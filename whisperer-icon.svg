@@ -1,0 +1,151 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024">
+  <defs>
+    <!-- Main gradient for icon background -->
+    <linearGradient id="bgGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#1a1a1a"/>
+      <stop offset="50%" style="stop-color:#0d0d0d"/>
+      <stop offset="100%" style="stop-color:#000000"/>
+    </linearGradient>
+    
+    <!-- Green glow gradient -->
+    <linearGradient id="greenGlow" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" style="stop-color:#00ff88"/>
+      <stop offset="50%" style="stop-color:#00d974"/>
+      <stop offset="100%" style="stop-color:#00b860"/>
+    </linearGradient>
+    
+    <!-- Subtle edge highlight -->
+    <linearGradient id="edgeHighlight" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" style="stop-color:#333333"/>
+      <stop offset="100%" style="stop-color:#1a1a1a"/>
+    </linearGradient>
+    
+    <!-- Inner shadow for depth -->
+    <filter id="innerShadow" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="20" result="blur"/>
+      <feOffset dx="0" dy="10" result="offsetBlur"/>
+      <feComposite in2="SourceAlpha" operator="arithmetic" k2="-1" k3="1" result="shadowDiff"/>
+      <feFlood flood-color="#000000" flood-opacity="0.5"/>
+      <feComposite in2="shadowDiff" operator="in"/>
+      <feComposite in2="SourceGraphic" operator="over"/>
+    </filter>
+    
+    <!-- Glow effect for green elements -->
+    <filter id="greenGlowEffect" x="-100%" y="-100%" width="300%" height="300%">
+      <feGaussianBlur stdDeviation="15" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+    
+    <!-- Soft outer glow -->
+    <filter id="softGlow" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="8" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+    
+    <!-- Noise texture -->
+    <filter id="noise">
+      <feTurbulence type="fractalNoise" baseFrequency="0.9" numOctaves="4" result="noise"/>
+      <feColorMatrix type="saturate" values="0"/>
+      <feBlend in="SourceGraphic" in2="noise" mode="overlay" result="blend"/>
+      <feComposite in="blend" in2="SourceGraphic" operator="in"/>
+    </filter>
+    
+    <!-- Mask for squircle -->
+    <clipPath id="squircleMask">
+      <path d="M512 40
+               C864 40 984 160 984 512
+               C984 864 864 984 512 984
+               C160 984 40 864 40 512
+               C40 160 160 40 512 40Z"/>
+    </clipPath>
+  </defs>
+  
+  <!-- Drop shadow for icon -->
+  <path d="M512 60
+           C854 60 964 170 964 512
+           C964 854 854 964 512 964
+           C170 964 60 854 60 512
+           C60 170 170 60 512 60Z"
+        fill="rgba(0,0,0,0.4)"
+        transform="translate(0, 20)"/>
+  
+  <!-- Main squircle background -->
+  <path d="M512 40
+           C864 40 984 160 984 512
+           C984 864 864 984 512 984
+           C160 984 40 864 40 512
+           C40 160 160 40 512 40Z"
+        fill="url(#bgGradient)"
+        filter="url(#innerShadow)"/>
+  
+  <!-- Subtle top edge highlight -->
+  <path d="M512 45
+           C859 45 979 165 979 512"
+        fill="none"
+        stroke="url(#edgeHighlight)"
+        stroke-width="3"
+        opacity="0.5"/>
+  
+  <!-- Noise overlay for texture -->
+  <g clip-path="url(#squircleMask)" opacity="0.03">
+    <rect x="40" y="40" width="944" height="944" fill="#ffffff" filter="url(#noise)"/>
+  </g>
+  
+  <!-- Central waveform visualization -->
+  <g transform="translate(512, 512)" filter="url(#greenGlowEffect)">
+    <!-- Center bar -->
+    <rect x="-15" y="-180" width="30" height="360" rx="15" fill="url(#greenGlow)" opacity="1">
+      <animate attributeName="height" values="360;280;360" dur="1.5s" repeatCount="indefinite"/>
+      <animate attributeName="y" values="-180;-140;-180" dur="1.5s" repeatCount="indefinite"/>
+    </rect>
+    
+    <!-- Left bars -->
+    <rect x="-85" y="-130" width="26" height="260" rx="13" fill="url(#greenGlow)" opacity="0.9">
+      <animate attributeName="height" values="260;180;260" dur="1.2s" repeatCount="indefinite"/>
+      <animate attributeName="y" values="-130;-90;-130" dur="1.2s" repeatCount="indefinite"/>
+    </rect>
+    <rect x="-150" y="-90" width="22" height="180" rx="11" fill="url(#greenGlow)" opacity="0.75">
+      <animate attributeName="height" values="180;120;180" dur="1s" repeatCount="indefinite"/>
+      <animate attributeName="y" values="-90;-60;-90" dur="1s" repeatCount="indefinite"/>
+    </rect>
+    <rect x="-207" y="-55" width="18" height="110" rx="9" fill="url(#greenGlow)" opacity="0.55">
+      <animate attributeName="height" values="110;70;110" dur="0.8s" repeatCount="indefinite"/>
+      <animate attributeName="y" values="-55;-35;-55" dur="0.8s" repeatCount="indefinite"/>
+    </rect>
+    <rect x="-255" y="-35" width="14" height="70" rx="7" fill="url(#greenGlow)" opacity="0.35">
+      <animate attributeName="height" values="70;40;70" dur="0.7s" repeatCount="indefinite"/>
+      <animate attributeName="y" values="-35;-20;-35" dur="0.7s" repeatCount="indefinite"/>
+    </rect>
+    
+    <!-- Right bars (mirrored) -->
+    <rect x="59" y="-130" width="26" height="260" rx="13" fill="url(#greenGlow)" opacity="0.9">
+      <animate attributeName="height" values="260;200;260" dur="1.3s" repeatCount="indefinite"/>
+      <animate attributeName="y" values="-130;-100;-130" dur="1.3s" repeatCount="indefinite"/>
+    </rect>
+    <rect x="128" y="-90" width="22" height="180" rx="11" fill="url(#greenGlow)" opacity="0.75">
+      <animate attributeName="height" values="180;100;180" dur="1.1s" repeatCount="indefinite"/>
+      <animate attributeName="y" values="-90;-50;-90" dur="1.1s" repeatCount="indefinite"/>
+    </rect>
+    <rect x="189" y="-55" width="18" height="110" rx="9" fill="url(#greenGlow)" opacity="0.55">
+      <animate attributeName="height" values="110;60;110" dur="0.9s" repeatCount="indefinite"/>
+      <animate attributeName="y" values="-55;-30;-55" dur="0.9s" repeatCount="indefinite"/>
+    </rect>
+    <rect x="241" y="-35" width="14" height="70" rx="7" fill="url(#greenGlow)" opacity="0.35">
+      <animate attributeName="height" values="70;35;70" dur="0.75s" repeatCount="indefinite"/>
+      <animate attributeName="y" values="-35;-17;-35" dur="0.75s" repeatCount="indefinite"/>
+    </rect>
+  </g>
+  
+  <!-- Subtle reflection at bottom -->
+  <ellipse cx="512" cy="820" rx="280" ry="30" fill="url(#greenGlow)" opacity="0.08"/>
+  
+  <!-- Ambient glow circles -->
+  <circle cx="512" cy="512" r="250" fill="none" stroke="url(#greenGlow)" stroke-width="1" opacity="0.15"/>
+  <circle cx="512" cy="512" r="320" fill="none" stroke="url(#greenGlow)" stroke-width="0.5" opacity="0.08"/>
+</svg>
