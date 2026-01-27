@@ -39,21 +39,15 @@ class SoundPlayer {
 
     // MARK: - Public API
 
-    /// Play start sound and wait for it to complete (async so muting waits)
-    func playStartSoundAndWait() async {
-        print("🔔 Playing start sound (ID: \(startSoundID))...")
+    /// Play start sound immediately (non-blocking for instant response)
+    func playStartSound() {
+        print("🔔 Playing start sound (ID: \(startSoundID))")
 
         if startSoundID != 0 {
             AudioServicesPlaySystemSound(startSoundID)
         } else {
-            // Fallback to system alert
             AudioServicesPlayAlertSound(kSystemSoundID_UserPreferredAlert)
         }
-
-        // Wait for sound to complete (Tink is ~0.1 seconds, add buffer)
-        try? await Task.sleep(nanoseconds: 200_000_000)  // 200ms
-
-        print("🔔 Start sound finished")
     }
 
     /// Play a gentle sound indicating recording has stopped

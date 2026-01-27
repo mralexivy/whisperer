@@ -49,5 +49,5 @@ struct WaveformView: View {
     WaveformView(amplitudes: [0.2, 0.5, 0.8, 0.6, 0.3, 0.7, 0.9, 0.4, 0.5, 0.6])
         .frame(width: 100, height: 30)
         .padding()
-        .background(Color(red: 0.15, green: 0.2, blue: 0.18))
+        .background(Color(white: 0.98))
 }

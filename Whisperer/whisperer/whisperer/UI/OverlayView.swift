@@ -2,7 +2,7 @@
 //  OverlayView.swift
 //  Whisperer
 //
-//  FaceTime-style overlay bar
+//  Adaptive overlay bar matching macOS appearance (light/dark mode)
 //
 
 import SwiftUI
@@ -10,8 +10,26 @@ import SwiftUI
 struct OverlayView: View {
     @ObservedObject var appState = AppState.shared
     @State private var isPulsing = false
+    @Environment(\.colorScheme) var colorScheme
 
-    private let darkGreen = Color(red: 0.12, green: 0.18, blue: 0.15)
+    // Adaptive colors based on appearance
+    private var backgroundColor: Color {
+        colorScheme == .dark ? Color(white: 0.15) : Color(white: 0.98)
+    }
+
+    private var transcriptionBackground: Color {
+        colorScheme == .dark ? Color(white: 0.2) : Color.white
+    }
+
+    private var shadowOpacity: Double {
+        colorScheme == .dark ? 0.4 : 0.15
+    }
+
+    private var strokeOpacity: Double {
+        colorScheme == .dark ? 0.2 : 0.1
+    }
+
+    private let greenAccent = Color(red: 0.2, green: 0.78, blue: 0.35)  // Apple green
 
     var body: some View {
         VStack(spacing: 8) {
@@ -19,7 +37,7 @@ struct OverlayView: View {
             if appState.state.isRecording && !appState.liveTranscription.isEmpty {
                 Text(appState.liveTranscription)
                     .font(.system(size: 13, weight: .medium))
-                    .foregroundColor(.white)
+                    .foregroundColor(.primary)
                     .lineLimit(2)
                     .multilineTextAlignment(.center)
                     .frame(maxWidth: 300)
@@ -27,7 +45,8 @@ struct OverlayView: View {
                     .padding(.vertical, 8)
                     .background(
                         RoundedRectangle(cornerRadius: 12)
-                            .fill(darkGreen.opacity(0.95))
+                            .fill(transcriptionBackground)
+                            .shadow(color: .black.opacity(colorScheme == .dark ? 0.3 : 0.1), radius: 8, x: 0, y: 2)
                     )
             }
 
@@ -42,13 +61,10 @@ struct OverlayView: View {
 
                 // Status indicator or mic button
                 if case .transcribing = appState.state {
-                    // Show transcribing indicator
                     TranscribingIndicator()
                 } else if case .downloadingModel(let progress) = appState.state {
-                    // Show download progress
                     DownloadIndicator(progress: progress)
                 } else {
-                    // Mic button
                     MicButton(isRecording: appState.state.isRecording)
                 }
 
@@ -58,12 +74,12 @@ struct OverlayView: View {
                 }) {
                     ZStack {
                         Circle()
-                            .fill(Color.red)
+                            .fill(Color.red.opacity(0.1))
                             .frame(width: 36, height: 36)
 
                         Image(systemName: "xmark")
                             .font(.system(size: 14, weight: .bold))
-                            .foregroundColor(.white)
+                            .foregroundColor(.red)
                     }
                 }
                 .buttonStyle(.plain)
@@ -73,7 +89,12 @@ struct OverlayView: View {
             .padding(.vertical, 10)
             .background(
                 Capsule()
-                    .fill(darkGreen)
+                    .fill(backgroundColor)
+                    .shadow(color: .black.opacity(shadowOpacity), radius: 12, x: 0, y: 4)
+            )
+            .overlay(
+                Capsule()
+                    .stroke(Color.gray.opacity(strokeOpacity), lineWidth: 1)
             )
         }
         .background(Color.clear)
@@ -91,24 +112,26 @@ struct RecordingIndicator: View {
     let isRecording: Bool
     @Binding var isPulsing: Bool
 
+    private let greenAccent = Color(red: 0.2, green: 0.78, blue: 0.35)
+
     var body: some View {
         ZStack {
-            // Background circle
+            // Background circle - light with green tint
             Circle()
-                .fill(Color(red: 0.2, green: 0.25, blue: 0.22))
+                .fill(greenAccent.opacity(0.12))
                 .frame(width: 44, height: 44)
 
             // Mic icon
             Image(systemName: "mic.fill")
                 .font(.system(size: 18))
-                .foregroundColor(Color(red: 0.3, green: 0.85, blue: 0.5))
+                .foregroundColor(greenAccent)
 
-            // Pulsing green dot (recording indicator)
+            // Pulsing dot (recording indicator)
             Circle()
-                .fill(Color(red: 0.2, green: 0.9, blue: 0.4))
+                .fill(greenAccent)
                 .frame(width: 10, height: 10)
-                .scaleEffect(isRecording && isPulsing ? 1.2 : 1.0)
-                .opacity(isRecording ? 1.0 : 0.5)
+                .scaleEffect(isRecording && isPulsing ? 1.3 : 1.0)
+                .opacity(isRecording ? 1.0 : 0.4)
                 .offset(x: 14, y: 14)
         }
     }
@@ -119,15 +142,17 @@ struct RecordingIndicator: View {
 struct MicButton: View {
     let isRecording: Bool
 
+    private let greenAccent = Color(red: 0.2, green: 0.78, blue: 0.35)
+
     var body: some View {
         ZStack {
             Circle()
-                .fill(Color(red: 0.2, green: 0.25, blue: 0.22))
+                .fill(greenAccent.opacity(0.12))
                 .frame(width: 36, height: 36)
 
             Image(systemName: isRecording ? "mic.fill" : "mic.slash.fill")
                 .font(.system(size: 14))
-                .foregroundColor(.white.opacity(0.8))
+                .foregroundColor(isRecording ? greenAccent : .secondary)
         }
     }
 }
@@ -135,23 +160,34 @@ struct MicButton: View {
 // MARK: - Transcribing Indicator
 
 struct TranscribingIndicator: View {
-    @State private var rotation: Double = 0
+    @State private var isAnimating = false
+
+    private let greenAccent = Color(red: 0.2, green: 0.78, blue: 0.35)
 
     var body: some View {
         ZStack {
             Circle()
-                .fill(Color(red: 0.2, green: 0.25, blue: 0.22))
+                .fill(greenAccent.opacity(0.12))
                 .frame(width: 36, height: 36)
 
-            Image(systemName: "waveform")
-                .font(.system(size: 14))
-                .foregroundColor(Color(red: 0.3, green: 0.85, blue: 0.5))
-                .rotationEffect(.degrees(rotation))
+            // Animated dots
+            HStack(spacing: 3) {
+                ForEach(0..<3) { index in
+                    Circle()
+                        .fill(greenAccent)
+                        .frame(width: 5, height: 5)
+                        .scaleEffect(isAnimating ? 1.0 : 0.5)
+                        .animation(
+                            .easeInOut(duration: 0.5)
+                            .repeatForever()
+                            .delay(Double(index) * 0.15),
+                            value: isAnimating
+                        )
+                }
+            }
         }
         .onAppear {
-            withAnimation(.linear(duration: 2).repeatForever(autoreverses: false)) {
-                rotation = 360
-            }
+            isAnimating = true
         }
     }
 }
@@ -161,21 +197,23 @@ struct TranscribingIndicator: View {
 struct DownloadIndicator: View {
     let progress: Double
 
+    private let greenAccent = Color(red: 0.2, green: 0.78, blue: 0.35)
+
     var body: some View {
         ZStack {
             Circle()
-                .stroke(Color.gray.opacity(0.3), lineWidth: 3)
+                .stroke(Color.gray.opacity(0.2), lineWidth: 3)
                 .frame(width: 36, height: 36)
 
             Circle()
                 .trim(from: 0, to: progress)
-                .stroke(Color(red: 0.3, green: 0.85, blue: 0.5), lineWidth: 3)
+                .stroke(greenAccent, style: StrokeStyle(lineWidth: 3, lineCap: .round))
                 .frame(width: 36, height: 36)
                 .rotationEffect(.degrees(-90))
 
             Text("\(Int(progress * 100))")
                 .font(.system(size: 10, weight: .bold))
-                .foregroundColor(.white)
+                .foregroundColor(.primary)
         }
     }
 }
@@ -183,22 +221,7 @@ struct DownloadIndicator: View {
 #Preview {
     VStack(spacing: 20) {
         OverlayView()
-
-        // Preview with mock recording state
-        HStack(spacing: 12) {
-            RecordingIndicator(isRecording: true, isPulsing: .constant(true))
-            WaveformView(amplitudes: [0.3, 0.5, 0.8, 0.6, 0.4, 0.7, 0.9, 0.5])
-                .frame(width: 100, height: 28)
-            MicButton(isRecording: true)
-            ZStack {
-                Circle().fill(Color.red).frame(width: 36, height: 36)
-                Image(systemName: "xmark").font(.system(size: 14, weight: .bold)).foregroundColor(.white)
-            }
-        }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 10)
-        .background(Capsule().fill(Color(red: 0.12, green: 0.18, blue: 0.15)))
     }
     .padding(40)
-    .background(Color.black)
+    .background(Color.gray.opacity(0.3))
 }

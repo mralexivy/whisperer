@@ -8,6 +8,8 @@
 
 import AVFoundation
 import Accelerate
+import CoreAudio
+import AudioToolbox
 
 class AudioRecorder: NSObject {
     private var audioEngine: AVAudioEngine?
@@ -22,6 +24,9 @@ class AudioRecorder: NSObject {
 
     // Target format for whisper: 16kHz mono
     private let targetSampleRate: Double = 16000.0
+
+    // Selected input device (nil = use system default)
+    var selectedDeviceID: AudioDeviceID?
 
     // MARK: - Permission
 
@@ -81,15 +86,33 @@ class AudioRecorder: NSObject {
 
         let inputNode = audioEngine.inputNode
 
-        // Enable Apple's voice processing (noise reduction, AGC, echo cancellation)
-        do {
-            try inputNode.setVoiceProcessingEnabled(true)
-            print("✅ Voice processing enabled (noise reduction, AGC)")
-        } catch {
-            print("⚠️ Failed to enable voice processing: \(error)")
+        // Only set custom device if explicitly selected (not system default)
+        // selectedDeviceID is only set when user picks a specific device in settings
+        if let deviceID = selectedDeviceID {
+            if setInputDevice(deviceID, on: inputNode) {
+                print("✅ Using selected input device: \(deviceID)")
+            } else {
+                // Device selection failed - clear it and use default
+                print("⚠️ Selected device unavailable, using system default")
+                selectedDeviceID = nil
+            }
+        } else {
+            print("🎤 Using system default input device")
         }
 
+        // Voice processing disabled - it causes ~500ms+ startup delay due to
+        // KeystrokeSuppressor initialization and stream setup timeouts.
+        // This delay cuts off the first words of speech.
+        // Whisper handles raw audio well enough without preprocessing.
+        print("🎤 Voice processing disabled for instant startup")
+
         let inputFormat = inputNode.outputFormat(forBus: 0)
+
+        // Validate format - must have valid sample rate and channels
+        guard inputFormat.sampleRate > 0 && inputFormat.channelCount > 0 else {
+            print("❌ Invalid input format: \(inputFormat.sampleRate)Hz, \(inputFormat.channelCount) channels")
+            throw RecordingError.invalidFormat
+        }
 
         print("Input format: \(inputFormat.sampleRate)Hz, \(inputFormat.channelCount) channels")
 
@@ -126,10 +149,13 @@ class AudioRecorder: NSObject {
         }
         print("✅ Tap installed successfully")
 
-        // Start engine
+        // Start engine (use self.audioEngine in case we recreated it)
         do {
             print("🎬 Starting audio engine...")
-            try audioEngine.start()
+            guard let engine = self.audioEngine else {
+                throw RecordingError.fileCreationFailed
+            }
+            try engine.start()
             isRecording = true
             print("✅ Started recording with AVAudioEngine to: \(audioURL.path)")
             return audioURL
@@ -220,6 +246,65 @@ class AudioRecorder: NSObject {
 
     var recordingURL: URL? {
         return currentURL
+    }
+
+    // MARK: - Device Selection
+
+    /// Attempt to set a specific input device. Returns true if successful.
+    /// If this fails, the system default device will be used automatically.
+    @discardableResult
+    private func setInputDevice(_ deviceID: AudioDeviceID, on inputNode: AVAudioInputNode) -> Bool {
+        // Verify device exists and has input capability first
+        guard isValidInputDevice(deviceID) else {
+            print("⚠️ Device \(deviceID) is not a valid input device, using default")
+            return false
+        }
+
+        // Get the audio unit from the input node
+        guard let au = inputNode.audioUnit else {
+            print("⚠️ Failed to get audio unit from input node, using default device")
+            return false
+        }
+
+        // Set the device on the audio unit
+        var deviceIDVar = deviceID
+        let status = AudioUnitSetProperty(
+            au,
+            kAudioOutputUnitProperty_CurrentDevice,
+            kAudioUnitScope_Global,
+            0,
+            &deviceIDVar,
+            UInt32(MemoryLayout<AudioDeviceID>.size)
+        )
+
+        if status == noErr {
+            print("✅ Set input device ID: \(deviceID)")
+            return true
+        } else {
+            print("⚠️ Failed to set input device (error: \(status)), using default")
+            return false
+        }
+    }
+
+    /// Check if a device ID is valid and has input capability
+    private func isValidInputDevice(_ deviceID: AudioDeviceID) -> Bool {
+        var propertyAddress = AudioObjectPropertyAddress(
+            mSelector: kAudioDevicePropertyStreams,
+            mScope: kAudioDevicePropertyScopeInput,
+            mElement: kAudioObjectPropertyElementMain
+        )
+
+        var dataSize: UInt32 = 0
+        let status = AudioObjectGetPropertyDataSize(
+            deviceID,
+            &propertyAddress,
+            0,
+            nil,
+            &dataSize
+        )
+
+        // Device is valid if it has input streams (dataSize > 0)
+        return status == noErr && dataSize > 0
     }
 }
 

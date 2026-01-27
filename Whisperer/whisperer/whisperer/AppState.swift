@@ -59,8 +59,15 @@ class AppState: ObservableObject {
         }
     }
 
+    // Language selection for transcription
+    @Published var selectedLanguage: TranscriptionLanguage = .english {
+        didSet {
+            UserDefaults.standard.set(selectedLanguage.rawValue, forKey: "selectedLanguage")
+        }
+    }
+
     // Model selection
-    @Published var selectedModel: WhisperModel = .largeTurbo
+    @Published var selectedModel: WhisperModel = .largeTurboQ5
     @Published var downloadingModel: WhisperModel? = nil
     @Published var downloadProgress: Double = 0
 
@@ -71,6 +78,10 @@ class AppState: ObservableObject {
     var textInjector: TextInjector?
     var audioMuter: AudioMuter?
     var soundPlayer: SoundPlayer?
+
+    // Audio device management
+    let audioDeviceManager = AudioDeviceManager.shared
+    private var deviceSubscription: AnyCancellable?
 
     // Pre-loaded WhisperBridge - keeps model in memory for instant recording start
     private var whisperBridge: WhisperBridge?
@@ -111,6 +122,29 @@ class AppState: ObservableObject {
         if UserDefaults.standard.object(forKey: "muteOtherAudioDuringRecording") != nil {
             muteOtherAudioDuringRecording = UserDefaults.standard.bool(forKey: "muteOtherAudioDuringRecording")
         }
+
+        // Load language preference (default English)
+        if let savedLang = UserDefaults.standard.string(forKey: "selectedLanguage"),
+           let lang = TranscriptionLanguage(rawValue: savedLang) {
+            selectedLanguage = lang
+        }
+
+        // Start monitoring audio device changes
+        audioDeviceManager.startMonitoring()
+
+        // Subscribe to device changes to update audioRecorder
+        // Only set device ID if user explicitly selected a non-default device
+        deviceSubscription = audioDeviceManager.$selectedDevice
+            .sink { [weak self] device in
+                guard let self = self else { return }
+                // Only set custom device if user explicitly selected one (preferredDeviceUID is not nil)
+                // If preferredDeviceUID is nil, use system default (don't set any device)
+                if self.audioDeviceManager.preferredDeviceUID != nil {
+                    self.audioRecorder?.selectedDeviceID = device?.id
+                } else {
+                    self.audioRecorder?.selectedDeviceID = nil
+                }
+            }
     }
 
     // MARK: - Model Selection
@@ -288,29 +322,35 @@ class AppState: ObservableObject {
     func startRecording() {
         guard state == .idle else { return }
 
-        // Clear live transcription
-        liveTranscription = ""
-
-        // Check if model is loaded first (before playing sound)
+        // Check if model is loaded first
         guard let bridge = whisperBridge else {
             errorMessage = "Model not loaded yet. Please wait..."
             print("⚠️ Cannot start recording - model not pre-loaded")
             return
         }
 
-        Task {
-            // Play start sound and WAIT for it to finish before muting
-            await soundPlayer?.playStartSoundAndWait()
+        // INSTANT: Set state immediately so overlay appears right away
+        state = .recording(startTime: Date())
+        liveTranscription = ""
 
-            // Mute other audio sources if enabled
+        // Play sound immediately (non-blocking)
+        soundPlayer?.playStartSound()
+
+        // Mute other audio sources if enabled (after sound plays)
+        Task {
+            // Small delay to let sound play before muting
+            try? await Task.sleep(nanoseconds: 50_000_000)  // 50ms
+
             if muteOtherAudioDuringRecording {
                 audioMuter?.muteSystemAudio()
             }
+        }
 
-            // Now start the actual recording
+        // Start recording immediately
+        Task {
             do {
-                // Create streaming transcriber with pre-loaded bridge and optional VAD
-                streamingTranscriber = StreamingTranscriber(whisperBridge: bridge, vad: sileroVAD)
+                // Create streaming transcriber with pre-loaded bridge, optional VAD, and language
+                streamingTranscriber = StreamingTranscriber(whisperBridge: bridge, vad: sileroVAD, language: selectedLanguage)
                 streamingTranscriber?.start { [weak self] text in
                     Task { @MainActor in
                         self?.liveTranscription = text
@@ -325,9 +365,9 @@ class AppState: ObservableObject {
 
                 let audioURL = try await audioRecorder?.startRecording()
                 currentAudioURL = audioURL
-                state = .recording(startTime: Date())
             } catch {
                 errorMessage = "Failed to start recording: \(error.localizedDescription)"
+                state = .idle
                 // Unmute on error since we're not recording
                 if muteOtherAudioDuringRecording {
                     audioMuter?.unmuteSystemAudio()
@@ -356,6 +396,7 @@ class AppState: ObservableObject {
             var finalText = ""
             if let transcriber = streamingTranscriber {
                 finalText = transcriber.stop()
+                print("🎤 Final transcription: '\(finalText)'")
 
                 // Save recording if enabled (use in-memory samples, not file)
                 if saveRecordings {
@@ -365,10 +406,12 @@ class AppState: ObservableObject {
             streamingTranscriber = nil
 
             if !finalText.isEmpty {
+                print("📝 Inserting text: '\(finalText)'")
                 state = .inserting(text: finalText)
                 await insertText(finalText)
             } else {
                 // No speech detected
+                print("⚠️ No speech detected in recording")
                 errorMessage = "No speech detected"
                 state = .idle
             }

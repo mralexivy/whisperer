@@ -553,6 +553,7 @@
 		1038D75B2F266EE000490030 /* Metal.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Metal.framework; path = Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS26.2.sdk/System/Library/Frameworks/Metal.framework; sourceTree = DEVELOPER_DIR; };
 		1038D75D2F266EE900490030 /* Accelerate.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Accelerate.framework; path = Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS26.2.sdk/System/Library/Frameworks/Accelerate.framework; sourceTree = DEVELOPER_DIR; };
 		1038D75F2F266EF900490030 /* Foundation.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Foundation.framework; path = Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS26.2.sdk/System/Library/Frameworks/Foundation.framework; sourceTree = DEVELOPER_DIR; };
+		10DED0232F27E4B40054AFA2 /* whisperer.xcodeproj */ = {isa = PBXFileReference; lastKnownFileType = "wrapper.pb-project"; path = whisperer.xcodeproj; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -1889,6 +1890,13 @@
 			path = "../../whisper.cpp/build-static";
 			sourceTree = "<group>";
 		};
+		10DED0272F27E4B40054AFA2 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
@@ -1949,6 +1957,10 @@
 				{
 					ProductGroup = 1038D4C92F263D6900490030 /* Products */;
 					ProjectRef = 1038D4C72F263D6900490030 /* whisperer.xcodeproj */;
+				},
+				{
+					ProductGroup = 10DED0272F27E4B40054AFA2 /* Products */;
+					ProjectRef = 10DED0232F27E4B40054AFA2 /* whisperer.xcodeproj */;
 				},
 			);
 			projectRoot = "";

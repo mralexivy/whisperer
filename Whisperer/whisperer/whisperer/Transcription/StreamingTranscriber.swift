@@ -58,11 +58,15 @@ class StreamingTranscriber {
     private var lastVADCheckTime: Date = Date()
     private var isSpeechDetected: Bool = true  // Assume speech by default
 
-    /// Initialize with a pre-loaded WhisperBridge and optional VAD
-    init(whisperBridge: WhisperBridge, vad: SileroVAD? = nil) {
+    // Language for transcription
+    private var language: TranscriptionLanguage
+
+    /// Initialize with a pre-loaded WhisperBridge, optional VAD, and language setting
+    init(whisperBridge: WhisperBridge, vad: SileroVAD? = nil, language: TranscriptionLanguage = .english) {
         self.whisper = whisperBridge
         self.vad = vad
         self.vadEnabled = vad != nil
+        self.language = language
     }
 
     /// Start streaming transcription
@@ -137,8 +141,8 @@ class StreamingTranscriber {
         // Get context from last transcription
         let context = lastTranscriptionContext
 
-        // Transcribe in background with context
-        whisper.transcribeAsync(samples: chunk, initialPrompt: context.isEmpty ? nil : context) { [weak self] text in
+        // Transcribe in background with context and language
+        whisper.transcribeAsync(samples: chunk, initialPrompt: context.isEmpty ? nil : context, language: language) { [weak self] text in
             guard let self = self else { return }
 
             print("📝 Transcription result: '\(text)'")
@@ -228,8 +232,8 @@ class StreamingTranscriber {
 
         // Final pass: re-transcribe entire audio for best accuracy
         if !allSamples.isEmpty {
-            print("🎯 Final pass: transcribing \(allSamples.count) total samples...")
-            let finalText = whisper.transcribe(samples: allSamples)
+            print("🎯 Final pass: transcribing \(allSamples.count) total samples (language: \(language.displayName))...")
+            let finalText = whisper.transcribe(samples: allSamples, language: language)
             if !finalText.isEmpty {
                 // Use final pass result as it's more accurate with full context
                 fullTranscription = finalText

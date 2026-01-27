@@ -166,8 +166,15 @@ class ModelDownloader {
                 }
             )
 
+            // Create configuration optimized for sandboxed apps
+            let config = URLSessionConfiguration.default
+            config.waitsForConnectivity = true
+            config.timeoutIntervalForRequest = 30
+            config.timeoutIntervalForResource = 3600  // 1 hour for large model downloads
+            config.requestCachePolicy = .reloadIgnoringLocalCacheData
+
             // Create session with delegate
-            let session = URLSession(configuration: .default, delegate: delegate, delegateQueue: nil)
+            let session = URLSession(configuration: config, delegate: delegate, delegateQueue: nil)
             let task = session.downloadTask(with: url)
 
             // Keep session and delegate alive
@@ -230,5 +237,9 @@ private class DownloadDelegate: NSObject, URLSessionDownloadDelegate {
         DispatchQueue.main.async { [weak self] in
             self?.progressCallback(progress)
         }
+    }
+
+    func urlSession(_ session: URLSession, taskIsWaitingForConnectivity task: URLSessionTask) {
+        print("Waiting for network connectivity...")
     }
 }
