@@ -74,6 +74,12 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             }
         }
 
+        appState.keyListener?.onShortcutCancelled = { [weak self] in
+            Task { @MainActor in
+                self?.appState.cancelRecording()
+            }
+        }
+
         // Setup audio callback for waveform
         appState.audioRecorder?.onAmplitudeUpdate = { [weak self] amplitude in
             Task { @MainActor in

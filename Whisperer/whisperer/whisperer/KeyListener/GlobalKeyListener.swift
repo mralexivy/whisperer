@@ -12,6 +12,7 @@ class GlobalKeyListener {
     // Callbacks
     var onShortcutPressed: (() -> Void)?
     var onShortcutReleased: (() -> Void)?
+    var onShortcutCancelled: (() -> Void)?  // Called when Fn+key combo cancels recording
 
     // Permission status - true if event tap was successfully created
     private(set) var hasInputMonitoringPermission: Bool = false
@@ -46,9 +47,14 @@ class GlobalKeyListener {
     private var currentModifiers: NSEvent.ModifierFlags = []
     private var currentKeyCode: UInt16 = 0
     private var isKeyDown = false
+    private var recordingInProgress = false  // True after onShortcutPressed called
 
     private let debounceInterval: TimeInterval = 0.02  // 20ms for instant response
     private var lastStateChange = Date()
+
+    // Event-driven Fn detection (using keyCode 63)
+    private var fnDown = false              // Fn key is currently held (detected via keyCode 63)
+    private var fnUsedWithOtherKey = false  // Another key was pressed while Fn held
 
     // For toggle mode
     private var isRecordingToggled = false
@@ -95,6 +101,11 @@ class GlobalKeyListener {
     }
 
     func stop() {
+        // Reset event-driven state
+        fnDown = false
+        fnUsedWithOtherKey = false
+        recordingInProgress = false
+
         // Stop event tap
         if let eventTap = eventTap {
             CGEvent.tapEnable(tap: eventTap, enable: false)
@@ -189,19 +200,35 @@ class GlobalKeyListener {
 
                 if !isArrowKey {
                     // Only update Fn state if this isn't an arrow key
+                    // Note: Primary Fn detection now uses keyCode 63 in NSEvent monitors
                     self.isFnCurrentlyHeld = fnPressed
                 }
 
-                // Check if this is a modifier-only shortcut match
+                // Check if this is a modifier-only shortcut match (non-Fn shortcuts)
                 self.checkShortcutStateLocked()
 
             case .keyDown:
                 let keyCode = UInt16(event.getIntegerValueField(.keyboardEventKeycode))
-                self.currentKeyCode = keyCode
-                self.isKeyDown = true
 
                 // Arrow keys set Fn flag, but we should ignore it
                 let isArrowKey = (keyCode >= 123 && keyCode <= 126)
+
+                // If Fn is held and another key is pressed, mark as combo
+                // This is a backup - primary combo detection is in NSEvent keyDown handler
+                if self.fnDown && !isArrowKey {
+                    self.fnUsedWithOtherKey = true
+
+                    // If already recording, cancel it
+                    if self.recordingInProgress {
+                        print("⚠️ CGEvent: Fn+key combo detected (keyCode: \(keyCode)), cancelling")
+                        self.cancelRecordingLocked()
+                        return
+                    }
+                }
+
+                self.currentKeyCode = keyCode
+                self.isKeyDown = true
+
                 if isArrowKey {
                     self.isFnCurrentlyHeld = false
                 }
@@ -324,55 +351,160 @@ class GlobalKeyListener {
         return "\(vendorID):\(productID):\(locationID)"
     }
 
-    // MARK: - Layer 3: NSEvent Monitors
+    // MARK: - Layer 3: NSEvent Monitors (Primary for Fn-only mode)
 
     private func setupNSEventMonitors() {
-        // Monitor for modifier changes
+        let config = shortcutConfig
+
+        // Monitor for modifier changes - Fn key has keyCode 63
         nsEventMonitor = NSEvent.addGlobalMonitorForEvents(matching: .flagsChanged) { [weak self] event in
-            let fnHeld = event.modifierFlags.contains(.function)
+            guard let self = self else { return }
+
             let modifiers = event.modifierFlags
 
-            self?.stateQueue.async {
-                self?.isFnCurrentlyHeld = fnHeld
-                self?.currentModifiers = modifiers
-                self?.checkShortcutStateLocked()
+            self.stateQueue.async {
+                self.currentModifiers = modifiers
+
+                // Fn key detection using keyCode 63
+                if event.keyCode == 63 {
+                    let mods = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
+
+                    if mods.contains(.function) {
+                        // Fn key pressed DOWN
+                        self.fnDown = true
+                        self.fnUsedWithOtherKey = false
+                        self.isFnCurrentlyHeld = true
+
+                        // For Fn-only mode with hold-to-record, start immediately
+                        if config.useFnKey && config.keyCode == 0 && config.modifierFlags == 0 {
+                            if config.recordingMode == .holdToRecord && !self.recordingInProgress {
+                                print("Shortcut PRESSED (Fn) - keyCode 63 detected")
+                                self.recordingInProgress = true
+                                self.isShortcutActive = true
+                                DispatchQueue.main.async {
+                                    self.onShortcutPressed?()
+                                }
+                            } else if config.recordingMode == .toggle && !self.isRecordingToggled {
+                                print("Shortcut TOGGLE ON (Fn) - keyCode 63 detected")
+                                self.isRecordingToggled = true
+                                self.recordingInProgress = true
+                                self.isShortcutActive = true
+                                DispatchQueue.main.async {
+                                    self.onShortcutPressed?()
+                                }
+                            } else if config.recordingMode == .toggle && self.isRecordingToggled {
+                                print("Shortcut TOGGLE OFF (Fn)")
+                                self.isRecordingToggled = false
+                                self.recordingInProgress = false
+                                self.isShortcutActive = false
+                                DispatchQueue.main.async {
+                                    self.onShortcutReleased?()
+                                }
+                            }
+                        } else {
+                            // Non-Fn-only mode: use existing logic
+                            self.checkShortcutStateLocked()
+                        }
+                    } else {
+                        // Fn key RELEASED
+                        if self.fnDown {
+                            if self.fnUsedWithOtherKey && self.recordingInProgress {
+                                // Fn was used with another key - cancel recording
+                                print("Shortcut CANCELLED (Fn+key combo)")
+                                self.recordingInProgress = false
+                                self.isShortcutActive = false
+                                DispatchQueue.main.async {
+                                    self.onShortcutCancelled?()
+                                }
+                            } else if self.recordingInProgress && config.recordingMode == .holdToRecord {
+                                // Clean Fn release - stop recording normally (hold mode only)
+                                print("Shortcut RELEASED (Fn)")
+                                self.recordingInProgress = false
+                                self.isShortcutActive = false
+                                DispatchQueue.main.async {
+                                    self.onShortcutReleased?()
+                                }
+                            }
+                        }
+                        self.fnDown = false
+                        self.fnUsedWithOtherKey = false
+                        self.isFnCurrentlyHeld = false
+                    }
+                } else {
+                    // Other modifier changes - update state for non-Fn shortcuts
+                    let fnHeld = event.modifierFlags.contains(.function)
+                    self.isFnCurrentlyHeld = fnHeld
+                    self.checkShortcutStateLocked()
+                }
             }
         }
 
-        // Monitor for key events (backup)
+        // Monitor for key events - detects Fn+key combos
         keyDownMonitor = NSEvent.addGlobalMonitorForEvents(matching: [.keyDown, .keyUp]) { [weak self] event in
+            guard let self = self else { return }
+
             let keyCode = event.keyCode
             let isDown = (event.type == .keyDown)
             let modifiers = event.modifierFlags
 
-            self?.stateQueue.async {
-                self?.currentKeyCode = keyCode
-                self?.isKeyDown = isDown
-                self?.currentModifiers = modifiers
-                self?.checkShortcutStateLocked()
+            self.stateQueue.async {
+                self.currentKeyCode = keyCode
+                self.isKeyDown = isDown
+                self.currentModifiers = modifiers
+
+                if isDown && self.fnDown {
+                    // Another key pressed while Fn is held - mark as combo
+                    self.fnUsedWithOtherKey = true
+                    print("⚠️ Fn+key combo detected (keyCode: \(keyCode))")
+
+                    // Cancel immediately if recording is active
+                    if self.recordingInProgress {
+                        print("Cancelling recording due to Fn+key combo")
+                        self.recordingInProgress = false
+                        self.isShortcutActive = false
+                        self.isRecordingToggled = false
+                        DispatchQueue.main.async {
+                            self.onShortcutCancelled?()
+                        }
+                    }
+                } else {
+                    // For non-Fn shortcuts, use existing logic
+                    self.checkShortcutStateLocked()
+                }
             }
         }
 
-        print("NSEvent monitors enabled")
+        print("NSEvent monitors enabled (Fn keyCode 63 detection)")
     }
 
     // MARK: - Shortcut Matching
 
+    /// Cancel recording due to Fn+key combo detection (must be called from stateQueue)
+    private func cancelRecordingLocked() {
+        guard recordingInProgress else { return }
+
+        recordingInProgress = false
+        isShortcutActive = false
+        isFnCurrentlyHeld = false
+        isRecordingToggled = false
+        fnDown = false
+        fnUsedWithOtherKey = false
+
+        DispatchQueue.main.async { [weak self] in
+            self?.onShortcutCancelled?()
+        }
+    }
+
     /// Must be called from stateQueue
+    /// NOTE: Fn-only mode is now handled directly in setupNSEventMonitors using keyCode 63
     private func checkShortcutStateLocked() {
         let config = shortcutConfig
         var shortcutMatches = false
 
         if config.useFnKey && config.keyCode == 0 && config.modifierFlags == 0 {
-            // Fn-only mode: Must have Fn pressed AND no other modifiers AND no regular keys pressed
-            // This prevents Command+Arrow from triggering (arrow keys set Fn flag internally)
-            let hasOtherModifiers = currentModifiers.contains(.command) ||
-                                    currentModifiers.contains(.option) ||
-                                    currentModifiers.contains(.control) ||
-                                    currentModifiers.contains(.shift)
-
-            // Only match if Fn is held alone (no other modifiers, no keys pressed)
-            shortcutMatches = isFnCurrentlyHeld && !hasOtherModifiers && !isKeyDown
+            // Fn-only mode is handled by NSEvent monitors using keyCode 63
+            // Skip here to avoid duplicate triggering
+            return
         } else if config.keyCode != 0 {
             // Key + optional modifiers
             shortcutMatches = isKeyDown &&
@@ -386,6 +518,8 @@ class GlobalKeyListener {
         updateShortcutState(shortcutMatches)
     }
 
+    /// Update shortcut state for non-Fn shortcuts only
+    /// Fn-only mode is handled directly in setupNSEventMonitors
     private func updateShortcutState(_ active: Bool) {
         // Debounce rapid state changes
         let now = Date()
@@ -404,10 +538,18 @@ class GlobalKeyListener {
 
                 if active {
                     print("Shortcut PRESSED (\(config.displayString))")
-                    onShortcutPressed?()
+                    recordingInProgress = true
+                    DispatchQueue.main.async { [weak self] in
+                        self?.onShortcutPressed?()
+                    }
                 } else {
-                    print("Shortcut RELEASED (\(config.displayString))")
-                    onShortcutReleased?()
+                    if recordingInProgress {
+                        print("Shortcut RELEASED (\(config.displayString))")
+                        recordingInProgress = false
+                        DispatchQueue.main.async { [weak self] in
+                            self?.onShortcutReleased?()
+                        }
+                    }
                 }
             }
 
@@ -419,15 +561,20 @@ class GlobalKeyListener {
                 lastStateChange = now
 
                 if isRecordingToggled {
-                    // Currently recording, stop
+                    // Currently recording, stop immediately
                     print("Shortcut TOGGLE OFF (\(config.displayString))")
                     isRecordingToggled = false
-                    onShortcutReleased?()
+                    recordingInProgress = false
+                    DispatchQueue.main.async { [weak self] in
+                        self?.onShortcutReleased?()
+                    }
                 } else {
-                    // Not recording, start
                     print("Shortcut TOGGLE ON (\(config.displayString))")
                     isRecordingToggled = true
-                    onShortcutPressed?()
+                    recordingInProgress = true
+                    DispatchQueue.main.async { [weak self] in
+                        self?.onShortcutPressed?()
+                    }
                 }
             } else if !active && isShortcutActive {
                 // Shortcut released, just update state

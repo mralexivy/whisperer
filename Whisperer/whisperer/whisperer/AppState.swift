@@ -419,6 +419,31 @@ class AppState: ObservableObject {
         }
     }
 
+    /// Cancel recording without transcribing (e.g., Fn+key combo detected)
+    /// Immediately stops recording, unmutes audio, and returns to idle state
+    func cancelRecording() {
+        guard case .recording = state else { return }
+
+        Logger.debug("Recording cancelled (Fn+key combo)", subsystem: .app)
+
+        Task {
+            // Stop audio recording immediately
+            await audioRecorder?.stopRecording()
+
+            // Unmute audio
+            if muteOtherAudioDuringRecording {
+                audioMuter?.unmuteSystemAudio()
+            }
+
+            // Clear streaming transcriber without doing final pass
+            streamingTranscriber = nil
+
+            // Reset state
+            state = .idle
+            liveTranscription = ""
+        }
+    }
+
     private func saveRecordingFromTranscriber(_ transcriber: StreamingTranscriber, transcription: String) {
         let dateFormatter = DateFormatter()
         dateFormatter.dateFormat = "yyyy-MM-dd_HH-mm-ss"
