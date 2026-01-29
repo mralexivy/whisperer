@@ -97,7 +97,7 @@ class WhisperRunner {
 
     // MARK: - Output Parsing
 
-    private func parseWhisperOutput(_ output: String) -> String {
+    nonisolated private func parseWhisperOutput(_ output: String) -> String {
         // Whisper.cpp outputs the transcription in the format:
         // [TRANSCRIPTION] text here
         // or sometimes just the text directly

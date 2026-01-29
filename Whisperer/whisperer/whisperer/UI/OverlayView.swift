@@ -31,16 +31,31 @@ struct OverlayView: View {
 
     private let greenAccent = Color(red: 0.2, green: 0.78, blue: 0.35)  // Apple green
 
+    // Show last N characters of transcription for ticker effect
+    private var displayedTranscription: String {
+        let text = appState.liveTranscription
+        let maxChars = 120  // Show approximately 2 lines worth
+        if text.count <= maxChars {
+            return text
+        }
+        // Find a word boundary to trim at
+        let suffix = String(text.suffix(maxChars))
+        if let firstSpace = suffix.firstIndex(of: " ") {
+            return "..." + String(suffix[suffix.index(after: firstSpace)...])
+        }
+        return "..." + suffix
+    }
+
     var body: some View {
         VStack(spacing: 8) {
             // Live transcription text (shown during recording)
             if appState.state.isRecording && !appState.liveTranscription.isEmpty {
-                Text(appState.liveTranscription)
+                Text(displayedTranscription)
                     .font(.system(size: 13, weight: .medium))
                     .foregroundColor(.primary)
                     .lineLimit(2)
-                    .multilineTextAlignment(.center)
-                    .frame(maxWidth: 300)
+                    .multilineTextAlignment(.leading)
+                    .frame(maxWidth: 300, alignment: .trailing)
                     .padding(.horizontal, 12)
                     .padding(.vertical, 8)
                     .background(
@@ -48,6 +63,26 @@ struct OverlayView: View {
                             .fill(transcriptionBackground)
                             .shadow(color: .black.opacity(colorScheme == .dark ? 0.3 : 0.1), radius: 8, x: 0, y: 2)
                     )
+                    .animation(.easeOut(duration: 0.15), value: displayedTranscription)
+            }
+
+            // Processing indicator (shown during final pass)
+            if case .stopping = appState.state {
+                HStack(spacing: 6) {
+                    ProgressView()
+                        .scaleEffect(0.7)
+                        .frame(width: 14, height: 14)
+                    Text("Processing audio...")
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundColor(.secondary)
+                }
+                .padding(.horizontal, 12)
+                .padding(.vertical, 6)
+                .background(
+                    RoundedRectangle(cornerRadius: 10)
+                        .fill(transcriptionBackground)
+                        .shadow(color: .black.opacity(colorScheme == .dark ? 0.3 : 0.1), radius: 6, x: 0, y: 2)
+                )
             }
 
             // Main control bar

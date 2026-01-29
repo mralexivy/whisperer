@@ -154,8 +154,8 @@ class PermissionManager: ObservableObject {
     // MARK: - Permission Requests
 
     func requestMicrophonePermission() {
-        AVCaptureDevice.requestAccess(for: .audio) { [weak self] granted in
-            Task { @MainActor in
+        AVCaptureDevice.requestAccess(for: .audio) { granted in
+            Task { @MainActor [weak self] in
                 self?.microphoneStatus = granted ? .granted : .denied
             }
         }
@@ -206,8 +206,8 @@ class PermissionManager: ObservableObject {
 
     private func startPeriodicCheck() {
         // Check permissions every 2 seconds (user might grant them in System Settings)
-        checkTimer = Timer.scheduledTimer(withTimeInterval: 2.0, repeats: true) { [weak self] _ in
-            Task { @MainActor in
+        checkTimer = Timer.scheduledTimer(withTimeInterval: 2.0, repeats: true) { _ in
+            Task { @MainActor [weak self] in
                 self?.refreshAllPermissions()
             }
         }

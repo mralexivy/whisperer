@@ -143,14 +143,16 @@ class AudioDeviceManager: ObservableObject {
         var name: CFString = "" as CFString
         var propertySize = UInt32(MemoryLayout<CFString>.size)
 
-        let status = AudioObjectGetPropertyData(
-            deviceID,
-            &propertyAddress,
-            0,
-            nil,
-            &propertySize,
-            &name
-        )
+        let status = withUnsafeMutablePointer(to: &name) { namePtr in
+            AudioObjectGetPropertyData(
+                deviceID,
+                &propertyAddress,
+                0,
+                nil,
+                &propertySize,
+                namePtr
+            )
+        }
 
         guard status == noErr else { return nil }
         return name as String
@@ -166,14 +168,16 @@ class AudioDeviceManager: ObservableObject {
         var uid: CFString = "" as CFString
         var propertySize = UInt32(MemoryLayout<CFString>.size)
 
-        let status = AudioObjectGetPropertyData(
-            deviceID,
-            &propertyAddress,
-            0,
-            nil,
-            &propertySize,
-            &uid
-        )
+        let status = withUnsafeMutablePointer(to: &uid) { uidPtr in
+            AudioObjectGetPropertyData(
+                deviceID,
+                &propertyAddress,
+                0,
+                nil,
+                &propertySize,
+                uidPtr
+            )
+        }
 
         guard status == noErr else { return nil }
         return uid as String

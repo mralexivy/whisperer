@@ -239,14 +239,15 @@ class AppState: ObservableObject {
             return
         }
 
-        print("🔄 Pre-loading \(model.displayName)...")
+        let modelDisplayName = model.displayName
+        print("🔄 Pre-loading \(modelDisplayName)...")
         let startTime = Date()
 
         Task.detached(priority: .userInitiated) {
             do {
                 let bridge = try WhisperBridge(modelPath: path)
                 let loadTime = Date().timeIntervalSince(startTime)
-                print("✅ \(model.displayName) pre-loaded in \(String(format: "%.2f", loadTime))s")
+                print("✅ \(modelDisplayName) pre-loaded in \(String(format: "%.2f", loadTime))s")
 
                 await MainActor.run {
                     self.whisperBridge = bridge
@@ -256,7 +257,7 @@ class AppState: ObservableObject {
                     self.preloadVAD()
                 }
             } catch {
-                print("❌ Failed to pre-load \(model.displayName): \(error)")
+                print("❌ Failed to pre-load \(modelDisplayName): \(error)")
             }
         }
     }
@@ -466,5 +467,33 @@ class AppState: ObservableObject {
 
     func clearError() {
         errorMessage = nil
+    }
+
+    // MARK: - Cleanup for Graceful Shutdown
+
+    /// Release all whisper-related resources before app termination
+    /// This prevents crashes when C++ destructors run during exit()
+    func releaseWhisperResources() {
+        Logger.debug("Releasing whisper resources...", subsystem: .transcription)
+
+        // Stop any streaming transcription
+        streamingTranscriber = nil
+
+        // Free VAD context first (smaller, faster)
+        if sileroVAD != nil {
+            Logger.debug("Freeing Silero VAD context", subsystem: .transcription)
+            sileroVAD = nil
+            isVADLoaded = false
+        }
+
+        // Free whisper context (this is the critical one that was crashing)
+        if whisperBridge != nil {
+            Logger.debug("Freeing WhisperBridge context", subsystem: .transcription)
+            whisperBridge = nil
+            loadedModel = nil
+            isModelLoaded = false
+        }
+
+        Logger.debug("Whisper resources released", subsystem: .transcription)
     }
 }

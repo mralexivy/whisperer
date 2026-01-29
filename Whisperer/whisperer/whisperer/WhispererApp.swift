@@ -23,8 +23,17 @@ struct WhispererApp: App {
 class AppDelegate: NSObject, NSApplicationDelegate {
     var overlayPanel: OverlayPanel?
     let appState = AppState.shared
+    private var isShuttingDown = false
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        Logger.info("Application launched", subsystem: .app)
+
+        // Install crash handlers first thing
+        CrashHandler.shared.install()
+
+        // Start queue health monitoring
+        QueueHealthMonitor.shared.startMonitoring()
+
         // Hide dock icon
         NSApp.setActivationPolicy(.accessory)
 
@@ -111,6 +120,70 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                 self.appState.preloadModel()
             }
         }
+    }
+
+    // MARK: - Graceful Shutdown (Fixes crash on quit)
+
+    func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
+        // Prevent re-entrancy
+        guard !isShuttingDown else {
+            return .terminateNow
+        }
+        isShuttingDown = true
+
+        Logger.info("App termination requested, starting graceful shutdown...", subsystem: .app)
+
+        // Start async cleanup
+        Task {
+            await gracefulShutdown()
+
+            // Now it's safe to terminate
+            Logger.info("Graceful shutdown complete, terminating", subsystem: .app)
+            Logger.flush()
+
+            DispatchQueue.main.async {
+                NSApplication.shared.reply(toApplicationShouldTerminate: true)
+            }
+        }
+
+        // Tell macOS to wait for our cleanup
+        return .terminateLater
+    }
+
+    private func gracefulShutdown() async {
+        // 1. Stop any active recording
+        Logger.debug("Stopping active recording if any...", subsystem: .app)
+        await MainActor.run {
+            if appState.state != .idle {
+                appState.state = .idle
+            }
+        }
+
+        // 2. Stop audio engine
+        Logger.debug("Stopping audio engine...", subsystem: .app)
+        await appState.audioRecorder?.stopRecording()
+
+        // 3. Stop key listener
+        Logger.debug("Stopping key listener...", subsystem: .app)
+        appState.keyListener?.stop()
+
+        // 4. Free whisper context BEFORE exit() runs C++ destructors
+        // This is the key fix - explicitly free the context while we control the timing
+        Logger.debug("Freeing whisper context...", subsystem: .app)
+        await MainActor.run {
+            appState.releaseWhisperResources()
+        }
+
+        // 5. Give Metal backend time to finish any pending operations
+        Logger.debug("Waiting for Metal operations to complete...", subsystem: .app)
+        try? await Task.sleep(nanoseconds: 200_000_000)  // 200ms
+
+        // 6. Stop queue health monitoring
+        Logger.debug("Stopping queue health monitoring...", subsystem: .app)
+        QueueHealthMonitor.shared.stopMonitoring()
+
+        // 7. Remove crash marker (clean exit)
+        CrashHandler.shared.uninstall()
     }
 }
 
@@ -749,6 +822,11 @@ struct SettingsTabView: View {
                 settingsCard(title: "Permissions", icon: "lock.shield.fill", color: .red) {
                     PermissionsView()
                 }
+
+                // Diagnostics
+                settingsCard(title: "Diagnostics", icon: "ladybug.fill", color: .gray) {
+                    DiagnosticsView()
+                }
             }
         }
     }
@@ -1263,6 +1341,95 @@ struct PermissionsView: View {
         }
         if permissionManager.inputMonitoringStatus != .granted {
             permissionManager.openSystemSettings(for: .inputMonitoring)
+        }
+    }
+}
+
+// MARK: - Diagnostics View
+
+struct DiagnosticsView: View {
+    @State private var logFileSize: String = "..."
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            // Log file info
+            HStack {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Log file")
+                        .font(.system(size: 12, weight: .medium))
+                    Text(logFileSize)
+                        .font(.system(size: 11))
+                        .foregroundColor(.secondary)
+                }
+
+                Spacer()
+
+                Button(action: {
+                    Logger.openLogInFinder()
+                }) {
+                    HStack(spacing: 4) {
+                        Image(systemName: "folder.badge.gearshape")
+                            .font(.system(size: 11))
+                        Text("Open Logs Folder")
+                            .font(.system(size: 11, weight: .medium))
+                    }
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 5)
+                    .background(Color.secondary.opacity(0.12))
+                    .cornerRadius(6)
+                }
+                .buttonStyle(.plain)
+            }
+
+            // Crash log indicator
+            if CrashHandler.hasCrashLog {
+                HStack(spacing: 4) {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .foregroundColor(.orange)
+                        .font(.system(size: 11))
+                    Text("Crash log available")
+                        .font(.system(size: 11))
+                        .foregroundColor(.orange)
+                }
+            }
+
+            Divider()
+                .opacity(0.5)
+
+            // Version info
+            HStack {
+                Text("Version")
+                    .font(.system(size: 12, weight: .medium))
+                Spacer()
+                Text(appVersion)
+                    .font(.system(size: 11))
+                    .foregroundColor(.secondary)
+            }
+        }
+        .onAppear {
+            updateLogFileSize()
+        }
+    }
+
+    private var appVersion: String {
+        let version = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "?"
+        let build = Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "?"
+        return "\(version) (\(build))"
+    }
+
+    private func updateLogFileSize() {
+        let url = Logger.logFileURL
+        if let attrs = try? FileManager.default.attributesOfItem(atPath: url.path),
+           let size = attrs[.size] as? Int64 {
+            if size < 1024 {
+                logFileSize = "\(size) bytes"
+            } else if size < 1024 * 1024 {
+                logFileSize = String(format: "%.1f KB", Double(size) / 1024.0)
+            } else {
+                logFileSize = String(format: "%.1f MB", Double(size) / 1024.0 / 1024.0)
+            }
+        } else {
+            logFileSize = "Not found"
         }
     }
 }

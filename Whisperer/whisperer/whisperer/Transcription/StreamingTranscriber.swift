@@ -13,7 +13,7 @@ class StreamingTranscriber {
     private var whisper: WhisperBridge
     private var vad: SileroVAD?
     private var audioBuffer: [Float] = []
-    private let bufferLock = NSLock()
+    private let bufferLock = SafeLock()
 
     // Chunk configuration
     private let chunkDuration: Double = 2.0       // Process every 2 seconds
@@ -23,30 +23,40 @@ class StreamingTranscriber {
     private var chunkSize: Int { Int(chunkDuration * sampleRate) }       // 32000 samples
     private var overlapSize: Int { Int(overlapDuration * sampleRate) }   // 8000 samples
 
+    // Memory bounds - maximum recording duration
+    private let maxRecordingDuration: Double = 5.0 * 60.0  // 5 minutes
+    private var maxRecordingSamples: Int { Int(maxRecordingDuration * sampleRate) }  // 4,800,000 samples (~19MB)
+    private var memoryLimitReached = false
+
     // Overlap buffer - carries audio from previous chunk for continuity
     private var overlapBuffer: [Float] = []
 
     // Full recording for final pass refinement
     private var allRecordedSamples: [Float] = []
-    private let allSamplesLock = NSLock()
+    private let allSamplesLock = SafeLock()
 
     // Context carrying - last transcription used as prompt
     private var lastTranscriptionContext: String = ""
     private let contextMaxLength = 100  // Characters to carry as context
 
     // Thread-safe processing flag
-    private let processingLock = NSLock()
+    private let processingLock = SafeLock()
     private var _isProcessing = false
     private var isProcessing: Bool {
         get {
-            processingLock.lock()
-            defer { processingLock.unlock() }
-            return _isProcessing
+            do {
+                return try processingLock.withLock(timeout: 1.0) { _isProcessing }
+            } catch {
+                Logger.error("Failed to get isProcessing: \(error.localizedDescription)", subsystem: .transcription)
+                return false
+            }
         }
         set {
-            processingLock.lock()
-            _isProcessing = newValue
-            processingLock.unlock()
+            do {
+                try processingLock.withLock(timeout: 1.0) { _isProcessing = newValue }
+            } catch {
+                Logger.error("Failed to set isProcessing: \(error.localizedDescription)", subsystem: .transcription)
+            }
         }
     }
 
@@ -72,48 +82,92 @@ class StreamingTranscriber {
     /// Start streaming transcription
     func start(onTranscription: @escaping (String) -> Void) {
         self.onTranscription = onTranscription
-        bufferLock.lock()
-        audioBuffer.removeAll()
-        overlapBuffer.removeAll()
-        bufferLock.unlock()
 
-        allSamplesLock.lock()
-        allRecordedSamples.removeAll()
-        allSamplesLock.unlock()
+        do {
+            try bufferLock.withLock {
+                audioBuffer.removeAll()
+                overlapBuffer.removeAll()
+            }
+
+            try allSamplesLock.withLock {
+                allRecordedSamples.removeAll()
+            }
+        } catch {
+            Logger.error("Failed to acquire lock in start(): \(error.localizedDescription)", subsystem: .transcription)
+        }
 
         fullTranscription = ""
         lastTranscriptionContext = ""
         isProcessing = false
         isSpeechDetected = true
-        print("StreamingTranscriber started (overlap: \(overlapDuration)s, VAD: \(vadEnabled))")
+        memoryLimitReached = false
+
+        Logger.debug("StreamingTranscriber started (overlap: \(overlapDuration)s, VAD: \(vadEnabled))", subsystem: .transcription)
     }
 
     /// Add audio samples from microphone (should be 16kHz mono float32)
     func addSamples(_ samples: [Float]) {
         guard !samples.isEmpty else { return }
 
-        // Store all samples for final pass
-        allSamplesLock.lock()
-        allRecordedSamples.append(contentsOf: samples)
-        allSamplesLock.unlock()
+        // Check memory limit first
+        if memoryLimitReached {
+            // Silently drop samples if we've reached the limit
+            return
+        }
 
-        bufferLock.lock()
-        audioBuffer.append(contentsOf: samples)
-        let currentCount = audioBuffer.count
-        bufferLock.unlock()
+        // Store all samples for final pass
+        var totalCount = 0
+        do {
+            try allSamplesLock.withLock {
+                // Check if adding these samples would exceed the limit
+                if allRecordedSamples.count + samples.count > maxRecordingSamples {
+                    Logger.warning("Memory limit reached (\(String(format: "%.1f", maxRecordingDuration/60))min), stopping sample collection", subsystem: .transcription)
+                    memoryLimitReached = true
+
+                    // Add what we can up to the limit
+                    let remainingCapacity = maxRecordingSamples - allRecordedSamples.count
+                    if remainingCapacity > 0 {
+                        allRecordedSamples.append(contentsOf: samples.prefix(remainingCapacity))
+                    }
+                    totalCount = allRecordedSamples.count
+                } else {
+                    allRecordedSamples.append(contentsOf: samples)
+                    totalCount = allRecordedSamples.count
+                }
+            }
+        } catch {
+            Logger.error("Failed to acquire allSamplesLock: \(error.localizedDescription)", subsystem: .transcription)
+            return
+        }
+
+        // If we just hit the limit, warn the user
+        if memoryLimitReached {
+            Logger.warning("Recording has reached maximum duration of \(String(format: "%.1f", maxRecordingDuration/60)) minutes", subsystem: .transcription)
+            return
+        }
+
+        // Add to processing buffer
+        var currentCount = 0
+        do {
+            try bufferLock.withLock {
+                audioBuffer.append(contentsOf: samples)
+                currentCount = audioBuffer.count
+            }
+        } catch {
+            Logger.error("Failed to acquire bufferLock: \(error.localizedDescription)", subsystem: .transcription)
+            return
+        }
 
         // Only log periodically to reduce overhead
         if currentCount % 16000 < 2000 {
-            print("📊 Buffer: \(currentCount)/\(chunkSize) samples (\(Int(Double(currentCount)/Double(chunkSize)*100))%)")
+            let progress = Int(Double(currentCount)/Double(chunkSize)*100)
+            let duration = Double(totalCount) / sampleRate
+            Logger.debug("Buffer: \(currentCount)/\(chunkSize) samples (\(progress)%), total: \(String(format: "%.1f", duration))s", subsystem: .transcription)
         }
 
         // Check if we should process a chunk
         if currentCount >= chunkSize && !isProcessing {
-            // VAD is disabled for now - it was blocking all speech detection
-            // The final pass refinement handles transcription accurately without it
-            // TODO: Re-enable VAD when we can resolve the chunk_len < n_window issue
-
-            print("🚀 Buffer full, processing chunk...")
+            Logger.debug("Buffer full, processing chunk...", subsystem: .transcription)
             processChunk()
         }
     }
@@ -121,22 +175,29 @@ class StreamingTranscriber {
     private func processChunk() {
         isProcessing = true
 
-        bufferLock.lock()
-        // Prepend overlap from previous chunk for continuity
-        var chunk = overlapBuffer + audioBuffer
+        var chunk: [Float] = []
+        do {
+            try bufferLock.withLock {
+                // Prepend overlap from previous chunk for continuity
+                chunk = overlapBuffer + audioBuffer
 
-        // Save overlap for next chunk (last 0.5s of current buffer)
-        overlapBuffer = Array(audioBuffer.suffix(overlapSize))
-        audioBuffer.removeAll()
-        bufferLock.unlock()
-
-        guard !chunk.isEmpty else {
-            print("⚠️ Skipping chunk: empty")
+                // Save overlap for next chunk (last 0.5s of current buffer)
+                overlapBuffer = Array(audioBuffer.suffix(overlapSize))
+                audioBuffer.removeAll()
+            }
+        } catch {
+            Logger.error("Failed to acquire bufferLock in processChunk: \(error.localizedDescription)", subsystem: .transcription)
             isProcessing = false
             return
         }
 
-        print("🔄 Processing chunk of \(chunk.count) samples (with \(overlapSize) overlap)...")
+        guard !chunk.isEmpty else {
+            Logger.warning("Skipping chunk: empty", subsystem: .transcription)
+            isProcessing = false
+            return
+        }
+
+        Logger.debug("Processing chunk of \(chunk.count) samples (with \(overlapSize) overlap)...", subsystem: .transcription)
 
         // Get context from last transcription
         let context = lastTranscriptionContext
@@ -145,7 +206,7 @@ class StreamingTranscriber {
         whisper.transcribeAsync(samples: chunk, initialPrompt: context.isEmpty ? nil : context, language: language) { [weak self] text in
             guard let self = self else { return }
 
-            print("📝 Transcription result: '\(text)'")
+            Logger.debug("Transcription result: '\(text)'", subsystem: .transcription)
 
             if !text.isEmpty {
                 // Deduplicate text if there's overlap
@@ -200,56 +261,76 @@ class StreamingTranscriber {
         if overlapCount > 0 {
             // Remove overlapping words from new text
             let deduplicated = newWords.dropFirst(overlapCount).joined(separator: " ")
-            print("🔀 Deduplicated: removed \(overlapCount) overlapping words")
+            Logger.debug("Deduplicated: removed \(overlapCount) overlapping words", subsystem: .transcription)
             return deduplicated
         }
 
         return newText
     }
 
-    /// Stop and perform final pass transcription on complete audio
+    /// Stop and perform final pass transcription on complete audio (non-blocking)
     func stop() -> String {
-        print("⏹️ Stopping StreamingTranscriber...")
+        Logger.debug("Stopping StreamingTranscriber...", subsystem: .transcription)
 
-        // Wait for any in-flight async transcription to complete
-        let startTime = Date()
-        var waitCount = 0
-        while isProcessing && Date().timeIntervalSince(startTime) < 3.0 {
-            Thread.sleep(forTimeInterval: 0.05)
-            waitCount += 1
-        }
-
-        if isProcessing {
-            print("⚠️ Timeout waiting for in-flight transcription after \(waitCount * 50)ms")
-        } else if waitCount > 0 {
-            print("✅ In-flight transcription completed after \(waitCount * 50)ms")
-        }
+        // Mark as not processing to prevent new chunks
+        isProcessing = false
 
         // Get all recorded audio for final pass
-        allSamplesLock.lock()
-        let allSamples = allRecordedSamples
-        allSamplesLock.unlock()
+        var allSamples: [Float] = []
+        do {
+            try allSamplesLock.withLock {
+                allSamples = allRecordedSamples
+            }
+        } catch {
+            Logger.error("Failed to acquire allSamplesLock in stop(): \(error.localizedDescription)", subsystem: .transcription)
+        }
 
         // Final pass: re-transcribe entire audio for best accuracy
+        // This runs on whisper's background queue, not blocking main thread
         if !allSamples.isEmpty {
-            print("🎯 Final pass: transcribing \(allSamples.count) total samples (language: \(language.displayName))...")
+            let duration = Double(allSamples.count) / sampleRate
+            Logger.debug("Final pass: \(String(format: "%.1f", duration))s of audio", subsystem: .transcription)
             let finalText = whisper.transcribe(samples: allSamples, language: language)
             if !finalText.isEmpty {
                 // Use final pass result as it's more accurate with full context
                 fullTranscription = finalText
-                print("✅ Final pass completed: '\(finalText)'")
             }
         }
 
         // Clear buffers
-        bufferLock.lock()
-        audioBuffer.removeAll()
-        overlapBuffer.removeAll()
-        bufferLock.unlock()
+        do {
+            try bufferLock.withLock {
+                audioBuffer.removeAll()
+                overlapBuffer.removeAll()
+            }
+        } catch {
+            Logger.error("Failed to acquire bufferLock in stop(): \(error.localizedDescription)", subsystem: .transcription)
+        }
 
-        print("✅ StreamingTranscriber stopped. Final: '\(fullTranscription)'")
+        Logger.debug("StreamingTranscriber stopped (\(fullTranscription.count) chars)", subsystem: .transcription)
 
         return fullTranscription.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    /// Stop asynchronously with proper cleanup (waits for in-flight operations)
+    func stopAsync() async -> String {
+        Logger.debug("Stopping StreamingTranscriber (async)...", subsystem: .transcription)
+
+        // Wait briefly for any in-flight transcription
+        var waitCount = 0
+        while isProcessing && waitCount < 40 {  // Max 2 seconds (40 * 50ms)
+            try? await Task.sleep(nanoseconds: 50_000_000)  // 50ms
+            waitCount += 1
+        }
+
+        if isProcessing {
+            Logger.warning("In-flight transcription still running after 2s, proceeding anyway", subsystem: .transcription)
+        } else if waitCount > 0 {
+            Logger.debug("In-flight transcription completed after \(waitCount * 50)ms", subsystem: .transcription)
+        }
+
+        // Now do the synchronous stop (final pass)
+        return stop()
     }
 
     /// Get current full transcription (streaming result, before final pass)
@@ -259,22 +340,32 @@ class StreamingTranscriber {
 
     /// Get total recorded audio duration in seconds
     var recordedDuration: Double {
-        allSamplesLock.lock()
-        let count = allRecordedSamples.count
-        allSamplesLock.unlock()
-        return Double(count) / sampleRate
+        do {
+            return try allSamplesLock.withLock {
+                return Double(allRecordedSamples.count) / sampleRate
+            }
+        } catch {
+            Logger.error("Failed to get recordedDuration: \(error.localizedDescription)", subsystem: .transcription)
+            return 0
+        }
     }
 
     /// Save recorded audio to WAV file
     /// - Parameter url: Destination URL for the WAV file
     /// - Returns: True if save was successful
     func saveRecording(to url: URL) -> Bool {
-        allSamplesLock.lock()
-        let samples = allRecordedSamples
-        allSamplesLock.unlock()
+        var samples: [Float] = []
+        do {
+            try allSamplesLock.withLock {
+                samples = allRecordedSamples
+            }
+        } catch {
+            Logger.error("Failed to acquire lock for saveRecording: \(error.localizedDescription)", subsystem: .transcription)
+            return false
+        }
 
         guard !samples.isEmpty else {
-            print("⚠️ No audio samples to save")
+            Logger.warning("No audio samples to save", subsystem: .transcription)
             return false
         }
 
@@ -285,12 +376,12 @@ class StreamingTranscriber {
             channels: 1,
             interleaved: false
         ) else {
-            print("❌ Failed to create audio format")
+            Logger.error("Failed to create audio format", subsystem: .transcription)
             return false
         }
 
         guard let buffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: AVAudioFrameCount(samples.count)) else {
-            print("❌ Failed to create audio buffer")
+            Logger.error("Failed to create audio buffer", subsystem: .transcription)
             return false
         }
 
@@ -307,10 +398,10 @@ class StreamingTranscriber {
         do {
             let file = try AVAudioFile(forWriting: url, settings: format.settings)
             try file.write(from: buffer)
-            print("✅ Recording saved to: \(url.path)")
+            Logger.debug("Recording saved to: \(url.lastPathComponent)", subsystem: .transcription)
             return true
         } catch {
-            print("❌ Failed to save recording: \(error)")
+            Logger.error("Failed to save recording: \(error.localizedDescription)", subsystem: .transcription)
             return false
         }
     }

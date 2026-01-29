@@ -239,11 +239,25 @@ class WhisperBridge {
     private var ctx: OpaquePointer?
     private let modelPath: URL
     private let queue = DispatchQueue(label: "whisper.transcribe", qos: .userInteractive)
-    private let ctxLock = NSLock()
+    private let ctxLock = SafeLock()
+
+    // Shutdown tracking to prevent operations during cleanup
+    private var isShuttingDown = false
+    private var isInitialized = false
+
+    // Transcription timeout (default 30 seconds)
+    var transcriptionTimeout: TimeInterval = 30.0
 
     init(modelPath: URL) throws {
         self.modelPath = modelPath
+        Logger.debug("Initializing WhisperBridge with model: \(modelPath.lastPathComponent)", subsystem: .transcription)
         try loadModel()
+        isInitialized = true
+
+        // Register queue for health monitoring
+        QueueHealthMonitor.shared.monitor(queue: queue, name: "whisper.transcribe")
+
+        Logger.debug("WhisperBridge initialized", subsystem: .transcription)
     }
 
     private func loadModel() throws {
@@ -260,7 +274,7 @@ class WhisperBridge {
             throw WhisperError.modelLoadFailed
         }
 
-        print("Whisper model loaded: \(modelPath.lastPathComponent)")
+        Logger.debug("Whisper model loaded: \(modelPath.lastPathComponent)", subsystem: .transcription)
     }
 
     /// Transcribe audio samples (16kHz mono float32)
@@ -270,11 +284,39 @@ class WhisperBridge {
     ///   - language: Language for transcription (default: .auto for auto-detection)
     /// - Returns: Transcribed text
     func transcribe(samples: [Float], initialPrompt: String? = nil, language: TranscriptionLanguage = .auto) -> String {
-        ctxLock.lock()
-        defer { ctxLock.unlock() }
+        // Don't start new transcriptions if shutting down
+        guard !isShuttingDown else {
+            Logger.warning("Transcription skipped - WhisperBridge is shutting down", subsystem: .transcription)
+            return ""
+        }
 
+        guard isInitialized else {
+            Logger.warning("Transcription skipped - WhisperBridge not initialized", subsystem: .transcription)
+            return ""
+        }
+
+        // Use SafeLock with timeout to prevent deadlocks
+        let result: String
+        do {
+            result = try ctxLock.withLock(timeout: 5.0) { [weak self] in
+                guard let self = self else { return "" }
+                return self.performTranscription(samples: samples, initialPrompt: initialPrompt, language: language)
+            }
+        } catch SafeLockError.timeout {
+            Logger.error("Failed to acquire context lock within 5 seconds - possible deadlock", subsystem: .transcription)
+            return ""
+        } catch {
+            Logger.error("Lock acquisition error: \(error.localizedDescription)", subsystem: .transcription)
+            return ""
+        }
+
+        return result
+    }
+
+    /// Perform the actual transcription (must be called with lock held)
+    private func performTranscription(samples: [Float], initialPrompt: String? = nil, language: TranscriptionLanguage = .auto) -> String {
         guard let ctx = ctx else {
-            print("⚠️ Whisper context is nil, cannot transcribe")
+            Logger.warning("Whisper context is nil, cannot transcribe", subsystem: .transcription)
             return ""
         }
         guard !samples.isEmpty else { return "" }
@@ -315,7 +357,7 @@ class WhisperBridge {
         let result: Int32
         if language == .auto {
             wparams.language = nil
-            print("🌐 Language: auto-detect")
+            Logger.debug("Language: auto-detect", subsystem: .transcription)
 
             if let prompt = initialPrompt, !prompt.isEmpty {
                 result = runWithPrompt(prompt)
@@ -326,7 +368,7 @@ class WhisperBridge {
             // Set specific language - C string must stay alive
             result = language.rawValue.withCString { langPtr in
                 wparams.language = langPtr
-                print("🌐 Language: \(language.displayName)")
+                Logger.debug("Language: \(language.displayName)", subsystem: .transcription)
 
                 if let prompt = initialPrompt, !prompt.isEmpty {
                     return runWithPrompt(prompt)
@@ -337,7 +379,7 @@ class WhisperBridge {
         }
 
         if result != 0 {
-            print("Whisper transcription failed with code: \(result)")
+            Logger.error("Whisper transcription failed with code: \(result)", subsystem: .transcription)
             return ""
         }
 
@@ -367,13 +409,93 @@ class WhisperBridge {
         }
     }
 
-    deinit {
-        ctxLock.lock()
-        defer { ctxLock.unlock() }
+    /// Check if whisper context is healthy
+    /// - Returns: true if context appears valid, false otherwise
+    func isContextHealthy() -> Bool {
+        do {
+            return try ctxLock.withLock(timeout: 1.0) { [weak self] in
+                guard let self = self else { return false }
+                guard let ctx = self.ctx else { return false }
+                guard self.isInitialized && !self.isShuttingDown else { return false }
 
-        if let ctx = ctx {
-            whisper_free(ctx)
-            print("Whisper context freed")
+                // Verify context is valid by checking if we can get basic info
+                // whisper_full_n_segments returns 0 for fresh context, which is valid
+                _ = whisper_full_n_segments(ctx)
+                return true
+            }
+        } catch {
+            Logger.error("Health check failed: \(error.localizedDescription)", subsystem: .transcription)
+            return false
+        }
+    }
+
+    /// Attempt to recover the whisper context by reloading the model
+    func recoverContext() throws {
+        Logger.warning("Attempting to recover whisper context...", subsystem: .transcription)
+
+        do {
+            try ctxLock.withLock(timeout: 5.0) { [weak self] in
+                guard let self = self else { return }
+
+                // Free old context if it exists
+                if let oldCtx = self.ctx {
+                    whisper_free(oldCtx)
+                    Logger.debug("Freed corrupted context", subsystem: .transcription)
+                }
+
+                // Reload model
+                var cparams = whisper_context_default_params()
+                cparams.use_gpu = true
+                cparams.flash_attn = true
+
+                self.ctx = whisper_init_from_file_with_params(
+                    self.modelPath.path,
+                    cparams
+                )
+
+                guard self.ctx != nil else {
+                    throw WhisperError.modelLoadFailed
+                }
+
+                Logger.debug("Whisper context recovered successfully", subsystem: .transcription)
+            }
+        } catch {
+            Logger.error("Context recovery failed: \(error.localizedDescription)", subsystem: .transcription)
+            throw error
+        }
+    }
+
+    /// Prepare for shutdown - prevents new transcriptions and waits for in-flight operations
+    func prepareForShutdown() {
+        Logger.debug("WhisperBridge preparing for shutdown...", subsystem: .transcription)
+        isShuttingDown = true
+
+        // Wait briefly for any in-flight queue operations
+        queue.sync {
+            Logger.debug("WhisperBridge queue drained", subsystem: .transcription)
+        }
+    }
+
+    deinit {
+        Logger.debug("WhisperBridge deinit - freeing context...", subsystem: .transcription)
+
+        isShuttingDown = true
+
+        // Use SafeLock with timeout for cleanup
+        do {
+            try ctxLock.withLock(timeout: 2.0) { [self] in
+                if let ctx = ctx {
+                    whisper_free(ctx)
+                    Logger.debug("Whisper context freed successfully", subsystem: .transcription)
+                }
+            }
+        } catch {
+            Logger.error("Failed to acquire lock during deinit: \(error.localizedDescription)", subsystem: .transcription)
+            // Force cleanup anyway - we're dying
+            if let ctx = ctx {
+                whisper_free(ctx)
+                Logger.warning("Forced whisper context cleanup without lock", subsystem: .transcription)
+            }
         }
     }
 }
