@@ -1505,12 +1505,6 @@ struct AboutView: View {
                     .font(.system(size: 12, weight: .semibold))
 
                 linkButton(
-                    icon: "doc.text",
-                    title: "Open Source Licenses",
-                    action: openAcknowledgments
-                )
-
-                linkButton(
                     icon: "hand.raised",
                     title: "Privacy Policy",
                     action: openPrivacyPolicy
@@ -1569,14 +1563,6 @@ struct AboutView: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-    }
-
-    private func openAcknowledgments() {
-        if let url = Bundle.main.url(forResource: "Acknowledgments", withExtension: "txt") {
-            NSWorkspace.shared.open(url)
-        } else {
-            Logger.warning("Acknowledgments.txt not found in bundle", subsystem: .app)
-        }
     }
 
     private func openPrivacyPolicy() {
