@@ -2144,7 +2144,7 @@
 					/Users/alexanderi/Downloads/whisperer/whisper.cpp/include,
 					/Users/alexanderi/Downloads/whisperer/whisper.cpp/ggml/include,
 				);
-				INFOPLIST_FILE = whisperer/Info.plist;
+				INFOPLIST_FILE = Info.plist;
 				INFOPLIST_KEY_LSUIElement = YES;
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphoneos*]" = YES;
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphonesimulator*]" = YES;
@@ -2218,7 +2218,7 @@
 					/Users/alexanderi/Downloads/whisperer/whisper.cpp/include,
 					/Users/alexanderi/Downloads/whisperer/whisper.cpp/ggml/include,
 				);
-				INFOPLIST_FILE = whisperer/Info.plist;
+				INFOPLIST_FILE = Info.plist;
 				INFOPLIST_KEY_LSUIElement = YES;
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphoneos*]" = YES;
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphonesimulator*]" = YES;
