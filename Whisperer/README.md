@@ -1,165 +1,320 @@
-# Whisperer - Voice-to-Text macOS App
+# Whisperer
 
-Native macOS menu bar app for hold-to-talk voice transcription using local whisper.cpp.
+A native macOS menu bar app for instant voice-to-text transcription. Hold a key, speak, release — your words appear wherever you're typing. Completely offline, powered by whisper.cpp with Apple Silicon optimization.
+
+---
 
 ## Features
 
-- **Hold Fn (Globe) key** to record audio with live waveform
-- **Release Fn** to stop and transcribe using whisper.cpp large-v3-turbo
-- **Auto-paste** transcribed text into any focused text field
-- **Works across all apps** - Safari, Chrome, VS Code, Slack, Notes, etc.
-- **Completely offline** - local transcription, no cloud required
-- **Fast** - Apple Silicon optimized with Metal acceleration
+### Core Functionality
 
-## Project Structure
+- **Hold-to-Record Transcription** — Hold the Fn key (or any custom shortcut), speak, and release. Your transcribed text is automatically inserted into the focused text field.
+- **100% Offline** — All transcription happens locally on your Mac using whisper.cpp. No internet connection required, no data leaves your device.
+- **Works Everywhere** — Automatically pastes transcribed text into any app: Safari, Chrome, VS Code, Slack, Notes, Terminal, and more.
+- **Real-time Preview** — See your words appear as you speak with live streaming transcription.
+- **Apple Silicon Optimized** — Metal GPU acceleration for fast, efficient transcription.
 
-```
-Whisperer/
-├── WhispererApp.swift           # App entry point
-├── AppState.swift               # State machine
-├── Info.plist                   # Permissions
-│
-├── UI/
-│   ├── OverlayPanel.swift       # Floating panel
-│   ├── OverlayView.swift        # SwiftUI overlay
-│   └── WaveformView.swift       # Audio visualization
-│
-├── Audio/
-│   └── AudioRecorder.swift      # Mic capture + waveform
-│
-├── KeyListener/
-│   └── GlobalKeyListener.swift  # Fn key detection
-│
-├── Transcription/
-│   ├── WhisperRunner.swift      # whisper.cpp executor
-│   └── ModelDownloader.swift    # Model download
-│
-├── TextInjection/
-│   └── TextInjector.swift       # Cross-app text paste
-│
-└── Resources/
-    └── whisper-cli              # Whisper.cpp binary
-```
+### Audio
 
-## Setup Instructions
+- **System Audio Muting** — Optionally mutes other audio during recording to prevent feedback and interference (great for Zoom calls).
+- **Sound Feedback** — Distinct audio cues (Tink/Pop) confirm when recording starts and stops.
+- **Multiple Microphones** — Choose from any connected input device, or use the system default.
+- **Live Waveform** — Visual feedback shows audio levels in real-time during recording.
+- **Auto-Recovery** — Automatically recovers from audio device disconnections or system changes.
 
-### 1. Create Xcode Project
+### Keyboard Shortcuts
 
-1. Open Xcode
-2. Create New Project → macOS → App
-3. Product Name: **Whisperer**
-4. Interface: **SwiftUI**
-5. Language: **Swift**
-6. Uncheck "Create Document-Based Application"
-7. Save in this directory
+- **Fn Key Detection** — Uses a sophisticated 3-layer detection system (CGEventTap + IOKit HID + NSEvent) for reliable Fn key capture.
+- **Smart Combo Filtering** — Automatically cancels recording when you press Fn+Volume, Fn+Brightness, or other Fn+key combinations — no accidental recordings during Zoom calls.
+- **Customizable Shortcuts** — Configure any key or modifier combination as your recording trigger.
+- **Two Recording Modes**:
+  - **Hold to Record** (default) — Hold the shortcut to record, release to stop and transcribe.
+  - **Toggle Mode** — Press once to start, press again to stop.
+- **Fn Calibration** — Learn your specific keyboard's Fn key for more reliable detection.
 
-### 2. Add Source Files
+### Whisper Models
 
-1. Delete the default ContentView.swift
-2. Add all Swift files from the directories above:
-   - Drag folders into Xcode: UI/, Audio/, KeyListener/, Transcription/, TextInjection/
-   - Add WhispererApp.swift and AppState.swift
-3. Replace Info.plist with the one provided
+Choose from 10 different models based on your needs:
 
-### 3. Add whisper-cli Binary
+| Model | Size | Speed | Best For |
+|-------|------|-------|----------|
+| **Large V3 Turbo Q5** | 547 MB | Fast | Recommended — best balance of speed, size & accuracy |
+| Large V3 Turbo | 1.5 GB | Fast | 8x faster than Large V3, high accuracy |
+| Distil Large V3 | 756 MB | Very Fast | 6x faster than Large V3, good accuracy |
+| Distil Small (EN) | 166 MB | Very Fast | English only, 2x faster than Small |
+| Large V3 Q5 | 1.1 GB | Medium | Quantized Large V3, smaller file |
+| Large V3 | 2.9 GB | Slowest | Maximum accuracy |
+| Medium | 1.5 GB | Slow | Good accuracy, moderate size |
+| Small | 466 MB | Medium | Balanced option |
+| Base | 142 MB | Fast | Quick transcription |
+| Tiny | 75 MB | Fastest | Minimal resources |
 
-1. In Xcode, add `Resources/whisper-cli` to the project
-2. In Build Phases → Copy Bundle Resources, verify whisper-cli is included
-3. Select whisper-cli in project navigator
-4. In File Inspector, ensure "Target Membership" is checked
+- **In-App Download** — Download models directly from Hugging Face with progress tracking.
+- **Model Pre-loading** — Keeps the selected model in memory for instant recording start (no loading delay).
+- **Hot-Swapping** — Switch between downloaded models without restarting.
 
-### 4. Configure Build Settings
+### Language Support
 
-1. Select project in navigator → Target → General
-2. Minimum Deployments: **macOS 13.0** or higher
-3. In Signing & Capabilities:
-   - Enable "Hardened Runtime"
-   - Under Hardened Runtime, enable:
-     - Audio Input
-     - User Selected Files (Read Only)
+- **100+ Languages** — Supports all languages available in OpenAI Whisper.
+- **Language Selection** — Choose your transcription language in settings for best accuracy.
+- **Auto-Detection** — Optional automatic language detection (may be less reliable than explicit selection).
 
-### 5. Link Frameworks
+### Voice Activity Detection (VAD)
 
-In Build Phases → Link Binary With Libraries, add:
-- AVFoundation.framework
-- Cocoa.framework
-- IOKit.framework
-- ApplicationServices.framework
+- **Silero VAD Integration** — Optional voice activity detection for improved transcription accuracy.
+- **Automatic Download** — The small (~2MB) VAD model downloads automatically if needed.
+- **Graceful Fallback** — App works perfectly fine without VAD if loading fails.
 
-### 6. Build and Run
+### Streaming Transcription
 
-1. Build the project (⌘B)
-2. Run (⌘R)
-3. On first launch:
-   - Grant **Microphone** permission when prompted
-   - Grant **Accessibility** permission in System Settings > Privacy & Security > Accessibility
-   - Grant **Input Monitoring** if prompted
-   - The app will download the whisper model (~1.5GB) - this may take a few minutes
+The app uses an advanced streaming architecture:
+
+- **2-Second Chunks** — Processes audio every 2 seconds for real-time feedback.
+- **0.5s Overlap** — Audio overlap between chunks prevents word cutoff at boundaries.
+- **Context Carrying** — Uses previous transcription as a prompt for better continuity.
+- **Deduplication** — Automatically removes repeated words at chunk boundaries.
+- **Final Pass Refinement** — Re-transcribes the complete recording when you stop for maximum accuracy.
+- **Recording Saving** — Optionally saves recordings as WAV files with timestamps and transcription previews in the filename.
+- **5-Minute Maximum** — Memory-bounded to prevent issues on very long recordings.
+
+### User Interface
+
+- **Menu Bar App** — Lives quietly in your menu bar, no dock icon.
+- **Floating Overlay** — Appears during recording showing:
+  - Live waveform visualization
+  - Real-time transcription text (ticker-style, last ~120 characters)
+  - Recording status indicator with pulsing dot
+  - Cancel button
+- **Dark & Light Mode** — Automatically adapts to your system appearance.
+- **Tabbed Settings**:
+  - **Status** — Current model, microphone, shortcut, and quick usage guide
+  - **Models** — Browse and download available models
+  - **Settings** — Audio, language, microphone, shortcut, permissions, and diagnostics
+
+### Reliability & Diagnostics
+
+- **Centralized Logging** — Detailed logs saved to `~/Library/Logs/Whisperer/`
+- **Log Rotation** — Automatic rotation at 10MB, keeps 7 historical files
+- **Crash Handler** — Records crash information for debugging
+- **Queue Health Monitoring** — Internal monitoring for stability
+- **Graceful Shutdown** — Properly releases whisper resources on quit to prevent crashes
+- **Startup Grace Period** — 1.5s buffer after recording starts to ignore audio configuration changes
+
+---
+
+## Requirements
+
+- **macOS 13.0** (Ventura) or later
+- **Apple Silicon** recommended (Intel Macs supported but slower)
+- **~2GB disk space** for the recommended model
+
+---
+
+## Permissions
+
+Whisperer requires three system permissions:
+
+| Permission | Purpose | How to Grant |
+|------------|---------|--------------|
+| **Microphone** | Record your voice | Auto-prompted on first use |
+| **Accessibility** | Insert text into any app | System Settings → Privacy & Security → Accessibility |
+| **Input Monitoring** | Detect keyboard shortcuts globally | System Settings → Privacy & Security → Input Monitoring |
+
+The app will guide you through granting these permissions on first launch.
+
+---
+
+## Installation
+
+### From Xcode (Development)
+
+1. **Clone or download** this repository
+2. **Open** `whisperer.xcodeproj` in Xcode
+3. **Select** your development team in Signing & Capabilities
+4. **Build and Run** (⌘R)
+
+### First Launch
+
+1. **Grant permissions** when prompted (Microphone, Accessibility, Input Monitoring)
+2. **Configure Globe key** (optional but recommended):
+   - Go to System Settings → Keyboard → Keyboard Shortcuts → Modifier Keys
+   - Set "Globe key" to "Do Nothing" (prevents emoji picker conflict)
+3. **Wait for model download** — The default model (~547MB) downloads automatically
+4. **Start using** — Hold Fn, speak, release!
+
+---
 
 ## Usage
 
-1. **Menu Bar**: Look for the Whisperer icon (waveform)
-2. **Configure Globe Key**:
-   - Go to System Settings → Keyboard → Keyboard Shortcuts → Modifier Keys
-   - Set Globe Key to "Do Nothing" (prevents emoji picker conflict)
-3. **Record**: Hold Fn (Globe) key
-4. **Stop**: Release Fn key or click X in popup
-5. **Text Injection**: Transcribed text automatically appears in focused text field
+### Basic Workflow
 
-## Permissions Required
+1. **Focus** a text field in any application
+2. **Hold** the Fn key (or your configured shortcut)
+3. **Speak** — watch the live waveform and transcription preview
+4. **Release** — your transcribed text appears in the text field
 
-| Permission | Why Needed | Where to Grant |
-|------------|-----------|----------------|
-| Microphone | Record audio | Auto-prompted on first use |
-| Accessibility | Insert text across apps | System Settings > Privacy & Security > Accessibility |
-| Input Monitoring | Capture Fn key globally | Auto-prompted on first use |
+### Menu Bar
+
+Click the Whisperer icon in your menu bar to:
+
+- View current status and model
+- Download and switch between models
+- Configure settings (language, microphone, shortcut)
+- Check permission status
+- View logs for troubleshooting
+- Quit the app (⌘Q)
+
+### Tips
+
+- **Speak clearly** and at a normal pace for best results
+- **Pause briefly** before releasing to capture your last words
+- **Use the recommended model** (Large V3 Turbo Q5) for the best speed/accuracy balance
+- **Set your language explicitly** rather than using auto-detect for better accuracy
+- **Enable audio muting** if you're on calls to prevent feedback
+
+---
 
 ## Troubleshooting
 
 ### Fn Key Not Working
 
-1. Check Globe key setting: System Settings → Keyboard → Keyboard Shortcuts → Modifier Keys
-2. Ensure "Input Monitoring" permission is granted
-3. Try restarting the app
+1. **Check Globe key setting**: System Settings → Keyboard → Keyboard Shortcuts → Modifier Keys → Set Globe key to "Do Nothing"
+2. **Verify Input Monitoring permission** is granted
+3. **Try Fn calibration** in Settings → Shortcut (if available)
+4. **Consider using a different shortcut** if Fn detection remains unreliable
+
+### Arrow Keys Triggering Recording
+
+This is handled automatically — the app filters out arrow key presses that set the Fn flag internally on macOS.
+
+### Recording Cancels Unexpectedly
+
+This is intentional when pressing Fn+key combinations (like Fn+Volume). The app detects these combos and cancels to prevent accidental recordings during normal keyboard use.
 
 ### No Text Appearing After Transcription
 
-1. Verify Accessibility permission is granted
-2. Make sure a text field is focused before releasing Fn
-3. Check Console.app for error messages
+1. **Verify Accessibility permission** is granted
+2. **Make sure a text field is focused** before releasing the shortcut
+3. **Check if the app supports text injection** (some apps block programmatic text entry)
+
+### Transcription Quality Issues
+
+1. **Try a larger model** for better accuracy
+2. **Set your language explicitly** instead of auto-detect
+3. **Speak closer to the microphone**
+4. **Reduce background noise** or enable audio muting
+5. **Check your microphone selection** in Settings
 
 ### Model Download Failing
 
-1. Check internet connection
-2. Verify disk space (~2GB needed)
-3. Model location: `~/Library/Application Support/Whisperer/`
-4. Manual download: https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-large-v3-turbo.bin
+1. Check your internet connection
+2. Verify disk space (~2GB for recommended model)
+3. Check `~/Library/Application Support/Whisperer/` for partial downloads
+4. Try a different model
 
-### App Not Appearing in Menu Bar
+### App Crashes on Quit
 
-1. Verify LSUIElement=YES in Info.plist
-2. Check if app is running in Activity Monitor
-3. Restart Mac if needed
+This is fixed in the current version through graceful shutdown handling. If you experience crashes, check `~/Library/Logs/Whisperer/crash.log` for details.
+
+### Viewing Logs
+
+1. Open the menu bar menu
+2. Go to Settings → Diagnostics
+3. Click "Open Logs Folder"
+4. View `whisperer.log` for detailed application logs
+
+---
+
+## Architecture
+
+```
+Whisperer/
+├── WhispererApp.swift              # App entry point & menu bar setup
+├── AppState.swift                  # Global state machine & recording workflow
+│
+├── UI/
+│   ├── OverlayPanel.swift          # Floating NSPanel window
+│   ├── OverlayView.swift           # SwiftUI overlay content
+│   └── WaveformView.swift          # Audio level visualization
+│
+├── Audio/
+│   ├── AudioRecorder.swift         # AVAudioEngine microphone capture
+│   ├── AudioMuter.swift            # System volume control
+│   ├── AudioDeviceManager.swift    # Input device enumeration
+│   └── SoundPlayer.swift           # Start/stop sound effects
+│
+├── KeyListener/
+│   ├── GlobalKeyListener.swift     # 3-layer keyboard detection
+│   └── ShortcutConfig.swift        # Shortcut configuration & persistence
+│
+├── Transcription/
+│   ├── WhisperBridge.swift         # whisper.cpp Swift wrapper
+│   ├── WhisperModel.swift          # Model definitions & metadata
+│   ├── WhisperRunner.swift         # CLI-based transcription (legacy)
+│   ├── StreamingTranscriber.swift  # Real-time streaming transcription
+│   ├── ModelDownloader.swift       # Hugging Face model downloads
+│   └── SileroVAD.swift             # Voice activity detection
+│
+├── TextInjection/
+│   └── TextInjector.swift          # Accessibility API text insertion
+│
+├── Permissions/
+│   └── PermissionManager.swift     # Centralized permission handling
+│
+├── Core/
+│   ├── Logger.swift                # File-based logging system
+│   ├── CrashHandler.swift          # Crash detection & reporting
+│   ├── SafeLock.swift              # Thread-safe locking primitives
+│   ├── TaskTracker.swift           # Async task tracking
+│   └── QueueHealthMonitor.swift    # Queue health diagnostics
+│
+└── Resources/
+    ├── whisper-cli                 # whisper.cpp binary (if used)
+    └── Assets.xcassets             # App icons & images
+```
+
+---
 
 ## Technical Details
 
-- **Audio Format**: Mono, 16kHz, PCM Int16 (optimal for Whisper)
-- **Model**: ggml-large-v3-turbo (~1.5GB)
-- **Transcription**: Local whisper.cpp with Metal acceleration
-- **Fn Detection**: 3-layer approach (CGEventTap + IOKit HID + NSEvent)
-- **Text Injection**: Accessibility API with clipboard fallback
+- **Audio Format**: 16kHz mono PCM Float32 (optimal for Whisper)
+- **Chunk Size**: 2 seconds with 0.5 second overlap
+- **Maximum Recording**: 5 minutes (~19MB in memory)
+- **Model Storage**: `~/Library/Application Support/Whisperer/`
+- **Log Storage**: `~/Library/Logs/Whisperer/`
+- **Preferences**: Standard UserDefaults
+
+### Fn Key Detection
+
+The app uses three detection layers for maximum compatibility:
+
+1. **CGEventTap** — Primary method for modifier flags and key events
+2. **IOKit HID** — Backup detection for Fn key via HID Manager
+3. **NSEvent** — Monitors for keyCode 63 (Fn key) flagsChanged events
+
+### Text Injection
+
+1. **Primary**: Accessibility API (`AXUIElementSetAttributeValue`)
+2. **Fallback**: Clipboard + simulated Cmd+V paste
+
+---
 
 ## Building for Distribution
 
-1. Archive the app (Product → Archive)
-2. Export for Mac App Store or Developer ID
-3. Notarize for Gatekeeper (required for distribution outside App Store)
+1. **Archive** the app (Product → Archive)
+2. **Export** for Mac App Store or Developer ID
+3. **Notarize** for Gatekeeper (required for distribution outside App Store)
+
+---
+
+## Credits
+
+- [whisper.cpp](https://github.com/ggerganov/whisper.cpp) — High-performance C++ inference of OpenAI's Whisper model
+- [OpenAI Whisper](https://github.com/openai/whisper) — Robust speech recognition model
+- [Silero VAD](https://github.com/snakers4/silero-vad) — Voice activity detection
+
+---
 
 ## License
 
 All source code is provided as-is for the Whisperer project.
-
-## Credits
-
-- [whisper.cpp](https://github.com/ggerganov/whisper.cpp) - High-performance inference of OpenAI's Whisper model
-- [OpenAI Whisper](https://github.com/openai/whisper) - Robust speech recognition model

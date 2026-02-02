@@ -24,7 +24,11 @@
 	<true/>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>Whisperer needs microphone access to transcribe your voice.</string>
+	<key>NSAppleEventsUsageDescription</key>
+	<string>Whisperer needs automation access to insert transcribed text into applications.</string>
 	<key>NSSupportsAutomaticGraphicsSwitching</key>
 	<true/>
+	<key>ITSAppUsesNonExemptEncryption</key>
+	<false/>
 </dict>
 </plist>

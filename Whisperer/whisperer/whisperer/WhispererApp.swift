@@ -28,6 +28,28 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         Logger.info("Application launched", subsystem: .app)
 
+        // Validate App Store receipt (only in Release builds)
+        #if !DEBUG
+        do {
+            let isValid = try ReceiptValidator.shared.validateReceipt()
+            if !isValid {
+                Logger.error("Receipt validation failed", subsystem: .app)
+                // Exit with code 173 to trigger receipt refresh from App Store
+                exit(173)
+            }
+            Logger.info("Receipt validation successful", subsystem: .app)
+        } catch ReceiptValidationError.noReceiptFound {
+            Logger.error("No App Store receipt found", subsystem: .app)
+            // Exit with 173 to prompt macOS to obtain receipt
+            exit(173)
+        } catch {
+            Logger.error("Receipt validation error: \(error.localizedDescription)", subsystem: .app)
+            exit(173)
+        }
+        #else
+        Logger.debug("Skipping receipt validation in DEBUG build", subsystem: .app)
+        #endif
+
         // Install crash handlers first thing
         CrashHandler.shared.install()
 
@@ -833,6 +855,16 @@ struct SettingsTabView: View {
                 settingsCard(title: "Diagnostics", icon: "ladybug.fill", color: .gray) {
                     DiagnosticsView()
                 }
+
+                // Pro Pack
+                settingsCard(title: "Pro Pack", icon: "star.fill", color: .yellow) {
+                    PurchaseView()
+                }
+
+                // About
+                settingsCard(title: "About", icon: "info.circle.fill", color: .blue) {
+                    AboutView()
+                }
             }
         }
     }
@@ -1436,6 +1468,126 @@ struct DiagnosticsView: View {
             }
         } else {
             logFileSize = "Not found"
+        }
+    }
+}
+
+// MARK: - About View
+
+struct AboutView: View {
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            // App info
+            HStack(spacing: 12) {
+                Image(systemName: "waveform")
+                    .font(.system(size: 32))
+                    .foregroundColor(.accentColor)
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Whisperer")
+                        .font(.system(size: 14, weight: .bold))
+
+                    Text("Voice to Text for Mac")
+                        .font(.system(size: 12))
+                        .foregroundColor(.secondary)
+
+                    Text(appVersion)
+                        .font(.system(size: 11))
+                        .foregroundColor(.secondary)
+                }
+            }
+
+            Divider()
+
+            // Links
+            VStack(alignment: .leading, spacing: 10) {
+                Text("Legal & Information")
+                    .font(.system(size: 12, weight: .semibold))
+
+                linkButton(
+                    icon: "doc.text",
+                    title: "Open Source Licenses",
+                    action: openAcknowledgments
+                )
+
+                linkButton(
+                    icon: "hand.raised",
+                    title: "Privacy Policy",
+                    action: openPrivacyPolicy
+                )
+
+                linkButton(
+                    icon: "globe",
+                    title: "Website",
+                    action: openWebsite
+                )
+            }
+
+            Divider()
+
+            // Copyright
+            Text("© 2026 Whisperer. All rights reserved.")
+                .font(.system(size: 10))
+                .foregroundColor(.secondary)
+                .frame(maxWidth: .infinity, alignment: .center)
+
+            Text("Built with whisper.cpp and OpenAI Whisper")
+                .font(.system(size: 10))
+                .foregroundColor(.secondary)
+                .frame(maxWidth: .infinity, alignment: .center)
+        }
+    }
+
+    private var appVersion: String {
+        let version = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.0"
+        let build = Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "1"
+        return "Version \(version) (Build \(build))"
+    }
+
+    private func linkButton(icon: String, title: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            HStack(spacing: 8) {
+                Image(systemName: icon)
+                    .foregroundColor(.accentColor)
+                    .font(.system(size: 12))
+                    .frame(width: 18)
+
+                Text(title)
+                    .font(.system(size: 12))
+                    .foregroundColor(.primary)
+
+                Spacer()
+
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 10))
+                    .foregroundColor(.secondary)
+            }
+            .padding(.vertical, 6)
+            .padding(.horizontal, 8)
+            .background(Color.secondary.opacity(0.05))
+            .cornerRadius(6)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+    }
+
+    private func openAcknowledgments() {
+        if let url = Bundle.main.url(forResource: "Acknowledgments", withExtension: "txt") {
+            NSWorkspace.shared.open(url)
+        } else {
+            Logger.warning("Acknowledgments.txt not found in bundle", subsystem: .app)
+        }
+    }
+
+    private func openPrivacyPolicy() {
+        if let url = URL(string: "https://whispererapp.com/privacy") {
+            NSWorkspace.shared.open(url)
+        }
+    }
+
+    private func openWebsite() {
+        if let url = URL(string: "https://whispererapp.com") {
+            NSWorkspace.shared.open(url)
         }
     }
 }
