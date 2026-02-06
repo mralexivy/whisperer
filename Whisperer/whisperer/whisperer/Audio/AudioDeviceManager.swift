@@ -8,6 +8,7 @@
 import Foundation
 import CoreAudio
 import Combine
+import AVFoundation
 
 class AudioDeviceManager: ObservableObject {
     static let shared = AudioDeviceManager()
@@ -35,6 +36,9 @@ class AudioDeviceManager: ObservableObject {
     }
 
     private var listenerBlock: AudioObjectPropertyListenerBlock?
+    private var defaultDeviceListenerBlock: AudioObjectPropertyListenerBlock?
+    private var deviceConnectedObserver: NSObjectProtocol?
+    private var deviceDisconnectedObserver: NSObjectProtocol?
     private var isMonitoring = false
 
     private init() {
@@ -267,6 +271,7 @@ class AudioDeviceManager: ObservableObject {
     func startMonitoring() {
         guard !isMonitoring else { return }
 
+        // Monitor device add/remove events
         var propertyAddress = AudioObjectPropertyAddress(
             mSelector: kAudioHardwarePropertyDevices,
             mScope: kAudioObjectPropertyScopeGlobal,
@@ -286,32 +291,121 @@ class AudioDeviceManager: ObservableObject {
             listenerBlock!
         )
 
-        if status == noErr {
-            isMonitoring = true
-            print("Started monitoring audio device changes")
-        } else {
-            print("Failed to start device monitoring: \(status)")
+        if status != noErr {
+            print("Failed to start device list monitoring: \(status)")
+            return
         }
-    }
 
-    func stopMonitoring() {
-        guard isMonitoring, let listenerBlock = listenerBlock else { return }
-
-        var propertyAddress = AudioObjectPropertyAddress(
-            mSelector: kAudioHardwarePropertyDevices,
+        // Monitor default input device changes
+        var defaultDeviceAddress = AudioObjectPropertyAddress(
+            mSelector: kAudioHardwarePropertyDefaultInputDevice,
             mScope: kAudioObjectPropertyScopeGlobal,
             mElement: kAudioObjectPropertyElementMain
         )
 
-        AudioObjectRemovePropertyListenerBlock(
+        defaultDeviceListenerBlock = { [weak self] (_, _) in
+            DispatchQueue.main.async {
+                guard let self = self else { return }
+                // When default device changes, refresh devices and update selection
+                // if user is following system default (preferredDeviceUID is nil)
+                if self.preferredDeviceUID == nil {
+                    print("Default input device changed, updating selection")
+                    self.refreshDevices()
+                }
+            }
+        }
+
+        let defaultStatus = AudioObjectAddPropertyListenerBlock(
             AudioObjectID(kAudioObjectSystemObject),
-            &propertyAddress,
+            &defaultDeviceAddress,
             DispatchQueue.main,
-            listenerBlock
+            defaultDeviceListenerBlock!
         )
 
+        if defaultStatus != noErr {
+            print("Failed to start default device monitoring: \(defaultStatus)")
+            // Continue anyway - we have the device list monitoring
+        }
+
+        // Add AVFoundation device notifications for redundancy
+        // These work alongside CoreAudio listeners for more reliable detection
+        deviceConnectedObserver = NotificationCenter.default.addObserver(
+            forName: AVCaptureDevice.wasConnectedNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] notification in
+            if let device = notification.object as? AVCaptureDevice,
+               device.hasMediaType(.audio) {
+                print("AVFoundation: Audio device connected - \(device.localizedName)")
+                self?.refreshDevices()
+            }
+        }
+
+        deviceDisconnectedObserver = NotificationCenter.default.addObserver(
+            forName: AVCaptureDevice.wasDisconnectedNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] notification in
+            if let device = notification.object as? AVCaptureDevice,
+               device.hasMediaType(.audio) {
+                print("AVFoundation: Audio device disconnected - \(device.localizedName)")
+                self?.refreshDevices()
+            }
+        }
+
+        isMonitoring = true
+        print("Started monitoring audio device changes (CoreAudio + AVFoundation)")
+    }
+
+    func stopMonitoring() {
+        guard isMonitoring else { return }
+
+        // Remove device list listener
+        if let listenerBlock = listenerBlock {
+            var propertyAddress = AudioObjectPropertyAddress(
+                mSelector: kAudioHardwarePropertyDevices,
+                mScope: kAudioObjectPropertyScopeGlobal,
+                mElement: kAudioObjectPropertyElementMain
+            )
+
+            AudioObjectRemovePropertyListenerBlock(
+                AudioObjectID(kAudioObjectSystemObject),
+                &propertyAddress,
+                DispatchQueue.main,
+                listenerBlock
+            )
+            self.listenerBlock = nil
+        }
+
+        // Remove default device listener
+        if let defaultDeviceListenerBlock = defaultDeviceListenerBlock {
+            var defaultDeviceAddress = AudioObjectPropertyAddress(
+                mSelector: kAudioHardwarePropertyDefaultInputDevice,
+                mScope: kAudioObjectPropertyScopeGlobal,
+                mElement: kAudioObjectPropertyElementMain
+            )
+
+            AudioObjectRemovePropertyListenerBlock(
+                AudioObjectID(kAudioObjectSystemObject),
+                &defaultDeviceAddress,
+                DispatchQueue.main,
+                defaultDeviceListenerBlock
+            )
+            self.defaultDeviceListenerBlock = nil
+        }
+
+        // Remove AVFoundation observers
+        if let observer = deviceConnectedObserver {
+            NotificationCenter.default.removeObserver(observer)
+            deviceConnectedObserver = nil
+        }
+
+        if let observer = deviceDisconnectedObserver {
+            NotificationCenter.default.removeObserver(observer)
+            deviceDisconnectedObserver = nil
+        }
+
         isMonitoring = false
-        self.listenerBlock = nil
         print("Stopped monitoring audio device changes")
     }
 

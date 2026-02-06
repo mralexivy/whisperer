@@ -22,6 +22,9 @@ class AudioRecorder: NSObject {
     // Callback for streaming samples (16kHz mono float32)
     var onStreamingSamples: (([Float]) -> Void)?
 
+    // Callback for device recovery events (message describing what happened)
+    var onDeviceRecovery: ((String) -> Void)?
+
     // Target format for whisper: 16kHz mono
     private let targetSampleRate: Double = 16000.0
 
@@ -43,50 +46,16 @@ class AudioRecorder: NSObject {
 
     override init() {
         super.init()
-        setupAudioEngineObservers()
+        // Observer setup moved to startRecordingInternal() to observe only our engine
     }
 
     deinit {
-        removeAudioEngineObservers()
+        // Observer cleanup moved to stopRecording()
     }
 
     // MARK: - Audio Engine Observers
-
-    private func setupAudioEngineObservers() {
-        // Observe configuration changes (device changes, format changes, interruptions)
-        configChangeObserver = NotificationCenter.default.addObserver(
-            forName: .AVAudioEngineConfigurationChange,
-            object: nil,
-            queue: .main
-        ) { [weak self] notification in
-            guard let self = self else { return }
-            Logger.warning("Audio engine configuration changed", subsystem: .audio)
-
-            // Ignore config changes during startup grace period
-            // (audio muting and other system changes can trigger this right after start)
-            if let startTime = self.recordingStartTime {
-                let elapsed = Date().timeIntervalSince(startTime)
-                if elapsed < self.startupGracePeriod {
-                    Logger.debug("Ignoring config change during startup grace period (\(String(format: "%.2f", elapsed))s < \(self.startupGracePeriod)s)", subsystem: .audio)
-                    return
-                }
-            }
-
-            if self.isRecording && self.autoRecoveryEnabled {
-                Logger.debug("Attempting to recover from configuration change...", subsystem: .audio)
-                Task {
-                    await self.recoverAudioEngine()
-                }
-            }
-        }
-    }
-
-    private func removeAudioEngineObservers() {
-        if let observer = configChangeObserver {
-            NotificationCenter.default.removeObserver(observer)
-            configChangeObserver = nil
-        }
-    }
+    // Note: Observer is now registered per-recording session in startRecordingInternal()
+    // and removed in stopRecording() to only monitor our specific engine instance
 
     /// Attempt to recover the audio engine after a failure
     private func recoverAudioEngine() async {
@@ -97,12 +66,22 @@ class AudioRecorder: NSObject {
 
         guard recoveryAttempts < maxRecoveryAttempts else {
             Logger.error("Max recovery attempts (\(maxRecoveryAttempts)) reached, giving up", subsystem: .audio)
+            DispatchQueue.main.async { [weak self] in
+                self?.onDeviceRecovery?("Microphone connection lost. Please check your audio device.")
+            }
             await stopRecording()
             return
         }
 
         recoveryAttempts += 1
         Logger.debug("Recovery attempt \(recoveryAttempts)/\(maxRecoveryAttempts)...", subsystem: .audio)
+
+        // Notify user that we're recovering
+        if recoveryAttempts == 1 {
+            DispatchQueue.main.async { [weak self] in
+                self?.onDeviceRecovery?("Audio device changed, reconnecting...")
+            }
+        }
 
         // Stop current engine
         audioEngine?.inputNode.removeTap(onBus: 0)
@@ -124,12 +103,22 @@ class AudioRecorder: NSObject {
             _ = try await startRecordingInternal()
             Logger.debug("Audio engine recovered successfully", subsystem: .audio)
             recoveryAttempts = 0  // Reset on success
+
+            // Notify user of successful recovery
+            DispatchQueue.main.async { [weak self] in
+                self?.onDeviceRecovery?("Audio reconnected successfully")
+            }
         } catch {
             Logger.error("Recovery failed: \(error.localizedDescription)", subsystem: .audio)
 
             // If we haven't maxed out, try again
             if recoveryAttempts < maxRecoveryAttempts {
                 await recoverAudioEngine()
+            } else {
+                // Final failure notification
+                DispatchQueue.main.async { [weak self] in
+                    self?.onDeviceRecovery?("Could not reconnect audio. Please restart recording.")
+                }
             }
         }
     }
@@ -200,7 +189,45 @@ class AudioRecorder: NSObject {
             throw RecordingError.fileCreationFailed
         }
 
+        // Setup observer for THIS engine only (not all engines on the system)
+        configChangeObserver = NotificationCenter.default.addObserver(
+            forName: .AVAudioEngineConfigurationChange,
+            object: audioEngine,  // Only observe our engine, not all engines
+            queue: .main
+        ) { [weak self] notification in
+            guard let self = self else { return }
+            Logger.warning("Audio engine configuration changed", subsystem: .audio)
+
+            // Ignore config changes during startup grace period
+            // (audio muting and other system changes can trigger this right after start)
+            if let startTime = self.recordingStartTime {
+                let elapsed = Date().timeIntervalSince(startTime)
+                if elapsed < self.startupGracePeriod {
+                    Logger.debug("Ignoring config change during startup grace period (\(String(format: "%.2f", elapsed))s < \(self.startupGracePeriod)s)", subsystem: .audio)
+                    return
+                }
+            }
+
+            if self.isRecording && self.autoRecoveryEnabled {
+                Logger.debug("Attempting to recover from configuration change...", subsystem: .audio)
+                Task {
+                    await self.recoverAudioEngine()
+                }
+            }
+        }
+
         let inputNode = audioEngine.inputNode
+
+        // Voice processing disabled - it causes ~500ms+ startup delay due to
+        // KeystrokeSuppressor initialization and stream setup timeouts.
+        // This delay cuts off the first words of speech.
+        // Whisper handles raw audio well enough without preprocessing.
+        Logger.debug("Voice processing disabled for instant startup", subsystem: .audio)
+
+        // CRITICAL: Force audio unit creation by querying format BEFORE setting device
+        // The audio unit is only created when we access outputFormat(forBus:)
+        // Without this, setInputDevice() fails because inputNode.audioUnit is nil
+        _ = inputNode.outputFormat(forBus: 0)
 
         // Only set custom device if explicitly selected (not system default)
         // selectedDeviceID is only set when user picks a specific device in settings
@@ -216,12 +243,7 @@ class AudioRecorder: NSObject {
             Logger.debug("Using system default input device", subsystem: .audio)
         }
 
-        // Voice processing disabled - it causes ~500ms+ startup delay due to
-        // KeystrokeSuppressor initialization and stream setup timeouts.
-        // This delay cuts off the first words of speech.
-        // Whisper handles raw audio well enough without preprocessing.
-        Logger.debug("Voice processing disabled for instant startup", subsystem: .audio)
-
+        // Re-query format after device change (format may be different for selected device)
         let inputFormat = inputNode.outputFormat(forBus: 0)
 
         // Validate format - must have valid sample rate and channels
@@ -391,6 +413,12 @@ class AudioRecorder: NSObject {
         try? await Task.sleep(nanoseconds: 200_000_000)
 
         Logger.debug("Drain period complete, removing tap", subsystem: .audio)
+
+        // Remove observer before stopping engine
+        if let observer = configChangeObserver {
+            NotificationCenter.default.removeObserver(observer)
+            configChangeObserver = nil
+        }
 
         // Now safe to remove the tap and stop
         audioEngine?.inputNode.removeTap(onBus: 0)

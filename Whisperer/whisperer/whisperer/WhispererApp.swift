@@ -109,6 +109,13 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             }
         }
 
+        // Setup device recovery callback
+        appState.audioRecorder?.onDeviceRecovery = { [weak self] message in
+            Task { @MainActor in
+                self?.appState.errorMessage = message
+            }
+        }
+
         // Start key listener
         appState.keyListener?.start()
     }
@@ -1525,7 +1532,7 @@ struct AboutView: View {
                 .foregroundColor(.secondary)
                 .frame(maxWidth: .infinity, alignment: .center)
 
-            Text("Built with whisper.cpp and OpenAI Whisper")
+            Text("Powered by whisper.cpp — 100% offline")
                 .font(.system(size: 10))
                 .foregroundColor(.secondary)
                 .frame(maxWidth: .infinity, alignment: .center)
