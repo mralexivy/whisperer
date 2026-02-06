@@ -462,6 +462,23 @@ class AppState: ObservableObject {
         // Save recording from in-memory samples
         if transcriber.saveRecording(to: destURL) {
             print("✅ Recording saved to: \(destURL.path)")
+
+            // Save to history database
+            Task {
+                do {
+                    let record = TranscriptionRecord(
+                        transcription: transcription,
+                        audioFileURL: fileName,
+                        duration: transcriber.recordedDuration,
+                        language: selectedLanguage.rawValue,
+                        modelUsed: selectedModel.rawValue
+                    )
+                    try await HistoryManager.shared.saveTranscription(record)
+                    Logger.debug("Transcription saved to history database", subsystem: .app)
+                } catch {
+                    Logger.error("Failed to save transcription to history: \(error)", subsystem: .app)
+                }
+            }
         }
     }
 

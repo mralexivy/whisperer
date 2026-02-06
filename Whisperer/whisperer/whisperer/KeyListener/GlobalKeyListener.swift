@@ -13,6 +13,7 @@ class GlobalKeyListener {
     var onShortcutPressed: (() -> Void)?
     var onShortcutReleased: (() -> Void)?
     var onShortcutCancelled: (() -> Void)?  // Called when Fn+key combo cancels recording
+    var onHistoryShortcut: (() -> Void)?    // Called when Fn+S is pressed
 
     // Permission status - true if event tap was successfully created
     private(set) var hasInputMonitoringPermission: Bool = false
@@ -453,6 +454,15 @@ class GlobalKeyListener {
                 self.currentModifiers = modifiers
 
                 if isDown && self.fnDown {
+                    // Check if this is Fn+S (history shortcut)
+                    if keyCode == 1 {  // 'S' key
+                        print("🔍 Fn+S detected - toggling history window")
+                        DispatchQueue.main.async {
+                            self.onHistoryShortcut?()
+                        }
+                        return  // Don't mark as used with other key
+                    }
+
                     // Another key pressed while Fn is held - mark as combo
                     self.fnUsedWithOtherKey = true
                     print("⚠️ Fn+key combo detected (keyCode: \(keyCode))")

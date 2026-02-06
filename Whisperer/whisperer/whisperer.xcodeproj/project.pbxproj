@@ -22,6 +22,7 @@
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
+		10028F6C2F34F29200941FBC /* whisperer.xcodeproj */ = {isa = PBXFileReference; lastKnownFileType = "wrapper.pb-project"; path = whisperer.xcodeproj; sourceTree = "<group>"; };
 		1009222C2F313D2200AA3C22 /* whisperer.xcodeproj */ = {isa = PBXFileReference; lastKnownFileType = "wrapper.pb-project"; path = whisperer.xcodeproj; sourceTree = "<group>"; };
 		1038D47F2F26382700490030 /* whisperer.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = whisperer.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		1038D48D2F263ADB00490030 /* whisperer.xcodeproj */ = {isa = PBXFileReference; lastKnownFileType = "wrapper.pb-project"; path = whisperer.xcodeproj; sourceTree = "<group>"; };
@@ -554,6 +555,7 @@
 		1038D75B2F266EE000490030 /* Metal.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Metal.framework; path = Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS26.2.sdk/System/Library/Frameworks/Metal.framework; sourceTree = DEVELOPER_DIR; };
 		1038D75D2F266EE900490030 /* Accelerate.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Accelerate.framework; path = Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS26.2.sdk/System/Library/Frameworks/Accelerate.framework; sourceTree = DEVELOPER_DIR; };
 		1038D75F2F266EF900490030 /* Foundation.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Foundation.framework; path = Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS26.2.sdk/System/Library/Frameworks/Foundation.framework; sourceTree = DEVELOPER_DIR; };
+		1068837B2F365B32008BC1AD /* whisperer.xcodeproj */ = {isa = PBXFileReference; lastKnownFileType = "wrapper.pb-project"; path = whisperer.xcodeproj; sourceTree = "<group>"; };
 		10DED0232F27E4B40054AFA2 /* whisperer.xcodeproj */ = {isa = PBXFileReference; lastKnownFileType = "wrapper.pb-project"; path = whisperer.xcodeproj; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
@@ -588,6 +590,13 @@
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
+		10028F702F34F29200941FBC /* Products */ = {
+			isa = PBXGroup;
+			children = (
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
 		100922302F313D2200AA3C22 /* Products */ = {
 			isa = PBXGroup;
 			children = (
@@ -1898,6 +1907,13 @@
 			path = "../../whisper.cpp/build-static";
 			sourceTree = "<group>";
 		};
+		1068837F2F365B32008BC1AD /* Products */ = {
+			isa = PBXGroup;
+			children = (
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
 		10DED0272F27E4B40054AFA2 /* Products */ = {
 			isa = PBXGroup;
 			children = (
@@ -1954,10 +1970,16 @@
 			);
 			mainGroup = 1038D4762F26382700490030;
 			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 1038D4802F26382700490030 /* Products */;
 			projectDirPath = "";
 			projectReferences = (
+				{
+					ProductGroup = 10028F702F34F29200941FBC /* Products */;
+					ProjectRef = 10028F6C2F34F29200941FBC /* whisperer.xcodeproj */;
+				},
 				{
 					ProductGroup = 1038D48E2F263ADB00490030 /* Products */;
 					ProjectRef = 1038D48D2F263ADB00490030 /* whisperer.xcodeproj */;
@@ -1965,6 +1987,10 @@
 				{
 					ProductGroup = 1038D4C92F263D6900490030 /* Products */;
 					ProjectRef = 1038D4C72F263D6900490030 /* whisperer.xcodeproj */;
+				},
+				{
+					ProductGroup = 1068837F2F365B32008BC1AD /* Products */;
+					ProjectRef = 1068837B2F365B32008BC1AD /* whisperer.xcodeproj */;
 				},
 				{
 					ProductGroup = 100922302F313D2200AA3C22 /* Products */;

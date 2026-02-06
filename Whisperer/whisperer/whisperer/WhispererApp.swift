@@ -102,6 +102,12 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             }
         }
 
+        appState.keyListener?.onHistoryShortcut = {
+            Task { @MainActor in
+                HistoryWindowManager.shared.toggleWindow()
+            }
+        }
+
         // Setup audio callback for waveform
         appState.audioRecorder?.onAmplitudeUpdate = { [weak self] amplitude in
             Task { @MainActor in
@@ -851,6 +857,31 @@ struct SettingsTabView: View {
                 // Keyboard Shortcut
                 settingsCard(title: "Shortcut", icon: "keyboard", color: .purple) {
                     ShortcutRecorderView()
+                }
+
+                // History
+                settingsCard(title: "History", icon: "clock.fill", color: .indigo) {
+                    Button(action: {
+                        HistoryWindowManager.shared.showWindow()
+                    }) {
+                        HStack {
+                            VStack(alignment: .leading, spacing: 3) {
+                                Text("View transcription history")
+                                    .font(.system(size: 13, weight: .medium))
+                                Text("Press Fn+S to toggle history window")
+                                    .font(.system(size: 11))
+                                    .foregroundColor(.secondary)
+                            }
+
+                            Spacer()
+
+                            Image(systemName: "arrow.up.forward")
+                                .font(.system(size: 13))
+                                .foregroundColor(.accentColor)
+                        }
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
                 }
 
                 // Permissions

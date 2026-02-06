@@ -6,6 +6,7 @@
 //
 
 import Foundation
+import Combine
 
 /// Represents a tracked task
 struct TrackedTask {
