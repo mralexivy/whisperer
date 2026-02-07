@@ -169,13 +169,15 @@ class StoreManager: ObservableObject {
     /// Listen for transaction updates
     private func listenForTransactions() -> Task<Void, Never> {
         let productId = self.productId
-        return Task.detached {
+        return Task.detached { [weak self] in
             for await result in Transaction.updates {
+                guard let self = self else { return }
                 do {
                     let transaction = try self.checkVerified(result)
 
                     // Update pro status
-                    await MainActor.run {
+                    await MainActor.run { [weak self] in
+                        guard let self = self else { return }
                         if transaction.productID == productId {
                             self.isPro = true
                             self.saveProStatus(true)

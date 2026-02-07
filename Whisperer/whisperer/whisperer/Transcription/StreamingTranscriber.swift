@@ -35,8 +35,7 @@ class StreamingTranscriber {
     private var allRecordedSamples: [Float] = []
     private let allSamplesLock = SafeLock()
 
-    // Context carrying - last transcription used as prompt
-    private var lastTranscriptionContext: String = ""
+    // Context carrying - last transcription used as prompt (see thread-safe properties above)
     private let contextMaxLength = 100  // Characters to carry as context
 
     // Thread-safe processing flag
@@ -61,7 +60,46 @@ class StreamingTranscriber {
     }
 
     private var onTranscription: ((String) -> Void)?
-    private var fullTranscription: String = ""
+
+    // Thread-safe transcription state
+    private let transcriptionLock = SafeLock()
+    private var _fullTranscription: String = ""
+    private var fullTranscription: String {
+        get {
+            do {
+                return try transcriptionLock.withLock(timeout: 1.0) { _fullTranscription }
+            } catch {
+                Logger.error("Failed to get fullTranscription: \(error.localizedDescription)", subsystem: .transcription)
+                return ""
+            }
+        }
+        set {
+            do {
+                try transcriptionLock.withLock(timeout: 1.0) { _fullTranscription = newValue }
+            } catch {
+                Logger.error("Failed to set fullTranscription: \(error.localizedDescription)", subsystem: .transcription)
+            }
+        }
+    }
+
+    private var _lastTranscriptionContext: String = ""
+    private var lastTranscriptionContext: String {
+        get {
+            do {
+                return try transcriptionLock.withLock(timeout: 1.0) { _lastTranscriptionContext }
+            } catch {
+                Logger.error("Failed to get lastTranscriptionContext: \(error.localizedDescription)", subsystem: .transcription)
+                return ""
+            }
+        }
+        set {
+            do {
+                try transcriptionLock.withLock(timeout: 1.0) { _lastTranscriptionContext = newValue }
+            } catch {
+                Logger.error("Failed to set lastTranscriptionContext: \(error.localizedDescription)", subsystem: .transcription)
+            }
+        }
+    }
 
     // VAD state
     private var vadEnabled: Bool = false

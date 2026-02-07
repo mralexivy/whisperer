@@ -206,7 +206,8 @@ class PermissionManager: ObservableObject {
 
     private func startPeriodicCheck() {
         // Check permissions every 2 seconds (user might grant them in System Settings)
-        checkTimer = Timer.scheduledTimer(withTimeInterval: 2.0, repeats: true) { _ in
+        checkTimer = Timer.scheduledTimer(withTimeInterval: 2.0, repeats: true) { [weak self] _ in
+            guard self != nil else { return }
             Task { @MainActor [weak self] in
                 self?.refreshAllPermissions()
             }

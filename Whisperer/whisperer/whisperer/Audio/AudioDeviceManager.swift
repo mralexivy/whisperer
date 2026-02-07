@@ -10,6 +10,7 @@ import CoreAudio
 import Combine
 import AVFoundation
 
+@MainActor
 class AudioDeviceManager: ObservableObject {
     static let shared = AudioDeviceManager()
 

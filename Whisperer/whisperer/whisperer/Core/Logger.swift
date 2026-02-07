@@ -97,7 +97,10 @@ final class Logger {
     }
 
     deinit {
-        fileHandle?.closeFile()
+        queue.sync {
+            fileHandle?.synchronizeFile()
+            fileHandle?.closeFile()
+        }
     }
 
     // MARK: - Public Logging Methods

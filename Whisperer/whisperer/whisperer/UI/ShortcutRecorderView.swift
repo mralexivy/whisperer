@@ -285,15 +285,15 @@ struct ShortcutRecorderView: View {
         }
 
         // Small delay before clearing state to prevent button clicks from re-triggering
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-            self.isRecording = false
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { [self] in
+            isRecording = false
 
-            if save, let config = self.tempConfig {
-                self.appState.keyListener?.shortcutConfig = config
+            if save, let config = tempConfig {
+                appState.keyListener?.shortcutConfig = config
             }
 
-            self.tempConfig = nil
-            self.lastModifiers = []
+            tempConfig = nil
+            lastModifiers = []
         }
     }
 

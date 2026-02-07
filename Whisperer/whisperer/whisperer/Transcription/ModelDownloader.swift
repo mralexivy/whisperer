@@ -192,7 +192,12 @@ private class DownloadDelegate: NSObject, URLSessionDownloadDelegate {
     let destination: URL
     let progressCallback: (Double) -> Void
     let onComplete: (Result<Void, Error>) -> Void
-    private var hasCompleted = false
+    private let completionLock = NSLock()
+    private var _hasCompleted = false
+    private var hasCompleted: Bool {
+        get { completionLock.lock(); defer { completionLock.unlock() }; return _hasCompleted }
+        set { completionLock.lock(); _hasCompleted = newValue; completionLock.unlock() }
+    }
 
     init(destination: URL, progressCallback: @escaping (Double) -> Void, onComplete: @escaping (Result<Void, Error>) -> Void) {
         self.destination = destination
@@ -201,7 +206,13 @@ private class DownloadDelegate: NSObject, URLSessionDownloadDelegate {
     }
 
     func urlSession(_ session: URLSession, downloadTask: URLSessionDownloadTask, didFinishDownloadingTo location: URL) {
-        guard !hasCompleted else { return }
+        completionLock.lock()
+        guard !_hasCompleted else {
+            completionLock.unlock()
+            return
+        }
+        _hasCompleted = true
+        completionLock.unlock()
 
         do {
             // Move file to destination
@@ -210,24 +221,29 @@ private class DownloadDelegate: NSObject, URLSessionDownloadDelegate {
             }
 
             try FileManager.default.moveItem(at: location, to: destination)
-            print("Model downloaded successfully to: \(destination.path)")
+            Logger.debug("Model downloaded successfully to: \(destination.path)", subsystem: .model)
 
-            hasCompleted = true
             onComplete(.success(()))
         } catch {
-            print("Failed to move model file: \(error)")
-            hasCompleted = true
+            Logger.error("Failed to move model file: \(error)", subsystem: .model)
             onComplete(.failure(error))
         }
     }
 
     func urlSession(_ session: URLSession, task: URLSessionTask, didCompleteWithError error: Error?) {
-        guard !hasCompleted else { return }
+        completionLock.lock()
+        guard !_hasCompleted else {
+            completionLock.unlock()
+            return
+        }
 
         if let error = error {
-            print("Download failed: \(error)")
-            hasCompleted = true
+            _hasCompleted = true
+            completionLock.unlock()
+            Logger.error("Download failed: \(error)", subsystem: .model)
             onComplete(.failure(error))
+        } else {
+            completionLock.unlock()
         }
     }
 
