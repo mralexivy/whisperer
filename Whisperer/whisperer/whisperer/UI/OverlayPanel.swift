@@ -9,6 +9,7 @@ import AppKit
 import SwiftUI
 
 class OverlayPanel: NSPanel {
+    private var stateObserver: NSObjectProtocol?
 
     init() {
         // Create the panel with proper style - fits transcription card + HUD capsule + shadows
@@ -33,7 +34,7 @@ class OverlayPanel: NSPanel {
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .background(Color.clear)
 
-        let hostingView = NSHostingView(rootView: AnyView(overlayView))
+        let hostingView = NSHostingView(rootView: overlayView)
 
         // Critical: Make hosting view fully transparent
         hostingView.wantsLayer = true
@@ -52,7 +53,7 @@ class OverlayPanel: NSPanel {
         self.orderOut(nil)
 
         // Observe state changes to show/hide panel
-        NotificationCenter.default.addObserver(
+        stateObserver = NotificationCenter.default.addObserver(
             forName: NSNotification.Name("AppStateChanged"),
             object: nil,
             queue: .main
@@ -103,4 +104,10 @@ class OverlayPanel: NSPanel {
 
     override var canBecomeKey: Bool { false }
     override var canBecomeMain: Bool { false }
+
+    deinit {
+        if let observer = stateObserver {
+            NotificationCenter.default.removeObserver(observer)
+        }
+    }
 }

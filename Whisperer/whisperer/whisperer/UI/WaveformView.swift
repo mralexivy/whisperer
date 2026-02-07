@@ -31,6 +31,9 @@ struct WaveformView: View {
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
         }
+        .accessibilityLabel("Audio waveform")
+        .accessibilityValue("Recording level visualization")
+        .accessibilityAddTraits(.updatesFrequently)
     }
 
     private func barWidth(for totalWidth: CGFloat) -> CGFloat {

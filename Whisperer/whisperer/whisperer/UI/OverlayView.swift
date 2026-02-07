@@ -108,6 +108,7 @@ struct OverlayView: View {
                 }
                 .buttonStyle(.plain)
                 .help("Stop and close")
+                .accessibilityLabel("Stop recording and close")
             }
             .padding(.horizontal, 16)
             .padding(.vertical, 10)

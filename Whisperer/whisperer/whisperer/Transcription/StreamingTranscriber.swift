@@ -392,7 +392,8 @@ class StreamingTranscriber {
         // Copy samples to buffer
         if let channelData = buffer.floatChannelData {
             samples.withUnsafeBufferPointer { ptr in
-                channelData[0].update(from: ptr.baseAddress!, count: samples.count)
+                guard let baseAddress = ptr.baseAddress else { return }
+                channelData[0].update(from: baseAddress, count: samples.count)
             }
         }
 

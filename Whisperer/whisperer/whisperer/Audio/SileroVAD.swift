@@ -286,8 +286,10 @@ class StreamingVAD {
         silenceFrames = 0
     }
 
-    /// Get current speech state
+    /// Get current speech state (thread-safe)
     var isCurrentlySpeaking: Bool {
+        bufferLock.lock()
+        defer { bufferLock.unlock() }
         return isSpeaking
     }
 }

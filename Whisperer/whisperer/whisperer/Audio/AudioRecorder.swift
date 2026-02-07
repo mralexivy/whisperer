@@ -50,7 +50,11 @@ class AudioRecorder: NSObject {
     }
 
     deinit {
-        // Observer cleanup moved to stopRecording()
+        // Safety net: clean up observer if stopRecording() was never called
+        if let observer = configChangeObserver {
+            NotificationCenter.default.removeObserver(observer)
+            configChangeObserver = nil
+        }
     }
 
     // MARK: - Audio Engine Observers

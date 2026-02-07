@@ -98,13 +98,18 @@ struct LiveTranscriptionCard: View {
                 .frame(width: 20, height: 10)
         }
         .frame(width: 380)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("Live transcription")
+        .accessibilityValue(typewriter.displayedText.isEmpty ? "Listening..." : typewriter.displayedText)
+        .accessibilityAddTraits(.updatesFrequently)
         .onAppear {
             // Start pulsing animation
             withAnimation(.easeInOut(duration: 1.2).repeatForever(autoreverses: true)) {
                 isPulsing = true
             }
 
-            // Start cursor blinking
+            // Start cursor blinking (invalidate any existing timer first)
+            cursorTimer?.invalidate()
             cursorTimer = Timer.scheduledTimer(withTimeInterval: 0.53, repeats: true) { _ in
                 showCursor.toggle()
             }
