@@ -456,7 +456,7 @@ class GlobalKeyListener {
                 if isDown && self.fnDown {
                     // Check if this is Fn+S (history shortcut)
                     if keyCode == 1 {  // 'S' key
-                        print("🔍 Fn+S detected - toggling history window")
+                        print("🔍 Fn+S detected - toggling workspace")
                         DispatchQueue.main.async {
                             self.onHistoryShortcut?()
                         }

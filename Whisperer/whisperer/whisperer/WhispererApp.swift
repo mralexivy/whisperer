@@ -446,29 +446,33 @@ struct MenuBarView: View {
 
     private var footerView: some View {
         HStack(spacing: 12) {
-            // Permissions button - navigates to Settings tab
-            Button(action: { selectedTab = .settings }) {
+            // Workspace button - premium style matching Quit
+            Button(action: { HistoryWindowManager.shared.showWindow() }) {
                 HStack(spacing: 6) {
-                    ZStack {
-                        Image(systemName: "lock.shield.fill")
-                            .font(.system(size: 11))
-
-                        // Warning badge if permissions missing
-                        if !permissionManager.allPermissionsGranted {
-                            Circle()
-                                .fill(Color.orange)
-                                .frame(width: 8, height: 8)
-                                .offset(x: 6, y: -5)
-                        }
-                    }
-                    Text("Permissions")
+                    Image(systemName: "square.grid.2x2.fill")
+                        .font(.system(size: 11, weight: .semibold))
+                    Text("Workspace")
                         .font(.system(size: 12, weight: .medium))
+                    Text("Fn+S")
+                        .font(.system(size: 10))
+                        .foregroundColor(.white.opacity(0.7))
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 2)
+                        .background(Color.white.opacity(0.15))
+                        .cornerRadius(4)
                 }
-                .foregroundColor(permissionManager.allPermissionsGranted ? .secondary : .orange)
-                .padding(.horizontal, 12)
+                .foregroundColor(.white)
+                .padding(.horizontal, 14)
                 .padding(.vertical, 8)
-                .background(permissionManager.allPermissionsGranted ? Color.secondary.opacity(0.08) : Color.orange.opacity(0.15))
+                .background(
+                    LinearGradient(
+                        colors: [Color.indigo.opacity(0.9), Color.indigo],
+                        startPoint: .top,
+                        endPoint: .bottom
+                    )
+                )
                 .cornerRadius(8)
+                .shadow(color: Color.indigo.opacity(0.3), radius: 4, x: 0, y: 2)
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
@@ -859,8 +863,8 @@ struct SettingsTabView: View {
                     ShortcutRecorderView()
                 }
 
-                // History
-                settingsCard(title: "History", icon: "clock.fill", color: .indigo) {
+                // Workspace
+                settingsCard(title: "Workspace", icon: "square.grid.2x2.fill", color: .indigo) {
                     Button(action: {
                         HistoryWindowManager.shared.showWindow()
                     }) {
@@ -868,7 +872,7 @@ struct SettingsTabView: View {
                             VStack(alignment: .leading, spacing: 3) {
                                 Text("View transcription history")
                                     .font(.system(size: 13, weight: .medium))
-                                Text("Press Fn+S to toggle history window")
+                                Text("Press Fn+S to toggle workspace")
                                     .font(.system(size: 11))
                                     .foregroundColor(.secondary)
                             }

@@ -14,21 +14,60 @@ struct DictionaryView: View {
     @State private var selectedFilter: DictionaryFilter = .all
     @State private var selectedEntry: DictionaryEntry?
     @State private var showAddEntry = false
-    @State private var highlightedEntryId: UUID? = nil  // For visual highlight animation
+    @State private var highlightedEntryId: UUID? = nil
+    @State private var selectedPackId: String? = nil
+    @State private var displayLimit = 50
+    @State private var showDropdown = false
     @Namespace private var scrollNamespace
 
-    var body: some View {
-        HStack(spacing: 0) {
-            // Left panel: Entry list
-            VStack(spacing: 0) {
-                headerView
-                toolbarView
-                entryList
-            }
-            .frame(minWidth: 400, maxWidth: .infinity)
+    private let pageSize = 50
 
-            // Right panel: Entry detail (if selected)
-            if let entry = selectedEntry {
+    // All filtered entries (before pagination) - computed lazily
+    private var allFilteredEntries: [DictionaryEntry] {
+        var entries = dictionaryManager.entries
+
+        if let packId = selectedPackId,
+           let pack = dictionaryManager.packs.first(where: { $0.id == packId }) {
+            entries = entries.filter { $0.category == pack.name }
+        }
+
+        if !searchText.isEmpty {
+            entries = entries.filter {
+                $0.incorrectForm.localizedCaseInsensitiveContains(searchText) ||
+                $0.correctForm.localizedCaseInsensitiveContains(searchText)
+            }
+        }
+
+        return entries
+    }
+
+    private var filteredEntries: [DictionaryEntry] {
+        Array(allFilteredEntries.prefix(displayLimit))
+    }
+
+    private var hasMoreEntries: Bool {
+        displayLimit < allFilteredEntries.count
+    }
+
+    private var remainingCount: Int {
+        max(0, allFilteredEntries.count - displayLimit)
+    }
+
+    var body: some View {
+        ZStack(alignment: .top) {
+            // Main content
+            HStack(spacing: 0) {
+                // Left panel
+                VStack(spacing: 0) {
+                    headerView
+                    DictionaryPacksView(selectedPackId: $selectedPackId, showDropdown: $showDropdown)
+                    toolbarView
+                    entryList
+                }
+                .frame(minWidth: 400, maxWidth: .infinity)
+
+                // Right panel
+                if let entry = selectedEntry {
                 ResizableDivider(colorScheme: colorScheme) { _ in }
                 EntryDetailView(
                     entry: entry,
@@ -47,10 +86,28 @@ struct DictionaryView: View {
                 )
                 .frame(width: 420)
             }
+            }
+
+            // Dropdown overlay - on top of everything
+            if showDropdown {
+                PackDropdownOverlay(
+                    selectedPackId: $selectedPackId,
+                    showDropdown: $showDropdown,
+                    packs: dictionaryManager.packs,
+                    totalEntries: dictionaryManager.entries.count,
+                    colorScheme: colorScheme
+                )
+                .transition(.opacity.combined(with: .scale(scale: 0.95, anchor: .topLeading)))
+                .zIndex(100)
+                .padding(.top, 130) // Position below header + packs bar
+            }
         }
         .background(WhispererColors.background(colorScheme))
         .sheet(isPresented: $showAddEntry) {
             AddDictionaryEntryView()
+        }
+        .onChange(of: selectedPackId) { _ in
+            displayLimit = pageSize
         }
         .onChange(of: dictionaryManager.selectedEntryId) { newValue in
             // When an entry is selected from correction popover, highlight it
@@ -85,60 +142,43 @@ struct DictionaryView: View {
     // MARK: - Header
 
     private var headerView: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            HStack(spacing: 14) {
-                ZStack {
-                    RoundedRectangle(cornerRadius: 14)
-                        .fill(WhispererColors.accent.opacity(0.12))
-                        .frame(width: 52, height: 52)
+        HStack(spacing: 14) {
+            ZStack {
+                RoundedRectangle(cornerRadius: 12)
+                    .fill(WhispererColors.accent.opacity(0.12))
+                    .frame(width: 44, height: 44)
 
-                    Image(systemName: "book.closed")
-                        .font(.system(size: 22))
-                        .foregroundColor(WhispererColors.accent)
-                }
+                Image(systemName: "book.closed.fill")
+                    .font(.system(size: 18))
+                    .foregroundColor(WhispererColors.accent)
+            }
 
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("Technical Dictionary")
-                        .font(.system(size: 26, weight: .bold, design: .rounded))
-                        .foregroundColor(WhispererColors.primaryText(colorScheme))
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Dictionary")
+                    .font(.system(size: 20, weight: .bold, design: .rounded))
+                    .foregroundColor(WhispererColors.primaryText(colorScheme))
 
-                    Text("Auto-correct technical jargon")
-                        .font(.system(size: 13))
-                        .foregroundColor(WhispererColors.secondaryText(colorScheme))
-                }
+                Text("\(dictionaryManager.entries.count) corrections from \(dictionaryManager.packs.filter { $0.isEnabled }.count) packs")
+                    .font(.system(size: 12))
+                    .foregroundColor(WhispererColors.secondaryText(colorScheme))
+            }
 
-                Spacer()
+            Spacer()
 
-                // Global toggle
+            // Global toggle with label
+            HStack(spacing: 8) {
+                Text(dictionaryManager.isEnabled ? "Active" : "Disabled")
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundColor(dictionaryManager.isEnabled ? WhispererColors.accent : WhispererColors.secondaryText(colorScheme))
+
                 Toggle("", isOn: $dictionaryManager.isEnabled)
                     .toggleStyle(.switch)
                     .tint(WhispererColors.accent)
                     .labelsHidden()
             }
-
-            // Stats
-            HStack(spacing: 20) {
-                CompactStatItem(
-                    value: "\(dictionaryManager.entries.count)",
-                    label: "Entries",
-                    icon: "text.book.closed",
-                    colorScheme: colorScheme
-                )
-                CompactStatItem(
-                    value: "\(dictionaryManager.entries.filter { $0.isEnabled }.count)",
-                    label: "Enabled",
-                    icon: "checkmark.circle",
-                    colorScheme: colorScheme
-                )
-                CompactStatItem(
-                    value: "\(dictionaryManager.entries.filter { $0.isBuiltIn }.count)",
-                    label: "Built-in",
-                    icon: "app.badge",
-                    colorScheme: colorScheme
-                )
-            }
         }
-        .padding(20)
+        .padding(.horizontal, 20)
+        .padding(.vertical, 16)
         .background(WhispererColors.cardBackground(colorScheme))
         .overlay(
             Rectangle()
@@ -151,23 +191,47 @@ struct DictionaryView: View {
     // MARK: - Toolbar
 
     private var toolbarView: some View {
-        HStack(spacing: 14) {
+        HStack(spacing: 12) {
+            // Filter indicator (when pack is selected)
+            if let packId = selectedPackId,
+               let pack = dictionaryManager.packs.first(where: { $0.id == packId }) {
+                HStack(spacing: 6) {
+                    Image(systemName: pack.icon)
+                        .font(.system(size: 11))
+                    Text(pack.name)
+                        .font(.system(size: 12, weight: .medium))
+                        .lineLimit(1)
+                    Button(action: { selectedPackId = nil; displayLimit = pageSize }) {
+                        Image(systemName: "xmark.circle.fill")
+                            .font(.system(size: 12))
+                    }
+                    .buttonStyle(.plain)
+                }
+                .foregroundColor(WhispererColors.accent)
+                .padding(.horizontal, 10)
+                .padding(.vertical, 6)
+                .background(
+                    RoundedRectangle(cornerRadius: 8)
+                        .fill(WhispererColors.accent.opacity(0.12))
+                )
+            }
+
             // Search
             HStack(spacing: 8) {
                 Image(systemName: "magnifyingglass")
                     .font(.system(size: 13, weight: .medium))
                     .foregroundColor(WhispererColors.secondaryText(colorScheme))
 
-                TextField("Search entries...", text: $searchText)
+                TextField("Search \(allFilteredEntries.count) entries...", text: $searchText)
                     .textFieldStyle(.plain)
                     .font(.system(size: 13))
                     .foregroundColor(WhispererColors.primaryText(colorScheme))
                     .onChange(of: searchText) { _ in
-                        performSearch()
+                        displayLimit = pageSize  // Reset pagination on search
                     }
 
                 if !searchText.isEmpty {
-                    Button(action: { searchText = "" }) {
+                    Button(action: { searchText = ""; displayLimit = pageSize }) {
                         Image(systemName: "xmark.circle.fill")
                             .font(.system(size: 13))
                             .foregroundColor(WhispererColors.secondaryText(colorScheme))
@@ -176,13 +240,13 @@ struct DictionaryView: View {
                 }
             }
             .padding(.horizontal, 12)
-            .padding(.vertical, 9)
+            .padding(.vertical, 8)
             .background(
-                RoundedRectangle(cornerRadius: 10)
+                RoundedRectangle(cornerRadius: 8)
                     .fill(WhispererColors.elevatedBackground(colorScheme))
             )
             .overlay(
-                RoundedRectangle(cornerRadius: 10)
+                RoundedRectangle(cornerRadius: 8)
                     .stroke(WhispererColors.border(colorScheme), lineWidth: 1)
             )
 
@@ -190,14 +254,14 @@ struct DictionaryView: View {
 
             // Add button
             Button(action: { showAddEntry = true }) {
-                HStack(spacing: 6) {
-                    Image(systemName: "plus.circle.fill")
-                        .font(.system(size: 14))
+                HStack(spacing: 5) {
+                    Image(systemName: "plus")
+                        .font(.system(size: 12, weight: .bold))
                     Text("Add")
                         .font(.system(size: 13, weight: .semibold))
                 }
                 .foregroundColor(.white)
-                .padding(.horizontal, 16)
+                .padding(.horizontal, 14)
                 .padding(.vertical, 8)
                 .background(
                     RoundedRectangle(cornerRadius: 8)
@@ -207,20 +271,50 @@ struct DictionaryView: View {
             .buttonStyle(.plain)
         }
         .padding(.horizontal, 20)
-        .padding(.vertical, 14)
+        .padding(.vertical, 12)
     }
 
     // MARK: - List
 
     private var entryList: some View {
         Group {
-            if dictionaryManager.entries.isEmpty {
+            if dictionaryManager.isLoadingEntries {
+                // Skeleton loading - shows instantly
+                ScrollView {
+                    LazyVStack(spacing: 6) {
+                        ForEach(0..<8, id: \.self) { _ in
+                            SkeletonRow(colorScheme: colorScheme)
+                        }
+                    }
+                    .padding(.horizontal, 20)
+                    .padding(.vertical, 12)
+                }
+            } else if filteredEntries.isEmpty && !dictionaryManager.entries.isEmpty {
+                VStack(spacing: 12) {
+                    Spacer()
+                    Image(systemName: "magnifyingglass")
+                        .font(.system(size: 32))
+                        .foregroundColor(WhispererColors.secondaryText(colorScheme).opacity(0.5))
+                    Text("No matching entries")
+                        .font(.system(size: 15, weight: .medium))
+                        .foregroundColor(WhispererColors.secondaryText(colorScheme))
+                    if selectedPackId != nil || !searchText.isEmpty {
+                        Button("Clear filters") {
+                            selectedPackId = nil
+                            searchText = ""
+                        }
+                        .font(.system(size: 13))
+                        .foregroundColor(WhispererColors.accent)
+                    }
+                    Spacer()
+                }
+            } else if dictionaryManager.entries.isEmpty && !dictionaryManager.isLoadingEntries {
                 emptyStateView
             } else {
                 ScrollViewReader { scrollProxy in
                     ScrollView {
-                        LazyVStack(spacing: 8) {
-                            ForEach(dictionaryManager.entries) { entry in
+                        LazyVStack(spacing: 6) {
+                            ForEach(filteredEntries) { entry in
                                 DictionaryEntryRow(
                                     entry: entry,
                                     isSelected: selectedEntry?.id == entry.id,
@@ -233,11 +327,33 @@ struct DictionaryView: View {
                                         }
                                     }
                                 )
-                                .id(entry.id)  // Add ID for scrolling
+                                .id(entry.id)
+                            }
+
+                            // Load more button
+                            if hasMoreEntries {
+                                Button(action: { displayLimit += pageSize }) {
+                                    HStack(spacing: 8) {
+                                        Text("Load \(min(pageSize, remainingCount)) more")
+                                            .font(.system(size: 13, weight: .medium))
+                                        Text("(\(remainingCount) remaining)")
+                                            .font(.system(size: 12))
+                                            .foregroundColor(WhispererColors.secondaryText(colorScheme))
+                                    }
+                                    .foregroundColor(WhispererColors.accent)
+                                    .frame(maxWidth: .infinity)
+                                    .padding(.vertical, 12)
+                                    .background(
+                                        RoundedRectangle(cornerRadius: 8)
+                                            .fill(WhispererColors.accent.opacity(0.08))
+                                    )
+                                }
+                                .buttonStyle(.plain)
+                                .padding(.top, 6)
                             }
                         }
                         .padding(.horizontal, 20)
-                        .padding(.vertical, 14)
+                        .padding(.vertical, 12)
                     }
                     .onChange(of: highlightedEntryId) { newValue in
                         if let entryId = newValue {
@@ -581,5 +697,55 @@ struct EntryDetailView: View {
         )
         onUpdate(updated)
         onClose()
+    }
+}
+
+// MARK: - Skeleton Loading Row
+
+struct SkeletonRow: View {
+    let colorScheme: ColorScheme
+    @State private var isAnimating = false
+
+    var body: some View {
+        HStack(spacing: 12) {
+            // Incorrect form skeleton
+            RoundedRectangle(cornerRadius: 4)
+                .fill(WhispererColors.elevatedBackground(colorScheme))
+                .frame(width: 120, height: 16)
+
+            // Arrow
+            Image(systemName: "arrow.right")
+                .font(.system(size: 10))
+                .foregroundColor(WhispererColors.secondaryText(colorScheme).opacity(0.3))
+
+            // Correct form skeleton
+            RoundedRectangle(cornerRadius: 4)
+                .fill(WhispererColors.elevatedBackground(colorScheme))
+                .frame(width: 100, height: 16)
+
+            Spacer()
+
+            // Category skeleton
+            RoundedRectangle(cornerRadius: 4)
+                .fill(WhispererColors.elevatedBackground(colorScheme))
+                .frame(width: 80, height: 20)
+
+            // Toggle skeleton
+            RoundedRectangle(cornerRadius: 10)
+                .fill(WhispererColors.elevatedBackground(colorScheme))
+                .frame(width: 44, height: 24)
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 12)
+        .background(
+            RoundedRectangle(cornerRadius: 10)
+                .fill(WhispererColors.cardBackground(colorScheme))
+        )
+        .opacity(isAnimating ? 0.5 : 1.0)
+        .onAppear {
+            withAnimation(.easeInOut(duration: 0.8).repeatForever(autoreverses: true)) {
+                isAnimating = true
+            }
+        }
     }
 }

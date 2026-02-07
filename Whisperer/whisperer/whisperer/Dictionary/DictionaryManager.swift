@@ -14,6 +14,8 @@ class DictionaryManager: ObservableObject {
     static let shared = DictionaryManager()
 
     @Published var entries: [DictionaryEntry] = []
+    @Published var packs: [DictionaryPack] = []  // Available dictionary packs
+    @Published var isLoadingEntries: Bool = true  // For UI skeleton loading
     @Published var isEnabled: Bool = true {
         didSet {
             UserDefaults.standard.set(isEnabled, forKey: "dictionaryEnabled")
@@ -41,6 +43,8 @@ class DictionaryManager: ObservableObject {
     }
 
     private var correctionEngine: CorrectionEngine?
+    private var packPreferences = DictionaryPackPreferences()
+    private let packPreferencesKey = "dictionaryPackPreferences"
 
     private init() {
         // Load enabled state
@@ -50,18 +54,217 @@ class DictionaryManager: ObservableObject {
         fuzzyMatchingSensitivity = UserDefaults.standard.object(forKey: "fuzzyMatchingSensitivity") as? Int ?? 2
         usePhoneticMatching = UserDefaults.standard.object(forKey: "usePhoneticMatching") as? Bool ?? true
 
-        Task {
-            await loadEntries()
-            await loadBundledDictionaryIfNeeded()
-            // Initialize correction engine with loaded entries
-            let enabledEntries = entries.filter { $0.isEnabled }
-            correctionEngine = CorrectionEngine(entries: enabledEntries)
+        // Load pack preferences
+        if let data = UserDefaults.standard.data(forKey: packPreferencesKey),
+           let prefs = try? JSONDecoder().decode(DictionaryPackPreferences.self, from: data) {
+            packPreferences = prefs
+        }
+
+        // Load data in background to avoid blocking UI
+        Task.detached { [weak self] in
+            guard let self = self else { return }
+
+            // Load packs from files (background thread)
+            let loadedPacks = await Self.loadPacksInBackground(packPreferences: self.packPreferences)
+
+            // Load entries from CoreData (background context)
+            let loadedEntries = await Self.loadEntriesInBackground()
+
+            // Also check if bundled dictionary needs loading
+            await Self.loadBundledDictionaryInBackground(packs: loadedPacks, packPreferences: self.packPreferences)
+
+            // Reload entries after bundled loading
+            let finalEntries = await Self.loadEntriesInBackground()
+
+            // Update UI on main thread
+            await MainActor.run {
+                self.packs = loadedPacks
+                self.entries = finalEntries
+                self.isLoadingEntries = false
+                let enabledEntries = finalEntries.filter { $0.isEnabled }
+                self.correctionEngine = CorrectionEngine(entries: enabledEntries)
+            }
+        }
+    }
+
+    // MARK: - Background Loading (off main thread)
+
+    /// Load packs from bundle files without blocking main thread
+    private static func loadPacksInBackground(packPreferences: DictionaryPackPreferences) async -> [DictionaryPack] {
+        guard let resourcePath = Bundle.main.resourcePath else {
+            return []
+        }
+
+        let fileManager = FileManager.default
+        var loadedPacks: [DictionaryPack] = []
+
+        let dictionariesPath = (resourcePath as NSString).appendingPathComponent("dictionaries")
+        let searchPath = fileManager.fileExists(atPath: dictionariesPath) ? dictionariesPath : resourcePath
+
+        do {
+            let files = try fileManager.contentsOfDirectory(atPath: searchPath)
+            let jsonFiles = files.filter {
+                $0.hasSuffix(".json") && $0.hasPrefix("pack_")
+            }.sorted()
+
+            for filename in jsonFiles {
+                let filePath = (searchPath as NSString).appendingPathComponent(filename)
+                let url = URL(fileURLWithPath: filePath)
+
+                do {
+                    let data = try Data(contentsOf: url)
+                    let packFile = try JSONDecoder().decode(DictionaryPackFile.self, from: data)
+
+                    let packId = (filename as NSString).deletingPathExtension
+                    let pack = DictionaryPack(
+                        id: packId,
+                        filename: filename,
+                        name: packFile.metadata.category,
+                        version: packFile.metadata.version,
+                        entryCount: packFile.totalEntryCount,
+                        isEnabled: packPreferences.isEnabled(packId),
+                        description: packFile.metadata.description
+                    )
+
+                    loadedPacks.append(pack)
+                } catch {
+                    Logger.error("Failed to load pack \(filename): \(error)", subsystem: .app)
+                }
+            }
+        } catch {
+            Logger.error("Failed to read dictionaries folder: \(error)", subsystem: .app)
+        }
+
+        return loadedPacks
+    }
+
+    /// Load entries from CoreData using background context
+    private static func loadEntriesInBackground() async -> [DictionaryEntry] {
+        let database = HistoryDatabase.shared
+        let context = database.newBackgroundContext()
+
+        return await context.perform {
+            let fetchRequest: NSFetchRequest<DictionaryEntryEntity> = DictionaryEntryEntity.fetchRequest()
+            fetchRequest.sortDescriptors = [NSSortDescriptor(key: "incorrectForm", ascending: true)]
+
+            do {
+                let entities = try context.fetch(fetchRequest)
+                return entities.map { DictionaryEntry(from: $0) }
+            } catch {
+                Logger.error("Failed to load dictionary entries in background: \(error)", subsystem: .app)
+                return []
+            }
+        }
+    }
+
+    /// Load bundled dictionary entries in background if needed
+    private static func loadBundledDictionaryInBackground(packs: [DictionaryPack], packPreferences: DictionaryPackPreferences) async {
+        let database = HistoryDatabase.shared
+        let context = database.newBackgroundContext()
+
+        // Load entries from all enabled packs that haven't been loaded or have new versions
+        for pack in packs where pack.isEnabled {
+            let loadedVersion = packPreferences.getLoadedVersion(pack.id)
+
+            if loadedVersion == nil || loadedVersion != pack.version {
+                await loadEntriesFromPackInBackground(pack, context: context, packPreferences: packPreferences)
+            }
+        }
+
+        // Legacy dictionary.json support
+        let hasLoadedKey = "hasLoadedBundledDictionary"
+        if !UserDefaults.standard.bool(forKey: hasLoadedKey) {
+            if let url = Bundle.main.url(forResource: "dictionary", withExtension: "json") {
+                do {
+                    let data = try Data(contentsOf: url)
+                    let bundledDict = try JSONDecoder().decode(BundledDictionary.self, from: data)
+
+                    await context.perform {
+                        for entry in bundledDict.entries {
+                            // Check if exists
+                            let fetchRequest: NSFetchRequest<DictionaryEntryEntity> = DictionaryEntryEntity.fetchRequest()
+                            fetchRequest.predicate = NSPredicate(format: "incorrectForm == %@", entry.incorrectForm)
+                            fetchRequest.fetchLimit = 1
+
+                            if (try? context.fetch(fetchRequest).first) == nil {
+                                _ = DictionaryEntryEntity.create(
+                                    in: context,
+                                    incorrectForm: entry.incorrectForm,
+                                    correctForm: entry.correctForm,
+                                    category: entry.category,
+                                    isBuiltIn: true,
+                                    notes: entry.notes
+                                )
+                            }
+                        }
+                        try? context.save()
+                    }
+
+                    await MainActor.run {
+                        UserDefaults.standard.set(true, forKey: hasLoadedKey)
+                    }
+                } catch {
+                    Logger.error("Failed to load legacy bundled dictionary: \(error)", subsystem: .app)
+                }
+            }
+        }
+    }
+
+    /// Load entries from a specific pack in background
+    private static func loadEntriesFromPackInBackground(_ pack: DictionaryPack, context: NSManagedObjectContext, packPreferences: DictionaryPackPreferences) async {
+        guard let resourcePath = Bundle.main.resourcePath else { return }
+
+        let fileManager = FileManager.default
+        let dictionariesPath = (resourcePath as NSString).appendingPathComponent("dictionaries")
+        let searchPath = fileManager.fileExists(atPath: dictionariesPath) ? dictionariesPath : resourcePath
+        let filePath = (searchPath as NSString).appendingPathComponent(pack.filename)
+        let url = URL(fileURLWithPath: filePath)
+
+        do {
+            let data = try Data(contentsOf: url)
+            let packFile = try JSONDecoder().decode(DictionaryPackFile.self, from: data)
+
+            await context.perform {
+                for correction in packFile.corrections {
+                    let correctForm = correction.term
+
+                    for alias in correction.aliases {
+                        // Check if exists
+                        let fetchRequest: NSFetchRequest<DictionaryEntryEntity> = DictionaryEntryEntity.fetchRequest()
+                        fetchRequest.predicate = NSPredicate(format: "incorrectForm == %@", alias.lowercased())
+                        fetchRequest.fetchLimit = 1
+
+                        if (try? context.fetch(fetchRequest).first) == nil {
+                            _ = DictionaryEntryEntity.create(
+                                in: context,
+                                incorrectForm: alias,
+                                correctForm: correctForm,
+                                category: packFile.metadata.category,
+                                isBuiltIn: true,
+                                notes: "From \(pack.name)"
+                            )
+                        }
+                    }
+                }
+                try? context.save()
+            }
+
+            // Update loaded version
+            var mutablePrefs = packPreferences
+            mutablePrefs.setLoadedVersion(pack.id, version: pack.version)
+            if let data = try? JSONEncoder().encode(mutablePrefs) {
+                await MainActor.run {
+                    UserDefaults.standard.set(data, forKey: "dictionaryPackPreferences")
+                }
+            }
+        } catch {
+            Logger.error("Failed to load entries from pack \(pack.name): \(error)", subsystem: .app)
         }
     }
 
     // MARK: - Create
 
-    func addEntry(_ entry: DictionaryEntry) async throws {
+    func addEntry(_ entry: DictionaryEntry, skipRebuild: Bool = false) async throws {
         let context = database.newBackgroundContext()
 
         await context.perform {
@@ -81,11 +284,13 @@ class DictionaryManager: ObservableObject {
             }
         }
 
-        await loadEntries()
-        rebuildCorrectionEngine()
+        if !skipRebuild {
+            await loadEntries()
+            rebuildCorrectionEngine()
+        }
     }
 
-    func addEntryIfNotExists(_ entry: DictionaryEntry, isBuiltIn: Bool) async throws {
+    func addEntryIfNotExists(_ entry: DictionaryEntry, isBuiltIn: Bool, skipRebuild: Bool = false) async throws {
         // Check if entry with same incorrectForm already exists
         let fetchRequest: NSFetchRequest<DictionaryEntryEntity> = DictionaryEntryEntity.fetchRequest()
         fetchRequest.predicate = NSPredicate(format: "incorrectForm == %@", entry.incorrectForm)
@@ -110,7 +315,7 @@ class DictionaryManager: ObservableObject {
             lastModifiedAt: entry.lastModifiedAt,
             useCount: entry.useCount
         )
-        try await addEntry(newEntry)
+        try await addEntry(newEntry, skipRebuild: skipRebuild)
     }
 
     // MARK: - Read
@@ -232,41 +437,200 @@ class DictionaryManager: ObservableObject {
         }
     }
 
-    // MARK: - Bundled Dictionary
+    // MARK: - Dictionary Packs
 
-    func loadBundledDictionaryIfNeeded() async {
-        // Check if we've already loaded the bundled dictionary
-        let hasLoadedKey = "hasLoadedBundledDictionary"
-        if UserDefaults.standard.bool(forKey: hasLoadedKey) {
+    /// Load all dictionary packs from the bundle
+    func loadPacks() async {
+        guard let resourcePath = Bundle.main.resourcePath else {
+            Logger.warning("Resource path not found", subsystem: .app)
             return
         }
 
-        guard let url = Bundle.main.url(forResource: "dictionary", withExtension: "json") else {
-            Logger.warning("Bundled dictionary not found", subsystem: .app)
-            return
+        let fileManager = FileManager.default
+        var loadedPacks: [DictionaryPack] = []
+
+        // Check if dictionaries are in a subfolder (Resources/dictionaries/)
+        let dictionariesPath = (resourcePath as NSString).appendingPathComponent("dictionaries")
+        let searchPath: String
+
+        if fileManager.fileExists(atPath: dictionariesPath) {
+            searchPath = dictionariesPath
+            Logger.debug("Found dictionaries folder at: \(dictionariesPath)", subsystem: .app)
+        } else {
+            // Fall back to Resources folder directly
+            searchPath = resourcePath
+            Logger.debug("Searching for dictionaries in Resources folder: \(resourcePath)", subsystem: .app)
         }
 
         do {
-            let data = try Data(contentsOf: url)
-            let bundledDict = try JSONDecoder().decode(BundledDictionary.self, from: data)
+            let files = try fileManager.contentsOfDirectory(atPath: searchPath)
+            // Filter for pack_*.json files only
+            let jsonFiles = files.filter {
+                $0.hasSuffix(".json") && $0.hasPrefix("pack_")
+            }.sorted()
 
-            Logger.debug("Loading \(bundledDict.entries.count) bundled dictionary entries", subsystem: .app)
+            Logger.debug("Found \(jsonFiles.count) dictionary pack files", subsystem: .app)
 
-            for entry in bundledDict.entries {
-                let dictEntry = DictionaryEntry(
-                    incorrectForm: entry.incorrectForm,
-                    correctForm: entry.correctForm,
-                    category: entry.category,
-                    isBuiltIn: true,
-                    notes: entry.notes
-                )
-                try await addEntryIfNotExists(dictEntry, isBuiltIn: true)
+            for filename in jsonFiles {
+                let filePath = (searchPath as NSString).appendingPathComponent(filename)
+                let url = URL(fileURLWithPath: filePath)
+
+                do {
+                    let data = try Data(contentsOf: url)
+                    let packFile = try JSONDecoder().decode(DictionaryPackFile.self, from: data)
+
+                    let packId = (filename as NSString).deletingPathExtension
+                    let pack = DictionaryPack(
+                        id: packId,
+                        filename: filename,
+                        name: packFile.metadata.category,
+                        version: packFile.metadata.version,
+                        entryCount: packFile.totalEntryCount,
+                        isEnabled: packPreferences.isEnabled(packId),
+                        description: packFile.metadata.description
+                    )
+
+                    loadedPacks.append(pack)
+                    Logger.debug("Loaded pack: \(pack.name) (\(pack.entryCount) entries)", subsystem: .app)
+                } catch {
+                    Logger.error("Failed to load pack \(filename): \(error)", subsystem: .app)
+                }
             }
 
-            UserDefaults.standard.set(true, forKey: hasLoadedKey)
-            Logger.debug("Bundled dictionary loaded successfully", subsystem: .app)
+            packs = loadedPacks
+            Logger.debug("Loaded \(packs.count) dictionary packs", subsystem: .app)
         } catch {
-            Logger.error("Failed to load bundled dictionary: \(error)", subsystem: .app)
+            Logger.error("Failed to read dictionaries folder: \(error)", subsystem: .app)
+        }
+    }
+
+    /// Toggle a dictionary pack on/off
+    func togglePack(_ pack: DictionaryPack) async throws {
+        guard let index = packs.firstIndex(where: { $0.id == pack.id }) else { return }
+
+        packs[index].isEnabled.toggle()
+        packPreferences.setEnabled(pack.id, enabled: packs[index].isEnabled)
+        savePackPreferences()
+
+        // Reload entries from all enabled packs
+        await reloadAllPackEntries()
+    }
+
+    /// Reload all entries from enabled packs
+    private func reloadAllPackEntries() async {
+        // Delete all built-in entries
+        let fetchRequest: NSFetchRequest<DictionaryEntryEntity> = DictionaryEntryEntity.fetchRequest()
+        fetchRequest.predicate = NSPredicate(format: "isBuiltIn == YES")
+
+        do {
+            let builtInEntities = try context.fetch(fetchRequest)
+            for entity in builtInEntities {
+                context.delete(entity)
+            }
+            try context.save()
+        } catch {
+            Logger.error("Failed to delete built-in entries: \(error)", subsystem: .app)
+        }
+
+        // Load entries from all enabled packs
+        for pack in packs where pack.isEnabled {
+            await loadEntriesFromPack(pack)
+        }
+
+        await loadEntries()
+        rebuildCorrectionEngine()
+    }
+
+    /// Load entries from a specific pack
+    private func loadEntriesFromPack(_ pack: DictionaryPack) async {
+        guard let resourcePath = Bundle.main.resourcePath else { return }
+
+        let fileManager = FileManager.default
+        let dictionariesPath = (resourcePath as NSString).appendingPathComponent("dictionaries")
+
+        // Check if dictionaries are in a subfolder or directly in Resources
+        let searchPath = fileManager.fileExists(atPath: dictionariesPath) ? dictionariesPath : resourcePath
+        let filePath = (searchPath as NSString).appendingPathComponent(pack.filename)
+        let url = URL(fileURLWithPath: filePath)
+
+        do {
+            let data = try Data(contentsOf: url)
+            let packFile = try JSONDecoder().decode(DictionaryPackFile.self, from: data)
+
+            Logger.debug("Loading \(packFile.totalEntryCount) entries from \(pack.name)", subsystem: .app)
+
+            // Convert each correction (term + aliases) to individual dictionary entries
+            for correction in packFile.corrections {
+                let correctForm = correction.term
+
+                for alias in correction.aliases {
+                    let entry = DictionaryEntry(
+                        incorrectForm: alias,
+                        correctForm: correctForm,
+                        category: packFile.metadata.category,
+                        isBuiltIn: true,
+                        notes: "From \(pack.name)"
+                    )
+                    try await addEntryIfNotExists(entry, isBuiltIn: true, skipRebuild: true)
+                }
+            }
+
+            // Update loaded version
+            packPreferences.setLoadedVersion(pack.id, version: pack.version)
+            savePackPreferences()
+        } catch {
+            Logger.error("Failed to load entries from pack \(pack.name): \(error)", subsystem: .app)
+        }
+    }
+
+    /// Save pack preferences to UserDefaults
+    private func savePackPreferences() {
+        if let data = try? JSONEncoder().encode(packPreferences) {
+            UserDefaults.standard.set(data, forKey: packPreferencesKey)
+        }
+    }
+
+    // MARK: - Bundled Dictionary (Legacy)
+
+    func loadBundledDictionaryIfNeeded() async {
+        // NEW: Load from packs instead of single dictionary file
+        for pack in packs where pack.isEnabled {
+            let loadedVersion = packPreferences.getLoadedVersion(pack.id)
+
+            // Load if not loaded before, or if version has changed
+            if loadedVersion == nil || loadedVersion != pack.version {
+                Logger.debug("Loading/updating pack: \(pack.name) (v\(pack.version))", subsystem: .app)
+                await loadEntriesFromPack(pack)
+            }
+        }
+
+        // LEGACY: Still support old dictionary.json for backwards compatibility
+        let hasLoadedKey = "hasLoadedBundledDictionary"
+        if !UserDefaults.standard.bool(forKey: hasLoadedKey) {
+            if let url = Bundle.main.url(forResource: "dictionary", withExtension: "json") {
+                do {
+                    let data = try Data(contentsOf: url)
+                    let bundledDict = try JSONDecoder().decode(BundledDictionary.self, from: data)
+
+                    Logger.debug("Loading \(bundledDict.entries.count) legacy bundled dictionary entries", subsystem: .app)
+
+                    for entry in bundledDict.entries {
+                        let dictEntry = DictionaryEntry(
+                            incorrectForm: entry.incorrectForm,
+                            correctForm: entry.correctForm,
+                            category: entry.category,
+                            isBuiltIn: true,
+                            notes: entry.notes
+                        )
+                        try await addEntryIfNotExists(dictEntry, isBuiltIn: true)
+                    }
+
+                    UserDefaults.standard.set(true, forKey: hasLoadedKey)
+                    Logger.debug("Legacy bundled dictionary loaded successfully", subsystem: .app)
+                } catch {
+                    Logger.error("Failed to load legacy bundled dictionary: \(error)", subsystem: .app)
+                }
+            }
         }
     }
 

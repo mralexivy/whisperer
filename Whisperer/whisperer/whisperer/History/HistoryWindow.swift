@@ -20,7 +20,7 @@ class HistoryWindow: NSWindow {
         )
 
         // Configure window
-        self.title = "Transcription History"
+        self.title = "Workspace"
         self.minSize = NSSize(width: 700, height: 500)
         self.center()
 
@@ -42,7 +42,7 @@ class HistoryWindow: NSWindow {
 extension HistoryWindow: NSWindowDelegate {
     func windowWillClose(_ notification: Notification) {
         // Window will be hidden but not deallocated
-        Logger.debug("History window closed", subsystem: .app)
+        Logger.debug("Workspace closed", subsystem: .app)
     }
 
     func windowDidBecomeKey(_ notification: Notification) {

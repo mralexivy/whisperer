@@ -175,7 +175,7 @@ struct HistoryWindowView: View {
                     .font(.system(size: 15, weight: .bold, design: .rounded))
                     .foregroundColor(WhispererColors.primaryText(colorScheme))
 
-                Text("History")
+                Text("Workspace")
                     .font(.system(size: 11))
                     .foregroundColor(WhispererColors.secondaryText(colorScheme))
             }
