@@ -12,13 +12,27 @@ class HistoryWindowManager {
     static let shared = HistoryWindowManager()
 
     private var historyWindow: HistoryWindow?
+    private var closeObserver: NSObjectProtocol?
 
     private init() {
         // Window created lazily on first show
     }
 
+    deinit {
+        removeObserver()
+    }
+
     func showWindow() {
-        if historyWindow == nil {
+        // Ensure we're on the main thread
+        guard Thread.isMainThread else {
+            DispatchQueue.main.async { [weak self] in
+                self?.showWindow()
+            }
+            return
+        }
+
+        // Check if window is still valid
+        if historyWindow == nil || historyWindow?.isVisible == false && historyWindow?.contentView == nil {
             createWindow()
         }
 
@@ -39,6 +53,10 @@ class HistoryWindowManager {
     }
 
     private func createWindow() {
+        // Remove existing observer if any
+        removeObserver()
+
+        // Create new window
         historyWindow = HistoryWindow()
 
         // Restore window position if saved
@@ -47,16 +65,28 @@ class HistoryWindowManager {
             historyWindow?.setFrame(frame, display: true)
         }
 
-        // Save position on close
-        NotificationCenter.default.addObserver(
+        // Save position and clean up on close
+        closeObserver = NotificationCenter.default.addObserver(
             forName: NSWindow.willCloseNotification,
             object: historyWindow,
             queue: .main
-        ) { [weak self] _ in
-            if let window = self?.historyWindow {
-                let frameString = NSStringFromRect(window.frame)
-                UserDefaults.standard.set(frameString, forKey: "historyWindowFrame")
-            }
+        ) { [weak self] notification in
+            guard let self = self, let window = notification.object as? HistoryWindow else { return }
+
+            // Save window position
+            let frameString = NSStringFromRect(window.frame)
+            UserDefaults.standard.set(frameString, forKey: "historyWindowFrame")
+
+            // Clean up
+            self.removeObserver()
+            self.historyWindow = nil
+        }
+    }
+
+    private func removeObserver() {
+        if let observer = closeObserver {
+            NotificationCenter.default.removeObserver(observer)
+            closeObserver = nil
         }
     }
 }

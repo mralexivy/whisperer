@@ -40,7 +40,8 @@ class HistoryManager: ObservableObject {
                 audioFileURL: record.audioFileURL,
                 duration: record.duration,
                 language: record.language,
-                modelUsed: record.modelUsed
+                modelUsed: record.modelUsed,
+                corrections: record.corrections
             )
 
             do {

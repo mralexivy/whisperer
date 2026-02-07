@@ -471,7 +471,8 @@ class AppState: ObservableObject {
                         audioFileURL: fileName,
                         duration: transcriber.recordedDuration,
                         language: selectedLanguage.rawValue,
-                        modelUsed: selectedModel.rawValue
+                        modelUsed: selectedModel.rawValue,
+                        corrections: DictionaryManager.shared.lastCorrections
                     )
                     try await HistoryManager.shared.saveTranscription(record)
                     Logger.debug("Transcription saved to history database", subsystem: .app)

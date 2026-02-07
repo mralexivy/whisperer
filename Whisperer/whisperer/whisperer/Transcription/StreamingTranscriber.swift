@@ -290,8 +290,10 @@ class StreamingTranscriber {
         if !allSamples.isEmpty {
             let duration = Double(allSamples.count) / sampleRate
             Logger.debug("Final pass: \(String(format: "%.1f", duration))s of audio", subsystem: .transcription)
-            let finalText = whisper.transcribe(samples: allSamples, language: language)
-            if !finalText.isEmpty {
+            let rawText = whisper.transcribe(samples: allSamples, language: language)
+            if !rawText.isEmpty {
+                // Apply dictionary corrections if enabled
+                let finalText = DictionaryManager.shared.correctText(rawText)
                 // Use final pass result as it's more accurate with full context
                 fullTranscription = finalText
             }

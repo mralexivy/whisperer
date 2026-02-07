@@ -22,6 +22,7 @@ struct TranscriptionRecord: Identifiable {
     let notes: String?
     let createdAt: Date
     let lastModifiedAt: Date
+    let corrections: [AppliedCorrection]
 
     // Computed properties
     var displayText: String {
@@ -57,10 +58,11 @@ struct TranscriptionRecord: Identifiable {
         self.notes = entity.notes
         self.createdAt = entity.createdAt
         self.lastModifiedAt = entity.lastModifiedAt
+        self.corrections = entity.corrections
     }
 
     // For creating new records
-    init(transcription: String, audioFileURL: String?, duration: Double, language: String, modelUsed: String) {
+    init(transcription: String, audioFileURL: String?, duration: Double, language: String, modelUsed: String, corrections: [AppliedCorrection] = []) {
         let now = Date()
         self.id = UUID()
         self.timestamp = now
@@ -76,5 +78,6 @@ struct TranscriptionRecord: Identifiable {
         self.notes = nil
         self.createdAt = now
         self.lastModifiedAt = now
+        self.corrections = corrections
     }
 }

@@ -24,6 +24,7 @@ public class TranscriptionEntity: NSManagedObject {
     @NSManaged public var notes: String?
     @NSManaged public var createdAt: Date
     @NSManaged public var lastModifiedAt: Date
+    @NSManaged public var correctionsData: Data?
 
     // Computed properties
     var displayText: String {
@@ -42,6 +43,25 @@ public class TranscriptionEntity: NSManagedObject {
         let recordingsDir = appSupport.appendingPathComponent("Whisperer/Recordings")
         return recordingsDir.appendingPathComponent(audioFileURL)
     }
+
+    var corrections: [AppliedCorrection] {
+        get {
+            guard let data = correctionsData else { return [] }
+            do {
+                return try JSONDecoder().decode([AppliedCorrection].self, from: data)
+            } catch {
+                Logger.error("Failed to decode corrections: \(error)", subsystem: .app)
+                return []
+            }
+        }
+        set {
+            do {
+                correctionsData = try JSONEncoder().encode(newValue)
+            } catch {
+                Logger.error("Failed to encode corrections: \(error)", subsystem: .app)
+            }
+        }
+    }
 }
 
 extension TranscriptionEntity: Identifiable {}
@@ -57,7 +77,7 @@ extension TranscriptionEntity {
 // MARK: - Convenience Initializer
 
 extension TranscriptionEntity {
-    static func create(in context: NSManagedObjectContext, transcription: String, audioFileURL: String?, duration: Double, language: String, modelUsed: String) -> TranscriptionEntity {
+    static func create(in context: NSManagedObjectContext, transcription: String, audioFileURL: String?, duration: Double, language: String, modelUsed: String, corrections: [AppliedCorrection] = []) -> TranscriptionEntity {
         let entity = TranscriptionEntity(context: context)
         let now = Date()
 
@@ -75,6 +95,7 @@ extension TranscriptionEntity {
         entity.notes = nil
         entity.createdAt = now
         entity.lastModifiedAt = now
+        entity.corrections = corrections
 
         return entity
     }

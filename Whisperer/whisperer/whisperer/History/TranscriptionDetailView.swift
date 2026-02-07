@@ -182,11 +182,11 @@ struct TranscriptionDetailView: View {
                             .stroke(WhispererColors.accent.opacity(0.4), lineWidth: 1.5)
                     )
             } else {
-                Text(editedText)
+                // Show highlighted text with dictionary corrections
+                HighlightedText(text: editedText, corrections: transcription.corrections)
                     .font(.system(size: 14))
                     .lineSpacing(4)
                     .foregroundColor(WhispererColors.primaryText(colorScheme))
-                    .textSelection(.enabled)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(14)
                     .background(

@@ -6,6 +6,7 @@
 //
 
 import SwiftUI
+import AppKit
 
 // MARK: - Design System Colors
 
@@ -71,6 +72,7 @@ enum TimeFormatSetting: String, CaseIterable {
 
 enum HistorySidebarItem: String, CaseIterable, Identifiable {
     case transcriptions = "Transcriptions"
+    case dictionary = "Dictionary"
     case settings = "Settings"
 
     var id: String { rawValue }
@@ -78,6 +80,7 @@ enum HistorySidebarItem: String, CaseIterable, Identifiable {
     var icon: String {
         switch self {
         case .transcriptions: return "waveform.and.mic"
+        case .dictionary: return "book.closed"
         case .settings: return "gearshape"
         }
     }
@@ -104,6 +107,8 @@ struct HistoryWindowView: View {
                 switch selectedSidebarItem {
                 case .transcriptions:
                     TranscriptionsView()
+                case .dictionary:
+                    DictionaryView()
                 case .settings:
                     HistorySettingsView()
                 }
@@ -111,6 +116,12 @@ struct HistoryWindowView: View {
         }
         .frame(minWidth: 1000, minHeight: 700)
         .background(WhispererColors.background(colorScheme))
+        .onReceive(NotificationCenter.default.publisher(for: .switchToDictionaryTab)) { notification in
+            // Switch to Dictionary tab when notification is received
+            withAnimation {
+                selectedSidebarItem = .dictionary
+            }
+        }
     }
 
     // MARK: - Sidebar
@@ -148,15 +159,15 @@ struct HistoryWindowView: View {
 
     private var brandHeader: some View {
         HStack(spacing: 12) {
-            // App icon
+            // App icon - circular waveform logo matching menubar
             ZStack {
-                RoundedRectangle(cornerRadius: 10)
-                    .fill(WhispererColors.accent)
-                    .frame(width: 36, height: 36)
+                Circle()
+                    .fill(WhispererColors.accent.opacity(0.15))
+                    .frame(width: 40, height: 40)
 
                 Image(systemName: "waveform")
-                    .font(.system(size: 16, weight: .semibold))
-                    .foregroundColor(.white)
+                    .font(.system(size: 18, weight: .semibold))
+                    .foregroundColor(WhispererColors.accent)
             }
 
             VStack(alignment: .leading, spacing: 1) {
@@ -563,6 +574,7 @@ struct HistorySettingsView: View {
                 // Settings content
                 VStack(alignment: .leading, spacing: 28) {
                     displaySection
+                    dictionarySection
                     storageSection
                     dataManagementSection
                     dangerZoneSection
@@ -652,6 +664,157 @@ struct HistorySettingsView: View {
                         .foregroundColor(WhispererColors.secondaryText(colorScheme))
                 }
             }
+        }
+    }
+
+    // MARK: - Dictionary Section
+
+    private var dictionarySection: some View {
+        SettingsCard(colorScheme: colorScheme) {
+            VStack(alignment: .leading, spacing: 20) {
+                SettingsSectionHeader(
+                    icon: "book.closed.fill",
+                    title: "Dictionary Corrections",
+                    colorScheme: colorScheme
+                )
+
+                // Enable dictionary toggle
+                SettingsRow(colorScheme: colorScheme) {
+                    HStack(spacing: 14) {
+                        ZStack {
+                            RoundedRectangle(cornerRadius: 8)
+                                .fill(WhispererColors.accent.opacity(0.12))
+                                .frame(width: 36, height: 36)
+
+                            Image(systemName: "text.badge.checkmark")
+                                .font(.system(size: 14, weight: .semibold))
+                                .foregroundColor(WhispererColors.accent)
+                        }
+
+                        VStack(alignment: .leading, spacing: 3) {
+                            Text("Enable Dictionary Corrections")
+                                .font(.system(size: 13, weight: .medium))
+                                .foregroundColor(WhispererColors.primaryText(colorScheme))
+
+                            Text("Auto-correct technical terms and common mistakes")
+                                .font(.system(size: 11))
+                                .foregroundColor(WhispererColors.secondaryText(colorScheme))
+                        }
+
+                        Spacer()
+
+                        Toggle("", isOn: Binding(
+                            get: { DictionaryManager.shared.isEnabled },
+                            set: { DictionaryManager.shared.isEnabled = $0 }
+                        ))
+                            .toggleStyle(.switch)
+                            .tint(WhispererColors.accent)
+                            .labelsHidden()
+                    }
+                }
+
+                // Fuzzy matching sensitivity slider
+                VStack(alignment: .leading, spacing: 14) {
+                    HStack {
+                        Text("Fuzzy Matching Sensitivity")
+                            .font(.system(size: 14, weight: .semibold))
+                            .foregroundColor(WhispererColors.primaryText(colorScheme))
+
+                        Spacer()
+
+                        Text(sensitivityLabel)
+                            .font(.system(size: 12, weight: .medium))
+                            .foregroundColor(WhispererColors.accent)
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 4)
+                            .background(
+                                RoundedRectangle(cornerRadius: 6)
+                                    .fill(WhispererColors.accent.opacity(0.12))
+                            )
+                    }
+
+                    HStack(spacing: 12) {
+                        Text("Strict")
+                            .font(.system(size: 11))
+                            .foregroundColor(WhispererColors.secondaryText(colorScheme))
+
+                        Slider(
+                            value: Binding(
+                                get: { Double(DictionaryManager.shared.fuzzyMatchingSensitivity) },
+                                set: { DictionaryManager.shared.fuzzyMatchingSensitivity = Int($0) }
+                            ),
+                            in: 0...3,
+                            step: 1
+                        )
+                        .tint(WhispererColors.accent)
+
+                        Text("Lenient")
+                            .font(.system(size: 11))
+                            .foregroundColor(WhispererColors.secondaryText(colorScheme))
+                    }
+
+                    Text(sensitivityDescription)
+                        .font(.system(size: 12))
+                        .foregroundColor(WhispererColors.secondaryText(colorScheme))
+                }
+
+                // Phonetic matching toggle
+                SettingsRow(colorScheme: colorScheme) {
+                    HStack(spacing: 14) {
+                        ZStack {
+                            RoundedRectangle(cornerRadius: 8)
+                                .fill(WhispererColors.accent.opacity(0.12))
+                                .frame(width: 36, height: 36)
+
+                            Image(systemName: "waveform.and.mic")
+                                .font(.system(size: 14, weight: .semibold))
+                                .foregroundColor(WhispererColors.accent)
+                        }
+
+                        VStack(alignment: .leading, spacing: 3) {
+                            Text("Phonetic Matching")
+                                .font(.system(size: 13, weight: .medium))
+                                .foregroundColor(WhispererColors.primaryText(colorScheme))
+
+                            Text("Match words by sound (e.g., 'jason' → 'JSON')")
+                                .font(.system(size: 11))
+                                .foregroundColor(WhispererColors.secondaryText(colorScheme))
+                        }
+
+                        Spacer()
+
+                        Toggle("", isOn: Binding(
+                            get: { DictionaryManager.shared.usePhoneticMatching },
+                            set: { DictionaryManager.shared.usePhoneticMatching = $0 }
+                        ))
+                            .toggleStyle(.switch)
+                            .tint(WhispererColors.accent)
+                            .labelsHidden()
+                    }
+                }
+            }
+        }
+    }
+
+    private var sensitivityLabel: String {
+        let sensitivity = DictionaryManager.shared.fuzzyMatchingSensitivity
+        switch sensitivity {
+        case 0: return "Exact Only"
+        case 1: return "Strict"
+        case 2: return "Balanced"
+        case 3: return "Lenient"
+        default: return "Balanced"
+        }
+    }
+
+    private var sensitivityDescription: String {
+        let sensitivity = DictionaryManager.shared.fuzzyMatchingSensitivity
+        switch sensitivity {
+        case 0: return "Only exact matches will be corrected (no fuzzy matching)"
+        case 1: return "Only very close matches (1 character difference)"
+        case 2: return "Balanced corrections (up to 2 character differences) — recommended"
+        case 3: return "Lenient corrections (up to 3 character differences) — may have false positives"
+        default: return "Balanced corrections — recommended"
         }
     }
 

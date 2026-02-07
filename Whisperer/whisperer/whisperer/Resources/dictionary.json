@@ -1,0 +1,353 @@
+{
+  "version": "1.0",
+  "entries": [
+    {
+      "incorrectForm": "post gress",
+      "correctForm": "PostgreSQL",
+      "category": "Programming",
+      "notes": "Database system"
+    },
+    {
+      "incorrectForm": "post gres queue el",
+      "correctForm": "PostgreSQL",
+      "category": "Programming",
+      "notes": "Database system"
+    },
+    {
+      "incorrectForm": "kubernetes",
+      "correctForm": "Kubernetes",
+      "category": "DevOps",
+      "notes": "Container orchestration"
+    },
+    {
+      "incorrectForm": "cooper netties",
+      "correctForm": "Kubernetes",
+      "category": "DevOps",
+      "notes": "Container orchestration"
+    },
+    {
+      "incorrectForm": "cooper net ease",
+      "correctForm": "Kubernetes",
+      "category": "DevOps",
+      "notes": "Container orchestration"
+    },
+    {
+      "incorrectForm": "graph queue el",
+      "correctForm": "GraphQL",
+      "category": "Programming",
+      "notes": "Query language for APIs"
+    },
+    {
+      "incorrectForm": "graphical",
+      "correctForm": "GraphQL",
+      "category": "Programming",
+      "notes": "Query language for APIs"
+    },
+    {
+      "incorrectForm": "type script",
+      "correctForm": "TypeScript",
+      "category": "Programming",
+      "notes": "JavaScript superset"
+    },
+    {
+      "incorrectForm": "java script",
+      "correctForm": "JavaScript",
+      "category": "Programming",
+      "notes": "Programming language"
+    },
+    {
+      "incorrectForm": "react native",
+      "correctForm": "React Native",
+      "category": "Programming",
+      "notes": "Mobile framework"
+    },
+    {
+      "incorrectForm": "mongo db",
+      "correctForm": "MongoDB",
+      "category": "Programming",
+      "notes": "NoSQL database"
+    },
+    {
+      "incorrectForm": "read is",
+      "correctForm": "Redis",
+      "category": "Programming",
+      "notes": "In-memory data store"
+    },
+    {
+      "incorrectForm": "red is",
+      "correctForm": "Redis",
+      "category": "Programming",
+      "notes": "In-memory data store"
+    },
+    {
+      "incorrectForm": "dock er",
+      "correctForm": "Docker",
+      "category": "DevOps",
+      "notes": "Containerization platform"
+    },
+    {
+      "incorrectForm": "doker",
+      "correctForm": "Docker",
+      "category": "DevOps",
+      "notes": "Containerization platform"
+    },
+    {
+      "incorrectForm": "next js",
+      "correctForm": "Next.js",
+      "category": "Programming",
+      "notes": "React framework"
+    },
+    {
+      "incorrectForm": "node js",
+      "correctForm": "Node.js",
+      "category": "Programming",
+      "notes": "JavaScript runtime"
+    },
+    {
+      "incorrectForm": "view js",
+      "correctForm": "Vue.js",
+      "category": "Programming",
+      "notes": "JavaScript framework"
+    },
+    {
+      "incorrectForm": "angular",
+      "correctForm": "Angular",
+      "category": "Programming",
+      "notes": "Web framework"
+    },
+    {
+      "incorrectForm": "tail wind",
+      "correctForm": "Tailwind",
+      "category": "Programming",
+      "notes": "CSS framework"
+    },
+    {
+      "incorrectForm": "tailwind css",
+      "correctForm": "Tailwind CSS",
+      "category": "Programming",
+      "notes": "CSS framework"
+    },
+    {
+      "incorrectForm": "git hub",
+      "correctForm": "GitHub",
+      "category": "DevOps",
+      "notes": "Code hosting platform"
+    },
+    {
+      "incorrectForm": "git lab",
+      "correctForm": "GitLab",
+      "category": "DevOps",
+      "notes": "DevOps platform"
+    },
+    {
+      "incorrectForm": "amazon web services",
+      "correctForm": "AWS",
+      "category": "Cloud",
+      "notes": "Cloud provider"
+    },
+    {
+      "incorrectForm": "a w s",
+      "correctForm": "AWS",
+      "category": "Cloud",
+      "notes": "Cloud provider"
+    },
+    {
+      "incorrectForm": "azure",
+      "correctForm": "Azure",
+      "category": "Cloud",
+      "notes": "Microsoft cloud platform"
+    },
+    {
+      "incorrectForm": "google cloud",
+      "correctForm": "Google Cloud",
+      "category": "Cloud",
+      "notes": "Google cloud platform"
+    },
+    {
+      "incorrectForm": "g c p",
+      "correctForm": "GCP",
+      "category": "Cloud",
+      "notes": "Google Cloud Platform"
+    },
+    {
+      "incorrectForm": "rest api",
+      "correctForm": "REST API",
+      "category": "Programming",
+      "notes": "API architectural style"
+    },
+    {
+      "incorrectForm": "jason",
+      "correctForm": "JSON",
+      "category": "Programming",
+      "notes": "Data format"
+    },
+    {
+      "incorrectForm": "j son",
+      "correctForm": "JSON",
+      "category": "Programming",
+      "notes": "Data format"
+    },
+    {
+      "incorrectForm": "sequel",
+      "correctForm": "SQL",
+      "category": "Programming",
+      "notes": "Query language"
+    },
+    {
+      "incorrectForm": "s q l",
+      "correctForm": "SQL",
+      "category": "Programming",
+      "notes": "Query language"
+    },
+    {
+      "incorrectForm": "h t m l",
+      "correctForm": "HTML",
+      "category": "Programming",
+      "notes": "Markup language"
+    },
+    {
+      "incorrectForm": "c s s",
+      "correctForm": "CSS",
+      "category": "Programming",
+      "notes": "Styling language"
+    },
+    {
+      "incorrectForm": "a p i",
+      "correctForm": "API",
+      "category": "Programming",
+      "notes": "Application Programming Interface"
+    },
+    {
+      "incorrectForm": "ai",
+      "correctForm": "AI",
+      "category": "Programming",
+      "notes": "Artificial Intelligence"
+    },
+    {
+      "incorrectForm": "ml",
+      "correctForm": "ML",
+      "category": "Programming",
+      "notes": "Machine Learning"
+    },
+    {
+      "incorrectForm": "ui",
+      "correctForm": "UI",
+      "category": "Programming",
+      "notes": "User Interface"
+    },
+    {
+      "incorrectForm": "ux",
+      "correctForm": "UX",
+      "category": "Programming",
+      "notes": "User Experience"
+    },
+    {
+      "incorrectForm": "cicd",
+      "correctForm": "CI/CD",
+      "category": "DevOps",
+      "notes": "Continuous Integration/Deployment"
+    },
+    {
+      "incorrectForm": "ci cd",
+      "correctForm": "CI/CD",
+      "category": "DevOps",
+      "notes": "Continuous Integration/Deployment"
+    },
+    {
+      "incorrectForm": "tensor flow",
+      "correctForm": "TensorFlow",
+      "category": "Programming",
+      "notes": "ML framework"
+    },
+    {
+      "incorrectForm": "pie torch",
+      "correctForm": "PyTorch",
+      "category": "Programming",
+      "notes": "ML framework"
+    },
+    {
+      "incorrectForm": "my sequel",
+      "correctForm": "MySQL",
+      "category": "Programming",
+      "notes": "Database"
+    },
+    {
+      "incorrectForm": "maria db",
+      "correctForm": "MariaDB",
+      "category": "Programming",
+      "notes": "Database"
+    },
+    {
+      "incorrectForm": "elastic search",
+      "correctForm": "Elasticsearch",
+      "category": "Programming",
+      "notes": "Search engine"
+    },
+    {
+      "incorrectForm": "rabbit mq",
+      "correctForm": "RabbitMQ",
+      "category": "Programming",
+      "notes": "Message broker"
+    },
+    {
+      "incorrectForm": "kafka",
+      "correctForm": "Kafka",
+      "category": "Programming",
+      "notes": "Event streaming platform"
+    },
+    {
+      "incorrectForm": "jenkins",
+      "correctForm": "Jenkins",
+      "category": "DevOps",
+      "notes": "Automation server"
+    },
+    {
+      "incorrectForm": "terraform",
+      "correctForm": "Terraform",
+      "category": "DevOps",
+      "notes": "Infrastructure as code"
+    },
+    {
+      "incorrectForm": "ansible",
+      "correctForm": "Ansible",
+      "category": "DevOps",
+      "notes": "Configuration management"
+    },
+    {
+      "incorrectForm": "prometheus",
+      "correctForm": "Prometheus",
+      "category": "DevOps",
+      "notes": "Monitoring system"
+    },
+    {
+      "incorrectForm": "grafana",
+      "correctForm": "Grafana",
+      "category": "DevOps",
+      "notes": "Analytics platform"
+    },
+    {
+      "incorrectForm": "anthropic",
+      "correctForm": "Anthropic",
+      "category": "Company",
+      "notes": "AI company"
+    },
+    {
+      "incorrectForm": "openai",
+      "correctForm": "OpenAI",
+      "category": "Company",
+      "notes": "AI company"
+    },
+    {
+      "incorrectForm": "chat gpt",
+      "correctForm": "ChatGPT",
+      "category": "Programming",
+      "notes": "AI chatbot"
+    },
+    {
+      "incorrectForm": "claude",
+      "correctForm": "Claude",
+      "category": "Programming",
+      "notes": "AI assistant"
+    }
+  ]
+}
