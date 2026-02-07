@@ -11,9 +11,9 @@ import SwiftUI
 class OverlayPanel: NSPanel {
 
     init() {
-        // Create the panel with proper style - larger to fit capsule + shadow
+        // Create the panel with proper style - fits transcription card + HUD capsule + shadows
         super.init(
-            contentRect: NSRect(x: 0, y: 0, width: 340, height: 90),
+            contentRect: NSRect(x: 0, y: 0, width: 420, height: 220),
             styleMask: [.borderless, .nonactivatingPanel],
             backing: .buffered,
             defer: false
@@ -68,8 +68,8 @@ class OverlayPanel: NSPanel {
         guard let screen = NSScreen.main else { return }
 
         let screenRect = screen.visibleFrame
-        let panelWidth: CGFloat = 340
-        let panelHeight: CGFloat = 90
+        let panelWidth: CGFloat = 420
+        let panelHeight: CGFloat = 220
         let bottomMargin: CGFloat = 30
 
         let xPos = screenRect.origin.x + (screenRect.width - panelWidth) / 2
@@ -86,6 +86,8 @@ class OverlayPanel: NSPanel {
         let shouldShow = appState.state != .idle
 
         if shouldShow && !self.isVisible {
+            // Reposition at bottom-center every time we show
+            positionAtBottomCenter()
             self.orderFrontRegardless()
             self.animator().alphaValue = 1.0
         } else if !shouldShow && self.isVisible {

@@ -48,22 +48,11 @@ struct OverlayView: View {
 
     var body: some View {
         VStack(spacing: 8) {
-            // Live transcription text (shown during recording)
+            Spacer(minLength: 0)
+
+            // Live transcription card (shown during recording)
             if appState.state.isRecording && !appState.liveTranscription.isEmpty {
-                Text(displayedTranscription)
-                    .font(.system(size: 13, weight: .medium))
-                    .foregroundColor(.primary)
-                    .lineLimit(2)
-                    .multilineTextAlignment(.leading)
-                    .frame(maxWidth: 300, alignment: .trailing)
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 8)
-                    .background(
-                        RoundedRectangle(cornerRadius: 12)
-                            .fill(transcriptionBackground)
-                            .shadow(color: .black.opacity(colorScheme == .dark ? 0.3 : 0.1), radius: 8, x: 0, y: 2)
-                    )
-                    .animation(.easeOut(duration: 0.15), value: displayedTranscription)
+                LiveTranscriptionCard(appState: appState)
             }
 
             // Processing indicator (shown during final pass)

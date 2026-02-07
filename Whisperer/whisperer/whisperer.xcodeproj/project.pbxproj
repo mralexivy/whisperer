@@ -556,6 +556,7 @@
 		1038D75D2F266EE900490030 /* Accelerate.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Accelerate.framework; path = Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS26.2.sdk/System/Library/Frameworks/Accelerate.framework; sourceTree = DEVELOPER_DIR; };
 		1038D75F2F266EF900490030 /* Foundation.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Foundation.framework; path = Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS26.2.sdk/System/Library/Frameworks/Foundation.framework; sourceTree = DEVELOPER_DIR; };
 		1068837B2F365B32008BC1AD /* whisperer.xcodeproj */ = {isa = PBXFileReference; lastKnownFileType = "wrapper.pb-project"; path = whisperer.xcodeproj; sourceTree = "<group>"; };
+		10CD05772F366002001C6FB0 /* whisperer.xcodeproj */ = {isa = PBXFileReference; lastKnownFileType = "wrapper.pb-project"; path = whisperer.xcodeproj; sourceTree = "<group>"; };
 		10DED0232F27E4B40054AFA2 /* whisperer.xcodeproj */ = {isa = PBXFileReference; lastKnownFileType = "wrapper.pb-project"; path = whisperer.xcodeproj; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
@@ -1914,6 +1915,13 @@
 			name = Products;
 			sourceTree = "<group>";
 		};
+		10CD057B2F366002001C6FB0 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
 		10DED0272F27E4B40054AFA2 /* Products */ = {
 			isa = PBXGroup;
 			children = (
@@ -1976,6 +1984,10 @@
 			productRefGroup = 1038D4802F26382700490030 /* Products */;
 			projectDirPath = "";
 			projectReferences = (
+				{
+					ProductGroup = 10CD057B2F366002001C6FB0 /* Products */;
+					ProjectRef = 10CD05772F366002001C6FB0 /* whisperer.xcodeproj */;
+				},
 				{
 					ProductGroup = 10028F702F34F29200941FBC /* Products */;
 					ProjectRef = 10028F6C2F34F29200941FBC /* whisperer.xcodeproj */;
