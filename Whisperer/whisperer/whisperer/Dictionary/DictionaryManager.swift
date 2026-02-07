@@ -60,24 +60,28 @@ class DictionaryManager: ObservableObject {
             packPreferences = prefs
         }
 
+        // Capture pack preferences before detaching (main actor isolated)
+        let capturedPackPrefs = packPreferences
+
         // Load data in background to avoid blocking UI
         Task.detached { [weak self] in
-            guard let self = self else { return }
+            guard self != nil else { return }
 
             // Load packs from files (background thread)
-            let loadedPacks = await Self.loadPacksInBackground(packPreferences: self.packPreferences)
+            let loadedPacks = await Self.loadPacksInBackground(packPreferences: capturedPackPrefs)
 
             // Load entries from CoreData (background context)
             let loadedEntries = await Self.loadEntriesInBackground()
 
             // Also check if bundled dictionary needs loading
-            await Self.loadBundledDictionaryInBackground(packs: loadedPacks, packPreferences: self.packPreferences)
+            await Self.loadBundledDictionaryInBackground(packs: loadedPacks, packPreferences: capturedPackPrefs)
 
             // Reload entries after bundled loading
             let finalEntries = await Self.loadEntriesInBackground()
 
             // Update UI on main thread
-            await MainActor.run {
+            await MainActor.run { [weak self] in
+                guard let self = self else { return }
                 self.packs = loadedPacks
                 self.entries = finalEntries
                 self.isLoadingEntries = false

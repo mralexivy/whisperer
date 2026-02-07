@@ -10,6 +10,7 @@ import CoreAudio
 import Combine
 import AVFoundation
 
+@MainActor
 class AudioDeviceManager: ObservableObject {
     static let shared = AudioDeviceManager()
 
@@ -409,7 +410,5 @@ class AudioDeviceManager: ObservableObject {
         print("Stopped monitoring audio device changes")
     }
 
-    deinit {
-        stopMonitoring()
-    }
+    // Note: deinit removed - AudioDeviceManager is a singleton that lives for app lifetime
 }

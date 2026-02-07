@@ -13,7 +13,12 @@ import AudioToolbox
 
 class AudioRecorder: NSObject {
     private var audioEngine: AVAudioEngine?
-    private var isRecording = false
+    private let isRecordingLock = NSLock()
+    private var _isRecording = false
+    private var isRecording: Bool {
+        get { isRecordingLock.lock(); defer { isRecordingLock.unlock() }; return _isRecording }
+        set { isRecordingLock.lock(); _isRecording = newValue; isRecordingLock.unlock() }
+    }
     private var currentURL: URL?
 
     // Callback for waveform updates

@@ -11,11 +11,16 @@ import CoreData
 class HistoryDatabase {
     static let shared = HistoryDatabase()
 
-    lazy var persistentContainer: NSPersistentContainer = {
+    /// Error that occurred during initialization, if any
+    private(set) var initializationError: Error?
+
+    lazy var persistentContainer: NSPersistentContainer? = {
         // Find the model in the app bundle
         guard let modelURL = Bundle.main.url(forResource: "WhispererHistory", withExtension: "momd"),
               let model = NSManagedObjectModel(contentsOf: modelURL) else {
-            fatalError("Unable to find Core Data model")
+            Logger.error("Unable to find Core Data model - history will be unavailable", subsystem: .app)
+            initializationError = HistoryDatabaseError.modelNotFound
+            return nil
         }
 
         let container = NSPersistentContainer(name: "WhispererHistory", managedObjectModel: model)
@@ -30,6 +35,9 @@ class HistoryDatabase {
 
         let storeURL = whispererDir.appendingPathComponent("history.sqlite")
         let description = NSPersistentStoreDescription(url: storeURL)
+        // Enable automatic migration
+        description.shouldMigrateStoreAutomatically = true
+        description.shouldInferMappingModelAutomatically = true
         container.persistentStoreDescriptions = [description]
 
         container.loadPersistentStores { description, error in
@@ -47,15 +55,35 @@ class HistoryDatabase {
     }()
 
     var viewContext: NSManagedObjectContext {
-        return persistentContainer.viewContext
+        guard let container = persistentContainer else {
+            Logger.error("Core Data unavailable - returning in-memory context", subsystem: .app)
+            // Return an in-memory context as fallback
+            let inMemoryContainer = NSPersistentContainer(name: "WhispererHistory")
+            let inMemoryDescription = NSPersistentStoreDescription()
+            inMemoryDescription.type = NSInMemoryStoreType
+            inMemoryContainer.persistentStoreDescriptions = [inMemoryDescription]
+            inMemoryContainer.loadPersistentStores { _, _ in }
+            return inMemoryContainer.viewContext
+        }
+        return container.viewContext
     }
 
     func newBackgroundContext() -> NSManagedObjectContext {
-        return persistentContainer.newBackgroundContext()
+        guard let container = persistentContainer else {
+            Logger.error("Core Data unavailable - returning in-memory context", subsystem: .app)
+            let inMemoryContainer = NSPersistentContainer(name: "WhispererHistory")
+            let inMemoryDescription = NSPersistentStoreDescription()
+            inMemoryDescription.type = NSInMemoryStoreType
+            inMemoryContainer.persistentStoreDescriptions = [inMemoryDescription]
+            inMemoryContainer.loadPersistentStores { _, _ in }
+            return inMemoryContainer.newBackgroundContext()
+        }
+        return container.newBackgroundContext()
     }
 
     func saveContext() {
-        let context = viewContext
+        guard let container = persistentContainer else { return }
+        let context = container.viewContext
         if context.hasChanges {
             do {
                 try context.save()
@@ -69,4 +97,9 @@ class HistoryDatabase {
         // Load persistent container
         _ = persistentContainer
     }
+}
+
+enum HistoryDatabaseError: Error {
+    case modelNotFound
+    case storeLoadFailed
 }

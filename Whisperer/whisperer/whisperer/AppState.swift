@@ -243,13 +243,14 @@ class AppState: ObservableObject {
         print("🔄 Pre-loading \(modelDisplayName)...")
         let startTime = Date()
 
-        Task.detached(priority: .userInitiated) {
+        Task.detached(priority: .userInitiated) { [weak self] in
             do {
                 let bridge = try WhisperBridge(modelPath: path)
                 let loadTime = Date().timeIntervalSince(startTime)
                 print("✅ \(modelDisplayName) pre-loaded in \(String(format: "%.2f", loadTime))s")
 
-                await MainActor.run {
+                await MainActor.run { [weak self] in
+                    guard let self = self else { return }
                     self.whisperBridge = bridge
                     self.loadedModel = model
                     self.isModelLoaded = true
@@ -274,7 +275,7 @@ class AppState: ObservableObject {
         let vadPath = ModelDownloader.shared.vadModelPath()
 
         // First ensure the VAD model is downloaded
-        Task.detached(priority: .userInitiated) {
+        Task.detached(priority: .userInitiated) { [weak self] in
             do {
                 print("📥 Checking for Silero VAD model...")
 
@@ -302,7 +303,8 @@ class AppState: ObservableObject {
                 let loadTime = Date().timeIntervalSince(startTime)
                 print("✅ Silero VAD pre-loaded in \(String(format: "%.2f", loadTime))s")
 
-                await MainActor.run {
+                await MainActor.run { [weak self] in
+                    guard let self = self else { return }
                     self.sileroVAD = vad
                     self.isVADLoaded = true
                 }
@@ -311,8 +313,8 @@ class AppState: ObservableObject {
                 print("   This is OK - VAD is optional for better performance")
                 print("   App will work fine without speech detection")
                 // VAD is completely optional, continue without it
-                await MainActor.run {
-                    self.isVADLoaded = false
+                await MainActor.run { [weak self] in
+                    self?.isVADLoaded = false
                 }
             }
         }
