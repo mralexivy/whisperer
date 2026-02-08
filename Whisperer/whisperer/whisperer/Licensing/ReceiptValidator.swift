@@ -2,20 +2,18 @@
 //  ReceiptValidator.swift
 //  Whisperer
 //
-//  App Store receipt validation for anti-piracy
+//  App Store receipt validation using StoreKit 2
 //  Validates that the app was purchased through the Mac App Store
 //
 
 import Foundation
-import Security
+import StoreKit
 
 enum ReceiptValidationError: Error {
     case noReceiptFound
     case invalidReceipt
-    case bundleIdMismatch
-    case versionMismatch
-    case signatureInvalid
-    case receiptExpired
+    case verificationFailed
+    case unknownError
 
     var localizedDescription: String {
         switch self {
@@ -23,18 +21,15 @@ enum ReceiptValidationError: Error {
             return "No App Store receipt found. Please ensure the app was downloaded from the Mac App Store."
         case .invalidReceipt:
             return "The App Store receipt is invalid or corrupted."
-        case .bundleIdMismatch:
-            return "Receipt bundle identifier does not match this app."
-        case .versionMismatch:
-            return "Receipt version does not match this app version."
-        case .signatureInvalid:
-            return "Receipt signature verification failed."
-        case .receiptExpired:
-            return "Receipt has expired."
+        case .verificationFailed:
+            return "App Store verification failed."
+        case .unknownError:
+            return "An unknown error occurred during validation."
         }
     }
 }
 
+@MainActor
 class ReceiptValidator {
     static let shared = ReceiptValidator()
 
@@ -43,68 +38,62 @@ class ReceiptValidator {
 
     private init() {}
 
-    /// Validate the App Store receipt
+    /// Validate the App Store receipt using StoreKit 2's AppTransaction API
     /// Returns true if valid, throws error if invalid
-    /// In production, this should call exit(173) on validation failure to trigger receipt refresh
-    func validateReceipt() throws -> Bool {
+    func validateReceipt() async throws -> Bool {
         // Return cached result if already validated
         if let cached = cachedResult {
             return cached
         }
 
-        // 1. Check if receipt exists
-        guard let receiptURL = Bundle.main.appStoreReceiptURL else {
+        do {
+            // Use StoreKit 2's AppTransaction to verify the app purchase
+            let result = try await AppTransaction.shared
+
+            switch result {
+            case .verified(let appTransaction):
+                // The app transaction is verified by Apple
+                Logger.info("✅ App Store verification passed - Original purchase: \(appTransaction.originalPurchaseDate)", subsystem: .app)
+                isValidated = true
+                cachedResult = true
+                return true
+
+            case .unverified(_, let verificationError):
+                // Verification failed
+                Logger.error("App Store verification failed: \(verificationError)", subsystem: .app)
+                throw ReceiptValidationError.verificationFailed
+            }
+        } catch let error as ReceiptValidationError {
+            throw error
+        } catch {
+            // For development/TestFlight builds, AppTransaction may not be available
+            // Log the error but don't fail the app
+            Logger.warning("App Store validation skipped: \(error.localizedDescription)", subsystem: .app)
+
+            // In development, allow the app to run
+            #if DEBUG
+            isValidated = true
+            cachedResult = true
+            return true
+            #else
+            // In production, if we can't verify, check for receipt file as fallback
+            if hasReceiptFile() {
+                Logger.info("Receipt file exists, allowing app to run", subsystem: .app)
+                isValidated = true
+                cachedResult = true
+                return true
+            }
             throw ReceiptValidationError.noReceiptFound
+            #endif
         }
-
-        guard FileManager.default.fileExists(atPath: receiptURL.path) else {
-            throw ReceiptValidationError.noReceiptFound
-        }
-
-        // 2. Load receipt data
-        guard let receiptData = try? Data(contentsOf: receiptURL) else {
-            throw ReceiptValidationError.invalidReceipt
-        }
-
-        // 3. Basic validation - ensure receipt is not empty
-        guard receiptData.count > 0 else {
-            throw ReceiptValidationError.invalidReceipt
-        }
-
-        // 4. Validate receipt structure (basic PKCS#7 check)
-        // The receipt is a PKCS#7 container - check for basic structure
-        guard isValidPKCS7Container(receiptData) else {
-            throw ReceiptValidationError.invalidReceipt
-        }
-
-        // 5. For Mac App Store, we can do additional validation
-        // In a production app, you would:
-        // - Parse the PKCS#7 container using Security framework
-        // - Verify Apple's signature chain
-        // - Extract ASN.1 payload and verify:
-        //   * Bundle ID matches Bundle.main.bundleIdentifier
-        //   * App version matches Bundle.main.infoDictionary?["CFBundleShortVersionString"]
-        //   * Receipt is not expired
-
-        // For now, we implement basic validation
-        // A full implementation would use OpenSSL or Security framework to parse the receipt
-
-        Logger.info("✅ Receipt validation passed (basic check)", subsystem: .app)
-
-        isValidated = true
-        cachedResult = true
-        return true
     }
 
-    /// Check if data looks like a PKCS#7 container
-    /// PKCS#7 containers start with the ASN.1 SEQUENCE tag (0x30)
-    private func isValidPKCS7Container(_ data: Data) -> Bool {
-        guard data.count > 20 else { return false }
-
-        // PKCS#7 starts with 0x30 (SEQUENCE)
-        // This is a very basic check - a full implementation would properly parse ASN.1
-        let bytes = [UInt8](data.prefix(4))
-        return bytes[0] == 0x30
+    /// Check if a receipt file exists (fallback for edge cases)
+    private func hasReceiptFile() -> Bool {
+        guard let receiptURL = Bundle.main.appStoreReceiptURL else {
+            return false
+        }
+        return FileManager.default.fileExists(atPath: receiptURL.path)
     }
 
     /// Check if the app has a valid purchase
@@ -116,46 +105,5 @@ class ReceiptValidator {
     func reset() {
         isValidated = false
         cachedResult = nil
-    }
-}
-
-// MARK: - Advanced Receipt Parsing (Optional Enhancement)
-
-extension ReceiptValidator {
-    /// Parse receipt and extract bundle ID (advanced)
-    /// This is a placeholder for full receipt parsing using ASN.1
-    /// In production, you would use a library like TPInAppReceipt or implement full ASN.1 parsing
-    private func parseReceipt(_ data: Data) throws -> ReceiptInfo {
-        // TODO: Implement full receipt parsing
-        // This would involve:
-        // 1. Extracting PKCS#7 payload
-        // 2. Verifying Apple's signature
-        // 3. Parsing ASN.1 structure to extract fields
-        // 4. Validating bundle ID, version, purchase date, etc.
-
-        // For now, return placeholder
-        return ReceiptInfo(
-            bundleId: Bundle.main.bundleIdentifier ?? "",
-            appVersion: Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "",
-            originalPurchaseDate: Date()
-        )
-    }
-}
-
-// MARK: - Receipt Info Model
-
-struct ReceiptInfo {
-    let bundleId: String
-    let appVersion: String
-    let originalPurchaseDate: Date
-
-    var isValid: Bool {
-        // Validate bundle ID matches
-        guard bundleId == Bundle.main.bundleIdentifier else {
-            return false
-        }
-
-        // Additional validation logic can be added here
-        return true
     }
 }

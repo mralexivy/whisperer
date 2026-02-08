@@ -239,18 +239,45 @@ class WhisperBridge {
     private var ctx: OpaquePointer?
     private let modelPath: URL
     private let queue = DispatchQueue(label: "whisper.transcribe", qos: .userInteractive)
-    private let ctxLock = SafeLock()
+    private let ctxLock: SafeLock
 
     // Shutdown tracking to prevent operations during cleanup
     private var isShuttingDown = false
     private var isInitialized = false
 
-    // Transcription timeout (default 30 seconds)
+    // Transcription timeout (default 30 seconds, longer on Intel)
     var transcriptionTimeout: TimeInterval = 30.0
+
+    // Lock timeout - longer on Intel Macs due to slower processing
+    private let lockTimeout: TimeInterval
+
+    // Whether running on Apple Silicon
+    private static let isAppleSilicon: Bool = {
+        var sysinfo = utsname()
+        uname(&sysinfo)
+        let machine = withUnsafePointer(to: &sysinfo.machine) {
+            $0.withMemoryRebound(to: CChar.self, capacity: 1) {
+                String(cString: $0)
+            }
+        }
+        // Apple Silicon Macs have machine names starting with "arm64"
+        return machine.hasPrefix("arm64")
+    }()
 
     init(modelPath: URL) throws {
         self.modelPath = modelPath
-        Logger.debug("Initializing WhisperBridge with model: \(modelPath.lastPathComponent)", subsystem: .transcription)
+
+        // Use longer timeouts on Intel Macs
+        if WhisperBridge.isAppleSilicon {
+            self.lockTimeout = 10.0  // 10 seconds for Apple Silicon
+            self.ctxLock = SafeLock(defaultTimeout: 10.0)
+        } else {
+            self.lockTimeout = 60.0  // 60 seconds for Intel (much slower)
+            self.ctxLock = SafeLock(defaultTimeout: 60.0)
+            self.transcriptionTimeout = 120.0  // 2 minutes for Intel
+        }
+
+        Logger.debug("Initializing WhisperBridge with model: \(modelPath.lastPathComponent) (Apple Silicon: \(WhisperBridge.isAppleSilicon))", subsystem: .transcription)
         try loadModel()
         isInitialized = true
 
@@ -262,19 +289,46 @@ class WhisperBridge {
 
     private func loadModel() throws {
         var cparams = whisper_context_default_params()
+
+        // Both Apple Silicon and Intel use GPU acceleration
+        // - Apple Silicon: Metal backend with flash attention
+        // - Intel: OpenCL backend (no flash attention support)
         cparams.use_gpu = true
-        cparams.flash_attn = true
+
+        if WhisperBridge.isAppleSilicon {
+            cparams.flash_attn = true
+            Logger.debug("Using Metal GPU with flash attention (Apple Silicon)", subsystem: .transcription)
+        } else {
+            // Intel Mac: OpenCL GPU (flash attention not supported)
+            cparams.flash_attn = false
+            Logger.info("Using OpenCL GPU acceleration (Intel Mac)", subsystem: .transcription)
+        }
 
         ctx = whisper_init_from_file_with_params(
             modelPath.path,
             cparams
         )
 
+        // If GPU initialization failed, retry with CPU only
+        if ctx == nil {
+            Logger.warning("GPU initialization failed, retrying with CPU only", subsystem: .transcription)
+            cparams.use_gpu = false
+            cparams.flash_attn = false
+            ctx = whisper_init_from_file_with_params(
+                modelPath.path,
+                cparams
+            )
+            if ctx != nil {
+                Logger.info("Successfully initialized with CPU + BLAS fallback", subsystem: .transcription)
+            }
+        }
+
         guard ctx != nil else {
             throw WhisperError.modelLoadFailed
         }
 
-        Logger.debug("Whisper model loaded: \(modelPath.lastPathComponent)", subsystem: .transcription)
+        let backend = cparams.use_gpu ? (WhisperBridge.isAppleSilicon ? "Metal" : "OpenCL") : "CPU+BLAS"
+        Logger.debug("Whisper model loaded: \(modelPath.lastPathComponent) (backend: \(backend))", subsystem: .transcription)
     }
 
     /// Transcribe audio samples (16kHz mono float32)
@@ -296,14 +350,15 @@ class WhisperBridge {
         }
 
         // Use SafeLock with timeout to prevent deadlocks
+        // Timeout is longer on Intel Macs due to slower processing
         let result: String
         do {
-            result = try ctxLock.withLock(timeout: 5.0) { [weak self] in
+            result = try ctxLock.withLock(timeout: lockTimeout) { [weak self] in
                 guard let self = self else { return "" }
                 return self.performTranscription(samples: samples, initialPrompt: initialPrompt, language: language)
             }
         } catch SafeLockError.timeout {
-            Logger.error("Failed to acquire context lock within 5 seconds - possible deadlock", subsystem: .transcription)
+            Logger.error("Failed to acquire context lock within \(lockTimeout) seconds - possible deadlock", subsystem: .transcription)
             return ""
         } catch {
             Logger.error("Lock acquisition error: \(error.localizedDescription)", subsystem: .transcription)

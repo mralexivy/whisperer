@@ -31,8 +31,8 @@ class HistoryWindowManager {
             return
         }
 
-        // Check if window is still valid
-        if historyWindow == nil || historyWindow?.isVisible == false && historyWindow?.contentView == nil {
+        // Create window lazily on first use (keep it alive for reuse)
+        if historyWindow == nil {
             createWindow()
         }
 
@@ -65,21 +65,21 @@ class HistoryWindowManager {
             historyWindow?.setFrame(frame, display: true)
         }
 
-        // Save position and clean up on close
+        // Save position on close - but DON'T release the window
+        // Releasing during close causes crash in NSWindowTransformAnimation dealloc
         closeObserver = NotificationCenter.default.addObserver(
             forName: NSWindow.willCloseNotification,
             object: historyWindow,
             queue: .main
         ) { [weak self] notification in
-            guard let self = self, let window = notification.object as? HistoryWindow else { return }
+            guard let window = notification.object as? HistoryWindow else { return }
 
             // Save window position
             let frameString = NSStringFromRect(window.frame)
             UserDefaults.standard.set(frameString, forKey: "historyWindowFrame")
 
-            // Clean up
-            self.removeObserver()
-            self.historyWindow = nil
+            // Don't nil out historyWindow - keep it for reuse
+            // This avoids the crash in NSWindowTransformAnimation dealloc
         }
     }
 

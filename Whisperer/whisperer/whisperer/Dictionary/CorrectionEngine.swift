@@ -25,6 +25,9 @@ class CorrectionEngine {
     // Phonetic matcher for voice-specific corrections
     private var phoneticMatcher: PhoneticMatcher?
 
+    // Spell validator to prevent fuzzy matching of valid English words
+    private let spellValidator = SpellValidator.shared
+
     init(entries: [DictionaryEntry]) {
         self.symSpell = SymSpell(maxEditDistance: 2, prefixLength: 7)
         self.phoneticMatcher = PhoneticMatcher()
@@ -115,24 +118,38 @@ class CorrectionEngine {
             // Try exact match first (works for any word length)
             if let entry = exactLookup[wordLower] {
                 processedText = replaceWord(processedText, word: String(word), entry: entry, corrections: &corrections)
+                continue
             }
-            // Try SymSpell fuzzy match - ONLY for words with 4+ characters to prevent false positives
-            // Short words like "to", "be", "is" have too many potential matches
-            else if maxEditDistance > 0 && wordLength >= 4,
-                    let suggestions = symSpell?.lookup(input: wordLower, verbosity: .top, maxEditDistance: maxEditDistance),
-                    let best = suggestions.first,
-                    best.distance > 0 {
-                // Additional check: edit distance should be less than half the word length
-                // This prevents matching "docker" to completely different words
+
+            // For fuzzy matching, check if word is valid English
+            // Skip spell check for non-Latin words (Hebrew, Russian, etc.) - they also skip fuzzy
+            let isLatinWord = spellValidator.isLatinWord(wordLower)
+            let isValidEnglishWord = isLatinWord && spellValidator.isValidEnglishWord(wordLower)
+
+            // Skip fuzzy matching if:
+            // 1. Word is a valid English word (prevents "cloud" → "Claude")
+            // 2. Word is non-Latin script (prevents mangling Hebrew/Russian)
+            guard !isValidEnglishWord && isLatinWord else {
+                continue
+            }
+
+            // Try SymSpell fuzzy match - ONLY for invalid/unknown Latin words
+            if maxEditDistance > 0 && wordLength >= 4,
+               let suggestions = symSpell?.lookup(input: wordLower, verbosity: .top, maxEditDistance: maxEditDistance),
+               let best = suggestions.first,
+               best.distance > 0 {
+                // Edit distance should be less than 1/3 of word length
                 if best.distance <= max(1, wordLength / 3) {
                     processedText = replaceWord(processedText, word: String(word), entry: best.entry, corrections: &corrections)
+                    continue
                 }
             }
-            // Try phonetic match as fallback - also only for 4+ character words
-            else if usePhonetic && wordLength >= 4,
-                    let phoneticMatches = phoneticMatcher?.findMatches(wordLower, maxResults: 1),
-                    let best = phoneticMatches.first,
-                    best.similarity >= 0.7 {
+
+            // Try phonetic match as fallback - also only for invalid Latin words
+            if usePhonetic && wordLength >= 4,
+               let phoneticMatches = phoneticMatcher?.findMatches(wordLower, maxResults: 1),
+               let best = phoneticMatches.first,
+               best.similarity >= 0.7 {
                 processedText = replaceWord(processedText, word: String(word), entry: best.entry, corrections: &corrections)
             }
         }

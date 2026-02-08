@@ -22,10 +22,22 @@ class MonitoredQueue {
     private var lastResponseTime: Date?
     private var consecutiveFailures: Int = 0
 
-    // Health thresholds
-    var warningLatency: TimeInterval = 1.0  // Warn if ping takes > 1s
-    var failureLatency: TimeInterval = 3.0  // Mark unhealthy if ping takes > 3s
-    var maxConsecutiveFailures: Int = 3
+    // Whether running on Apple Silicon (shared with WhisperBridge)
+    private static let isAppleSilicon: Bool = {
+        var sysinfo = utsname()
+        uname(&sysinfo)
+        let machine = withUnsafePointer(to: &sysinfo.machine) {
+            $0.withMemoryRebound(to: CChar.self, capacity: 1) {
+                String(cString: $0)
+            }
+        }
+        return machine.hasPrefix("arm64")
+    }()
+
+    // Health thresholds - more lenient on Intel Macs
+    var warningLatency: TimeInterval = MonitoredQueue.isAppleSilicon ? 1.0 : 10.0
+    var failureLatency: TimeInterval = MonitoredQueue.isAppleSilicon ? 3.0 : 30.0
+    var maxConsecutiveFailures: Int = MonitoredQueue.isAppleSilicon ? 3 : 10
 
     var currentStatus: QueueHealthStatus {
         guard let lastResponse = lastResponseTime else {
@@ -55,7 +67,9 @@ class MonitoredQueue {
     }
 
     /// Send a ping to the queue and measure response time
-    func ping(timeout: TimeInterval = 2.0) {
+    /// Timeout is longer on Intel Macs due to slower processing
+    func ping(timeout: TimeInterval? = nil) {
+        let actualTimeout = timeout ?? (MonitoredQueue.isAppleSilicon ? 2.0 : 15.0)
         lastPingTime = Date()
 
         let workItem = DispatchWorkItem { [weak self] in
@@ -76,16 +90,16 @@ class MonitoredQueue {
         queue.async(execute: workItem)
 
         // Check if it responded within timeout
-        DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + timeout) { [weak self] in
+        DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + actualTimeout) { [weak self, actualTimeout] in
             guard let self = self else { return }
 
             // If we sent a ping but haven't received response yet
             if let pingTime = self.lastPingTime,
                (self.lastResponseTime == nil || self.lastResponseTime! < pingTime) {
                 let waitTime = Date().timeIntervalSince(pingTime)
-                if waitTime >= timeout {
+                if waitTime >= actualTimeout {
                     self.consecutiveFailures += 1
-                    Logger.error("Queue '\(self.name)' did not respond within \(timeout)s (failure #\(self.consecutiveFailures))", subsystem: .app)
+                    Logger.error("Queue '\(self.name)' did not respond within \(actualTimeout)s (failure #\(self.consecutiveFailures))", subsystem: .app)
                 }
             }
         }

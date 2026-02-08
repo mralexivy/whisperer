@@ -32,6 +32,10 @@ class HistoryWindow: NSWindow {
         // Make sure window appears in mission control and window list
         self.collectionBehavior = [.managed, .participatesInCycle]
 
+        // CRITICAL: Prevent AppKit from releasing window on close
+        // We keep the window alive for reuse
+        self.isReleasedWhenClosed = false
+
         // Set delegate for window lifecycle events
         self.delegate = self
     }

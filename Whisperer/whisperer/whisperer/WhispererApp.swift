@@ -28,27 +28,30 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         Logger.info("Application launched", subsystem: .app)
 
-        // Validate App Store receipt (only in Release builds)
-        #if !DEBUG
-        do {
-            let isValid = try ReceiptValidator.shared.validateReceipt()
-            if !isValid {
-                Logger.error("Receipt validation failed", subsystem: .app)
-                // Exit with code 173 to trigger receipt refresh from App Store
-                exit(173)
+        // Receipt validation using StoreKit 2 (disabled for now)
+        // TODO: Enable when in-app purchases are ready by setting receiptValidationEnabled = true
+        let receiptValidationEnabled = false
+
+        if receiptValidationEnabled {
+            #if !DEBUG
+            Task {
+                do {
+                    let isValid = try await ReceiptValidator.shared.validateReceipt()
+                    if !isValid {
+                        Logger.error("Receipt validation failed", subsystem: .app)
+                    } else {
+                        Logger.info("Receipt validation successful", subsystem: .app)
+                    }
+                } catch {
+                    Logger.error("Receipt validation error: \(error.localizedDescription)", subsystem: .app)
+                }
             }
-            Logger.info("Receipt validation successful", subsystem: .app)
-        } catch ReceiptValidationError.noReceiptFound {
-            Logger.error("No App Store receipt found", subsystem: .app)
-            // Exit with 173 to prompt macOS to obtain receipt
-            exit(173)
-        } catch {
-            Logger.error("Receipt validation error: \(error.localizedDescription)", subsystem: .app)
-            exit(173)
+            #else
+            Logger.debug("Skipping receipt validation in DEBUG build", subsystem: .app)
+            #endif
+        } else {
+            Logger.debug("Receipt validation is disabled", subsystem: .app)
         }
-        #else
-        Logger.debug("Skipping receipt validation in DEBUG build", subsystem: .app)
-        #endif
 
         // Install crash handlers first thing
         CrashHandler.shared.install()
