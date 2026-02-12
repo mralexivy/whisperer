@@ -81,12 +81,6 @@ struct LiveTranscriptionCard: View {
             .background(
                 RoundedRectangle(cornerRadius: 14)
                     .fill(cardBackground)
-                    .shadow(
-                        color: .black.opacity(colorScheme == .dark ? 0.5 : 0.12),
-                        radius: 16,
-                        x: 0,
-                        y: 6
-                    )
             )
             .overlay(
                 RoundedRectangle(cornerRadius: 14)

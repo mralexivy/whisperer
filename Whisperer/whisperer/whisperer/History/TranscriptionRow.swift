@@ -2,7 +2,7 @@
 //  TranscriptionRow.swift
 //  Whisperer
 //
-//  Row component for transcription list - Matching Whisperer design
+//  Premium row component for transcription list
 //
 
 import SwiftUI
@@ -17,113 +17,170 @@ struct TranscriptionRow: View {
     @State private var showCopiedFeedback = false
     @AppStorage("timeFormat") private var timeFormat: String = "12h"
 
+    // MARK: - Accent bar color
+
+    private var accentBarColor: Color {
+        if isSelected { return WhispererColors.accent }
+        if transcription.isFlagged { return .red }
+        if transcription.isPinned { return .orange }
+        return .clear
+    }
+
+    private var showAccentBar: Bool {
+        isSelected || transcription.isPinned || transcription.isFlagged
+    }
+
+    // MARK: - Body
+
     var body: some View {
         Button(action: onSelect) {
-            HStack(alignment: .top, spacing: 16) {
-                // Time column
-                VStack(spacing: 4) {
-                    Text(timeString)
-                        .font(.system(size: 12, weight: .medium, design: .monospaced))
-                        .foregroundColor(isSelected ? WhispererColors.accent : WhispererColors.secondaryText(colorScheme))
+            HStack(spacing: 0) {
+                // Left accent bar
+                RoundedRectangle(cornerRadius: 2)
+                    .fill(accentBarColor)
+                    .frame(width: 3)
+                    .padding(.vertical, 8)
+                    .opacity(showAccentBar ? 1 : 0)
 
-                    // Duration badge
-                    Text(durationString)
-                        .font(.system(size: 10, weight: .semibold, design: .monospaced))
-                        .foregroundColor(.white)
-                        .padding(.horizontal, 6)
-                        .padding(.vertical, 3)
-                        .background(
-                            Capsule()
-                                .fill(isSelected ? WhispererColors.accent : WhispererColors.secondaryText(colorScheme).opacity(0.6))
-                        )
-                }
-                .frame(width: 56)
-
-                // Content
+                // Main content
                 VStack(alignment: .leading, spacing: 10) {
-                    // Text preview
+                    // Text preview — the hero element
                     Text(transcription.displayText)
-                        .font(.system(size: 14))
+                        .font(.system(size: 14, weight: .regular))
                         .foregroundColor(WhispererColors.primaryText(colorScheme))
                         .lineLimit(2)
                         .multilineTextAlignment(.leading)
-                        .lineSpacing(3)
+                        .lineSpacing(4)
+                        .fixedSize(horizontal: false, vertical: true)
 
-                    // Metadata row
-                    HStack(spacing: 10) {
-                        // WPM
-                        MetaBadge(
-                            icon: "speedometer",
-                            text: "\(transcription.wordsPerMinute) WPM",
-                            colorScheme: colorScheme
-                        )
+                    // Metadata + actions row
+                    HStack(spacing: 0) {
+                        metadataRow
 
-                        // Word count
-                        MetaBadge(
-                            icon: "text.word.spacing",
-                            text: "\(transcription.wordCount) words",
-                            colorScheme: colorScheme
-                        )
+                        Spacer(minLength: 12)
 
-                        // Status indicators
-                        HStack(spacing: 4) {
-                            if transcription.isPinned {
-                                StatusDot(icon: "pin.fill", color: .orange)
-                            }
-                            if transcription.isFlagged {
-                                StatusDot(icon: "flag.fill", color: .red)
-                            }
-                            if transcription.editedTranscription != nil {
-                                StatusDot(icon: "pencil", color: .purple)
-                            }
-                        }
-
-                        Spacer()
+                        actionButtons
                     }
                 }
-
-                // Action buttons (on hover/select)
-                if isHovered || isSelected {
-                    actionButtons
-                        .transition(.opacity.combined(with: .scale(scale: 0.95)))
-                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.leading, 12)
+                .padding(.trailing, 14)
+                .padding(.vertical, 14)
             }
-            .padding(14)
-            .background(
-                RoundedRectangle(cornerRadius: 12)
-                    .fill(isSelected ? WhispererColors.cardBackground(colorScheme) : (isHovered ? WhispererColors.cardBackground(colorScheme).opacity(0.7) : Color.clear))
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: 12)
-                    .stroke(
-                        isSelected ? WhispererColors.accent.opacity(0.5) : (isHovered ? WhispererColors.border(colorScheme) : Color.clear),
-                        lineWidth: isSelected ? 1.5 : 1
-                    )
+            .background(rowBackground)
+            .overlay(rowBorder)
+            .shadow(
+                color: isSelected
+                    ? WhispererColors.accent.opacity(0.12)
+                    : (isHovered ? Color.black.opacity(colorScheme == .dark ? 0.2 : 0.06) : .clear),
+                radius: isSelected ? 8 : 4,
+                x: 0,
+                y: isSelected ? 2 : 1
             )
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .onHover { hovering in
-            withAnimation(.easeInOut(duration: 0.15)) {
+            withAnimation(.spring(response: 0.25, dampingFraction: 0.8)) {
                 isHovered = hovering
             }
         }
-        .overlay(
+        .overlay(alignment: .top) {
             copiedFeedback
+                .offset(y: -8)
                 .opacity(showCopiedFeedback ? 1 : 0)
-        )
+                .scaleEffect(showCopiedFeedback ? 1 : 0.8)
+        }
+    }
+
+    // MARK: - Row background
+
+    private var rowBackground: some View {
+        RoundedRectangle(cornerRadius: 12)
+            .fill(
+                isSelected
+                    ? WhispererColors.cardBackground(colorScheme)
+                    : (isHovered ? WhispererColors.cardBackground(colorScheme).opacity(0.6) : Color.clear)
+            )
+    }
+
+    private var rowBorder: some View {
+        RoundedRectangle(cornerRadius: 12)
+            .stroke(
+                isSelected
+                    ? WhispererColors.accent.opacity(0.5)
+                    : (isHovered ? WhispererColors.border(colorScheme) : Color.clear),
+                lineWidth: isSelected ? 1.5 : 1
+            )
+    }
+
+    // MARK: - Inline Metadata
+
+    private var metadataRow: some View {
+        HStack(spacing: 6) {
+            // Time
+            Text(timeString)
+                .foregroundColor(isSelected ? WhispererColors.accent : WhispererColors.secondaryText(colorScheme))
+                .fontWeight(isSelected ? .semibold : .medium)
+
+            metaDot
+
+            // Duration
+            Text(durationString)
+
+            metaDot
+
+            // WPM
+            HStack(spacing: 3) {
+                Image(systemName: "speedometer")
+                    .font(.system(size: 9, weight: .semibold))
+                    .foregroundColor(WhispererColors.accent.opacity(0.7))
+                Text("\(transcription.wordsPerMinute) WPM")
+            }
+
+            metaDot
+
+            // Word count
+            HStack(spacing: 3) {
+                Image(systemName: "text.word.spacing")
+                    .font(.system(size: 9, weight: .semibold))
+                    .foregroundColor(WhispererColors.accent.opacity(0.7))
+                Text("\(transcription.wordCount)")
+            }
+
+            // Edited indicator
+            if transcription.editedTranscription != nil {
+                metaDot
+                HStack(spacing: 3) {
+                    Image(systemName: "pencil")
+                        .font(.system(size: 9, weight: .semibold))
+                        .foregroundColor(.purple.opacity(0.7))
+                    Text("Edited")
+                }
+            }
+        }
+        .font(.system(size: 11, weight: .medium))
+        .foregroundColor(WhispererColors.secondaryText(colorScheme))
+        .lineLimit(1)
+    }
+
+    private var metaDot: some View {
+        Text("·")
+            .font(.system(size: 12, weight: .bold))
+            .foregroundColor(WhispererColors.secondaryText(colorScheme).opacity(0.4))
     }
 
     // MARK: - Action Buttons
 
     private var actionButtons: some View {
         HStack(spacing: 2) {
-            RowActionButton(icon: "doc.on.doc", colorScheme: colorScheme) {
+            RowActionButton(icon: "doc.on.doc", tooltip: "Copy", colorScheme: colorScheme) {
                 copyToClipboard()
             }
 
             RowActionButton(
                 icon: transcription.isFlagged ? "flag.fill" : "flag",
+                tooltip: transcription.isFlagged ? "Unflag" : "Flag",
                 isActive: transcription.isFlagged,
                 activeColor: .red,
                 colorScheme: colorScheme
@@ -133,6 +190,7 @@ struct TranscriptionRow: View {
 
             RowActionButton(
                 icon: transcription.isPinned ? "pin.fill" : "pin",
+                tooltip: transcription.isPinned ? "Unpin" : "Pin",
                 isActive: transcription.isPinned,
                 activeColor: .orange,
                 colorScheme: colorScheme
@@ -155,34 +213,41 @@ struct TranscriptionRow: View {
                 Image(systemName: "ellipsis")
                     .font(.system(size: 11, weight: .semibold))
                     .foregroundColor(WhispererColors.secondaryText(colorScheme))
-                    .frame(width: 26, height: 26)
+                    .frame(width: 28, height: 28)
                     .background(
                         Circle()
                             .fill(WhispererColors.elevatedBackground(colorScheme))
                     )
             }
             .menuStyle(.borderlessButton)
-            .frame(width: 26)
+            .frame(width: 28)
+            .help("More")
         }
     }
 
+    // MARK: - Copied Feedback
+
     private var copiedFeedback: some View {
-        Text("Copied!")
-            .font(.system(size: 11, weight: .semibold))
-            .foregroundColor(.white)
-            .padding(.horizontal, 10)
-            .padding(.vertical, 5)
-            .background(
-                Capsule()
-                    .fill(WhispererColors.accent)
-            )
+        HStack(spacing: 5) {
+            Image(systemName: "checkmark")
+                .font(.system(size: 10, weight: .bold))
+            Text("Copied")
+                .font(.system(size: 11, weight: .semibold))
+        }
+        .foregroundColor(.white)
+        .padding(.horizontal, 12)
+        .padding(.vertical, 6)
+        .background(
+            Capsule()
+                .fill(WhispererColors.accent)
+                .shadow(color: WhispererColors.accent.opacity(0.3), radius: 6, y: 2)
+        )
     }
 
     // MARK: - Helpers
 
     private var timeString: String {
         let formatter = DateFormatter()
-        // Use time format from settings
         if timeFormat == "24h" {
             formatter.dateFormat = "HH:mm"
         } else {
@@ -203,11 +268,11 @@ struct TranscriptionRow: View {
         NSPasteboard.general.clearContents()
         NSPasteboard.general.setString(transcription.displayText, forType: .string)
 
-        withAnimation(.spring(response: 0.3)) {
+        withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
             showCopiedFeedback = true
         }
         DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
-            withAnimation(.easeOut) {
+            withAnimation(.easeOut(duration: 0.2)) {
                 showCopiedFeedback = false
             }
         }
@@ -239,50 +304,11 @@ struct TranscriptionRow: View {
     }
 }
 
-// MARK: - Supporting Views
-
-struct MetaBadge: View {
-    let icon: String
-    let text: String
-    let colorScheme: ColorScheme
-
-    var body: some View {
-        HStack(spacing: 4) {
-            Image(systemName: icon)
-                .font(.system(size: 9, weight: .semibold))
-                .foregroundColor(WhispererColors.accent)
-
-            Text(text)
-                .font(.system(size: 10, weight: .medium))
-                .foregroundColor(WhispererColors.secondaryText(colorScheme))
-        }
-        .padding(.horizontal, 8)
-        .padding(.vertical, 4)
-        .background(
-            Capsule()
-                .fill(WhispererColors.accent.opacity(0.1))
-        )
-    }
-}
-
-struct StatusDot: View {
-    let icon: String
-    let color: Color
-
-    var body: some View {
-        Image(systemName: icon)
-            .font(.system(size: 9, weight: .semibold))
-            .foregroundColor(color)
-            .frame(width: 20, height: 20)
-            .background(
-                Circle()
-                    .fill(color.opacity(0.15))
-            )
-    }
-}
+// MARK: - Row Action Button
 
 struct RowActionButton: View {
     let icon: String
+    var tooltip: String = ""
     var isActive: Bool = false
     var activeColor: Color = WhispererColors.accent
     let colorScheme: ColorScheme
@@ -294,8 +320,12 @@ struct RowActionButton: View {
         Button(action: action) {
             Image(systemName: icon)
                 .font(.system(size: 11, weight: .medium))
-                .foregroundColor(isActive ? activeColor : (isHovered ? WhispererColors.primaryText(colorScheme) : WhispererColors.secondaryText(colorScheme)))
-                .frame(width: 26, height: 26)
+                .foregroundColor(
+                    isActive
+                        ? activeColor
+                        : (isHovered ? WhispererColors.primaryText(colorScheme) : WhispererColors.secondaryText(colorScheme))
+                )
+                .frame(width: 28, height: 28)
                 .background(
                     Circle()
                         .fill(isHovered ? WhispererColors.elevatedBackground(colorScheme) : Color.clear)
@@ -303,7 +333,10 @@ struct RowActionButton: View {
         }
         .buttonStyle(.plain)
         .onHover { hovering in
-            isHovered = hovering
+            withAnimation(.easeInOut(duration: 0.12)) {
+                isHovered = hovering
+            }
         }
+        .help(tooltip)
     }
 }

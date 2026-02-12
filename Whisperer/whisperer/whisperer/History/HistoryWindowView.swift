@@ -114,7 +114,7 @@ struct HistoryWindowView: View {
                 }
             }
         }
-        .frame(minWidth: 1000, minHeight: 700)
+        .frame(minWidth: 1100, minHeight: 700)
         .background(WhispererColors.background(colorScheme))
         .onReceive(NotificationCenter.default.publisher(for: .switchToDictionaryTab)) { notification in
             // Switch to Dictionary tab when notification is received
@@ -277,6 +277,7 @@ struct TranscriptionsView: View {
                 transcriptionList
             }
             .frame(minWidth: 400, maxWidth: .infinity)
+            .clipped()
 
             // Detail panel with resizable divider
             if let selected = selectedTranscription {
@@ -292,6 +293,7 @@ struct TranscriptionsView: View {
                 )
                 .id(selected.id) // Force view recreation when transcription changes
                 .frame(width: detailPanelWidth)
+                .clipped()
                 .transition(.asymmetric(
                     insertion: .move(edge: .trailing).combined(with: .opacity),
                     removal: .move(edge: .trailing).combined(with: .opacity)
@@ -1183,34 +1185,77 @@ struct ResizableDivider: View {
 
     @State private var isHovered = false
     @State private var isDragging = false
+    @State private var lastTranslation: CGFloat = 0
+
+    private var isActive: Bool { isDragging || isHovered }
 
     var body: some View {
-        Rectangle()
-            .fill(isDragging || isHovered ? WhispererColors.accent : WhispererColors.border(colorScheme))
-            .frame(width: isDragging || isHovered ? 4 : 1)
-            .contentShape(Rectangle().inset(by: -4))
-            .onHover { hovering in
-                withAnimation(.easeInOut(duration: 0.15)) {
-                    isHovered = hovering
-                }
-                if hovering {
-                    NSCursor.resizeLeftRight.push()
-                } else {
-                    NSCursor.pop()
+        ZStack {
+            // Background track
+            Rectangle()
+                .fill(isActive ? WhispererColors.accent.opacity(0.15) : Color.clear)
+                .frame(width: 12)
+
+            // Visible line
+            Rectangle()
+                .fill(isActive ? WhispererColors.accent : WhispererColors.border(colorScheme))
+                .frame(width: isDragging ? 3 : (isHovered ? 2 : 1))
+
+            // Grip handle — 3 horizontal bars centered on the divider
+            VStack(spacing: 3) {
+                ForEach(0..<3, id: \.self) { _ in
+                    RoundedRectangle(cornerRadius: 0.5)
+                        .fill(isActive ? WhispererColors.accent : WhispererColors.secondaryText(colorScheme).opacity(0.4))
+                        .frame(width: 8, height: 1.5)
                 }
             }
-            .gesture(
-                DragGesture(minimumDistance: 1)
-                    .onChanged { value in
-                        if !isDragging {
+            .padding(.vertical, 4)
+            .padding(.horizontal, 3)
+            .background(
+                RoundedRectangle(cornerRadius: 4)
+                    .fill(isActive
+                        ? WhispererColors.accent.opacity(colorScheme == .dark ? 0.25 : 0.15)
+                        : WhispererColors.elevatedBackground(colorScheme).opacity(0.8))
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 4)
+                    .stroke(isActive ? WhispererColors.accent.opacity(0.4) : WhispererColors.border(colorScheme), lineWidth: 0.5)
+            )
+            .opacity(isActive ? 1 : 0)
+            .scaleEffect(isActive ? 1 : 0.8)
+        }
+        .frame(width: 12)
+        .contentShape(Rectangle())
+        .onHover { hovering in
+            withAnimation(.easeInOut(duration: 0.2)) {
+                isHovered = hovering
+            }
+            if hovering {
+                NSCursor.resizeLeftRight.push()
+            } else {
+                NSCursor.pop()
+            }
+        }
+        .gesture(
+            DragGesture(minimumDistance: 1)
+                .onChanged { value in
+                    if !isDragging {
+                        withAnimation(.easeInOut(duration: 0.1)) {
                             isDragging = true
                         }
-                        onDrag(value.translation.width)
+                        lastTranslation = 0
                     }
-                    .onEnded { _ in
+                    let delta = value.translation.width - lastTranslation
+                    lastTranslation = value.translation.width
+                    onDrag(delta)
+                }
+                .onEnded { _ in
+                    withAnimation(.easeOut(duration: 0.2)) {
                         isDragging = false
                     }
-            )
+                    lastTranslation = 0
+                }
+        )
     }
 }
 

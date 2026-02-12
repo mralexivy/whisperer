@@ -13,7 +13,7 @@ class HistoryWindow: NSWindow {
     init() {
         // Create window with standard style
         super.init(
-            contentRect: NSRect(x: 0, y: 0, width: 900, height: 650),
+            contentRect: NSRect(x: 0, y: 0, width: 1100, height: 750),
             styleMask: [.titled, .closable, .miniaturizable, .resizable],
             backing: .buffered,
             defer: false
@@ -21,7 +21,7 @@ class HistoryWindow: NSWindow {
 
         // Configure window
         self.title = "Workspace"
-        self.minSize = NSSize(width: 700, height: 500)
+        self.minSize = NSSize(width: 1100, height: 700)
         self.center()
 
         // Set content view to SwiftUI

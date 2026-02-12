@@ -251,18 +251,19 @@ class WhisperBridge {
     // Lock timeout - longer on Intel Macs due to slower processing
     private let lockTimeout: TimeInterval
 
-    // Whether running on Apple Silicon
-    private static let isAppleSilicon: Bool = {
+    // Machine architecture string (e.g. "arm64" or "x86_64")
+    private static let machineArch: String = {
         var sysinfo = utsname()
         uname(&sysinfo)
-        let machine = withUnsafePointer(to: &sysinfo.machine) {
+        return withUnsafePointer(to: &sysinfo.machine) {
             $0.withMemoryRebound(to: CChar.self, capacity: 1) {
                 String(cString: $0)
             }
         }
-        // Apple Silicon Macs have machine names starting with "arm64"
-        return machine.hasPrefix("arm64")
     }()
+
+    // Whether running on Apple Silicon
+    private static let isAppleSilicon: Bool = machineArch.hasPrefix("arm64")
 
     init(modelPath: URL) throws {
         self.modelPath = modelPath
@@ -277,31 +278,28 @@ class WhisperBridge {
             self.transcriptionTimeout = 120.0  // 2 minutes for Intel
         }
 
-        Logger.debug("Initializing WhisperBridge with model: \(modelPath.lastPathComponent) (Apple Silicon: \(WhisperBridge.isAppleSilicon))", subsystem: .transcription)
+        Logger.info("Initializing WhisperBridge with model: \(modelPath.lastPathComponent)", subsystem: .transcription)
         try loadModel()
         isInitialized = true
 
         // Register queue for health monitoring
         QueueHealthMonitor.shared.monitor(queue: queue, name: "whisper.transcribe")
 
-        Logger.debug("WhisperBridge initialized", subsystem: .transcription)
+        Logger.info("WhisperBridge initialized", subsystem: .transcription)
     }
 
     private func loadModel() throws {
         var cparams = whisper_context_default_params()
 
-        // Both Apple Silicon and Intel use GPU acceleration
+        // Both Apple Silicon and Intel use Metal GPU acceleration
         // - Apple Silicon: Metal backend with flash attention
-        // - Intel: OpenCL backend (no flash attention support)
+        // - Intel: Metal backend (no flash attention support)
         cparams.use_gpu = true
 
         if WhisperBridge.isAppleSilicon {
             cparams.flash_attn = true
-            Logger.debug("Using Metal GPU with flash attention (Apple Silicon)", subsystem: .transcription)
         } else {
-            // Intel Mac: OpenCL GPU (flash attention not supported)
             cparams.flash_attn = false
-            Logger.info("Using OpenCL GPU acceleration (Intel Mac)", subsystem: .transcription)
         }
 
         ctx = whisper_init_from_file_with_params(
@@ -318,17 +316,23 @@ class WhisperBridge {
                 modelPath.path,
                 cparams
             )
-            if ctx != nil {
-                Logger.info("Successfully initialized with CPU + BLAS fallback", subsystem: .transcription)
-            }
         }
 
         guard ctx != nil else {
             throw WhisperError.modelLoadFailed
         }
 
-        let backend = cparams.use_gpu ? (WhisperBridge.isAppleSilicon ? "Metal" : "OpenCL") : "CPU+BLAS"
-        Logger.debug("Whisper model loaded: \(modelPath.lastPathComponent) (backend: \(backend))", subsystem: .transcription)
+        // Log acceleration summary
+        let gpu = cparams.use_gpu
+        let flashAttn = cparams.flash_attn
+        let arch = WhisperBridge.isAppleSilicon ? "Apple Silicon" : "Intel"
+
+        Logger.info("=== Whisper Acceleration Report ===", subsystem: .transcription)
+        Logger.info("  Architecture: \(arch) (\(WhisperBridge.machineArch))", subsystem: .transcription)
+        Logger.info("  Model: \(modelPath.lastPathComponent)", subsystem: .transcription)
+        Logger.info("  GPU (Metal): \(gpu ? "YES" : "NO")", subsystem: .transcription)
+        Logger.info("  Flash Attention: \(flashAttn ? "YES" : "NO")", subsystem: .transcription)
+        Logger.info("===================================", subsystem: .transcription)
     }
 
     /// Transcribe audio samples (16kHz mono float32)

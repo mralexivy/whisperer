@@ -19,6 +19,7 @@
 		1038D75C2F266EE000490030 /* Metal.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 1038D75B2F266EE000490030 /* Metal.framework */; };
 		1038D75E2F266EE900490030 /* Accelerate.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 1038D75D2F266EE900490030 /* Accelerate.framework */; };
 		1038D7602F266EF900490030 /* Foundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 1038D75F2F266EF900490030 /* Foundation.framework */; };
+
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -555,6 +556,7 @@
 		1038D75B2F266EE000490030 /* Metal.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Metal.framework; path = Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS26.2.sdk/System/Library/Frameworks/Metal.framework; sourceTree = DEVELOPER_DIR; };
 		1038D75D2F266EE900490030 /* Accelerate.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Accelerate.framework; path = Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS26.2.sdk/System/Library/Frameworks/Accelerate.framework; sourceTree = DEVELOPER_DIR; };
 		1038D75F2F266EF900490030 /* Foundation.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Foundation.framework; path = Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS26.2.sdk/System/Library/Frameworks/Foundation.framework; sourceTree = DEVELOPER_DIR; };
+
 		1068837B2F365B32008BC1AD /* whisperer.xcodeproj */ = {isa = PBXFileReference; lastKnownFileType = "wrapper.pb-project"; path = whisperer.xcodeproj; sourceTree = "<group>"; };
 		10CD05772F366002001C6FB0 /* whisperer.xcodeproj */ = {isa = PBXFileReference; lastKnownFileType = "wrapper.pb-project"; path = whisperer.xcodeproj; sourceTree = "<group>"; };
 		10DB4E112F3779900053C1FB /* whisperer.xcodeproj */ = {isa = PBXFileReference; lastKnownFileType = "wrapper.pb-project"; path = whisperer.xcodeproj; sourceTree = "<group>"; };
@@ -583,6 +585,7 @@
 				1038D7572F266E7000490030 /* libggml-cpu.a in Frameworks */,
 				1038D7582F266E7000490030 /* libggml.a in Frameworks */,
 				1038D7552F266E4000490030 /* libwhisper.a in Frameworks */,
+
 				1038D4E22F2642AA00490030 /* ApplicationServices.framework in Frameworks */,
 				1038D4E02F2642A100490030 /* IOKit.framework in Frameworks */,
 				1038D4DE2F26429800490030 /* AVFoundation.framework in Frameworks */,
@@ -640,6 +643,7 @@
 		1038D4D92F26429700490030 /* Frameworks */ = {
 			isa = PBXGroup;
 			children = (
+
 				1038D75F2F266EF900490030 /* Foundation.framework */,
 				1038D75D2F266EE900490030 /* Accelerate.framework */,
 				1038D75B2F266EE000490030 /* Metal.framework */,
@@ -1806,6 +1810,7 @@
 				1038D7252F266E1700490030 /* CMakeFiles */,
 				1038D7262F266E1700490030 /* cmake_install.cmake */,
 				1038D7272F266E1700490030 /* libwhisper.a */,
+
 				1038D7282F266E1700490030 /* Makefile */,
 			);
 			path = src;

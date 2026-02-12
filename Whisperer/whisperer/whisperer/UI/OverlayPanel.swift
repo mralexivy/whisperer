@@ -29,21 +29,31 @@ class OverlayPanel: NSPanel {
         self.isOpaque = false
         self.hasShadow = false  // No window shadow - SwiftUI capsule has its own
 
-        // Create SwiftUI content wrapped for transparency
+        // Create SwiftUI content
         let overlayView = OverlayView()
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .frame(maxWidth: .infinity)
             .background(Color.clear)
 
         let hostingView = NSHostingView(rootView: overlayView)
-
-        // Critical: Make hosting view fully transparent
+        hostingView.translatesAutoresizingMaskIntoConstraints = false
         hostingView.wantsLayer = true
         hostingView.layer?.backgroundColor = NSColor.clear.cgColor
 
-        // Use the hosting view directly as content view
-        self.contentView = hostingView
-        self.contentView?.wantsLayer = true
-        self.contentView?.layer?.backgroundColor = NSColor.clear.cgColor
+        // Container view fills the panel; hosting view is pinned to its bottom
+        // so content always appears at the bottom of the panel regardless of
+        // NSHostingView's intrinsic sizing behavior.
+        let container = NSView()
+        container.wantsLayer = true
+        container.layer?.backgroundColor = NSColor.clear.cgColor
+        container.addSubview(hostingView)
+
+        NSLayoutConstraint.activate([
+            hostingView.leadingAnchor.constraint(equalTo: container.leadingAnchor),
+            hostingView.trailingAnchor.constraint(equalTo: container.trailingAnchor),
+            hostingView.bottomAnchor.constraint(equalTo: container.bottomAnchor),
+        ])
+
+        self.contentView = container
 
         // Position at bottom-center of screen
         positionAtBottomCenter()
@@ -71,7 +81,7 @@ class OverlayPanel: NSPanel {
         let screenRect = screen.visibleFrame
         let panelWidth: CGFloat = 420
         let panelHeight: CGFloat = 220
-        let bottomMargin: CGFloat = 30
+        let bottomMargin: CGFloat = 10
 
         let xPos = screenRect.origin.x + (screenRect.width - panelWidth) / 2
         let yPos = screenRect.origin.y + bottomMargin

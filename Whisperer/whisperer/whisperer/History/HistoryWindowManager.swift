@@ -59,10 +59,14 @@ class HistoryWindowManager {
         // Create new window
         historyWindow = HistoryWindow()
 
-        // Restore window position if saved
-        if let frameString = UserDefaults.standard.string(forKey: "historyWindowFrame") {
-            let frame = NSRectFromString(frameString)
-            historyWindow?.setFrame(frame, display: true)
+        // Restore window position if saved, enforcing minimum size
+        if let frameString = UserDefaults.standard.string(forKey: "historyWindowFrame"),
+           let window = historyWindow {
+            var frame = NSRectFromString(frameString)
+            let minSize = window.minSize
+            frame.size.width = max(frame.size.width, minSize.width)
+            frame.size.height = max(frame.size.height, minSize.height)
+            window.setFrame(frame, display: true)
         }
 
         // Save position on close - but DON'T release the window

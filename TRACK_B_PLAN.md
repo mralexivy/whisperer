@@ -1,29 +1,27 @@
-# Track B: Pro Pack Feature Development - SAVED FOR LATER
+# Track B: Pro Pack Feature Development
 
-This document contains the complete implementation plan for Track B (Pro Pack features). These features will differentiate the Pro Pack IAP from the base app.
+This document contains the implementation plan for Track B (Pro Pack features). These features differentiate the Pro Pack IAP from the base app.
 
-**Status**: Not yet implemented (infrastructure ready from Track A)
-
-**When to implement**: After App Store submission or before if you want a complete launch
+**Status**: In Progress (B3 Personal Dictionary completed)
 
 ---
 
 ## Overview
 
-The Pro Pack infrastructure (StoreKit 2, purchase UI) is complete. Now we need to build the actual features that Pro Pack unlocks.
+The Pro Pack infrastructure (StoreKit 2, purchase UI) is complete. Below are the features that Pro Pack unlocks.
 
 ### Pro Pack Features
 
-| Feature | Complexity | Priority | Estimated Time |
-|---------|-----------|----------|----------------|
-| Code Mode | Medium | High (Flagship #1) | 1-2 days |
-| Per-App Profiles | High | High (Flagship #2) | 2-3 days |
-| Personal Dictionary | Medium | Medium | 1-2 days |
-| Pro Insertion Engine | Medium-High | Medium | 1-2 days |
-| Pro Dictation Controls | Medium | Low (Optional) | 1 day |
-| Pro Model Gating | Low | Low (Optional) | 2 hours |
+| Feature | Complexity | Priority | Status |
+|---------|-----------|----------|--------|
+| Code Mode | Medium | High (Flagship #1) | Pending |
+| Per-App Profiles | High | High (Flagship #2) | Pending |
+| Personal Dictionary | Medium | Medium | **DONE** |
+| Pro Insertion Engine | Medium-High | Medium | Pending |
+| Pro Dictation Controls | Medium | Low (Optional) | Pending |
+| Pro Model Gating | Low | Low (Optional) | Pending |
 
-**Total Estimated Time**: 6-10 days for core features (B1-B4)
+**Remaining**: 5 features (B1, B2, B4, B5, B6)
 
 ---
 
@@ -177,53 +175,15 @@ enum PunctuationStyle {
 
 ---
 
-## Phase B3: Personal Dictionary
+## Phase B3: Personal Dictionary - COMPLETED
 
-**Goal**: Allow users to add custom words for better transcription accuracy
+**Status**: Implemented with dictionary-based spell correction using SymSpell fuzzy matching.
 
-### Files to Create
-
-**1. `Dictionary/PersonalDictionary.swift`**
-
-```swift
-//  PersonalDictionary.swift
-//  Manages custom vocabulary for improved accuracy
-
-class PersonalDictionary: ObservableObject {
-    static let shared = PersonalDictionary()
-
-    @Published var words: [String] = []
-
-    func addWord(_ word: String)
-    func removeWord(_ word: String)
-    func importFromCSV(_ url: URL) throws
-    func exportToCSV() throws -> URL
-    func getPromptBias() -> String  // Format words for whisper prompt
-}
-```
-
-**2. `UI/DictionaryView.swift`**
-- List of custom words
-- Add/remove buttons
-- Import/Export buttons
-- "Add to dictionary" quick action in overlay
-
-### Files to Modify
-
-**`WhisperBridge.swift`**
-- Pass initial prompt with dictionary words
-- Use `whisper_full_params.prompt_text` to bias model
-
-**`OverlayView.swift`**
-- Add "Add to Dictionary" button when Pro
-- Tap word to add it
-
-### Implementation Notes
-
-- Whisper supports initial prompt for biasing
-- Format: comma-separated list of words
-- Limit to ~50-100 words for best performance
-- Store in UserDefaults or separate file
+**What was built**:
+- Premium dictionary packs with unified pack naming
+- SymSpell fuzzy matching for spell correction
+- Dictionary pack dropdown in settings UI
+- Integration with transcription pipeline
 
 ---
 
@@ -355,21 +315,19 @@ extension WhisperModel {
 
 ## Implementation Priority
 
-### Minimum Viable Pro Pack (MV P)
-Implement these for initial launch:
+### Completed
+- [x] **B3: Personal Dictionary** - SymSpell fuzzy matching with premium dictionary packs
+
+### Minimum Viable Pro Pack (MVP)
+Implement these next:
 1. **B1: Code Mode** (Flagship feature)
 2. **B2: Per-App Profiles** (Second flagship)
 3. **B6: Pro Model Gating** (Easy to implement, adds value)
 
-**Time**: ~3-4 days
-
 ### Full Pro Pack
 Add these for maximum value:
-4. **B3: Personal Dictionary**
-5. **B4: Pro Insertion Engine**
-6. **B5: Pro Dictation Controls** (if time allows)
-
-**Time**: ~6-10 days total
+4. **B4: Pro Insertion Engine**
+5. **B5: Pro Dictation Controls** (if time allows)
 
 ---
 
@@ -410,27 +368,25 @@ After implementing each feature:
 
 ## Code Organization
 
-Suggested file structure:
+File structure (Dictionary already implemented):
 
 ```
 Whisperer/whisperer/whisperer/
-├── CodeMode/
+├── CodeMode/                    # Pending
 │   ├── CodeModeProcessor.swift
 │   ├── SymbolMappings.swift
 │   └── CasingTransformer.swift
-├── Profiles/
+├── Profiles/                    # Pending
 │   ├── ProfileManager.swift
 │   ├── AppProfile.swift
 │   └── ProfileStorage.swift
-├── Dictionary/
-│   ├── PersonalDictionary.swift
-│   └── DictionaryStorage.swift
-├── Commands/
+├── Dictionary/                  # DONE
+│   └── (SymSpell integration)
+├── Commands/                    # Pending
 │   └── VoiceCommandProcessor.swift
 └── UI/
-    ├── ProfileEditorView.swift
-    ├── DictionaryView.swift
-    └── ProFeatureLockView.swift
+    ├── ProfileEditorView.swift  # Pending
+    └── ProFeatureLockView.swift # Pending
 ```
 
 ---
@@ -439,29 +395,25 @@ Whisperer/whisperer/whisperer/
 
 Each Pro feature integrates at these points:
 
-| Feature | Integration Point | Gating Check |
-|---------|------------------|--------------|
-| Code Mode | StreamingTranscriber output | StoreManager.isPro |
-| Per-App Profiles | AppState initialization | StoreManager.isPro |
-| Personal Dictionary | WhisperBridge prompt | StoreManager.isPro |
-| Pro Insertion | TextInjector method | StoreManager.isPro |
-| Voice Commands | StreamingTranscriber output | StoreManager.isPro |
-| Pro Models | AppState.selectModel() | StoreManager.isPro |
+| Feature | Integration Point | Gating Check | Status |
+|---------|------------------|--------------|--------|
+| Code Mode | StreamingTranscriber output | StoreManager.isPro | Pending |
+| Per-App Profiles | AppState initialization | StoreManager.isPro | Pending |
+| Personal Dictionary | Transcription pipeline | StoreManager.isPro | **DONE** |
+| Pro Insertion | TextInjector method | StoreManager.isPro | Pending |
+| Voice Commands | StreamingTranscriber output | StoreManager.isPro | Pending |
+| Pro Models | AppState.selectModel() | StoreManager.isPro | Pending |
 
 ---
 
 ## Next Steps
 
-When ready to implement Track B:
-
-1. **Review this document** and refine priorities
-2. **Create feature branches** for each phase
-3. **Implement MVP first** (B1, B2, B6)
-4. **Test thoroughly** with Pro Pack purchase
-5. **Submit update** to App Store with new features
-
-**Full plan available at**: `~/.claude/plans/quirky-dancing-umbrella.md`
+1. **B1: Code Mode** - Implement symbol replacement and casing commands
+2. **B2: Per-App Profiles** - Auto-switch settings per application
+3. **B6: Pro Model Gating** - Lock larger models behind Pro
+4. **B4: Pro Insertion Engine** - Improve text insertion reliability
+5. **B5: Pro Dictation Controls** - Voice commands (optional)
 
 ---
 
-**Status**: Plan saved ✅ | Ready for implementation when needed
+**Status**: 1/6 features completed (Personal Dictionary)

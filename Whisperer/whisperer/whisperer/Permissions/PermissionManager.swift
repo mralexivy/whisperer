@@ -162,9 +162,16 @@ class PermissionManager: ObservableObject {
     }
 
     func requestAccessibilityPermission() {
-        let options: NSDictionary = [kAXTrustedCheckOptionPrompt.takeRetainedValue() as String: true]
+        let options: NSDictionary = [kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String: true]
         let trusted = AXIsProcessTrustedWithOptions(options)
-        accessibilityStatus = trusted ? .granted : .denied
+        if trusted {
+            accessibilityStatus = .granted
+        } else {
+            // The system prompt only appears on the very first call.
+            // On subsequent attempts, open System Settings directly.
+            openSystemSettings(for: .accessibility)
+            accessibilityStatus = .denied
+        }
     }
 
     func requestInputMonitoringPermission() {

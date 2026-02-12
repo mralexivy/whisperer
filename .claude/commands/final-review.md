@@ -12,26 +12,18 @@ git log --oneline -10 | grep -i "Co-Authored-By: Claude"
 - **Follow-up pass**: Recent Claude co-authored commits exist from a previous `/final-review` run on this same feature.
 
 If this is a follow-up pass:
+
 - Note this in the summary as "Review Pass #2" (or #3, etc.)
 - Tell the review agents to check git history to understand WHY recent changes were made before suggesting reversals
 - Be more conservative with changes — the previous pass already applied significant improvements
 - Focus agents on catching issues introduced BY the previous review, not re-litigating decisions already made
 
-## Step 1: Create or Update the PR
-
-First, check which branch you're on:
-- **If on `main`**: Create a new feature branch with a descriptive name based on the changes (e.g., `feature/live-transcription`, `fix/audio-buffer-leak`), then commit the changes to that branch.
-- **If already on a feature branch**: Continue with existing branch.
-
-Then handle the PR:
-- If a PR doesn't exist for this branch, create one with a clear title and description summarizing the changes.
-- If a PR already exists, push any uncommitted changes to it.
-
-## Step 2: Launch Seven Review Agents in Parallel
+## Step 1: Launch Seven Review Agents in Parallel
 
 Use the Task tool to launch these seven agents simultaneously.
 
 **Important context for all agents**: If this is a follow-up pass, include in each agent's prompt:
+
 - "Check git log to see recent commits and their messages before making recommendations"
 - "If a pattern looks intentional based on recent commit messages, don't recommend reversing it without strong justification"
 - "Focus on issues that may have been INTRODUCED by recent changes, not re-reviewing the entire file"
@@ -235,6 +227,7 @@ When the seven agents return their recommendations:
 Run ALL of these that apply to the changes:
 
 ### 4a. Build & Static Analysis
+
 ```bash
 # Clean build to catch all warnings
 xcodebuild clean build -scheme "YourScheme" -destination "platform=macOS" 2>&1 | tee ./tmp/build-results.log
@@ -253,6 +246,7 @@ grep -rn "print(" Sources/ --include="*.swift" | grep -v "// debug" | grep -v "T
 ```
 
 ### 4b. Unit & Integration Tests
+
 ```bash
 # Run full test suite
 xcodebuild test -scheme "YourScheme" -destination "platform=macOS" 2>&1 | tee ./tmp/test-results.log
@@ -265,12 +259,14 @@ grep -E "(Test Suite .* failed|Executed .* with .* failure)" ./tmp/test-results.
 ```
 
 **Concurrency test verification**: For any new or modified concurrent code, verify tests exist that:
+
 - Use `XCTestExpectation` with explicit timeouts for async operations
 - Test cancellation paths (start a task, cancel it, verify cleanup)
 - Use deterministic scheduling where possible (inject clock/scheduler dependencies)
 - Don't rely on `sleep()` or `Task.sleep()` for synchronization — use expectations or continuations
 
 ### 4c. Memory Leak Detection
+
 ```bash
 # Run tests with leak checking enabled via environment variable
 xcodebuild test -scheme "YourScheme" -destination "platform=macOS" \
@@ -281,6 +277,7 @@ MallocStackLogging=1 xcodebuild test -scheme "YourScheme" -destination "platform
 ```
 
 Manual verification (note in summary if not possible to automate):
+
 - Run the app in Instruments with the **Leaks** template for 5 minutes of typical usage
 - Run with **Allocations** template: filter by `Persistent Bytes`, sort by `Growth`, look for unbounded growth; use **Mark Generation** (heapshot) before and after exercising a feature to isolate leaks
 - Run with **Thread Sanitizer** enabled (Edit Scheme → Diagnostics → Thread Sanitizer)
@@ -288,6 +285,7 @@ Manual verification (note in summary if not possible to automate):
 - Run **VM Tracker** to check for large dirty memory regions from unreleased buffers
 
 ### 4d. Concurrency Verification
+
 ```bash
 # Build with Thread Sanitizer (TSan)
 xcodebuild test -scheme "YourScheme" -destination "platform=macOS" \
@@ -327,6 +325,7 @@ xcodebuild test -scheme "YourScheme" -destination "platform=macOS" \
 ```
 
 Verify:
+
 - CPU usage stays reasonable during steady-state operation
 - Memory footprint doesn't grow unbounded over time (check with `footprint` CLI tool or Activity Monitor)
 - App launch time hasn't regressed — measure with `os_signpost` or Time Profiler
@@ -357,10 +356,12 @@ After all fixes and tests pass, commit and push the changes to the PR.
 Provide a summary with these sections:
 
 ### Review Pass
+
 - State which pass this is (e.g., "Review Pass #1" or "Review Pass #2")
 - If follow-up pass, briefly note what the previous pass addressed
 
 ### Changes Applied
+
 - List the recommendations you implemented from each agent
 - **Memory fixes**: Specifically call out every retain cycle, leak, or ownership issue fixed
 - **Concurrency fixes**: Specifically call out every race condition or threading issue fixed
@@ -371,11 +372,13 @@ Provide a summary with these sections:
 - **Security & logging fixes**: Note entitlement cleanup, data protection, logging improvements
 
 ### Recommendations Skipped
+
 - For each skipped item, explain WHY you decided not to do it
 - Remember: "out of scope" is not a valid excuse in a single-developer repo
 - Memory, concurrency, and security skips require extra justification
 
 ### Test Coverage
+
 - Build status and warning count
 - Unit/integration test results (including concurrency test coverage)
 - Thread Sanitizer results
@@ -384,12 +387,14 @@ Provide a summary with these sections:
 - Security check results
 
 ### Unable to Test
+
 - List anything that couldn't be tested and why
 - Specifically note if Instruments profiling was not performed
 - Specifically note if security sanity checks were skipped
 - Explain what you'd want to manually verify
 
 ### Another Pass Needed?
+
 - If this pass fixed memory leaks, concurrency issues, or security problems, **always recommend another pass** to verify the fixes didn't introduce new issues
 - If changes were minor (small tweaks, naming fixes), recommend proceeding to merge
 - Be honest: "Fixed 3 retain cycles, a data race, and plaintext credential storage — I'd recommend one more review" or "Changes were cosmetic — ready to merge"

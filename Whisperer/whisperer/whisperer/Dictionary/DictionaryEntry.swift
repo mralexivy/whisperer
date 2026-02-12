@@ -106,6 +106,16 @@ struct AppliedCorrection: Identifiable, Equatable, Codable {
         self.notes = notes
         self.entryId = entryId
     }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decodeIfPresent(UUID.self, forKey: .id) ?? UUID()
+        original = try container.decode(String.self, forKey: .original)
+        replacement = try container.decode(String.self, forKey: .replacement)
+        category = try container.decodeIfPresent(String.self, forKey: .category)
+        notes = try container.decodeIfPresent(String.self, forKey: .notes)
+        entryId = try container.decodeIfPresent(UUID.self, forKey: .entryId) ?? UUID()
+    }
 }
 
 // MARK: - Bundled Dictionary Format

@@ -206,9 +206,12 @@ class CorrectionEngine {
 
                 // Try fuzzy match for the combined phrase (joined without space)
                 // This handles "githubrepo" → "GitHub repo" type errors
-                if !matched && maxEditDistance > 0 {
+                // Skip if any word in the phrase is a single character (likely an apostrophe fragment)
+                if !matched && maxEditDistance > 0 && phraseWords.allSatisfy({ $0.count >= 2 }) {
                     let joinedPhrase = phraseWords.joined().lowercased()
-                    if let suggestions = symSpell?.lookup(input: joinedPhrase, verbosity: .top, maxEditDistance: maxEditDistance),
+                    // Only attempt if the joined phrase is long enough to be meaningful
+                    if joinedPhrase.count >= 5,
+                       let suggestions = symSpell?.lookup(input: joinedPhrase, verbosity: .top, maxEditDistance: maxEditDistance),
                        let best = suggestions.first,
                        best.distance > 0 && best.distance <= maxEditDistance {
                         // Only accept if the match is very close (distance <= 1 for compound)

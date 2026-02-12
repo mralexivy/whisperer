@@ -378,7 +378,15 @@ struct FlowLayout: Layout {
         var totalWidth: CGFloat = 0
 
         for subview in subviews {
-            let size = subview.sizeThatFits(.unspecified)
+            let idealSize = subview.sizeThatFits(.unspecified)
+
+            // If the item is wider than the container, constrain it so Text can wrap
+            let size: CGSize
+            if idealSize.width > maxWidth {
+                size = subview.sizeThatFits(ProposedViewSize(width: maxWidth, height: nil))
+            } else {
+                size = idealSize
+            }
 
             // Check if we need to wrap to next line
             if currentX + size.width > maxWidth && currentX > 0 {
@@ -387,10 +395,19 @@ struct FlowLayout: Layout {
                 lineHeight = 0
             }
 
-            frames.append(CGRect(x: currentX, y: currentY, width: size.width, height: size.height))
-            lineHeight = max(lineHeight, size.height)
-            currentX += size.width + spacing
-            totalWidth = max(totalWidth, currentX - spacing)
+            // If still wider than remaining space, constrain to remaining width
+            let availableWidth = maxWidth - currentX
+            let finalSize: CGSize
+            if size.width > availableWidth && availableWidth > 0 {
+                finalSize = subview.sizeThatFits(ProposedViewSize(width: availableWidth, height: nil))
+            } else {
+                finalSize = size
+            }
+
+            frames.append(CGRect(x: currentX, y: currentY, width: finalSize.width, height: finalSize.height))
+            lineHeight = max(lineHeight, finalSize.height)
+            currentX += finalSize.width + spacing
+            totalWidth = max(totalWidth, min(currentX - spacing, maxWidth))
         }
 
         return (CGSize(width: totalWidth, height: currentY + lineHeight), frames)

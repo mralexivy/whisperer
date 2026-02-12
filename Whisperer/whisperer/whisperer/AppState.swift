@@ -332,6 +332,9 @@ class AppState: ObservableObject {
             return
         }
 
+        // Capture the frontmost app BEFORE our overlay steals focus
+        textInjector?.captureTargetApp()
+
         // INSTANT: Set state immediately so overlay appears right away
         state = .recording(startTime: Date())
         liveTranscription = ""

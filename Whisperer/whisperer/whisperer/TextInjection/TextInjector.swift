@@ -10,10 +10,24 @@ import ApplicationServices
 
 class TextInjector {
 
+    // The PID of the app that was frontmost when recording started.
+    // Must be captured BEFORE recording begins (before overlay steals focus).
+    private var targetAppPID: pid_t?
+
+    /// Call this before recording starts to capture which app should receive the text
+    func captureTargetApp() {
+        if let frontApp = NSWorkspace.shared.frontmostApplication,
+           frontApp.bundleIdentifier != Bundle.main.bundleIdentifier {
+            targetAppPID = frontApp.processIdentifier
+        } else {
+            targetAppPID = nil
+        }
+    }
+
     // MARK: - Permission Request
 
     static func requestAccessibilityPermission() {
-        let options: NSDictionary = [kAXTrustedCheckOptionPrompt.takeRetainedValue() as String: true]
+        let options: NSDictionary = [kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String: true]
         let accessEnabled = AXIsProcessTrustedWithOptions(options)
 
         if accessEnabled {
@@ -56,28 +70,41 @@ class TextInjector {
     // MARK: - Accessibility API Method
 
     private func insertViaAccessibility(_ text: String) async throws -> Bool {
+        let pid = self.targetAppPID
         return await withCheckedContinuation { continuation in
             DispatchQueue.global(qos: .userInitiated).async {
-                // Get system-wide accessibility element
-                let systemWide = AXUIElementCreateSystemWide()
+                // Try using the captured target app PID first
+                let appElement: AXUIElement
+                if let pid = pid {
+                    appElement = AXUIElementCreateApplication(pid)
+                } else {
+                    // Fall back to system-wide focused app query
+                    let systemWide = AXUIElementCreateSystemWide()
+                    var focusedApp: AnyObject?
+                    let appResult = AXUIElementCopyAttributeValue(
+                        systemWide,
+                        kAXFocusedApplicationAttribute as CFString,
+                        &focusedApp
+                    )
+                    guard appResult == .success, let app = focusedApp else {
+                        print("Failed to get focused application")
+                        continuation.resume(returning: false)
+                        return
+                    }
+                    appElement = app as! AXUIElement
+                }
 
-                // Get focused element
-                var focusedApp: AnyObject?
-                let appResult = AXUIElementCopyAttributeValue(
-                    systemWide,
-                    kAXFocusedApplicationAttribute as CFString,
-                    &focusedApp
-                )
-
-                guard appResult == .success, let focusedApp = focusedApp else {
-                    print("Failed to get focused application")
-                    continuation.resume(returning: false)
-                    return
+                // Activate the target app to ensure it has focus
+                if let pid = pid {
+                    let app = NSRunningApplication(processIdentifier: pid)
+                    app?.activate()
+                    // Brief wait for activation
+                    Thread.sleep(forTimeInterval: 0.05)
                 }
 
                 var focusedElement: AnyObject?
                 let elementResult = AXUIElementCopyAttributeValue(
-                    focusedApp as! AXUIElement,
+                    appElement,
                     kAXFocusedUIElementAttribute as CFString,
                     &focusedElement
                 )
@@ -88,26 +115,26 @@ class TextInjector {
                     return
                 }
 
-                // Try to set the value directly
-                let setValue = AXUIElementSetAttributeValue(
-                    element,
-                    kAXValueAttribute as CFString,
-                    text as CFString
-                )
-
-                if setValue == .success {
-                    continuation.resume(returning: true)
-                    return
-                }
-
-                // If direct value setting fails, try inserting at selection
+                // Try inserting at selection first (appends at cursor position)
                 let setSelectedText = AXUIElementSetAttributeValue(
                     element,
                     kAXSelectedTextAttribute as CFString,
                     text as CFString
                 )
 
-                continuation.resume(returning: setSelectedText == .success)
+                if setSelectedText == .success {
+                    continuation.resume(returning: true)
+                    return
+                }
+
+                // Fall back to setting the entire value
+                let setValue = AXUIElementSetAttributeValue(
+                    element,
+                    kAXValueAttribute as CFString,
+                    text as CFString
+                )
+
+                continuation.resume(returning: setValue == .success)
             }
         }
     }
@@ -115,6 +142,13 @@ class TextInjector {
     // MARK: - Clipboard Method
 
     private func insertViaClipboard(_ text: String) async throws {
+        // Re-activate the target app before pasting
+        if let pid = targetAppPID,
+           let app = NSRunningApplication(processIdentifier: pid) {
+            app.activate()
+            try await Task.sleep(nanoseconds: 50_000_000) // 50ms for activation
+        }
+
         let pasteboard = NSPasteboard.general
 
         // Save current clipboard content (just the string, if any)

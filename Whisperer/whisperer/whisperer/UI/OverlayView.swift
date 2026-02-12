@@ -21,10 +21,6 @@ struct OverlayView: View {
         colorScheme == .dark ? Color(white: 0.2) : Color.white
     }
 
-    private var shadowOpacity: Double {
-        colorScheme == .dark ? 0.4 : 0.15
-    }
-
     private var strokeOpacity: Double {
         colorScheme == .dark ? 0.2 : 0.1
     }
@@ -48,8 +44,6 @@ struct OverlayView: View {
 
     var body: some View {
         VStack(spacing: 8) {
-            Spacer(minLength: 0)
-
             // Live transcription card (shown during recording)
             if appState.state.isRecording && !appState.liveTranscription.isEmpty {
                 LiveTranscriptionCard(appState: appState)
@@ -70,7 +64,6 @@ struct OverlayView: View {
                 .background(
                     RoundedRectangle(cornerRadius: 10)
                         .fill(transcriptionBackground)
-                        .shadow(color: .black.opacity(colorScheme == .dark ? 0.3 : 0.1), radius: 6, x: 0, y: 2)
                 )
             }
 
@@ -115,7 +108,6 @@ struct OverlayView: View {
             .background(
                 Capsule()
                     .fill(backgroundColor)
-                    .shadow(color: .black.opacity(shadowOpacity), radius: 12, x: 0, y: 4)
             )
             .overlay(
                 Capsule()

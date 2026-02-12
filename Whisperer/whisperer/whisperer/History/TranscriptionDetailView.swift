@@ -47,7 +47,7 @@ struct TranscriptionDetailView: View {
             }
         }
         .background(WhispererColors.background(colorScheme))
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .frame(maxHeight: .infinity)
     }
 
     // MARK: - Header
