@@ -789,8 +789,18 @@ struct HistorySettingsView: View {
             // Icon
             ZStack {
                 RoundedRectangle(cornerRadius: 14)
-                    .fill(WhispererColors.accent.opacity(0.12))
+                    .fill(
+                        LinearGradient(
+                            colors: [
+                                WhispererColors.accent.opacity(colorScheme == .dark ? 0.18 : 0.12),
+                                WhispererColors.accentDark.opacity(colorScheme == .dark ? 0.08 : 0.05)
+                            ],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                    )
                     .frame(width: 52, height: 52)
+                    .shadow(color: WhispererColors.accent.opacity(0.08), radius: 4, y: 1)
 
                 Image(systemName: "gearshape.fill")
                     .font(.system(size: 22))
@@ -867,7 +877,16 @@ struct HistorySettingsView: View {
                     HStack(spacing: 14) {
                         ZStack {
                             RoundedRectangle(cornerRadius: 8)
-                                .fill(WhispererColors.accent.opacity(0.12))
+                                .fill(
+                                    LinearGradient(
+                                        colors: [
+                                            WhispererColors.accent.opacity(colorScheme == .dark ? 0.18 : 0.12),
+                                            WhispererColors.accentDark.opacity(colorScheme == .dark ? 0.08 : 0.05)
+                                        ],
+                                        startPoint: .topLeading,
+                                        endPoint: .bottomTrailing
+                                    )
+                                )
                                 .frame(width: 36, height: 36)
 
                             Image(systemName: "text.badge.checkmark")
@@ -913,7 +932,7 @@ struct HistorySettingsView: View {
                             .padding(.vertical, 4)
                             .background(
                                 RoundedRectangle(cornerRadius: 6)
-                                    .fill(WhispererColors.accent.opacity(0.12))
+                                    .fill(WhispererColors.accent.opacity(colorScheme == .dark ? 0.15 : 0.12))
                             )
                     }
 
@@ -947,7 +966,16 @@ struct HistorySettingsView: View {
                     HStack(spacing: 14) {
                         ZStack {
                             RoundedRectangle(cornerRadius: 8)
-                                .fill(WhispererColors.accent.opacity(0.12))
+                                .fill(
+                                    LinearGradient(
+                                        colors: [
+                                            WhispererColors.accent.opacity(colorScheme == .dark ? 0.18 : 0.12),
+                                            WhispererColors.accentDark.opacity(colorScheme == .dark ? 0.08 : 0.05)
+                                        ],
+                                        startPoint: .topLeading,
+                                        endPoint: .bottomTrailing
+                                    )
+                                )
                                 .frame(width: 36, height: 36)
 
                             Image(systemName: "waveform.and.mic")
@@ -1017,7 +1045,16 @@ struct HistorySettingsView: View {
                     HStack(spacing: 14) {
                         ZStack {
                             RoundedRectangle(cornerRadius: 8)
-                                .fill(WhispererColors.accent.opacity(0.12))
+                                .fill(
+                                    LinearGradient(
+                                        colors: [
+                                            WhispererColors.accent.opacity(colorScheme == .dark ? 0.18 : 0.12),
+                                            WhispererColors.accentDark.opacity(colorScheme == .dark ? 0.08 : 0.05)
+                                        ],
+                                        startPoint: .topLeading,
+                                        endPoint: .bottomTrailing
+                                    )
+                                )
                                 .frame(width: 36, height: 36)
 
                             Image(systemName: "waveform")
@@ -1100,11 +1137,20 @@ struct HistorySettingsView: View {
                     .foregroundColor(.red)
             }
 
-            SettingsCard(colorScheme: colorScheme, borderColor: .red.opacity(0.3)) {
+            SettingsCard(colorScheme: colorScheme, borderColor: .red.opacity(colorScheme == .dark ? 0.15 : 0.3)) {
                 HStack(spacing: 16) {
                     ZStack {
                         RoundedRectangle(cornerRadius: 8)
-                            .fill(Color.red.opacity(0.12))
+                            .fill(
+                                LinearGradient(
+                                    colors: [
+                                        Color.red.opacity(colorScheme == .dark ? 0.15 : 0.12),
+                                        Color.red.opacity(colorScheme == .dark ? 0.06 : 0.05)
+                                    ],
+                                    startPoint: .topLeading,
+                                    endPoint: .bottomTrailing
+                                )
+                            )
                             .frame(width: 42, height: 42)
 
                         Image(systemName: "trash.fill")
@@ -1124,18 +1170,7 @@ struct HistorySettingsView: View {
 
                     Spacer()
 
-                    Button(action: { showDeleteConfirmation = true }) {
-                        Text("Delete All")
-                            .font(.system(size: 12, weight: .semibold))
-                            .foregroundColor(.white)
-                            .padding(.horizontal, 16)
-                            .padding(.vertical, 8)
-                            .background(
-                                RoundedRectangle(cornerRadius: 8)
-                                    .fill(Color.red)
-                            )
-                    }
-                    .buttonStyle(.plain)
+                    DangerButton(action: { showDeleteConfirmation = true }, colorScheme: colorScheme)
                 }
             }
         }
@@ -1167,22 +1202,32 @@ struct SettingsCard<Content: View>: View {
     var borderColor: Color? = nil
     @ViewBuilder let content: () -> Content
 
+    @State private var isHovered = false
+
     var body: some View {
         content()
             .padding(20)
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(
                 RoundedRectangle(cornerRadius: 14)
-                    .fill(WhispererColors.cardBackground(colorScheme))
+                    .fill(isHovered ? WhispererColors.elevatedBackground(colorScheme).opacity(0.3) : WhispererColors.cardBackground(colorScheme))
             )
             .overlay(
                 RoundedRectangle(cornerRadius: 14)
-                    .stroke(borderColor ?? WhispererColors.border(colorScheme), lineWidth: 1)
+                    .stroke(
+                        borderColor ?? WhispererColors.border(colorScheme).opacity(isHovered ? (colorScheme == .dark ? 2.5 : 1.2) : 1),
+                        lineWidth: 1
+                    )
             )
             .shadow(
-                color: Color.black.opacity(colorScheme == .dark ? 0.06 : 0.03),
-                radius: 4, y: 1
+                color: Color.black.opacity(colorScheme == .dark ? (isHovered ? 0.12 : 0.06) : (isHovered ? 0.06 : 0.03)),
+                radius: isHovered ? 6 : 4, y: isHovered ? 2 : 1
             )
+            .onHover { hovering in
+                withAnimation(.easeInOut(duration: 0.15)) {
+                    isHovered = hovering
+                }
+            }
     }
 }
 
@@ -1234,6 +1279,38 @@ struct SettingsRow<Content: View>: View {
     }
 }
 
+struct DangerButton: View {
+    let action: () -> Void
+    let colorScheme: ColorScheme
+
+    @State private var isHovered = false
+
+    var body: some View {
+        Button(action: action) {
+            Text("Delete All")
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundColor(.white)
+                .padding(.horizontal, 16)
+                .padding(.vertical, 8)
+                .background(
+                    RoundedRectangle(cornerRadius: 8)
+                        .fill(isHovered ? Color.red.opacity(0.85) : Color.red)
+                )
+                .shadow(
+                    color: isHovered ? Color.red.opacity(colorScheme == .dark ? 0.2 : 0.3) : .clear,
+                    radius: 6, y: 2
+                )
+                .scaleEffect(isHovered ? 1.02 : 1.0)
+        }
+        .buttonStyle(.plain)
+        .onHover { hovering in
+            withAnimation(.easeInOut(duration: 0.15)) {
+                isHovered = hovering
+            }
+        }
+    }
+}
+
 struct TimeFormatCard: View {
     let format: TimeFormatSetting
     let isSelected: Bool
@@ -1256,7 +1333,7 @@ struct TimeFormatCard: View {
         Button(action: action) {
             VStack(spacing: 8) {
                 Text(exampleTime)
-                    .font(.system(size: 18, weight: .bold, design: .monospaced))
+                    .font(.system(size: 18, weight: .light, design: .monospaced))
                     .foregroundColor(isSelected ? .white : WhispererColors.primaryText(colorScheme))
 
                 Text(format.displayName)
@@ -1270,9 +1347,20 @@ struct TimeFormatCard: View {
             )
             .overlay(
                 RoundedRectangle(cornerRadius: 12)
-                    .stroke(isSelected ? WhispererColors.accent : WhispererColors.border(colorScheme), lineWidth: isSelected ? 0 : 1)
+                    .stroke(
+                        isSelected
+                            ? WhispererColors.accent
+                            : WhispererColors.border(colorScheme).opacity(isHovered ? (colorScheme == .dark ? 2.5 : 1.2) : 1),
+                        lineWidth: isSelected ? 0 : 1
+                    )
             )
-            .shadow(color: isSelected ? WhispererColors.accent.opacity(0.3) : .clear, radius: 8, x: 0, y: 4)
+            .shadow(
+                color: isSelected
+                    ? WhispererColors.accent.opacity(colorScheme == .dark ? 0.15 : 0.3)
+                    : .clear,
+                radius: 8, x: 0, y: 4
+            )
+            .scaleEffect(isHovered && !isSelected ? 1.02 : 1.0)
         }
         .buttonStyle(.plain)
         .onHover { hovering in
@@ -1295,7 +1383,7 @@ struct RetentionOptionButton: View {
         Button(action: action) {
             Text(label)
                 .font(.system(size: 12, weight: isSelected ? .semibold : .medium))
-                .foregroundColor(isSelected ? .white : WhispererColors.primaryText(colorScheme))
+                .foregroundColor(isSelected ? .white : (isHovered ? WhispererColors.primaryText(colorScheme) : WhispererColors.secondaryText(colorScheme)))
                 .padding(.horizontal, 14)
                 .padding(.vertical, 10)
                 .background(
@@ -1304,8 +1392,18 @@ struct RetentionOptionButton: View {
                 )
                 .overlay(
                     RoundedRectangle(cornerRadius: 8)
-                        .stroke(isSelected ? Color.clear : WhispererColors.border(colorScheme), lineWidth: 1)
+                        .stroke(
+                            isSelected
+                                ? Color.clear
+                                : WhispererColors.border(colorScheme).opacity(isHovered ? (colorScheme == .dark ? 2.5 : 1.2) : 1),
+                            lineWidth: 1
+                        )
                 )
+                .shadow(
+                    color: isSelected ? WhispererColors.accent.opacity(colorScheme == .dark ? 0.15 : 0.25) : .clear,
+                    radius: 4, y: 1
+                )
+                .scaleEffect(isHovered && !isSelected ? 1.02 : 1.0)
         }
         .buttonStyle(.plain)
         .onHover { hovering in
