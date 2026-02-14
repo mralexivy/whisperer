@@ -142,50 +142,78 @@ struct DictionaryView: View {
     // MARK: - Header
 
     private var headerView: some View {
-        HStack(spacing: 14) {
-            ZStack {
-                RoundedRectangle(cornerRadius: 12)
-                    .fill(WhispererColors.accent.opacity(0.12))
-                    .frame(width: 44, height: 44)
+        VStack(spacing: 0) {
+            HStack(spacing: 14) {
+                // Icon — gradient accent fill with shadow
+                ZStack {
+                    RoundedRectangle(cornerRadius: 12)
+                        .fill(
+                            LinearGradient(
+                                colors: [
+                                    WhispererColors.accent.opacity(0.15),
+                                    WhispererColors.accentDark.opacity(0.08)
+                                ],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            )
+                        )
+                        .frame(width: 44, height: 44)
+                        .shadow(color: WhispererColors.accent.opacity(0.1), radius: 6, y: 2)
 
-                Image(systemName: "book.closed.fill")
-                    .font(.system(size: 18))
-                    .foregroundColor(WhispererColors.accent)
+                    Image(systemName: "book.closed.fill")
+                        .font(.system(size: 18))
+                        .foregroundStyle(
+                            LinearGradient(
+                                colors: [WhispererColors.accent, WhispererColors.accentDark],
+                                startPoint: .top,
+                                endPoint: .bottom
+                            )
+                        )
+                }
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Dictionary")
+                        .font(.system(size: 20, weight: .bold, design: .rounded))
+                        .foregroundColor(WhispererColors.primaryText(colorScheme))
+
+                    Text("\(dictionaryManager.entries.count) corrections from \(dictionaryManager.packs.filter { $0.isEnabled }.count) packs")
+                        .font(.system(size: 12, weight: .regular))
+                        .foregroundColor(WhispererColors.secondaryText(colorScheme))
+                }
+
+                Spacer()
+
+                // Global toggle with label
+                HStack(spacing: 8) {
+                    Text(dictionaryManager.isEnabled ? "Active" : "Disabled")
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundColor(dictionaryManager.isEnabled ? WhispererColors.accent : WhispererColors.secondaryText(colorScheme))
+
+                    Toggle("", isOn: $dictionaryManager.isEnabled)
+                        .toggleStyle(.switch)
+                        .tint(WhispererColors.accent)
+                        .labelsHidden()
+                }
             }
+            .padding(.horizontal, 20)
+            .padding(.vertical, 16)
 
-            VStack(alignment: .leading, spacing: 2) {
-                Text("Dictionary")
-                    .font(.system(size: 20, weight: .bold, design: .rounded))
-                    .foregroundColor(WhispererColors.primaryText(colorScheme))
-
-                Text("\(dictionaryManager.entries.count) corrections from \(dictionaryManager.packs.filter { $0.isEnabled }.count) packs")
-                    .font(.system(size: 12))
-                    .foregroundColor(WhispererColors.secondaryText(colorScheme))
-            }
-
-            Spacer()
-
-            // Global toggle with label
-            HStack(spacing: 8) {
-                Text(dictionaryManager.isEnabled ? "Active" : "Disabled")
-                    .font(.system(size: 12, weight: .medium))
-                    .foregroundColor(dictionaryManager.isEnabled ? WhispererColors.accent : WhispererColors.secondaryText(colorScheme))
-
-                Toggle("", isOn: $dictionaryManager.isEnabled)
-                    .toggleStyle(.switch)
-                    .tint(WhispererColors.accent)
-                    .labelsHidden()
-            }
-        }
-        .padding(.horizontal, 20)
-        .padding(.vertical, 16)
-        .background(WhispererColors.cardBackground(colorScheme))
-        .overlay(
+            // Gradient separator
             Rectangle()
-                .fill(WhispererColors.border(colorScheme))
-                .frame(height: 1),
-            alignment: .bottom
-        )
+                .fill(
+                    LinearGradient(
+                        colors: [
+                            WhispererColors.border(colorScheme).opacity(0.6),
+                            WhispererColors.border(colorScheme),
+                            WhispererColors.border(colorScheme).opacity(0.6)
+                        ],
+                        startPoint: .leading,
+                        endPoint: .trailing
+                    )
+                )
+                .frame(height: 1)
+        }
+        .background(WhispererColors.background(colorScheme))
     }
 
     // MARK: - Toolbar
@@ -249,6 +277,10 @@ struct DictionaryView: View {
                 RoundedRectangle(cornerRadius: 8)
                     .stroke(WhispererColors.border(colorScheme), lineWidth: 1)
             )
+            .shadow(
+                color: Color.black.opacity(colorScheme == .dark ? 0.06 : 0.03),
+                radius: 3, y: 1
+            )
 
             Spacer()
 
@@ -266,6 +298,10 @@ struct DictionaryView: View {
                 .background(
                     RoundedRectangle(cornerRadius: 8)
                         .fill(WhispererColors.accent)
+                )
+                .shadow(
+                    color: WhispererColors.accent.opacity(0.25),
+                    radius: 4, y: 1
                 )
             }
             .buttonStyle(.plain)
@@ -347,6 +383,14 @@ struct DictionaryView: View {
                                         RoundedRectangle(cornerRadius: 8)
                                             .fill(WhispererColors.accent.opacity(0.08))
                                     )
+                                    .overlay(
+                                        RoundedRectangle(cornerRadius: 8)
+                                            .stroke(WhispererColors.accent.opacity(0.15), lineWidth: 1)
+                                    )
+                                    .shadow(
+                                        color: WhispererColors.accent.opacity(0.08),
+                                        radius: 4, y: 1
+                                    )
                                 }
                                 .buttonStyle(.plain)
                                 .padding(.top, 6)
@@ -373,12 +417,28 @@ struct DictionaryView: View {
 
             ZStack {
                 Circle()
-                    .fill(WhispererColors.accent.opacity(0.12))
+                    .fill(
+                        LinearGradient(
+                            colors: [
+                                WhispererColors.accent.opacity(0.15),
+                                WhispererColors.accentDark.opacity(0.08)
+                            ],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                    )
                     .frame(width: 72, height: 72)
+                    .shadow(color: WhispererColors.accent.opacity(0.1), radius: 8, y: 2)
 
                 Image(systemName: "book.closed")
                     .font(.system(size: 28))
-                    .foregroundColor(WhispererColors.accent)
+                    .foregroundStyle(
+                        LinearGradient(
+                            colors: [WhispererColors.accent, WhispererColors.accentDark],
+                            startPoint: .top,
+                            endPoint: .bottom
+                        )
+                    )
             }
 
             VStack(spacing: 6) {
@@ -403,6 +463,10 @@ struct DictionaryView: View {
                 .background(
                     RoundedRectangle(cornerRadius: 10)
                         .fill(WhispererColors.accent)
+                )
+                .shadow(
+                    color: WhispererColors.accent.opacity(0.25),
+                    radius: 6, y: 2
                 )
             }
             .buttonStyle(.plain)
@@ -460,6 +524,7 @@ struct DictionaryEntryRow: View {
                 if let category = entry.category {
                     Text(category)
                         .font(.system(size: 10, weight: .medium))
+                        .tracking(0.3)
                         .foregroundColor(WhispererColors.accent)
                         .padding(.horizontal, 8)
                         .padding(.vertical, 4)
@@ -491,7 +556,7 @@ struct DictionaryEntryRow: View {
                         isHighlighted ? WhispererColors.accent.opacity(0.25) :
                         isSelected ? WhispererColors.accent.opacity(0.15) :
                         isHovered ? WhispererColors.elevatedBackground(colorScheme) :
-                        Color.clear
+                        WhispererColors.cardBackground(colorScheme)
                     )
             )
             .overlay(
@@ -499,14 +564,27 @@ struct DictionaryEntryRow: View {
                     .stroke(
                         isHighlighted ? WhispererColors.accent.opacity(0.6) :
                         isSelected ? WhispererColors.accent.opacity(0.3) :
-                        Color.clear,
+                        isHovered ? WhispererColors.border(colorScheme).opacity(colorScheme == .dark ? 2.5 : 1.2) :
+                        WhispererColors.border(colorScheme),
                         lineWidth: isHighlighted ? 2 : 1
                     )
             )
+            .shadow(
+                color: isSelected
+                    ? WhispererColors.accent.opacity(colorScheme == .dark ? 0.06 : 0.08)
+                    : (isHovered
+                        ? Color.black.opacity(colorScheme == .dark ? 0.12 : 0.06)
+                        : Color.black.opacity(colorScheme == .dark ? 0.06 : 0.03)),
+                radius: isSelected ? 8 : (isHovered ? 6 : 3),
+                y: isSelected ? 3 : (isHovered ? 2 : 1)
+            )
+            .scaleEffect(isHovered && !isSelected ? 1.006 : 1.0)
         }
         .buttonStyle(.plain)
         .onHover { hovering in
-            isHovered = hovering
+            withAnimation(.easeInOut(duration: 0.15)) {
+                isHovered = hovering
+            }
         }
     }
 }
@@ -524,6 +602,9 @@ struct EntryDetailView: View {
     @State private var correctForm: String
     @State private var category: String
     @State private var notes: String
+    @State private var isCloseHovered = false
+    @State private var isSaveHovered = false
+    @State private var isDeleteHovered = false
 
     init(entry: DictionaryEntry, onClose: @escaping () -> Void, onUpdate: @escaping (DictionaryEntry) -> Void, onDelete: @escaping () -> Void) {
         self.entry = entry
@@ -550,14 +631,35 @@ struct EntryDetailView: View {
                     Image(systemName: "xmark.circle.fill")
                         .font(.system(size: 20))
                         .foregroundColor(WhispererColors.secondaryText(colorScheme))
+                        .scaleEffect(isCloseHovered ? 1.06 : 1.0)
+                        .shadow(
+                            color: isCloseHovered ? Color.black.opacity(colorScheme == .dark ? 0.08 : 0.06) : .clear,
+                            radius: 3, y: 1
+                        )
                 }
                 .buttonStyle(.plain)
+                .onHover { hovering in
+                    withAnimation(.easeOut(duration: 0.15)) {
+                        isCloseHovered = hovering
+                    }
+                }
             }
             .padding(20)
             .background(WhispererColors.cardBackground(colorScheme))
             .overlay(
+                // Gradient separator with accent tint on leading edge
                 Rectangle()
-                    .fill(WhispererColors.border(colorScheme))
+                    .fill(
+                        LinearGradient(
+                            colors: [
+                                WhispererColors.accent.opacity(0.2),
+                                WhispererColors.border(colorScheme),
+                                WhispererColors.border(colorScheme).opacity(0.3)
+                            ],
+                            startPoint: .leading,
+                            endPoint: .trailing
+                        )
+                    )
                     .frame(height: 1),
                 alignment: .bottom
             )
@@ -567,7 +669,8 @@ struct EntryDetailView: View {
                     // Incorrect form
                     VStack(alignment: .leading, spacing: 8) {
                         Text("Incorrect Form (as heard)")
-                            .font(.system(size: 12, weight: .semibold))
+                            .font(.system(size: 12, weight: .medium))
+                            .tracking(0.2)
                             .foregroundColor(WhispererColors.primaryText(colorScheme))
 
                         TextField("e.g., post gress", text: $incorrectForm)
@@ -582,13 +685,18 @@ struct EntryDetailView: View {
                                 RoundedRectangle(cornerRadius: 8)
                                     .stroke(WhispererColors.border(colorScheme), lineWidth: 1)
                             )
+                            .shadow(
+                                color: Color.black.opacity(colorScheme == .dark ? 0.04 : 0.025),
+                                radius: 3, y: 1
+                            )
                             .disabled(entry.isBuiltIn)
                     }
 
                     // Correct form
                     VStack(alignment: .leading, spacing: 8) {
                         Text("Correct Form")
-                            .font(.system(size: 12, weight: .semibold))
+                            .font(.system(size: 12, weight: .medium))
+                            .tracking(0.2)
                             .foregroundColor(WhispererColors.primaryText(colorScheme))
 
                         TextField("e.g., PostgreSQL", text: $correctForm)
@@ -603,12 +711,17 @@ struct EntryDetailView: View {
                                 RoundedRectangle(cornerRadius: 8)
                                     .stroke(WhispererColors.border(colorScheme), lineWidth: 1)
                             )
+                            .shadow(
+                                color: Color.black.opacity(colorScheme == .dark ? 0.04 : 0.025),
+                                radius: 3, y: 1
+                            )
                     }
 
                     // Category
                     VStack(alignment: .leading, spacing: 8) {
                         Text("Category (optional)")
-                            .font(.system(size: 12, weight: .semibold))
+                            .font(.system(size: 12, weight: .medium))
+                            .tracking(0.2)
                             .foregroundColor(WhispererColors.primaryText(colorScheme))
 
                         TextField("e.g., Programming", text: $category)
@@ -623,12 +736,17 @@ struct EntryDetailView: View {
                                 RoundedRectangle(cornerRadius: 8)
                                     .stroke(WhispererColors.border(colorScheme), lineWidth: 1)
                             )
+                            .shadow(
+                                color: Color.black.opacity(colorScheme == .dark ? 0.04 : 0.025),
+                                radius: 3, y: 1
+                            )
                     }
 
                     // Notes
                     VStack(alignment: .leading, spacing: 8) {
                         Text("Notes (optional)")
-                            .font(.system(size: 12, weight: .semibold))
+                            .font(.system(size: 12, weight: .medium))
+                            .tracking(0.2)
                             .foregroundColor(WhispererColors.primaryText(colorScheme))
 
                         TextEditor(text: $notes)
@@ -643,6 +761,10 @@ struct EntryDetailView: View {
                                 RoundedRectangle(cornerRadius: 8)
                                     .stroke(WhispererColors.border(colorScheme), lineWidth: 1)
                             )
+                            .shadow(
+                                color: Color.black.opacity(colorScheme == .dark ? 0.04 : 0.025),
+                                radius: 3, y: 1
+                            )
                     }
 
                     // Save button
@@ -656,9 +778,20 @@ struct EntryDetailView: View {
                                 RoundedRectangle(cornerRadius: 8)
                                     .fill(WhispererColors.accent)
                             )
+                            .shadow(
+                                color: WhispererColors.accent.opacity(isSaveHovered ? 0.4 : 0.25),
+                                radius: isSaveHovered ? 8 : 4,
+                                y: isSaveHovered ? 2 : 1
+                            )
+                            .scaleEffect(isSaveHovered ? 1.02 : 1.0)
                     }
                     .buttonStyle(.plain)
                     .disabled(incorrectForm.isEmpty || correctForm.isEmpty)
+                    .onHover { hovering in
+                        withAnimation(.easeOut(duration: 0.15)) {
+                            isSaveHovered = hovering
+                        }
+                    }
 
                     // Delete button
                     if !entry.isBuiltIn {
@@ -672,8 +805,19 @@ struct EntryDetailView: View {
                                     RoundedRectangle(cornerRadius: 8)
                                         .fill(Color.red)
                                 )
+                                .shadow(
+                                    color: Color.red.opacity(isDeleteHovered ? 0.4 : 0.2),
+                                    radius: isDeleteHovered ? 8 : 4,
+                                    y: isDeleteHovered ? 2 : 1
+                                )
+                                .scaleEffect(isDeleteHovered ? 1.02 : 1.0)
                         }
                         .buttonStyle(.plain)
+                        .onHover { hovering in
+                            withAnimation(.easeOut(duration: 0.15)) {
+                                isDeleteHovered = hovering
+                            }
+                        }
                     }
                 }
                 .padding(20)
@@ -740,6 +884,14 @@ struct SkeletonRow: View {
         .background(
             RoundedRectangle(cornerRadius: 10)
                 .fill(WhispererColors.cardBackground(colorScheme))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 10)
+                .stroke(WhispererColors.border(colorScheme), lineWidth: 1)
+        )
+        .shadow(
+            color: Color.black.opacity(colorScheme == .dark ? 0.06 : 0.03),
+            radius: 3, y: 1
         )
         .opacity(isAnimating ? 0.5 : 1.0)
         .onAppear {

@@ -27,11 +27,21 @@ struct DictionaryPacksView: View {
             // Custom dropdown trigger
             Button(action: { withAnimation(.easeOut(duration: 0.15)) { showDropdown.toggle() } }) {
                 HStack(spacing: 10) {
-                    // Icon
+                    // Icon — gradient fill with micro-shadow
                     ZStack {
                         Circle()
-                            .fill(WhispererColors.accent.opacity(0.15))
+                            .fill(
+                                LinearGradient(
+                                    colors: [
+                                        WhispererColors.accent.opacity(0.18),
+                                        WhispererColors.accentDark.opacity(0.08)
+                                    ],
+                                    startPoint: .topLeading,
+                                    endPoint: .bottomTrailing
+                                )
+                            )
                             .frame(width: 32, height: 32)
+                            .shadow(color: WhispererColors.accent.opacity(0.08), radius: 3, y: 1)
 
                         Image(systemName: selectedPack?.icon ?? "books.vertical.fill")
                             .font(.system(size: 14, weight: .semibold))
@@ -60,11 +70,18 @@ struct DictionaryPacksView: View {
                 .padding(.vertical, 10)
                 .background(
                     RoundedRectangle(cornerRadius: 12)
-                        .fill(showDropdown ? WhispererColors.accent.opacity(0.08) : WhispererColors.elevatedBackground(colorScheme))
+                        .fill(showDropdown ? WhispererColors.accent.opacity(0.08) : WhispererColors.cardBackground(colorScheme))
                 )
                 .overlay(
                     RoundedRectangle(cornerRadius: 12)
                         .stroke(showDropdown ? WhispererColors.accent.opacity(0.3) : WhispererColors.border(colorScheme), lineWidth: 1)
+                )
+                .shadow(
+                    color: showDropdown
+                        ? WhispererColors.accent.opacity(0.08)
+                        : Color.black.opacity(colorScheme == .dark ? 0.06 : 0.03),
+                    radius: showDropdown ? 6 : 3,
+                    y: 1
                 )
             }
             .buttonStyle(.plain)
@@ -74,10 +91,20 @@ struct DictionaryPacksView: View {
         }
         .padding(.horizontal, 20)
         .padding(.vertical, 12)
-        .background(WhispererColors.cardBackground(colorScheme))
+        .background(WhispererColors.background(colorScheme))
         .overlay(
             Rectangle()
-                .fill(WhispererColors.border(colorScheme))
+                .fill(
+                    LinearGradient(
+                        colors: [
+                            WhispererColors.border(colorScheme).opacity(0.6),
+                            WhispererColors.border(colorScheme),
+                            WhispererColors.border(colorScheme).opacity(0.6)
+                        ],
+                        startPoint: .leading,
+                        endPoint: .trailing
+                    )
+                )
                 .frame(height: 1),
             alignment: .bottom
         )
@@ -290,7 +317,7 @@ struct PackDropdownOverlay: View {
                 RoundedRectangle(cornerRadius: 16)
                     .stroke(WhispererColors.border(colorScheme).opacity(0.5), lineWidth: 1)
             )
-            .shadow(color: Color.black.opacity(colorScheme == .dark ? 0.6 : 0.15), radius: 20, x: 0, y: 8)
+            .shadow(color: Color.black.opacity(colorScheme == .dark ? 0.35 : 0.15), radius: 20, x: 0, y: 8)
             .padding(.leading, 20)
             .padding(.top, 4)
         }
@@ -417,8 +444,13 @@ struct PremiumDropdownItem: View {
             RoundedRectangle(cornerRadius: 8)
                 .fill(isSelected ? WhispererColors.accent.opacity(0.1) : (isHovered ? WhispererColors.elevatedBackground(colorScheme) : Color.clear))
         )
+        .scaleEffect(isHovered ? 1.006 : 1.0)
         .padding(.horizontal, 4)
-        .onHover { isHovered = $0 }
+        .onHover { hovering in
+            withAnimation(.easeInOut(duration: 0.12)) {
+                isHovered = hovering
+            }
+        }
     }
 }
 
@@ -465,9 +497,14 @@ struct DropdownItem: View {
                 RoundedRectangle(cornerRadius: 6)
                     .fill(isSelected ? WhispererColors.accent.opacity(0.1) : (isHovered ? WhispererColors.elevatedBackground(colorScheme) : Color.clear))
             )
+            .scaleEffect(isHovered ? 1.006 : 1.0)
         }
         .buttonStyle(.plain)
-        .onHover { isHovered = $0 }
+        .onHover { hovering in
+            withAnimation(.easeInOut(duration: 0.12)) {
+                isHovered = hovering
+            }
+        }
     }
 }
 
@@ -558,6 +595,11 @@ struct PackManagerRow: View {
         .padding(.horizontal, 12)
         .padding(.vertical, 8)
         .background(RoundedRectangle(cornerRadius: 8).fill(isHovered ? WhispererColors.elevatedBackground(colorScheme) : Color.clear))
-        .onHover { isHovered = $0 }
+        .scaleEffect(isHovered ? 1.006 : 1.0)
+        .onHover { hovering in
+            withAnimation(.easeInOut(duration: 0.12)) {
+                isHovered = hovering
+            }
+        }
     }
 }

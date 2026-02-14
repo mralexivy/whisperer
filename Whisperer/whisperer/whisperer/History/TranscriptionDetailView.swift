@@ -62,37 +62,60 @@ struct TranscriptionDetailView: View {
     // MARK: - Header
 
     private var headerView: some View {
-        HStack(spacing: 16) {
-            VStack(alignment: .leading, spacing: 3) {
-                Text(dayLabel)
-                    .font(.system(size: 10, weight: .bold, design: .rounded))
-                    .foregroundColor(WhispererColors.accent)
-                    .textCase(.uppercase)
-                    .tracking(0.5)
+        VStack(spacing: 0) {
+            HStack(spacing: 16) {
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(dayLabel)
+                        .font(.system(size: 10, weight: .bold, design: .rounded))
+                        .foregroundStyle(
+                            LinearGradient(
+                                colors: [WhispererColors.accent, WhispererColors.accentDark],
+                                startPoint: .leading,
+                                endPoint: .trailing
+                            )
+                        )
+                        .textCase(.uppercase)
+                        .tracking(0.5)
 
-                HStack(alignment: .firstTextBaseline, spacing: 6) {
-                    Text(dateString)
-                        .font(.system(size: 18, weight: .bold, design: .rounded))
-                        .foregroundColor(WhispererColors.primaryText(colorScheme))
+                    HStack(alignment: .firstTextBaseline, spacing: 6) {
+                        Text(dateString)
+                            .font(.system(size: 18, weight: .bold, design: .rounded))
+                            .foregroundColor(WhispererColors.primaryText(colorScheme))
 
-                    Text("at \(timeString)")
-                        .font(.system(size: 13))
-                        .foregroundColor(WhispererColors.secondaryText(colorScheme))
+                        Text("at \(timeString)")
+                            .font(.system(size: 13))
+                            .foregroundColor(WhispererColors.secondaryText(colorScheme))
+                    }
+                }
+
+                Spacer()
+
+                HStack(spacing: 8) {
+                    DetailHeaderButton(icon: "square.and.arrow.up", colorScheme: colorScheme, action: shareTranscription)
+                        .help("Share")
+
+                    DetailHeaderButton(icon: "xmark", colorScheme: colorScheme, action: onClose)
+                        .help("Close")
                 }
             }
+            .padding(.horizontal, 20)
+            .padding(.vertical, 16)
 
-            Spacer()
-
-            HStack(spacing: 8) {
-                DetailHeaderButton(icon: "square.and.arrow.up", colorScheme: colorScheme, action: shareTranscription)
-                    .help("Share")
-
-                DetailHeaderButton(icon: "xmark", colorScheme: colorScheme, action: onClose)
-                    .help("Close")
-            }
+            // Gradient separator
+            Rectangle()
+                .fill(
+                    LinearGradient(
+                        colors: [
+                            WhispererColors.accent.opacity(0.2),
+                            WhispererColors.border(colorScheme),
+                            WhispererColors.border(colorScheme).opacity(0.3)
+                        ],
+                        startPoint: .leading,
+                        endPoint: .trailing
+                    )
+                )
+                .frame(height: 1)
         }
-        .padding(.horizontal, 20)
-        .padding(.vertical, 16)
         .background(WhispererColors.background(colorScheme))
     }
 
@@ -116,6 +139,10 @@ struct TranscriptionDetailView: View {
         .overlay(
             RoundedRectangle(cornerRadius: 14)
                 .stroke(WhispererColors.border(colorScheme), lineWidth: 1)
+        )
+        .shadow(
+            color: Color.black.opacity(colorScheme == .dark ? 0.06 : 0.03),
+            radius: 4, y: 1
         )
     }
 
@@ -147,7 +174,23 @@ struct TranscriptionDetailView: View {
                     .padding(.vertical, 7)
                     .background(
                         Capsule()
-                            .fill(isEditing ? WhispererColors.accent : WhispererColors.elevatedBackground(colorScheme))
+                            .fill(
+                                isEditing
+                                    ? AnyShapeStyle(LinearGradient(
+                                        colors: [WhispererColors.accent, WhispererColors.accentDark],
+                                        startPoint: .leading,
+                                        endPoint: .trailing
+                                    ))
+                                    : AnyShapeStyle(WhispererColors.elevatedBackground(colorScheme))
+                            )
+                    )
+                    .overlay(
+                        Capsule()
+                            .stroke(isEditing ? Color.clear : WhispererColors.border(colorScheme), lineWidth: 0.5)
+                    )
+                    .shadow(
+                        color: isEditing ? WhispererColors.accent.opacity(0.25) : Color.clear,
+                        radius: 4, y: 1
                     )
                 }
                 .buttonStyle(.plain)
@@ -165,7 +208,7 @@ struct TranscriptionDetailView: View {
                             .fill(
                                 LinearGradient(
                                     colors: [
-                                        WhispererColors.accent.opacity(colorScheme == .dark ? 0.12 : 0.08),
+                                        WhispererColors.accent.opacity(colorScheme == .dark ? 0.06 : 0.08),
                                         WhispererColors.cardBackground(colorScheme)
                                     ],
                                     startPoint: .leading,
@@ -192,6 +235,10 @@ struct TranscriptionDetailView: View {
                     .overlay(
                         RoundedRectangle(cornerRadius: 12)
                             .stroke(WhispererColors.border(colorScheme), lineWidth: 1)
+                    )
+                    .shadow(
+                        color: Color.black.opacity(colorScheme == .dark ? 0.04 : 0.025),
+                        radius: 3, y: 1
                     )
             }
         }
@@ -252,6 +299,10 @@ struct TranscriptionDetailView: View {
                 RoundedRectangle(cornerRadius: 12)
                     .stroke(WhispererColors.border(colorScheme), lineWidth: 1)
             )
+            .shadow(
+                color: Color.black.opacity(colorScheme == .dark ? 0.04 : 0.025),
+                radius: 3, y: 1
+            )
         }
     }
 
@@ -261,8 +312,18 @@ struct TranscriptionDetailView: View {
         HStack(spacing: 8) {
             ZStack {
                 RoundedRectangle(cornerRadius: 6)
-                    .fill(WhispererColors.accent.opacity(colorScheme == .dark ? 0.15 : 0.1))
+                    .fill(
+                        LinearGradient(
+                            colors: [
+                                WhispererColors.accent.opacity(colorScheme == .dark ? 0.18 : 0.12),
+                                WhispererColors.accentDark.opacity(colorScheme == .dark ? 0.08 : 0.05)
+                            ],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                    )
                     .frame(width: 24, height: 24)
+                    .shadow(color: WhispererColors.accent.opacity(0.06), radius: 2, y: 1)
 
                 Image(systemName: icon)
                     .font(.system(size: 11, weight: .semibold))
@@ -371,6 +432,11 @@ struct DetailHeaderButton: View {
                     Circle()
                         .stroke(isHovered ? WhispererColors.border(colorScheme) : Color.clear, lineWidth: 0.5)
                 )
+                .shadow(
+                    color: isHovered ? Color.black.opacity(colorScheme == .dark ? 0.08 : 0.06) : Color.clear,
+                    radius: 3, y: 1
+                )
+                .scaleEffect(isHovered ? 1.06 : 1.0)
         }
         .buttonStyle(.plain)
         .onHover { hovering in
@@ -400,8 +466,8 @@ struct DetailStatCard: View {
                     .fill(
                         LinearGradient(
                             colors: [
-                                color.opacity(colorScheme == .dark ? 0.2 : 0.12),
-                                color.opacity(colorScheme == .dark ? 0.1 : 0.06)
+                                color.opacity(colorScheme == .dark ? 0.12 : 0.12),
+                                color.opacity(colorScheme == .dark ? 0.05 : 0.06)
                             ],
                             startPoint: .topLeading,
                             endPoint: .bottomTrailing
@@ -424,7 +490,7 @@ struct DetailStatCard: View {
 
             // Value
             Text(value)
-                .font(.system(size: 20, weight: .bold, design: .rounded))
+                .font(.system(size: 20, weight: .light, design: .rounded))
                 .foregroundColor(WhispererColors.primaryText(colorScheme))
                 .lineLimit(1)
                 .minimumScaleFactor(0.6)
@@ -455,8 +521,8 @@ struct DetailStatCard: View {
             RoundedRectangle(cornerRadius: 14)
                 .stroke(
                     isHovered
-                        ? color.opacity(colorScheme == .dark ? 0.35 : 0.25)
-                        : color.opacity(colorScheme == .dark ? 0.15 : 0.1),
+                        ? color.opacity(colorScheme == .dark ? 0.2 : 0.25)
+                        : color.opacity(colorScheme == .dark ? 0.08 : 0.1),
                     lineWidth: 1
                 )
         )

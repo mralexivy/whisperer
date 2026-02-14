@@ -128,18 +128,41 @@ struct TranscriptionRow: View {
                                 startPoint: .top,
                                 endPoint: .bottom
                             ))
-                            : AnyShapeStyle(WhispererColors.cardBackground(colorScheme))
+                            : (isHovered
+                                ? AnyShapeStyle(LinearGradient(
+                                    colors: [
+                                        WhispererColors.cardBackground(colorScheme),
+                                        WhispererColors.elevatedBackground(colorScheme).opacity(0.3)
+                                    ],
+                                    startPoint: .top,
+                                    endPoint: .bottom
+                                ))
+                                : AnyShapeStyle(WhispererColors.cardBackground(colorScheme)))
                     )
             )
             .overlay(
                 RoundedRectangle(cornerRadius: 12)
                     .stroke(
-                        isSelected ? WhispererColors.accent.opacity(0.3) : WhispererColors.border(colorScheme),
+                        isSelected
+                            ? WhispererColors.accent.opacity(0.3)
+                            : (isHovered
+                                ? WhispererColors.border(colorScheme).opacity(colorScheme == .dark ? 2.5 : 1.2)
+                                : WhispererColors.border(colorScheme)),
                         lineWidth: isSelected ? 1.5 : 1
                     )
             )
+            .shadow(
+                color: isSelected
+                    ? WhispererColors.accent.opacity(colorScheme == .dark ? 0.06 : 0.08)
+                    : (isHovered
+                        ? Color.black.opacity(colorScheme == .dark ? 0.12 : 0.06)
+                        : Color.black.opacity(colorScheme == .dark ? 0.06 : 0.03)),
+                radius: isSelected ? 8 : (isHovered ? 6 : 3),
+                y: isSelected ? 3 : (isHovered ? 2 : 1)
+            )
             .clipShape(RoundedRectangle(cornerRadius: 12))
             .contentShape(RoundedRectangle(cornerRadius: 12))
+            .scaleEffect(isHovered && !isSelected ? 1.006 : 1.0)
         }
         .buttonStyle(.plain)
         .onHover { hovering in
@@ -323,6 +346,11 @@ struct RowActionButton: View {
                     Circle()
                         .fill(isHovered ? WhispererColors.elevatedBackground(colorScheme) : Color.clear)
                 )
+                .overlay(
+                    Circle()
+                        .stroke(isHovered ? WhispererColors.border(colorScheme) : Color.clear, lineWidth: 0.5)
+                )
+                .scaleEffect(isHovered ? 1.08 : 1.0)
         }
         .buttonStyle(.plain)
         .onHover { hovering in

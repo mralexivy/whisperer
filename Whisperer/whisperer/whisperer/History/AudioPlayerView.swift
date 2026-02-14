@@ -77,11 +77,14 @@ struct AudioPlayerView: View {
                 )
 
                 // Playhead
-                Circle()
-                    .fill(Color.white)
-                    .frame(width: 10, height: 10)
-                    .shadow(color: WhispererColors.accent.opacity(0.5), radius: 4, y: 2)
-                    .offset(x: geometry.size.width * CGFloat(player.progress) - 5)
+                ZStack {
+                    Circle()
+                        .fill(Color.white)
+                        .frame(width: 10, height: 10)
+                        .shadow(color: WhispererColors.accent.opacity(0.5), radius: 4, y: 2)
+                        .shadow(color: Color.white.opacity(0.3), radius: 2, y: 0)
+                }
+                .offset(x: geometry.size.width * CGFloat(player.progress) - 5)
             }
             // Vertical fade — bars fade out at top and bottom edges
             .mask(
@@ -109,20 +112,33 @@ struct AudioPlayerView: View {
 
     // MARK: - Play Button
 
+    @State private var isPlayButtonHovered = false
+
     private var playButton: some View {
         Button(action: togglePlayback) {
             ZStack {
                 Circle()
                     .fill(WhispererColors.accent)
                     .frame(width: 44, height: 44)
+                    .shadow(
+                        color: WhispererColors.accent.opacity(isPlayButtonHovered ? 0.4 : 0.25),
+                        radius: isPlayButtonHovered ? 10 : 6,
+                        y: isPlayButtonHovered ? 3 : 2
+                    )
 
                 Image(systemName: player.isPlaying ? "pause.fill" : "play.fill")
                     .font(.system(size: 16, weight: .semibold))
                     .foregroundColor(.white)
                     .offset(x: player.isPlaying ? 0 : 1)
             }
+            .scaleEffect(isPlayButtonHovered ? 1.06 : 1.0)
         }
         .buttonStyle(.plain)
+        .onHover { hovering in
+            withAnimation(.easeOut(duration: 0.15)) {
+                isPlayButtonHovered = hovering
+            }
+        }
     }
 
     // MARK: - Time Display
@@ -166,6 +182,10 @@ struct AudioPlayerView: View {
             .background(
                 Capsule()
                     .fill(WhispererColors.elevatedBackground(colorScheme))
+            )
+            .overlay(
+                Capsule()
+                    .stroke(WhispererColors.border(colorScheme), lineWidth: 0.5)
             )
         }
         .menuStyle(.borderlessButton)

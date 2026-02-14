@@ -18,14 +18,50 @@ struct AddDictionaryEntryView: View {
     @State private var notes = ""
     @State private var showValidationError = false
     @State private var errorMessage = ""
+    @State private var isCloseHovered = false
+    @State private var isCancelHovered = false
+    @State private var isAddHovered = false
 
     var body: some View {
         VStack(spacing: 0) {
             // Header
-            HStack {
-                Text("Add Dictionary Entry")
-                    .font(.system(size: 18, weight: .bold, design: .rounded))
-                    .foregroundColor(WhispererColors.primaryText(colorScheme))
+            HStack(spacing: 14) {
+                // Icon — gradient accent fill with shadow
+                ZStack {
+                    RoundedRectangle(cornerRadius: 12)
+                        .fill(
+                            LinearGradient(
+                                colors: [
+                                    WhispererColors.accent.opacity(0.15),
+                                    WhispererColors.accentDark.opacity(0.08)
+                                ],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            )
+                        )
+                        .frame(width: 40, height: 40)
+                        .shadow(color: WhispererColors.accent.opacity(0.1), radius: 6, y: 2)
+
+                    Image(systemName: "plus.circle.fill")
+                        .font(.system(size: 17))
+                        .foregroundStyle(
+                            LinearGradient(
+                                colors: [WhispererColors.accent, WhispererColors.accentDark],
+                                startPoint: .top,
+                                endPoint: .bottom
+                            )
+                        )
+                }
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Add Dictionary Entry")
+                        .font(.system(size: 18, weight: .bold, design: .rounded))
+                        .foregroundColor(WhispererColors.primaryText(colorScheme))
+
+                    Text("Improve transcription accuracy")
+                        .font(.system(size: 12))
+                        .foregroundColor(WhispererColors.secondaryText(colorScheme))
+                }
 
                 Spacer()
 
@@ -33,25 +69,63 @@ struct AddDictionaryEntryView: View {
                     Image(systemName: "xmark.circle.fill")
                         .font(.system(size: 22))
                         .foregroundColor(WhispererColors.secondaryText(colorScheme))
+                        .scaleEffect(isCloseHovered ? 1.06 : 1.0)
+                        .shadow(
+                            color: isCloseHovered ? Color.black.opacity(colorScheme == .dark ? 0.08 : 0.06) : .clear,
+                            radius: 3, y: 1
+                        )
                 }
                 .buttonStyle(.plain)
+                .onHover { hovering in
+                    withAnimation(.easeOut(duration: 0.15)) {
+                        isCloseHovered = hovering
+                    }
+                }
             }
-            .padding(24)
-            .background(WhispererColors.cardBackground(colorScheme))
+            .padding(.horizontal, 24)
+            .padding(.vertical, 18)
+            .background(WhispererColors.background(colorScheme))
             .overlay(
+                // Gradient separator with accent tint
                 Rectangle()
-                    .fill(WhispererColors.border(colorScheme))
+                    .fill(
+                        LinearGradient(
+                            colors: [
+                                WhispererColors.accent.opacity(0.2),
+                                WhispererColors.border(colorScheme),
+                                WhispererColors.border(colorScheme).opacity(0.3)
+                            ],
+                            startPoint: .leading,
+                            endPoint: .trailing
+                        )
+                    )
                     .frame(height: 1),
                 alignment: .bottom
             )
 
             ScrollView {
                 VStack(alignment: .leading, spacing: 24) {
-                    // Instructions
+                    // Instructions card
                     HStack(spacing: 12) {
-                        Image(systemName: "info.circle.fill")
-                            .font(.system(size: 16))
-                            .foregroundColor(WhispererColors.accent)
+                        ZStack {
+                            RoundedRectangle(cornerRadius: 6)
+                                .fill(
+                                    LinearGradient(
+                                        colors: [
+                                            WhispererColors.accent.opacity(colorScheme == .dark ? 0.18 : 0.12),
+                                            WhispererColors.accentDark.opacity(colorScheme == .dark ? 0.08 : 0.05)
+                                        ],
+                                        startPoint: .topLeading,
+                                        endPoint: .bottomTrailing
+                                    )
+                                )
+                                .frame(width: 28, height: 28)
+                                .shadow(color: WhispererColors.accent.opacity(0.06), radius: 2, y: 1)
+
+                            Image(systemName: "info.circle.fill")
+                                .font(.system(size: 13, weight: .semibold))
+                                .foregroundColor(WhispererColors.accent)
+                        }
 
                         Text("Add terms that Whisper commonly mishears. The incorrect form should match what Whisper outputs.")
                             .font(.system(size: 13))
@@ -61,13 +135,22 @@ struct AddDictionaryEntryView: View {
                     .padding(14)
                     .background(
                         RoundedRectangle(cornerRadius: 10)
-                            .fill(WhispererColors.accent.opacity(0.1))
+                            .fill(WhispererColors.accent.opacity(0.08))
+                    )
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 10)
+                            .stroke(WhispererColors.accent.opacity(0.12), lineWidth: 1)
+                    )
+                    .shadow(
+                        color: WhispererColors.accent.opacity(0.06),
+                        radius: 4, y: 1
                     )
 
                     // Incorrect form
                     VStack(alignment: .leading, spacing: 8) {
                         Text("Incorrect Form (as heard)")
-                            .font(.system(size: 13, weight: .semibold))
+                            .font(.system(size: 13, weight: .medium))
+                            .tracking(0.3)
                             .foregroundColor(WhispererColors.primaryText(colorScheme))
 
                         TextField("e.g., post gress or cooper netties", text: $incorrectForm)
@@ -82,6 +165,10 @@ struct AddDictionaryEntryView: View {
                                 RoundedRectangle(cornerRadius: 10)
                                     .stroke(WhispererColors.border(colorScheme), lineWidth: 1)
                             )
+                            .shadow(
+                                color: Color.black.opacity(colorScheme == .dark ? 0.04 : 0.025),
+                                radius: 3, y: 1
+                            )
 
                         Text("Lowercase, exactly as Whisper transcribes it")
                             .font(.system(size: 11))
@@ -91,7 +178,8 @@ struct AddDictionaryEntryView: View {
                     // Correct form
                     VStack(alignment: .leading, spacing: 8) {
                         Text("Correct Form")
-                            .font(.system(size: 13, weight: .semibold))
+                            .font(.system(size: 13, weight: .medium))
+                            .tracking(0.3)
                             .foregroundColor(WhispererColors.primaryText(colorScheme))
 
                         TextField("e.g., PostgreSQL or Kubernetes", text: $correctForm)
@@ -106,6 +194,10 @@ struct AddDictionaryEntryView: View {
                                 RoundedRectangle(cornerRadius: 10)
                                     .stroke(WhispererColors.border(colorScheme), lineWidth: 1)
                             )
+                            .shadow(
+                                color: Color.black.opacity(colorScheme == .dark ? 0.04 : 0.025),
+                                radius: 3, y: 1
+                            )
 
                         Text("With proper capitalization")
                             .font(.system(size: 11))
@@ -115,7 +207,8 @@ struct AddDictionaryEntryView: View {
                     // Category
                     VStack(alignment: .leading, spacing: 8) {
                         Text("Category (optional)")
-                            .font(.system(size: 13, weight: .semibold))
+                            .font(.system(size: 13, weight: .medium))
+                            .tracking(0.3)
                             .foregroundColor(WhispererColors.primaryText(colorScheme))
 
                         TextField("e.g., Programming, DevOps, Cloud", text: $category)
@@ -130,12 +223,17 @@ struct AddDictionaryEntryView: View {
                                 RoundedRectangle(cornerRadius: 10)
                                     .stroke(WhispererColors.border(colorScheme), lineWidth: 1)
                             )
+                            .shadow(
+                                color: Color.black.opacity(colorScheme == .dark ? 0.04 : 0.025),
+                                radius: 3, y: 1
+                            )
                     }
 
                     // Notes
                     VStack(alignment: .leading, spacing: 8) {
                         Text("Notes (optional)")
-                            .font(.system(size: 13, weight: .semibold))
+                            .font(.system(size: 13, weight: .medium))
+                            .tracking(0.3)
                             .foregroundColor(WhispererColors.primaryText(colorScheme))
 
                         TextEditor(text: $notes)
@@ -149,6 +247,10 @@ struct AddDictionaryEntryView: View {
                             .overlay(
                                 RoundedRectangle(cornerRadius: 10)
                                     .stroke(WhispererColors.border(colorScheme), lineWidth: 1)
+                            )
+                            .shadow(
+                                color: Color.black.opacity(colorScheme == .dark ? 0.04 : 0.025),
+                                radius: 3, y: 1
                             )
                     }
 
@@ -177,7 +279,15 @@ struct AddDictionaryEntryView: View {
                             .frame(maxWidth: .infinity, alignment: .leading)
                             .background(
                                 RoundedRectangle(cornerRadius: 10)
-                                    .fill(WhispererColors.accent.opacity(0.1))
+                                    .fill(WhispererColors.accent.opacity(0.08))
+                            )
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 10)
+                                    .stroke(WhispererColors.accent.opacity(0.15), lineWidth: 1)
+                            )
+                            .shadow(
+                                color: WhispererColors.accent.opacity(0.06),
+                                radius: 3, y: 1
                             )
                         }
                     }
@@ -198,6 +308,10 @@ struct AddDictionaryEntryView: View {
                         .background(
                             RoundedRectangle(cornerRadius: 10)
                                 .fill(Color.red.opacity(0.1))
+                        )
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 10)
+                                .stroke(Color.red.opacity(0.15), lineWidth: 1)
                         )
                     }
                 }
@@ -220,8 +334,19 @@ struct AddDictionaryEntryView: View {
                             RoundedRectangle(cornerRadius: 10)
                                 .stroke(WhispererColors.border(colorScheme), lineWidth: 1)
                         )
+                        .shadow(
+                            color: Color.black.opacity(colorScheme == .dark ? 0.06 : 0.03),
+                            radius: isCancelHovered ? 6 : 3,
+                            y: isCancelHovered ? 2 : 1
+                        )
+                        .scaleEffect(isCancelHovered ? 1.02 : 1.0)
                 }
                 .buttonStyle(.plain)
+                .onHover { hovering in
+                    withAnimation(.easeOut(duration: 0.15)) {
+                        isCancelHovered = hovering
+                    }
+                }
 
                 Button(action: addEntry) {
                     Text("Add Entry")
@@ -233,15 +358,39 @@ struct AddDictionaryEntryView: View {
                             RoundedRectangle(cornerRadius: 10)
                                 .fill(isValid ? WhispererColors.accent : WhispererColors.secondaryText(colorScheme).opacity(0.3))
                         )
+                        .shadow(
+                            color: isValid
+                                ? WhispererColors.accent.opacity(isAddHovered ? 0.4 : 0.25)
+                                : Color.clear,
+                            radius: isAddHovered ? 8 : 4,
+                            y: isAddHovered ? 2 : 1
+                        )
+                        .scaleEffect(isAddHovered && isValid ? 1.02 : 1.0)
                 }
                 .buttonStyle(.plain)
                 .disabled(!isValid)
+                .onHover { hovering in
+                    withAnimation(.easeOut(duration: 0.15)) {
+                        isAddHovered = hovering
+                    }
+                }
             }
             .padding(24)
-            .background(WhispererColors.cardBackground(colorScheme))
+            .background(WhispererColors.background(colorScheme))
             .overlay(
+                // Gradient separator
                 Rectangle()
-                    .fill(WhispererColors.border(colorScheme))
+                    .fill(
+                        LinearGradient(
+                            colors: [
+                                WhispererColors.border(colorScheme).opacity(0.6),
+                                WhispererColors.border(colorScheme),
+                                WhispererColors.border(colorScheme).opacity(0.6)
+                            ],
+                            startPoint: .leading,
+                            endPoint: .trailing
+                        )
+                    )
                     .frame(height: 1),
                 alignment: .top
             )
