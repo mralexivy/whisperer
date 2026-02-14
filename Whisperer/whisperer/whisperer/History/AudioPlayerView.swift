@@ -24,6 +24,7 @@ struct AudioPlayerView: View {
             // Waveform
             waveformView
                 .frame(height: 56)
+                .padding(.horizontal, 4)
 
             // Controls
             HStack(spacing: 16) {
@@ -54,19 +55,18 @@ struct AudioPlayerView: View {
                     ForEach(0..<waveformData.count, id: \.self) { index in
                         RoundedRectangle(cornerRadius: 2)
                             .fill(WhispererColors.secondaryText(colorScheme).opacity(0.25))
-                            .frame(width: 3)
                             .frame(height: max(4, CGFloat(waveformData[index]) * 56))
                     }
                 }
                 .frame(maxHeight: .infinity, alignment: .center)
 
-                // Progress bars
+                // Progress bars with glow
                 HStack(spacing: 2) {
                     ForEach(0..<waveformData.count, id: \.self) { index in
                         RoundedRectangle(cornerRadius: 2)
                             .fill(WhispererColors.accent)
-                            .frame(width: 3)
                             .frame(height: max(4, CGFloat(waveformData[index]) * 56))
+                            .shadow(color: WhispererColors.accent.opacity(0.4), radius: 3, y: 0)
                     }
                 }
                 .frame(maxHeight: .infinity, alignment: .center)
@@ -83,6 +83,19 @@ struct AudioPlayerView: View {
                     .shadow(color: WhispererColors.accent.opacity(0.5), radius: 4, y: 2)
                     .offset(x: geometry.size.width * CGFloat(player.progress) - 5)
             }
+            // Vertical fade — bars fade out at top and bottom edges
+            .mask(
+                LinearGradient(
+                    stops: [
+                        .init(color: .clear, location: 0),
+                        .init(color: .white, location: 0.15),
+                        .init(color: .white, location: 0.85),
+                        .init(color: .clear, location: 1)
+                    ],
+                    startPoint: .top,
+                    endPoint: .bottom
+                )
+            )
             .contentShape(Rectangle())
             .gesture(
                 DragGesture(minimumDistance: 0)
@@ -92,7 +105,6 @@ struct AudioPlayerView: View {
                     }
             )
         }
-        .clipShape(RoundedRectangle(cornerRadius: 6))
     }
 
     // MARK: - Play Button

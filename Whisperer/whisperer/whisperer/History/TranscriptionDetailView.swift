@@ -46,7 +46,16 @@ struct TranscriptionDetailView: View {
                 .padding(24)
             }
         }
-        .background(WhispererColors.background(colorScheme))
+        .background(
+            LinearGradient(
+                colors: [
+                    WhispererColors.accent.opacity(colorScheme == .dark ? 0.04 : 0.02),
+                    WhispererColors.background(colorScheme)
+                ],
+                startPoint: .top,
+                endPoint: .bottom
+            )
+        )
         .frame(maxHeight: .infinity)
     }
 
@@ -54,11 +63,12 @@ struct TranscriptionDetailView: View {
 
     private var headerView: some View {
         HStack(spacing: 16) {
-            VStack(alignment: .leading, spacing: 2) {
+            VStack(alignment: .leading, spacing: 3) {
                 Text(dayLabel)
-                    .font(.system(size: 11, weight: .bold, design: .rounded))
+                    .font(.system(size: 10, weight: .bold, design: .rounded))
                     .foregroundColor(WhispererColors.accent)
                     .textCase(.uppercase)
+                    .tracking(0.5)
 
                 HStack(alignment: .firstTextBaseline, spacing: 6) {
                     Text(dateString)
@@ -74,62 +84,39 @@ struct TranscriptionDetailView: View {
             Spacer()
 
             HStack(spacing: 8) {
-                // Share
-                Button(action: shareTranscription) {
-                    Image(systemName: "square.and.arrow.up")
-                        .font(.system(size: 13, weight: .medium))
-                        .foregroundColor(WhispererColors.secondaryText(colorScheme))
-                        .frame(width: 32, height: 32)
-                        .background(
-                            Circle()
-                                .fill(WhispererColors.elevatedBackground(colorScheme))
-                        )
-                }
-                .buttonStyle(.plain)
-                .help("Share")
+                DetailHeaderButton(icon: "square.and.arrow.up", colorScheme: colorScheme, action: shareTranscription)
+                    .help("Share")
 
-                // Close
-                Button(action: onClose) {
-                    Image(systemName: "xmark")
-                        .font(.system(size: 11, weight: .bold))
-                        .foregroundColor(WhispererColors.secondaryText(colorScheme))
-                        .frame(width: 32, height: 32)
-                        .background(
-                            Circle()
-                                .fill(WhispererColors.elevatedBackground(colorScheme))
-                        )
-                }
-                .buttonStyle(.plain)
-                .help("Close")
+                DetailHeaderButton(icon: "xmark", colorScheme: colorScheme, action: onClose)
+                    .help("Close")
             }
         }
-        .padding(20)
-        .background(WhispererColors.cardBackground(colorScheme))
-        .overlay(
-            Rectangle()
-                .fill(WhispererColors.border(colorScheme))
-                .frame(height: 1),
-            alignment: .bottom
-        )
+        .padding(.horizontal, 20)
+        .padding(.vertical, 16)
+        .background(WhispererColors.background(colorScheme))
     }
 
     // MARK: - Audio Section
 
     private func audioSection(url: URL) -> some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: 0) {
             sectionLabel("Audio Recording", icon: "waveform")
+                .padding(.horizontal, 20)
+                .padding(.top, 18)
+                .padding(.bottom, 14)
 
             AudioPlayerView(audioURL: url, duration: transcription.duration)
-                .padding(20)
-                .background(
-                    RoundedRectangle(cornerRadius: 14)
-                        .fill(WhispererColors.cardBackground(colorScheme))
-                )
-                .overlay(
-                    RoundedRectangle(cornerRadius: 14)
-                        .stroke(WhispererColors.border(colorScheme), lineWidth: 1)
-                )
+                .padding(.horizontal, 20)
+                .padding(.bottom, 20)
         }
+        .background(
+            RoundedRectangle(cornerRadius: 14)
+                .fill(WhispererColors.cardBackground(colorScheme))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 14)
+                .stroke(WhispererColors.border(colorScheme), lineWidth: 1)
+        )
     }
 
     // MARK: - Transcription Section
@@ -175,7 +162,16 @@ struct TranscriptionDetailView: View {
                     .frame(minHeight: 140)
                     .background(
                         RoundedRectangle(cornerRadius: 12)
-                            .fill(WhispererColors.cardBackground(colorScheme))
+                            .fill(
+                                LinearGradient(
+                                    colors: [
+                                        WhispererColors.accent.opacity(colorScheme == .dark ? 0.12 : 0.08),
+                                        WhispererColors.cardBackground(colorScheme)
+                                    ],
+                                    startPoint: .leading,
+                                    endPoint: .trailing
+                                )
+                            )
                     )
                     .overlay(
                         RoundedRectangle(cornerRadius: 12)
@@ -207,47 +203,19 @@ struct TranscriptionDetailView: View {
         VStack(alignment: .leading, spacing: 12) {
             sectionLabel("Details", icon: "info.circle")
 
-            LazyVGrid(columns: [
-                GridItem(.flexible()),
-                GridItem(.flexible())
-            ], spacing: 10) {
-                DetailCard(icon: "clock", label: "Duration", value: durationString, colorScheme: colorScheme)
-                DetailCard(icon: "text.word.spacing", label: "Words", value: "\(transcription.wordCount)", colorScheme: colorScheme)
-                DetailCard(icon: "speedometer", label: "WPM", value: "\(transcription.wordsPerMinute)", colorScheme: colorScheme)
-                DetailCard(icon: "globe", label: "Language", value: languageDisplay, colorScheme: colorScheme)
+            // 2-column grid of stat cards
+            let columns = [
+                GridItem(.flexible(), spacing: 12),
+                GridItem(.flexible(), spacing: 12)
+            ]
+
+            LazyVGrid(columns: columns, spacing: 12) {
+                DetailStatCard(icon: "clock", label: "DURATION", value: durationString, color: WhispererColors.accent, colorScheme: colorScheme)
+                DetailStatCard(icon: "text.word.spacing", label: "WORDS", value: "\(transcription.wordCount)", color: .blue, colorScheme: colorScheme)
+                DetailStatCard(icon: "speedometer", label: "WPM", value: "\(transcription.wordsPerMinute)", color: .purple, colorScheme: colorScheme)
+                DetailStatCard(icon: "globe", label: "LANGUAGE", value: languageDisplay, color: .orange, colorScheme: colorScheme)
+                DetailStatCard(icon: "cpu", label: "MODEL", value: modelDisplay, color: .cyan, colorScheme: colorScheme)
             }
-
-            // Model (full width)
-            HStack(spacing: 12) {
-                Image(systemName: "cpu")
-                    .font(.system(size: 12))
-                    .foregroundColor(WhispererColors.accent)
-                    .frame(width: 28, height: 28)
-                    .background(
-                        Circle()
-                            .fill(WhispererColors.accent.opacity(0.15))
-                    )
-
-                VStack(alignment: .leading, spacing: 1) {
-                    Text("Model")
-                        .font(.system(size: 10))
-                        .foregroundColor(WhispererColors.secondaryText(colorScheme))
-                    Text(modelDisplay)
-                        .font(.system(size: 12, weight: .semibold))
-                        .foregroundColor(WhispererColors.primaryText(colorScheme))
-                }
-
-                Spacer()
-            }
-            .padding(12)
-            .background(
-                RoundedRectangle(cornerRadius: 10)
-                    .fill(WhispererColors.cardBackground(colorScheme))
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: 10)
-                    .stroke(WhispererColors.border(colorScheme), lineWidth: 1)
-            )
         }
     }
 
@@ -290,14 +258,21 @@ struct TranscriptionDetailView: View {
     // MARK: - Helpers
 
     private func sectionLabel(_ text: String, icon: String) -> some View {
-        HStack(spacing: 6) {
-            Image(systemName: icon)
-                .font(.system(size: 11, weight: .semibold))
-                .foregroundColor(WhispererColors.accent)
+        HStack(spacing: 8) {
+            ZStack {
+                RoundedRectangle(cornerRadius: 6)
+                    .fill(WhispererColors.accent.opacity(colorScheme == .dark ? 0.15 : 0.1))
+                    .frame(width: 24, height: 24)
 
-            Text(text)
-                .font(.system(size: 12, weight: .bold, design: .rounded))
-                .foregroundColor(WhispererColors.primaryText(colorScheme))
+                Image(systemName: icon)
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundColor(WhispererColors.accent)
+            }
+
+            Text(text.uppercased())
+                .font(.system(size: 11, weight: .bold, design: .rounded))
+                .foregroundColor(WhispererColors.secondaryText(colorScheme))
+                .tracking(0.8)
         }
     }
 
@@ -373,44 +348,123 @@ struct TranscriptionDetailView: View {
     }
 }
 
-// MARK: - Detail Card
+// MARK: - Detail Header Button
 
-struct DetailCard: View {
+struct DetailHeaderButton: View {
+    let icon: String
+    let colorScheme: ColorScheme
+    let action: () -> Void
+
+    @State private var isHovered = false
+
+    var body: some View {
+        Button(action: action) {
+            Image(systemName: icon)
+                .font(.system(size: icon == "xmark" ? 11 : 13, weight: icon == "xmark" ? .bold : .medium))
+                .foregroundColor(isHovered ? WhispererColors.primaryText(colorScheme) : WhispererColors.secondaryText(colorScheme))
+                .frame(width: 32, height: 32)
+                .background(
+                    Circle()
+                        .fill(isHovered ? WhispererColors.elevatedBackground(colorScheme) : WhispererColors.elevatedBackground(colorScheme).opacity(0.6))
+                )
+                .overlay(
+                    Circle()
+                        .stroke(isHovered ? WhispererColors.border(colorScheme) : Color.clear, lineWidth: 0.5)
+                )
+        }
+        .buttonStyle(.plain)
+        .onHover { hovering in
+            withAnimation(.easeInOut(duration: 0.12)) {
+                isHovered = hovering
+            }
+        }
+    }
+}
+
+// MARK: - Detail Stat Card
+
+struct DetailStatCard: View {
     let icon: String
     let label: String
     let value: String
+    let color: Color
     let colorScheme: ColorScheme
 
+    @State private var isHovered = false
+
     var body: some View {
-        HStack(spacing: 10) {
-            Image(systemName: icon)
-                .font(.system(size: 12))
-                .foregroundColor(WhispererColors.accent)
-                .frame(width: 28, height: 28)
-                .background(
-                    Circle()
-                        .fill(WhispererColors.accent.opacity(0.15))
-                )
+        VStack(alignment: .leading, spacing: 0) {
+            // Icon in gradient circle
+            ZStack {
+                Circle()
+                    .fill(
+                        LinearGradient(
+                            colors: [
+                                color.opacity(colorScheme == .dark ? 0.2 : 0.12),
+                                color.opacity(colorScheme == .dark ? 0.1 : 0.06)
+                            ],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                    )
+                    .frame(width: 36, height: 36)
 
-            VStack(alignment: .leading, spacing: 1) {
-                Text(label)
-                    .font(.system(size: 10))
-                    .foregroundColor(WhispererColors.secondaryText(colorScheme))
-                Text(value)
-                    .font(.system(size: 14, weight: .bold, design: .rounded))
-                    .foregroundColor(WhispererColors.primaryText(colorScheme))
+                Image(systemName: icon)
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundColor(color)
             }
+            .padding(.bottom, 14)
 
-            Spacer()
+            // Label
+            Text(label)
+                .font(.system(size: 10, weight: .bold))
+                .foregroundColor(WhispererColors.secondaryText(colorScheme).opacity(0.7))
+                .tracking(1.0)
+                .padding(.bottom, 4)
+
+            // Value
+            Text(value)
+                .font(.system(size: 20, weight: .bold, design: .rounded))
+                .foregroundColor(WhispererColors.primaryText(colorScheme))
+                .lineLimit(1)
+                .minimumScaleFactor(0.6)
         }
-        .padding(12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(16)
         .background(
-            RoundedRectangle(cornerRadius: 10)
-                .fill(WhispererColors.cardBackground(colorScheme))
+            RoundedRectangle(cornerRadius: 14)
+                .fill(
+                    LinearGradient(
+                        colors: [
+                            color.opacity(colorScheme == .dark ? 0.08 : 0.04),
+                            WhispererColors.cardBackground(colorScheme)
+                        ],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
+                )
+                .shadow(
+                    color: colorScheme == .dark
+                        ? Color.black.opacity(0.25)
+                        : color.opacity(0.08),
+                    radius: isHovered ? 10 : 4,
+                    y: isHovered ? 4 : 1
+                )
         )
         .overlay(
-            RoundedRectangle(cornerRadius: 10)
-                .stroke(WhispererColors.border(colorScheme), lineWidth: 1)
+            RoundedRectangle(cornerRadius: 14)
+                .stroke(
+                    isHovered
+                        ? color.opacity(colorScheme == .dark ? 0.35 : 0.25)
+                        : color.opacity(colorScheme == .dark ? 0.15 : 0.1),
+                    lineWidth: 1
+                )
         )
+        .scaleEffect(isHovered ? 1.02 : 1.0)
+        .onHover { hovering in
+            withAnimation(.easeOut(duration: 0.2)) {
+                isHovered = hovering
+            }
+        }
     }
 }

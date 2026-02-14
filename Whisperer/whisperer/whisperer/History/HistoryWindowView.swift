@@ -90,17 +90,21 @@ enum HistorySidebarItem: String, CaseIterable, Identifiable {
 
 struct HistoryWindowView: View {
     @Environment(\.colorScheme) var colorScheme
+    @ObservedObject private var historyManager = HistoryManager.shared
     @State private var selectedSidebarItem: HistorySidebarItem = .transcriptions
+    @State private var isSidebarCollapsed = false
 
     var body: some View {
         HStack(spacing: 0) {
-            // Sidebar
-            sidebarView
+            // Sidebar (collapsible)
+            if !isSidebarCollapsed {
+                sidebarView
 
-            // Divider
-            Rectangle()
-                .fill(WhispererColors.border(colorScheme))
-                .frame(width: 1)
+                // Divider
+                Rectangle()
+                    .fill(WhispererColors.border(colorScheme))
+                    .frame(width: 1)
+            }
 
             // Main content
             Group {
@@ -114,12 +118,19 @@ struct HistoryWindowView: View {
                 }
             }
         }
-        .frame(minWidth: 1100, minHeight: 700)
+        .frame(minWidth: isSidebarCollapsed ? 700 : 1100, minHeight: 700)
         .background(WhispererColors.background(colorScheme))
         .onReceive(NotificationCenter.default.publisher(for: .switchToDictionaryTab)) { notification in
-            // Switch to Dictionary tab when notification is received
-            withAnimation {
+            withAnimation(.spring(response: 0.3)) {
                 selectedSidebarItem = .dictionary
+                if isSidebarCollapsed {
+                    isSidebarCollapsed = false
+                }
+            }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .toggleWorkspaceSidebar)) { _ in
+            withAnimation(.spring(response: 0.3)) {
+                isSidebarCollapsed.toggle()
             }
         }
     }
@@ -150,6 +161,11 @@ struct HistoryWindowView: View {
 
             Spacer()
 
+            // Stats card
+            if let stats = historyManager.statistics {
+                sidebarStatsCard(stats)
+            }
+
             // Keyboard shortcut hint at bottom
             shortcutHint
         }
@@ -159,14 +175,14 @@ struct HistoryWindowView: View {
 
     private var brandHeader: some View {
         HStack(spacing: 12) {
-            // App icon - circular waveform logo matching menubar
+            // App icon — rounded square with accent fill
             ZStack {
-                Circle()
-                    .fill(WhispererColors.accent.opacity(0.15))
-                    .frame(width: 40, height: 40)
+                RoundedRectangle(cornerRadius: 10)
+                    .fill(WhispererColors.accent.opacity(0.12))
+                    .frame(width: 36, height: 36)
 
                 Image(systemName: "waveform")
-                    .font(.system(size: 18, weight: .semibold))
+                    .font(.system(size: 16, weight: .semibold))
                     .foregroundColor(WhispererColors.accent)
             }
 
@@ -182,34 +198,114 @@ struct HistoryWindowView: View {
 
             Spacer()
         }
-        .padding(16)
+        .padding(20)
+        .frame(height: 84, alignment: .center)
         .background(WhispererColors.sidebarBackground(colorScheme))
-        .overlay(
-            Rectangle()
-                .fill(WhispererColors.border(colorScheme))
-                .frame(height: 1),
-            alignment: .bottom
+    }
+
+    private func sidebarStatsCard(_ stats: HistoryStatistics) -> some View {
+        VStack(spacing: 14) {
+            sidebarStatRow(label: "RECORDINGS", value: "\(stats.totalRecordings)")
+            sidebarStatRow(label: "WORDS", value: formatSidebarNumber(stats.totalWords))
+            sidebarStatRow(label: "AVG WPM", value: "\(stats.averageWPM)", valueColor: WhispererColors.accent)
+            sidebarStatRow(label: "DAYS", value: "\(stats.totalDays)")
+        }
+        .padding(16)
+        .background(
+            RoundedRectangle(cornerRadius: 12)
+                .fill(
+                    LinearGradient(
+                        colors: [
+                            WhispererColors.accent.opacity(colorScheme == .dark ? 0.1 : 0.06),
+                            WhispererColors.cardBackground(colorScheme)
+                        ],
+                        startPoint: .leading,
+                        endPoint: .trailing
+                    )
+                )
         )
+        .overlay(
+            RoundedRectangle(cornerRadius: 12)
+                .stroke(WhispererColors.accent.opacity(0.15), lineWidth: 1)
+        )
+        .padding(.horizontal, 12)
+        .padding(.bottom, 8)
+    }
+
+    private func sidebarStatRow(label: String, value: String, valueColor: Color? = nil) -> some View {
+        HStack {
+            Text(label)
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundColor(WhispererColors.secondaryText(colorScheme))
+                .tracking(0.8)
+
+            Spacer()
+
+            Text(value)
+                .font(.system(size: 16, weight: .bold, design: .rounded))
+                .foregroundColor(valueColor ?? WhispererColors.primaryText(colorScheme))
+        }
+    }
+
+    private func formatSidebarNumber(_ number: Int) -> String {
+        if number >= 1000 {
+            return String(format: "%.1fK", Double(number) / 1000)
+        }
+        return "\(number)"
     }
 
     private var shortcutHint: some View {
         HStack(spacing: 6) {
             Image(systemName: "keyboard")
-                .font(.system(size: 11))
-                .foregroundColor(WhispererColors.secondaryText(colorScheme))
+                .font(.system(size: 10))
+                .foregroundColor(WhispererColors.secondaryText(colorScheme).opacity(0.6))
 
-            Text("Fn + S")
-                .font(.system(size: 11, weight: .medium, design: .monospaced))
-                .foregroundColor(WhispererColors.secondaryText(colorScheme))
+            HStack(spacing: 3) {
+                Text("Fn")
+                    .font(.system(size: 10, weight: .medium, design: .monospaced))
+                    .padding(.horizontal, 4)
+                    .padding(.vertical, 1)
+                    .background(
+                        RoundedRectangle(cornerRadius: 3)
+                            .fill(WhispererColors.elevatedBackground(colorScheme))
+                    )
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 3)
+                            .stroke(WhispererColors.border(colorScheme), lineWidth: 0.5)
+                    )
+
+                Text("+")
+                    .font(.system(size: 10))
+
+                Text("S")
+                    .font(.system(size: 10, weight: .medium, design: .monospaced))
+                    .padding(.horizontal, 5)
+                    .padding(.vertical, 1)
+                    .background(
+                        RoundedRectangle(cornerRadius: 3)
+                            .fill(WhispererColors.elevatedBackground(colorScheme))
+                    )
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 3)
+                            .stroke(WhispererColors.border(colorScheme), lineWidth: 0.5)
+                    )
+            }
+            .foregroundColor(WhispererColors.secondaryText(colorScheme))
 
             Text("to toggle")
-                .font(.system(size: 11))
-                .foregroundColor(WhispererColors.secondaryText(colorScheme).opacity(0.7))
+                .font(.system(size: 10))
+                .foregroundColor(WhispererColors.secondaryText(colorScheme).opacity(0.5))
         }
-        .padding(.vertical, 14)
+        .padding(.vertical, 12)
         .padding(.horizontal, 16)
         .frame(maxWidth: .infinity)
-        .background(WhispererColors.elevatedBackground(colorScheme).opacity(0.5))
+        .background(WhispererColors.elevatedBackground(colorScheme).opacity(0.4))
+        .overlay(
+            Rectangle()
+                .fill(WhispererColors.border(colorScheme))
+                .frame(height: 1),
+            alignment: .top
+        )
     }
 }
 
@@ -301,62 +397,57 @@ struct TranscriptionsView: View {
             }
         }
         .background(WhispererColors.background(colorScheme))
+        .onAppear {
+            // Auto-select first transcription so detail panel is open by default
+            if selectedTranscription == nil, let first = historyManager.transcriptions.first {
+                selectedTranscription = first
+            }
+        }
+        .onChange(of: historyManager.transcriptions.count) { _ in
+            // Select first item when data loads if nothing is selected
+            if selectedTranscription == nil, let first = historyManager.transcriptions.first {
+                selectedTranscription = first
+            }
+        }
     }
 
     // MARK: - Header
 
     private var headerView: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            // Welcome
-            HStack(spacing: 14) {
-                ZStack {
-                    Circle()
-                        .fill(WhispererColors.accent)
-                        .frame(width: 44, height: 44)
+        HStack(spacing: 14) {
+            // Avatar — matching settings icon style
+            ZStack {
+                RoundedRectangle(cornerRadius: 12)
+                    .fill(WhispererColors.accent.opacity(0.12))
+                    .frame(width: 44, height: 44)
 
-                    Text(initials)
-                        .font(.system(size: 15, weight: .bold, design: .rounded))
-                        .foregroundColor(.white)
-                }
-
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("Welcome back")
-                        .font(.system(size: 12))
-                        .foregroundColor(WhispererColors.secondaryText(colorScheme))
-
-                    Text(firstName)
-                        .font(.system(size: 20, weight: .bold, design: .rounded))
-                        .foregroundColor(WhispererColors.primaryText(colorScheme))
-                }
-
-                Spacer()
+                Text(initials)
+                    .font(.system(size: 15, weight: .bold, design: .rounded))
+                    .foregroundColor(WhispererColors.accent)
             }
 
-            // Stats
-            if let stats = historyManager.statistics {
-                HStack(spacing: 20) {
-                    CompactStatItem(value: "\(stats.totalRecordings)", label: "Recordings", icon: "waveform", colorScheme: colorScheme)
-                    CompactStatItem(value: formatNumber(stats.totalWords), label: "Words", icon: "text.alignleft", colorScheme: colorScheme)
-                    CompactStatItem(value: "\(stats.averageWPM)", label: "Avg WPM", icon: "speedometer", colorScheme: colorScheme)
-                    CompactStatItem(value: "\(stats.totalDays)", label: "Days", icon: "calendar", colorScheme: colorScheme)
-                }
+            VStack(alignment: .leading, spacing: 2) {
+                Text(firstName)
+                    .font(.system(size: 20, weight: .bold, design: .rounded))
+                    .foregroundColor(WhispererColors.primaryText(colorScheme))
+
+                Text("Welcome back")
+                    .font(.system(size: 12))
+                    .foregroundColor(WhispererColors.secondaryText(colorScheme))
             }
+
+            Spacer()
         }
-        .padding(20)
-        .background(WhispererColors.cardBackground(colorScheme))
-        .overlay(
-            Rectangle()
-                .fill(WhispererColors.border(colorScheme))
-                .frame(height: 1),
-            alignment: .bottom
-        )
+        .padding(.horizontal, 20)
+        .padding(.vertical, 16)
+        .background(WhispererColors.background(colorScheme))
     }
 
     // MARK: - Toolbar
 
     private var toolbarView: some View {
-        HStack(spacing: 14) {
-            // Search
+        VStack(spacing: 12) {
+            // Search row
             HStack(spacing: 8) {
                 Image(systemName: "magnifyingglass")
                     .font(.system(size: 13, weight: .medium))
@@ -377,6 +468,25 @@ struct TranscriptionsView: View {
                             .foregroundColor(WhispererColors.secondaryText(colorScheme))
                     }
                     .buttonStyle(.plain)
+                } else {
+                    // ⌘K shortcut badge
+                    HStack(spacing: 2) {
+                        Text("⌘")
+                            .font(.system(size: 10, weight: .medium))
+                        Text("K")
+                            .font(.system(size: 10, weight: .semibold))
+                    }
+                    .foregroundColor(WhispererColors.secondaryText(colorScheme).opacity(0.6))
+                    .padding(.horizontal, 5)
+                    .padding(.vertical, 2)
+                    .background(
+                        RoundedRectangle(cornerRadius: 4)
+                            .fill(WhispererColors.elevatedBackground(colorScheme))
+                    )
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 4)
+                            .stroke(WhispererColors.border(colorScheme), lineWidth: 0.5)
+                    )
                 }
             }
             .padding(.horizontal, 12)
@@ -390,28 +500,23 @@ struct TranscriptionsView: View {
                     .stroke(WhispererColors.border(colorScheme), lineWidth: 1)
             )
 
-            Spacer()
-
-            // Filters
-            HStack(spacing: 4) {
-                FilterChip(title: "All", isSelected: selectedFilter == .all, colorScheme: colorScheme) {
+            // Filters row (separate line)
+            HStack(spacing: 6) {
+                FilterTab(title: "All", isSelected: selectedFilter == .all, colorScheme: colorScheme) {
                     withAnimation(.spring(response: 0.3)) { selectedFilter = .all }
                     performSearch()
                 }
-                FilterChip(title: "Pinned", icon: "pin.fill", isSelected: selectedFilter == .pinned, colorScheme: colorScheme) {
+                FilterTab(title: "Pinned", isSelected: selectedFilter == .pinned, colorScheme: colorScheme) {
                     withAnimation(.spring(response: 0.3)) { selectedFilter = .pinned }
                     performSearch()
                 }
-                FilterChip(title: "Flagged", icon: "flag.fill", isSelected: selectedFilter == .flagged, colorScheme: colorScheme) {
+                FilterTab(title: "Flagged", isSelected: selectedFilter == .flagged, colorScheme: colorScheme) {
                     withAnimation(.spring(response: 0.3)) { selectedFilter = .flagged }
                     performSearch()
                 }
+
+                Spacer()
             }
-            .padding(4)
-            .background(
-                RoundedRectangle(cornerRadius: 12)
-                    .fill(WhispererColors.elevatedBackground(colorScheme))
-            )
         }
         .padding(.horizontal, 20)
         .padding(.vertical, 14)
@@ -428,7 +533,7 @@ struct TranscriptionsView: View {
                     LazyVStack(alignment: .leading, spacing: 0, pinnedViews: [.sectionHeaders]) {
                         ForEach(groupedTranscriptions.keys.sorted(by: >), id: \.self) { date in
                             Section(header: sectionHeader(for: date)) {
-                                VStack(spacing: 6) {
+                                VStack(spacing: 8) {
                                     ForEach(groupedTranscriptions[date] ?? []) { transcription in
                                         TranscriptionRow(
                                             transcription: transcription,
@@ -442,7 +547,7 @@ struct TranscriptionsView: View {
                                         )
                                     }
                                 }
-                                .padding(.bottom, 14)
+                                .padding(.bottom, 8)
                             }
                         }
                     }
@@ -531,13 +636,6 @@ struct TranscriptionsView: View {
             formatter.dateFormat = "EEEE, MMMM d"
             return formatter.string(from: date)
         }
-    }
-
-    private func formatNumber(_ number: Int) -> String {
-        if number >= 1000 {
-            return String(format: "%.1fK", Double(number) / 1000)
-        }
-        return "\(number)"
     }
 
     private func performSearch() {
@@ -1007,9 +1105,15 @@ struct SettingsSectionHeader: View {
 
     var body: some View {
         HStack(spacing: 10) {
-            Image(systemName: icon)
-                .font(.system(size: 14, weight: .semibold))
-                .foregroundColor(WhispererColors.accent)
+            ZStack {
+                RoundedRectangle(cornerRadius: 7)
+                    .fill(WhispererColors.accent.opacity(colorScheme == .dark ? 0.15 : 0.1))
+                    .frame(width: 28, height: 28)
+
+                Image(systemName: icon)
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundColor(WhispererColors.accent)
+            }
 
             Text(title)
                 .font(.system(size: 15, weight: .bold, design: .rounded))
@@ -1114,66 +1218,42 @@ struct RetentionOptionButton: View {
     }
 }
 
-// MARK: - Compact Stat Item
+// MARK: - Filter Tab
 
-struct CompactStatItem: View {
-    let value: String
-    let label: String
-    let icon: String
-    let colorScheme: ColorScheme
-
-    var body: some View {
-        HStack(spacing: 8) {
-            Image(systemName: icon)
-                .font(.system(size: 12))
-                .foregroundColor(WhispererColors.accent)
-                .frame(width: 24, height: 24)
-                .background(
-                    Circle()
-                        .fill(WhispererColors.accent.opacity(0.12))
-                )
-
-            VStack(alignment: .leading, spacing: 0) {
-                Text(value)
-                    .font(.system(size: 14, weight: .bold, design: .rounded))
-                    .foregroundColor(WhispererColors.primaryText(colorScheme))
-
-                Text(label)
-                    .font(.system(size: 10))
-                    .foregroundColor(WhispererColors.secondaryText(colorScheme))
-            }
-        }
-    }
-}
-
-// MARK: - Filter Chip
-
-struct FilterChip: View {
+struct FilterTab: View {
     let title: String
-    var icon: String? = nil
     let isSelected: Bool
     let colorScheme: ColorScheme
     let action: () -> Void
 
+    @State private var isHovered = false
+
     var body: some View {
         Button(action: action) {
-            HStack(spacing: 4) {
-                if let icon = icon {
-                    Image(systemName: icon)
-                        .font(.system(size: 9, weight: .semibold))
-                }
-                Text(title)
-                    .font(.system(size: 11, weight: .medium))
-            }
-            .foregroundColor(isSelected ? .white : WhispererColors.primaryText(colorScheme))
-            .padding(.horizontal, 12)
-            .padding(.vertical, 7)
-            .background(
-                RoundedRectangle(cornerRadius: 8)
-                    .fill(isSelected ? WhispererColors.accent : Color.clear)
-            )
+            Text(title)
+                .font(.system(size: 12, weight: isSelected ? .semibold : .medium))
+                .foregroundColor(
+                    isSelected
+                        ? .white
+                        : (isHovered ? WhispererColors.primaryText(colorScheme) : WhispererColors.secondaryText(colorScheme))
+                )
+                .padding(.horizontal, 14)
+                .padding(.vertical, 7)
+                .background(
+                    Capsule()
+                        .fill(isSelected ? WhispererColors.accent : (isHovered ? WhispererColors.elevatedBackground(colorScheme) : Color.clear))
+                )
+                .overlay(
+                    Capsule()
+                        .stroke(isSelected ? Color.clear : WhispererColors.border(colorScheme), lineWidth: 1)
+                )
         }
         .buttonStyle(.plain)
+        .onHover { hovering in
+            withAnimation(.easeInOut(duration: 0.12)) {
+                isHovered = hovering
+            }
+        }
     }
 }
 

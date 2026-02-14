@@ -450,7 +450,7 @@ struct MenuBarView: View {
     private var footerView: some View {
         HStack(spacing: 12) {
             // Workspace button - premium style matching Quit
-            Button(action: { HistoryWindowManager.shared.showWindow() }) {
+            Button(action: { HistoryWindowManager.shared.showWindowAndDismissMenu() }) {
                 HStack(spacing: 6) {
                     Image(systemName: "square.grid.2x2.fill")
                         .font(.system(size: 11, weight: .semibold))
@@ -869,7 +869,7 @@ struct SettingsTabView: View {
                 // Workspace
                 settingsCard(title: "Workspace", icon: "square.grid.2x2.fill", color: .indigo) {
                     Button(action: {
-                        HistoryWindowManager.shared.showWindow()
+                        HistoryWindowManager.shared.showWindowAndDismissMenu()
                     }) {
                         HStack {
                             VStack(alignment: .leading, spacing: 3) {

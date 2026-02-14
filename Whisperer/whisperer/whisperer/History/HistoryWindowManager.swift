@@ -40,6 +40,13 @@ class HistoryWindowManager {
         NSApp.activate(ignoringOtherApps: true)
     }
 
+    /// Shows workspace and dismisses the menu bar popover window
+    func showWindowAndDismissMenu() {
+        // Dismiss the MenuBarExtra window first
+        dismissMenuBarWindow()
+        showWindow()
+    }
+
     func hideWindow() {
         historyWindow?.orderOut(nil)
     }
@@ -91,6 +98,24 @@ class HistoryWindowManager {
         if let observer = closeObserver {
             NotificationCenter.default.removeObserver(observer)
             closeObserver = nil
+        }
+    }
+
+    private func dismissMenuBarWindow() {
+        // The MenuBarExtra .window style creates an NSPanel.
+        // Find it by excluding our own windows (HistoryWindow and OverlayPanel).
+        for window in NSApp.windows where window.isVisible {
+            // Skip our own history window
+            if window === historyWindow { continue }
+            // Skip overlay panels (OverlayPanel is a non-activating NSPanel for recording UI)
+            if window is OverlayPanel { continue }
+
+            // The MenuBarExtra window is an NSPanel with a specific size (360x580)
+            // or at a high window level. Match by type + level.
+            if window is NSPanel {
+                window.orderOut(nil)
+                return
+            }
         }
     }
 }

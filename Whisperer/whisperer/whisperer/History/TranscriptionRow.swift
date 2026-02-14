@@ -2,7 +2,7 @@
 //  TranscriptionRow.swift
 //  Whisperer
 //
-//  Premium row component for transcription list
+//  Clean row component for transcription list
 //
 
 import SwiftUI
@@ -35,53 +35,115 @@ struct TranscriptionRow: View {
     var body: some View {
         Button(action: onSelect) {
             HStack(spacing: 0) {
-                // Left accent bar
-                RoundedRectangle(cornerRadius: 2)
+                // Left accent bar — full height, clipped to card radius
+                Rectangle()
                     .fill(accentBarColor)
-                    .frame(width: 3)
-                    .padding(.vertical, 8)
+                    .frame(width: 3.5)
                     .opacity(showAccentBar ? 1 : 0)
 
                 // Main content
-                VStack(alignment: .leading, spacing: 10) {
-                    // Text preview — the hero element
+                VStack(alignment: .leading, spacing: 8) {
+                    // Top line: Time · Duration ... status icons + action buttons
+                    HStack(spacing: 0) {
+                        // Time and duration
+                        HStack(spacing: 8) {
+                            Text(timeString)
+                                .font(.system(size: 12, weight: .bold, design: .rounded))
+                                .foregroundColor(isSelected ? WhispererColors.accent : WhispererColors.primaryText(colorScheme))
+
+                            Text(durationString)
+                                .font(.system(size: 11, weight: .medium))
+                                .foregroundColor(WhispererColors.secondaryText(colorScheme))
+                                .padding(.horizontal, 8)
+                                .padding(.vertical, 3)
+                                .background(
+                                    Capsule()
+                                        .fill(WhispererColors.elevatedBackground(colorScheme))
+                                )
+                        }
+
+                        Spacer(minLength: 8)
+
+                        // Status icons (always visible)
+                        HStack(spacing: 6) {
+                            if transcription.editedTranscription != nil {
+                                Image(systemName: "pencil")
+                                    .font(.system(size: 10, weight: .semibold))
+                                    .foregroundColor(.orange)
+                            }
+
+                            if transcription.isPinned {
+                                Image(systemName: "pin.fill")
+                                    .font(.system(size: 10, weight: .semibold))
+                                    .foregroundColor(.orange)
+                            }
+
+                            if transcription.isFlagged {
+                                Image(systemName: "flag.fill")
+                                    .font(.system(size: 10, weight: .semibold))
+                                    .foregroundColor(.red)
+                            }
+                        }
+
+                        // Action buttons (on hover/selected)
+                        actionButtons
+                    }
+
+                    // Text preview
                     Text(transcription.displayText)
-                        .font(.system(size: 14, weight: .regular))
+                        .font(.system(size: 13.5, weight: .regular))
                         .foregroundColor(WhispererColors.primaryText(colorScheme))
                         .lineLimit(2)
                         .multilineTextAlignment(.leading)
-                        .lineSpacing(4)
+                        .lineSpacing(3)
                         .fixedSize(horizontal: false, vertical: true)
 
-                    // Metadata + actions row
+                    // Bottom metadata: wpm · words · Language
                     HStack(spacing: 0) {
-                        metadataRow
-
-                        Spacer(minLength: 12)
-
-                        actionButtons
+                        Text("\(transcription.wordsPerMinute) wpm")
+                        Text(" · ")
+                            .foregroundColor(WhispererColors.secondaryText(colorScheme).opacity(0.4))
+                        Text("\(transcription.wordCount) words")
+                        Text(" · ")
+                            .foregroundColor(WhispererColors.secondaryText(colorScheme).opacity(0.4))
+                        Text(languageDisplay)
                     }
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundColor(WhispererColors.secondaryText(colorScheme))
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.leading, 12)
+                .padding(.leading, 10)
                 .padding(.trailing, 14)
                 .padding(.vertical, 14)
             }
-            .background(rowBackground)
-            .overlay(rowBorder)
-            .shadow(
-                color: isSelected
-                    ? WhispererColors.accent.opacity(0.12)
-                    : (isHovered ? Color.black.opacity(colorScheme == .dark ? 0.2 : 0.06) : .clear),
-                radius: isSelected ? 8 : 4,
-                x: 0,
-                y: isSelected ? 2 : 1
+            .background(
+                RoundedRectangle(cornerRadius: 12)
+                    .fill(
+                        isSelected
+                            ? AnyShapeStyle(LinearGradient(
+                                colors: [
+                                    WhispererColors.accent.opacity(colorScheme == .dark ? 0.08 : 0.05),
+                                    WhispererColors.accent.opacity(colorScheme == .dark ? 0.02 : 0.01)
+                                ],
+                                startPoint: .top,
+                                endPoint: .bottom
+                            ))
+                            : AnyShapeStyle(WhispererColors.cardBackground(colorScheme))
+                    )
             )
-            .contentShape(Rectangle())
+            .overlay(
+                RoundedRectangle(cornerRadius: 12)
+                    .stroke(
+                        isSelected ? WhispererColors.accent.opacity(0.3) : WhispererColors.border(colorScheme),
+                        lineWidth: isSelected ? 1.5 : 1
+                    )
+            )
+            .clipShape(RoundedRectangle(cornerRadius: 12))
+            .contentShape(RoundedRectangle(cornerRadius: 12))
         }
         .buttonStyle(.plain)
         .onHover { hovering in
-            withAnimation(.spring(response: 0.25, dampingFraction: 0.8)) {
+            withAnimation(.easeInOut(duration: 0.15)) {
                 isHovered = hovering
             }
         }
@@ -91,83 +153,6 @@ struct TranscriptionRow: View {
                 .opacity(showCopiedFeedback ? 1 : 0)
                 .scaleEffect(showCopiedFeedback ? 1 : 0.8)
         }
-    }
-
-    // MARK: - Row background
-
-    private var rowBackground: some View {
-        RoundedRectangle(cornerRadius: 12)
-            .fill(
-                isSelected
-                    ? WhispererColors.cardBackground(colorScheme)
-                    : (isHovered ? WhispererColors.cardBackground(colorScheme).opacity(0.6) : Color.clear)
-            )
-    }
-
-    private var rowBorder: some View {
-        RoundedRectangle(cornerRadius: 12)
-            .stroke(
-                isSelected
-                    ? WhispererColors.accent.opacity(0.5)
-                    : (isHovered ? WhispererColors.border(colorScheme) : Color.clear),
-                lineWidth: isSelected ? 1.5 : 1
-            )
-    }
-
-    // MARK: - Inline Metadata
-
-    private var metadataRow: some View {
-        HStack(spacing: 6) {
-            // Time
-            Text(timeString)
-                .foregroundColor(isSelected ? WhispererColors.accent : WhispererColors.secondaryText(colorScheme))
-                .fontWeight(isSelected ? .semibold : .medium)
-
-            metaDot
-
-            // Duration
-            Text(durationString)
-
-            metaDot
-
-            // WPM
-            HStack(spacing: 3) {
-                Image(systemName: "speedometer")
-                    .font(.system(size: 9, weight: .semibold))
-                    .foregroundColor(WhispererColors.accent.opacity(0.7))
-                Text("\(transcription.wordsPerMinute) WPM")
-            }
-
-            metaDot
-
-            // Word count
-            HStack(spacing: 3) {
-                Image(systemName: "text.word.spacing")
-                    .font(.system(size: 9, weight: .semibold))
-                    .foregroundColor(WhispererColors.accent.opacity(0.7))
-                Text("\(transcription.wordCount)")
-            }
-
-            // Edited indicator
-            if transcription.editedTranscription != nil {
-                metaDot
-                HStack(spacing: 3) {
-                    Image(systemName: "pencil")
-                        .font(.system(size: 9, weight: .semibold))
-                        .foregroundColor(.purple.opacity(0.7))
-                    Text("Edited")
-                }
-            }
-        }
-        .font(.system(size: 11, weight: .medium))
-        .foregroundColor(WhispererColors.secondaryText(colorScheme))
-        .lineLimit(1)
-    }
-
-    private var metaDot: some View {
-        Text("·")
-            .font(.system(size: 12, weight: .bold))
-            .foregroundColor(WhispererColors.secondaryText(colorScheme).opacity(0.4))
     }
 
     // MARK: - Action Buttons
@@ -223,6 +208,7 @@ struct TranscriptionRow: View {
             .frame(width: 28)
             .help("More")
         }
+        .opacity(isHovered || isSelected ? 1 : 0)
     }
 
     // MARK: - Copied Feedback
@@ -260,6 +246,13 @@ struct TranscriptionRow: View {
         let minutes = Int(transcription.duration) / 60
         let seconds = Int(transcription.duration) % 60
         return String(format: "%d:%02d", minutes, seconds)
+    }
+
+    private var languageDisplay: String {
+        let code = transcription.language
+        if code == "en" { return "English" }
+        if code == "auto" { return "Auto" }
+        return Locale.current.localizedString(forLanguageCode: code) ?? code
     }
 
     // MARK: - Actions
