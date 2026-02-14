@@ -1,6 +1,6 @@
 # CLAUDE.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+This file provides guidance to Claude Code when working with Whisperer.
 
 ## Project Overview
 
@@ -21,70 +21,33 @@ xcodebuild clean build -project Whisperer/whisperer/whisperer.xcodeproj -scheme 
 
 There are no unit tests in this project. No linter is configured.
 
-## Architecture
-
-### Entry Point & State Machine
-
-- **WhispererApp.swift** — `@main` SwiftUI app using `MenuBarExtra` (no dock icon, `.accessory` activation policy). Uses `@NSApplicationDelegateAdaptor` for `AppDelegate` which initializes all components.
-- **AppState.swift** — `@MainActor` singleton (`AppState.shared`) managing the recording state machine. States flow: `idle → recording → stopping → transcribing → inserting → idle`. Also holds `@Published` references to all subsystem components (AudioRecorder, GlobalKeyListener, WhisperBridge, etc.).
-
-### Audio Pipeline
-
-```
-Microphone → AudioRecorder → StreamingTranscriber → WhisperBridge → CorrectionEngine → TextInjector
-                 ↓                    ↓
-            Waveform UI          Live Preview
-```
-
-- **AudioRecorder** — `AVAudioEngine` capture, converts to 16kHz mono Float32 (Whisper's required format). Streams samples via callback.
-- **StreamingTranscriber** — Buffers audio, processes 2-second chunks with 0.5s overlap. Uses context carrying (previous transcription as prompt) and deduplication. Does a final-pass re-transcription of the complete recording on stop.
-- **WhisperBridge** — Native Swift wrapper around the whisper.cpp C library. Manages `whisper_context` lifecycle, Metal GPU acceleration. Thread-safe with locks.
-- **SileroVAD** — Optional CoreML-based voice activity detection (~2MB model, CPU-only to avoid GPU contention with Whisper).
-
-### Key Detection
-
-- **GlobalKeyListener** — 3-layer Fn key detection: CGEventTap (primary) → IOKit HID (backup) → NSEvent monitor. Filters Fn+key combos to prevent accidental recordings.
-- **ShortcutConfig** — Persists user's chosen shortcut to UserDefaults.
-
-### Text Injection
-
-- **TextInjector** — Primary: Accessibility API (`AXUIElementSetAttributeValue`). Fallback: clipboard + simulated Cmd+V. Restores previous clipboard content after paste.
-
-### Dictionary & Spell Correction
-
-- **CorrectionEngine** — Applies corrections using exact HashMap lookup, multi-word phrase matching, SymSpell fuzzy matching, and PhoneticMatcher.
-- **DictionaryManager** — Manages dictionary entries (CoreData-backed via DictionaryEntryEntity), dictionary packs, and user custom entries.
-- **SpellValidator** — Prevents fuzzy matching from incorrectly "correcting" valid English words.
-
-### UI Layer
-
-- **OverlayPanel** — Non-activating `NSPanel` that appears during recording at screen bottom. Doesn't steal focus from the current app.
-- **OverlayView / LiveTranscriptionCard** — SwiftUI views showing waveform, live transcription text, and recording status.
-- **HistoryWindowManager / HistoryWindow** — Separate window for transcription history (CoreData-persisted via `HistoryDatabase`).
-
-### Core Infrastructure
-
-- **Logger** — Custom file-based logging to `~/Library/Logs/Whisperer/` with rotation (10MB, 7 files). Subsystems: `.app`, `.audio`, `.transcription`, etc.
-- **SafeLock** — Timeout-based NSLock wrapper to prevent deadlocks.
-- **CrashHandler** — Signal handler that writes crash info to `~/Library/Logs/Whisperer/crash.log`.
-- **QueueHealthMonitor** — Detects hung operations on dispatch queues.
-
 ## Key Paths
 
-- **Source code**: `Whisperer/whisperer/whisperer/` (Swift files organized in Audio/, Core/, Dictionary/, History/, KeyListener/, Licensing/, Permissions/, Store/, TextInjection/, Transcription/, UI/)
+- **Source code**: `Whisperer/whisperer/whisperer/` (Audio/, Core/, Dictionary/, History/, KeyListener/, Licensing/, Permissions/, Store/, TextInjection/, Transcription/, UI/)
 - **Xcode project**: `Whisperer/whisperer/whisperer.xcodeproj`
 - **whisper.cpp**: `whisper.cpp/` (vendored C++ library, not a git submodule)
-- **Model storage** (runtime): `~/Library/Application Support/Whisperer/`
-- **Log storage** (runtime): `~/Library/Logs/Whisperer/`
 - **Bundle ID**: `com.ivy.whisperer`
 
-## Concurrency Model
+## When Working On...
 
-- `AppState` is `@MainActor`-isolated. All UI state updates go through it.
-- `StreamingTranscriber` and `WhisperBridge` use `SafeLock` (timeout-based NSLock) for thread safety, not Swift actors.
-- Audio processing and Whisper inference happen on background `DispatchQueue`s.
-- 5-minute max recording limit prevents unbounded memory growth (~19MB max audio buffer).
+- **UI/Design** → Load skills: `design-colors`, `design-typography`, `design-layout`, `design-components`
+- **Audio/Transcription** → Load skills: `whisper-integration`, `architecture-decisions`
+- **New code/Refactoring** → Load skill: `coding-conventions`
+- **State/Lifecycle/Threading** → Load skill: `architecture-decisions`
+- **App Store prep** → Load skill: `app-store-submission`
+
+## Critical Rules (Always Apply)
+
+1. `AppState` is `@MainActor` — all UI state updates go through `AppState.shared`
+2. `SafeLock` (timeout-based NSLock) for whisper.cpp thread safety, not Swift actors
+3. `WhispererColors` only — no system semantic colors in workspace views
+4. `Logger.shared` — no `print()` statements
+5. 5-minute max recording limit prevents unbounded memory growth (~19MB)
+6. `[weak self]` in all `Task.detached` closures and stored callbacks
+7. Audio pipeline: Microphone → AudioRecorder → StreamingTranscriber → WhisperBridge → CorrectionEngine → TextInjector
 
 ## Custom Slash Commands
 
-- `/final-review` — Launches 7 parallel review agents (Memory, Concurrency, Architecture, Consistency, Platform, State/Reliability, Security) then reconciles and applies fixes.
+- `/final-review` — Launches 7 parallel review agents (Memory, Concurrency, Architecture, Consistency, Platform, State/Reliability, Security) then reconciles and applies fixes
+- `/design-check` — Quick design system compliance check on changed UI files
+- `/conventions-check` — Coding conventions scan (print statements, force unwraps, weak self)
