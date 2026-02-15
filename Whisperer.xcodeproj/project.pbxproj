@@ -622,7 +622,7 @@
 		1038D4762F26382700490030 = {
 			isa = PBXGroup;
 			children = (
-				1038D4812F26382700490030 /* whisperer */,
+				1038D4812F26382700490030 /* Whisperer */,
 				1038D4D92F26429700490030 /* Frameworks */,
 				1038D4802F26382700490030 /* Products */,
 			);
@@ -1966,7 +1966,7 @@
 			dependencies = (
 			);
 			fileSystemSynchronizedGroups = (
-				1038D4812F26382700490030 /* whisperer */,
+				1038D4812F26382700490030 /* Whisperer */,
 			);
 			name = whisperer;
 			packageProductDependencies = (
@@ -1990,7 +1990,7 @@
 					};
 				};
 			};
-			buildConfigurationList = 1038D47A2F26382700490030 /* Build configuration list for PBXProject "whisperer" */;
+			buildConfigurationList = 1038D47A2F26382700490030 /* Build configuration list for PBXProject "Whisperer" */;
 			developmentRegion = en;
 			hasScannedForEncodings = 0;
 			knownRegions = (
@@ -2010,10 +2010,6 @@
 					ProjectRef = 10CD05772F366002001C6FB0 /* whisperer.xcodeproj */;
 				},
 				{
-					ProductGroup = 10028F702F34F29200941FBC /* Products */;
-					ProjectRef = 10028F6C2F34F29200941FBC /* whisperer.xcodeproj */;
-				},
-				{
 					ProductGroup = 1038D48E2F263ADB00490030 /* Products */;
 					ProjectRef = 1038D48D2F263ADB00490030 /* whisperer.xcodeproj */;
 				},
@@ -2026,16 +2022,20 @@
 					ProjectRef = 1068837B2F365B32008BC1AD /* whisperer.xcodeproj */;
 				},
 				{
-					ProductGroup = 100922302F313D2200AA3C22 /* Products */;
-					ProjectRef = 1009222C2F313D2200AA3C22 /* whisperer.xcodeproj */;
-				},
-				{
 					ProductGroup = 10DED0272F27E4B40054AFA2 /* Products */;
 					ProjectRef = 10DED0232F27E4B40054AFA2 /* whisperer.xcodeproj */;
 				},
 				{
 					ProductGroup = 10DB4E152F3779900053C1FB /* Products */;
 					ProjectRef = 10DB4E112F3779900053C1FB /* whisperer.xcodeproj */;
+				},
+				{
+					ProductGroup = 10028F702F34F29200941FBC /* Products */;
+					ProjectRef = 10028F6C2F34F29200941FBC /* whisperer.xcodeproj */;
+				},
+				{
+					ProductGroup = 100922302F313D2200AA3C22 /* Products */;
+					ProjectRef = 1009222C2F313D2200AA3C22 /* whisperer.xcodeproj */;
 				},
 			);
 			projectRoot = "";
@@ -2332,7 +2332,7 @@
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
-		1038D47A2F26382700490030 /* Build configuration list for PBXProject "whisperer" */ = {
+		1038D47A2F26382700490030 /* Build configuration list for PBXProject "Whisperer" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				1038D4882F26382900490030 /* Debug */,
