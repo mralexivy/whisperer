@@ -1,9 +1,4 @@
----
-name: architecture-decisions
-description: Use when making architectural decisions, understanding component interactions, or working across multiple subsystems in Whisperer. Covers state machine design, threading architecture, component ownership, dependency rules, and known pitfalls.
----
-
-# Whisperer Architecture & Design Decisions
+# Whisperer Architecture
 
 ## Entry Point & State Machine
 
@@ -133,3 +128,7 @@ Infrastructure (Logger, SafeLock, CrashHandler)
 7. **Model download vs model loading** — `isModelDownloaded()` checks file existence. `isModelLoaded` checks if WhisperBridge has loaded the model into memory. Both must be true before recording.
 
 8. **Clipboard restoration** — TextInjector's clipboard fallback saves and restores previous clipboard content. The restoration delay must be long enough for paste to complete but short enough to feel instant.
+
+## Deep Reference
+
+For whisper.cpp C interop details (context lifecycle, threading, C string lifetime, streaming pipeline, shutdown sequence), see [docs/references/whisper-cpp-integration.md](docs/references/whisper-cpp-integration.md).

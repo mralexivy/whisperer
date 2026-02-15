@@ -19,7 +19,6 @@
 		1038D75C2F266EE000490030 /* Metal.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 1038D75B2F266EE000490030 /* Metal.framework */; };
 		1038D75E2F266EE900490030 /* Accelerate.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 1038D75D2F266EE900490030 /* Accelerate.framework */; };
 		1038D7602F266EF900490030 /* Foundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 1038D75F2F266EF900490030 /* Foundation.framework */; };
-
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -556,17 +555,29 @@
 		1038D75B2F266EE000490030 /* Metal.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Metal.framework; path = Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS26.2.sdk/System/Library/Frameworks/Metal.framework; sourceTree = DEVELOPER_DIR; };
 		1038D75D2F266EE900490030 /* Accelerate.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Accelerate.framework; path = Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS26.2.sdk/System/Library/Frameworks/Accelerate.framework; sourceTree = DEVELOPER_DIR; };
 		1038D75F2F266EF900490030 /* Foundation.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Foundation.framework; path = Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS26.2.sdk/System/Library/Frameworks/Foundation.framework; sourceTree = DEVELOPER_DIR; };
-
 		1068837B2F365B32008BC1AD /* whisperer.xcodeproj */ = {isa = PBXFileReference; lastKnownFileType = "wrapper.pb-project"; path = whisperer.xcodeproj; sourceTree = "<group>"; };
 		10CD05772F366002001C6FB0 /* whisperer.xcodeproj */ = {isa = PBXFileReference; lastKnownFileType = "wrapper.pb-project"; path = whisperer.xcodeproj; sourceTree = "<group>"; };
 		10DB4E112F3779900053C1FB /* whisperer.xcodeproj */ = {isa = PBXFileReference; lastKnownFileType = "wrapper.pb-project"; path = whisperer.xcodeproj; sourceTree = "<group>"; };
 		10DED0232F27E4B40054AFA2 /* whisperer.xcodeproj */ = {isa = PBXFileReference; lastKnownFileType = "wrapper.pb-project"; path = whisperer.xcodeproj; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
+/* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
+		AABB00112F00000000000001 /* Exceptions for "Whisperer" folder in "whisperer" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+			);
+			target = 1038D47E2F26382700490030 /* whisperer */;
+		};
+/* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
+
 /* Begin PBXFileSystemSynchronizedRootGroup section */
-		1038D4812F26382700490030 /* whisperer */ = {
+		1038D4812F26382700490030 /* Whisperer */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
-			path = whisperer;
+			exceptions = (
+				AABB00112F00000000000001 /* Exceptions for "Whisperer" folder in "whisperer" target */,
+			);
+			path = Whisperer;
 			sourceTree = "<group>";
 		};
 /* End PBXFileSystemSynchronizedRootGroup section */
@@ -585,7 +596,6 @@
 				1038D7572F266E7000490030 /* libggml-cpu.a in Frameworks */,
 				1038D7582F266E7000490030 /* libggml.a in Frameworks */,
 				1038D7552F266E4000490030 /* libwhisper.a in Frameworks */,
-
 				1038D4E22F2642AA00490030 /* ApplicationServices.framework in Frameworks */,
 				1038D4E02F2642A100490030 /* IOKit.framework in Frameworks */,
 				1038D4DE2F26429800490030 /* AVFoundation.framework in Frameworks */,
@@ -643,7 +653,6 @@
 		1038D4D92F26429700490030 /* Frameworks */ = {
 			isa = PBXGroup;
 			children = (
-
 				1038D75F2F266EF900490030 /* Foundation.framework */,
 				1038D75D2F266EE900490030 /* Accelerate.framework */,
 				1038D75B2F266EE000490030 /* Metal.framework */,
@@ -1810,7 +1819,6 @@
 				1038D7252F266E1700490030 /* CMakeFiles */,
 				1038D7262F266E1700490030 /* cmake_install.cmake */,
 				1038D7272F266E1700490030 /* libwhisper.a */,
-
 				1038D7282F266E1700490030 /* Makefile */,
 			);
 			path = src;
@@ -1911,7 +1919,7 @@
 				1038D7532F266E1700490030 /* whisper-version.cmake */,
 			);
 			name = "build-static";
-			path = "../../whisper.cpp/build-static";
+			path = "whisper.cpp/build-static";
 			sourceTree = "<group>";
 		};
 		1068837F2F365B32008BC1AD /* Products */ = {
@@ -2002,6 +2010,10 @@
 					ProjectRef = 10CD05772F366002001C6FB0 /* whisperer.xcodeproj */;
 				},
 				{
+					ProductGroup = 10028F702F34F29200941FBC /* Products */;
+					ProjectRef = 10028F6C2F34F29200941FBC /* whisperer.xcodeproj */;
+				},
+				{
 					ProductGroup = 1038D48E2F263ADB00490030 /* Products */;
 					ProjectRef = 1038D48D2F263ADB00490030 /* whisperer.xcodeproj */;
 				},
@@ -2014,20 +2026,16 @@
 					ProjectRef = 1068837B2F365B32008BC1AD /* whisperer.xcodeproj */;
 				},
 				{
+					ProductGroup = 100922302F313D2200AA3C22 /* Products */;
+					ProjectRef = 1009222C2F313D2200AA3C22 /* whisperer.xcodeproj */;
+				},
+				{
 					ProductGroup = 10DED0272F27E4B40054AFA2 /* Products */;
 					ProjectRef = 10DED0232F27E4B40054AFA2 /* whisperer.xcodeproj */;
 				},
 				{
 					ProductGroup = 10DB4E152F3779900053C1FB /* Products */;
 					ProjectRef = 10DB4E112F3779900053C1FB /* whisperer.xcodeproj */;
-				},
-				{
-					ProductGroup = 10028F702F34F29200941FBC /* Products */;
-					ProjectRef = 10028F6C2F34F29200941FBC /* whisperer.xcodeproj */;
-				},
-				{
-					ProductGroup = 100922302F313D2200AA3C22 /* Products */;
-					ProjectRef = 1009222C2F313D2200AA3C22 /* whisperer.xcodeproj */;
 				},
 			);
 			projectRoot = "";
@@ -2180,7 +2188,7 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				AUTOMATION_APPLE_EVENTS = NO;
-				"CODE_SIGN_ENTITLEMENTS[sdk=*]" = "whisperer/whisperer-nosandbox.entitlements";
+				"CODE_SIGN_ENTITLEMENTS[sdk=*]" = "Whisperer/whisperer-nosandbox.entitlements";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = 8NM6EHZB4G;
@@ -2196,10 +2204,10 @@
 				ENABLE_USER_SELECTED_FILES = readonly;
 				GENERATE_INFOPLIST_FILE = YES;
 				HEADER_SEARCH_PATHS = (
-					/Users/alexanderi/Downloads/whisperer/whisper.cpp/include,
-					/Users/alexanderi/Downloads/whisperer/whisper.cpp/ggml/include,
+					"$(SRCROOT)/whisper.cpp/include",
+					"$(SRCROOT)/whisper.cpp/ggml/include",
 				);
-				INFOPLIST_FILE = Info.plist;
+				INFOPLIST_FILE = Whisperer/Info.plist;
 				INFOPLIST_KEY_LSUIElement = YES;
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphoneos*]" = YES;
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphonesimulator*]" = YES;
@@ -2215,10 +2223,10 @@
 				LD_RUNPATH_SEARCH_PATHS = "@executable_path/Frameworks";
 				"LD_RUNPATH_SEARCH_PATHS[sdk=macosx*]" = "@executable_path/../Frameworks";
 				LIBRARY_SEARCH_PATHS = (
-					"/Users/alexanderi/Downloads/whisperer/whisper.cpp/build-static/src",
-					"/Users/alexanderi/Downloads/whisperer/whisper.cpp/build-static/ggml/src",
-					"/Users/alexanderi/Downloads/whisperer/whisper.cpp/build-static/ggml/src/ggml-metal",
-					"/Users/alexanderi/Downloads/whisperer/whisper.cpp/build-static/ggml/src/ggml-blas",
+					"$(SRCROOT)/whisper.cpp/build-static/src",
+					"$(SRCROOT)/whisper.cpp/build-static/ggml/src",
+					"$(SRCROOT)/whisper.cpp/build-static/ggml/src/ggml-metal",
+					"$(SRCROOT)/whisper.cpp/build-static/ggml/src/ggml-blas",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 26.2;
 				MARKETING_VERSION = 1.0;
@@ -2238,7 +2246,7 @@
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
 				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
 				SWIFT_EMIT_LOC_STRINGS = YES;
-				SWIFT_OBJC_BRIDGING_HEADER = "whisperer/Whisperer-Bridging-Header.h";
+				SWIFT_OBJC_BRIDGING_HEADER = "Whisperer/Whisperer-Bridging-Header.h";
 				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = "1,2,7";
@@ -2252,7 +2260,7 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				AUTOMATION_APPLE_EVENTS = NO;
-				"CODE_SIGN_ENTITLEMENTS[sdk=*]" = "whisperer/whisperer-nosandbox.entitlements";
+				"CODE_SIGN_ENTITLEMENTS[sdk=*]" = "Whisperer/whisperer-nosandbox.entitlements";
 				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "Apple Distribution";
 				CODE_SIGN_STYLE = Manual;
 				CURRENT_PROJECT_VERSION = 1;
@@ -2270,10 +2278,10 @@
 				ENABLE_USER_SELECTED_FILES = readonly;
 				GENERATE_INFOPLIST_FILE = YES;
 				HEADER_SEARCH_PATHS = (
-					/Users/alexanderi/Downloads/whisperer/whisper.cpp/include,
-					/Users/alexanderi/Downloads/whisperer/whisper.cpp/ggml/include,
+					"$(SRCROOT)/whisper.cpp/include",
+					"$(SRCROOT)/whisper.cpp/ggml/include",
 				);
-				INFOPLIST_FILE = Info.plist;
+				INFOPLIST_FILE = Whisperer/Info.plist;
 				INFOPLIST_KEY_LSUIElement = YES;
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphoneos*]" = YES;
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphonesimulator*]" = YES;
@@ -2289,10 +2297,10 @@
 				LD_RUNPATH_SEARCH_PATHS = "@executable_path/Frameworks";
 				"LD_RUNPATH_SEARCH_PATHS[sdk=macosx*]" = "@executable_path/../Frameworks";
 				LIBRARY_SEARCH_PATHS = (
-					"/Users/alexanderi/Downloads/whisperer/whisper.cpp/build-static/src",
-					"/Users/alexanderi/Downloads/whisperer/whisper.cpp/build-static/ggml/src",
-					"/Users/alexanderi/Downloads/whisperer/whisper.cpp/build-static/ggml/src/ggml-metal",
-					"/Users/alexanderi/Downloads/whisperer/whisper.cpp/build-static/ggml/src/ggml-blas",
+					"$(SRCROOT)/whisper.cpp/build-static/src",
+					"$(SRCROOT)/whisper.cpp/build-static/ggml/src",
+					"$(SRCROOT)/whisper.cpp/build-static/ggml/src/ggml-metal",
+					"$(SRCROOT)/whisper.cpp/build-static/ggml/src/ggml-blas",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 26.2;
 				MARKETING_VERSION = 1.0;
@@ -2313,7 +2321,7 @@
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
 				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
 				SWIFT_EMIT_LOC_STRINGS = YES;
-				SWIFT_OBJC_BRIDGING_HEADER = "whisperer/Whisperer-Bridging-Header.h";
+				SWIFT_OBJC_BRIDGING_HEADER = "Whisperer/Whisperer-Bridging-Header.h";
 				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = "1,2,7";

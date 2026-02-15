@@ -1,8 +1,3 @@
----
-name: app-store-submission
-description: Use when preparing for Mac App Store submission, working with StoreKit, receipt validation, entitlements, or App Store compliance. Covers the complete submission workflow, IAP configuration, and testing checklists.
----
-
 # App Store Submission Guide
 
 ## Current Status
@@ -52,10 +47,10 @@ NSAppleEventsUsageDescription = "Whisperer needs automation access to insert tra
 
 ```bash
 # Clean build
-xcodebuild clean build -project Whisperer/whisperer/whisperer.xcodeproj -scheme whisperer -configuration Release -destination "platform=macOS"
+xcodebuild clean build -project Whisperer.xcodeproj -scheme whisperer -configuration Release -destination "platform=macOS"
 ```
 
-In Xcode: Product → Archive → Distribute App → App Store Connect → Upload
+In Xcode: Product -> Archive -> Distribute App -> App Store Connect -> Upload
 
 ## Pre-Submission Checklist
 

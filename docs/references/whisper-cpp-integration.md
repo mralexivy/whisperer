@@ -1,8 +1,3 @@
----
-name: whisper-integration
-description: Use when working with WhisperBridge, whisper.cpp C interop, model loading, transcription parameters, or the streaming pipeline. Covers context lifecycle, threading constraints, Metal GPU acceleration, and C API patterns.
----
-
 # whisper.cpp Integration Guide
 
 ## Overview

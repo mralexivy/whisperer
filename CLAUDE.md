@@ -10,41 +10,33 @@ Whisperer is a native macOS menu bar app for offline voice-to-text transcription
 
 ```bash
 # Build (Release)
-xcodebuild build -project Whisperer/whisperer/whisperer.xcodeproj -scheme whisperer -configuration Release -destination "platform=macOS"
+xcodebuild build -project Whisperer.xcodeproj -scheme whisperer -configuration Release -destination "platform=macOS"
 
 # Build (Debug)
-xcodebuild build -project Whisperer/whisperer/whisperer.xcodeproj -scheme whisperer -configuration Debug -destination "platform=macOS"
+xcodebuild build -project Whisperer.xcodeproj -scheme whisperer -configuration Debug -destination "platform=macOS"
 
 # Clean build
-xcodebuild clean build -project Whisperer/whisperer/whisperer.xcodeproj -scheme whisperer -configuration Debug -destination "platform=macOS"
+xcodebuild clean build -project Whisperer.xcodeproj -scheme whisperer -configuration Debug -destination "platform=macOS"
 ```
 
 There are no unit tests in this project. No linter is configured.
 
 ## Key Paths
 
-- **Source code**: `Whisperer/whisperer/whisperer/` (Audio/, Core/, Dictionary/, History/, KeyListener/, Licensing/, Permissions/, Store/, TextInjection/, Transcription/, UI/)
-- **Xcode project**: `Whisperer/whisperer/whisperer.xcodeproj`
+- **Source code**: `Whisperer/` (Audio/, Core/, Dictionary/, History/, KeyListener/, Licensing/, Permissions/, Store/, TextInjection/, Transcription/, UI/)
+- **Xcode project**: `Whisperer.xcodeproj`
 - **whisper.cpp**: `whisper.cpp/` (vendored C++ library, not a git submodule)
 - **Bundle ID**: `com.ivy.whisperer`
 
-## When Working On...
+## Documentation Map
 
-- **UI/Design** → Load skills: `design-colors`, `design-typography`, `design-layout`, `design-components`
-- **Audio/Transcription** → Load skills: `whisper-integration`, `architecture-decisions`
-- **New code/Refactoring** → Load skill: `coding-conventions`
-- **State/Lifecycle/Threading** → Load skill: `architecture-decisions`
-- **App Store prep** → Load skill: `app-store-submission`
-
-## Critical Rules (Always Apply)
-
-1. `AppState` is `@MainActor` — all UI state updates go through `AppState.shared`
-2. `SafeLock` (timeout-based NSLock) for whisper.cpp thread safety, not Swift actors
-3. `WhispererColors` only — no system semantic colors in workspace views
-4. `Logger.shared` — no `print()` statements
-5. 5-minute max recording limit prevents unbounded memory growth (~19MB)
-6. `[weak self]` in all `Task.detached` closures and stored callbacks
-7. Audio pipeline: Microphone → AudioRecorder → StreamingTranscriber → WhisperBridge → CorrectionEngine → TextInjector
+- **AGENTS.md** — Critical rules, coding conventions, naming patterns, Swift idioms
+- **ARCHITECTURE.md** — System design, state machine, audio pipeline, component ownership
+- **DESIGN.md** — Color system, typography, layout patterns, components
+- **PRODUCT_SENSE.md** — Product vision, UX principles, target users
+- **PLANS.md** — Planning process, active plans, tech debt
+- **docs/references/** — Deep technical references (whisper.cpp C interop)
+- **docs/exec-plans/** — Execution plans, App Store submission checklist
 
 ## Custom Slash Commands
 

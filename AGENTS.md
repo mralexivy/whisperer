@@ -1,11 +1,14 @@
----
-name: coding-conventions
-description: Use when writing new Swift code or refactoring existing code in Whisperer. Covers naming conventions, error handling patterns, logging discipline, memory management, and Swift idioms used throughout the codebase.
----
+# Whisperer Agent Guide
 
-# Whisperer Coding Conventions
+## Critical Rules (Always Apply)
 
-Extracted from the actual codebase (~17,000 lines of Swift).
+1. `AppState` is `@MainActor` — all UI state updates go through `AppState.shared`
+2. `SafeLock` (timeout-based NSLock) for whisper.cpp thread safety, not Swift actors
+3. `WhispererColors` only — no system semantic colors in workspace views
+4. `Logger.shared` — no `print()` statements
+5. 5-minute max recording limit prevents unbounded memory growth (~19MB)
+6. `[weak self]` in all `Task.detached` closures and stored callbacks
+7. Audio pipeline: Microphone → AudioRecorder → StreamingTranscriber → WhisperBridge → CorrectionEngine → TextInjector
 
 ## Naming Patterns
 

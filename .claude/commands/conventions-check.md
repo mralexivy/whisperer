@@ -4,13 +4,13 @@ Scan recently changed Swift files for coding convention violations. Run this bef
 
 ## Step 1: Identify Changed Files
 
-Run `git diff --name-only HEAD` and filter for `.swift` files under `Whisperer/whisperer/whisperer/`.
+Run `git diff --name-only HEAD` and filter for `.swift` files under `Whisperer/`.
 
 If no Swift files changed, report "No Swift files changed — nothing to check" and stop.
 
 ## Step 2: Load Coding Conventions
 
-Load the `coding-conventions` skill for reference.
+Read `AGENTS.md` for the coding conventions reference.
 
 ## Step 3: Scan Each Changed File
 

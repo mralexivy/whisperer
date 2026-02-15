@@ -8,12 +8,9 @@ Run `git diff --name-only HEAD` and filter for Swift files in UI/, History/, or 
 
 If no UI files changed, report "No UI files changed — nothing to check" and stop.
 
-## Step 2: Load Relevant Design Skills
+## Step 2: Load Design Reference
 
-Load these skills based on what you'll be checking:
-- `design-colors` — color system rules
-- `design-typography` — font scale rules
-- `design-components` — component patterns and anti-patterns
+Read `DESIGN.md` for the complete design system (colors, typography, layout, components, anti-patterns).
 
 ## Step 3: Scan Each Changed File
 

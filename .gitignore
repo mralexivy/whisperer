@@ -28,6 +28,7 @@ Packages/
 Package.pins
 Package.resolved
 *.xcodeproj
+!Whisperer.xcodeproj
 
 # CocoaPods
 Pods/
