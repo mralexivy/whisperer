@@ -115,6 +115,11 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
         // Start key listener
         appState.keyListener?.start()
+
+        // Eagerly initialize DictionaryManager so its background loading
+        // (CoreData fetch + SymSpell/PhoneticMatcher index build) completes
+        // before the user's first recording, avoiding a text injection delay.
+        _ = DictionaryManager.shared
     }
 
     private func setupOverlay() {

@@ -79,14 +79,19 @@ class DictionaryManager: ObservableObject {
             // Reload entries after bundled loading
             let finalEntries = await Self.loadEntriesInBackground()
 
-            // Update UI on main thread
+            // Build correction engine on background thread (SymSpell + PhoneticMatcher
+            // index building is expensive and would block the main actor for ~2s,
+            // delaying text injection on the first recording)
+            let enabledEntries = finalEntries.filter { $0.isEnabled }
+            let engine = CorrectionEngine(entries: enabledEntries)
+
+            // Only assign references on main thread (fast)
             await MainActor.run { [weak self] in
                 guard let self = self else { return }
                 self.packs = loadedPacks
                 self.entries = finalEntries
                 self.isLoadingEntries = false
-                let enabledEntries = finalEntries.filter { $0.isEnabled }
-                self.correctionEngine = CorrectionEngine(entries: enabledEntries)
+                self.correctionEngine = engine
             }
         }
     }

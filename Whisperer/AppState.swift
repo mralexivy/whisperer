@@ -246,8 +246,15 @@ class AppState: ObservableObject {
         Task.detached(priority: .userInitiated) { [weak self] in
             do {
                 let bridge = try WhisperBridge(modelPath: path)
+
+                // Warm up Metal GPU shaders by running a tiny transcription.
+                // The first whisper_full() call compiles Metal shaders; subsequent calls use the cache.
+                // Without this, the user's first recording has a noticeable delay.
+                let warmupSamples = [Float](repeating: 0, count: 16000) // 1s of silence at 16kHz
+                _ = bridge.transcribe(samples: warmupSamples)
+
                 let loadTime = Date().timeIntervalSince(startTime)
-                print("✅ \(modelDisplayName) pre-loaded in \(String(format: "%.2f", loadTime))s")
+                print("✅ \(modelDisplayName) pre-loaded in \(String(format: "%.2f", loadTime))s (includes GPU warm-up)")
 
                 await MainActor.run { [weak self] in
                     guard let self = self else { return }
