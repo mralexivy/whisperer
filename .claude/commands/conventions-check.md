@@ -37,6 +37,14 @@ For each changed Swift file, check for these violations:
 - [ ] Direct mutation of `AppState` properties from background threads (must use `await MainActor.run { }`)
 - [ ] `DispatchQueue.main.sync` calls (potential deadlock if already on main thread)
 
+### App Store Compliance Violations (Guideline 2.4.5)
+- [ ] `CGEvent.tapCreate` or `CGEventTapCreate` usage (banned — causes App Store rejection)
+- [ ] `IOHIDManager` or `import IOKit.hid` (banned — hardware input monitoring)
+- [ ] `addGlobalMonitorForEvents` with `.keyDown` or `.keyUp` (banned — global keystroke monitoring)
+- [ ] `IOHIDCheckAccess` or `IOHIDRequestAccess` (banned — Input Monitoring permission APIs)
+- [ ] AX calls dispatched to `DispatchQueue.global()` (performance — causes multi-second delays from queue contention)
+- [ ] AX calls without `AXUIElementSetMessagingTimeout` (reliability — hung target app blocks indefinitely)
+
 ## Step 4: Report
 
 For each violation found, report:

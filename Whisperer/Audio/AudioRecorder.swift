@@ -92,10 +92,8 @@ class AudioRecorder: NSObject {
             }
         }
 
-        // Stop current engine
-        audioEngine?.inputNode.removeTap(onBus: 0)
-        audioEngine?.stop()
-        audioEngine = nil
+        // Stop current engine completely
+        cleanupEngineState()
 
         // Wait a bit before restarting
         try? await Task.sleep(nanoseconds: 500_000_000)  // 500ms
@@ -172,7 +170,29 @@ class AudioRecorder: NSObject {
         recoveryAttempts = 0  // Reset recovery counter on new recording
         startupRetryCount = 0  // Reset startup retry counter
         recordingStartTime = Date()  // Set grace period start time
-        return try await startRecordingInternal()
+
+        do {
+            return try await startRecordingInternal()
+        } catch {
+            // First attempt failed — clean up completely and retry once with a fresh
+            // engine and system default device. This handles cases where the audio unit
+            // is left in a bad state by a previous session or device change.
+            guard startupRetryCount == 0 else {
+                // Already retried, give up
+                throw error
+            }
+            startupRetryCount += 1
+            Logger.warning("Recording setup failed (\(error.localizedDescription)), retrying with fresh engine and default device...", subsystem: .audio)
+
+            cleanupEngineState()
+            selectedDeviceID = nil
+
+            // Let the audio subsystem settle before retrying
+            try? await Task.sleep(nanoseconds: 200_000_000) // 200ms
+
+            recordingStartTime = Date()
+            return try await startRecordingInternal()
+        }
     }
 
     private func startRecordingInternal() async throws -> URL {
@@ -236,7 +256,14 @@ class AudioRecorder: NSObject {
         // CRITICAL: Force audio unit creation by querying format BEFORE setting device
         // The audio unit is only created when we access outputFormat(forBus:)
         // Without this, setInputDevice() fails because inputNode.audioUnit is nil
-        _ = inputNode.outputFormat(forBus: 0)
+        let initialFormat = inputNode.outputFormat(forBus: 0)
+
+        // Validate audio unit was created successfully — the outputFormat call can
+        // fail internally (AVAudioIONodeImpl error) leaving the audio unit in a bad state
+        guard initialFormat.sampleRate > 0 && initialFormat.channelCount > 0 else {
+            Logger.error("Audio unit initialization failed (format: \(initialFormat.sampleRate)Hz, \(initialFormat.channelCount)ch)", subsystem: .audio)
+            throw RecordingError.audioUnitFailed
+        }
 
         // Only set custom device if explicitly selected (not system default)
         // selectedDeviceID is only set when user picks a specific device in settings
@@ -314,29 +341,9 @@ class AudioRecorder: NSObject {
             isRecording = true
             Logger.debug("Started recording", subsystem: .audio)
             return audioURL
-        } catch let error as NSError {
-            Logger.error("Failed to start audio engine: \(error.localizedDescription) (code: \(error.code))", subsystem: .audio)
-
-            // If device error and we had a selected device, try again with default (but only once)
-            if startupRetryCount == 0 && selectedDeviceID != nil && (error.code == 1852797029 || error.domain == NSOSStatusErrorDomain) {
-                startupRetryCount += 1
-                Logger.warning("Device error detected, retrying with system default device (attempt \(startupRetryCount))...", subsystem: .audio)
-
-                // Clean up current attempt
-                self.audioEngine?.inputNode.removeTap(onBus: 0)
-                self.audioEngine?.stop()
-                self.audioEngine = nil
-
-                // Clear selected device and retry
-                selectedDeviceID = nil
-
-                // Retry with default device
-                return try await startRecordingInternal()
-            }
-
-            // If we still failed, give up
-            Logger.error("Cannot start recording after \(startupRetryCount) retry attempt(s)", subsystem: .audio)
-            throw RecordingError.fileCreationFailed
+        } catch {
+            Logger.error("Failed to start audio engine: \(error.localizedDescription)", subsystem: .audio)
+            throw error
         }
     }
 
@@ -423,20 +430,8 @@ class AudioRecorder: NSObject {
 
         Logger.debug("Drain period complete, removing tap", subsystem: .audio)
 
-        // Remove observer before stopping engine
-        if let observer = configChangeObserver {
-            NotificationCenter.default.removeObserver(observer)
-            configChangeObserver = nil
-        }
-
-        // Now safe to remove the tap and stop
-        audioEngine?.inputNode.removeTap(onBus: 0)
-        audioEngine?.stop()
-        audioEngine = nil
-
-        // Clear converter and format
-        converter = nil
-        outputFormat = nil
+        // Tear down the engine and all associated state
+        cleanupEngineState()
         recordingStartTime = nil
 
         Logger.debug("Audio recording stopped", subsystem: .audio)
@@ -444,6 +439,24 @@ class AudioRecorder: NSObject {
 
     var recordingURL: URL? {
         return currentURL
+    }
+
+    // MARK: - Engine Cleanup
+
+    /// Fully tear down the audio engine and all associated state.
+    /// Safe to call even if the engine is nil or partially initialized.
+    private func cleanupEngineState() {
+        if let observer = configChangeObserver {
+            NotificationCenter.default.removeObserver(observer)
+            configChangeObserver = nil
+        }
+        if let engine = audioEngine {
+            engine.inputNode.removeTap(onBus: 0)
+            engine.stop()
+        }
+        audioEngine = nil
+        converter = nil
+        outputFormat = nil
     }
 
     // MARK: - Device Selection
@@ -511,4 +524,5 @@ enum RecordingError: Error {
     case invalidFormat
     case fileCreationFailed
     case microphonePermissionDenied
+    case audioUnitFailed
 }

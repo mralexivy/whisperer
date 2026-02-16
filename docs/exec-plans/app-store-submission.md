@@ -2,7 +2,14 @@
 
 ## Current Status
 
-Track A (App Store Foundation) is complete. The app is ready for submission.
+Version 1.0 (2) submitted after addressing Guideline 2.4.5 rejection in v1.0 (1).
+
+### Rejection History
+
+**v1.0 (1) — Rejected (Guideline 2.4.5)**
+- Apple flagged: "Your app uses Accessibility features for non-accessibility purposes" and "Your app accesses user keystrokes for purposes other than assistive accessibility features"
+- Root cause: `CGEventTap`, `IOHIDManager`, global `keyDown`/`keyUp` monitors, and `CGEvent.post` for simulated paste
+- Resolution: Removed all red-flag APIs, reframed as assistive dictation tool. See "Guideline 2.4.5 Compliance" section below.
 
 ### What's Implemented
 - **Receipt Validation** (`Licensing/ReceiptValidator.swift`) — Validates App Store receipt on launch. Exits with code 173 on failure (triggers receipt refresh). Only runs in Release builds.
@@ -11,6 +18,29 @@ Track A (App Store Foundation) is complete. The app is ready for submission.
 - **Export Compliance** — `ITSAppUsesNonExemptEncryption = NO` in Info.plist (HTTPS only).
 - **Privacy Policy** — Hosted at https://whispererapp.com/privacy/
 - **Entitlements** — Cleaned: sandbox, network.client, audio-input, files.user-selected.read-write. Removed network.server.
+
+## Guideline 2.4.5 Compliance
+
+### What Was Removed
+| API Removed | Replacement |
+|-------------|-------------|
+| `CGEvent.tapCreate` (keyboard event monitoring) | `NSEvent.addGlobalMonitorForEvents(matching: .flagsChanged)` for Fn key |
+| `IOHIDManager` (hardware input monitoring) | Carbon `RegisterEventHotKey` for non-Fn shortcuts |
+| Global `keyDown`/`keyUp` monitors | Removed entirely — not needed |
+| Input Monitoring permission type | Removed from PermissionManager and UI |
+| Fn calibration (cookie-based, IOKit HID) | Removed — Fn detected via flagsChanged keyCode 63 |
+
+### What Was Kept (with justification)
+| API Kept | Justification |
+|----------|--------------|
+| `AXUIElement` text injection | Core assistive function — inserts dictated text as assistive input |
+| `CGEvent.post(tap: .cgAnnotatedSessionEventTap)` | Posts synthetic Cmd+V for clipboard fallback — posting ≠ monitoring |
+| `NSEvent.addGlobalMonitorForEvents(matching: .flagsChanged)` | Monitors modifier state changes only, NOT keystrokes |
+| Carbon `RegisterEventHotKey` | Standard macOS hotkey mechanism, used by many approved apps |
+
+### Verification
+
+Run `/app-store-check` for a full codebase scan, or `/submission-prep` for the complete pre-submission checklist.
 
 ## Entitlements (whisperer.entitlements)
 
@@ -28,7 +58,7 @@ NOT present (intentionally removed): `com.apple.security.network.server`
 
 ```xml
 ITSAppUsesNonExemptEncryption = NO     <!-- HTTPS only, exempt -->
-NSMicrophoneUsageDescription = "Whisperer needs microphone access to transcribe your voice to text."
+NSMicrophoneUsageDescription = "Whisperer needs microphone access to transcribe your voice."
 NSAppleEventsUsageDescription = "Whisperer needs automation access to insert transcribed text into applications."
 ```
 
@@ -37,7 +67,7 @@ NSAppleEventsUsageDescription = "Whisperer needs automation access to insert tra
 | Field | Value |
 |-------|-------|
 | Bundle ID | `com.ivy.whisperer` |
-| Category | Utilities (Primary), Productivity (Secondary) |
+| Category | Productivity (Primary) |
 | SKU | `whisperer-macos-1` |
 | Pro Pack Product ID | `com.ivy.whisperer.propack` |
 | Pro Pack Type | Non-Consumable |
@@ -54,25 +84,27 @@ In Xcode: Product -> Archive -> Distribute App -> App Store Connect -> Upload
 
 ## Pre-Submission Checklist
 
-### Code
-- [ ] Privacy policy URL updated in WhispererApp.swift
-- [ ] Bundle ID matches everywhere: `com.ivy.whisperer`
-- [ ] Product ID matches: `com.ivy.whisperer.propack`
-- [ ] Version/build numbers set
-- [ ] Acknowledgments.txt added to Xcode target
+Run `/submission-prep` to execute the automated checklist. It covers:
+- App Store compliance scan (banned APIs, framing, permissions)
+- Conventions check
+- Release build
+- Info.plist and entitlements verification
+- Reviewer notes generation
 
-### Testing
-- [ ] App builds in Release configuration
+### Manual Testing (not automated)
 - [ ] Receipt validation triggers exit(173) without receipt (expected)
 - [ ] Pro Pack products load in Sandbox
 - [ ] Purchase and Restore work in Sandbox
-- [ ] All permissions prompt correctly
+- [ ] Microphone and Accessibility permissions prompt correctly (NO Input Monitoring prompt)
 - [ ] Model downloads successfully
 - [ ] Transcription works end-to-end
-- [ ] Text injection works in various apps
+- [ ] Text injection works in various apps (TextEdit, Safari, Notes)
+- [ ] Clipboard fallback works when Accessibility is denied
+- [ ] Hold-to-record with Fn key works
+- [ ] Custom shortcuts work (Carbon hotkey path)
+- [ ] Audio recovery works across multiple recording sessions
 
-### App Store Connect
-- [ ] App created with correct bundle ID
+### App Store Connect (manual)
 - [ ] Pricing set
 - [ ] Pro Pack IAP created and submitted for review
 - [ ] Privacy policy URL added
@@ -80,26 +112,14 @@ In Xcode: Product -> Archive -> Distribute App -> App Store Connect -> Upload
 - [ ] Screenshots uploaded (1280x800 or 1440x900)
 - [ ] Description and keywords entered
 - [ ] Build uploaded and processed
-- [ ] Reviewer notes provided
+- [ ] Reviewer notes provided (generated by `/submission-prep`)
 
-## Reviewer Notes Template
+## Common Rejection Reasons & Lessons Learned
 
-```
-Testing Instructions:
-1. Grant Microphone, Accessibility, and Input Monitoring permissions when prompted
-2. Wait for model download (~500MB Large V3 Turbo) — one-time
-3. Open TextEdit or any text field
-4. Hold Fn key, speak, release to see transcription
-5. The app works 100% offline after model download
-
-Pro Pack IAP: com.ivy.whisperer.propack
-Contact: [YOUR_EMAIL]
-```
-
-## Common Rejection Reasons
-
-1. **Permissions not explained** — Ensure NSMicrophoneUsageDescription and NSAppleEventsUsageDescription are clear
-2. **App crashes** — Test thoroughly, use TestFlight first
-3. **Privacy policy issues** — Verify URL works and is accurate
-4. **IAP issues** — Test in Sandbox before production
-5. **Missing functionality** — All advertised features must work
+1. **Guideline 2.4.5 — Keystroke access** — CGEventTap, IOHIDManager, and global keyDown/keyUp monitors are red flags. Use flagsChanged for modifier keys and Carbon hotkeys for shortcuts instead.
+2. **Guideline 2.4.5 — Accessibility misuse** — Frame AXUIElement usage as assistive text input, not automation. The usage description and reviewer notes must clearly state the assistive purpose.
+3. **Permissions not explained** — Ensure NSMicrophoneUsageDescription is clear. Remove any permission types no longer used (we removed Input Monitoring entirely).
+4. **App crashes** — Test audio engine recovery across multiple recording sessions. Validate audio format after `outputFormat(forBus:)` to catch device errors early.
+5. **Privacy policy issues** — Verify URL works and is accurate
+6. **IAP issues** — Test in Sandbox before production
+7. **Missing functionality** — All advertised features must work

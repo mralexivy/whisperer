@@ -495,15 +495,14 @@ class AppState: ObservableObject {
             return
         }
 
+        // Dismiss HUD immediately — fade-out animation runs concurrently with text injection
+        state = .idle
+        liveTranscription = ""
+
         do {
             try await textInjector.insertText(text)
-            // Brief success state, then back to idle
-            try await Task.sleep(nanoseconds: 300_000_000) // 300ms
-            state = .idle
-            liveTranscription = ""  // Clear live transcription
         } catch {
             errorMessage = "Failed to insert text: \(error.localizedDescription)"
-            state = .idle
         }
     }
 

@@ -34,10 +34,11 @@ Microphone → AudioRecorder → StreamingTranscriber → WhisperBridge → Corr
 **Why**: whisper.cpp is blocking C code. Swift actors suspend on await, not block. SafeLock provides timeout protection to prevent deadlocks. Timeout is 10s on Apple Silicon, 60s on Intel.
 **Pitfall**: Never hold SafeLock from main thread if background work might need it.
 
-### 2. Three-Layer Key Detection
-**Decision**: CGEventTap (primary) → IOKit HID (backup) → NSEvent monitor (fallback).
-**Why**: The Fn key behaves differently across keyboard types and macOS versions. Some keyboards don't generate CGEvents for Fn. IOKit catches what CGEventTap misses. NSEvent is the safety net.
-**Pitfall**: Must filter Fn+key combos (Fn+F1 = brightness) to prevent accidental recordings.
+### 2. Key Detection (App Store Compliant)
+**Decision**: `NSEvent.addGlobalMonitorForEvents(matching: .flagsChanged)` for Fn key + Carbon `RegisterEventHotKey` for key+modifier shortcuts.
+**Why**: CGEventTap, IOKit HID, and global keyDown/keyUp monitors are rejected by App Store review (Guideline 2.4.5). The current approach uses only approved APIs: flagsChanged monitors modifier state changes (not keystrokes) and Carbon hotkeys are a standard macOS hotkey mechanism used by many approved apps.
+**How it works**: Fn key detected via `event.keyCode == 63` in flagsChanged handler. Non-Fn shortcuts (e.g., Cmd+Shift+Space) registered via Carbon `RegisterEventHotKey` which fires pressed/released events for hold-to-record support.
+**Pitfall**: Carbon hotkeys require proper cleanup — `UnregisterEventHotKey` and `RemoveEventHandler` in teardown. The `Unmanaged.passUnretained(self)` pointer must remain valid while the handler is registered.
 
 ### 3. Five-Minute Recording Limit
 **Decision**: Hard cap at 5 minutes (~19MB audio buffer at 16kHz mono Float32).
@@ -50,8 +51,10 @@ Microphone → AudioRecorder → StreamingTranscriber → WhisperBridge → Corr
 **Pitfall**: ~1.5GB memory footprint for large models. This is intentional.
 
 ### 5. Text Injection: Accessibility API + Clipboard Fallback
-**Decision**: Primary is `AXUIElementSetAttributeValue`. Fallback is clipboard + simulated Cmd+V.
-**Why**: Accessibility API is instant and doesn't touch clipboard. But it doesn't work in all apps (Electron apps, some terminals). Clipboard fallback restores previous clipboard content after paste.
+**Decision**: Primary is `AXUIElementSetAttributeValue` (assistive text input). Fallback is clipboard + simulated Cmd+V via `CGEvent.post(tap: .cgAnnotatedSessionEventTap)`.
+**Why**: Accessibility API is instant and doesn't touch clipboard. But it doesn't work in all apps (Electron apps, some terminals). Clipboard fallback restores previous clipboard content after paste. If Accessibility permission is denied entirely, text is copied to clipboard with a notification for the user to paste manually.
+**Performance**: AX messaging timeout set to 100ms via `AXUIElementSetMessagingTimeout` to prevent blocking if the target app is hung. Text injection runs inline on the calling thread (not dispatched to a background queue) to avoid latency from queue contention.
+**App Store framing**: Accessibility API usage is framed as assistive text input for dictation — this is its intended purpose and is approved by App Store review. `CGEvent.post` (posting synthetic events) is distinct from `CGEvent.tapCreate` (monitoring events) and does not require Input Monitoring.
 
 ### 6. Non-Activating Overlay Panel
 **Decision**: `NSPanel` with `[.borderless, .nonactivatingPanel]`, `hasShadow = false`.
@@ -127,7 +130,11 @@ Infrastructure (Logger, SafeLock, CrashHandler)
 
 7. **Model download vs model loading** — `isModelDownloaded()` checks file existence. `isModelLoaded` checks if WhisperBridge has loaded the model into memory. Both must be true before recording.
 
-8. **Clipboard restoration** — TextInjector's clipboard fallback saves and restores previous clipboard content. The restoration delay must be long enough for paste to complete but short enough to feel instant.
+8. **Clipboard restoration** — TextInjector's clipboard fallback saves and restores previous clipboard content after a 100ms paste delay. If Accessibility permission is denied, text is only copied to clipboard (no simulated paste) and a `TextCopiedToClipboard` notification is posted for the UI.
+
+9. **AX messaging timeout** — Always set `AXUIElementSetMessagingTimeout` (100ms) on both the app element and the focused element before AX calls. A hung target app can otherwise block the entire text injection path indefinitely.
+
+10. **Audio engine retry** — `AudioRecorder.startRecording()` retries once on ANY setup failure (not just device-specific errors). The retry tears down the engine completely via `cleanupEngineState()`, resets to the default device, waits 200ms, and tries again. This handles transient audio unit failures (error 1852797029) that occur when the audio device state changes between recordings.
 
 ## Deep Reference
 

@@ -9,6 +9,7 @@
 5. 5-minute max recording limit prevents unbounded memory growth (~19MB)
 6. `[weak self]` in all `Task.detached` closures and stored callbacks
 7. Audio pipeline: Microphone → AudioRecorder → StreamingTranscriber → WhisperBridge → CorrectionEngine → TextInjector
+8. **NEVER** use `CGEventTap`, `IOHIDManager`, or global `keyDown`/`keyUp` monitors — App Store rejection (Guideline 2.4.5)
 
 ## Naming Patterns
 
@@ -140,6 +141,39 @@ autoreleasepool {
     onStreamingSamples?(samples)
 }
 ```
+
+## App Store Compliance (Guideline 2.4.5)
+
+### Banned APIs — NEVER introduce these
+These APIs cause automatic App Store rejection under Guideline 2.4.5 (keystroke/input monitoring):
+
+| API | Why Banned |
+|-----|-----------|
+| `CGEvent.tapCreate` / `CGEventTapCreate` | Monitors/intercepts keyboard events — classified as keystroke logging |
+| `IOHIDManager` / `IOKit.hid` | Hardware-level input device monitoring |
+| `NSEvent.addGlobalMonitorForEvents(matching: .keyDown)` | Global keystroke monitoring |
+| `NSEvent.addGlobalMonitorForEvents(matching: .keyUp)` | Global keystroke monitoring |
+| `IOHIDCheckAccess` / `IOHIDRequestAccess` | Input Monitoring permission APIs |
+
+### Approved APIs — safe to use
+| API | Purpose | Why Approved |
+|-----|---------|-------------|
+| `NSEvent.addGlobalMonitorForEvents(matching: .flagsChanged)` | Fn key detection via `keyCode == 63` | Monitors modifier state changes, NOT keystrokes |
+| `Carbon RegisterEventHotKey` | Global hotkey registration (e.g., Cmd+Shift+Space) | Standard macOS hotkey mechanism, no Input Monitoring needed |
+| `AXUIElement` APIs | Assistive text injection into focused fields | Approved when framed as assistive text input for dictation |
+| `CGEvent.post(tap: .cgAnnotatedSessionEventTap)` | Posting synthetic Cmd+V for clipboard fallback | Posting events ≠ monitoring events |
+| `NSEvent.addLocalMonitorForEvents` | Local key monitoring within own windows | Only captures events in own windows |
+
+### Framing Guidelines
+- Frame Accessibility usage as **assistive text input** for dictation, not "automation"
+- Frame the app as an **assistive dictation tool** for users who cannot type comfortably
+- Never mention "keystroke monitoring", "key logging", or "input monitoring" in user-facing strings
+- `NSMicrophoneUsageDescription`: say "transcribe your voice" not "record audio"
+
+### Performance Rules for Text Injection
+- Never dispatch AX calls to `DispatchQueue.global()` — queue contention causes multi-second delays
+- Always set `AXUIElementSetMessagingTimeout` (100ms) before AX calls
+- Set app state to `.idle` BEFORE calling `textInjector.insertText()` so HUD dismissal runs concurrently
 
 ## Code Organization
 

@@ -99,18 +99,6 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             }
         }
 
-        appState.keyListener?.onShortcutCancelled = { [weak self] in
-            Task { @MainActor in
-                self?.appState.cancelRecording()
-            }
-        }
-
-        appState.keyListener?.onHistoryShortcut = {
-            Task { @MainActor in
-                HistoryWindowManager.shared.toggleWindow()
-            }
-        }
-
         // Setup audio callback for waveform
         appState.audioRecorder?.onAmplitudeUpdate = { [weak self] amplitude in
             Task { @MainActor in
@@ -148,9 +136,6 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             if permissionManager.accessibilityStatus != .granted {
                 permissionManager.requestAccessibilityPermission()
             }
-
-            // Input monitoring is checked when GlobalKeyListener starts
-            // If it failed, the permission warning will show in the UI
         }
 
         // Check if selected model is downloaded
@@ -456,13 +441,6 @@ struct MenuBarView: View {
                         .font(.system(size: 11, weight: .semibold))
                     Text("Workspace")
                         .font(.system(size: 12, weight: .medium))
-                    Text("Fn+S")
-                        .font(.system(size: 10))
-                        .foregroundColor(.white.opacity(0.7))
-                        .padding(.horizontal, 6)
-                        .padding(.vertical, 2)
-                        .background(Color.white.opacity(0.15))
-                        .cornerRadius(4)
                 }
                 .foregroundColor(.white)
                 .padding(.horizontal, 14)
@@ -534,9 +512,6 @@ struct MenuBarView: View {
         }
         if permissionManager.accessibilityStatus != .granted {
             permissionManager.requestAccessibilityPermission()
-        }
-        if permissionManager.inputMonitoringStatus != .granted {
-            permissionManager.openSystemSettings(for: .inputMonitoring)
         }
     }
 }
@@ -683,9 +658,6 @@ struct StatusTabView: View {
                 if permissionManager.accessibilityStatus != .granted {
                     missingPermissionBadge("Accessibility", icon: "accessibility")
                 }
-                if permissionManager.inputMonitoringStatus != .granted {
-                    missingPermissionBadge("Keyboard", icon: "keyboard")
-                }
             }
 
             Button(action: {
@@ -695,9 +667,6 @@ struct StatusTabView: View {
                 }
                 if permissionManager.accessibilityStatus != .granted {
                     permissionManager.requestAccessibilityPermission()
-                }
-                if permissionManager.inputMonitoringStatus != .granted {
-                    permissionManager.openSystemSettings(for: .inputMonitoring)
                 }
             }) {
                 HStack {
@@ -875,7 +844,7 @@ struct SettingsTabView: View {
                             VStack(alignment: .leading, spacing: 3) {
                                 Text("View transcription history")
                                     .font(.system(size: 13, weight: .medium))
-                                Text("Press Fn+S to toggle workspace")
+                                Text("Open workspace window")
                                     .font(.system(size: 11))
                                     .foregroundColor(.secondary)
                             }
@@ -1410,8 +1379,6 @@ struct PermissionsView: View {
             permissionManager.requestMicrophonePermission()
         case .accessibility:
             permissionManager.requestAccessibilityPermission()
-        case .inputMonitoring:
-            permissionManager.openSystemSettings(for: .inputMonitoring)
         }
     }
 
@@ -1421,9 +1388,6 @@ struct PermissionsView: View {
         }
         if permissionManager.accessibilityStatus != .granted {
             permissionManager.requestAccessibilityPermission()
-        }
-        if permissionManager.inputMonitoringStatus != .granted {
-            permissionManager.openSystemSettings(for: .inputMonitoring)
         }
     }
 }

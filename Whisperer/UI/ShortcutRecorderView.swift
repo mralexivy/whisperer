@@ -13,7 +13,6 @@ struct ShortcutRecorderView: View {
     @State private var isRecording = false
     @State private var tempConfig: ShortcutConfig?
     @State private var localMonitor: Any?
-    @State private var globalMonitor: Any?
     @State private var lastModifiers: NSEvent.ModifierFlags = []
     @State private var showConflictAlert = false
     @State private var conflictMessage = ""
@@ -250,15 +249,11 @@ struct ShortcutRecorderView: View {
         tempConfig = nil
         lastModifiers = []
 
-        // First, set up event monitors with highest priority
+        // Set up local event monitor for shortcut recording (in-app only, no global monitoring)
         localMonitor = NSEvent.addLocalMonitorForEvents(matching: [.keyDown, .flagsChanged]) { event in
             self.handleKeyEvent(event)
             // ALWAYS consume the event to prevent it from propagating to text fields
             return nil
-        }
-
-        globalMonitor = NSEvent.addGlobalMonitorForEvents(matching: [.keyDown, .flagsChanged]) { event in
-            self.handleKeyEvent(event)
         }
 
         // Then resign first responder with a tiny delay to ensure monitors are active
@@ -274,14 +269,10 @@ struct ShortcutRecorderView: View {
     }
 
     private func stopRecording(save: Bool) {
-        // Remove monitors FIRST to prevent further events
+        // Remove monitor FIRST to prevent further events
         if let monitor = localMonitor {
             NSEvent.removeMonitor(monitor)
             localMonitor = nil
-        }
-        if let monitor = globalMonitor {
-            NSEvent.removeMonitor(monitor)
-            globalMonitor = nil
         }
 
         // Small delay before clearing state to prevent button clicks from re-triggering

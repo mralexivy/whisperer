@@ -17,6 +17,12 @@ Tracked in [docs/exec-plans/tech-debt.md](docs/exec-plans/tech-debt.md).
 
 ## Current Focus Areas
 
-- App Store submission preparation
+- App Store resubmission (v1.0 build 2) — awaiting review after Guideline 2.4.5 compliance fix
 - Workspace window polish and UX refinement
 - Dictionary & spell correction accuracy
+
+## Completed
+
+- **App Store Guideline 2.4.5 compliance** — Removed CGEventTap, IOHIDManager, global keyDown/keyUp monitors. Replaced with flagsChanged + Carbon hotkeys. Removed Input Monitoring permission. See [docs/exec-plans/app-store-submission.md](docs/exec-plans/app-store-submission.md).
+- **Text injection latency fix** — Removed background dispatch that caused 2.4s+ delays from queue contention. Added AX messaging timeouts (100ms).
+- **Audio engine crash protection** — Added universal retry logic with engine teardown and format validation for transient device errors (error 1852797029).
