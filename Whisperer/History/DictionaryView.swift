@@ -11,13 +11,15 @@ struct DictionaryView: View {
     @Environment(\.colorScheme) var colorScheme
     @ObservedObject var dictionaryManager = DictionaryManager.shared
     @State private var searchText = ""
-    @State private var selectedFilter: DictionaryFilter = .all
     @State private var selectedEntry: DictionaryEntry?
     @State private var showAddEntry = false
     @State private var highlightedEntryId: UUID? = nil
     @State private var selectedPackId: String? = nil
     @State private var displayLimit = 50
     @State private var showDropdown = false
+    @State private var detailPanelWidth: CGFloat = 420
+    private let minDetailWidth: CGFloat = 320
+    private let maxDetailWidth: CGFloat = 600
     @Namespace private var scrollNamespace
 
     private let pageSize = 50
@@ -60,15 +62,24 @@ struct DictionaryView: View {
                 // Left panel
                 VStack(spacing: 0) {
                     headerView
-                    DictionaryPacksView(selectedPackId: $selectedPackId, showDropdown: $showDropdown)
-                    toolbarView
-                    entryList
+
+                    Group {
+                        DictionaryPacksView(selectedPackId: $selectedPackId, showDropdown: $showDropdown)
+                        toolbarView
+                        entryList
+                    }
+                    .opacity(dictionaryManager.isEnabled ? 1.0 : 0.4)
+                    .allowsHitTesting(dictionaryManager.isEnabled)
+                    .animation(.easeInOut(duration: 0.2), value: dictionaryManager.isEnabled)
                 }
                 .frame(minWidth: 400, maxWidth: .infinity)
 
                 // Right panel
                 if let entry = selectedEntry {
-                ResizableDivider(colorScheme: colorScheme) { _ in }
+                ResizableDivider(colorScheme: colorScheme) { delta in
+                    let newWidth = detailPanelWidth - delta
+                    detailPanelWidth = min(max(newWidth, minDetailWidth), maxDetailWidth)
+                }
                 EntryDetailView(
                     entry: entry,
                     onClose: { selectedEntry = nil },
@@ -84,7 +95,11 @@ struct DictionaryView: View {
                         }
                     }
                 )
-                .frame(width: 420)
+                .id(entry.id)
+                .frame(width: detailPanelWidth)
+                .opacity(dictionaryManager.isEnabled ? 1.0 : 0.4)
+                .allowsHitTesting(dictionaryManager.isEnabled)
+                .animation(.easeInOut(duration: 0.2), value: dictionaryManager.isEnabled)
             }
             }
 
@@ -114,7 +129,6 @@ struct DictionaryView: View {
             if let entryId = newValue {
                 // Clear any active filters/search to ensure entry is visible
                 searchText = ""
-                selectedFilter = .all
 
                 // Find the entry
                 if let entry = dictionaryManager.entries.first(where: { $0.id == entryId }) {
@@ -358,9 +372,7 @@ struct DictionaryView: View {
                                     colorScheme: colorScheme,
                                     onSelect: { selectedEntry = entry },
                                     onToggle: {
-                                        Task {
-                                            try? await dictionaryManager.toggleEntry(entry)
-                                        }
+                                        dictionaryManager.toggleEntry(entry)
                                     }
                                 )
                                 .id(entry.id)
@@ -476,14 +488,6 @@ struct DictionaryView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
-    private func performSearch() {
-        Task {
-            await dictionaryManager.loadEntries(
-                filter: selectedFilter,
-                searchQuery: searchText.isEmpty ? nil : searchText
-            )
-        }
-    }
 }
 
 // MARK: - Dictionary Entry Row
@@ -542,11 +546,13 @@ struct DictionaryEntryRow: View {
                 }
 
                 // Toggle
-                Toggle("", isOn: .constant(entry.isEnabled))
+                Toggle("", isOn: Binding(
+                    get: { entry.isEnabled },
+                    set: { _ in onToggle() }
+                ))
                     .toggleStyle(.switch)
                     .tint(WhispererColors.accent)
                     .labelsHidden()
-                    .onTapGesture { onToggle() }
             }
             .padding(.horizontal, 16)
             .padding(.vertical, 12)

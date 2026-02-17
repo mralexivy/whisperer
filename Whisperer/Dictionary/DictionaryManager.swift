@@ -20,7 +20,12 @@ class DictionaryManager: ObservableObject {
         didSet {
             UserDefaults.standard.set(isEnabled, forKey: "dictionaryEnabled")
             if isEnabled {
-                correctionEngine?.rebuild(with: entries.filter { $0.isEnabled })
+                scheduleRebuild()
+            } else {
+                // Fully disable: cancel any pending rebuild and release the engine
+                rebuildWorkItem?.cancel()
+                rebuildWorkItem = nil
+                correctionEngine = nil
             }
         }
     }
@@ -295,7 +300,7 @@ class DictionaryManager: ObservableObject {
 
         if !skipRebuild {
             await loadEntries()
-            rebuildCorrectionEngine()
+            scheduleRebuild()
         }
     }
 
@@ -380,24 +385,45 @@ class DictionaryManager: ObservableObject {
 
         try context.save()
         await loadEntries()
-        rebuildCorrectionEngine()
+        scheduleRebuild()
     }
 
-    func toggleEntry(_ entry: DictionaryEntry) async throws {
-        let fetchRequest: NSFetchRequest<DictionaryEntryEntity> = DictionaryEntryEntity.fetchRequest()
-        fetchRequest.predicate = NSPredicate(format: "id == %@", entry.id as CVarArg)
-        fetchRequest.fetchLimit = 1
-
-        guard let entity = try context.fetch(fetchRequest).first else {
-            throw DictionaryError.entryNotFound
+    func toggleEntry(_ entry: DictionaryEntry) {
+        // 1. Optimistic UI update — flips instantly, triggers @Published
+        let newEnabled = !entry.isEnabled
+        if let index = entries.firstIndex(where: { $0.id == entry.id }) {
+            entries[index] = DictionaryEntry(
+                id: entry.id,
+                incorrectForm: entry.incorrectForm,
+                correctForm: entry.correctForm,
+                category: entry.category,
+                isBuiltIn: entry.isBuiltIn,
+                isEnabled: newEnabled,
+                notes: entry.notes,
+                createdAt: entry.createdAt,
+                lastModifiedAt: Date(),
+                useCount: entry.useCount
+            )
         }
 
-        entity.isEnabled.toggle()
-        entity.lastModifiedAt = Date()
+        // 2. Persist to CoreData on background context (off main thread)
+        let entryId = entry.id
+        let database = self.database
+        Task.detached {
+            let bgContext = database.newBackgroundContext()
+            await bgContext.perform {
+                let fetchRequest: NSFetchRequest<DictionaryEntryEntity> = DictionaryEntryEntity.fetchRequest()
+                fetchRequest.predicate = NSPredicate(format: "id == %@", entryId as CVarArg)
+                fetchRequest.fetchLimit = 1
+                guard let entity = try? bgContext.fetch(fetchRequest).first else { return }
+                entity.isEnabled = newEnabled
+                entity.lastModifiedAt = Date()
+                try? bgContext.save()
+            }
+        }
 
-        try context.save()
-        await loadEntries()
-        rebuildCorrectionEngine()
+        // 3. Debounced correction engine rebuild
+        scheduleRebuild()
     }
 
     func incrementUseCount(_ incorrectForm: String) async {
@@ -426,7 +452,7 @@ class DictionaryManager: ObservableObject {
         try context.save()
 
         await loadEntries()
-        rebuildCorrectionEngine()
+        scheduleRebuild()
     }
 
     func deleteAllEntries() async throws {
@@ -439,7 +465,7 @@ class DictionaryManager: ObservableObject {
             }
             try context.save()
             await loadEntries()
-            rebuildCorrectionEngine()
+            scheduleRebuild()
         } catch {
             Logger.error("Failed to delete all dictionary entries: \(error)", subsystem: .app)
             throw error
@@ -547,7 +573,7 @@ class DictionaryManager: ObservableObject {
         }
 
         await loadEntries()
-        rebuildCorrectionEngine()
+        scheduleRebuild()
     }
 
     /// Load entries from a specific pack
@@ -728,9 +754,28 @@ class DictionaryManager: ObservableObject {
         }
     }
 
-    private func rebuildCorrectionEngine() {
+    private var rebuildWorkItem: DispatchWorkItem?
+
+    /// Debounced background rebuild of the correction engine.
+    /// Cancels any pending rebuild so rapid toggles only trigger one rebuild.
+    /// Builds a NEW engine on a background thread, then swaps the reference
+    /// on the main thread — avoids all concurrent mutation of engine internals.
+    private func scheduleRebuild() {
+        rebuildWorkItem?.cancel()
         let enabledEntries = entries.filter { $0.isEnabled }
-        correctionEngine?.rebuild(with: enabledEntries)
+        let workItem = DispatchWorkItem { [weak self] in
+            // Build entirely new engine on background thread (expensive, ~2s)
+            let newEngine = CorrectionEngine(entries: enabledEntries)
+            // Swap reference on main thread (fast pointer assignment, no race)
+            DispatchQueue.main.async { [weak self] in
+                self?.correctionEngine = newEngine
+            }
+        }
+        rebuildWorkItem = workItem
+        DispatchQueue.global(qos: .utility).asyncAfter(
+            deadline: .now() + 0.5,
+            execute: workItem
+        )
     }
 }
 
