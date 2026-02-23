@@ -1401,9 +1401,33 @@ struct PermissionsView: View {
 
 struct DiagnosticsView: View {
     @State private var logFileSize: String = "..."
+    @State private var verboseLogging: Bool = Logger.isVerbose
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
+            // Verbose logging toggle
+            HStack {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Verbose logging")
+                        .font(.system(size: 12, weight: .medium))
+                    Text("Enable debug-level logs for troubleshooting")
+                        .font(.system(size: 11))
+                        .foregroundColor(.secondary)
+                }
+
+                Spacer()
+
+                Toggle("", isOn: $verboseLogging)
+                    .toggleStyle(.switch)
+                    .labelsHidden()
+                    .onChange(of: verboseLogging) { _, newValue in
+                        Logger.isVerbose = newValue
+                    }
+            }
+
+            Divider()
+                .opacity(0.5)
+
             // Log file info
             HStack {
                 VStack(alignment: .leading, spacing: 2) {

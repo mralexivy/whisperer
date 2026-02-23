@@ -37,12 +37,16 @@ class GlobalKeyListener {
         }
     }
 
-    // NSEvent monitor for flagsChanged (modifier key detection — NOT keystroke monitoring)
+    // NSEvent monitors for flagsChanged (modifier key detection — NOT keystroke monitoring)
     private var flagsChangedMonitor: Any?
+    private var localFlagsChangedMonitor: Any?
 
     // Carbon hotkey for non-Fn key+modifier shortcuts
     private var carbonHotKeyRef: EventHotKeyRef?
     private var carbonEventHandler: EventHandlerRef?
+
+    // Polling fallback for Fn release detection (safety net for Globe/Fn key edge cases)
+    private var releaseCheckTimer: DispatchSourceTimer?
 
     // State tracking
     private var isShortcutActive = false
@@ -75,10 +79,18 @@ class GlobalKeyListener {
         recordingInProgress = false
         isRecordingToggled = false
 
-        // Stop flagsChanged monitor
+        // Stop release check timer
+        releaseCheckTimer?.cancel()
+        releaseCheckTimer = nil
+
+        // Stop flagsChanged monitors
         if let monitor = flagsChangedMonitor {
             NSEvent.removeMonitor(monitor)
             flagsChangedMonitor = nil
+        }
+        if let monitor = localFlagsChangedMonitor {
+            NSEvent.removeMonitor(monitor)
+            localFlagsChangedMonitor = nil
         }
 
         // Unregister Carbon hotkey
@@ -93,6 +105,7 @@ class GlobalKeyListener {
         let config = shortcutConfig
 
         // Monitor modifier flag changes only — this does NOT monitor keystrokes
+        // Global monitor: catches events when OTHER apps are active
         flagsChangedMonitor = NSEvent.addGlobalMonitorForEvents(matching: .flagsChanged) { [weak self] event in
             guard let self = self else { return }
 
@@ -101,7 +114,19 @@ class GlobalKeyListener {
             }
         }
 
-        print("FlagsChanged monitor enabled")
+        // Local monitor: catches events when Whisperer itself is active
+        // (e.g., menu bar extra is open, or system Globe/Fn key activated the app)
+        // Without this, Fn release is missed when the app is frontmost.
+        localFlagsChangedMonitor = NSEvent.addLocalMonitorForEvents(matching: .flagsChanged) { [weak self] event in
+            guard let self = self else { return event }
+
+            self.stateQueue.async {
+                self.handleFlagsChanged(event, config: config)
+            }
+            return event
+        }
+
+        print("FlagsChanged monitors enabled (global + local)")
     }
 
     private func handleFlagsChanged(_ event: NSEvent, config: ShortcutConfig) {
@@ -110,6 +135,8 @@ class GlobalKeyListener {
             handleFnKeyEvent(event, config: config)
             return
         }
+
+        Logger.debug("flagsChanged keyCode=\(event.keyCode) flags=\(event.modifierFlags.rawValue)", subsystem: .keyListener)
 
         // For modifier-only shortcuts (non-Fn), check if modifiers match
         if !config.useFnKey && config.keyCode == 0 && config.modifierFlags != 0 {
@@ -123,6 +150,7 @@ class GlobalKeyListener {
         if mods.contains(.function) {
             // Fn key pressed DOWN
             fnDown = true
+            Logger.debug("Fn DOWN detected (keyCode 63, flags=\(mods.rawValue))", subsystem: .keyListener)
 
             // Only handle if Fn is part of the configured shortcut
             guard config.useFnKey else { return }
@@ -133,6 +161,7 @@ class GlobalKeyListener {
             }
         } else {
             // Fn key RELEASED
+            Logger.debug("Fn UP detected (keyCode 63, flags=\(mods.rawValue), fnDown=\(fnDown))", subsystem: .keyListener)
             guard fnDown else { return }
 
             if config.useFnKey && config.keyCode == 0 && config.modifierFlags == 0 {
@@ -168,6 +197,7 @@ class GlobalKeyListener {
                 recordingInProgress = true
                 isShortcutActive = true
                 lastStateChange = now
+                startReleaseCheckTimer(config: config)
                 DispatchQueue.main.async { [weak self] in
                     self?.onShortcutPressed?()
                 }
@@ -208,6 +238,7 @@ class GlobalKeyListener {
                 recordingInProgress = false
                 isShortcutActive = false
                 lastStateChange = now
+                stopReleaseCheckTimer()
                 DispatchQueue.main.async { [weak self] in
                     self?.onShortcutReleased?()
                 }
@@ -217,6 +248,41 @@ class GlobalKeyListener {
             // In toggle mode, releasing the key just updates active state
             isShortcutActive = false
         }
+    }
+
+    // MARK: - Polling Fallback
+
+    /// Safety net: periodically checks if Fn is still held during hold-to-record mode.
+    /// Catches cases where the Fn release event is consumed by the system (e.g., Globe key
+    /// opening emoji picker, input source switch, or macOS dictation).
+    private func startReleaseCheckTimer(config: ShortcutConfig) {
+        guard config.useFnKey && config.keyCode == 0 && config.recordingMode == .holdToRecord else { return }
+
+        stopReleaseCheckTimer()
+
+        let timer = DispatchSource.makeTimerSource(queue: stateQueue)
+        timer.schedule(deadline: .now() + 0.5, repeating: 0.2)
+        timer.setEventHandler { [weak self] in
+            guard let self = self, self.recordingInProgress else {
+                self?.stopReleaseCheckTimer()
+                return
+            }
+
+            let currentFlags = NSEvent.modifierFlags
+            Logger.debug("Polling check: .function=\(currentFlags.contains(.function))", subsystem: .keyListener)
+            if !currentFlags.contains(.function) {
+                Logger.warning("Fn release detected via polling fallback (event monitors missed it)", subsystem: .keyListener)
+                self.handleShortcutDeactivated(config: config)
+                self.fnDown = false
+            }
+        }
+        timer.resume()
+        releaseCheckTimer = timer
+    }
+
+    private func stopReleaseCheckTimer() {
+        releaseCheckTimer?.cancel()
+        releaseCheckTimer = nil
     }
 
     // MARK: - Carbon Hot Key (for key+modifier shortcuts)

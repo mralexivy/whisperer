@@ -58,13 +58,24 @@ final class Logger {
     private let osLog = OSLog(subsystem: "com.ivy.whisperer", category: "general")
 
     // Minimum log level to write
-    // Debug builds: show everything for development
-    // Release builds: info and above (debug messages filtered out)
-    #if DEBUG
-    var minimumLevel: LogLevel = .debug
-    #else
-    var minimumLevel: LogLevel = .info
-    #endif
+    // Default: .info in release, .debug in debug builds
+    // Can be changed at runtime via Settings > Diagnostics > Verbose Logging
+    var minimumLevel: LogLevel {
+        didSet {
+            UserDefaults.standard.set(minimumLevel.rawValue, forKey: "logMinimumLevel")
+            let timestamp = dateFormatter.string(from: Date())
+            let msg = "[\(timestamp)] [INFO] [App] [Logger.swift:0] Log level changed to \(minimumLevel.prefix)\n"
+            queue.async { [weak self] in
+                self?.writeToFile(msg)
+            }
+        }
+    }
+
+    /// Whether verbose (debug) logging is enabled
+    static var isVerbose: Bool {
+        get { shared.minimumLevel == .debug }
+        set { shared.minimumLevel = newValue ? .debug : .info }
+    }
 
     // Maximum log file size before rotation (10 MB)
     private let maxFileSize: UInt64 = 10 * 1024 * 1024
@@ -73,6 +84,15 @@ final class Logger {
     private let maxRotatedFiles = 7
 
     private init() {
+        // Load persisted log level, default to .info for release, .debug for debug builds
+        #if DEBUG
+        let defaultLevel = LogLevel.debug.rawValue
+        #else
+        let defaultLevel = LogLevel.info.rawValue
+        #endif
+        let savedLevel = UserDefaults.standard.object(forKey: "logMinimumLevel") as? Int ?? defaultLevel
+        minimumLevel = LogLevel(rawValue: savedLevel) ?? .info
+
         // Setup date formatter
         dateFormatter = DateFormatter()
         dateFormatter.dateFormat = "yyyy-MM-dd HH:mm:ss.SSS"
