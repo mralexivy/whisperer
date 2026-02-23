@@ -13,7 +13,7 @@ class GlobalKeyListener {
     // Callbacks
     var onShortcutPressed: (() -> Void)?
     var onShortcutReleased: (() -> Void)?
-
+    var onShortcutCancelled: (() -> Void)?
     // Legacy callbacks (for backwards compatibility)
     var onFnPressed: (() -> Void)? {
         get { onShortcutPressed }
@@ -33,7 +33,7 @@ class GlobalKeyListener {
                 unregisterCarbonHotKey()
                 registerCarbonHotKeyIfNeeded()
             }
-            print("Shortcut config updated: \(shortcutConfig.displayString)")
+            Logger.info("Shortcut config updated: \(shortcutConfig.displayString)", subsystem: .keyListener)
         }
     }
 
@@ -71,7 +71,7 @@ class GlobalKeyListener {
         // Setup Carbon hotkey for key+modifier shortcuts (e.g., Cmd+Shift+Space)
         registerCarbonHotKeyIfNeeded()
 
-        print("GlobalKeyListener started with shortcut: \(shortcutConfig.displayString)")
+        Logger.info("GlobalKeyListener started with shortcut: \(shortcutConfig.displayString)", subsystem: .keyListener)
     }
 
     func stop() {
@@ -96,7 +96,7 @@ class GlobalKeyListener {
         // Unregister Carbon hotkey
         unregisterCarbonHotKey()
 
-        print("GlobalKeyListener stopped")
+        Logger.info("GlobalKeyListener stopped", subsystem: .keyListener)
     }
 
     // MARK: - Modifier Flags Monitor (Fn key detection)
@@ -126,7 +126,7 @@ class GlobalKeyListener {
             return event
         }
 
-        print("FlagsChanged monitors enabled (global + local)")
+        Logger.info("FlagsChanged monitors enabled (global + local)", subsystem: .keyListener)
     }
 
     private func handleFlagsChanged(_ event: NSEvent, config: ShortcutConfig) {
@@ -137,6 +137,13 @@ class GlobalKeyListener {
         }
 
         Logger.debug("flagsChanged keyCode=\(event.keyCode) flags=\(event.modifierFlags.rawValue)", subsystem: .keyListener)
+
+        // Fn+key combo: another modifier pressed while Fn is held during recording.
+        // Cancel recording entirely — don't process audio.
+        if fnDown && recordingInProgress && config.useFnKey && config.keyCode == 0 && config.modifierFlags == 0 {
+            handleShortcutCancelled(config: config, reason: "Fn+modifier keyCode=\(event.keyCode)")
+            return
+        }
 
         // For modifier-only shortcuts (non-Fn), check if modifiers match
         if !config.useFnKey && config.keyCode == 0 && config.modifierFlags != 0 {
@@ -193,7 +200,7 @@ class GlobalKeyListener {
         switch config.recordingMode {
         case .holdToRecord:
             if !recordingInProgress {
-                print("Shortcut PRESSED (\(config.displayString))")
+                Logger.info("Shortcut PRESSED (\(config.displayString))", subsystem: .keyListener)
                 recordingInProgress = true
                 isShortcutActive = true
                 lastStateChange = now
@@ -209,14 +216,14 @@ class GlobalKeyListener {
                 lastStateChange = now
 
                 if isRecordingToggled {
-                    print("Shortcut TOGGLE OFF (\(config.displayString))")
+                    Logger.info("Shortcut TOGGLE OFF (\(config.displayString))", subsystem: .keyListener)
                     isRecordingToggled = false
                     recordingInProgress = false
                     DispatchQueue.main.async { [weak self] in
                         self?.onShortcutReleased?()
                     }
                 } else {
-                    print("Shortcut TOGGLE ON (\(config.displayString))")
+                    Logger.info("Shortcut TOGGLE ON (\(config.displayString))", subsystem: .keyListener)
                     isRecordingToggled = true
                     recordingInProgress = true
                     DispatchQueue.main.async { [weak self] in
@@ -234,7 +241,7 @@ class GlobalKeyListener {
         switch config.recordingMode {
         case .holdToRecord:
             if recordingInProgress {
-                print("Shortcut RELEASED (\(config.displayString))")
+                Logger.info("Shortcut RELEASED (\(config.displayString))", subsystem: .keyListener)
                 recordingInProgress = false
                 isShortcutActive = false
                 lastStateChange = now
@@ -250,34 +257,87 @@ class GlobalKeyListener {
         }
     }
 
+    /// Cancels the shortcut activation due to Fn+key combo detection.
+    /// Unlike deactivation (normal release), cancellation discards the recording.
+    private func handleShortcutCancelled(config: ShortcutConfig, reason: String) {
+        guard recordingInProgress else { return }
+
+        Logger.info("Shortcut CANCELLED (\(config.displayString)) — \(reason)", subsystem: .keyListener)
+        recordingInProgress = false
+        isShortcutActive = false
+        isRecordingToggled = false
+        lastStateChange = Date()
+        stopReleaseCheckTimer()
+        DispatchQueue.main.async { [weak self] in
+            self?.onShortcutCancelled?()
+        }
+    }
+
     // MARK: - Polling Fallback
 
-    /// Safety net: periodically checks if Fn is still held during hold-to-record mode.
-    /// Catches cases where the Fn release event is consumed by the system (e.g., Globe key
-    /// opening emoji picker, input source switch, or macOS dictation).
+    /// Polls key state to detect Fn release or Fn+key combos during hold-to-record mode.
+    /// Catches: (1) Fn release consumed by the system (Globe key, emoji picker, dictation),
+    /// (2) any key pressed while Fn is held (volume, brightness, F-keys, letter keys, etc.).
+    /// Uses CGEventSource.keyState to query the system key state table — this is a passive
+    /// state query, NOT event monitoring or interception.
     private func startReleaseCheckTimer(config: ShortcutConfig) {
         guard config.useFnKey && config.keyCode == 0 && config.recordingMode == .holdToRecord else { return }
 
         stopReleaseCheckTimer()
 
         let timer = DispatchSource.makeTimerSource(queue: stateQueue)
-        timer.schedule(deadline: .now() + 0.5, repeating: 0.2)
+        timer.schedule(deadline: .now() + 0.05, repeating: 0.05)
         timer.setEventHandler { [weak self] in
             guard let self = self, self.recordingInProgress else {
                 self?.stopReleaseCheckTimer()
                 return
             }
 
+            // Check 1: Fn key released (event monitors may have missed it)
             let currentFlags = NSEvent.modifierFlags
-            Logger.debug("Polling check: .function=\(currentFlags.contains(.function))", subsystem: .keyListener)
             if !currentFlags.contains(.function) {
-                Logger.warning("Fn release detected via polling fallback (event monitors missed it)", subsystem: .keyListener)
+                Logger.info("Fn release detected via polling", subsystem: .keyListener)
                 self.handleShortcutDeactivated(config: config)
                 self.fnDown = false
+                return
+            }
+
+            // Check 2: Any non-modifier key pressed while Fn is held → Fn+key combo
+            if self.isAnyNonModifierKeyPressed() {
+                self.handleShortcutCancelled(config: config, reason: "Fn+key via key state polling")
+                return
+            }
+
+            // Check 3: Modifier key added while Fn is held (Fn+Cmd, Fn+Shift, etc.)
+            let extraModifiers: NSEvent.ModifierFlags = [.command, .control, .option, .shift]
+            if !currentFlags.intersection(extraModifiers).isEmpty {
+                self.handleShortcutCancelled(config: config, reason: "Fn+modifier via polling")
             }
         }
         timer.resume()
         releaseCheckTimer = timer
+    }
+
+    /// Checks if any non-modifier key is currently pressed.
+    /// Uses CGEventSource.keyState which queries the system key state table —
+    /// a passive read, not event monitoring or interception.
+    private func isAnyNonModifierKeyPressed() -> Bool {
+        let modifierKeyCodes: Set<CGKeyCode> = [
+            54, 55,  // Right/Left Command
+            56, 60,  // Left/Right Shift
+            58, 61,  // Left/Right Option
+            59, 62,  // Left/Right Control
+            63,      // Fn/Globe
+            57,      // Caps Lock
+        ]
+
+        for keyCode: CGKeyCode in 0..<128 {
+            guard !modifierKeyCodes.contains(keyCode) else { continue }
+            if CGEventSource.keyState(.combinedSessionState, key: keyCode) {
+                return true
+            }
+        }
+        return false
     }
 
     private func stopReleaseCheckTimer() {
@@ -318,7 +378,7 @@ class GlobalKeyListener {
         )
 
         guard status == noErr else {
-            print("Failed to register Carbon hotkey: \(status)")
+            Logger.error("Failed to register Carbon hotkey: \(status)", subsystem: .keyListener)
             return
         }
 
@@ -343,9 +403,9 @@ class GlobalKeyListener {
         )
 
         if handlerResult == noErr {
-            print("Carbon hotkey registered: \(config.displayString)")
+            Logger.info("Carbon hotkey registered: \(config.displayString)", subsystem: .keyListener)
         } else {
-            print("Failed to install Carbon event handler: \(handlerResult)")
+            Logger.error("Failed to install Carbon event handler: \(handlerResult)", subsystem: .keyListener)
         }
     }
 
