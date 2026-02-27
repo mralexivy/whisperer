@@ -195,7 +195,11 @@ class GlobalKeyListener {
 
     private func handleShortcutActivated(config: ShortcutConfig) {
         let now = Date()
-        guard now.timeIntervalSince(lastStateChange) > debounceInterval else { return }
+        let elapsed = now.timeIntervalSince(lastStateChange)
+        guard elapsed > debounceInterval else {
+            Logger.info("Shortcut PRESS debounced (\(String(format: "%.0f", elapsed * 1000))ms < \(String(format: "%.0f", debounceInterval * 1000))ms, recording=\(recordingInProgress))", subsystem: .keyListener)
+            return
+        }
 
         switch config.recordingMode {
         case .holdToRecord:
@@ -208,6 +212,8 @@ class GlobalKeyListener {
                 DispatchQueue.main.async { [weak self] in
                     self?.onShortcutPressed?()
                 }
+            } else {
+                Logger.info("Shortcut PRESS ignored — already recording (fnDown=\(fnDown), active=\(isShortcutActive))", subsystem: .keyListener)
             }
 
         case .toggle:
@@ -236,7 +242,17 @@ class GlobalKeyListener {
 
     private func handleShortcutDeactivated(config: ShortcutConfig) {
         let now = Date()
-        guard now.timeIntervalSince(lastStateChange) > debounceInterval else { return }
+
+        // In hold-to-record mode, NEVER debounce the release — dropping a release
+        // leaves recordingInProgress stuck true (state machine breaks).
+        // Debounce only applies to toggle mode where spurious releases are harmless.
+        if config.recordingMode == .toggle {
+            let elapsed = now.timeIntervalSince(lastStateChange)
+            guard elapsed > debounceInterval else {
+                Logger.info("Shortcut RELEASE debounced in toggle mode (\(String(format: "%.0f", elapsed * 1000))ms)", subsystem: .keyListener)
+                return
+            }
+        }
 
         switch config.recordingMode {
         case .holdToRecord:
@@ -249,6 +265,8 @@ class GlobalKeyListener {
                 DispatchQueue.main.async { [weak self] in
                     self?.onShortcutReleased?()
                 }
+            } else {
+                Logger.info("Shortcut RELEASE ignored — not recording (fnDown=\(fnDown), active=\(isShortcutActive))", subsystem: .keyListener)
             }
 
         case .toggle:

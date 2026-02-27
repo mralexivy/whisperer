@@ -248,6 +248,12 @@ class WhisperBridge {
     // Transcription timeout (default 30 seconds, longer on Intel)
     var transcriptionTimeout: TimeInterval = 30.0
 
+    // Threshold for filtering segments based on no_speech probability.
+    // Segments with no_speech_prob above this are considered non-speech hallucinations.
+    // Set high (0.9) because without the logprob conjunction that whisper.cpp uses
+    // internally, lower values aggressively filter legitimate speech.
+    private let noSpeechProbThreshold: Float = 0.9
+
     // Lock timeout - longer on Intel Macs due to slower processing
     private let lockTimeout: TimeInterval
 
@@ -264,6 +270,24 @@ class WhisperBridge {
 
     // Whether running on Apple Silicon
     private static let isAppleSilicon: Bool = machineArch.hasPrefix("arm64")
+
+    // Optimal thread count: use performance cores only on Apple Silicon
+    private static let optimalThreadCount: Int32 = {
+        if isAppleSilicon {
+            // Query actual performance core count via sysctl (hw.perflevel0 = P-cores)
+            var count: Int32 = 0
+            var size = MemoryLayout<Int32>.size
+            if sysctlbyname("hw.perflevel0.logicalcpu", &count, &size, nil, 0) == 0, count > 0 {
+                // Reserve 2 P-cores for audio capture, VAD, and UI
+                return max(2, count - 2)
+            }
+            // Fallback: ~50% of total cores (excludes E-cores heuristically)
+            return Int32(max(4, ProcessInfo.processInfo.activeProcessorCount / 2))
+        } else {
+            // Intel: no P/E split, cap at 8
+            return Int32(min(ProcessInfo.processInfo.activeProcessorCount, 8))
+        }
+    }()
 
     init(modelPath: URL) throws {
         self.modelPath = modelPath
@@ -340,8 +364,9 @@ class WhisperBridge {
     ///   - samples: Audio samples in float32 format at 16kHz
     ///   - initialPrompt: Optional context from previous transcription to improve continuity
     ///   - language: Language for transcription (default: .auto for auto-detection)
+    ///   - singleSegment: Force single-segment output (faster for short chunks)
     /// - Returns: Transcribed text
-    func transcribe(samples: [Float], initialPrompt: String? = nil, language: TranscriptionLanguage = .auto) -> String {
+    func transcribe(samples: [Float], initialPrompt: String? = nil, language: TranscriptionLanguage = .auto, singleSegment: Bool = false) -> String {
         // Don't start new transcriptions if shutting down
         guard !isShuttingDown else {
             Logger.warning("Transcription skipped - WhisperBridge is shutting down", subsystem: .transcription)
@@ -359,7 +384,7 @@ class WhisperBridge {
         do {
             result = try ctxLock.withLock(timeout: lockTimeout) { [weak self] in
                 guard let self = self else { return "" }
-                return self.performTranscription(samples: samples, initialPrompt: initialPrompt, language: language)
+                return self.performTranscription(samples: samples, initialPrompt: initialPrompt, language: language, singleSegment: singleSegment)
             }
         } catch SafeLockError.timeout {
             Logger.error("Failed to acquire context lock within \(lockTimeout) seconds - possible deadlock", subsystem: .transcription)
@@ -373,7 +398,7 @@ class WhisperBridge {
     }
 
     /// Perform the actual transcription (must be called with lock held)
-    private func performTranscription(samples: [Float], initialPrompt: String? = nil, language: TranscriptionLanguage = .auto) -> String {
+    private func performTranscription(samples: [Float], initialPrompt: String? = nil, language: TranscriptionLanguage = .auto, singleSegment: Bool = false) -> String {
         guard let ctx = ctx else {
             Logger.warning("Whisper context is nil, cannot transcribe", subsystem: .transcription)
             return ""
@@ -385,9 +410,20 @@ class WhisperBridge {
         wparams.print_special = false
         wparams.print_realtime = false
         wparams.print_timestamps = false
-        wparams.single_segment = false  // Allow multiple segments for full transcription
+        wparams.single_segment = singleSegment
         wparams.no_timestamps = true
-        wparams.n_threads = Int32(ProcessInfo.processInfo.activeProcessorCount)
+        wparams.n_threads = WhisperBridge.optimalThreadCount
+        wparams.suppress_nst = true
+        wparams.suppress_blank = true
+
+        // Speed: deterministic greedy decoding, no temperature fallback ladder
+        wparams.temperature = 0.0
+        wparams.temperature_inc = 0.0
+
+        // Explicit thresholds (match defaults, protect against future changes)
+        wparams.no_speech_thold = 0.6
+        wparams.logprob_thold = -1.0
+        wparams.entropy_thold = 2.4
 
         // Context carrying: use previous transcription as prompt for better continuity
         if let prompt = initialPrompt, !prompt.isEmpty {
@@ -427,6 +463,7 @@ class WhisperBridge {
             // Set specific language - C string must stay alive
             result = language.rawValue.withCString { langPtr in
                 wparams.language = langPtr
+                wparams.detect_language = false
                 Logger.debug("Language: \(language.displayName)", subsystem: .transcription)
 
                 if let prompt = initialPrompt, !prompt.isEmpty {
@@ -445,6 +482,13 @@ class WhisperBridge {
         var text = ""
         let nSegments = whisper_full_n_segments(ctx)
         for i in 0..<nSegments {
+            let noSpeechProb = whisper_full_get_segment_no_speech_prob(ctx, i)
+            if noSpeechProb > noSpeechProbThreshold {
+                if let segmentText = whisper_full_get_segment_text(ctx, i) {
+                    Logger.debug("Skipping non-speech segment (prob=\(String(format: "%.3f", noSpeechProb))): '\(String(cString: segmentText))'", subsystem: .transcription)
+                }
+                continue
+            }
             if let segmentText = whisper_full_get_segment_text(ctx, i) {
                 text += String(cString: segmentText)
             }
@@ -458,11 +502,12 @@ class WhisperBridge {
     ///   - samples: Audio samples in float32 format at 16kHz
     ///   - initialPrompt: Optional context from previous transcription
     ///   - language: Language for transcription (default: .auto for auto-detection)
+    ///   - singleSegment: Force single-segment output (faster for short chunks)
     ///   - completion: Called on background queue with transcription result
-    func transcribeAsync(samples: [Float], initialPrompt: String? = nil, language: TranscriptionLanguage = .auto, completion: @escaping (String) -> Void) {
+    func transcribeAsync(samples: [Float], initialPrompt: String? = nil, language: TranscriptionLanguage = .auto, singleSegment: Bool = false, completion: @escaping (String) -> Void) {
         queue.async { [weak self] in
             guard let self = self else { return }
-            let text = self.transcribe(samples: samples, initialPrompt: initialPrompt, language: language)
+            let text = self.transcribe(samples: samples, initialPrompt: initialPrompt, language: language, singleSegment: singleSegment)
             // Call completion directly on background queue to avoid blocking main thread
             completion(text)
         }

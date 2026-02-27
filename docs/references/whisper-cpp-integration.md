@@ -84,9 +84,20 @@ wparams.print_progress = false
 wparams.print_special = false
 wparams.print_realtime = false
 wparams.print_timestamps = false
-wparams.single_segment = false
+wparams.single_segment = singleSegment   // true for streaming chunks, false for longer audio
 wparams.no_timestamps = true
-wparams.n_threads = Int32(ProcessInfo.processInfo.activeProcessorCount)
+wparams.n_threads = WhisperBridge.optimalThreadCount  // P-cores only on Apple Silicon
+wparams.suppress_nst = true
+wparams.suppress_blank = true
+
+// Speed: deterministic greedy, no temperature fallback ladder
+wparams.temperature = 0.0
+wparams.temperature_inc = 0.0      // Prevents up to 6 decode retries per chunk
+
+// Explicit thresholds (pinned to prevent drift from future whisper.cpp default changes)
+wparams.no_speech_thold = 0.6
+wparams.logprob_thold = -1.0
+wparams.entropy_thold = 2.4
 
 // Context carrying
 if let prompt = initialPrompt, !prompt.isEmpty {
@@ -96,7 +107,33 @@ if let prompt = initialPrompt, !prompt.isEmpty {
 
 // Language (nil = auto-detect)
 wparams.language = language == .auto ? nil : languageCode
+// When language is explicit, disable auto-detection
+if language != .auto {
+    wparams.detect_language = false
+}
 ```
+
+## Thread Count
+
+On Apple Silicon, thread count targets performance cores only (excludes efficiency cores):
+
+```swift
+private static let optimalThreadCount: Int32 = {
+    if isAppleSilicon {
+        // Query P-core count via sysctl, reserve 2 for audio/UI
+        var count: Int32 = 0
+        var size = MemoryLayout<Int32>.size
+        if sysctlbyname("hw.perflevel0.logicalcpu", &count, &size, nil, 0) == 0, count > 0 {
+            return max(2, count - 2)
+        }
+        return Int32(max(4, ProcessInfo.processInfo.activeProcessorCount / 2))
+    } else {
+        return Int32(min(ProcessInfo.processInfo.activeProcessorCount, 8))
+    }
+}()
+```
+
+**Why not all cores?** Efficiency cores create straggler effects (P-cores wait for E-cores). Reserving 2 P-cores prevents contention with audio capture, VAD, and UI rendering.
 
 ## C String Lifetime
 
@@ -134,9 +171,13 @@ return text.trimmingCharacters(in: .whitespacesAndNewlines)
 ```
 Audio samples → Buffer (audioBuffer)
                     ↓ when buffer >= 32,000 samples (2s)
+                VAD check (hasSpeech — lightweight probability check)
+                    ↓ if speech detected
                 Prepend overlap (8,000 samples / 0.5s from previous chunk)
                     ↓
-                WhisperBridge.transcribeAsync()
+                WhisperBridge.transcribeAsync(singleSegment: true)
+                    ↓
+                Update lastProcessedSampleIndex
                     ↓
                 Deduplicate overlapping words
                     ↓
@@ -144,10 +185,13 @@ Audio samples → Buffer (audioBuffer)
                     ↓
                 Update live preview (main thread callback)
 
-On stop:
-    Re-transcribe ALL recorded samples → final accurate result
-    Apply DictionaryManager corrections
+On stop (tail-only final pass):
+    Compute tail = allRecordedSamples[lastProcessedSampleIndex...]
+    If tail > 0.3s: VAD-filter tail → transcribe tail only → deduplicate → append
+    Apply DictionaryManager corrections to combined streaming + tail result
 ```
+
+**Key difference from full re-transcription**: Only unprocessed audio after the last chunk is transcribed on stop, not the entire recording. For a 30s recording where ~1-2s of tail remains, this reduces final-pass latency by 10-15x.
 
 **Memory bounds**: Max 5 minutes = 4,800,000 samples (~19MB). Samples dropped after limit.
 

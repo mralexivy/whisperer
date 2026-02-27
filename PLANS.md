@@ -26,3 +26,4 @@ Tracked in [docs/exec-plans/tech-debt.md](docs/exec-plans/tech-debt.md).
 - **App Store Guideline 2.4.5 compliance** — Removed CGEventTap, IOHIDManager, global keyDown/keyUp monitors. Replaced with flagsChanged + Carbon hotkeys. Removed Input Monitoring permission. See [docs/exec-plans/app-store-submission.md](docs/exec-plans/app-store-submission.md).
 - **Text injection latency fix** — Removed background dispatch that caused 2.4s+ delays from queue contention. Added AX messaging timeouts (100ms).
 - **Audio engine crash protection** — Added universal retry logic with engine teardown and format validation for transient device errors (error 1852797029).
+- **Transcription speed optimization** — Disabled temperature fallback ladder (prevents 2-6x retry latency), tail-only final pass (10-15x faster stop), single-segment mode for streaming chunks, P-core-aware thread count on Apple Silicon, explicit `detect_language=false`, lightweight VAD `hasSpeech()` check.

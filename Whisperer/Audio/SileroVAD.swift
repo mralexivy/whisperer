@@ -159,8 +159,10 @@ class SileroVAD {
         let count = whisper_vad_segments_n_segments(segments)
 
         for i in 0..<count {
-            let t0 = whisper_vad_segments_get_segment_t0(segments, Int32(i))
-            let t1 = whisper_vad_segments_get_segment_t1(segments, Int32(i))
+            // whisper.cpp VAD returns times in centiseconds (int64_t internally),
+            // convert to seconds for SpeechSegment
+            let t0 = whisper_vad_segments_get_segment_t0(segments, Int32(i)) / 100
+            let t1 = whisper_vad_segments_get_segment_t1(segments, Int32(i)) / 100
             result.append(SpeechSegment(startTime: t0, endTime: t1))
         }
 
@@ -173,6 +175,28 @@ class SileroVAD {
     func containsSpeech(samples: [Float]) -> Bool {
         let segments = detectSpeechSegments(samples: samples)
         return !segments.isEmpty
+    }
+
+    /// Lightweight speech check using raw probabilities
+    /// Faster than containsSpeech() — skips segment boundary computation and allocation
+    func hasSpeech(samples: [Float]) -> Bool {
+        ctxLock.lock()
+        defer { ctxLock.unlock() }
+
+        guard let vadCtx = vadCtx else { return true }  // Assume speech if VAD unavailable
+        guard !samples.isEmpty else { return false }
+
+        let success = samples.withUnsafeBufferPointer { ptr -> Bool in
+            return whisper_vad_detect_speech(vadCtx, ptr.baseAddress, Int32(samples.count))
+        }
+        guard success else { return true }  // Assume speech on error
+
+        // Check raw probabilities directly instead of computing full segments
+        let count = whisper_vad_n_probs(vadCtx)
+        guard count > 0, let probsPtr = whisper_vad_probs(vadCtx) else { return true }
+
+        let probs = UnsafeBufferPointer(start: probsPtr, count: Int(count))
+        return probs.contains(where: { $0 > threshold })
     }
 
     /// Detect speech asynchronously

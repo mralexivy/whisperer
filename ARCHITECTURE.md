@@ -23,9 +23,9 @@ Microphone → AudioRecorder → StreamingTranscriber → WhisperBridge → Corr
 ```
 
 - **AudioRecorder** — `AVAudioEngine` capture, converts to 16kHz mono Float32. Streams samples via `onStreamingSamples` callback.
-- **StreamingTranscriber** — Buffers audio, processes 2s chunks with 0.5s overlap. Context carrying + deduplication. Final-pass re-transcription on stop.
-- **WhisperBridge** — Swift wrapper around whisper.cpp C library. Manages `whisper_context` lifecycle, Metal GPU acceleration. Thread-safe with SafeLock.
-- **SileroVAD** — Optional CoreML voice activity detection (~2MB model, CPU-only to avoid GPU contention).
+- **StreamingTranscriber** — Buffers audio, processes 2s chunks with 0.5s overlap (single-segment mode for speed). Context carrying + deduplication. Tail-only final pass on stop (only transcribes unprocessed audio after the last chunk, not the entire recording).
+- **WhisperBridge** — Swift wrapper around whisper.cpp C library. Manages `whisper_context` lifecycle, Metal GPU acceleration. Thread-safe with SafeLock. Uses deterministic greedy decoding (temperature=0, no fallback ladder) and performance-core-aware thread count.
+- **SileroVAD** — Optional Silero voice activity detection (~2MB model, CPU-only to avoid GPU contention). Provides both full segment detection and lightweight `hasSpeech()` probability check.
 
 ## Key Design Decisions
 
@@ -65,9 +65,18 @@ Microphone → AudioRecorder → StreamingTranscriber → WhisperBridge → Corr
 **Decision**: Last 100 characters of previous transcription passed as `initial_prompt` to next chunk.
 **Why**: Whisper produces better continuity when it knows what came before. Reduces word repetition at chunk boundaries.
 
-### 8. Final-Pass Re-transcription
-**Decision**: On stop, re-transcribe the entire recording for final output (ignoring streaming results).
-**Why**: Full-context transcription is significantly more accurate than stitched chunks. The streaming preview is for UX; the final pass is for accuracy.
+### 8. Tail-Only Final Pass
+**Decision**: On stop, only transcribe unprocessed audio after the last completed chunk (not the entire recording).
+**Why**: Re-transcribing the full recording added seconds of latency after key release. Tail-only processing reduces final-pass latency by 10-15x while streaming chunks already provide good incremental results. Dictionary corrections are applied to the combined streaming + tail output.
+**Pitfall**: If streaming quality degrades, consider adding a user preference for full re-transcription.
+
+### 9. Deterministic Greedy Decoding
+**Decision**: `temperature=0.0`, `temperature_inc=0.0` (no fallback ladder), greedy sampling with `best_of=1`.
+**Why**: The default `temperature_inc=0.2` causes up to 6 decode retries per chunk at increasing temperatures when entropy/logprob thresholds aren't met. Each retry re-runs the full decoder. Disabling this makes per-chunk latency predictable. VAD already filters silence, so fallback retries add cost without benefit for dictation.
+
+### 10. Performance-Core Thread Count
+**Decision**: On Apple Silicon, query `hw.perflevel0.logicalcpu` to use only performance cores (minus 2 reserved for audio/UI). On Intel, cap at 8 threads.
+**Why**: Using all cores (including efficiency cores) causes straggler effects where fast P-cores wait for slow E-cores. Reserving cores prevents contention with audio capture, VAD, and UI.
 
 ## Component Ownership
 
