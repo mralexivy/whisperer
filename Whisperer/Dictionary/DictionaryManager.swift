@@ -86,7 +86,7 @@ class DictionaryManager: ObservableObject {
 
             // Build correction engine on background thread (SymSpell + PhoneticMatcher
             // index building is expensive and would block the main actor for ~2s,
-            // delaying text injection on the first recording)
+            // delaying text entry on the first recording)
             let enabledEntries = finalEntries.filter { $0.isEnabled }
             let engine = CorrectionEngine(entries: enabledEntries)
 

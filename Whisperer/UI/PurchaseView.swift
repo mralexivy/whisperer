@@ -30,6 +30,8 @@ struct PurchaseView: View {
 
     // MARK: - Pro Activated View
 
+    private static let blueAccent = Color(red: 0.357, green: 0.424, blue: 0.969) // #5B6CF7
+
     private var proActivatedView: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack(spacing: 8) {
@@ -40,27 +42,27 @@ struct PurchaseView: View {
                 VStack(alignment: .leading, spacing: 2) {
                     Text("Pro Pack Activated")
                         .font(.system(size: 14, weight: .semibold))
-                        .foregroundColor(.primary)
+                        .foregroundColor(.white)
 
                     Text("Thank you for your support!")
                         .font(.system(size: 12))
-                        .foregroundColor(.secondary)
+                        .foregroundColor(.white.opacity(0.5))
                 }
             }
             .padding(12)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(Color.green.opacity(0.1))
+            .background(Color.green.opacity(0.15))
             .cornerRadius(8)
 
             Text("You have access to all Pro features:")
                 .font(.system(size: 12, weight: .medium))
-                .foregroundColor(.secondary)
+                .foregroundColor(.white.opacity(0.5))
 
             VStack(alignment: .leading, spacing: 6) {
                 proFeatureRow(icon: "keyboard", title: "Code Mode", description: "Spoken symbols & casing")
                 proFeatureRow(icon: "app.badge", title: "Per-App Profiles", description: "Auto-switch settings per app")
                 proFeatureRow(icon: "book.closed", title: "Personal Dictionary", description: "Custom words & names")
-                proFeatureRow(icon: "arrow.up.doc", title: "Pro Insertion", description: "Clipboard-safe paste & fallbacks")
+                proFeatureRow(icon: "arrow.up.doc", title: "Pro Text Entry", description: "Clipboard-safe paste & fallbacks")
             }
         }
     }
@@ -73,18 +75,21 @@ struct PurchaseView: View {
             VStack(alignment: .leading, spacing: 4) {
                 Text("Upgrade to Pro Pack")
                     .font(.system(size: 15, weight: .bold))
+                    .foregroundColor(.white)
 
                 Text("Unlock powerful features for developers and power users")
                     .font(.system(size: 12))
-                    .foregroundColor(.secondary)
+                    .foregroundColor(.white.opacity(0.5))
             }
 
             Divider()
+                .opacity(0.3)
 
             // Feature comparison
             VStack(alignment: .leading, spacing: 10) {
                 Text("What's included:")
                     .font(.system(size: 13, weight: .semibold))
+                    .foregroundColor(.white)
 
                 VStack(alignment: .leading, spacing: 8) {
                     proFeatureRow(
@@ -107,13 +112,14 @@ struct PurchaseView: View {
 
                     proFeatureRow(
                         icon: "arrow.up.doc",
-                        title: "Pro Insertion Engine",
-                        description: "Clipboard-safe paste, keystroke fallback, app-specific workarounds"
+                        title: "Pro Text Entry",
+                        description: "Clipboard-safe paste with app-specific workarounds"
                     )
                 }
             }
 
             Divider()
+                .opacity(0.3)
 
             // Purchase button
             if let product = storeManager.proPackProduct {
@@ -149,9 +155,9 @@ struct PurchaseView: View {
                         .padding(.vertical, 10)
                         .background(
                             LinearGradient(
-                                colors: [Color.accentColor, Color.accentColor.opacity(0.8)],
-                                startPoint: .top,
-                                endPoint: .bottom
+                                colors: [Self.blueAccent, Color(red: 0.545, green: 0.361, blue: 0.965)],
+                                startPoint: .leading,
+                                endPoint: .trailing
                             )
                         )
                         .cornerRadius(8)
@@ -167,7 +173,7 @@ struct PurchaseView: View {
                     }) {
                         Text("Restore Purchases")
                             .font(.system(size: 11))
-                            .foregroundColor(.accentColor)
+                            .foregroundColor(Self.blueAccent)
                     }
                     .buttonStyle(.plain)
                 }
@@ -178,7 +184,7 @@ struct PurchaseView: View {
                         .scaleEffect(0.7)
                     Text("Loading Pro Pack...")
                         .font(.system(size: 12))
-                        .foregroundColor(.secondary)
+                        .foregroundColor(.white.opacity(0.5))
                 }
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 8)
@@ -198,7 +204,7 @@ struct PurchaseView: View {
             // One-time purchase note
             Text("One-time purchase. Includes all future Pro Pack features.")
                 .font(.system(size: 10))
-                .foregroundColor(.secondary)
+                .foregroundColor(.white.opacity(0.35))
                 .multilineTextAlignment(.center)
                 .frame(maxWidth: .infinity)
         }
@@ -209,17 +215,18 @@ struct PurchaseView: View {
     private func proFeatureRow(icon: String, title: String, description: String) -> some View {
         HStack(alignment: .top, spacing: 10) {
             Image(systemName: icon)
-                .foregroundColor(.accentColor)
+                .foregroundColor(Self.blueAccent)
                 .font(.system(size: 14))
                 .frame(width: 20)
 
             VStack(alignment: .leading, spacing: 2) {
                 Text(title)
                     .font(.system(size: 12, weight: .medium))
+                    .foregroundColor(.white)
 
                 Text(description)
                     .font(.system(size: 11))
-                    .foregroundColor(.secondary)
+                    .foregroundColor(.white.opacity(0.5))
                     .fixedSize(horizontal: false, vertical: true)
             }
         }

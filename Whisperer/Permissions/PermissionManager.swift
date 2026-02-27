@@ -19,7 +19,7 @@ enum PermissionType: String, CaseIterable {
         case .microphone:
             return "Record audio from your microphone"
         case .accessibility:
-            return "Insert dictated text into apps (assistive input)"
+            return "Assistive dictation — enter text wherever you type"
         }
     }
 
@@ -144,6 +144,17 @@ class PermissionManager: ObservableObject {
     var allPermissionsGranted: Bool {
         microphoneStatus == .granted &&
         accessibilityStatus == .granted
+    }
+
+    /// Permissions required for the current mode.
+    /// Microphone is always required. Accessibility is only required
+    /// when system-wide dictation is enabled.
+    var requiredPermissionsGranted: Bool {
+        guard microphoneStatus == .granted else { return false }
+        if AppState.shared.systemWideDictationEnabled {
+            return accessibilityStatus == .granted
+        }
+        return true
     }
 
     var criticalPermissionsMissing: Bool {

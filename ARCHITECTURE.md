@@ -2,7 +2,7 @@
 
 ## Entry Point & State Machine
 
-**WhispererApp.swift** — `@main` SwiftUI app using `MenuBarExtra` (no dock icon, `.accessory` activation policy). Uses `@NSApplicationDelegateAdaptor` for `AppDelegate` which initializes all components.
+**WhispererApp.swift** — `@main` SwiftUI app using `MenuBarExtra` (no dock icon, `.accessory` activation policy). Uses `@NSApplicationDelegateAdaptor` for `AppDelegate` which initializes all components. Also contains `MBColors` (menu bar color palette), `MenuBarWindowConfigurator` (NSViewRepresentable for flat window chrome), and all menu bar tab views.
 
 **AppState.swift** — `@MainActor` singleton (`AppState.shared`) managing the recording state machine:
 
@@ -77,6 +77,30 @@ Microphone → AudioRecorder → StreamingTranscriber → WhisperBridge → Corr
 ### 10. Performance-Core Thread Count
 **Decision**: On Apple Silicon, query `hw.perflevel0.logicalcpu` to use only performance cores (minus 2 reserved for audio/UI). On Intel, cap at 8 threads.
 **Why**: Using all cores (including efficiency cores) causes straggler effects where fast P-cores wait for slow E-cores. Reserving cores prevents contention with audio capture, VAD, and UI.
+
+## Windows & UI Chrome
+
+All windows share a unified dark navy theme (`#0C0C1A` background, `#14142B` card surfaces, blue-purple accents).
+
+### Window Configuration Pattern
+Every NSWindow is configured for flat dark appearance:
+- `window.appearance = NSAppearance(named: .darkAqua)`
+- `window.titlebarAppearsTransparent = true` (workspace only — menu bar uses `MenuBarWindowConfigurator`)
+- `window.backgroundColor = NSColor(red: 0.047, green: 0.047, blue: 0.102, alpha: 1.0)`
+- `window.hasShadow = false` — flat appearance, no system border
+- Content view layer: `cornerRadius = 10`, `masksToBounds = true`, `borderWidth = 0`
+
+### Onboarding Window (OnboardingWindow + OnboardingView)
+Borderless NSWindow (860x540) shown on first launch. Four-page guided setup:
+1. **Welcome** — App introduction with brand animation
+2. **Permissions** — Microphone + Accessibility permission requests
+3. **Model Selection** — Download whisper model during setup
+4. **Shortcut Setup** — Configure recording trigger key
+
+Sets `hasCompletedOnboarding` in UserDefaults on completion. Launched from `AppDelegate.applicationDidFinishLaunching()` when flag is false.
+
+### Menu Bar Window (MenuBarWindowConfigurator)
+`NSViewRepresentable` that accesses the hosting NSWindow from SwiftUI's `MenuBarExtra` and applies the flat dark appearance. Necessary because `MenuBarExtra` doesn't expose its NSPanel directly.
 
 ## Component Ownership
 

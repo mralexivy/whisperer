@@ -29,6 +29,12 @@ class HistoryWindow: NSWindow {
         self.minSize = NSSize(width: 700, height: 700)
         self.center()
 
+        // Force dark appearance and blend titlebar with content
+        self.appearance = NSAppearance(named: .darkAqua)
+        self.titlebarAppearsTransparent = true
+        self.backgroundColor = NSColor(red: 0.047, green: 0.047, blue: 0.102, alpha: 1.0)
+        self.hasShadow = false
+
         // Add toolbar with sidebar toggle at leading edge
         let toolbar = NSToolbar(identifier: "WorkspaceToolbar")
         toolbar.delegate = self
@@ -41,6 +47,14 @@ class HistoryWindow: NSWindow {
         let historyView = HistoryWindowView()
         let hostingView = NSHostingView(rootView: historyView)
         self.contentView = hostingView
+
+        // Remove visible window border by configuring content view layer
+        hostingView.wantsLayer = true
+        hostingView.layer?.backgroundColor = NSColor(red: 0.047, green: 0.047, blue: 0.102, alpha: 1.0).cgColor
+        hostingView.layer?.cornerRadius = 10
+        hostingView.layer?.masksToBounds = true
+        hostingView.layer?.borderWidth = 0
+        hostingView.layer?.borderColor = NSColor.clear.cgColor
 
         // Make sure window appears in mission control and window list
         self.collectionBehavior = [.managed, .participatesInCycle]

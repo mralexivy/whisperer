@@ -18,7 +18,7 @@ struct WaveformView: View {
                 ForEach(0..<barCount, id: \.self) { index in
                     let amplitude = index < amplitudes.count ? amplitudes[index] : 0
                     RoundedRectangle(cornerRadius: 1.5)
-                        .fill(Color(red: 0.2, green: 0.8, blue: 0.4)) // Green like FaceTime
+                        .fill(Color(red: 0.357, green: 0.424, blue: 0.969)) // #5B6CF7 blue accent
                         .frame(
                             width: barWidth(for: geometry.size.width),
                             height: barHeight(
@@ -52,5 +52,5 @@ struct WaveformView: View {
     WaveformView(amplitudes: [0.2, 0.5, 0.8, 0.6, 0.3, 0.7, 0.9, 0.4, 0.5, 0.6])
         .frame(width: 100, height: 30)
         .padding()
-        .background(Color(white: 0.98))
+        .background(Color(red: 0.078, green: 0.078, blue: 0.169))
 }

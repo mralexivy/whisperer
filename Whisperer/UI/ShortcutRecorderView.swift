@@ -9,6 +9,8 @@ import SwiftUI
 import Carbon.HIToolbox
 
 struct ShortcutRecorderView: View {
+    static let blueAccent = Color(red: 0.357, green: 0.424, blue: 0.969) // #5B6CF7
+
     @ObservedObject var appState = AppState.shared
     @State private var isRecording = false
     @State private var tempConfig: ShortcutConfig?
@@ -48,7 +50,7 @@ struct ShortcutRecorderView: View {
                             .foregroundColor(.white)
                             .padding(.horizontal, 12)
                             .padding(.vertical, 5)
-                            .background(tempConfig != nil ? Color.accentColor : Color.gray)
+                            .background(tempConfig != nil ? ShortcutRecorderView.blueAccent : Color.gray)
                             .cornerRadius(6)
                             .contentShape(Rectangle())
                     }
@@ -62,10 +64,10 @@ struct ShortcutRecorderView: View {
                             Text("Change")
                                 .font(.system(size: 11, weight: .medium))
                         }
-                        .foregroundColor(.accentColor)
+                        .foregroundColor(ShortcutRecorderView.blueAccent)
                         .padding(.horizontal, 10)
                         .padding(.vertical, 5)
-                        .background(Color.accentColor.opacity(0.1))
+                        .background(ShortcutRecorderView.blueAccent.opacity(0.15))
                         .cornerRadius(6)
                         .contentShape(Rectangle())
                     }
@@ -139,7 +141,7 @@ struct ShortcutRecorderView: View {
         .padding(.vertical, 8)
         .background(
             RoundedRectangle(cornerRadius: 8)
-                .fill(isRecording ? Color.orange.opacity(0.1) : Color.secondary.opacity(0.08))
+                .fill(isRecording ? Color.orange.opacity(0.15) : Color.white.opacity(0.06))
         )
         .overlay(
             RoundedRectangle(cornerRadius: 8)
@@ -168,16 +170,16 @@ struct ShortcutRecorderView: View {
     private func keyCapView(_ key: String) -> some View {
         Text(key)
             .font(.system(size: 12, weight: .semibold, design: .rounded))
-            .foregroundColor(.primary)
+            .foregroundColor(.white)
             .frame(minWidth: key.count > 2 ? 32 : 24, minHeight: 24)
             .background(
                 RoundedRectangle(cornerRadius: 5)
-                    .fill(Color(nsColor: .controlBackgroundColor))
-                    .shadow(color: .black.opacity(0.1), radius: 1, x: 0, y: 1)
+                    .fill(Color.white.opacity(0.08))
+                    .shadow(color: .black.opacity(0.2), radius: 1, x: 0, y: 1)
             )
             .overlay(
                 RoundedRectangle(cornerRadius: 5)
-                    .stroke(Color.secondary.opacity(0.2), lineWidth: 0.5)
+                    .stroke(Color.white.opacity(0.1), lineWidth: 0.5)
             )
     }
 
@@ -229,13 +231,13 @@ struct ShortcutRecorderView: View {
                 Text(title)
                     .font(.system(size: 11, weight: .medium))
             }
-            .foregroundColor(isSelected ? .white : .primary)
+            .foregroundColor(isSelected ? .white : .white.opacity(0.5))
             .padding(.horizontal, 12)
             .padding(.vertical, 7)
             .frame(maxWidth: .infinity)
             .background(
                 RoundedRectangle(cornerRadius: 6)
-                    .fill(isSelected ? Color.accentColor : Color.secondary.opacity(0.1))
+                    .fill(isSelected ? Self.blueAccent : Color.white.opacity(0.08))
             )
             .contentShape(Rectangle())
         }

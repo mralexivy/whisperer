@@ -99,17 +99,11 @@ struct TranscriptionRow: View {
                         .fixedSize(horizontal: false, vertical: true)
 
                     // Bottom metadata: wpm · words · Language
-                    HStack(spacing: 0) {
-                        Text("\(transcription.wordsPerMinute) wpm")
-                        Text(" · ")
-                            .foregroundColor(WhispererColors.secondaryText(colorScheme).opacity(0.4))
-                        Text("\(transcription.wordCount) words")
-                        Text(" · ")
-                            .foregroundColor(WhispererColors.secondaryText(colorScheme).opacity(0.4))
-                        Text(languageDisplay)
+                    HStack(spacing: 10) {
+                        metadataPill(icon: "speedometer", text: "\(transcription.wordsPerMinute) wpm", color: .orange)
+                        metadataPill(icon: "text.word.spacing", text: "\(transcription.wordCount) words", color: WhispererColors.accentBlue)
+                        metadataPill(icon: "globe", text: languageDisplay, color: .purple)
                     }
-                    .font(.system(size: 11, weight: .medium))
-                    .foregroundColor(WhispererColors.secondaryText(colorScheme))
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.leading, 10)
@@ -250,6 +244,25 @@ struct TranscriptionRow: View {
             Capsule()
                 .fill(WhispererColors.accent)
                 .shadow(color: WhispererColors.accent.opacity(0.3), radius: 6, y: 2)
+        )
+    }
+
+    // MARK: - Metadata Pill
+
+    private func metadataPill(icon: String, text: String, color: Color) -> some View {
+        HStack(spacing: 4) {
+            Image(systemName: icon)
+                .font(.system(size: 9, weight: .semibold))
+                .foregroundColor(color)
+            Text(text)
+                .font(.system(size: 10.5, weight: .medium))
+                .foregroundColor(color)
+        }
+        .padding(.horizontal, 7)
+        .padding(.vertical, 3)
+        .background(
+            Capsule()
+                .fill(color.opacity(colorScheme == .dark ? 0.12 : 0.08))
         )
     }
 

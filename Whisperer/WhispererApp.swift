@@ -72,12 +72,14 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         Task {
             await checkPermissions()
         }
+
+        // Show onboarding window on first launch
+        OnboardingWindowManager.shared.showIfNeeded()
     }
 
     private func setupComponents() {
-        // Initialize all components
+        // Initialize core components (always needed)
         appState.audioRecorder = AudioRecorder()
-        appState.keyListener = GlobalKeyListener()
         appState.whisperRunner = WhisperRunner()
         appState.textInjector = TextInjector()
         appState.audioMuter = AudioMuter()
@@ -85,25 +87,6 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
         // Set initial selected microphone
         appState.audioRecorder?.selectedDeviceID = appState.audioDeviceManager.selectedDevice?.id
-
-        // Setup key listener callbacks
-        appState.keyListener?.onFnPressed = { [weak self] in
-            Task { @MainActor in
-                self?.appState.startRecording()
-            }
-        }
-
-        appState.keyListener?.onFnReleased = { [weak self] in
-            Task { @MainActor in
-                self?.appState.stopRecording()
-            }
-        }
-
-        appState.keyListener?.onShortcutCancelled = { [weak self] in
-            Task { @MainActor in
-                self?.appState.cancelRecording()
-            }
-        }
 
         // Setup audio callback for waveform
         appState.audioRecorder?.onAmplitudeUpdate = { [weak self] amplitude in
@@ -119,12 +102,14 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             }
         }
 
-        // Start key listener
-        appState.keyListener?.start()
+        // Only start global key listener if user has opted in
+        if appState.systemWideDictationEnabled {
+            appState.startGlobalDictation()
+        }
 
         // Eagerly initialize DictionaryManager so its background loading
         // (CoreData fetch + SymSpell/PhoneticMatcher index build) completes
-        // before the user's first recording, avoiding a text injection delay.
+        // before the user's first recording, avoiding a text entry delay.
         _ = DictionaryManager.shared
     }
 
@@ -134,18 +119,13 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func checkPermissions() async {
-        // Initialize permission manager and request permissions on startup
+        // Only request microphone on startup (core feature).
+        // Accessibility is requested only when user enables system-wide dictation.
         await MainActor.run {
             let permissionManager = PermissionManager.shared
 
-            // Request microphone permission if not granted
             if permissionManager.microphoneStatus != .granted {
                 permissionManager.requestMicrophonePermission()
-            }
-
-            // Request accessibility permission if not granted
-            if permissionManager.accessibilityStatus != .granted {
-                permissionManager.requestAccessibilityPermission()
             }
         }
 
@@ -241,6 +221,62 @@ enum MenuTab: String, CaseIterable {
         case .settings: return "gear"
         }
     }
+
+    var color: Color {
+        switch self {
+        case .status: return Color(red: 0.357, green: 0.424, blue: 0.969) // blue
+        case .models: return .orange
+        case .settings: return .purple
+        }
+    }
+}
+
+// MARK: - Menu Bar Colors (dark navy palette — matches workspace & onboarding)
+
+private enum MBColors {
+    static let background       = Color(red: 0.047, green: 0.047, blue: 0.102)  // #0C0C1A
+    static let cardSurface      = Color(red: 0.078, green: 0.078, blue: 0.169)  // #14142B
+    static let elevated         = Color(red: 0.110, green: 0.110, blue: 0.227)  // #1C1C3A
+    static let accent           = Color(red: 0.357, green: 0.424, blue: 0.969)  // #5B6CF7
+    static let accentPurple     = Color(red: 0.545, green: 0.361, blue: 0.965)  // #8B5CF6
+    static var accentGradient: LinearGradient {
+        LinearGradient(colors: [accent, accentPurple], startPoint: .leading, endPoint: .trailing)
+    }
+    static let textPrimary      = Color.white
+    static let textSecondary    = Color.white.opacity(0.5)
+    static let textTertiary     = Color.white.opacity(0.35)
+    static let border           = Color.white.opacity(0.06)
+    static let pill             = Color.white.opacity(0.08)
+}
+
+// MARK: - Menu Bar Window Configurator
+
+/// Finds the hosting NSWindow and forces dark appearance + navy background
+/// so the system window chrome matches the content.
+private struct MenuBarWindowConfigurator: NSViewRepresentable {
+    func makeNSView(context: Context) -> NSView {
+        let view = NSView()
+        DispatchQueue.main.async {
+            guard let window = view.window else { return }
+            window.appearance = NSAppearance(named: .darkAqua)
+            window.backgroundColor = NSColor(red: 0.047, green: 0.047, blue: 0.102, alpha: 1.0)
+            window.isOpaque = false
+            window.hasShadow = false
+
+            // Remove visible border by configuring the content view layer
+            if let contentView = window.contentView {
+                contentView.wantsLayer = true
+                contentView.layer?.backgroundColor = NSColor(red: 0.047, green: 0.047, blue: 0.102, alpha: 1.0).cgColor
+                contentView.layer?.cornerRadius = 10
+                contentView.layer?.masksToBounds = true
+                contentView.layer?.borderWidth = 0
+                contentView.layer?.borderColor = NSColor.clear.cgColor
+            }
+        }
+        return view
+    }
+
+    func updateNSView(_ nsView: NSView, context: Context) {}
 }
 
 // MARK: - Main Menu Bar View
@@ -269,7 +305,9 @@ struct MenuBarView: View {
             footerView
         }
         .frame(width: 360, height: 580)
-        .background(Color(nsColor: .windowBackgroundColor))
+        .background(MBColors.background)
+        .background(MenuBarWindowConfigurator())
+        .environment(\.colorScheme, .dark)
     }
 
     // MARK: - Header
@@ -277,20 +315,27 @@ struct MenuBarView: View {
     private var headerView: some View {
         VStack(spacing: 8) {
             HStack(spacing: 12) {
-                // App icon with glow effect
+                // App icon with gradient glow
                 ZStack {
                     Circle()
-                        .fill(statusColor.opacity(0.2))
+                        .fill(
+                            LinearGradient(
+                                colors: [MBColors.accent.opacity(0.3), MBColors.accentPurple.opacity(0.15)],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            )
+                        )
                         .frame(width: 44, height: 44)
 
                     Image(systemName: statusIcon)
                         .font(.system(size: 20, weight: .semibold))
-                        .foregroundColor(statusColor)
+                        .foregroundStyle(MBColors.accentGradient)
                 }
 
                 VStack(alignment: .leading, spacing: 2) {
                     Text("Whisperer")
                         .font(.system(size: 16, weight: .bold))
+                        .foregroundColor(MBColors.textPrimary)
 
                     HStack(spacing: 6) {
                         Circle()
@@ -299,7 +344,7 @@ struct MenuBarView: View {
 
                         Text(appState.state.displayText)
                             .font(.system(size: 12, weight: .medium))
-                            .foregroundColor(.secondary)
+                            .foregroundColor(MBColors.textSecondary)
                     }
                 }
 
@@ -309,7 +354,7 @@ struct MenuBarView: View {
                 HStack(spacing: 4) {
                     if appState.isModelLoaded {
                         Image(systemName: "checkmark.circle.fill")
-                            .foregroundColor(.green)
+                            .foregroundColor(MBColors.accent)
                             .font(.system(size: 10))
                     } else if appState.state == .idle {
                         ProgressView()
@@ -318,11 +363,11 @@ struct MenuBarView: View {
 
                     Text(appState.selectedModel.displayName)
                         .font(.system(size: 11, weight: .medium))
-                        .foregroundColor(.secondary)
+                        .foregroundColor(MBColors.textSecondary)
                 }
                 .padding(.horizontal, 8)
                 .padding(.vertical, 4)
-                .background(Color.secondary.opacity(0.1))
+                .background(MBColors.pill)
                 .cornerRadius(12)
             }
 
@@ -334,7 +379,7 @@ struct MenuBarView: View {
         .padding(16)
         .background(
             LinearGradient(
-                colors: [Color.accentColor.opacity(0.1), Color.clear],
+                colors: [MBColors.accent.opacity(0.1), Color.clear],
                 startPoint: .top,
                 endPoint: .bottom
             )
@@ -355,8 +400,8 @@ struct MenuBarView: View {
         switch appState.state {
         case .recording: return .red
         case .transcribing, .inserting: return .orange
-        case .downloadingModel: return .blue
-        default: return appState.isModelLoaded ? .green : .orange
+        case .downloadingModel: return MBColors.accent
+        default: return appState.isModelLoaded ? MBColors.accent : .orange
         }
     }
 
@@ -383,8 +428,12 @@ struct MenuBarView: View {
             .foregroundColor(.red)
         }
         .padding(10)
-        .background(Color.red.opacity(0.1))
+        .background(Color.red.opacity(0.15))
         .cornerRadius(8)
+        .overlay(
+            RoundedRectangle(cornerRadius: 8)
+                .stroke(Color.red.opacity(0.3), lineWidth: 1)
+        )
     }
 
     // MARK: - Tab Bar
@@ -397,7 +446,7 @@ struct MenuBarView: View {
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 8)
-        .background(Color.secondary.opacity(0.05))
+        .background(MBColors.cardSurface)
     }
 
     private func tabButton(_ tab: MenuTab) -> some View {
@@ -409,17 +458,18 @@ struct MenuBarView: View {
             HStack(spacing: 6) {
                 Image(systemName: tab.icon)
                     .font(.system(size: 12, weight: .medium))
+                    .foregroundColor(tab.color)
                 Text(tab.rawValue)
                     .font(.system(size: 12, weight: .medium))
+                    .foregroundColor(selectedTab == tab ? MBColors.textPrimary : MBColors.textSecondary)
             }
             .padding(.horizontal, 16)
             .padding(.vertical, 8)
             .background(
                 selectedTab == tab
-                    ? Color.accentColor.opacity(0.15)
+                    ? tab.color.opacity(0.12)
                     : Color.clear
             )
-            .foregroundColor(selectedTab == tab ? .accentColor : .secondary)
             .cornerRadius(8)
             .contentShape(Rectangle())
         }
@@ -445,7 +495,7 @@ struct MenuBarView: View {
 
     private var footerView: some View {
         HStack(spacing: 12) {
-            // Workspace button - premium style matching Quit
+            // Workspace button - blue-purple gradient
             Button(action: { HistoryWindowManager.shared.showWindowAndDismissMenu() }) {
                 HStack(spacing: 6) {
                     Image(systemName: "square.grid.2x2.fill")
@@ -456,15 +506,9 @@ struct MenuBarView: View {
                 .foregroundColor(.white)
                 .padding(.horizontal, 14)
                 .padding(.vertical, 8)
-                .background(
-                    LinearGradient(
-                        colors: [Color.indigo.opacity(0.9), Color.indigo],
-                        startPoint: .top,
-                        endPoint: .bottom
-                    )
-                )
+                .background(MBColors.accentGradient)
                 .cornerRadius(8)
-                .shadow(color: Color.indigo.opacity(0.3), radius: 4, x: 0, y: 2)
+                .shadow(color: MBColors.accent.opacity(0.3), radius: 4, x: 0, y: 2)
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
@@ -506,25 +550,16 @@ struct MenuBarView: View {
         .padding(.horizontal, 16)
         .padding(.vertical, 14)
         .background(
-            Color.secondary.opacity(0.03)
+            MBColors.cardSurface
                 .overlay(
                     Rectangle()
                         .frame(height: 1)
-                        .foregroundColor(Color.secondary.opacity(0.1)),
+                        .foregroundColor(MBColors.border),
                     alignment: .top
                 )
         )
     }
 
-    private func checkPermissions() {
-        let permissionManager = PermissionManager.shared
-        if permissionManager.microphoneStatus != .granted {
-            permissionManager.requestMicrophonePermission()
-        }
-        if permissionManager.accessibilityStatus != .granted {
-            permissionManager.requestAccessibilityPermission()
-        }
-    }
 }
 
 // MARK: - Status Tab
@@ -533,62 +568,276 @@ struct StatusTabView: View {
     @ObservedObject var appState = AppState.shared
     @ObservedObject var permissionManager = PermissionManager.shared
 
+    /// Whether to show permission warnings (mode-aware)
+    private var showPermissionWarning: Bool {
+        if permissionManager.microphoneStatus != .granted { return true }
+        if appState.systemWideDictationEnabled && permissionManager.accessibilityStatus != .granted { return true }
+        return false
+    }
+
     var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            // Permission warning banner (if needed)
-            if !permissionManager.allPermissionsGranted {
-                permissionWarningBanner
-            }
+        ScrollView(showsIndicators: false) {
+            VStack(alignment: .leading, spacing: 16) {
+                // Permission warning banner (mode-aware)
+                if showPermissionWarning {
+                    permissionWarningBanner
+                }
 
-            // Quick info cards
-            VStack(spacing: 12) {
-                infoCard(
-                    icon: "cpu",
-                    title: "Model",
-                    value: appState.selectedModel.displayName,
-                    detail: appState.selectedModel.sizeDescription,
-                    color: .blue
-                )
+                // In-App Transcription — core feature, no Accessibility required
+                inAppTranscriptionCard
 
-                infoCard(
-                    icon: "mic",
-                    title: "Microphone",
-                    value: AudioDeviceManager.shared.selectedDevice?.name ?? "System Default",
-                    detail: nil,
-                    color: .green
-                )
+                // Quick info cards
+                VStack(spacing: 12) {
+                    infoCard(
+                        icon: "cpu",
+                        title: "Model",
+                        value: appState.selectedModel.displayName,
+                        detail: appState.selectedModel.sizeDescription,
+                        color: .blue
+                    )
 
-                infoCard(
-                    icon: "keyboard",
-                    title: "Shortcut",
-                    value: appState.keyListener?.shortcutConfig.displayString ?? "Fn",
-                    detail: appState.keyListener?.shortcutConfig.recordingMode.displayName,
-                    color: .purple
-                )
-            }
+                    infoCard(
+                        icon: "mic",
+                        title: "Microphone",
+                        value: AudioDeviceManager.shared.selectedDevice?.name ?? "System Default",
+                        detail: nil,
+                        color: .cyan
+                    )
 
-            // Usage hint
-            VStack(alignment: .leading, spacing: 8) {
-                Text("How to use")
-                    .font(.system(size: 12, weight: .semibold))
-                    .foregroundColor(.secondary)
+                    // Only show shortcut card when system-wide dictation is enabled
+                    if appState.systemWideDictationEnabled {
+                        infoCard(
+                            icon: "keyboard",
+                            title: "Shortcut",
+                            value: appState.keyListener?.shortcutConfig.displayString ?? "Fn",
+                            detail: appState.keyListener?.shortcutConfig.recordingMode.displayName,
+                            color: .purple
+                        )
+                    }
+                }
 
-                HStack(spacing: 12) {
-                    stepBadge(number: 1, text: "Hold shortcut")
-                    Image(systemName: "arrow.right")
-                        .font(.caption2)
-                        .foregroundColor(.secondary)
-                    stepBadge(number: 2, text: "Speak")
-                    Image(systemName: "arrow.right")
-                        .font(.caption2)
-                        .foregroundColor(.secondary)
-                    stepBadge(number: 3, text: "Release")
+                // Usage hint — context-dependent
+                if appState.systemWideDictationEnabled {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("System-Wide Dictation")
+                            .font(.system(size: 12, weight: .semibold))
+                            .foregroundColor(MBColors.textSecondary)
+
+                        HStack(spacing: 12) {
+                            stepBadge(number: 1, text: "Hold shortcut")
+                            Image(systemName: "arrow.right")
+                                .font(.caption2)
+                                .foregroundColor(MBColors.textTertiary)
+                            stepBadge(number: 2, text: "Speak")
+                            Image(systemName: "arrow.right")
+                                .font(.caption2)
+                                .foregroundColor(MBColors.textTertiary)
+                            stepBadge(number: 3, text: "Release")
+                        }
+                    }
+                    .padding(12)
+                    .background(MBColors.cardSurface)
+                    .cornerRadius(10)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 10)
+                            .stroke(MBColors.border, lineWidth: 1)
+                    )
+                } else {
+                    // Prompt to enable system-wide dictation
+                    VStack(alignment: .leading, spacing: 8) {
+                        HStack(spacing: 8) {
+                            Image(systemName: "globe")
+                                .font(.system(size: 14))
+                                .foregroundColor(MBColors.accent)
+                            Text("System-Wide Dictation")
+                                .font(.system(size: 12, weight: .semibold))
+                                .foregroundColor(MBColors.textPrimary)
+                        }
+                        Text("Dictate text anywhere you can type. Enable in Settings.")
+                            .font(.system(size: 11))
+                            .foregroundColor(MBColors.textSecondary)
+                    }
+                    .padding(12)
+                    .background(MBColors.accent.opacity(0.08))
+                    .cornerRadius(10)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 10)
+                            .stroke(MBColors.accent.opacity(0.15), lineWidth: 1)
+                    )
                 }
             }
-            .padding(12)
-            .background(Color.secondary.opacity(0.05))
-            .cornerRadius(10)
         }
+    }
+
+    // MARK: - In-App Transcription Card
+
+    private var inAppTranscriptionCard: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(spacing: 8) {
+                ZStack {
+                    RoundedRectangle(cornerRadius: 8)
+                        .fill(MBColors.accent.opacity(0.15))
+                        .frame(width: 36, height: 36)
+                    Image(systemName: "mic.fill")
+                        .font(.system(size: 16))
+                        .foregroundColor(MBColors.accent)
+                }
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Transcribe")
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundColor(MBColors.textPrimary)
+                    Text("Record and transcribe your voice")
+                        .font(.system(size: 11))
+                        .foregroundColor(MBColors.textSecondary)
+                }
+
+                Spacer()
+            }
+
+            // Recording state or result
+            if appState.isInAppMode && appState.state.isRecording {
+                // Live transcription during recording
+                VStack(spacing: 8) {
+                    // Waveform
+                    HStack(spacing: 2) {
+                        ForEach(0..<appState.waveformAmplitudes.count, id: \.self) { i in
+                            RoundedRectangle(cornerRadius: 1.5)
+                                .fill(Color.red)
+                                .frame(width: 3, height: max(3, CGFloat(appState.waveformAmplitudes[i]) * 30))
+                        }
+                    }
+                    .frame(height: 30)
+                    .animation(.easeOut(duration: 0.1), value: appState.waveformAmplitudes)
+
+                    if !appState.liveTranscription.isEmpty {
+                        Text(appState.liveTranscription)
+                            .font(.system(size: 12))
+                            .foregroundColor(MBColors.textPrimary)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .lineLimit(3)
+                    }
+
+                    // Stop button
+                    Button(action: {
+                        appState.stopInAppRecording()
+                    }) {
+                        HStack(spacing: 6) {
+                            Image(systemName: "stop.fill")
+                                .font(.system(size: 10))
+                            Text("Stop")
+                                .font(.system(size: 12, weight: .medium))
+                        }
+                        .foregroundColor(.white)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 8)
+                        .background(Color.red)
+                        .cornerRadius(8)
+                    }
+                    .buttonStyle(.plain)
+                }
+            } else if !appState.lastInAppTranscription.isEmpty {
+                // Show result
+                VStack(spacing: 8) {
+                    Text(appState.lastInAppTranscription)
+                        .font(.system(size: 12))
+                        .foregroundColor(MBColors.textPrimary)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(8)
+                        .background(MBColors.elevated)
+                        .cornerRadius(6)
+                        .textSelection(.enabled)
+
+                    HStack(spacing: 8) {
+                        Button(action: {
+                            NSPasteboard.general.clearContents()
+                            NSPasteboard.general.setString(appState.lastInAppTranscription, forType: .string)
+                        }) {
+                            HStack(spacing: 4) {
+                                Image(systemName: "doc.on.doc")
+                                    .font(.system(size: 10))
+                                Text("Copy")
+                                    .font(.system(size: 11, weight: .medium))
+                            }
+                            .foregroundColor(MBColors.accent)
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 6)
+                            .background(MBColors.accent.opacity(0.15))
+                            .cornerRadius(6)
+                        }
+                        .buttonStyle(.plain)
+
+                        Button(action: {
+                            appState.lastInAppTranscription = ""
+                        }) {
+                            HStack(spacing: 4) {
+                                Image(systemName: "xmark")
+                                    .font(.system(size: 10))
+                                Text("Clear")
+                                    .font(.system(size: 11, weight: .medium))
+                            }
+                            .foregroundColor(MBColors.textSecondary)
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 6)
+                            .background(MBColors.pill)
+                            .cornerRadius(6)
+                        }
+                        .buttonStyle(.plain)
+
+                        Spacer()
+
+                        // Record again button
+                        Button(action: {
+                            appState.lastInAppTranscription = ""
+                            appState.startInAppRecording()
+                        }) {
+                            HStack(spacing: 4) {
+                                Image(systemName: "mic.fill")
+                                    .font(.system(size: 10))
+                                Text("Record")
+                                    .font(.system(size: 11, weight: .medium))
+                            }
+                            .foregroundColor(.white)
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 6)
+                            .background(MBColors.accent)
+                            .cornerRadius(6)
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+            } else {
+                // Record button
+                Button(action: {
+                    appState.startInAppRecording()
+                }) {
+                    HStack(spacing: 6) {
+                        Image(systemName: "mic.fill")
+                            .font(.system(size: 12))
+                        Text("Record")
+                            .font(.system(size: 13, weight: .medium))
+                    }
+                    .foregroundColor(.white)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 10)
+                    .background(
+                        appState.isModelLoaded && permissionManager.microphoneStatus == .granted
+                            ? MBColors.accentGradient
+                            : LinearGradient(colors: [Color.gray], startPoint: .leading, endPoint: .trailing)
+                    )
+                    .cornerRadius(8)
+                }
+                .buttonStyle(.plain)
+                .disabled(!appState.isModelLoaded || permissionManager.microphoneStatus != .granted)
+            }
+        }
+        .padding(12)
+        .background(MBColors.cardSurface)
+        .cornerRadius(10)
+        .overlay(
+            RoundedRectangle(cornerRadius: 10)
+                .stroke(MBColors.border, lineWidth: 1)
+        )
     }
 
     private func infoCard(icon: String, title: String, value: String, detail: String?, color: Color) -> some View {
@@ -605,9 +854,10 @@ struct StatusTabView: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text(title)
                     .font(.caption)
-                    .foregroundColor(.secondary)
+                    .foregroundColor(MBColors.textTertiary)
                 Text(value)
                     .font(.system(size: 13, weight: .medium))
+                    .foregroundColor(MBColors.textPrimary)
                     .lineLimit(1)
             }
 
@@ -616,16 +866,20 @@ struct StatusTabView: View {
             if let detail = detail {
                 Text(detail)
                     .font(.caption)
-                    .foregroundColor(.secondary)
+                    .foregroundColor(MBColors.textSecondary)
                     .padding(.horizontal, 8)
                     .padding(.vertical, 4)
-                    .background(Color.secondary.opacity(0.1))
+                    .background(MBColors.pill)
                     .cornerRadius(6)
             }
         }
         .padding(12)
-        .background(Color.secondary.opacity(0.05))
+        .background(MBColors.cardSurface)
         .cornerRadius(10)
+        .overlay(
+            RoundedRectangle(cornerRadius: 10)
+                .stroke(MBColors.border, lineWidth: 1)
+        )
     }
 
     private func stepBadge(number: Int, text: String) -> some View {
@@ -634,10 +888,11 @@ struct StatusTabView: View {
                 .font(.system(size: 10, weight: .bold))
                 .foregroundColor(.white)
                 .frame(width: 18, height: 18)
-                .background(Color.accentColor)
+                .background(MBColors.accent)
                 .clipShape(Circle())
             Text(text)
                 .font(.caption)
+                .foregroundColor(MBColors.textSecondary)
         }
     }
 
@@ -655,28 +910,28 @@ struct StatusTabView: View {
 
                     Text("Some features won't work without permissions")
                         .font(.system(size: 11))
-                        .foregroundColor(.secondary)
+                        .foregroundColor(MBColors.textSecondary)
                 }
 
                 Spacer()
             }
 
-            // Show which permissions are missing
+            // Show which permissions are missing (mode-aware)
             HStack(spacing: 8) {
                 if permissionManager.microphoneStatus != .granted {
                     missingPermissionBadge("Mic", icon: "mic.fill")
                 }
-                if permissionManager.accessibilityStatus != .granted {
+                // Only show Accessibility as missing when system-wide dictation is enabled
+                if appState.systemWideDictationEnabled && permissionManager.accessibilityStatus != .granted {
                     missingPermissionBadge("Accessibility", icon: "accessibility")
                 }
             }
 
             Button(action: {
-                // Request all missing permissions
                 if permissionManager.microphoneStatus != .granted {
                     permissionManager.requestMicrophonePermission()
                 }
-                if permissionManager.accessibilityStatus != .granted {
+                if appState.systemWideDictationEnabled && permissionManager.accessibilityStatus != .granted {
                     permissionManager.requestAccessibilityPermission()
                 }
             }) {
@@ -695,7 +950,7 @@ struct StatusTabView: View {
             .buttonStyle(.plain)
         }
         .padding(12)
-        .background(Color.orange.opacity(0.1))
+        .background(Color.orange.opacity(0.15))
         .cornerRadius(10)
         .overlay(
             RoundedRectangle(cornerRadius: 10)
@@ -729,7 +984,7 @@ struct ModelsTabView: View {
             // Recommended
             modelSection(
                 title: "Recommended",
-                icon: "star.fill",
+                icon: "crown.fill",
                 color: .yellow,
                 models: [.largeTurboQ5],
                 sectionId: "recommended"
@@ -771,19 +1026,25 @@ struct ModelsTabView: View {
                     expandedSection = expandedSection == sectionId ? nil : sectionId
                 }
             }) {
-                HStack {
-                    Image(systemName: icon)
-                        .foregroundColor(color)
-                        .font(.system(size: 12))
+                HStack(spacing: 10) {
+                    ZStack {
+                        RoundedRectangle(cornerRadius: 6)
+                            .fill(color.opacity(0.15))
+                            .frame(width: 26, height: 26)
+                        Image(systemName: icon)
+                            .foregroundColor(color)
+                            .font(.system(size: 12, weight: .medium))
+                    }
 
                     Text(title)
                         .font(.system(size: 12, weight: .semibold))
+                        .foregroundColor(MBColors.textPrimary)
 
                     Spacer()
 
                     Image(systemName: expandedSection == sectionId ? "chevron.up" : "chevron.down")
                         .font(.caption)
-                        .foregroundColor(.secondary)
+                        .foregroundColor(MBColors.textTertiary)
                 }
                 .contentShape(Rectangle())
             }
@@ -799,8 +1060,12 @@ struct ModelsTabView: View {
             }
         }
         .padding(12)
-        .background(Color.secondary.opacity(0.05))
+        .background(MBColors.cardSurface)
         .cornerRadius(10)
+        .overlay(
+            RoundedRectangle(cornerRadius: 10)
+                .stroke(MBColors.border, lineWidth: 1)
+        )
     }
 }
 
@@ -812,21 +1077,64 @@ struct SettingsTabView: View {
     var body: some View {
         ScrollView(showsIndicators: false) {
             VStack(alignment: .leading, spacing: 14) {
+                // System-Wide Dictation toggle — top of settings
+                settingsCard(title: "System-Wide Dictation", icon: "globe", color: .blue) {
+                    VStack(alignment: .leading, spacing: 10) {
+                        HStack {
+                            VStack(alignment: .leading, spacing: 3) {
+                                Text("Dictate anywhere")
+                                    .font(.system(size: 13, weight: .medium))
+                                    .foregroundColor(MBColors.textPrimary)
+                                Text("Assistive dictation — enter text wherever you type, just like Apple's built-in dictation")
+                                    .font(.system(size: 11))
+                                    .foregroundColor(MBColors.textSecondary)
+                            }
+
+                            Spacer()
+
+                            Toggle("", isOn: Binding(
+                                get: { appState.systemWideDictationEnabled },
+                                set: { newValue in
+                                    appState.systemWideDictationEnabled = newValue
+                                    // Request Accessibility permission when first enabled
+                                    if newValue && PermissionManager.shared.accessibilityStatus != .granted {
+                                        PermissionManager.shared.requestAccessibilityPermission()
+                                    }
+                                }
+                            ))
+                            .toggleStyle(.switch)
+                            .tint(MBColors.accent)
+                            .labelsHidden()
+                        }
+
+                        if !appState.systemWideDictationEnabled {
+                            Text("Enable to hold a shortcut key and dictate text into any app. Requires Accessibility permission.")
+                                .font(.system(size: 10))
+                                .foregroundColor(MBColors.textSecondary)
+                                .padding(8)
+                                .background(MBColors.accent.opacity(0.08))
+                                .cornerRadius(6)
+                        }
+                    }
+                }
+
                 // Audio Settings - compact card
                 settingsCard(title: "Audio", icon: "speaker.wave.2.fill", color: .orange) {
                     HStack {
                         VStack(alignment: .leading, spacing: 3) {
                             Text("Mute other audio")
                                 .font(.system(size: 13, weight: .medium))
+                                .foregroundColor(MBColors.textPrimary)
                             Text("Pause system audio while recording")
                                 .font(.system(size: 11))
-                                .foregroundColor(.secondary)
+                                .foregroundColor(MBColors.textSecondary)
                         }
 
                         Spacer()
 
                         Toggle("", isOn: $appState.muteOtherAudioDuringRecording)
                             .toggleStyle(.switch)
+                            .tint(MBColors.accent)
                             .labelsHidden()
                     }
                 }
@@ -841,9 +1149,11 @@ struct SettingsTabView: View {
                     MicrophonePickerView()
                 }
 
-                // Keyboard Shortcut
-                settingsCard(title: "Shortcut", icon: "keyboard", color: .purple) {
-                    ShortcutRecorderView()
+                // Keyboard Shortcut (only when system-wide dictation is enabled)
+                if appState.systemWideDictationEnabled {
+                    settingsCard(title: "Shortcut", icon: "keyboard", color: .purple) {
+                        ShortcutRecorderView()
+                    }
                 }
 
                 // Workspace
@@ -855,16 +1165,17 @@ struct SettingsTabView: View {
                             VStack(alignment: .leading, spacing: 3) {
                                 Text("View transcription history")
                                     .font(.system(size: 13, weight: .medium))
+                                    .foregroundColor(MBColors.textPrimary)
                                 Text("Open workspace window")
                                     .font(.system(size: 11))
-                                    .foregroundColor(.secondary)
+                                    .foregroundColor(MBColors.textSecondary)
                             }
 
                             Spacer()
 
                             Image(systemName: "arrow.up.forward")
                                 .font(.system(size: 13))
-                                .foregroundColor(.accentColor)
+                                .foregroundColor(MBColors.accent)
                         }
                         .contentShape(Rectangle())
                     }
@@ -909,6 +1220,7 @@ struct SettingsTabView: View {
 
                 Text(title)
                     .font(.system(size: 13, weight: .semibold))
+                    .foregroundColor(MBColors.textPrimary)
             }
 
             // Content
@@ -917,10 +1229,10 @@ struct SettingsTabView: View {
         .padding(14)
         .background(
             RoundedRectangle(cornerRadius: 12)
-                .fill(Color.secondary.opacity(0.04))
+                .fill(MBColors.cardSurface)
                 .overlay(
                     RoundedRectangle(cornerRadius: 12)
-                        .stroke(Color.secondary.opacity(0.08), lineWidth: 1)
+                        .stroke(MBColors.border, lineWidth: 1)
                 )
         )
     }
@@ -942,12 +1254,12 @@ struct ModelMenuItem: View {
                 // Selection indicator
                 ZStack {
                     Circle()
-                        .stroke(isSelected ? Color.accentColor : Color.secondary.opacity(0.3), lineWidth: 2)
+                        .stroke(isSelected ? MBColors.accent : MBColors.textTertiary, lineWidth: 2)
                         .frame(width: 18, height: 18)
 
                     if isSelected {
                         Circle()
-                            .fill(Color.accentColor)
+                            .fill(MBColors.accent)
                             .frame(width: 10, height: 10)
                     }
                 }
@@ -955,7 +1267,7 @@ struct ModelMenuItem: View {
                 VStack(alignment: .leading, spacing: 2) {
                     Text(model.displayName)
                         .font(.system(size: 12, weight: isSelected ? .semibold : .regular))
-                        .foregroundColor(isSelected ? .primary : .secondary)
+                        .foregroundColor(isSelected ? MBColors.textPrimary : MBColors.textSecondary)
 
                     HStack(spacing: 6) {
                         Text(model.sizeDescription)
@@ -965,7 +1277,7 @@ struct ModelMenuItem: View {
                         Text(model.speedDescription)
                             .font(.caption2)
                     }
-                    .foregroundColor(.secondary)
+                    .foregroundColor(MBColors.textTertiary)
                 }
 
                 Spacer()
@@ -986,11 +1298,11 @@ struct ModelMenuItem: View {
                     .scaleEffect(0.5)
                 Text("\(Int(appState.downloadProgress * 100))%")
                     .font(.caption2)
-                    .foregroundColor(.accentColor)
+                    .foregroundColor(MBColors.accent)
             }
         } else if isDownloaded {
             Image(systemName: "checkmark.circle.fill")
-                .foregroundColor(.green)
+                .foregroundColor(MBColors.accent)
                 .font(.system(size: 14))
         } else {
             HStack(spacing: 4) {
@@ -999,7 +1311,7 @@ struct ModelMenuItem: View {
                 Text("Download")
                     .font(.caption2)
             }
-            .foregroundColor(.accentColor)
+            .foregroundColor(MBColors.accent)
         }
     }
 
@@ -1042,7 +1354,7 @@ struct MicrophonePickerView: View {
             if deviceManager.availableInputDevices.isEmpty {
                 Text("No microphones found")
                     .font(.caption)
-                    .foregroundColor(.secondary)
+                    .foregroundColor(MBColors.textTertiary)
                     .italic()
                     .padding(.vertical, 4)
             }
@@ -1057,29 +1369,29 @@ struct MicrophonePickerView: View {
             HStack(spacing: 10) {
                 ZStack {
                     Circle()
-                        .stroke(isSelected ? Color.accentColor : Color.secondary.opacity(0.3), lineWidth: 2)
+                        .stroke(isSelected ? MBColors.accent : MBColors.textTertiary, lineWidth: 2)
                         .frame(width: 16, height: 16)
 
                     if isSelected {
                         Circle()
-                            .fill(Color.accentColor)
+                            .fill(MBColors.accent)
                             .frame(width: 8, height: 8)
                     }
                 }
 
                 Text(name)
                     .font(.system(size: 12))
-                    .foregroundColor(isSelected ? .primary : .secondary)
+                    .foregroundColor(isSelected ? MBColors.textPrimary : MBColors.textSecondary)
 
                 Spacer()
 
                 if let detail = detail {
                     Text(detail)
                         .font(.caption2)
-                        .foregroundColor(.secondary)
+                        .foregroundColor(MBColors.textSecondary)
                         .padding(.horizontal, 6)
                         .padding(.vertical, 2)
-                        .background(Color.secondary.opacity(0.1))
+                        .background(MBColors.pill)
                         .cornerRadius(4)
                 }
             }
@@ -1122,16 +1434,16 @@ struct LanguagePickerView: View {
                     VStack(alignment: .leading, spacing: 3) {
                         Text("Transcription language")
                             .font(.system(size: 13, weight: .medium))
-                            .foregroundColor(.primary)
+                            .foregroundColor(MBColors.textPrimary)
                         Text(appState.selectedLanguage.displayName)
                             .font(.system(size: 11))
-                            .foregroundColor(.secondary)
+                            .foregroundColor(MBColors.textSecondary)
                     }
 
                     Spacer()
 
                     Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
-                        .foregroundColor(.secondary)
+                        .foregroundColor(MBColors.textTertiary)
                         .font(.system(size: 11, weight: .semibold))
                 }
                 .contentShape(Rectangle())
@@ -1146,31 +1458,32 @@ struct LanguagePickerView: View {
                     // Search field
                     HStack(spacing: 6) {
                         Image(systemName: "magnifyingglass")
-                            .foregroundColor(.secondary)
+                            .foregroundColor(MBColors.textTertiary)
                             .font(.system(size: 12))
 
                         TextField("Search languages...", text: $searchText)
                             .textFieldStyle(.plain)
                             .font(.system(size: 12))
+                            .foregroundColor(MBColors.textPrimary)
 
                         if !searchText.isEmpty {
                             Button(action: { searchText = "" }) {
                                 Image(systemName: "xmark.circle.fill")
-                                    .foregroundColor(.secondary)
+                                    .foregroundColor(MBColors.textTertiary)
                                     .font(.system(size: 12))
                             }
                             .buttonStyle(.plain)
                         }
                     }
                     .padding(8)
-                    .background(Color.secondary.opacity(0.08))
+                    .background(MBColors.elevated)
                     .cornerRadius(6)
 
                     // Language list - show max 5 items (160px height)
                     if filteredLanguages.isEmpty {
                         Text("No languages found")
                             .font(.caption)
-                            .foregroundColor(.secondary)
+                            .foregroundColor(MBColors.textTertiary)
                             .italic()
                             .padding(.vertical, 12)
                             .frame(maxWidth: .infinity, alignment: .center)
@@ -1201,37 +1514,37 @@ struct LanguagePickerView: View {
             HStack(spacing: 10) {
                 ZStack {
                     Circle()
-                        .stroke(appState.selectedLanguage == language ? Color.accentColor : Color.secondary.opacity(0.3), lineWidth: 2)
+                        .stroke(appState.selectedLanguage == language ? MBColors.accent : MBColors.textTertiary, lineWidth: 2)
                         .frame(width: 14, height: 14)
 
                     if appState.selectedLanguage == language {
                         Circle()
-                            .fill(Color.accentColor)
+                            .fill(MBColors.accent)
                             .frame(width: 7, height: 7)
                     }
                 }
 
                 Text(language.displayName)
                     .font(.system(size: 12))
-                    .foregroundColor(appState.selectedLanguage == language ? .primary : .secondary)
+                    .foregroundColor(appState.selectedLanguage == language ? MBColors.textPrimary : MBColors.textSecondary)
 
                 Spacer()
 
                 if language == .auto {
                     Text("May be unreliable")
                         .font(.caption2)
-                        .foregroundColor(.secondary)
+                        .foregroundColor(MBColors.textSecondary)
                         .padding(.horizontal, 6)
                         .padding(.vertical, 2)
-                        .background(Color.secondary.opacity(0.1))
+                        .background(MBColors.pill)
                         .cornerRadius(4)
                 } else if language == .english {
                     Text("Default")
                         .font(.caption2)
-                        .foregroundColor(.secondary)
+                        .foregroundColor(MBColors.textSecondary)
                         .padding(.horizontal, 6)
                         .padding(.vertical, 2)
-                        .background(Color.secondary.opacity(0.1))
+                        .background(MBColors.pill)
                         .cornerRadius(4)
                 }
             }
@@ -1261,7 +1574,7 @@ struct PermissionsView: View {
                     VStack(alignment: .leading, spacing: 3) {
                         Text("Required permissions")
                             .font(.system(size: 13, weight: .medium))
-                            .foregroundColor(.primary)
+                            .foregroundColor(MBColors.textPrimary)
 
                         if permissionManager.allPermissionsGranted {
                             Text("All permissions granted")
@@ -1288,7 +1601,7 @@ struct PermissionsView: View {
                     }
 
                     Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
-                        .foregroundColor(.secondary)
+                        .foregroundColor(MBColors.textTertiary)
                         .font(.system(size: 11, weight: .semibold))
                 }
                 .contentShape(Rectangle())
@@ -1316,7 +1629,7 @@ struct PermissionsView: View {
                             .foregroundColor(.white)
                             .frame(maxWidth: .infinity)
                             .padding(.vertical, 8)
-                            .background(Color.accentColor)
+                            .background(MBColors.accent)
                             .cornerRadius(6)
                         }
                         .buttonStyle(.plain)
@@ -1348,11 +1661,11 @@ struct PermissionsView: View {
             VStack(alignment: .leading, spacing: 1) {
                 Text(permission.rawValue)
                     .font(.system(size: 12, weight: .medium))
-                    .foregroundColor(status == .granted ? .primary : .secondary)
+                    .foregroundColor(status == .granted ? MBColors.textPrimary : MBColors.textSecondary)
 
                 Text(permission.description)
                     .font(.system(size: 10))
-                    .foregroundColor(.secondary)
+                    .foregroundColor(MBColors.textTertiary)
             }
 
             Spacer()
@@ -1416,15 +1729,17 @@ struct DiagnosticsView: View {
                 VStack(alignment: .leading, spacing: 2) {
                     Text("Verbose logging")
                         .font(.system(size: 12, weight: .medium))
+                        .foregroundColor(MBColors.textPrimary)
                     Text("Enable debug-level logs for troubleshooting")
                         .font(.system(size: 11))
-                        .foregroundColor(.secondary)
+                        .foregroundColor(MBColors.textSecondary)
                 }
 
                 Spacer()
 
                 Toggle("", isOn: $verboseLogging)
                     .toggleStyle(.switch)
+                    .tint(MBColors.accent)
                     .labelsHidden()
                     .onChange(of: verboseLogging) { _, newValue in
                         Logger.isVerbose = newValue
@@ -1432,16 +1747,17 @@ struct DiagnosticsView: View {
             }
 
             Divider()
-                .opacity(0.5)
+                .opacity(0.3)
 
             // Log file info
             HStack {
                 VStack(alignment: .leading, spacing: 2) {
                     Text("Log file")
                         .font(.system(size: 12, weight: .medium))
+                        .foregroundColor(MBColors.textPrimary)
                     Text(logFileSize)
                         .font(.system(size: 11))
-                        .foregroundColor(.secondary)
+                        .foregroundColor(MBColors.textSecondary)
                 }
 
                 Spacer()
@@ -1455,9 +1771,10 @@ struct DiagnosticsView: View {
                         Text("Open Logs Folder")
                             .font(.system(size: 11, weight: .medium))
                     }
+                    .foregroundColor(MBColors.textSecondary)
                     .padding(.horizontal, 10)
                     .padding(.vertical, 5)
-                    .background(Color.secondary.opacity(0.12))
+                    .background(MBColors.pill)
                     .cornerRadius(6)
                 }
                 .buttonStyle(.plain)
@@ -1476,16 +1793,17 @@ struct DiagnosticsView: View {
             }
 
             Divider()
-                .opacity(0.5)
+                .opacity(0.3)
 
             // Version info
             HStack {
                 Text("Version")
                     .font(.system(size: 12, weight: .medium))
+                    .foregroundColor(MBColors.textPrimary)
                 Spacer()
                 Text(appVersion)
                     .font(.system(size: 11))
-                    .foregroundColor(.secondary)
+                    .foregroundColor(MBColors.textSecondary)
             }
         }
         .onAppear {
@@ -1525,28 +1843,31 @@ struct AboutView: View {
             HStack(spacing: 12) {
                 Image(systemName: "waveform")
                     .font(.system(size: 32))
-                    .foregroundColor(.accentColor)
+                    .foregroundColor(MBColors.accent)
 
                 VStack(alignment: .leading, spacing: 2) {
                     Text("Whisperer")
                         .font(.system(size: 14, weight: .bold))
+                        .foregroundColor(MBColors.textPrimary)
 
-                    Text("Voice to Text for Mac")
+                    Text("Offline Voice Transcription for Mac")
                         .font(.system(size: 12))
-                        .foregroundColor(.secondary)
+                        .foregroundColor(MBColors.textSecondary)
 
                     Text(appVersion)
                         .font(.system(size: 11))
-                        .foregroundColor(.secondary)
+                        .foregroundColor(MBColors.textTertiary)
                 }
             }
 
             Divider()
+                .opacity(0.3)
 
             // Links
             VStack(alignment: .leading, spacing: 10) {
                 Text("Legal & Information")
                     .font(.system(size: 12, weight: .semibold))
+                    .foregroundColor(MBColors.textPrimary)
 
                 linkButton(
                     icon: "hand.raised",
@@ -1562,16 +1883,17 @@ struct AboutView: View {
             }
 
             Divider()
+                .opacity(0.3)
 
             // Copyright
             Text("© 2026 Whisperer. All rights reserved.")
                 .font(.system(size: 10))
-                .foregroundColor(.secondary)
+                .foregroundColor(MBColors.textTertiary)
                 .frame(maxWidth: .infinity, alignment: .center)
 
             Text("Powered by whisper.cpp — 100% offline")
                 .font(.system(size: 10))
-                .foregroundColor(.secondary)
+                .foregroundColor(MBColors.textTertiary)
                 .frame(maxWidth: .infinity, alignment: .center)
         }
     }
@@ -1586,23 +1908,23 @@ struct AboutView: View {
         Button(action: action) {
             HStack(spacing: 8) {
                 Image(systemName: icon)
-                    .foregroundColor(.accentColor)
+                    .foregroundColor(MBColors.accent)
                     .font(.system(size: 12))
                     .frame(width: 18)
 
                 Text(title)
                     .font(.system(size: 12))
-                    .foregroundColor(.primary)
+                    .foregroundColor(MBColors.textPrimary)
 
                 Spacer()
 
                 Image(systemName: "chevron.right")
                     .font(.system(size: 10))
-                    .foregroundColor(.secondary)
+                    .foregroundColor(MBColors.textTertiary)
             }
             .padding(.vertical, 6)
             .padding(.horizontal, 8)
-            .background(Color.secondary.opacity(0.05))
+            .background(MBColors.elevated)
             .cornerRadius(6)
             .contentShape(Rectangle())
         }

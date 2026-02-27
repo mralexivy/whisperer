@@ -2,9 +2,9 @@
 
 ## Table of Contents
 
-1. [Color System](#1-color-system) — WhispererColors, accent variants, dark mode, gradients
+1. [Color System](#1-color-system) — Unified dark navy palette, blue-purple accents, per-element colorful icons
 2. [Typography](#2-typography) — Font scale, weight ladder, tracking, design variants
-3. [Layout Patterns](#3-layout-patterns) — Workspace window, sidebar, panels, overlay HUD
+3. [Layout Patterns](#3-layout-patterns) — Workspace window, sidebar, panels, overlay HUD, onboarding
 4. [Components](#4-components) — Cards, rows, buttons, filters, icons, search, animations
 5. [Anti-Patterns](#5-anti-patterns) — Collected rules for what NOT to do
 
@@ -14,83 +14,128 @@
 
 ### Core Principle
 
-Every UI surface uses `WhispererColors` — never system semantic colors (`NSColor.windowBackgroundColor`, `.controlBackgroundColor`, `.foregroundStyle(.secondary)`). The one exception is the menu bar panel (see Menu Bar Panel section in Layout).
+The entire app uses a **unified dark navy theme** across all windows — workspace, menu bar, overlay HUD, and onboarding. Every UI surface uses the dark navy palette with blue-purple accents. Three color structs exist (`WhispererColors`, `MBColors`, `OnboardingColors`) sharing identical base values for their respective scopes:
 
-### WhispererColors Struct
+| Struct | Scope | Defined in |
+|--------|-------|-----------|
+| `WhispererColors` | Workspace/history window | `HistoryWindowView.swift` |
+| `MBColors` | Menu bar panel | `WhispererApp.swift` (private enum) |
+| `OnboardingColors` | Onboarding window | `OnboardingView.swift` (private enum) |
 
-Defined in `HistoryWindowView.swift`:
+### Unified Dark Navy Palette
+
+All three color structs share these values:
+
+| Token | Value | Usage |
+|-------|-------|-------|
+| Background | `#0C0C1A` (rgb 0.047, 0.047, 0.102) | Window/page background |
+| Card surface | `#14142B` (rgb 0.078, 0.078, 0.169) | Cards, panels, HUD |
+| Sidebar bg | `#0A0A18` (rgb 0.039, 0.039, 0.094) | Sidebar (workspace only) |
+| Elevated | `#1C1C3A` (rgb 0.110, 0.110, 0.227) | Elevated surfaces, inputs |
+| Accent blue | `#5B6CF7` (rgb 0.357, 0.424, 0.969) | Primary accent — selections, toggles, indicators |
+| Accent purple | `#8B5CF6` (rgb 0.545, 0.361, 0.965) | Gradient endpoint for CTAs |
+| Text primary | `Color.white` | Headings, body text |
+| Text secondary | `white.opacity(0.5)` | Descriptions, labels |
+| Text tertiary | `white.opacity(0.35)` | Hints, fine print |
+| Border | `white.opacity(0.06)` | Card borders, dividers |
+| Pill background | `white.opacity(0.08)` | Badges, key caps, pills |
+
+### Accent Gradient
+
+Blue-to-purple gradient used on primary CTA buttons (Save, Add Entry, Unlock Pro Pack, Workspace button):
 
 ```swift
-struct WhispererColors {
-    // Brand accent — vibrant green
-    static let accent = Color(hex: "22C55E")
-    static let accentDark = Color(hex: "16A34A")
+LinearGradient(colors: [accentBlue, accentPurple], startPoint: .leading, endPoint: .trailing)
+```
 
-    // Backgrounds (adapt to color scheme)
-    static func background(_ scheme: ColorScheme) -> Color {
-        scheme == .dark ? Color(hex: "111111") : Color(hex: "F8FAFC")
-    }
-    static func cardBackground(_ scheme: ColorScheme) -> Color {
-        scheme == .dark ? Color(hex: "181818") : Color.white
-    }
-    static func sidebarBackground(_ scheme: ColorScheme) -> Color {
-        scheme == .dark ? Color(hex: "0D0D0D") : Color(hex: "FFFFFF")
-    }
-    static func elevatedBackground(_ scheme: ColorScheme) -> Color {
-        scheme == .dark ? Color(hex: "1F1F1F") : Color(hex: "F1F5F9")
-    }
+### Flat Accent vs Gradient Rule
 
-    // Text
-    static func primaryText(_ scheme: ColorScheme) -> Color {
-        scheme == .dark ? Color.white : Color(hex: "0F172A")
-    }
-    static func secondaryText(_ scheme: ColorScheme) -> Color {
-        scheme == .dark ? Color(hex: "B3B3B3") : Color(hex: "64748B")
-    }
+- **Flat `accent` (#5B6CF7)** — Toggles (`.tint()`), selected filter tabs, selected rows, radio buttons, checkmarks, model badges, links
+- **Gradient `[accentBlue, accentPurple]`** — Primary CTA buttons (Save, Add, Purchase), header app icon, Workspace footer button
+- **NEVER** use gradient on toggles, filter tabs, or radio buttons — these use flat accent
 
-    // Borders
-    static func border(_ scheme: ColorScheme) -> Color {
-        scheme == .dark ? Color.white.opacity(0.04) : Color.black.opacity(0.06)
-    }
+### Per-Element Colorful Icons
+
+Section headers and feature cards use unique colors per element (not all blue). Each icon sits inside a tinted rounded rectangle:
+
+```swift
+ZStack {
+    RoundedRectangle(cornerRadius: 6)
+        .fill(color.opacity(0.15))
+        .frame(width: 26, height: 26)
+    Image(systemName: icon)
+        .foregroundColor(color)
+        .font(.system(size: 12, weight: .medium))
 }
 ```
 
-### Green Accent Variants
+Examples of per-element colors:
+- System-Wide Dictation: `.blue` (globe icon)
+- Microphone: `.green` (mic.fill icon)
+- Audio Recording: `.red` (waveform icon)
+- Keyboard Shortcut: `.orange` (keyboard icon)
+- About: `.purple` (info.circle icon)
 
-Different surfaces use slightly different green values:
+Model category icons:
+- Recommended: `.yellow` (crown.fill)
+- Turbo & Optimized: `.orange` (bolt.fill)
+- Standard: `.blue` (cube.fill)
+- Distilled: `.purple` (wand.and.stars)
 
-| Surface | Green Value | Usage |
-|---------|-------------|-------|
-| WhispererColors | `Color(hex: "22C55E")` | Workspace window, sidebar, cards |
-| OverlayView / MicButton / RecordingIndicator | `Color(red: 0.2, green: 0.78, blue: 0.35)` | HUD overlay bar |
-| LiveTranscriptionCard / KeywordHighlighter | `Color(red: 0.0, green: 0.82, blue: 0.42)` (#00D26A) | Live text, keyword highlights |
-| WaveformView | `Color(red: 0.2, green: 0.8, blue: 0.4)` | Waveform bars |
+Menu bar tab icons:
+- Status: `.blue` (chart.bar.fill)
+- Models: `.orange` (cpu.fill)
+- Settings: `.purple` (gearshape.fill)
 
-### Gradient vs Flat Accent Rule
+### Metadata Pills (TranscriptionRow)
 
-- **Flat `WhispererColors.accent`** — Solid accent buttons: play button, selected filter tab, selected edit/save capsule, selected nav item background
-- **Gradient `[accent, accentDark]`** — Icon containers (brand, section labels, settings headers, avatar), day label text, edit button when active, decorative separators
-- **NEVER** use gradient on filter tabs or play button — these use the single flat `WhispererColors.accent`
+Colorful capsule-shaped pills for row metadata:
 
-### Dark Mode Philosophy — Spotify-Inspired
+```swift
+HStack(spacing: 4) {
+    Image(systemName: icon).font(.system(size: 9, weight: .semibold)).foregroundColor(color)
+    Text(text).font(.system(size: 10.5, weight: .medium)).foregroundColor(color)
+}
+.padding(.horizontal, 7).padding(.vertical, 3)
+.background(Capsule().fill(color.opacity(colorScheme == .dark ? 0.12 : 0.08)))
+```
 
-1. **Deep blacks, not gray** — Backgrounds are #0D0D0D sidebar, #111111 main, #181818 cards. Immersive, not "gray dark mode."
-2. **Borders are nearly invisible** — `white.opacity(0.04)`. Separation via background layering, not visible borders.
-3. **Shadows are whisper-quiet** — 50-60% lower opacity than light mode. Depth comes from color layering.
-4. **Secondary text is warm neutral** — `#B3B3B3` (not blue-tinted). Warm gray against deep black feels premium.
-5. **Green accent pops naturally** — Keep accent opacities restrained so green feels electric, not washed out.
-6. **Background layering** — sidebar (#0D0D0D) → main (#111111) → cards (#181818) → elevated (#1F1F1F). ~7 hex values apart.
+- WPM: `.orange` + speedometer icon
+- Words: `accentBlue` + text.word.spacing icon
+- Language: `.purple` + globe icon
 
-### Dark Mode Shadow Values
+### Window Chrome
 
-| Context | Dark Opacity | Light Opacity |
-|---------|-------------|---------------|
-| Card/row rest | `0.06` | `0.03` |
-| Card/row hover | `0.12` | `0.06` |
-| Text field | `0.04` | `0.025` |
-| Button hover | `0.08` | `0.06` |
-| Selected accent glow | `0.06` | `0.08` |
-| Dropdown panel | `0.35` | `0.15` |
+All windows use flat dark appearance with no visible system border:
+
+```swift
+// NSWindow configuration (HistoryWindow, MenuBarWindowConfigurator)
+window.appearance = NSAppearance(named: .darkAqua)
+window.titlebarAppearsTransparent = true
+window.backgroundColor = NSColor(red: 0.047, green: 0.047, blue: 0.102, alpha: 1.0)
+window.hasShadow = false
+
+// Content view layer (removes system border)
+contentView.wantsLayer = true
+contentView.layer?.backgroundColor = navyColor.cgColor
+contentView.layer?.cornerRadius = 10
+contentView.layer?.masksToBounds = true
+contentView.layer?.borderWidth = 0
+contentView.layer?.borderColor = NSColor.clear.cgColor
+```
+
+### App Icon
+
+Dark navy rounded rectangle background (`#0C0C1A`) with blue-to-purple gradient waveform bars (`#5B6CF7` → `#8B5CF6`). Subtle radial glow behind the waveform. Generated programmatically at all macOS icon sizes (16px through 1024px).
+
+### Dark Mode Philosophy — Always Dark
+
+1. **Always dark** — All windows force dark appearance. No light mode support. Deep navy backgrounds, not gray.
+2. **Background layering** — sidebar (`#0A0A18`) → main (`#0C0C1A`) → cards (`#14142B`) → elevated (`#1C1C3A`). Separation via layering, not borders.
+3. **Borders are nearly invisible** — `white.opacity(0.06)`. Present for subtle definition, not separation.
+4. **Shadows are minimal** — 50-60% lower than typical. Depth comes from color layering.
+5. **White text with opacity** — Primary (100%), secondary (50%), tertiary (35%). No gray hex values.
+6. **Blue-purple accent pops naturally** — Keep accent opacities restrained so colors feel electric, not washed out.
 
 ### Color Hex Extension
 
@@ -127,48 +172,38 @@ Whisperer uses **explicit font sizes** with `.system(size:weight:design:)`, neve
 
 ### Standard Scale
 
-| Usage | Font Specification | Notes |
-|-------|-------------------|-------|
-| Page/section title | `.system(size: 26, weight: .bold, design: .rounded)` | |
-| Stat card value (detail) | `.system(size: 20, weight: .light, design: .rounded)` | Light = elegance at large sizes |
-| Workspace name | `.system(size: 20, weight: .bold, design: .rounded)` | |
-| Detail date header | `.system(size: 18, weight: .bold, design: .rounded)` | |
-| Header stat value | `.system(size: 18, weight: .light, design: .rounded)` | |
-| Sidebar stat value | `.system(size: 16, weight: .light, design: .rounded)` | |
-| Brand name (sidebar) | `.system(size: 15, weight: .bold, design: .rounded)` | |
-| Section header | `.system(size: 15, weight: .bold, design: .rounded)` | |
-| Setting label | `.system(size: 14, weight: .semibold)` | |
-| Body text (transcription) | `.system(size: 14, weight: .regular)` + `.lineSpacing(5)` | |
-| Text preview (row) | `.system(size: 13.5, weight: .regular)` + `.lineSpacing(3)` | |
-| Field title | `.system(size: 13, weight: .medium)` + `.tracking(0.3)` | |
-| Search field | `.system(size: 13, weight: .regular)` | |
-| Sidebar nav item | `.system(size: 13, weight: .medium/.semibold)` | Medium default, semibold selected |
-| Row time | `.system(size: 12, weight: .bold, design: .rounded)` | |
-| Row duration | `.system(size: 12, weight: .medium)` | |
-| Filter tab | `.system(size: 12, weight: .semibold/.medium)` | Semibold selected, medium default |
-| Subtitle / description | `.system(size: 12, weight: .regular)` | |
-| Section label (detail) | `.system(size: 11, weight: .bold, design: .rounded)` + `.tracking(0.8)` + `.uppercased()` | |
-| Date section header | `.system(size: 11, weight: .bold, design: .rounded)` + `.tracking(0.5)` + `.textCase(.uppercase)` | |
-| Sidebar stat label | `.system(size: 11, weight: .semibold)` + `.tracking(0.8)` + `.uppercased()` | |
-| Helper text | `.system(size: 11, weight: .regular)` + `.opacity(0.7)` on secondaryText | |
-| Stat card label (detail) | `.system(size: 10, weight: .bold)` + `.tracking(1.0)` + `.uppercased()` | |
-| Category badge | `.system(size: 10, weight: .medium)` + `.tracking(0.3)` | |
-| Header stat label | `.system(size: 9, weight: .semibold)` + `.tracking(0.8)` | |
+| Usage | Font Specification |
+|-------|-------------------|
+| Page/section title | `.system(size: 26, weight: .bold, design: .rounded)` |
+| Onboarding title | `.system(size: 24, weight: .bold, design: .rounded)` |
+| Stat card value (detail) | `.system(size: 20, weight: .light, design: .rounded)` |
+| Workspace name | `.system(size: 20, weight: .bold, design: .rounded)` |
+| Detail date header | `.system(size: 18, weight: .bold, design: .rounded)` |
+| Header stat value | `.system(size: 18, weight: .light, design: .rounded)` |
+| Sidebar stat value | `.system(size: 16, weight: .light, design: .rounded)` |
+| Menu bar app name | `.system(size: 16, weight: .bold)` |
+| Brand name (sidebar) | `.system(size: 15, weight: .bold, design: .rounded)` |
+| Section header | `.system(size: 15, weight: .bold, design: .rounded)` |
+| Setting label | `.system(size: 14, weight: .semibold)` |
+| Body text (transcription) | `.system(size: 14, weight: .regular)` + `.lineSpacing(5)` |
+| Text preview (row) | `.system(size: 13.5, weight: .regular)` + `.lineSpacing(3)` |
+| Menu bar section title | `.system(size: 13, weight: .semibold)` |
+| Field title | `.system(size: 13, weight: .medium)` + `.tracking(0.3)` |
+| Sidebar nav item | `.system(size: 13, weight: .medium/.semibold)` |
+| Row time | `.system(size: 12, weight: .bold, design: .rounded)` |
+| Filter tab | `.system(size: 12, weight: .semibold/.medium)` |
+| Menu bar body text | `.system(size: 12, weight: .regular)` |
+| Section label (detail) | `.system(size: 11, weight: .bold, design: .rounded)` + `.tracking(0.8)` |
+| Date section header | `.system(size: 11, weight: .bold, design: .rounded)` + `.tracking(0.5)` |
+| Metadata pill text | `.system(size: 10.5, weight: .medium)` |
+| Stat card label | `.system(size: 10, weight: .bold)` + `.tracking(1.0)` |
+| Header stat label | `.system(size: 9, weight: .semibold)` + `.tracking(0.8)` |
 
 ### Design Variants
 
-- **`.rounded`** — Titles, brand text, section headers, stat values, modal headers. The app's typographic signature.
-- **`.monospaced`** — Dictionary entries, time formats, keyboard shortcuts, code-like data.
-- **Default** — Body text, form labels, descriptions, metadata, helper text.
-
-### Tracking Guide
-
-| Text Size | Tracking | Usage |
-|-----------|----------|-------|
-| 9-10pt uppercase | `1.0-1.2` | Stat labels, tiny uppercase captions |
-| 11pt uppercase | `0.5-0.8` | Section labels, date headers, sidebar labels |
-| 12-13pt | `0.2-0.3` | Field titles, category badges (optional) |
-| 14pt+ | `0` | Body text, titles — no tracking needed |
+- **`.rounded`** — Titles, brand text, section headers, stat values, modal headers
+- **`.monospaced`** — Dictionary entries, time formats, keyboard shortcuts, code-like data
+- **Default** — Body text, form labels, descriptions, metadata, helper text
 
 ---
 
@@ -176,469 +211,119 @@ Whisperer uses **explicit font sizes** with `.system(size:weight:design:)`, neve
 
 ### Workspace Window (HistoryWindow + HistoryWindowView)
 
-```
-┌──────────────────────────────────────────────────────────────┐
-│ [≡]                                              (toolbar)   │
-├─────────┬────────────────────────────────────────────────────┤
-│ Sidebar │                                                    │
-│ (220pt) │  Main Content Area                                 │
-│ fixed   │  (TranscriptionsView / DictionaryView /            │
-│         │   HistorySettingsView)                             │
-│ Brand   │                                                    │
-│ Header  │                                                    │
-│ Nav     │                                                    │
-│ Items   │                                                    │
-│ Spacer  │                                                    │
-│ Stats   │                                                    │
-│ Shortcut│                                                    │
-└─────────┴────────────────────────────────────────────────────┘
-```
+- Custom `HStack(spacing: 0)` with collapsible sidebar (220pt)
+- Window: 1100x750 default, 700x700 min
+- Dark chrome: transparent titlebar, navy background, no shadow, no border
+- NSToolbar `.unified` with sidebar toggle
 
-- Custom `HStack(spacing: 0)` with `@State isSidebarCollapsed` toggle
-- Sidebar width: **220pt** fixed
-- 1pt `WhispererColors.border()` divider between sidebar and content
-- Sidebar background: `WhispererColors.sidebarBackground()`
-- Content background: `WhispererColors.background()`
-- Window size: **1100x750** default, **700x700** minimum
-- **NSToolbar** `.unified` style, `titleVisibility = .hidden` — sidebar toggle button at leading edge
-- Toggle: plain borderless `NSButton` with `sidebar.leading` icon, posts `.toggleWorkspaceSidebar` notification
-- SwiftUI receives notification and toggles `isSidebarCollapsed` with `.spring(response: 0.3)`
+### Onboarding Window (OnboardingWindow + OnboardingView)
 
-### Header Alignment
-
-All three panel headers (sidebar brand, main content, detail) MUST share the same fixed height:
-
-```swift
-.frame(height: 84, alignment: .center)
-```
-
-Full-width background behind header area fills ResizableDivider gap:
-```swift
-.background(
-    VStack(spacing: 0) {
-        WhispererColors.cardBackground(colorScheme).frame(height: 84)
-            .overlay(alignment: .bottom) {
-                Rectangle().fill(WhispererColors.border(colorScheme)).frame(height: 1)
-            }
-        WhispererColors.background(colorScheme)
-    }
-)
-```
-
-### Sidebar Structure
-
-```swift
-VStack(spacing: 0) {
-    brandHeader          // Logo + "Whisperer" / "Workspace" — 84pt height
-    VStack(spacing: 4) { // Nav items with 12pt horizontal padding
-        ForEach(items) { SidebarNavItem(...) }
-    }
-    Spacer()
-    sidebarStatsCard     // Stats (recordings, words, avg WPM, days)
-    shortcutHint         // "Fn + S to toggle" at bottom
-}
-```
-
-**Brand Header** — Gradient icon container (36pt rounded rect) with shadow, waveform icon.
-
-**SidebarNavItem** — 12pt horizontal + 10pt vertical padding, `RoundedRectangle(cornerRadius: 10)` background:
-- Selected: `accent.opacity(0.15)` fill + `.accent.opacity(0.3)` stroke + accent shadow
-- Hovered: `elevatedBackground` fill, text brightens to primaryText
-- Icon: 14pt medium, green when selected
-- Text: 13pt semibold selected, medium default
-
-**Sidebar Stats Card** — Diagonal gradient with gradient border and accent shadow. Each row: HStack { label (11pt semibold, tracking 0.8) | Spacer | value (16pt light rounded) }
-
-### Transcriptions View (List + Detail)
-
-```
-┌────────────────────────────┬───┬─────────────────────┐
-│  Header (welcome + stats)  │   │                     │
-├────────────────────────────┤ R │  Detail Panel        │
-│  Search bar                │ e │  (TranscriptionDe-   │
-│  Filter capsules           │ s │   tailView)          │
-├────────────────────────────┤ i │                      │
-│  Grouped list              │ z │  Width: 420pt        │
-│  (by date sections)        │ a │  (320-600pt range)   │
-│                            │ b │                      │
-│                            │ l │                      │
-│                            │ e │                      │
-└────────────────────────────┴───┴─────────────────────┘
-```
-
-- Left panel: min 400pt, stretches
-- **ResizableDivider**: 12pt wide hit area, 1pt visible line, grip handle with 3 horizontal bars, green accent when active
-- Right panel: 420pt default, 320-600pt range
-
-### Main Content Header
-
-```swift
-VStack(spacing: 0) {
-    HStack(spacing: 14) {
-        // Avatar — gradient accent fill, 44pt rounded rect with shadow
-        // Welcome text — name 20pt bold rounded + greeting 12pt secondary
-        Spacer()
-    }
-    .padding(.horizontal, 20).padding(.vertical, 16)
-    // Gradient separator fading at edges
-    Rectangle().fill(LinearGradient(
-        colors: [border.opacity(0.6), border, border.opacity(0.6)],
-        startPoint: .leading, endPoint: .trailing
-    )).frame(height: 1)
-}
-```
-
-No card background, no stats in header (stats are in sidebar only).
-
-### Toolbar — Search + Filters (Two Rows)
-
-```swift
-VStack(spacing: 12) {
-    // Row 1: Search field (full width) with shadow
-    // Row 2: Filter capsules (left-aligned)
-    HStack(spacing: 6) {
-        FilterTab(title: "All", ...)
-        FilterTab(title: "Pinned", ...)
-        FilterTab(title: "Flagged", ...)
-        Spacer()
-    }
-}
-.padding(.horizontal, 20).padding(.vertical, 14)
-```
-
-DO NOT put filters on the same row as search.
-
-### Detail Panel (TranscriptionDetailView)
-
-Header with gradient separator (accent tint on leading edge):
-```swift
-Rectangle().fill(LinearGradient(
-    colors: [accent.opacity(0.2), border, border.opacity(0.3)],
-    startPoint: .leading, endPoint: .trailing
-)).frame(height: 1)
-```
-
-Panel background: Subtle top-to-bottom accent gradient:
-```swift
-.background(LinearGradient(
-    colors: [accent.opacity(dark: 0.04, light: 0.02), background],
-    startPoint: .top, endPoint: .bottom
-))
-```
-
-Sections (24pt spacing):
-1. **Audio Recording** — Section label INSIDE card, plain card background + shadow
-2. **Transcription** — HighlightedText with edit toggle. Non-editing: plain card + shadow. Editing: accent gradient + accent border
-3. **Details** — 2-column `LazyVGrid` of `DetailStatCard` with color-tinted gradients
-4. **Notes** — TextEditor with placeholder, plain card + shadow
-
-**Important**: Content containers use plain card backgrounds — NOT accent gradients. Only editing state and panel background use accent tints.
+- Frame: 860x540, borderless NSWindow
+- Four pages: Welcome, Permissions, Model Selection, Shortcut Setup
+- Two-column: left content + right decorative panel (340pt)
+- Shown on first launch (`hasCompletedOnboarding` UserDefaults)
+- Launches model download and permissions during setup
 
 ### Menu Bar Panel (MenuBarView)
 
-```
-┌──────────────────────────┐
-│  Header (gradient bg)    │
-│  ┌ Icon + Status ─────┐ │
-│  │ Model badge        │  │
-│  └────────────────────┘  │
-├──────────────────────────┤
-│  Tab Bar (custom)        │
-├──────────────────────────┤
-│  Tab Content (scrollable)│
-├──────────────────────────┤
-│  Footer (gradient btns)  │
-└──────────────────────────┘
-```
-
-- Frame: **360x580**
-- Background: `Color(nsColor: .windowBackgroundColor)` — exception (system menu bar panel)
-- Footer: Two gradient buttons (indigo=Workspace, red=Quit) with shadows and keyboard shortcut badges
-- Workspace button calls `HistoryWindowManager.shared.showWindowAndDismissMenu()`
+- Frame: 360x580
+- `MBColors` enum, `.environment(\.colorScheme, .dark)`
+- `MenuBarWindowConfigurator` NSViewRepresentable for flat window
+- 3-tab layout with colorful per-tab icons
+- Footer: gradient Workspace + red Quit buttons
 
 ### Overlay HUD (OverlayView + OverlayPanel)
 
-- `NSPanel` with `[.borderless, .nonactivatingPanel]`, `hasShadow = false`
-- Background: `Capsule()` — dark: `Color(white: 0.15)`, light: `Color(white: 0.98)`
-- Stroke: `Color.gray.opacity()` — dark: 0.2, light: 0.1
-- Panel size: **420x220**, bottom-center with 10pt margin
-- Content pinned to bottom via Auto Layout
-
-### Window Management (HistoryWindowManager)
-
-Singleton managing workspace window lifecycle:
-- `showWindow()` — creates lazily, makes key
-- `showWindowAndDismissMenu()` — dismisses MenuBarExtra panel first, then shows workspace
-- `dismissMenuBarWindow()` — finds MenuBarExtra NSPanel by checking `window is NSPanel` (skipping known windows), uses `orderOut(nil)` not `close()`
+- `NSPanel` borderless, non-activating, no shadow
+- Navy capsule background with blue accent elements
+- Panel: 420x220, bottom-center
 
 ---
 
 ## 4. Components
 
-### Icon Containers
-
-**Two styles** depending on context:
-
-**Circles** — stat card icons (36pt) and header avatars (44pt):
-```swift
-Circle()
-    .fill(LinearGradient(
-        colors: [color.opacity(0.12), color.opacity(0.05)],
-        startPoint: .topLeading, endPoint: .bottomTrailing
-    ))
-    .frame(width: 36, height: 36)
-```
-
-**Rounded squares** — section labels (24pt, cornerRadius 6), settings headers (28pt, cornerRadius 7), settings rows (36pt, cornerRadius 8):
-```swift
-RoundedRectangle(cornerRadius: 7)
-    .fill(LinearGradient(
-        colors: [accent.opacity(dark: 0.18, light: 0.12), accentDark.opacity(dark: 0.08, light: 0.05)],
-        startPoint: .topLeading, endPoint: .bottomTrailing
-    ))
-    .shadow(color: accent.opacity(0.08), radius: 3, y: 1)
-```
-
-Settings row icon containers use **flat** fill (no gradient): `.fill(accent.opacity(0.12))`
-
-### Cards
+### Icon Containers (Colorful Tinted Style)
 
 ```swift
-content()
-    .padding(20)
-    .frame(maxWidth: .infinity, alignment: .leading)
-    .background(RoundedRectangle(cornerRadius: 14).fill(cardBackground))
-    .overlay(RoundedRectangle(cornerRadius: 14).stroke(border, lineWidth: 1))
-    .shadow(color: Color.black.opacity(dark: 0.06, light: 0.03), radius: 4, y: 1)
-```
-
-### TranscriptionRow
-
-Three-line layout with full-height accent bar, layered shadows, hover elevation:
-
-```swift
-HStack(spacing: 0) {
-    // Left accent bar — full height, no padding
-    Rectangle().fill(accentBarColor).frame(width: 3.5)
-        .opacity(showAccentBar ? 1 : 0)
-    // Content
-    VStack(alignment: .leading, spacing: 8) {
-        // Line 1: Time · Duration ... status icons + action buttons
-        // Line 2: Text preview (13.5pt, 2 lines)
-        // Line 3: Metadata (wpm · words · language)
-    }
-    .padding(.leading, 10).padding(.trailing, 14).padding(.vertical, 14)
+ZStack {
+    RoundedRectangle(cornerRadius: 6)
+        .fill(color.opacity(0.15))
+        .frame(width: 26, height: 26)
+    Image(systemName: icon)
+        .foregroundColor(color)
+        .font(.system(size: 12, weight: .medium))
 }
 ```
 
-Selected row: vertical LinearGradient using AnyShapeStyle, accent border 1.5pt, accent shadow.
-Hovered: subtle gradient, border intensified, `scaleEffect(1.006)`.
-Card clipped with `.clipShape(RoundedRectangle(cornerRadius: 12))`.
-
-### DetailStatCard (2-Column Grid)
-
-Color-tinted gradient cards with per-card color (accent=Duration, blue=Words, purple=WPM, orange=Language, cyan=Model):
-
-```swift
-VStack(alignment: .leading, spacing: 0) {
-    // Gradient circle icon (36pt) using card's color
-    // Label: 10pt bold, tracking 1.0, uppercased, 0.7 opacity secondary
-    // Value: 20pt light rounded, primary
-}
-.padding(16)
-.background(RoundedRectangle(cornerRadius: 14)
-    .fill(LinearGradient(
-        colors: [color.opacity(dark: 0.08, light: 0.04), cardBackground],
-        startPoint: .topLeading, endPoint: .bottomTrailing
-    )))
-.overlay(RoundedRectangle(cornerRadius: 14)
-    .stroke(isHovered ? color.opacity(0.2) : color.opacity(0.08), lineWidth: 1))
-.scaleEffect(isHovered ? 1.02 : 1.0)
-```
-
-### Section Headers
-
-**Settings section headers** (SettingsSectionHeader): gradient icon (28pt) + 15pt bold rounded title.
-
-**Date section headers** (transcription list): 11pt bold rounded uppercase + `.tracking(0.5)` + gradient fading line:
-```swift
-HStack(spacing: 10) {
-    Text(dateString).font(.system(size: 11, weight: .bold, design: .rounded))
-        .textCase(.uppercase).tracking(0.5)
-    Rectangle().fill(LinearGradient(colors: [border, border.opacity(0.2)], ...)).frame(height: 1)
-}
-```
-
-### Action Buttons (Row-Level)
-
-28pt circular with hover state, border ring, and scale:
-```swift
-Image(systemName: icon)
-    .font(.system(size: 11, weight: .medium))
-    .frame(width: 28, height: 28)
-    .background(Circle().fill(isHovered ? elevatedBackground : .clear))
-    .overlay(Circle().stroke(isHovered ? border : .clear, lineWidth: 0.5))
-    .scaleEffect(isHovered ? 1.08 : 1.0)
-```
-
-### FilterTab
-
-Capsule-shaped pills:
-- Selected: flat `WhispererColors.accent` (NOT gradient), white text, accent glow shadow
-- Unselected: transparent, border stroke, secondary text
-- Hovered: elevatedBackground fill, text brightens
-- Padding: 14pt horizontal, 7pt vertical
-- Font: 12pt semibold (selected) / medium (unselected)
+Sizes: 26pt (menu bar), 34pt (onboarding features), 40pt (onboarding steps)
 
 ### Toggle Switches
 
 ```swift
-Toggle("", isOn: $binding).toggleStyle(.switch).tint(WhispererColors.accent).labelsHidden()
+Toggle("", isOn: $binding).toggleStyle(.switch).tint(accent).labelsHidden()
 ```
 
-### Empty States
+Uses `#5B6CF7` blue accent tint across all windows.
 
-Custom pattern — NOT `ContentUnavailableView`:
-```swift
-VStack(spacing: 20) {
-    Spacer()
-    ZStack {
-        Circle().fill(accent.opacity(0.12)).frame(width: 72, height: 72)
-        Image(systemName: "waveform.and.mic").font(.system(size: 28)).foregroundColor(accent)
-    }
-    VStack(spacing: 6) {
-        Text("No Transcriptions Yet").font(.system(size: 18, weight: .bold, design: .rounded))
-        Text("Hold Fn to record...").font(.system(size: 13)).foregroundColor(secondaryText)
-    }
-    Spacer()
-}
-```
+### Model Selection Radio Buttons
 
-### Search Fields
+Blue accent (#5B6CF7) circle stroke + fill. Downloaded checkmark also blue accent.
 
-Custom HStack — NOT `.searchable()`:
-```swift
-HStack(spacing: 8) {
-    Image(systemName: "magnifyingglass")
-    TextField("Search transcriptions...", text: $searchText).textFieldStyle(.plain)
-}
-.padding(.horizontal, 12).padding(.vertical, 9)
-.background(RoundedRectangle(cornerRadius: 10).fill(elevatedBackground))
-.overlay(RoundedRectangle(cornerRadius: 10).stroke(border, lineWidth: 1))
-.shadow(color: Color.black.opacity(dark: 0.06, light: 0.03), radius: 3, y: 1)
-```
+### Metadata Pills (TranscriptionRow)
 
-### Play Button (AudioPlayerView)
+Colorful capsules: WPM (orange), Words (blue), Language (purple).
 
-Flat accent fill (NOT gradient) with accent glow and hover scale:
-```swift
-Circle().fill(WhispererColors.accent).frame(width: 44, height: 44)
-    .shadow(color: accent.opacity(isHovered ? 0.4 : 0.25), radius: isHovered ? 10 : 6, y: isHovered ? 3 : 2)
-    .scaleEffect(isHovered ? 1.06 : 1.0)
-```
+### Search Fields — custom HStack, NOT `.searchable()`
 
-Waveform bars use flexible widths (no fixed `.frame(width:)`), 70 samples, `.mask()` for progress.
+### Empty States — custom pattern, NOT `ContentUnavailableView`
 
-### Shadow Tiers
-
-| Element | Shadow |
-|---------|--------|
-| Row (rest) | `black.opacity(dark: 0.06, light: 0.03), radius: 3, y: 1` |
-| Row (hover) | `black.opacity(dark: 0.12, light: 0.06), radius: 6, y: 2` |
-| Row (selected) | `accent.opacity(dark: 0.06, light: 0.08), radius: 8, y: 3` |
-| Settings cards | `black.opacity(dark: 0.06, light: 0.03), radius: 4, y: 1` |
-| Search field | `black.opacity(dark: 0.06, light: 0.03), radius: 3, y: 1` |
-| Selected filter | `accent.opacity(0.25), radius: 4, y: 1` |
-| Play button (rest) | `accent.opacity(0.25), radius: 6, y: 2` |
-| Play button (hover) | `accent.opacity(0.4), radius: 10, y: 3` |
-| Icon containers | `accent.opacity(0.06-0.15), radius: 2-6, y: 1-2` |
-
-### Hover Micro-Interactions
-
-| Element | Effect |
-|---------|--------|
-| TranscriptionRow | `scaleEffect(1.006)` + gradient bg + deeper shadow |
-| RowActionButton | `scaleEffect(1.08)` + border ring + elevated bg |
-| DetailHeaderButton | `scaleEffect(1.06)` + shadow lift |
-| DetailStatCard | `scaleEffect(1.02)` + shadow + border intensify |
-| Play button | `scaleEffect(1.06)` + shadow intensify |
-| SidebarNavItem | Text brightens to primaryText |
-
-### Spacing Values
-
-| Context | Value |
-|---------|-------|
-| Card padding | 20pt |
-| Detail stat card padding | 16pt |
-| Section spacing | 24pt |
-| Content margin | 20pt |
-| Card corner radius (large) | 14pt |
-| Card corner radius (medium) | 12pt |
-| Card corner radius (small) | 10pt |
-| Grid spacing | 12pt |
-| Row action button size | 28pt |
-| Left accent bar width | 3.5pt |
-
-### Animation Patterns
-
-- **Spring**: `.spring(response: 0.3)` for selection, tab changes
-- **Hover**: `.easeInOut(duration: 0.15)` for rows, nav items
-- **Hover (fast)**: `.easeInOut(duration: 0.12)` for buttons, filters
-- **Hover (play)**: `.easeOut(duration: 0.15)`
-- **Hover (cards)**: `.easeOut(duration: 0.2)` for stat cards with scale
-- **Spring with damping**: `.spring(response: 0.25, dampingFraction: 0.8)` for interactive
-- **Pulsing**: `.easeInOut(duration: 1.0).repeatForever(autoreverses: true)` for recording
-- **Transitions**: `.asymmetric(insertion: .move(edge: .trailing).combined(with: .opacity), ...)`
+### Filter Tabs — flat accent when selected, NOT gradient
 
 ### File Locations
 
 | File | Contents |
 |------|----------|
-| `HistoryWindowView.swift` | WhispererColors, sidebar, TranscriptionsView, settings, FilterTab, ResizableDivider, Color(hex:) |
-| `TranscriptionDetailView.swift` | Detail panel, DetailStatCard, DetailHeaderButton, section labels |
-| `TranscriptionRow.swift` | List row, RowActionButton, accent bar, metadata |
-| `WhispererApp.swift` | MenuBarView, StatusTab, ModelsTab, SettingsTab |
+| `HistoryWindowView.swift` | WhispererColors, sidebar, TranscriptionsView, settings |
+| `TranscriptionDetailView.swift` | Detail panel, DetailStatCard |
+| `TranscriptionRow.swift` | List row, RowActionButton, colorful metadata pills |
+| `WhispererApp.swift` | MBColors, MenuBarView, MenuBarWindowConfigurator |
+| `OnboardingView.swift` | OnboardingColors, onboarding pages |
+| `OnboardingWindow.swift` | Borderless NSWindow for onboarding |
 | `OverlayView.swift` | HUD overlay, RecordingIndicator, MicButton |
 | `LiveTranscriptionCard.swift` | Live transcription bubble, TypewriterAnimator |
-| `WaveformView.swift` | Waveform visualization bars |
+| `WaveformView.swift` | Waveform visualization bars (blue) |
+| `ShortcutRecorderView.swift` | Shortcut recorder, key caps |
+| `PurchaseView.swift` | Pro Pack purchase UI, gradient CTA |
+| `HistoryWindow.swift` | NSWindow subclass, dark chrome |
 
 ---
 
 ## 5. Anti-Patterns
 
 ### Colors
-- DO NOT use `.background(.ultraThinMaterial)` — use WhispererColors backgrounds
-- DO NOT use `.foregroundStyle(.primary/.secondary)` — use WhispererColors text colors
-- DO NOT use `Color(nsColor: .windowBackgroundColor)` in workspace — use WhispererColors.background()
-- DO NOT use `Color(nsColor: .separatorColor)` — use WhispererColors.border()
-- DO NOT use system `Color.green` — use per-surface green values
-- DO NOT use shadow opacity above `0.15` for `Color.black` — creates gray halos
-- DO NOT use same opacity for dark and light — dark needs ~50% less
+- DO NOT use `.background(.ultraThinMaterial)` — use dark navy backgrounds
+- DO NOT use `.foregroundStyle(.primary/.secondary)` — use explicit white / white.opacity()
+- DO NOT use `Color(nsColor: .windowBackgroundColor)` — use navy background
+- DO NOT use `Color.green` for accents — use `#5B6CF7` blue or per-element colors
+- DO NOT use shadow opacity above `0.15` for `Color.black`
 - DO NOT rely on borders for separation — use background layering
-- DO NOT use blue-tinted grays for secondary text — use warm #B3B3B3
-- DO NOT increase accent opacities to compensate — accent pops naturally
+- DO NOT use system blue for toggles — use `.tint(accent)` (#5B6CF7)
+- DO NOT use `window.hasShadow = true` — all windows use flat appearance
 
 ### Typography
-- DO NOT use `.bold` for large display numbers (20pt+) — use `.light` for elegance
-- DO NOT use uppercase text without tracking — looks cramped and cheap
-- DO NOT use `.title` / `.body` / `.caption` semantic styles — always explicit sizes
-- DO NOT use the same weight for everything — weight ladder creates visual rhythm
-- DO NOT skip `.lineSpacing()` on multi-line body text — default is too tight
-- DO NOT use `.rounded` for body text or metadata — reserve for titles and stat values
+- DO NOT use `.bold` for large display numbers (20pt+) — use `.light`
+- DO NOT use uppercase text without tracking
+- DO NOT use `.title` / `.body` / `.caption` semantic styles
+- DO NOT use `.rounded` for body text — reserve for titles and stat values
 
 ### Layout
-- DO NOT use `NavigationSplitView` — workspace uses custom `HStack(spacing: 0)`
-- DO NOT use flexible header height — all three headers must be exactly 84pt
-- DO NOT use `.listStyle(.sidebar)` — sidebar uses custom SidebarNavItem components
-- DO NOT put filters on the same row as search
+- DO NOT use `NavigationSplitView` — custom `HStack(spacing: 0)`
+- DO NOT use `.listStyle(.sidebar)` — custom SidebarNavItem
+- DO NOT put filters on same row as search
 
 ### Components
-- DO NOT use `ContentUnavailableView` — use custom empty state
-- DO NOT use `.searchable()` — use custom search field
-- DO NOT use `Picker(.segmented)` for tabs — use custom tab pattern
-- DO NOT replace gradient footer buttons with `.borderless` — gradient is intentional
-- DO NOT use fixed `.frame(width:)` on waveform bars — flexible widths
-- DO NOT use plain icons for section labels — wrap in gradient container with micro-shadow
-- DO NOT use gradient on play button or filter tabs — use flat accent
-- DO NOT create cards without shadows — every card needs subtle depth
-- DO NOT create hover states without at least one visual change
+- DO NOT use `ContentUnavailableView` — custom empty state
+- DO NOT use `.searchable()` — custom search field
+- DO NOT use plain bare icons for section labels — wrap in colorful tinted container
+- DO NOT use gradient on filter tabs or toggles — flat accent only
+- DO NOT create cards without shadows

@@ -158,27 +158,31 @@ struct DictionaryView: View {
     private var headerView: some View {
         VStack(spacing: 0) {
             HStack(spacing: 14) {
-                // Icon — gradient accent fill with shadow
+                // Icon — blue-purple gradient fill with shadow
                 ZStack {
                     RoundedRectangle(cornerRadius: 12)
                         .fill(
                             LinearGradient(
                                 colors: [
-                                    WhispererColors.accent.opacity(0.15),
-                                    WhispererColors.accentDark.opacity(0.08)
+                                    WhispererColors.accentBlue.opacity(0.18),
+                                    WhispererColors.accentPurple.opacity(0.10)
                                 ],
                                 startPoint: .topLeading,
                                 endPoint: .bottomTrailing
                             )
                         )
                         .frame(width: 44, height: 44)
-                        .shadow(color: WhispererColors.accent.opacity(0.1), radius: 6, y: 2)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 12)
+                                .stroke(WhispererColors.accentBlue.opacity(0.2), lineWidth: 0.5)
+                        )
+                        .shadow(color: WhispererColors.accentBlue.opacity(0.1), radius: 6, y: 2)
 
                     Image(systemName: "book.closed.fill")
                         .font(.system(size: 18))
                         .foregroundStyle(
                             LinearGradient(
-                                colors: [WhispererColors.accent, WhispererColors.accentDark],
+                                colors: [WhispererColors.accentBlue, WhispererColors.accentPurple],
                                 startPoint: .top,
                                 endPoint: .bottom
                             )
@@ -311,10 +315,10 @@ struct DictionaryView: View {
                 .padding(.vertical, 8)
                 .background(
                     RoundedRectangle(cornerRadius: 8)
-                        .fill(WhispererColors.accent)
+                        .fill(WhispererColors.accentGradient)
                 )
                 .shadow(
-                    color: WhispererColors.accent.opacity(0.25),
+                    color: WhispererColors.accentBlue.opacity(0.25),
                     radius: 4, y: 1
                 )
             }
@@ -432,21 +436,21 @@ struct DictionaryView: View {
                     .fill(
                         LinearGradient(
                             colors: [
-                                WhispererColors.accent.opacity(0.15),
-                                WhispererColors.accentDark.opacity(0.08)
+                                WhispererColors.accentBlue.opacity(0.18),
+                                WhispererColors.accentPurple.opacity(0.10)
                             ],
                             startPoint: .topLeading,
                             endPoint: .bottomTrailing
                         )
                     )
                     .frame(width: 72, height: 72)
-                    .shadow(color: WhispererColors.accent.opacity(0.1), radius: 8, y: 2)
+                    .shadow(color: WhispererColors.accentBlue.opacity(0.1), radius: 8, y: 2)
 
                 Image(systemName: "book.closed")
                     .font(.system(size: 28))
                     .foregroundStyle(
                         LinearGradient(
-                            colors: [WhispererColors.accent, WhispererColors.accentDark],
+                            colors: [WhispererColors.accentBlue, WhispererColors.accentPurple],
                             startPoint: .top,
                             endPoint: .bottom
                         )
@@ -474,10 +478,10 @@ struct DictionaryView: View {
                 .padding(.vertical, 10)
                 .background(
                     RoundedRectangle(cornerRadius: 10)
-                        .fill(WhispererColors.accent)
+                        .fill(WhispererColors.accentGradient)
                 )
                 .shadow(
-                    color: WhispererColors.accent.opacity(0.25),
+                    color: WhispererColors.accentBlue.opacity(0.25),
                     radius: 6, y: 2
                 )
             }
@@ -782,10 +786,10 @@ struct EntryDetailView: View {
                             .padding(.vertical, 12)
                             .background(
                                 RoundedRectangle(cornerRadius: 8)
-                                    .fill(WhispererColors.accent)
+                                    .fill(WhispererColors.accentGradient)
                             )
                             .shadow(
-                                color: WhispererColors.accent.opacity(isSaveHovered ? 0.4 : 0.25),
+                                color: WhispererColors.accentBlue.opacity(isSaveHovered ? 0.4 : 0.25),
                                 radius: isSaveHovered ? 8 : 4,
                                 y: isSaveHovered ? 2 : 1
                             )

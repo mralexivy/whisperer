@@ -26,27 +26,31 @@ struct AddDictionaryEntryView: View {
         VStack(spacing: 0) {
             // Header
             HStack(spacing: 14) {
-                // Icon — gradient accent fill with shadow
+                // Icon — blue-purple gradient fill with shadow
                 ZStack {
                     RoundedRectangle(cornerRadius: 12)
                         .fill(
                             LinearGradient(
                                 colors: [
-                                    WhispererColors.accent.opacity(0.15),
-                                    WhispererColors.accentDark.opacity(0.08)
+                                    WhispererColors.accentBlue.opacity(0.18),
+                                    WhispererColors.accentPurple.opacity(0.10)
                                 ],
                                 startPoint: .topLeading,
                                 endPoint: .bottomTrailing
                             )
                         )
                         .frame(width: 40, height: 40)
-                        .shadow(color: WhispererColors.accent.opacity(0.1), radius: 6, y: 2)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 12)
+                                .stroke(WhispererColors.accentBlue.opacity(0.2), lineWidth: 0.5)
+                        )
+                        .shadow(color: WhispererColors.accentBlue.opacity(0.1), radius: 6, y: 2)
 
                     Image(systemName: "plus.circle.fill")
                         .font(.system(size: 17))
                         .foregroundStyle(
                             LinearGradient(
-                                colors: [WhispererColors.accent, WhispererColors.accentDark],
+                                colors: [WhispererColors.accentBlue, WhispererColors.accentPurple],
                                 startPoint: .top,
                                 endPoint: .bottom
                             )
@@ -112,19 +116,19 @@ struct AddDictionaryEntryView: View {
                                 .fill(
                                     LinearGradient(
                                         colors: [
-                                            WhispererColors.accent.opacity(colorScheme == .dark ? 0.18 : 0.12),
-                                            WhispererColors.accentDark.opacity(colorScheme == .dark ? 0.08 : 0.05)
+                                            WhispererColors.accentBlue.opacity(0.18),
+                                            WhispererColors.accentPurple.opacity(0.10)
                                         ],
                                         startPoint: .topLeading,
                                         endPoint: .bottomTrailing
                                     )
                                 )
                                 .frame(width: 28, height: 28)
-                                .shadow(color: WhispererColors.accent.opacity(0.06), radius: 2, y: 1)
+                                .shadow(color: WhispererColors.accentBlue.opacity(0.06), radius: 2, y: 1)
 
                             Image(systemName: "info.circle.fill")
                                 .font(.system(size: 13, weight: .semibold))
-                                .foregroundColor(WhispererColors.accent)
+                                .foregroundColor(WhispererColors.accentBlue)
                         }
 
                         Text("Add terms that Whisper commonly mishears. The incorrect form should match what Whisper outputs.")
@@ -356,11 +360,11 @@ struct AddDictionaryEntryView: View {
                         .padding(.vertical, 12)
                         .background(
                             RoundedRectangle(cornerRadius: 10)
-                                .fill(isValid ? WhispererColors.accent : WhispererColors.secondaryText(colorScheme).opacity(0.3))
+                                .fill(isValid ? AnyShapeStyle(WhispererColors.accentGradient) : AnyShapeStyle(WhispererColors.secondaryText(colorScheme).opacity(0.3)))
                         )
                         .shadow(
                             color: isValid
-                                ? WhispererColors.accent.opacity(isAddHovered ? 0.4 : 0.25)
+                                ? WhispererColors.accentBlue.opacity(isAddHovered ? 0.4 : 0.25)
                                 : Color.clear,
                             radius: isAddHovered ? 8 : 4,
                             y: isAddHovered ? 2 : 1

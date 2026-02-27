@@ -99,7 +99,7 @@ struct TranscriptionDetailView: View {
                 }
             }
             .padding(.horizontal, 20)
-            .padding(.vertical, 16)
+            .frame(height: 72)
 
             // Gradient separator
             Rectangle()
@@ -123,7 +123,7 @@ struct TranscriptionDetailView: View {
 
     private func audioSection(url: URL) -> some View {
         VStack(alignment: .leading, spacing: 0) {
-            sectionLabel("Audio Recording", icon: "waveform")
+            sectionLabel("Audio Recording", icon: "waveform", color: .red)
                 .padding(.horizontal, 20)
                 .padding(.top, 18)
                 .padding(.bottom, 14)
@@ -151,7 +151,7 @@ struct TranscriptionDetailView: View {
     private var transcriptionSection: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack {
-                sectionLabel("Transcription", icon: "text.alignleft")
+                sectionLabel("Transcription", icon: "text.alignleft", color: WhispererColors.accentBlue)
 
                 Spacer()
 
@@ -176,11 +176,7 @@ struct TranscriptionDetailView: View {
                         Capsule()
                             .fill(
                                 isEditing
-                                    ? AnyShapeStyle(LinearGradient(
-                                        colors: [WhispererColors.accent, WhispererColors.accentDark],
-                                        startPoint: .leading,
-                                        endPoint: .trailing
-                                    ))
+                                    ? AnyShapeStyle(WhispererColors.accentGradient)
                                     : AnyShapeStyle(WhispererColors.elevatedBackground(colorScheme))
                             )
                     )
@@ -189,7 +185,7 @@ struct TranscriptionDetailView: View {
                             .stroke(isEditing ? Color.clear : WhispererColors.border(colorScheme), lineWidth: 0.5)
                     )
                     .shadow(
-                        color: isEditing ? WhispererColors.accent.opacity(0.25) : Color.clear,
+                        color: isEditing ? WhispererColors.accentBlue.opacity(0.25) : Color.clear,
                         radius: 4, y: 1
                     )
                 }
@@ -248,7 +244,7 @@ struct TranscriptionDetailView: View {
 
     private var detailsSection: some View {
         VStack(alignment: .leading, spacing: 12) {
-            sectionLabel("Details", icon: "info.circle")
+            sectionLabel("Details", icon: "info.circle", color: .purple)
 
             // 2-column grid of stat cards
             let columns = [
@@ -270,7 +266,7 @@ struct TranscriptionDetailView: View {
 
     private var notesSection: some View {
         VStack(alignment: .leading, spacing: 12) {
-            sectionLabel("Notes", icon: "note.text")
+            sectionLabel("Notes", icon: "note.text", color: .orange)
 
             ZStack(alignment: .topLeading) {
                 TextEditor(text: $notes)
@@ -308,26 +304,17 @@ struct TranscriptionDetailView: View {
 
     // MARK: - Helpers
 
-    private func sectionLabel(_ text: String, icon: String) -> some View {
+    private func sectionLabel(_ text: String, icon: String, color: Color = WhispererColors.accent) -> some View {
         HStack(spacing: 8) {
             ZStack {
                 RoundedRectangle(cornerRadius: 6)
-                    .fill(
-                        LinearGradient(
-                            colors: [
-                                WhispererColors.accent.opacity(colorScheme == .dark ? 0.18 : 0.12),
-                                WhispererColors.accentDark.opacity(colorScheme == .dark ? 0.08 : 0.05)
-                            ],
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
-                        )
-                    )
+                    .fill(color.opacity(colorScheme == .dark ? 0.15 : 0.12))
                     .frame(width: 24, height: 24)
-                    .shadow(color: WhispererColors.accent.opacity(0.06), radius: 2, y: 1)
+                    .shadow(color: color.opacity(0.06), radius: 2, y: 1)
 
                 Image(systemName: icon)
                     .font(.system(size: 11, weight: .semibold))
-                    .foregroundColor(WhispererColors.accent)
+                    .foregroundColor(color)
             }
 
             Text(text.uppercased())

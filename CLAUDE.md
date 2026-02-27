@@ -27,12 +27,13 @@ There are no unit tests in this project. No linter is configured.
 - **Xcode project**: `Whisperer.xcodeproj`
 - **whisper.cpp**: `whisper.cpp/` (vendored C++ library, not a git submodule)
 - **Bundle ID**: `com.ivy.whisperer`
+- **App icon assets**: `Whisperer/Assets.xcassets/AppIcon.appiconset/` (dark navy + gradient waveform)
 
 ## Documentation Map
 
 - **AGENTS.md** — Critical rules, coding conventions, naming patterns, Swift idioms
 - **ARCHITECTURE.md** — System design, state machine, audio pipeline, component ownership
-- **DESIGN.md** — Color system, typography, layout patterns, components
+- **DESIGN.md** — Unified dark navy theme, blue-purple accents, colorful icons, typography, layout patterns, components
 - **PRODUCT_SENSE.md** — Product vision, UX principles, target users
 - **PLANS.md** — Planning process, active plans, tech debt
 - **docs/references/** — Deep technical references (whisper.cpp C interop)

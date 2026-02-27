@@ -14,6 +14,18 @@ Whisperer is invisible transcription. Hold a key, speak, release — your words 
 
 ## UX Principles
 
+### Premium Dark Aesthetic
+- Unified dark navy theme across all windows — workspace, menu bar, overlay, onboarding
+- Blue-purple gradient accents with per-element colorful icons
+- Always-dark appearance — no light mode. Deep navy (#0C0C1A), not gray dark mode
+- Flat window chrome with no visible system borders or shadows
+- App icon matches the theme: navy background with gradient waveform
+
+### Guided First-Run Experience
+- Four-page onboarding window on first launch: Welcome, Permissions, Model Download, Shortcut Setup
+- Permissions and model download happen during onboarding — not after
+- User is recording-ready when onboarding completes
+
 ### Invisible Until Needed
 - Menu bar app with no dock icon (`.accessory` activation policy)
 - Non-activating overlay panel — never steals focus from the user's current app
@@ -26,7 +38,6 @@ Whisperer is invisible transcription. Hold a key, speak, release — your words 
 - Pulsing dot indicator for recording state
 
 ### Fail Gracefully
-- 3-layer key detection (CGEventTap → IOKit HID → NSEvent) — if one fails, the next catches it
 - Accessibility API for text injection with clipboard fallback — works even when AX doesn't
 - Clipboard content restored after paste fallback — nothing lost
 - VAD is optional — the app works without it

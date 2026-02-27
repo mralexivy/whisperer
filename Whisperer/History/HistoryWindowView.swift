@@ -11,40 +11,55 @@ import AppKit
 // MARK: - Design System Colors
 
 struct WhispererColors {
-    // Primary brand green
-    static let accent = Color(hex: "22C55E")
-    static let accentDark = Color(hex: "16A34A")
+    // Primary accent blue (selections, indicators, toggles — matches onboarding)
+    static let accent = Color(red: 0.357, green: 0.424, blue: 0.969)    // #5B6CF7
+    static let accentDark = Color(red: 0.298, green: 0.365, blue: 0.910) // #4C5DE8
 
-    // Backgrounds (adapt to color scheme)
+    // Blue-purple accent for primary CTA buttons (matches onboarding)
+    static let accentBlue = Color(red: 0.357, green: 0.424, blue: 0.969)    // #5B6CF7
+    static let accentPurple = Color(red: 0.545, green: 0.361, blue: 0.965)  // #8B5CF6
+
+    static var accentGradient: LinearGradient {
+        LinearGradient(colors: [accentBlue, accentPurple], startPoint: .leading, endPoint: .trailing)
+    }
+
+    // Backgrounds — deep navy palette (always dark)
     static func background(_ scheme: ColorScheme) -> Color {
-        scheme == .dark ? Color(hex: "111111") : Color(hex: "F8FAFC")
+        Color(red: 0.047, green: 0.047, blue: 0.102)       // #0C0C1A
     }
 
     static func cardBackground(_ scheme: ColorScheme) -> Color {
-        scheme == .dark ? Color(hex: "181818") : Color.white
+        Color(red: 0.078, green: 0.078, blue: 0.169)       // #14142B
     }
 
     static func sidebarBackground(_ scheme: ColorScheme) -> Color {
-        scheme == .dark ? Color(hex: "0D0D0D") : Color(hex: "FFFFFF")
+        Color(red: 0.039, green: 0.039, blue: 0.094)       // #0A0A18
     }
 
     static func elevatedBackground(_ scheme: ColorScheme) -> Color {
-        scheme == .dark ? Color(hex: "1F1F1F") : Color(hex: "F1F5F9")
+        Color(red: 0.110, green: 0.110, blue: 0.227)       // #1C1C3A
     }
 
-    // Text
+    // Text — white with opacity levels
     static func primaryText(_ scheme: ColorScheme) -> Color {
-        scheme == .dark ? Color.white : Color(hex: "0F172A")
+        Color.white
     }
 
     static func secondaryText(_ scheme: ColorScheme) -> Color {
-        scheme == .dark ? Color(hex: "B3B3B3") : Color(hex: "64748B")
+        Color.white.opacity(0.5)
     }
 
-    // Borders
-    static func border(_ scheme: ColorScheme) -> Color {
-        scheme == .dark ? Color.white.opacity(0.04) : Color.black.opacity(0.06)
+    static func tertiaryText(_ scheme: ColorScheme) -> Color {
+        Color.white.opacity(0.35)
     }
+
+    // Borders — subtle white
+    static func border(_ scheme: ColorScheme) -> Color {
+        Color.white.opacity(0.06)
+    }
+
+    // Pill/badge backgrounds
+    static let pillBackground = Color.white.opacity(0.08)
 }
 
 // MARK: - Time Format Setting
@@ -82,6 +97,14 @@ enum HistorySidebarItem: String, CaseIterable, Identifiable {
         case .transcriptions: return "waveform.and.mic"
         case .dictionary: return "book.closed"
         case .settings: return "gearshape"
+        }
+    }
+
+    var color: Color {
+        switch self {
+        case .transcriptions: return WhispererColors.accentBlue
+        case .dictionary: return .purple
+        case .settings: return .orange
         }
     }
 }
@@ -175,27 +198,31 @@ struct HistoryWindowView: View {
 
     private var brandHeader: some View {
         HStack(spacing: 12) {
-            // App icon — rounded square with gradient accent fill
+            // App icon — rounded square with blue-purple gradient
             ZStack {
                 RoundedRectangle(cornerRadius: 10)
                     .fill(
                         LinearGradient(
                             colors: [
-                                WhispererColors.accent.opacity(0.18),
-                                WhispererColors.accentDark.opacity(0.08)
+                                WhispererColors.accentBlue.opacity(0.18),
+                                WhispererColors.accentPurple.opacity(0.10)
                             ],
                             startPoint: .topLeading,
                             endPoint: .bottomTrailing
                         )
                     )
                     .frame(width: 36, height: 36)
-                    .shadow(color: WhispererColors.accent.opacity(0.15), radius: 6, y: 2)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 10)
+                            .stroke(WhispererColors.accentBlue.opacity(0.25), lineWidth: 0.5)
+                    )
+                    .shadow(color: WhispererColors.accentBlue.opacity(0.15), radius: 6, y: 2)
 
                 Image(systemName: "waveform")
                     .font(.system(size: 16, weight: .semibold))
                     .foregroundStyle(
                         LinearGradient(
-                            colors: [WhispererColors.accent, WhispererColors.accentDark],
+                            colors: [WhispererColors.accentBlue, WhispererColors.accentPurple],
                             startPoint: .top,
                             endPoint: .bottom
                         )
@@ -221,10 +248,10 @@ struct HistoryWindowView: View {
 
     private func sidebarStatsCard(_ stats: HistoryStatistics) -> some View {
         VStack(spacing: 14) {
-            sidebarStatRow(label: "RECORDINGS", value: "\(stats.totalRecordings)")
-            sidebarStatRow(label: "WORDS", value: formatSidebarNumber(stats.totalWords))
-            sidebarStatRow(label: "AVG WPM", value: "\(stats.averageWPM)", valueColor: WhispererColors.accent)
-            sidebarStatRow(label: "DAYS", value: "\(stats.totalDays)")
+            sidebarStatRow(label: "RECORDINGS", value: "\(stats.totalRecordings)", valueColor: WhispererColors.accentBlue)
+            sidebarStatRow(label: "WORDS", value: formatSidebarNumber(stats.totalWords), valueColor: .purple)
+            sidebarStatRow(label: "AVG WPM", value: "\(stats.averageWPM)", valueColor: .orange)
+            sidebarStatRow(label: "DAYS", value: "\(stats.totalDays)", valueColor: .cyan)
         }
         .padding(16)
         .background(
@@ -299,7 +326,7 @@ struct HistoryWindowView: View {
                     .padding(.vertical, 1)
                     .background(
                         RoundedRectangle(cornerRadius: 3)
-                            .fill(WhispererColors.elevatedBackground(colorScheme))
+                            .fill(WhispererColors.pillBackground)
                     )
                     .overlay(
                         RoundedRectangle(cornerRadius: 3)
@@ -315,7 +342,7 @@ struct HistoryWindowView: View {
                     .padding(.vertical, 1)
                     .background(
                         RoundedRectangle(cornerRadius: 3)
-                            .fill(WhispererColors.elevatedBackground(colorScheme))
+                            .fill(WhispererColors.pillBackground)
                     )
                     .overlay(
                         RoundedRectangle(cornerRadius: 3)
@@ -356,7 +383,7 @@ struct SidebarNavItem: View {
             HStack(spacing: 12) {
                 Image(systemName: item.icon)
                     .font(.system(size: 14, weight: .medium))
-                    .foregroundColor(isSelected ? WhispererColors.accent : WhispererColors.secondaryText(colorScheme))
+                    .foregroundColor(item.color)
                     .frame(width: 20)
 
                 Text(item.rawValue)
@@ -369,14 +396,14 @@ struct SidebarNavItem: View {
             .padding(.vertical, 10)
             .background(
                 RoundedRectangle(cornerRadius: 10)
-                    .fill(isSelected ? WhispererColors.accent.opacity(0.15) : (isHovered ? WhispererColors.elevatedBackground(colorScheme) : Color.clear))
+                    .fill(isSelected ? item.color.opacity(0.15) : (isHovered ? WhispererColors.elevatedBackground(colorScheme) : Color.clear))
             )
             .overlay(
                 RoundedRectangle(cornerRadius: 10)
-                    .stroke(isSelected ? WhispererColors.accent.opacity(0.3) : Color.clear, lineWidth: 1)
+                    .stroke(isSelected ? item.color.opacity(0.3) : Color.clear, lineWidth: 1)
             )
             .shadow(
-                color: isSelected ? WhispererColors.accent.opacity(0.06) : Color.clear,
+                color: isSelected ? item.color.opacity(0.06) : Color.clear,
                 radius: 4, y: 1
             )
         }
@@ -454,27 +481,31 @@ struct TranscriptionsView: View {
     private var headerView: some View {
         VStack(spacing: 0) {
             HStack(spacing: 14) {
-                // Avatar — gradient accent fill with shadow
+                // Avatar — blue-purple gradient fill with shadow
                 ZStack {
                     RoundedRectangle(cornerRadius: 12)
                         .fill(
                             LinearGradient(
                                 colors: [
-                                    WhispererColors.accent.opacity(0.15),
-                                    WhispererColors.accentDark.opacity(0.08)
+                                    WhispererColors.accentBlue.opacity(0.18),
+                                    WhispererColors.accentPurple.opacity(0.10)
                                 ],
                                 startPoint: .topLeading,
                                 endPoint: .bottomTrailing
                             )
                         )
                         .frame(width: 44, height: 44)
-                        .shadow(color: WhispererColors.accent.opacity(0.1), radius: 6, y: 2)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 12)
+                                .stroke(WhispererColors.accentBlue.opacity(0.2), lineWidth: 0.5)
+                        )
+                        .shadow(color: WhispererColors.accentBlue.opacity(0.1), radius: 6, y: 2)
 
                     Text(initials)
                         .font(.system(size: 15, weight: .bold, design: .rounded))
                         .foregroundStyle(
                             LinearGradient(
-                                colors: [WhispererColors.accent, WhispererColors.accentDark],
+                                colors: [WhispererColors.accentBlue, WhispererColors.accentPurple],
                                 startPoint: .top,
                                 endPoint: .bottom
                             )
@@ -494,7 +525,7 @@ struct TranscriptionsView: View {
                 Spacer()
             }
             .padding(.horizontal, 20)
-            .padding(.vertical, 16)
+            .frame(height: 72)
 
             // Subtle gradient separator
             Rectangle()
@@ -577,15 +608,15 @@ struct TranscriptionsView: View {
 
             // Filters row (separate line)
             HStack(spacing: 6) {
-                FilterTab(title: "All", isSelected: selectedFilter == .all, colorScheme: colorScheme) {
+                FilterTab(title: "All", isSelected: selectedFilter == .all, colorScheme: colorScheme, color: WhispererColors.accentBlue) {
                     withAnimation(.spring(response: 0.3)) { selectedFilter = .all }
                     performSearch()
                 }
-                FilterTab(title: "Pinned", isSelected: selectedFilter == .pinned, colorScheme: colorScheme) {
+                FilterTab(title: "Pinned", isSelected: selectedFilter == .pinned, colorScheme: colorScheme, color: .orange) {
                     withAnimation(.spring(response: 0.3)) { selectedFilter = .pinned }
                     performSearch()
                 }
-                FilterTab(title: "Flagged", isSelected: selectedFilter == .flagged, colorScheme: colorScheme) {
+                FilterTab(title: "Flagged", isSelected: selectedFilter == .flagged, colorScheme: colorScheme, color: .red) {
                     withAnimation(.spring(response: 0.3)) { selectedFilter = .flagged }
                     performSearch()
                 }
@@ -639,12 +670,21 @@ struct TranscriptionsView: View {
 
             ZStack {
                 Circle()
-                    .fill(WhispererColors.accent.opacity(0.12))
+                    .fill(
+                        LinearGradient(
+                            colors: [
+                                WhispererColors.accentBlue.opacity(0.18),
+                                WhispererColors.accentPurple.opacity(0.10)
+                            ],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                    )
                     .frame(width: 72, height: 72)
 
                 Image(systemName: "waveform.and.mic")
                     .font(.system(size: 28))
-                    .foregroundColor(WhispererColors.accent)
+                    .foregroundColor(WhispererColors.accentBlue)
             }
 
             VStack(spacing: 6) {
@@ -792,19 +832,19 @@ struct HistorySettingsView: View {
                     .fill(
                         LinearGradient(
                             colors: [
-                                WhispererColors.accent.opacity(colorScheme == .dark ? 0.18 : 0.12),
-                                WhispererColors.accentDark.opacity(colorScheme == .dark ? 0.08 : 0.05)
+                                WhispererColors.accentBlue.opacity(0.18),
+                                WhispererColors.accentPurple.opacity(0.10)
                             ],
                             startPoint: .topLeading,
                             endPoint: .bottomTrailing
                         )
                     )
                     .frame(width: 52, height: 52)
-                    .shadow(color: WhispererColors.accent.opacity(0.08), radius: 4, y: 1)
+                    .shadow(color: WhispererColors.accentBlue.opacity(0.08), radius: 4, y: 1)
 
                 Image(systemName: "gearshape.fill")
                     .font(.system(size: 22))
-                    .foregroundColor(WhispererColors.accent)
+                    .foregroundColor(WhispererColors.accentBlue)
             }
 
             VStack(alignment: .leading, spacing: 4) {
@@ -829,7 +869,8 @@ struct HistorySettingsView: View {
                 SettingsSectionHeader(
                     icon: "clock.fill",
                     title: "Display",
-                    colorScheme: colorScheme
+                    colorScheme: colorScheme,
+                    color: .orange
                 )
 
                 VStack(alignment: .leading, spacing: 14) {
@@ -869,7 +910,8 @@ struct HistorySettingsView: View {
                 SettingsSectionHeader(
                     icon: "book.closed.fill",
                     title: "Dictionary Corrections",
-                    colorScheme: colorScheme
+                    colorScheme: colorScheme,
+                    color: .purple
                 )
 
                 // Enable dictionary toggle
@@ -880,8 +922,8 @@ struct HistorySettingsView: View {
                                 .fill(
                                     LinearGradient(
                                         colors: [
-                                            WhispererColors.accent.opacity(colorScheme == .dark ? 0.18 : 0.12),
-                                            WhispererColors.accentDark.opacity(colorScheme == .dark ? 0.08 : 0.05)
+                                            WhispererColors.accentBlue.opacity(0.18),
+                                            WhispererColors.accentPurple.opacity(0.10)
                                         ],
                                         startPoint: .topLeading,
                                         endPoint: .bottomTrailing
@@ -891,7 +933,7 @@ struct HistorySettingsView: View {
 
                             Image(systemName: "text.badge.checkmark")
                                 .font(.system(size: 14, weight: .semibold))
-                                .foregroundColor(WhispererColors.accent)
+                                .foregroundColor(WhispererColors.accentBlue)
                         }
 
                         VStack(alignment: .leading, spacing: 3) {
@@ -969,8 +1011,8 @@ struct HistorySettingsView: View {
                                 .fill(
                                     LinearGradient(
                                         colors: [
-                                            WhispererColors.accent.opacity(colorScheme == .dark ? 0.18 : 0.12),
-                                            WhispererColors.accentDark.opacity(colorScheme == .dark ? 0.08 : 0.05)
+                                            WhispererColors.accentBlue.opacity(0.18),
+                                            WhispererColors.accentPurple.opacity(0.10)
                                         ],
                                         startPoint: .topLeading,
                                         endPoint: .bottomTrailing
@@ -980,7 +1022,7 @@ struct HistorySettingsView: View {
 
                             Image(systemName: "waveform.and.mic")
                                 .font(.system(size: 14, weight: .semibold))
-                                .foregroundColor(WhispererColors.accent)
+                                .foregroundColor(WhispererColors.accentBlue)
                         }
 
                         VStack(alignment: .leading, spacing: 3) {
@@ -1038,7 +1080,8 @@ struct HistorySettingsView: View {
                 SettingsSectionHeader(
                     icon: "externaldrive.fill",
                     title: "Storage",
-                    colorScheme: colorScheme
+                    colorScheme: colorScheme,
+                    color: .cyan
                 )
 
                 SettingsRow(colorScheme: colorScheme) {
@@ -1048,8 +1091,8 @@ struct HistorySettingsView: View {
                                 .fill(
                                     LinearGradient(
                                         colors: [
-                                            WhispererColors.accent.opacity(colorScheme == .dark ? 0.18 : 0.12),
-                                            WhispererColors.accentDark.opacity(colorScheme == .dark ? 0.08 : 0.05)
+                                            WhispererColors.accentBlue.opacity(0.18),
+                                            WhispererColors.accentPurple.opacity(0.10)
                                         ],
                                         startPoint: .topLeading,
                                         endPoint: .bottomTrailing
@@ -1059,7 +1102,7 @@ struct HistorySettingsView: View {
 
                             Image(systemName: "waveform")
                                 .font(.system(size: 14, weight: .semibold))
-                                .foregroundColor(WhispererColors.accent)
+                                .foregroundColor(WhispererColors.accentBlue)
                         }
 
                         VStack(alignment: .leading, spacing: 3) {
@@ -1092,7 +1135,8 @@ struct HistorySettingsView: View {
                 SettingsSectionHeader(
                     icon: "clock.arrow.circlepath",
                     title: "Data Management",
-                    colorScheme: colorScheme
+                    colorScheme: colorScheme,
+                    color: .red
                 )
 
                 VStack(alignment: .leading, spacing: 14) {
@@ -1235,27 +1279,19 @@ struct SettingsSectionHeader: View {
     let icon: String
     let title: String
     let colorScheme: ColorScheme
+    var color: Color = WhispererColors.accentBlue
 
     var body: some View {
         HStack(spacing: 10) {
             ZStack {
                 RoundedRectangle(cornerRadius: 7)
-                    .fill(
-                        LinearGradient(
-                            colors: [
-                                WhispererColors.accent.opacity(colorScheme == .dark ? 0.18 : 0.12),
-                                WhispererColors.accentDark.opacity(colorScheme == .dark ? 0.08 : 0.05)
-                            ],
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
-                        )
-                    )
+                    .fill(color.opacity(0.15))
                     .frame(width: 28, height: 28)
-                    .shadow(color: WhispererColors.accent.opacity(0.08), radius: 3, y: 1)
+                    .shadow(color: color.opacity(0.08), radius: 3, y: 1)
 
                 Image(systemName: icon)
                     .font(.system(size: 13, weight: .semibold))
-                    .foregroundColor(WhispererColors.accent)
+                    .foregroundColor(color)
             }
 
             Text(title)
@@ -1420,6 +1456,7 @@ struct FilterTab: View {
     let title: String
     let isSelected: Bool
     let colorScheme: ColorScheme
+    var color: Color = WhispererColors.accent
     let action: () -> Void
 
     @State private var isHovered = false
@@ -1437,14 +1474,14 @@ struct FilterTab: View {
                 .padding(.vertical, 7)
                 .background(
                     Capsule()
-                        .fill(isSelected ? WhispererColors.accent : (isHovered ? WhispererColors.elevatedBackground(colorScheme) : Color.clear))
+                        .fill(isSelected ? color : (isHovered ? WhispererColors.elevatedBackground(colorScheme) : Color.clear))
                 )
                 .overlay(
                     Capsule()
                         .stroke(isSelected ? Color.clear : WhispererColors.border(colorScheme), lineWidth: 1)
                 )
                 .shadow(
-                    color: isSelected ? WhispererColors.accent.opacity(0.25) : Color.clear,
+                    color: isSelected ? color.opacity(0.25) : Color.clear,
                     radius: 4, y: 1
                 )
         }

@@ -41,7 +41,23 @@ Read `Whisperer/Permissions/PermissionManager.swift` and verify:
 - [ ] No references to `inputMonitoring` or Input Monitoring
 - [ ] `allPermissionsGranted` checks only microphone + accessibility
 
-## Step 7: Generate Submission Summary
+## Step 7: Verify Onboarding Flow
+
+Read `Whisperer/UI/OnboardingView.swift` and `Whisperer/UI/OnboardingWindow.swift`:
+- [ ] Onboarding shows on first launch when `hasCompletedOnboarding` is false
+- [ ] Onboarding requests Microphone and Accessibility permissions
+- [ ] Onboarding triggers model download
+- [ ] Onboarding sets `hasCompletedOnboarding = true` on completion
+- [ ] No banned APIs used in onboarding permission requests
+
+## Step 8: Verify App Icon
+
+Check `Whisperer/Assets.xcassets/AppIcon.appiconset/`:
+- [ ] All 10 macOS icon sizes present (16, 16@2x, 32, 32@2x, 128, 128@2x, 256, 256@2x, 512, 512@2x)
+- [ ] Icons use dark navy background with blue-purple gradient waveform (matching app theme)
+- [ ] `Contents.json` references all filenames correctly
+
+## Step 9: Generate Submission Summary
 
 Output a summary with:
 
@@ -66,6 +82,9 @@ Generate reviewer notes using this template — fill in the current version:
 ```
 Whisperer is an assistive dictation and voice-to-text tool that enables hands-free text input.
 
+FIRST LAUNCH EXPERIENCE:
+On first launch, a guided onboarding flow walks users through permissions setup, model download, and shortcut configuration. The app is ready to use immediately after onboarding completes.
+
 ACCESSIBILITY USAGE:
 We use Accessibility API (AXUIElement) solely for its intended assistive purpose — inserting user-dictated text into the focused text field. Users who cannot grant Accessibility can still use the app via clipboard fallback.
 
@@ -77,11 +96,12 @@ NO INPUT MONITORING:
 We do NOT monitor keystrokes. We do NOT use CGEventTap, IOKit HID, or global key event monitoring. Shortcut detection uses only NSEvent flagsChanged (modifier state) and Carbon RegisterEventHotKey.
 
 TESTING:
-1. Grant Microphone permission when prompted
-2. Grant Accessibility permission for text injection (optional)
-3. Wait for model download (~500MB, one-time)
-4. Open TextEdit, hold Fn key, speak, release
-5. App works 100% offline after model download
+1. Launch the app — onboarding window appears on first run
+2. Follow onboarding: grant Microphone permission, download a model, configure shortcut
+3. Open TextEdit, hold Fn key (or configured shortcut), speak, release
+4. Transcribed text appears in the focused field
+5. Open Workspace from menu bar to see transcription history
+6. App works 100% offline after model download
 
 EXPORT COMPLIANCE: Uses HTTPS only (exempt). No proprietary encryption.
 Pro Pack IAP: com.ivy.whisperer.propack

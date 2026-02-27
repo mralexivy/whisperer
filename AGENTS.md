@@ -4,7 +4,7 @@
 
 1. `AppState` is `@MainActor` — all UI state updates go through `AppState.shared`
 2. `SafeLock` (timeout-based NSLock) for whisper.cpp thread safety, not Swift actors
-3. `WhispererColors` only — no system semantic colors in workspace views
+3. Unified dark navy palette (`WhispererColors` / `MBColors` / `OnboardingColors`) — no system semantic colors, no `Color.green` accents, always-dark theme
 4. `Logger.shared` — no `print()` statements
 5. 5-minute max recording limit prevents unbounded memory growth (~19MB)
 6. `[weak self]` in all `Task.detached` closures and stored callbacks
@@ -17,7 +17,8 @@
 - **Services**: `AudioRecorder`, `WhisperBridge`, `TextInjector` (noun + verb/purpose)
 - **Managers**: `HistoryManager`, `DictionaryManager`, `AudioDeviceManager` (noun + Manager)
 - **Views**: `TranscriptionRow`, `LiveTranscriptionCard`, `WaveformView` (semantic name + View)
-- **Windows**: `HistoryWindow`, `OverlayPanel` (purpose + Window/Panel)
+- **Windows**: `HistoryWindow`, `OverlayPanel`, `OnboardingWindow` (purpose + Window/Panel)
+- **Color Structs**: `WhispererColors` (workspace), `MBColors` (menu bar, private enum), `OnboardingColors` (onboarding, private enum)
 - **Errors**: `WhisperError`, `RecordingError`, `SafeLockError` (domain + Error, enums with `LocalizedError`)
 
 ### Properties

@@ -24,7 +24,7 @@ struct AudioPlayerView: View {
             // Waveform
             waveformView
                 .frame(height: 56)
-                .padding(.horizontal, 4)
+                .padding(.horizontal, 8)
 
             // Controls
             HStack(spacing: 16) {
@@ -59,6 +59,19 @@ struct AudioPlayerView: View {
                     }
                 }
                 .frame(maxHeight: .infinity, alignment: .center)
+                // Vertical fade — bars fade out at top and bottom edges
+                .mask(
+                    LinearGradient(
+                        stops: [
+                            .init(color: .clear, location: 0),
+                            .init(color: .white, location: 0.15),
+                            .init(color: .white, location: 0.85),
+                            .init(color: .clear, location: 1)
+                        ],
+                        startPoint: .top,
+                        endPoint: .bottom
+                    )
+                )
 
                 // Progress bars with glow
                 HStack(spacing: 2) {
@@ -75,30 +88,28 @@ struct AudioPlayerView: View {
                         .frame(width: geometry.size.width * CGFloat(player.progress))
                         .frame(maxWidth: .infinity, alignment: .leading)
                 )
-
-                // Playhead
-                ZStack {
-                    Circle()
-                        .fill(Color.white)
-                        .frame(width: 10, height: 10)
-                        .shadow(color: WhispererColors.accent.opacity(0.5), radius: 4, y: 2)
-                        .shadow(color: Color.white.opacity(0.3), radius: 2, y: 0)
-                }
-                .offset(x: geometry.size.width * CGFloat(player.progress) - 5)
-            }
-            // Vertical fade — bars fade out at top and bottom edges
-            .mask(
-                LinearGradient(
-                    stops: [
-                        .init(color: .clear, location: 0),
-                        .init(color: .white, location: 0.15),
-                        .init(color: .white, location: 0.85),
-                        .init(color: .clear, location: 1)
-                    ],
-                    startPoint: .top,
-                    endPoint: .bottom
+                // Vertical fade — bars fade out at top and bottom edges
+                .mask(
+                    LinearGradient(
+                        stops: [
+                            .init(color: .clear, location: 0),
+                            .init(color: .white, location: 0.15),
+                            .init(color: .white, location: 0.85),
+                            .init(color: .clear, location: 1)
+                        ],
+                        startPoint: .top,
+                        endPoint: .bottom
+                    )
                 )
-            )
+
+                // Playhead — outside the mask so it doesn't get clipped
+                Circle()
+                    .fill(Color.white)
+                    .frame(width: 10, height: 10)
+                    .shadow(color: WhispererColors.accent.opacity(0.5), radius: 4, y: 2)
+                    .shadow(color: Color.white.opacity(0.3), radius: 2, y: 0)
+                    .offset(x: geometry.size.width * CGFloat(player.progress) - 5)
+            }
             .contentShape(Rectangle())
             .gesture(
                 DragGesture(minimumDistance: 0)

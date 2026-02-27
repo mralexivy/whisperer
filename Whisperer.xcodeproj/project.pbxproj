@@ -2010,6 +2010,10 @@
 					ProjectRef = 10CD05772F366002001C6FB0 /* whisperer.xcodeproj */;
 				},
 				{
+					ProductGroup = 10028F702F34F29200941FBC /* Products */;
+					ProjectRef = 10028F6C2F34F29200941FBC /* whisperer.xcodeproj */;
+				},
+				{
 					ProductGroup = 1038D48E2F263ADB00490030 /* Products */;
 					ProjectRef = 1038D48D2F263ADB00490030 /* whisperer.xcodeproj */;
 				},
@@ -2022,20 +2026,16 @@
 					ProjectRef = 1068837B2F365B32008BC1AD /* whisperer.xcodeproj */;
 				},
 				{
+					ProductGroup = 100922302F313D2200AA3C22 /* Products */;
+					ProjectRef = 1009222C2F313D2200AA3C22 /* whisperer.xcodeproj */;
+				},
+				{
 					ProductGroup = 10DED0272F27E4B40054AFA2 /* Products */;
 					ProjectRef = 10DED0232F27E4B40054AFA2 /* whisperer.xcodeproj */;
 				},
 				{
 					ProductGroup = 10DB4E152F3779900053C1FB /* Products */;
 					ProjectRef = 10DB4E112F3779900053C1FB /* whisperer.xcodeproj */;
-				},
-				{
-					ProductGroup = 10028F702F34F29200941FBC /* Products */;
-					ProjectRef = 10028F6C2F34F29200941FBC /* whisperer.xcodeproj */;
-				},
-				{
-					ProductGroup = 100922302F313D2200AA3C22 /* Products */;
-					ProjectRef = 1009222C2F313D2200AA3C22 /* whisperer.xcodeproj */;
 				},
 			);
 			projectRoot = "";
@@ -2190,7 +2190,7 @@
 				AUTOMATION_APPLE_EVENTS = NO;
 				"CODE_SIGN_ENTITLEMENTS[sdk=*]" = "Whisperer/whisperer-nosandbox.entitlements";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 1;
+				CURRENT_PROJECT_VERSION = 2;
 				DEVELOPMENT_TEAM = 8NM6EHZB4G;
 				ENABLE_APP_SANDBOX = YES;
 				ENABLE_HARDENED_RUNTIME = YES;
@@ -2229,7 +2229,7 @@
 					"$(SRCROOT)/whisper.cpp/build-static/ggml/src/ggml-blas",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 26.2;
-				MARKETING_VERSION = 1.0;
+				MARKETING_VERSION = 1.1;
 				OTHER_LDFLAGS = "-lc++";
 				PRODUCT_BUNDLE_IDENTIFIER = com.ivy.whisperer;
 				PRODUCT_NAME = "$(TARGET_NAME)";
@@ -2260,9 +2260,9 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				AUTOMATION_APPLE_EVENTS = NO;
-				"CODE_SIGN_ENTITLEMENTS[sdk=*]" = "Whisperer/whisperer.entitlements";
+				"CODE_SIGN_ENTITLEMENTS[sdk=*]" = Whisperer/whisperer.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 1;
+				CURRENT_PROJECT_VERSION = 2;
 				DEVELOPMENT_TEAM = 8NM6EHZB4G;
 				ENABLE_APP_SANDBOX = YES;
 				ENABLE_HARDENED_RUNTIME = YES;
@@ -2301,7 +2301,7 @@
 					"$(SRCROOT)/whisper.cpp/build-static/ggml/src/ggml-blas",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 26.2;
-				MARKETING_VERSION = 1.0;
+				MARKETING_VERSION = 1.1;
 				OTHER_LDFLAGS = "-lc++";
 				PRODUCT_BUNDLE_IDENTIFIER = com.ivy.whisperer;
 				PRODUCT_NAME = "$(TARGET_NAME)";

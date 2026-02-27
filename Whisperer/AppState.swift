@@ -32,7 +32,7 @@ enum RecordingState: Equatable {
         case .transcribing:
             return "Transcribing..."
         case .inserting:
-            return "Inserting..."
+            return "Entering text..."
         case .downloadingModel(let progress):
             return "Downloading model... \(Int(progress * 100))%"
         }
@@ -56,6 +56,29 @@ class AppState: ObservableObject {
     @Published var muteOtherAudioDuringRecording: Bool = true {  // Mute other audio sources during recording
         didSet {
             UserDefaults.standard.set(muteOtherAudioDuringRecording, forKey: "muteOtherAudioDuringRecording")
+        }
+    }
+
+    // System-wide dictation opt-in (default OFF for App Store compliance)
+    @Published var systemWideDictationEnabled: Bool = false {
+        didSet {
+            UserDefaults.standard.set(systemWideDictationEnabled, forKey: "systemWideDictationEnabled")
+            if systemWideDictationEnabled {
+                startGlobalDictation()
+            } else {
+                stopGlobalDictation()
+            }
+        }
+    }
+
+    // In-app transcription mode (no Accessibility required)
+    @Published var isInAppMode: Bool = false
+    @Published var lastInAppTranscription: String = ""
+
+    // Onboarding
+    @Published var hasCompletedOnboarding: Bool = false {
+        didSet {
+            UserDefaults.standard.set(hasCompletedOnboarding, forKey: "hasCompletedOnboarding")
         }
     }
 
@@ -127,6 +150,17 @@ class AppState: ObservableObject {
         if let savedLang = UserDefaults.standard.string(forKey: "selectedLanguage"),
            let lang = TranscriptionLanguage(rawValue: savedLang) {
             selectedLanguage = lang
+        }
+
+        // Load system-wide dictation preference (default OFF)
+        if UserDefaults.standard.object(forKey: "systemWideDictationEnabled") != nil {
+            // Use _systemWideDictationEnabled to avoid triggering didSet during init
+            _systemWideDictationEnabled = Published(wrappedValue: UserDefaults.standard.bool(forKey: "systemWideDictationEnabled"))
+        }
+
+        // Load onboarding state
+        if UserDefaults.standard.object(forKey: "hasCompletedOnboarding") != nil {
+            _hasCompletedOnboarding = Published(wrappedValue: UserDefaults.standard.bool(forKey: "hasCompletedOnboarding"))
         }
 
         // Start monitoring audio device changes
@@ -327,6 +361,142 @@ class AppState: ObservableObject {
         }
     }
 
+    // MARK: - Global Dictation Lifecycle
+
+    /// Start global dictation — creates and starts the key listener
+    func startGlobalDictation() {
+        guard keyListener == nil else {
+            keyListener?.start()
+            return
+        }
+        let listener = GlobalKeyListener()
+        keyListener = listener
+        configureKeyListenerCallbacks(listener)
+        listener.start()
+        Logger.info("System-wide dictation enabled", subsystem: .app)
+    }
+
+    /// Stop global dictation — stops and removes the key listener
+    func stopGlobalDictation() {
+        keyListener?.stop()
+        keyListener = nil
+        Logger.info("System-wide dictation disabled", subsystem: .app)
+    }
+
+    /// Configure key listener callbacks (reusable for both init and toggle)
+    func configureKeyListenerCallbacks(_ listener: GlobalKeyListener) {
+        listener.onFnPressed = { [weak self] in
+            Task { @MainActor in
+                self?.startRecording()
+            }
+        }
+        listener.onFnReleased = { [weak self] in
+            Task { @MainActor in
+                self?.stopRecording()
+            }
+        }
+        listener.onShortcutCancelled = { [weak self] in
+            Task { @MainActor in
+                self?.cancelRecording()
+            }
+        }
+    }
+
+    // MARK: - In-App Transcription
+
+    /// Start recording in in-app mode (no text entry into other apps, no Accessibility required)
+    func startInAppRecording() {
+        guard state == .idle else { return }
+
+        guard let bridge = whisperBridge else {
+            errorMessage = "Model not loaded yet. Please wait..."
+            return
+        }
+
+        isInAppMode = true
+        lastInAppTranscription = ""
+
+        // Set state immediately so UI updates
+        state = .recording(startTime: Date())
+        liveTranscription = ""
+
+        soundPlayer?.playStartSound()
+
+        // Mute other audio if enabled
+        Task {
+            try? await Task.sleep(nanoseconds: 50_000_000)
+            if muteOtherAudioDuringRecording {
+                audioMuter?.muteSystemAudio()
+            }
+        }
+
+        Task {
+            do {
+                streamingTranscriber = StreamingTranscriber(whisperBridge: bridge, vad: sileroVAD, language: selectedLanguage)
+                streamingTranscriber?.start { [weak self] text in
+                    Task { @MainActor in
+                        self?.liveTranscription = text
+                    }
+                }
+
+                audioRecorder?.onStreamingSamples = { [weak self] samples in
+                    self?.streamingTranscriber?.addSamples(samples)
+                }
+
+                let audioURL = try await audioRecorder?.startRecording()
+                currentAudioURL = audioURL
+            } catch {
+                errorMessage = "Failed to start recording: \(error.localizedDescription)"
+                state = .idle
+                isInAppMode = false
+                if muteOtherAudioDuringRecording {
+                    audioMuter?.unmuteSystemAudio()
+                }
+            }
+        }
+    }
+
+    /// Stop in-app recording — stores result in lastInAppTranscription, no text entry into other apps
+    func stopInAppRecording() {
+        guard case .recording = state else { return }
+        guard isInAppMode else {
+            stopRecording()
+            return
+        }
+
+        state = .stopping
+
+        Task {
+            await audioRecorder?.stopRecording()
+
+            if muteOtherAudioDuringRecording {
+                audioMuter?.unmuteSystemAudio()
+            }
+
+            soundPlayer?.playStopSound()
+
+            var finalText = ""
+            if let transcriber = streamingTranscriber {
+                finalText = transcriber.stop()
+
+                if saveRecordings {
+                    saveRecordingFromTranscriber(transcriber, transcription: finalText)
+                }
+            }
+            streamingTranscriber = nil
+
+            if !finalText.isEmpty {
+                lastInAppTranscription = finalText
+            } else {
+                errorMessage = "No speech detected"
+            }
+
+            state = .idle
+            isInAppMode = false
+            liveTranscription = ""
+        }
+    }
+
     // MARK: - State Transitions
 
     func startRecording() {
@@ -419,7 +589,7 @@ class AppState: ObservableObject {
             streamingTranscriber = nil
 
             if !finalText.isEmpty {
-                print("📝 Inserting text: '\(finalText)'")
+                Logger.debug("Entering dictated text: '\(finalText)'", subsystem: .app)
                 state = .inserting(text: finalText)
                 await insertText(finalText)
             } else {
@@ -497,19 +667,19 @@ class AppState: ObservableObject {
 
     private func insertText(_ text: String) async {
         guard let textInjector = textInjector else {
-            errorMessage = "Text injector not initialized"
+            errorMessage = "Text entry not initialized"
             state = .idle
             return
         }
 
-        // Dismiss HUD immediately — fade-out animation runs concurrently with text injection
+        // Dismiss HUD immediately — fade-out animation runs concurrently with text entry
         state = .idle
         liveTranscription = ""
 
         do {
             try await textInjector.insertText(text)
         } catch {
-            errorMessage = "Failed to insert text: \(error.localizedDescription)"
+            errorMessage = "Failed to enter text: \(error.localizedDescription)"
         }
     }
 

@@ -17,18 +17,11 @@ struct LiveTranscriptionCard: View {
     @State private var isPulsing = false
     @State private var showCursor = true
     @State private var cursorTimer: Timer?
-    @Environment(\.colorScheme) var colorScheme
 
-    // Colors
-    private var cardBackground: Color {
-        colorScheme == .dark ? Color(white: 0.12) : Color(white: 0.98)
-    }
-
-    private var dividerColor: Color {
-        colorScheme == .dark ? Color(white: 0.25) : Color(white: 0.88)
-    }
-
-    private let greenAccent = Color(red: 0.0, green: 0.82, blue: 0.42)  // #00D26A
+    // Dark navy palette — always dark, matches workspace & onboarding
+    private let cardBackground = Color(red: 0.078, green: 0.078, blue: 0.169)     // #14142B
+    private let dividerColor = Color.white.opacity(0.06)
+    private let blueAccent = Color(red: 0.357, green: 0.424, blue: 0.969)          // #5B6CF7
 
     var body: some View {
         VStack(spacing: 0) {
@@ -37,14 +30,14 @@ struct LiveTranscriptionCard: View {
                 // Header: Pulsing dot + "LIVE TRANSCRIPTION"
                 HStack(spacing: 8) {
                     Circle()
-                        .fill(greenAccent)
+                        .fill(blueAccent)
                         .frame(width: 8, height: 8)
                         .scaleEffect(isPulsing ? 1.2 : 1.0)
                         .opacity(isPulsing ? 0.8 : 1.0)
 
                     Text("LIVE TRANSCRIPTION")
                         .font(.system(size: 11, weight: .semibold))
-                        .foregroundColor(greenAccent)
+                        .foregroundColor(blueAccent)
                         .tracking(0.8)
 
                     Spacer()
@@ -63,7 +56,7 @@ struct LiveTranscriptionCard: View {
                     ScrollView(.vertical, showsIndicators: false) {
                         Text(highlightedDisplayText)
                             .font(.system(size: 17, weight: .regular))
-                            .foregroundColor(.primary)
+                            .foregroundColor(.white)
                             .lineSpacing(5)
                             .frame(maxWidth: .infinity, alignment: .leading)
                             .padding(.horizontal, 20)
@@ -129,7 +122,7 @@ struct LiveTranscriptionCard: View {
         // Add blinking cursor at the end
         if showCursor {
             var cursor = AttributedString("|")
-            cursor.foregroundColor = .primary
+            cursor.foregroundColor = .white
             attributed.append(cursor)
         } else {
             var space = AttributedString(" ")
