@@ -410,7 +410,7 @@ class AudioRecorder: NSObject {
         let rms = sqrt(sum)
 
         // Normalize (typical speech is around 0.1-0.3 RMS)
-        return min(rms * 3.0, 1.0)
+        return min(rms * 4.0, 1.0)
     }
 
     func stopRecording() async {

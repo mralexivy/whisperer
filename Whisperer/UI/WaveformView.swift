@@ -44,7 +44,10 @@ struct WaveformView: View {
     private func barHeight(for amplitude: Float, maxHeight: CGFloat) -> CGFloat {
         let minHeight: CGFloat = 3
         let normalizedAmplitude = CGFloat(min(max(amplitude, 0), 1))
-        return minHeight + (normalizedAmplitude * (maxHeight - minHeight))
+        // Perceptual power curve — boosts quiet speech visibility
+        // (e.g., 0.05 → 0.27, 0.1 → 0.40, 0.8 → 0.88)
+        let curved = pow(normalizedAmplitude, 0.4)
+        return minHeight + (curved * (maxHeight - minHeight))
     }
 }
 
