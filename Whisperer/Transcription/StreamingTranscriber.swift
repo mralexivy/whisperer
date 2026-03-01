@@ -35,9 +35,6 @@ class StreamingTranscriber {
     private var allRecordedSamples: [Float] = []
     private let allSamplesLock = SafeLock()
 
-    // Track how far streaming has processed for tail-only final pass
-    private var lastProcessedSampleIndex: Int = 0
-
     // Context carrying - last transcription used as prompt (see thread-safe properties above)
     private let contextMaxLength = 100  // Characters to carry as context
 
@@ -142,7 +139,6 @@ class StreamingTranscriber {
         isProcessing = false
         isSpeechDetected = true
         memoryLimitReached = false
-        lastProcessedSampleIndex = 0
 
         Logger.debug("StreamingTranscriber started (overlap: \(overlapDuration)s, VAD: \(vadEnabled))", subsystem: .transcription)
     }
@@ -258,18 +254,12 @@ class StreamingTranscriber {
 
             Logger.debug("Transcription result: '\(text)'", subsystem: .transcription)
 
-            // Update processed sample index (streaming has covered up to this point)
-            do {
-                try self.allSamplesLock.withLock {
-                    self.lastProcessedSampleIndex = self.allRecordedSamples.count
-                }
-            } catch {
-                Logger.error("Failed to update lastProcessedSampleIndex: \(error.localizedDescription)", subsystem: .transcription)
-            }
-
             if !text.isEmpty {
                 // Deduplicate text if there's overlap
-                let deduplicatedText = self.deduplicateText(newText: text, previousContext: context)
+                var deduplicatedText = self.deduplicateText(newText: text, previousContext: context)
+
+                // Fix spurious capitalization at chunk boundaries for live preview
+                deduplicatedText = self.normalizeChunkCapitalization(deduplicatedText, after: self.fullTranscription)
 
                 self.fullTranscription += deduplicatedText + " "
 
@@ -290,6 +280,32 @@ class StreamingTranscriber {
 
             self.isProcessing = false
         }
+    }
+
+    /// Normalize capitalization when appending a new chunk to existing transcription.
+    /// Whisper capitalizes the first token of every segment, producing spurious capitals
+    /// at chunk boundaries (e.g. "beautiful text This is" instead of "beautiful text this is").
+    /// If the existing transcription ends mid-sentence, lowercase the first character of the new text.
+    private func normalizeChunkCapitalization(_ text: String, after existingText: String) -> String {
+        guard !text.isEmpty, !existingText.isEmpty else { return text }
+
+        let trimmed = existingText.trimmingCharacters(in: .whitespaces)
+        guard let lastChar = trimmed.last else { return text }
+
+        // If previous text ends with sentence-ending punctuation, keep the capital
+        if lastChar == "." || lastChar == "!" || lastChar == "?" {
+            return text
+        }
+
+        // Mid-sentence: lowercase the first character unless it's "I" standing alone
+        let firstWord = String(text.prefix(while: { !$0.isWhitespace }))
+        if firstWord == "I" || firstWord == "I'm" || firstWord == "I've" || firstWord == "I'll" || firstWord == "I'd" {
+            return text
+        }
+
+        var result = text
+        let first = result.removeFirst()
+        return String(first).lowercased() + result
     }
 
     /// Remove duplicate text that might appear due to overlap
@@ -327,103 +343,60 @@ class StreamingTranscriber {
         return newText
     }
 
-    /// Stop and perform tail-only final pass on unprocessed audio
-    /// Instead of re-transcribing everything, only process audio that arrived after the last chunk.
+    /// Stop streaming and produce final transcription by re-transcribing the full recording.
+    /// Streaming chunks are only used for live preview — the final result comes from a single
+    /// coherent whisper pass over all recorded audio, which eliminates chunk boundary artifacts,
+    /// missing words, and hallucination from partial audio.
     func stop() -> String {
         Logger.debug("Stopping StreamingTranscriber...", subsystem: .transcription)
 
         // Mark as not processing to prevent new chunks
         isProcessing = false
 
-        // Get unprocessed tail audio (samples after the last fully processed chunk)
-        var tailSamples: [Float] = []
-        var totalDuration: Double = 0
+        // Get the complete recording for final transcription
+        var allSamples: [Float] = []
         do {
             try allSamplesLock.withLock {
-                totalDuration = Double(allRecordedSamples.count) / sampleRate
-                if lastProcessedSampleIndex < allRecordedSamples.count {
-                    tailSamples = Array(allRecordedSamples[lastProcessedSampleIndex...])
-                }
+                allSamples = allRecordedSamples
             }
         } catch {
             Logger.error("Failed to acquire allSamplesLock in stop(): \(error.localizedDescription)", subsystem: .transcription)
         }
 
-        let tailDuration = Double(tailSamples.count) / sampleRate
-        Logger.debug("Final pass: \(String(format: "%.1f", tailDuration))s tail of \(String(format: "%.1f", totalDuration))s total", subsystem: .transcription)
+        let totalDuration = Double(allSamples.count) / sampleRate
+        Logger.debug("Final pass: re-transcribing \(String(format: "%.1f", totalDuration))s of audio", subsystem: .transcription)
 
-        // Only transcribe tail if it's long enough to contain meaningful speech (>0.3s)
-        let minTailSamples = Int(0.3 * sampleRate)  // 4800 samples
-        if tailSamples.count >= minTailSamples {
-            // VAD-filter the tail to skip silence
-            let samplesToTranscribe: [Float]
-            if let vad = vad {
-                let speechSegments = vad.detectSpeechSegments(samples: tailSamples)
-
-                if speechSegments.isEmpty {
-                    Logger.debug("VAD: No speech in tail, skipping tail transcription", subsystem: .transcription)
-                    samplesToTranscribe = []
-                } else {
-                    var speechAudio: [Float] = []
-                    for segment in speechSegments {
-                        let start = min(segment.startSample, tailSamples.count)
-                        let end = min(segment.endSample, tailSamples.count)
-                        guard start < end else { continue }
-                        speechAudio.append(contentsOf: tailSamples[start..<end])
-                    }
-                    samplesToTranscribe = speechAudio
-                }
-            } else {
-                samplesToTranscribe = tailSamples
-            }
-
-            if !samplesToTranscribe.isEmpty {
-                // Use streaming context as prompt for continuity
-                let context = lastTranscriptionContext
-                let tailText = whisper.transcribe(
-                    samples: samplesToTranscribe,
-                    initialPrompt: context.isEmpty ? nil : context,
-                    language: language
-                )
-
-                if !tailText.isEmpty {
-                    let deduplicatedTail = deduplicateText(newText: tailText, previousContext: context)
-                    if !deduplicatedTail.isEmpty {
-                        fullTranscription += deduplicatedTail + " "
-                    }
-                }
-            }
-        } else if !tailSamples.isEmpty {
-            Logger.debug("Tail too short (\(String(format: "%.2f", tailDuration))s), skipping tail transcription", subsystem: .transcription)
+        // Need minimum audio length for meaningful transcription
+        let minSamples = Int(0.3 * sampleRate)  // 300ms
+        guard allSamples.count >= minSamples else {
+            Logger.debug("Recording too short (\(String(format: "%.2f", totalDuration))s), skipping", subsystem: .transcription)
+            return clearAndReturn("")
         }
 
-        // Apply dictionary corrections to the combined streaming + tail result
-        let rawResult = fullTranscription.trimmingCharacters(in: .whitespacesAndNewlines)
+        // VAD check: skip transcription if no speech detected in entire recording
+        if let vad = vad, !vad.containsSpeech(samples: allSamples) {
+            Logger.debug("VAD: No speech in recording", subsystem: .transcription)
+            return clearAndReturn("")
+        }
+
+        // Full re-transcription of the complete recording
+        let rawText = whisper.transcribe(
+            samples: allSamples,
+            language: language
+        )
+
         let finalResult: String
-        if !rawResult.isEmpty {
-            finalResult = DictionaryManager.shared.correctText(rawResult)
-        } else if vad != nil {
-            // Check if the full recording had any speech at all
-            var allSamples: [Float] = []
-            do {
-                try allSamplesLock.withLock {
-                    allSamples = allRecordedSamples
-                }
-            } catch {
-                Logger.error("Failed to acquire allSamplesLock for VAD check: \(error.localizedDescription)", subsystem: .transcription)
-            }
-
-            if !allSamples.isEmpty && !vad!.containsSpeech(samples: allSamples) {
-                Logger.debug("VAD: No speech in entire recording", subsystem: .transcription)
-                finalResult = ""
-            } else {
-                finalResult = rawResult
-            }
+        if !rawText.isEmpty {
+            finalResult = DictionaryManager.shared.correctText(rawText)
         } else {
-            finalResult = rawResult
+            finalResult = ""
         }
 
-        // Clear buffers
+        return clearAndReturn(finalResult)
+    }
+
+    /// Clear buffers and return the final result
+    private func clearAndReturn(_ result: String) -> String {
         do {
             try bufferLock.withLock {
                 audioBuffer.removeAll()
@@ -433,9 +406,8 @@ class StreamingTranscriber {
             Logger.error("Failed to acquire bufferLock in stop(): \(error.localizedDescription)", subsystem: .transcription)
         }
 
-        Logger.debug("StreamingTranscriber stopped (\(finalResult.count) chars)", subsystem: .transcription)
-
-        return finalResult
+        Logger.debug("StreamingTranscriber stopped (\(result.count) chars)", subsystem: .transcription)
+        return result
     }
 
     /// Stop asynchronously with proper cleanup (waits for in-flight operations)

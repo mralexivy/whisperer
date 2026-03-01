@@ -59,7 +59,7 @@ Microphone → AudioRecorder → StreamingTranscriber → WhisperBridge → Corr
 ### 6. Non-Activating Overlay Panel
 **Decision**: `NSPanel` with `[.borderless, .nonactivatingPanel]`, `hasShadow = false`.
 **Why**: The recording overlay must NOT steal focus from the app where text will be inserted. `nonactivatingPanel` keeps the previous app as key window.
-**Pitfall**: Use `.orderFront()`, NEVER `.makeKey()` or `.makeKeyAndOrderFront()`.
+**Pitfall**: Use `.orderFront()`, NEVER `.makeKey()` or `.makeKeyAndOrderFront()`. The panel shows whenever `state != .idle` via NotificationCenter observer. A 5-second safety timeout in `stopRecording()` prevents the HUD from getting permanently stuck if audio device errors cause `audioRecorder.stopRecording()` to hang.
 
 ### 7. Context Carrying for Transcription
 **Decision**: Last 100 characters of previous transcription passed as `initial_prompt` to next chunk.
@@ -68,7 +68,7 @@ Microphone → AudioRecorder → StreamingTranscriber → WhisperBridge → Corr
 ### 8. Tail-Only Final Pass
 **Decision**: On stop, only transcribe unprocessed audio after the last completed chunk (not the entire recording).
 **Why**: Re-transcribing the full recording added seconds of latency after key release. Tail-only processing reduces final-pass latency by 10-15x while streaming chunks already provide good incremental results. Dictionary corrections are applied to the combined streaming + tail output.
-**Pitfall**: If streaming quality degrades, consider adding a user preference for full re-transcription.
+**Pitfall**: Always use `await transcriber.stopAsync()`, never `transcriber.stop()`. The synchronous `stop()` races with in-flight chunks — it reads `lastProcessedSampleIndex` before the chunk's completion handler updates it, causing the tail to overlap with already-transcribed audio and producing duplicated text. `stopAsync()` polls `isProcessing` until in-flight chunks complete, then calls `stop()` with consistent state.
 
 ### 9. Deterministic Greedy Decoding
 **Decision**: `temperature=0.0`, `temperature_inc=0.0` (no fallback ladder), greedy sampling with `best_of=1`.
@@ -168,6 +168,10 @@ Infrastructure (Logger, SafeLock, CrashHandler)
 9. **AX messaging timeout** — Always set `AXUIElementSetMessagingTimeout` (100ms) on both the app element and the focused element before AX calls. A hung target app can otherwise block the entire text injection path indefinitely.
 
 10. **Audio engine retry** — `AudioRecorder.startRecording()` retries once on ANY setup failure (not just device-specific errors). The retry tears down the engine completely via `cleanupEngineState()`, resets to the default device, waits 200ms, and tries again. This handles transient audio unit failures (error 1852797029) that occur when the audio device state changes between recordings.
+
+11. **stopRecording() safety timeout** — A parallel Task sleeps 5 seconds, then checks if state is still `.stopping`. If so, it forces `.idle` (clearing `streamingTranscriber` and `liveTranscription`). The main stop Task checks `guard case .stopping = state` after `audioRecorder?.stopRecording()` returns — if the timeout already fired, it bails out. This prevents the overlay HUD from getting permanently stuck when `AVAudioEngine.stop()` hangs on a bad audio device.
+
+12. **stopAsync() over stop()** — Always use `await transcriber.stopAsync()` in AppState, never `transcriber.stop()`. The synchronous `stop()` reads `lastProcessedSampleIndex` before in-flight chunk completion handlers update it, causing overlapping tail transcription and duplicated text output.
 
 ## Deep Reference
 

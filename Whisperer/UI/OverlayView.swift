@@ -40,20 +40,7 @@ struct OverlayView: View {
 
             // Processing indicator (shown during final pass)
             if case .stopping = appState.state {
-                HStack(spacing: 6) {
-                    ProgressView()
-                        .scaleEffect(0.7)
-                        .frame(width: 14, height: 14)
-                    Text("Processing audio...")
-                        .font(.system(size: 12, weight: .medium))
-                        .foregroundColor(.white.opacity(0.5))
-                }
-                .padding(.horizontal, 12)
-                .padding(.vertical, 6)
-                .background(
-                    RoundedRectangle(cornerRadius: 10)
-                        .fill(hudBackground)
-                )
+                ProcessingIndicator()
             }
 
             // Main control bar
@@ -195,6 +182,75 @@ struct TranscribingIndicator: View {
         .onAppear {
             isAnimating = true
         }
+    }
+}
+
+// MARK: - Processing Indicator
+
+struct ProcessingIndicator: View {
+    @State private var isAnimating = false
+
+    private let hudBackground = Color(red: 0.078, green: 0.078, blue: 0.169)      // #14142B
+    private let accentBlue = Color(red: 0.357, green: 0.424, blue: 0.969)          // #5B6CF7
+    private let accentPurple = Color(red: 0.545, green: 0.361, blue: 0.965)        // #8B5CF6
+
+    private let barCount = 4
+    private let barWidth: CGFloat = 3
+    private let barSpacing: CGFloat = 3
+    private let maxBarHeight: CGFloat = 14
+    private let minBarHeight: CGFloat = 4
+
+    var body: some View {
+        HStack(spacing: 8) {
+            // Animated equalizer bars with gradient
+            HStack(spacing: barSpacing) {
+                ForEach(0..<barCount, id: \.self) { index in
+                    RoundedRectangle(cornerRadius: barWidth / 2)
+                        .fill(
+                            LinearGradient(
+                                colors: [accentBlue, accentPurple],
+                                startPoint: .bottom,
+                                endPoint: .top
+                            )
+                        )
+                        .frame(width: barWidth, height: isAnimating ? barHeight(for: index) : minBarHeight)
+                        .animation(
+                            .easeInOut(duration: duration(for: index))
+                            .repeatForever(autoreverses: true)
+                            .delay(Double(index) * 0.12),
+                            value: isAnimating
+                        )
+                }
+            }
+            .frame(height: maxBarHeight)
+
+            Text("Processing")
+                .font(.system(size: 12, weight: .semibold, design: .rounded))
+                .foregroundColor(.white.opacity(0.6))
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 8)
+        .background(
+            Capsule()
+                .fill(hudBackground)
+                .overlay(
+                    Capsule()
+                        .stroke(accentPurple.opacity(0.15), lineWidth: 1)
+                )
+        )
+        .onAppear {
+            isAnimating = true
+        }
+    }
+
+    private func barHeight(for index: Int) -> CGFloat {
+        let heights: [CGFloat] = [10, 14, 8, 12]
+        return heights[index % heights.count]
+    }
+
+    private func duration(for index: Int) -> Double {
+        let durations: [Double] = [0.5, 0.4, 0.6, 0.45]
+        return durations[index % durations.count]
     }
 }
 

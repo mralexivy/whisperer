@@ -102,7 +102,7 @@ struct TranscriptionRow: View {
                     HStack(spacing: 10) {
                         metadataPill(icon: "speedometer", text: "\(transcription.wordsPerMinute) wpm", color: .orange)
                         metadataPill(icon: "text.word.spacing", text: "\(transcription.wordCount) words", color: WhispererColors.accentBlue)
-                        metadataPill(icon: "globe", text: languageDisplay, color: .purple)
+                        metadataPill(icon: "globe", text: languageDisplay, color: .red)
                     }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)

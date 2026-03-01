@@ -26,7 +26,7 @@ Tracked in [docs/exec-plans/tech-debt.md](docs/exec-plans/tech-debt.md).
 
 - **Onboarding window** — Added four-page guided first-run experience (OnboardingWindow + OnboardingView): Welcome splash, Permissions setup (Microphone + Accessibility), Model download, Shortcut configuration. Uses the same dark navy theme. Sets `hasCompletedOnboarding` UserDefaults flag. Ensures users are recording-ready when onboarding completes.
 
-- **Menu bar window restyle** — Replaced system colors with MBColors dark navy palette, added MenuBarWindowConfigurator NSViewRepresentable for flat window chrome, per-tab colorful icons (Status=blue, Models=orange, Settings=purple), accent gradient header icon, settingsCard helper with colorful icon pattern.
+- **Menu bar window restyle** — Replaced system colors with MBColors dark navy palette, added MenuBarWindowConfigurator NSViewRepresentable for flat window chrome, per-tab colorful icons (Status=blue, Models=orange, Settings=red), accent gradient header icon, settingsCard helper with colorful icon pattern.
 
 - **Overlay HUD restyle** — Changed from adaptive light/dark to always-dark navy. Blue accent throughout (recording indicator, waveform bars, mic button, transcribing dots, live transcription card).
 
@@ -37,3 +37,7 @@ Tracked in [docs/exec-plans/tech-debt.md](docs/exec-plans/tech-debt.md).
 - **Audio engine crash protection** — Added universal retry logic with engine teardown and format validation for transient device errors (error 1852797029).
 
 - **Transcription speed optimization** — Disabled temperature fallback ladder (prevents 2-6x retry latency), tail-only final pass (10-15x faster stop), single-segment mode for streaming chunks, P-core-aware thread count on Apple Silicon, explicit `detect_language=false`, lightweight VAD `hasSpeech()` check.
+
+- **Text duplication fix** — Fixed race condition where `transcriber.stop()` read stale `lastProcessedSampleIndex` while an in-flight chunk was still being transcribed, causing the tail to overlap with already-processed audio and producing duplicated text output. Changed both `stopRecording()` and `stopInAppRecording()` to use `await transcriber.stopAsync()` which waits for in-flight chunks to complete before the final pass.
+
+- **HUD stuck prevention** — Added 5-second safety timeout in `stopRecording()`. If `audioRecorder.stopRecording()` hangs (e.g., `AVAudioEngine.stop()` blocking on a bad audio device), the timeout forces state to `.idle` and dismisses the overlay HUD. The main stop Task checks if the timeout already fired before proceeding with transcription.

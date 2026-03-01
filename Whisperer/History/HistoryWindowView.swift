@@ -103,7 +103,7 @@ enum HistorySidebarItem: String, CaseIterable, Identifiable {
     var color: Color {
         switch self {
         case .transcriptions: return WhispererColors.accentBlue
-        case .dictionary: return .purple
+        case .dictionary: return .red
         case .settings: return .orange
         }
     }
@@ -249,7 +249,7 @@ struct HistoryWindowView: View {
     private func sidebarStatsCard(_ stats: HistoryStatistics) -> some View {
         VStack(spacing: 14) {
             sidebarStatRow(label: "RECORDINGS", value: "\(stats.totalRecordings)", valueColor: WhispererColors.accentBlue)
-            sidebarStatRow(label: "WORDS", value: formatSidebarNumber(stats.totalWords), valueColor: .purple)
+            sidebarStatRow(label: "WORDS", value: formatSidebarNumber(stats.totalWords), valueColor: .red)
             sidebarStatRow(label: "AVG WPM", value: "\(stats.averageWPM)", valueColor: .orange)
             sidebarStatRow(label: "DAYS", value: "\(stats.totalDays)", valueColor: .cyan)
         }
@@ -911,7 +911,7 @@ struct HistorySettingsView: View {
                     icon: "book.closed.fill",
                     title: "Dictionary Corrections",
                     colorScheme: colorScheme,
-                    color: .purple
+                    color: .red
                 )
 
                 // Enable dictionary toggle

@@ -244,7 +244,7 @@ struct TranscriptionDetailView: View {
 
     private var detailsSection: some View {
         VStack(alignment: .leading, spacing: 12) {
-            sectionLabel("Details", icon: "info.circle", color: .purple)
+            sectionLabel("Details", icon: "info.circle", color: .red)
 
             // 2-column grid of stat cards
             let columns = [
@@ -255,7 +255,7 @@ struct TranscriptionDetailView: View {
             LazyVGrid(columns: columns, spacing: 12) {
                 DetailStatCard(icon: "clock", label: "DURATION", value: durationString, color: WhispererColors.accent, colorScheme: colorScheme)
                 DetailStatCard(icon: "text.word.spacing", label: "WORDS", value: "\(transcription.wordCount)", color: .blue, colorScheme: colorScheme)
-                DetailStatCard(icon: "speedometer", label: "WPM", value: "\(transcription.wordsPerMinute)", color: .purple, colorScheme: colorScheme)
+                DetailStatCard(icon: "speedometer", label: "WPM", value: "\(transcription.wordsPerMinute)", color: .red, colorScheme: colorScheme)
                 DetailStatCard(icon: "globe", label: "LANGUAGE", value: languageDisplay, color: .orange, colorScheme: colorScheme)
                 DetailStatCard(icon: "cpu", label: "MODEL", value: modelDisplay, color: .cyan, colorScheme: colorScheme)
             }

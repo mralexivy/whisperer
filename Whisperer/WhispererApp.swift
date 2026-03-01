@@ -6,6 +6,7 @@
 //
 
 import SwiftUI
+import ServiceManagement
 
 @main
 struct WhispererApp: App {
@@ -24,9 +25,14 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     var overlayPanel: OverlayPanel?
     let appState = AppState.shared
     private var isShuttingDown = false
+    private var rightClickMenu: NSMenu?
+    private var rightClickMonitor: Any?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         Logger.info("Application launched", subsystem: .app)
+
+        // Setup right-click menu on the status bar icon
+        setupStatusItemRightClickMenu()
 
         // Receipt validation using StoreKit 2 (disabled for now)
         // TODO: Enable when in-app purchases are ready by setting receiptValidationEnabled = true
@@ -205,6 +211,29 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         // 7. Remove crash marker (clean exit)
         CrashHandler.shared.uninstall()
     }
+
+    // MARK: - Status Item Right-Click Menu
+
+    private func setupStatusItemRightClickMenu() {
+        let menu = NSMenu()
+        menu.addItem(withTitle: "Quit Whisperer", action: #selector(quitApp), keyEquivalent: "q")
+        self.rightClickMenu = menu
+
+        // Monitor right-click on the status bar area
+        rightClickMonitor = NSEvent.addLocalMonitorForEvents(matching: [.rightMouseUp]) { [weak self] event in
+            guard let self = self,
+                  let button = event.window?.contentView?.hitTest(event.locationInWindow),
+                  button is NSStatusBarButton else {
+                return event
+            }
+            self.rightClickMenu?.popUp(positioning: nil, at: NSPoint(x: 0, y: button.bounds.height), in: button)
+            return nil
+        }
+    }
+
+    @objc private func quitApp() {
+        NSApplication.shared.terminate(nil)
+    }
 }
 
 // MARK: - Tab Enum
@@ -226,7 +255,7 @@ enum MenuTab: String, CaseIterable {
         switch self {
         case .status: return Color(red: 0.357, green: 0.424, blue: 0.969) // blue
         case .models: return .orange
-        case .settings: return .purple
+        case .settings: return .red
         }
     }
 }
@@ -281,10 +310,16 @@ private struct MenuBarWindowConfigurator: NSViewRepresentable {
 
 // MARK: - Main Menu Bar View
 
+enum SettingsScrollTarget: String {
+    case dictation
+    case microphone
+}
+
 struct MenuBarView: View {
     @ObservedObject var appState = AppState.shared
     @ObservedObject var permissionManager = PermissionManager.shared
     @State private var selectedTab: MenuTab = .status
+    @State private var settingsScrollTarget: SettingsScrollTarget?
 
     var body: some View {
         VStack(spacing: 0) {
@@ -474,6 +509,9 @@ struct MenuBarView: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        .onHover { hovering in
+            if hovering { NSCursor.pointingHand.push() } else { NSCursor.pop() }
+        }
         .frame(maxWidth: .infinity)
     }
 
@@ -483,11 +521,11 @@ struct MenuBarView: View {
     private var tabContent: some View {
         switch selectedTab {
         case .status:
-            StatusTabView()
+            StatusTabView(selectedTab: $selectedTab, settingsScrollTarget: $settingsScrollTarget)
         case .models:
             ModelsTabView()
         case .settings:
-            SettingsTabView()
+            SettingsTabView(scrollTarget: $settingsScrollTarget)
         }
     }
 
@@ -565,6 +603,8 @@ struct MenuBarView: View {
 // MARK: - Status Tab
 
 struct StatusTabView: View {
+    @Binding var selectedTab: MenuTab
+    @Binding var settingsScrollTarget: SettingsScrollTarget?
     @ObservedObject var appState = AppState.shared
     @ObservedObject var permissionManager = PermissionManager.shared
 
@@ -593,7 +633,8 @@ struct StatusTabView: View {
                         title: "Model",
                         value: appState.selectedModel.displayName,
                         detail: appState.selectedModel.sizeDescription,
-                        color: .blue
+                        color: .blue,
+                        navigateTo: .models
                     )
 
                     infoCard(
@@ -601,70 +642,15 @@ struct StatusTabView: View {
                         title: "Microphone",
                         value: AudioDeviceManager.shared.selectedDevice?.name ?? "System Default",
                         detail: nil,
-                        color: .cyan
+                        color: .cyan,
+                        navigateTo: .settings,
+                        scrollTo: .microphone
                     )
 
-                    // Only show shortcut card when system-wide dictation is enabled
-                    if appState.systemWideDictationEnabled {
-                        infoCard(
-                            icon: "keyboard",
-                            title: "Shortcut",
-                            value: appState.keyListener?.shortcutConfig.displayString ?? "Fn",
-                            detail: appState.keyListener?.shortcutConfig.recordingMode.displayName,
-                            color: .purple
-                        )
-                    }
                 }
 
-                // Usage hint — context-dependent
-                if appState.systemWideDictationEnabled {
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text("System-Wide Dictation")
-                            .font(.system(size: 12, weight: .semibold))
-                            .foregroundColor(MBColors.textSecondary)
-
-                        HStack(spacing: 12) {
-                            stepBadge(number: 1, text: "Hold shortcut")
-                            Image(systemName: "arrow.right")
-                                .font(.caption2)
-                                .foregroundColor(MBColors.textTertiary)
-                            stepBadge(number: 2, text: "Speak")
-                            Image(systemName: "arrow.right")
-                                .font(.caption2)
-                                .foregroundColor(MBColors.textTertiary)
-                            stepBadge(number: 3, text: "Release")
-                        }
-                    }
-                    .padding(12)
-                    .background(MBColors.cardSurface)
-                    .cornerRadius(10)
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 10)
-                            .stroke(MBColors.border, lineWidth: 1)
-                    )
-                } else {
-                    // Prompt to enable system-wide dictation
-                    VStack(alignment: .leading, spacing: 8) {
-                        HStack(spacing: 8) {
-                            Image(systemName: "globe")
-                                .font(.system(size: 14))
-                                .foregroundColor(MBColors.accent)
-                            Text("System-Wide Dictation")
-                                .font(.system(size: 12, weight: .semibold))
-                                .foregroundColor(MBColors.textPrimary)
-                        }
-                        Text("Dictate text anywhere you can type. Enable in Settings.")
-                            .font(.system(size: 11))
-                            .foregroundColor(MBColors.textSecondary)
-                    }
-                    .padding(12)
-                    .background(MBColors.accent.opacity(0.08))
-                    .cornerRadius(10)
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 10)
-                            .stroke(MBColors.accent.opacity(0.15), lineWidth: 1)
-                    )
-                }
+                // System-Wide Dictation card with toggle and shortcut flow
+                systemWideDictationCard
             }
         }
     }
@@ -840,59 +826,117 @@ struct StatusTabView: View {
         )
     }
 
-    private func infoCard(icon: String, title: String, value: String, detail: String?, color: Color) -> some View {
-        HStack(spacing: 12) {
-            ZStack {
-                RoundedRectangle(cornerRadius: 8)
-                    .fill(color.opacity(0.15))
-                    .frame(width: 36, height: 36)
-                Image(systemName: icon)
-                    .font(.system(size: 16))
-                    .foregroundColor(color)
+    private func infoCard(icon: String, title: String, value: String, detail: String?, color: Color, navigateTo tab: MenuTab, scrollTo target: SettingsScrollTarget? = nil) -> some View {
+        Button {
+            withAnimation(.easeInOut(duration: 0.2)) {
+                settingsScrollTarget = target
+                selectedTab = tab
             }
+        } label: {
+            HStack(spacing: 12) {
+                ZStack {
+                    RoundedRectangle(cornerRadius: 8)
+                        .fill(color.opacity(0.15))
+                        .frame(width: 36, height: 36)
+                    Image(systemName: icon)
+                        .font(.system(size: 16))
+                        .foregroundColor(color)
+                }
 
-            VStack(alignment: .leading, spacing: 2) {
-                Text(title)
-                    .font(.caption)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(title)
+                        .font(.caption)
+                        .foregroundColor(MBColors.textTertiary)
+                    Text(value)
+                        .font(.system(size: 13, weight: .medium))
+                        .foregroundColor(MBColors.textPrimary)
+                        .lineLimit(1)
+                }
+
+                Spacer()
+
+                if let detail = detail {
+                    Text(detail)
+                        .font(.caption)
+                        .foregroundColor(MBColors.textSecondary)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 4)
+                        .background(MBColors.pill)
+                        .cornerRadius(6)
+                }
+
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 11, weight: .semibold))
                     .foregroundColor(MBColors.textTertiary)
-                Text(value)
-                    .font(.system(size: 13, weight: .medium))
-                    .foregroundColor(MBColors.textPrimary)
-                    .lineLimit(1)
             }
-
-            Spacer()
-
-            if let detail = detail {
-                Text(detail)
-                    .font(.caption)
-                    .foregroundColor(MBColors.textSecondary)
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 4)
-                    .background(MBColors.pill)
-                    .cornerRadius(6)
-            }
+            .padding(12)
+            .background(MBColors.cardSurface)
+            .cornerRadius(10)
+            .overlay(
+                RoundedRectangle(cornerRadius: 10)
+                    .stroke(MBColors.border, lineWidth: 1)
+            )
         }
-        .padding(12)
-        .background(MBColors.cardSurface)
-        .cornerRadius(10)
-        .overlay(
-            RoundedRectangle(cornerRadius: 10)
-                .stroke(MBColors.border, lineWidth: 1)
-        )
+        .buttonStyle(.plain)
+        .onHover { hovering in
+            if hovering { NSCursor.pointingHand.push() } else { NSCursor.pop() }
+        }
     }
 
-    private func stepBadge(number: Int, text: String) -> some View {
-        HStack(spacing: 6) {
-            Text("\(number)")
-                .font(.system(size: 10, weight: .bold))
-                .foregroundColor(.white)
-                .frame(width: 18, height: 18)
-                .background(MBColors.accent)
-                .clipShape(Circle())
-            Text(text)
-                .font(.caption)
-                .foregroundColor(MBColors.textSecondary)
+    private var systemWideDictationCard: some View {
+        let isEnabled = appState.systemWideDictationEnabled
+        let shortcutKey = appState.keyListener?.shortcutConfig.displayString ?? "Fn"
+
+        return Button {
+            withAnimation(.easeInOut(duration: 0.2)) {
+                settingsScrollTarget = .dictation
+                selectedTab = .settings
+            }
+        } label: {
+            HStack(spacing: 12) {
+                ZStack {
+                    RoundedRectangle(cornerRadius: 8)
+                        .fill(Color.blue.opacity(0.15))
+                        .frame(width: 36, height: 36)
+                    Image(systemName: "globe")
+                        .font(.system(size: 16))
+                        .foregroundColor(.blue)
+                }
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("System-Wide Dictation")
+                        .font(.caption)
+                        .foregroundColor(MBColors.textTertiary)
+                    Text(isEnabled ? "Press \(shortcutKey) → Speak → Release" : "Disabled")
+                        .font(.system(size: 13, weight: .medium))
+                        .foregroundColor(MBColors.textPrimary)
+                }
+
+                Spacer()
+
+                Text(isEnabled ? "On" : "Off")
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundColor(isEnabled ? .green : MBColors.textTertiary)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 4)
+                    .background((isEnabled ? Color.green : Color.white).opacity(0.1))
+                    .cornerRadius(6)
+
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundColor(MBColors.textTertiary)
+            }
+            .padding(12)
+            .background(MBColors.cardSurface)
+            .cornerRadius(10)
+            .overlay(
+                RoundedRectangle(cornerRadius: 10)
+                    .stroke(MBColors.border, lineWidth: 1)
+            )
+        }
+        .buttonStyle(.plain)
+        .onHover { hovering in
+            if hovering { NSCursor.pointingHand.push() } else { NSCursor.pop() }
         }
     }
 
@@ -984,8 +1028,8 @@ struct ModelsTabView: View {
             // Recommended
             modelSection(
                 title: "Recommended",
-                icon: "crown.fill",
-                color: .yellow,
+                icon: "sparkles",
+                color: MBColors.accent,
                 models: [.largeTurboQ5],
                 sectionId: "recommended"
             )
@@ -1012,7 +1056,7 @@ struct ModelsTabView: View {
             modelSection(
                 title: "Distilled",
                 icon: "wand.and.stars",
-                color: .purple,
+                color: .red,
                 models: WhisperModel.allCases.filter { $0.isDistilled },
                 sectionId: "distilled"
             )
@@ -1072,13 +1116,15 @@ struct ModelsTabView: View {
 // MARK: - Settings Tab
 
 struct SettingsTabView: View {
+    @Binding var scrollTarget: SettingsScrollTarget?
     @ObservedObject var appState = AppState.shared
 
     var body: some View {
-        ScrollView(showsIndicators: false) {
-            VStack(alignment: .leading, spacing: 14) {
-                // System-Wide Dictation toggle — top of settings
-                settingsCard(title: "System-Wide Dictation", icon: "globe", color: .blue) {
+        ScrollViewReader { proxy in
+            ScrollView(showsIndicators: false) {
+                VStack(alignment: .leading, spacing: 14) {
+                    // System-Wide Dictation toggle — top of settings
+                    settingsCard(title: "System-Wide Dictation", icon: "globe", color: .blue) {
                     VStack(alignment: .leading, spacing: 10) {
                         HStack {
                             VStack(alignment: .leading, spacing: 3) {
@@ -1117,6 +1163,7 @@ struct SettingsTabView: View {
                         }
                     }
                 }
+                .id(SettingsScrollTarget.dictation)
 
                 // Audio Settings - compact card
                 settingsCard(title: "Audio", icon: "speaker.wave.2.fill", color: .orange) {
@@ -1139,6 +1186,40 @@ struct SettingsTabView: View {
                     }
                 }
 
+                // Launch at Login
+                settingsCard(title: "Launch at Login", icon: "arrow.right.to.line", color: .cyan) {
+                    HStack {
+                        VStack(alignment: .leading, spacing: 3) {
+                            Text("Start automatically")
+                                .font(.system(size: 13, weight: .medium))
+                                .foregroundColor(MBColors.textPrimary)
+                            Text("Launch Whisperer when you log in")
+                                .font(.system(size: 11))
+                                .foregroundColor(MBColors.textSecondary)
+                        }
+
+                        Spacer()
+
+                        Toggle("", isOn: Binding(
+                            get: { SMAppService.mainApp.status == .enabled },
+                            set: { newValue in
+                                do {
+                                    if newValue {
+                                        try SMAppService.mainApp.register()
+                                    } else {
+                                        try SMAppService.mainApp.unregister()
+                                    }
+                                } catch {
+                                    Logger.error("Launch at login failed: \(error.localizedDescription)", subsystem: .app)
+                                }
+                            }
+                        ))
+                        .toggleStyle(.switch)
+                        .tint(MBColors.accent)
+                        .labelsHidden()
+                    }
+                }
+
                 // Language Settings
                 settingsCard(title: "Language", icon: "globe", color: .blue) {
                     LanguagePickerView()
@@ -1148,10 +1229,11 @@ struct SettingsTabView: View {
                 settingsCard(title: "Microphone", icon: "mic.fill", color: .green) {
                     MicrophonePickerView()
                 }
+                .id(SettingsScrollTarget.microphone)
 
                 // Keyboard Shortcut (only when system-wide dictation is enabled)
                 if appState.systemWideDictationEnabled {
-                    settingsCard(title: "Shortcut", icon: "keyboard", color: .purple) {
+                    settingsCard(title: "Shortcut", icon: "keyboard", color: .red) {
                         ShortcutRecorderView()
                     }
                 }
@@ -1193,13 +1275,32 @@ struct SettingsTabView: View {
                 }
 
                 // Pro Pack
-                settingsCard(title: "Pro Pack", icon: "star.fill", color: .yellow) {
+                settingsCard(title: "Pro Pack", icon: "wand.and.stars", color: .indigo) {
                     PurchaseView()
                 }
 
                 // About
                 settingsCard(title: "About", icon: "info.circle.fill", color: .blue) {
                     AboutView()
+                }
+            }
+            }
+            .onAppear {
+                if let target = scrollTarget {
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
+                        withAnimation(.easeInOut(duration: 0.3)) {
+                            proxy.scrollTo(target, anchor: .top)
+                        }
+                        scrollTarget = nil
+                    }
+                }
+            }
+            .onChange(of: scrollTarget) { target in
+                if let target = target {
+                    withAnimation(.easeInOut(duration: 0.3)) {
+                        proxy.scrollTo(target, anchor: .top)
+                    }
+                    scrollTarget = nil
                 }
             }
         }

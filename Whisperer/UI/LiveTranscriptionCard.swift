@@ -22,23 +22,43 @@ struct LiveTranscriptionCard: View {
     private let cardBackground = Color(red: 0.078, green: 0.078, blue: 0.169)     // #14142B
     private let dividerColor = Color.white.opacity(0.06)
     private let blueAccent = Color(red: 0.357, green: 0.424, blue: 0.969)          // #5B6CF7
+    private let purpleAccent = Color(red: 0.545, green: 0.361, blue: 0.965)        // #8B5CF6
 
     var body: some View {
         VStack(spacing: 0) {
             // Main card content
             VStack(spacing: 0) {
-                // Header: Pulsing dot + "LIVE TRANSCRIPTION"
+                // Header: Gradient pulsing dot + "LIVE TRANSCRIPTION"
                 HStack(spacing: 8) {
-                    Circle()
-                        .fill(blueAccent)
-                        .frame(width: 8, height: 8)
-                        .scaleEffect(isPulsing ? 1.2 : 1.0)
-                        .opacity(isPulsing ? 0.8 : 1.0)
+                    ZStack {
+                        // Glow ring
+                        Circle()
+                            .fill(blueAccent.opacity(isPulsing ? 0.25 : 0.0))
+                            .frame(width: 16, height: 16)
+
+                        // Gradient dot
+                        Circle()
+                            .fill(
+                                LinearGradient(
+                                    colors: [blueAccent, purpleAccent],
+                                    startPoint: .topLeading,
+                                    endPoint: .bottomTrailing
+                                )
+                            )
+                            .frame(width: 8, height: 8)
+                            .scaleEffect(isPulsing ? 1.2 : 1.0)
+                    }
 
                     Text("LIVE TRANSCRIPTION")
-                        .font(.system(size: 11, weight: .semibold))
-                        .foregroundColor(blueAccent)
-                        .tracking(0.8)
+                        .font(.system(size: 11, weight: .bold, design: .rounded))
+                        .foregroundStyle(
+                            LinearGradient(
+                                colors: [blueAccent, purpleAccent],
+                                startPoint: .leading,
+                                endPoint: .trailing
+                            )
+                        )
+                        .tracking(1.2)
 
                     Spacer()
                 }
@@ -46,17 +66,23 @@ struct LiveTranscriptionCard: View {
                 .padding(.top, 14)
                 .padding(.bottom, 10)
 
-                // Thin divider below header
+                // Gradient divider below header
                 Rectangle()
-                    .fill(dividerColor)
+                    .fill(
+                        LinearGradient(
+                            colors: [blueAccent.opacity(0.3), purpleAccent.opacity(0.3), Color.clear],
+                            startPoint: .leading,
+                            endPoint: .trailing
+                        )
+                    )
                     .frame(height: 0.5)
 
                 // Text area with typewriter effect
                 ScrollViewReader { proxy in
                     ScrollView(.vertical, showsIndicators: false) {
                         Text(highlightedDisplayText)
-                            .font(.system(size: 17, weight: .regular))
-                            .foregroundColor(.white)
+                            .font(.system(size: 16, weight: .regular, design: .rounded))
+                            .foregroundColor(.white.opacity(0.9))
                             .lineSpacing(5)
                             .frame(maxWidth: .infinity, alignment: .leading)
                             .padding(.horizontal, 20)
@@ -77,11 +103,11 @@ struct LiveTranscriptionCard: View {
             )
             .overlay(
                 RoundedRectangle(cornerRadius: 14)
-                    .stroke(dividerColor, lineWidth: 0.5)
+                    .stroke(purpleAccent.opacity(0.15), lineWidth: 1)
             )
 
             // Speech bubble arrow pointing down to HUD
-            SpeechBubbleArrow(color: cardBackground, borderColor: dividerColor)
+            SpeechBubbleArrow(color: cardBackground, borderColor: purpleAccent.opacity(0.15))
                 .frame(width: 20, height: 10)
         }
         .frame(width: 380)
@@ -122,7 +148,7 @@ struct LiveTranscriptionCard: View {
         // Add blinking cursor at the end
         if showCursor {
             var cursor = AttributedString("|")
-            cursor.foregroundColor = .white
+            cursor.foregroundColor = Color(red: 0.357, green: 0.424, blue: 0.969)  // blueAccent
             attributed.append(cursor)
         } else {
             var space = AttributedString(" ")

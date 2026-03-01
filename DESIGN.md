@@ -73,19 +73,19 @@ Examples of per-element colors:
 - System-Wide Dictation: `.blue` (globe icon)
 - Microphone: `.green` (mic.fill icon)
 - Audio Recording: `.red` (waveform icon)
-- Keyboard Shortcut: `.orange` (keyboard icon)
-- About: `.purple` (info.circle icon)
+- Keyboard Shortcut: `.red` (keyboard icon)
+- About: `.blue` (info.circle icon)
 
 Model category icons:
-- Recommended: `.yellow` (crown.fill)
+- Recommended: `accent` (#5B6CF7, sparkles)
 - Turbo & Optimized: `.orange` (bolt.fill)
 - Standard: `.blue` (cube.fill)
-- Distilled: `.purple` (wand.and.stars)
+- Distilled: `.red` (wand.and.stars)
 
 Menu bar tab icons:
 - Status: `.blue` (chart.bar.fill)
 - Models: `.orange` (cpu.fill)
-- Settings: `.purple` (gearshape.fill)
+- Settings: `.red` (gearshape.fill)
 
 ### Metadata Pills (TranscriptionRow)
 
@@ -102,7 +102,7 @@ HStack(spacing: 4) {
 
 - WPM: `.orange` + speedometer icon
 - Words: `accentBlue` + text.word.spacing icon
-- Language: `.purple` + globe icon
+- Language: `.red` + globe icon
 
 ### Window Chrome
 
@@ -271,7 +271,7 @@ Blue accent (#5B6CF7) circle stroke + fill. Downloaded checkmark also blue accen
 
 ### Metadata Pills (TranscriptionRow)
 
-Colorful capsules: WPM (orange), Words (blue), Language (purple).
+Colorful capsules: WPM (orange), Words (blue), Language (red).
 
 ### Search Fields — custom HStack, NOT `.searchable()`
 

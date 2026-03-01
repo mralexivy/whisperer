@@ -30,7 +30,7 @@
 
 ### Methods
 - **State transitions**: `startRecording()`, `stopRecording()`, `cancelRecording()`
-- **Async variants**: `stopAsync()`, `transcribeAsync(samples:initialPrompt:language:singleSegment:completion:)` — suffix `Async` or use `async` keyword
+- **Async variants**: `stopAsync()`, `transcribeAsync(samples:initialPrompt:language:singleSegment:completion:)` — suffix `Async` or use `async` keyword. Always use `await transcriber.stopAsync()` in AppState, never the synchronous `stop()` (race condition causes text duplication)
 - **Internal helpers**: `private func processChunk()`, `private func performTranscription()`
 - **Lifecycle**: `preloadModel()`, `preloadVAD()`, `releaseWhisperResources()`, `prepareForShutdown()`
 

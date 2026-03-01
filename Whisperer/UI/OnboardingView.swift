@@ -337,7 +337,7 @@ struct OnboardingView: View {
                 featureGridCard(icon: "mic.fill", color: .red, title: "Record", subtitle: "Hold & speak")
                 featureGridCard(icon: "text.bubble.fill", color: OnboardingColors.accentBlue, title: "Transcribe", subtitle: "Real-time text")
                 featureGridCard(icon: "book.closed.fill", color: .orange, title: "Dictionary", subtitle: "Custom terms")
-                featureGridCard(icon: "clock.fill", color: .purple, title: "History", subtitle: "All recordings")
+                featureGridCard(icon: "clock.fill", color: .red, title: "History", subtitle: "All recordings")
                 featureGridCard(icon: "cpu", color: .cyan, title: "Models", subtitle: "Choose quality")
                 featureGridCard(icon: "globe", color: .green, title: "Languages", subtitle: "100+ supported")
             }
@@ -372,7 +372,7 @@ struct OnboardingView: View {
                     decorativeIcon("mic.fill", size: 22, color: .red)
                     decorativeIcon("text.bubble.fill", size: 22, color: OnboardingColors.accentBlue)
                     decorativeIcon("book.closed.fill", size: 22, color: .orange)
-                    decorativeIcon("clock.fill", size: 22, color: .purple)
+                    decorativeIcon("clock.fill", size: 22, color: .red)
                 }
             }
         }

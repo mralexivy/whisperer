@@ -477,7 +477,7 @@ class AppState: ObservableObject {
 
             var finalText = ""
             if let transcriber = streamingTranscriber {
-                finalText = transcriber.stop()
+                finalText = await transcriber.stopAsync()
 
                 if saveRecordings {
                     saveRecordingFromTranscriber(transcriber, transcription: finalText)
@@ -564,6 +564,16 @@ class AppState: ObservableObject {
 
         state = .stopping
 
+        // Safety timeout: force-dismiss HUD if stop hangs (e.g., audio device errors)
+        Task { @MainActor [weak self] in
+            try? await Task.sleep(nanoseconds: 5_000_000_000) // 5s
+            guard let self, case .stopping = self.state else { return }
+            Logger.warning("stopRecording timed out after 5s, forcing idle", subsystem: .app)
+            self.streamingTranscriber = nil
+            self.state = .idle
+            self.liveTranscription = ""
+        }
+
         Task {
             await audioRecorder?.stopRecording()
 
@@ -575,20 +585,26 @@ class AppState: ObservableObject {
             // Play stop sound AFTER unmuting (so user hears it)
             soundPlayer?.playStopSound()
 
+            // Bail out if safety timeout already forced idle
+            guard case .stopping = state else {
+                streamingTranscriber = nil
+                return
+            }
+
             // Get final transcription from streaming transcriber
             var finalText = ""
-            if let transcriber = streamingTranscriber {
-                finalText = transcriber.stop()
+            let transcriber = streamingTranscriber
+            if let transcriber {
+                finalText = await transcriber.stopAsync()
                 print("🎤 Final transcription: '\(finalText)'")
-
-                // Save recording if enabled (use in-memory samples, not file)
-                if saveRecordings {
-                    saveRecordingFromTranscriber(transcriber, transcription: finalText)
-                }
             }
             streamingTranscriber = nil
 
             if !finalText.isEmpty {
+                // Save recording if enabled (only when there are actual words)
+                if saveRecordings, let transcriber {
+                    saveRecordingFromTranscriber(transcriber, transcription: finalText)
+                }
                 Logger.debug("Entering dictated text: '\(finalText)'", subsystem: .app)
                 state = .inserting(text: finalText)
                 await insertText(finalText)
