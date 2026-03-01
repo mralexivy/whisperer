@@ -1,22 +1,39 @@
+---
+name: design-check
+description: >
+  Verifies UI code changes comply with Whisperer's design system: unified dark
+  navy palette, blue-purple accents, per-element colorful icons, explicit
+  typography, custom components. Use when creating or modifying any SwiftUI
+  views, windows, or visual components. Use when user says "design check",
+  "UI review", "check colors", "check typography", or modifies files ending
+  in View.swift, Window.swift, Row.swift, or Card.swift.
+metadata:
+  version: 1.0.0
+  category: design
+  tags: [ui, design-system, swiftui, dark-theme]
+---
+
 # Design Check — Quick Design System Compliance
 
 Scan recently changed UI files for design system violations. Run this before committing UI changes.
 
-## Step 1: Identify Changed UI Files
+## Instructions
+
+### Step 1: Identify Changed UI Files
 
 Run `git diff --name-only HEAD` and filter for Swift files in UI/, History/, or any file ending in View.swift, Window.swift, Row.swift, or Card.swift.
 
 If no UI files changed, report "No UI files changed — nothing to check" and stop.
 
-## Step 2: Load Design Reference
+### Step 2: Load Design Reference
 
 Read `DESIGN.md` for the complete design system (unified dark navy palette, blue-purple accents, colorful icons, typography, layout, components, anti-patterns).
 
-## Step 3: Scan Each Changed File
+### Step 3: Scan Each Changed File
 
 For each changed UI file, check for these violations:
 
-### Color Violations
+#### Color Violations
 - [ ] `Color.primary` or `Color.secondary` used anywhere (should be explicit `Color.white` / `Color.white.opacity()`)
 - [ ] `NSColor.windowBackgroundColor` or `.controlBackgroundColor` (should be navy background `#0C0C1A`)
 - [ ] `Color.green` used as an accent color (should be `accent` #5B6CF7 blue or per-element colorful color)
@@ -28,17 +45,17 @@ For each changed UI file, check for these violations:
 - [ ] Gray hex values for backgrounds (should be navy: #0C0C1A, #14142B, #0A0A18, #1C1C3A)
 - [ ] Light mode colors or `colorScheme` adaptive logic that produces non-navy backgrounds
 
-### Icon Violations
+#### Icon Violations
 - [ ] Plain bare `Image(systemName:)` for section headers without tinted container (should wrap in `ZStack { RoundedRectangle + Image }` with `color.opacity(0.15)` fill)
 - [ ] All section icons using the same color (should use per-element colorful colors)
 - [ ] Green icons where blue accent should be used
 
-### Typography Violations
+#### Typography Violations
 - [ ] `.font(.body)`, `.font(.title)`, `.font(.caption)` or other semantic text styles (should be explicit `.system(size:weight:design:)`)
 - [ ] Uppercase text without `.tracking()` applied
 - [ ] `.bold` weight on text 20pt or larger (should be `.light` for elegance)
 
-### Component Violations
+#### Component Violations
 - [ ] `ContentUnavailableView` (should use custom empty state pattern)
 - [ ] `.searchable()` modifier (should use custom search field)
 - [ ] `Picker(.segmented)` for tabs (should use custom tab pattern)
@@ -46,7 +63,7 @@ For each changed UI file, check for these violations:
 - [ ] Hover states without any visual change
 - [ ] Gradient fill on filter tabs or toggles (should use flat `accent`)
 
-## Step 4: Report
+### Step 4: Report
 
 For each violation found, report:
 - File path and line number

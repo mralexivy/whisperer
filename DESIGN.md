@@ -24,7 +24,7 @@ The entire app uses a **unified dark navy theme** across all windows — workspa
 
 ### Unified Dark Navy Palette
 
-All three color structs share these values:
+All three color structs share these core values:
 
 | Token | Value | Usage |
 |-------|-------|-------|
@@ -33,12 +33,24 @@ All three color structs share these values:
 | Sidebar bg | `#0A0A18` (rgb 0.039, 0.039, 0.094) | Sidebar (workspace only) |
 | Elevated | `#1C1C3A` (rgb 0.110, 0.110, 0.227) | Elevated surfaces, inputs |
 | Accent blue | `#5B6CF7` (rgb 0.357, 0.424, 0.969) | Primary accent — selections, toggles, indicators |
+| Accent dark | `#4C5DE8` (rgb 0.298, 0.365, 0.910) | Darker accent variant for gradient endpoints |
 | Accent purple | `#8B5CF6` (rgb 0.545, 0.361, 0.965) | Gradient endpoint for CTAs |
 | Text primary | `Color.white` | Headings, body text |
 | Text secondary | `white.opacity(0.5)` | Descriptions, labels |
 | Text tertiary | `white.opacity(0.35)` | Hints, fine print |
 | Border | `white.opacity(0.06)` | Card borders, dividers |
 | Pill background | `white.opacity(0.08)` | Badges, key caps, pills |
+
+### Scope-Specific Tokens
+
+`OnboardingColors` has additional tokens not shared by other structs:
+
+| Token | Value | Usage |
+|-------|-------|-------|
+| Right panel | `#12122A` (rgb 0.071, 0.071, 0.165) | Decorative right column background |
+| Dot inactive | `white.opacity(0.2)` | Page indicator inactive dots |
+
+`WhispererColors` background colors are functions taking `ColorScheme` (always returning the dark value). `MBColors` and `OnboardingColors` use static properties.
 
 ### Accent Gradient
 
@@ -69,12 +81,25 @@ ZStack {
 }
 ```
 
-Examples of per-element colors:
+Examples of per-element colors (workspace settings):
 - System-Wide Dictation: `.blue` (globe icon)
 - Microphone: `.green` (mic.fill icon)
 - Audio Recording: `.red` (waveform icon)
 - Keyboard Shortcut: `.red` (keyboard icon)
 - About: `.blue` (info.circle icon)
+
+Menu bar settings card icons:
+- System-Wide Dictation: `.blue` (globe)
+- Audio: `.orange` (speaker.wave.2.fill)
+- Launch at Login: `.cyan` (arrow.right.to.line)
+- Language: `.blue` (globe)
+- Microphone: `.green` (mic.fill)
+- Shortcut: `.red` (keyboard)
+- Workspace: `.indigo` (square.grid.2x2.fill)
+- Permissions: `.red` (lock.shield.fill)
+- Diagnostics: `.gray` (ladybug.fill)
+- Pro Pack: `.indigo` (wand.and.stars)
+- About: `.blue` (info.circle.fill)
 
 Model category icons:
 - Recommended: `accent` (#5B6CF7, sparkles)
@@ -83,9 +108,19 @@ Model category icons:
 - Distilled: `.red` (wand.and.stars)
 
 Menu bar tab icons:
-- Status: `.blue` (chart.bar.fill)
-- Models: `.orange` (cpu.fill)
-- Settings: `.red` (gearshape.fill)
+- Status: `accent` #5B6CF7 (waveform)
+- Models: `.orange` (cpu)
+- Settings: `.red` (gear)
+
+Sidebar nav items:
+- Transcriptions: `accentBlue` #5B6CF7 (waveform.and.mic)
+- Dictionary: `.red` (book.closed)
+- Settings: `.orange` (gearshape)
+
+Filter tabs (TranscriptionsView):
+- All: `accentBlue` #5B6CF7
+- Pinned: `.orange`
+- Flagged: `.red`
 
 ### Metadata Pills (TranscriptionRow)
 
@@ -106,7 +141,7 @@ HStack(spacing: 4) {
 
 ### Window Chrome
 
-All windows use flat dark appearance with no visible system border:
+Most windows use flat dark appearance with no visible system border:
 
 ```swift
 // NSWindow configuration (HistoryWindow, MenuBarWindowConfigurator)
@@ -123,6 +158,8 @@ contentView.layer?.masksToBounds = true
 contentView.layer?.borderWidth = 0
 contentView.layer?.borderColor = NSColor.clear.cgColor
 ```
+
+**OnboardingWindow exception**: Borderless floating window with `hasShadow = true`, `cornerRadius = 20`, `level = .floating`. Uses shadow because it's a standalone floating window without system chrome to anchor it visually.
 
 ### App Icon
 
@@ -150,7 +187,7 @@ Color(hex: "FF22C55E")   // 8-char with alpha
 
 ## 2. Typography
 
-Whisperer uses **explicit font sizes** with `.system(size:weight:design:)`, never semantic styles (`.body`, `.title`, `.caption`).
+Whisperer uses **explicit font sizes** with `.system(size:weight:design:)` in workspace and onboarding windows. The menu bar panel uses `.caption` / `.caption2` for compact secondary text (info card labels, model size/speed, badge text, permission descriptions) where the smaller semantic sizes fit the dense layout.
 
 ### Core Principles
 
@@ -198,6 +235,14 @@ Whisperer uses **explicit font sizes** with `.system(size:weight:design:)`, neve
 | Metadata pill text | `.system(size: 10.5, weight: .medium)` |
 | Stat card label | `.system(size: 10, weight: .bold)` + `.tracking(1.0)` |
 | Header stat label | `.system(size: 9, weight: .semibold)` + `.tracking(0.8)` |
+| Live transcription text | `.system(size: 16, weight: .regular, design: .rounded)` + `.lineSpacing(5)` |
+| Live transcription header | `.system(size: 11, weight: .bold, design: .rounded)` + `.tracking(1.2)` |
+| Menu bar info card label | `.caption` (compact secondary) |
+| Menu bar model size/speed | `.caption2` (compact tertiary) |
+| Menu bar badge text | `.caption2` (compact) |
+| Onboarding hero title | `.system(size: 40, weight: .bold)` + gradient |
+| Onboarding page title | `.system(size: 34, weight: .bold)` |
+| Onboarding feature pill | `.system(size: 12, weight: .medium)` |
 
 ### Design Variants
 
@@ -218,11 +263,14 @@ Whisperer uses **explicit font sizes** with `.system(size:weight:design:)`, neve
 
 ### Onboarding Window (OnboardingWindow + OnboardingView)
 
-- Frame: 860x540, borderless NSWindow
-- Four pages: Welcome, Permissions, Model Selection, Shortcut Setup
-- Two-column: left content + right decorative panel (340pt)
+- Frame: 860x540, borderless NSWindow, `level = .floating`, `hasShadow = true`, corner radius 20
+- Four pages: Welcome (full-width splash), Permissions (microphone), System-Wide Dictation, Features
+- Pages 1-3 use two-column layout: left content + right decorative panel (340pt)
+- Welcome page: Full-width centered with app icon (120x120), hero title (40pt gradient), feature pills
+- Right panels: Decorative with concentric circles, radial gradients (280x280), and large icons
+- Page indicator dots: Active = accentBlue capsule (24x8), Inactive = white.opacity(0.2) circle (8x8)
 - Shown on first launch (`hasCompletedOnboarding` UserDefaults)
-- Launches model download and permissions during setup
+- Launches permissions and system-wide dictation setup during onboarding
 
 ### Menu Bar Panel (MenuBarView)
 
@@ -234,9 +282,14 @@ Whisperer uses **explicit font sizes** with `.system(size:weight:design:)`, neve
 
 ### Overlay HUD (OverlayView + OverlayPanel)
 
-- `NSPanel` borderless, non-activating, no shadow
-- Navy capsule background with blue accent elements
-- Panel: 420x220, bottom-center
+- `NSPanel` borderless, non-activating, no shadow, `canJoinAllSpaces`
+- Navy capsule background (`#14142B`) with blue accent elements and `white.opacity(0.06)` border
+- Panel: 420x220, bottom-center with 10pt bottom margin
+- Recording indicator: Blue circle (44x44) with pulsing dot (10x10)
+- Mic button: Blue circle (36x36) with accent opacity 0.15 background
+- Transcribing state: 3 animated dots in blue circle (36x36)
+- Processing state: 4 animated gradient bars (blue → purple)
+- Close button: Red circle (36x36) with red.opacity(0.1) background
 
 ---
 
@@ -255,7 +308,12 @@ ZStack {
 }
 ```
 
-Sizes: 26pt (menu bar), 34pt (onboarding features), 40pt (onboarding steps)
+Size variants (frame size / corner radius / icon size):
+- 24pt / 6 / 11 — detail view section labels
+- 26pt / 6 / 12 — menu bar settings cards, model section headers
+- 34pt / 8 / 15 — onboarding feature grid cards
+- 36pt / 8 / 16 — menu bar info cards, in-app transcription card
+- 40pt / 10 / 17 — onboarding privacy/step cards
 
 ### Toggle Switches
 
@@ -279,22 +337,51 @@ Colorful capsules: WPM (orange), Words (blue), Language (red).
 
 ### Filter Tabs — flat accent when selected, NOT gradient
 
+Selected: flat `color` fill, white text, `.semibold`, shadow `color.opacity(0.25)`. Unselected: clear background, 1px border, `.medium`, secondary text. Shape: Capsule. Padding: horizontal 14, vertical 7.
+
+### LiveTranscriptionCard
+
+Speech bubble card shown during streaming transcription:
+- Width: 380pt, card surface background (`#14142B`), border `accentPurple.opacity(0.15)` 1px
+- Header: "LIVE TRANSCRIPTION" — 11pt bold rounded, tracking 1.2, gradient text (blue → purple)
+- Pulsing gradient dot (8x8) with glow ring (16x16)
+- Text: 16pt regular rounded, white.opacity(0.9), lineSpacing 5, 72pt frame height
+- Divider: gradient `[accentBlue.opacity(0.3), accentPurple.opacity(0.3), clear]`, 0.5pt
+- Speech bubble arrow: Triangle pointing down, 20x10
+
+### Sidebar Stat Card
+
+Gradient card in sidebar showing recording stats:
+- Gradient background: `accent.opacity(0.1)` → `accent.opacity(0.04)` → `cardBackground`, topLeading → bottomTrailing
+- Border: 1px gradient stroke
+- Shadow: `accent.opacity(0.08)`, radius 8, y 2
+- Corner radius: 12, padding: 16
+- Stat labels: 11pt semibold, tracking 0.8, secondary text
+- Stat values: 16pt light rounded, per-stat colors (accentBlue, red, orange, cyan)
+
 ### File Locations
 
 | File | Contents |
 |------|----------|
-| `HistoryWindowView.swift` | WhispererColors, sidebar, TranscriptionsView, settings |
-| `TranscriptionDetailView.swift` | Detail panel, DetailStatCard |
+| `HistoryWindowView.swift` | WhispererColors, Color hex extension, sidebar, TranscriptionsView, FilterTab, settings |
+| `TranscriptionDetailView.swift` | Detail panel, DetailStatCard, section labels |
 | `TranscriptionRow.swift` | List row, RowActionButton, colorful metadata pills |
-| `WhispererApp.swift` | MBColors, MenuBarView, MenuBarWindowConfigurator |
-| `OnboardingView.swift` | OnboardingColors, onboarding pages |
-| `OnboardingWindow.swift` | Borderless NSWindow for onboarding |
-| `OverlayView.swift` | HUD overlay, RecordingIndicator, MicButton |
-| `LiveTranscriptionCard.swift` | Live transcription bubble, TypewriterAnimator |
-| `WaveformView.swift` | Waveform visualization bars (blue) |
-| `ShortcutRecorderView.swift` | Shortcut recorder, key caps |
-| `PurchaseView.swift` | Pro Pack purchase UI, gradient CTA |
-| `HistoryWindow.swift` | NSWindow subclass, dark chrome |
+| `WhispererApp.swift` | MBColors, MenuBarView, MenuBarWindowConfigurator, all menu bar tabs |
+| `OnboardingView.swift` | OnboardingColors, four onboarding pages, feature grid |
+| `OnboardingWindow.swift` | Borderless floating NSWindow for onboarding |
+| `OverlayView.swift` | HUD overlay, RecordingIndicator, MicButton, processing states |
+| `OverlayPanel.swift` | NSPanel subclass, positioning, visibility |
+| `LiveTranscriptionCard.swift` | Live transcription bubble, TypewriterAnimator, speech bubble |
+| `WaveformView.swift` | Waveform visualization bars (blue, 20 bars) |
+| `ShortcutRecorderView.swift` | Shortcut recorder, key caps, mode buttons |
+| `PurchaseView.swift` | Pro Pack purchase UI, gradient CTA, feature list |
+| `HistoryWindow.swift` | NSWindow subclass, dark chrome, toolbar |
+| `DictionaryView.swift` | Dictionary entries list, workspace dictionary tab |
+| `DictionaryPacksView.swift` | Dictionary pack management UI |
+| `AddDictionaryEntryView.swift` | Add/edit dictionary entry form |
+| `AudioPlayerView.swift` | Audio playback controls for recordings |
+| `KeywordHighlighter.swift` | Gradient text highlighting for keywords |
+| `HighlightedText.swift` | Highlighted text rendering helper |
 
 ---
 
@@ -308,12 +395,12 @@ Colorful capsules: WPM (orange), Words (blue), Language (red).
 - DO NOT use shadow opacity above `0.15` for `Color.black`
 - DO NOT rely on borders for separation — use background layering
 - DO NOT use system blue for toggles — use `.tint(accent)` (#5B6CF7)
-- DO NOT use `window.hasShadow = true` — all windows use flat appearance
+- DO NOT use `window.hasShadow = true` — use flat appearance (exception: OnboardingWindow uses shadow as a borderless floating window)
 
 ### Typography
 - DO NOT use `.bold` for large display numbers (20pt+) — use `.light`
 - DO NOT use uppercase text without tracking
-- DO NOT use `.title` / `.body` / `.caption` semantic styles
+- DO NOT use `.title` / `.body` / `.headline` / `.subheadline` semantic styles — use explicit `.system(size:weight:)`. Exception: `.caption` / `.caption2` are permitted in menu bar for compact secondary text (info labels, badge text, model specs)
 - DO NOT use `.rounded` for body text — reserve for titles and stat values
 
 ### Layout

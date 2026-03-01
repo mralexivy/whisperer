@@ -1,3 +1,18 @@
+---
+name: app-store-check
+description: >
+  Scans Whisperer codebase for App Store Guideline 2.4.5 violations including
+  banned APIs (CGEventTap, IOHIDManager, global keyDown/keyUp monitors),
+  permission red flags, and framing issues. Use when modifying KeyListener,
+  TextInjector, or Permissions code, or before App Store submission. Use when
+  user says "check compliance", "App Store scan", "guideline check", "2.4.5",
+  or touches input handling or text injection code.
+metadata:
+  version: 1.0.0
+  category: compliance
+  tags: [app-store, compliance, security, guideline-2.4.5]
+---
+
 # App Store Compliance Check — Guideline 2.4.5 Scan
 
 Full codebase scan for APIs that cause App Store rejection. Run before every submission.

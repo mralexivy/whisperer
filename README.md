@@ -24,13 +24,13 @@ A native macOS menu bar app for instant voice-to-text transcription. Hold a key,
 
 ### Keyboard Shortcuts
 
-- **Fn Key Detection** — Uses a sophisticated 3-layer detection system (CGEventTap + IOKit HID + NSEvent) for reliable Fn key capture.
+- **Fn Key Detection** — Detects Fn key via `NSEvent.flagsChanged` (keyCode 63) and custom shortcuts via Carbon `RegisterEventHotKey`. App Store compliant — no event taps or input monitoring.
 - **Smart Combo Filtering** — Automatically cancels recording when you press Fn+Volume, Fn+Brightness, or other Fn+key combinations — no accidental recordings during Zoom calls.
 - **Customizable Shortcuts** — Configure any key or modifier combination as your recording trigger.
 - **Two Recording Modes**:
   - **Hold to Record** (default) — Hold the shortcut to record, release to stop and transcribe.
   - **Toggle Mode** — Press once to start, press again to stop.
-- **Fn Calibration** — Learn your specific keyboard's Fn key for more reliable detection.
+- **Fn Calibration** — Learn your specific keyboard's Fn key for reliable detection.
 
 ### Whisper Models
 
@@ -85,7 +85,7 @@ The app uses an advanced streaming architecture:
   - Real-time transcription text (ticker-style, last ~120 characters)
   - Recording status indicator with pulsing dot
   - Cancel button
-- **Dark & Light Mode** — Automatically adapts to your system appearance.
+- **Dark Navy Theme** — Unified always-dark design with blue-purple accents across all windows.
 - **Tabbed Settings**:
   - **Status** — Current model, microphone, shortcut, and quick usage guide
   - **Models** — Browse and download available models
@@ -112,15 +112,14 @@ The app uses an advanced streaming architecture:
 
 ## Permissions
 
-Whisperer requires three system permissions:
+Whisperer requires up to two system permissions:
 
-| Permission | Purpose | How to Grant |
-|------------|---------|--------------|
-| **Microphone** | Record your voice | Auto-prompted on first use |
-| **Accessibility** | Insert text into any app | System Settings → Privacy & Security → Accessibility |
-| **Input Monitoring** | Detect keyboard shortcuts globally | System Settings → Privacy & Security → Input Monitoring |
+| Permission | Purpose | Required? | How to Grant |
+|------------|---------|-----------|--------------|
+| **Microphone** | Record your voice for transcription | Yes | Auto-prompted on first use |
+| **Accessibility** | Paste transcribed text at cursor (system-wide dictation) | Optional | System Settings → Privacy & Security → Accessibility |
 
-The app will guide you through granting these permissions on first launch.
+A guided onboarding flow walks you through permissions on first launch. The app works fully without Accessibility — transcriptions copy to clipboard for manual paste.
 
 ---
 
@@ -135,7 +134,7 @@ The app will guide you through granting these permissions on first launch.
 
 ### First Launch
 
-1. **Grant permissions** when prompted (Microphone, Accessibility, Input Monitoring)
+1. **Complete onboarding** — Grant Microphone permission, download a model, configure your shortcut
 2. **Configure Globe key** (optional but recommended):
    - Go to System Settings → Keyboard → Keyboard Shortcuts → Modifier Keys
    - Set "Globe key" to "Do Nothing" (prevents emoji picker conflict)
@@ -179,9 +178,8 @@ Click the Whisperer icon in your menu bar to:
 ### Fn Key Not Working
 
 1. **Check Globe key setting**: System Settings → Keyboard → Keyboard Shortcuts → Modifier Keys → Set Globe key to "Do Nothing"
-2. **Verify Input Monitoring permission** is granted
-3. **Try Fn calibration** in Settings → Shortcut (if available)
-4. **Consider using a different shortcut** if Fn detection remains unreliable
+2. **Try Fn calibration** in Settings → Shortcut (if available)
+3. **Consider using a different shortcut** if Fn detection remains unreliable
 
 ### Arrow Keys Triggering Recording
 
@@ -244,7 +242,7 @@ Whisperer/
 │   └── SoundPlayer.swift           # Start/stop sound effects
 │
 ├── KeyListener/
-│   ├── GlobalKeyListener.swift     # 3-layer keyboard detection
+│   ├── GlobalKeyListener.swift     # flagsChanged + Carbon hotkey detection
 │   └── ShortcutConfig.swift        # Shortcut configuration & persistence
 │
 ├── Transcription/
@@ -256,7 +254,7 @@ Whisperer/
 │   └── SileroVAD.swift             # Voice activity detection
 │
 ├── TextInjection/
-│   └── TextInjector.swift          # Accessibility API text insertion
+│   └── TextInjector.swift          # Clipboard + paste text entry
 │
 ├── Permissions/
 │   └── PermissionManager.swift     # Centralized permission handling
@@ -284,18 +282,15 @@ Whisperer/
 - **Log Storage**: `~/Library/Logs/Whisperer/`
 - **Preferences**: Standard UserDefaults
 
-### Fn Key Detection
+### Shortcut Detection (App Store Compliant)
 
-The app uses three detection layers for maximum compatibility:
+- **Fn key**: `NSEvent.addGlobalMonitorForEvents(matching: .flagsChanged)` — detects modifier state changes via keyCode 63, not keystrokes
+- **Custom shortcuts**: Carbon `RegisterEventHotKey` — standard macOS hotkey API, no Input Monitoring required
 
-1. **CGEventTap** — Primary method for modifier flags and key events
-2. **IOKit HID** — Backup detection for Fn key via HID Manager
-3. **NSEvent** — Monitors for keyCode 63 (Fn key) flagsChanged events
+### Text Entry
 
-### Text Injection
-
-1. **Primary**: Accessibility API (`AXUIElementSetAttributeValue`)
-2. **Fallback**: Clipboard + simulated Cmd+V paste
+- **Clipboard + paste**: Copy transcription to `NSPasteboard`, post synthetic Cmd+V via `CGEvent.post(tap: .cgAnnotatedSessionEventTap)`
+- **Without Accessibility**: Text copies to clipboard for manual paste
 
 ---
 
