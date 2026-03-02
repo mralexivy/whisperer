@@ -366,7 +366,7 @@ class WhisperBridge {
     ///   - language: Language for transcription (default: .auto for auto-detection)
     ///   - singleSegment: Force single-segment output (faster for short chunks)
     /// - Returns: Transcribed text
-    func transcribe(samples: [Float], initialPrompt: String? = nil, language: TranscriptionLanguage = .auto, singleSegment: Bool = false) -> String {
+    func transcribe(samples: [Float], initialPrompt: String? = nil, language: TranscriptionLanguage = .auto, singleSegment: Bool = false, maxTokens: Int32 = 0) -> String {
         // Don't start new transcriptions if shutting down
         guard !isShuttingDown else {
             Logger.warning("Transcription skipped - WhisperBridge is shutting down", subsystem: .transcription)
@@ -384,7 +384,7 @@ class WhisperBridge {
         do {
             result = try ctxLock.withLock(timeout: lockTimeout) { [weak self] in
                 guard let self = self else { return "" }
-                return self.performTranscription(samples: samples, initialPrompt: initialPrompt, language: language, singleSegment: singleSegment)
+                return self.performTranscription(samples: samples, initialPrompt: initialPrompt, language: language, singleSegment: singleSegment, maxTokens: maxTokens)
             }
         } catch SafeLockError.timeout {
             Logger.error("Failed to acquire context lock within \(lockTimeout) seconds - possible deadlock", subsystem: .transcription)
@@ -398,7 +398,7 @@ class WhisperBridge {
     }
 
     /// Perform the actual transcription (must be called with lock held)
-    private func performTranscription(samples: [Float], initialPrompt: String? = nil, language: TranscriptionLanguage = .auto, singleSegment: Bool = false) -> String {
+    private func performTranscription(samples: [Float], initialPrompt: String? = nil, language: TranscriptionLanguage = .auto, singleSegment: Bool = false, maxTokens: Int32 = 0) -> String {
         guard let ctx = ctx else {
             Logger.warning("Whisper context is nil, cannot transcribe", subsystem: .transcription)
             return ""
@@ -424,6 +424,10 @@ class WhisperBridge {
         wparams.no_speech_thold = 0.6
         wparams.logprob_thold = -1.0
         wparams.entropy_thold = 2.4
+
+        // Limit decoder output length (0 = no limit, >0 = max tokens per segment)
+        // Prevents hallucination spirals where whisper generates 100+ repeated tokens
+        wparams.max_tokens = maxTokens
 
         // Context carrying: use previous transcription as prompt for better continuity
         if let prompt = initialPrompt, !prompt.isEmpty {
@@ -504,10 +508,10 @@ class WhisperBridge {
     ///   - language: Language for transcription (default: .auto for auto-detection)
     ///   - singleSegment: Force single-segment output (faster for short chunks)
     ///   - completion: Called on background queue with transcription result
-    func transcribeAsync(samples: [Float], initialPrompt: String? = nil, language: TranscriptionLanguage = .auto, singleSegment: Bool = false, completion: @escaping (String) -> Void) {
+    func transcribeAsync(samples: [Float], initialPrompt: String? = nil, language: TranscriptionLanguage = .auto, singleSegment: Bool = false, maxTokens: Int32 = 0, completion: @escaping (String) -> Void) {
         queue.async { [weak self] in
             guard let self = self else { return }
-            let text = self.transcribe(samples: samples, initialPrompt: initialPrompt, language: language, singleSegment: singleSegment)
+            let text = self.transcribe(samples: samples, initialPrompt: initialPrompt, language: language, singleSegment: singleSegment, maxTokens: maxTokens)
             // Call completion directly on background queue to avoid blocking main thread
             completion(text)
         }

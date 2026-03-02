@@ -18,19 +18,19 @@ class AudioMuter {
 
     /// Mute system audio output, saving previous state
     func muteSystemAudio() {
-        print("🔇 AudioMuter.muteSystemAudio() called")
+        Logger.debug("muteSystemAudio() called", subsystem: .audio)
 
         guard !isMutedByUs else {
-            print("🔇 Already muted by us, skipping")
+            Logger.debug("Already muted by us, skipping", subsystem: .audio)
             return
         }
 
         guard let deviceID = getDefaultOutputDevice() else {
-            print("❌ AudioMuter: Could not get default output device")
+            Logger.error("Could not get default output device", subsystem: .audio)
             return
         }
 
-        print("🔇 Got device ID: \(deviceID)")
+        Logger.debug("Muting output device: \(deviceID)", subsystem: .audio)
         mutedDeviceID = deviceID
 
         // Save current volumes for all channels and set to 0
@@ -43,25 +43,25 @@ class AudioMuter {
                 // Only save non-zero volumes to avoid saving our own muted state
                 if volume > 0.001 {  // Use small threshold to avoid floating point issues
                     newlySaved[element] = volume
-                    print("💾 Saved volume for element \(element): \(volume)")
+                    Logger.debug("Saved volume for element \(element): \(volume)", subsystem: .audio)
                 } else if let previousVolume = savedVolumes[element] {
                     // Volume is 0, but we have a previous value - keep it
                     newlySaved[element] = previousVolume
-                    print("💾 Keeping previous volume for element \(element): \(previousVolume) (current is 0)")
+                    Logger.debug("Keeping previous volume for element \(element): \(previousVolume) (current is 0)", subsystem: .audio)
                 } else {
                     // Volume is 0 and we have no previous value - try master volume
                     if let masterVolume = getMasterVolume(device: deviceID), masterVolume > 0.001 {
                         newlySaved[element] = masterVolume
-                        print("💾 Using master volume for element \(element): \(masterVolume) (current is 0)")
+                        Logger.debug("Using master volume for element \(element): \(masterVolume) (current is 0)", subsystem: .audio)
                     } else {
                         // Last resort: use 100% so user doesn't lose their audio
                         newlySaved[element] = 1.0
-                        print("💾 Using 100% default for element \(element) (current is 0, no master found)")
+                        Logger.warning("Using 100% default for element \(element) (current is 0, no master found)", subsystem: .audio)
                     }
                 }
 
                 if setVolume(device: deviceID, element: element, volume: 0.0) {
-                    print("🔇 Set element \(element) volume to 0")
+                    Logger.debug("Set element \(element) volume to 0", subsystem: .audio)
                 }
             }
         }
@@ -70,19 +70,18 @@ class AudioMuter {
 
         if !savedVolumes.isEmpty {
             isMutedByUs = true
-            print("✅ AudioMuter: System audio MUTED (\(savedVolumes.count) channels)")
+            Logger.info("System audio MUTED (\(savedVolumes.count) channels)", subsystem: .audio)
         } else {
-            print("❌ AudioMuter: Failed to mute any channels")
+            Logger.error("Failed to mute any channels", subsystem: .audio)
         }
     }
 
     /// Restore system audio to previous state
     func unmuteSystemAudio() {
-        print("🔊 AudioMuter.unmuteSystemAudio() called")
-        print("🔊 isMutedByUs: \(isMutedByUs), savedVolumes: \(savedVolumes)")
+        Logger.debug("unmuteSystemAudio() called (isMutedByUs: \(isMutedByUs), savedVolumes: \(savedVolumes.count) channels)", subsystem: .audio)
 
         guard isMutedByUs else {
-            print("⚠️ Not muted by us, skipping unmute")
+            Logger.debug("Not muted by us, skipping unmute", subsystem: .audio)
             return
         }
 
@@ -90,13 +89,13 @@ class AudioMuter {
         var deviceID = mutedDeviceID
         if deviceID == 0 {
             guard let currentDeviceID = getDefaultOutputDevice() else {
-                print("❌ AudioMuter: Could not get default output device")
+                Logger.error("Could not get default output device for unmute", subsystem: .audio)
                 return
             }
             deviceID = currentDeviceID
         }
 
-        print("🔊 Restoring device ID: \(deviceID)")
+        Logger.debug("Restoring volume on device: \(deviceID)", subsystem: .audio)
 
         var restoredCount = 0
         for (element, volume) in savedVolumes {
@@ -110,14 +109,14 @@ class AudioMuter {
                     // Verify it was actually set
                     if let actualVolume = getVolume(device: deviceID, element: element) {
                         if abs(actualVolume - volume) < 0.01 {  // Close enough
-                            print("🔊 Restored element \(element) to volume: \(volume) (verified on attempt \(attempt))")
+                            Logger.debug("Restored element \(element) to \(volume) (attempt \(attempt))", subsystem: .audio)
                             success = true
                             break
                         } else {
-                            print("⚠️ Attempt \(attempt)/5: Set volume to \(volume) but read back \(actualVolume)")
+                            Logger.warning("Attempt \(attempt)/5: Set volume to \(volume) but read back \(actualVolume) for element \(element)", subsystem: .audio)
                         }
                     } else {
-                        print("⚠️ Attempt \(attempt)/5: Could not read back volume for element \(element)")
+                        Logger.warning("Attempt \(attempt)/5: Could not read back volume for element \(element)", subsystem: .audio)
                     }
                 }
 
@@ -131,13 +130,13 @@ class AudioMuter {
             if success {
                 restoredCount += 1
             } else {
-                print("❌ FAILED to restore element \(element) after 5 attempts - volume may be stuck at 0!")
+                Logger.error("FAILED to restore element \(element) after 5 attempts", subsystem: .audio)
                 // Last-ditch effort: try one more time with longer delay
                 usleep(300_000)  // 300ms
                 if setVolume(device: deviceID, element: element, volume: volume) {
                     usleep(50_000)  // 50ms
                     if let finalVolume = getVolume(device: deviceID, element: element) {
-                        print("🚨 Final attempt: volume is now \(finalVolume) (target was \(volume))")
+                        Logger.warning("Final attempt: volume is now \(finalVolume) (target was \(volume))", subsystem: .audio)
                         if abs(finalVolume - volume) < 0.01 {
                             restoredCount += 1
                         }
@@ -153,15 +152,15 @@ class AudioMuter {
         mutedDeviceID = 0
 
         if restoredCount > 0 {
-            print("✅ AudioMuter: System audio RESTORED (\(restoredCount) channels, keeping volumes for next cycle)")
+            Logger.info("System audio RESTORED (\(restoredCount) channels)", subsystem: .audio)
         } else {
-            print("❌ AudioMuter: Failed to restore any channels")
+            Logger.error("Failed to restore any channels", subsystem: .audio)
         }
     }
 
     /// Force restore (emergency unmute)
     func forceRestore() {
-        print("🚨 AudioMuter.forceRestore() called")
+        Logger.warning("forceRestore() called", subsystem: .audio)
         isMutedByUs = true  // Force the guard to pass
         unmuteSystemAudio()
     }
@@ -188,7 +187,7 @@ class AudioMuter {
         )
 
         if status != noErr {
-            print("❌ Failed to get default output device, error: \(status)")
+            Logger.error("Failed to get default output device, error: \(status)", subsystem: .audio)
             return nil
         }
 

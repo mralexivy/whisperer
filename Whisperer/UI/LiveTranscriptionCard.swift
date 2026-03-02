@@ -13,7 +13,7 @@ import Combine
 
 struct LiveTranscriptionCard: View {
     @ObservedObject var appState: AppState
-    @StateObject private var typewriter = TypewriterAnimator()
+    @StateObject private var textUpdater = SmoothTextUpdater()
     @State private var isPulsing = false
     @State private var showCursor = true
     @State private var cursorTimer: Timer?
@@ -89,7 +89,7 @@ struct LiveTranscriptionCard: View {
                             .padding(.vertical, 14)
                             .id("textEnd")
                     }
-                    .onChange(of: typewriter.displayedText) { _ in
+                    .onChange(of: textUpdater.displayedText) { _ in
                         withAnimation(.easeOut(duration: 0.15)) {
                             proxy.scrollTo("textEnd", anchor: .bottom)
                         }
@@ -113,7 +113,7 @@ struct LiveTranscriptionCard: View {
         .frame(width: 380)
         .accessibilityElement(children: .combine)
         .accessibilityLabel("Live transcription")
-        .accessibilityValue(typewriter.displayedText.isEmpty ? "Listening..." : typewriter.displayedText)
+        .accessibilityValue(textUpdater.displayedText.isEmpty ? "Listening..." : textUpdater.displayedText)
         .accessibilityAddTraits(.updatesFrequently)
         .onAppear {
             // Start pulsing animation
@@ -127,22 +127,30 @@ struct LiveTranscriptionCard: View {
                 showCursor.toggle()
             }
 
-            // Initialize typewriter with current text
-            typewriter.setTarget(appState.liveTranscription)
+            // Initialize with current text
+            textUpdater.setTarget(appState.liveTranscription)
         }
         .onDisappear {
             cursorTimer?.invalidate()
             cursorTimer = nil
-            typewriter.stop()
+            textUpdater.stop()
         }
         .onChange(of: appState.liveTranscription) { newText in
-            typewriter.setTarget(newText)
+            textUpdater.setTarget(newText)
         }
     }
 
-    // Highlighted displayed text with blinking cursor
+    // Highlighted displayed text with blinking cursor or "Listening..." placeholder
     private var highlightedDisplayText: AttributedString {
-        let text = typewriter.displayedText
+        let text = textUpdater.displayedText
+
+        // Show placeholder while waiting for first transcription
+        if text.isEmpty {
+            var listening = AttributedString("Listening...")
+            listening.foregroundColor = .white.opacity(0.35)
+            return listening
+        }
+
         var attributed = KeywordHighlighter.highlight(text)
 
         // Add blinking cursor at the end
@@ -160,78 +168,98 @@ struct LiveTranscriptionCard: View {
     }
 }
 
-// MARK: - Typewriter Animator
+// MARK: - Smooth Text Updater
 
-class TypewriterAnimator: ObservableObject {
+/// Word-by-word dictation animation. Whisper returns chunks of 3-7 words
+/// every 1-1.5s. Instead of showing all words at once, this queues them and
+/// reveals one word at a time at 60ms intervals — creating the effect of
+/// words being typed as you speak.
+class SmoothTextUpdater: ObservableObject {
     @Published var displayedText: String = ""
 
-    private var targetText: String = ""
-    private var targetWords: [String] = []
-    private var displayedWordCount: Int = 0
-    private var timer: Timer?
-
-    // Speed: delay between words (in seconds)
-    private let wordDelay: TimeInterval = 0.06
+    /// What the display will eventually show (displayed + pending words)
+    private var committedText: String = ""
+    private var pendingWords: [String] = []
+    private var animationTimer: Timer?
+    private let wordInterval: TimeInterval = 0.06  // 60ms per word
 
     func setTarget(_ text: String) {
-        // If text is shorter (correction/reset), update immediately
-        if text.count < targetText.count || text.isEmpty {
-            targetText = text
-            targetWords = text.split(separator: " ", omittingEmptySubsequences: false).map(String.init)
-            displayedWordCount = targetWords.count
-            displayedText = text
+        let newText = text.trimmingCharacters(in: .whitespaces)
+
+        // Empty text = new recording, reset
+        if newText.isEmpty {
+            animationTimer?.invalidate()
+            animationTimer = nil
+            pendingWords.removeAll()
+            displayedText = ""
+            committedText = ""
             return
         }
 
-        // Find new words to animate
-        let newWords = text.split(separator: " ", omittingEmptySubsequences: false).map(String.init)
+        // Already committed this exact text
+        guard newText != committedText else { return }
 
-        // If we have more words than before, animate the new ones
-        if newWords.count > targetWords.count {
-            let previousCount = targetWords.count
-            targetText = text
-            targetWords = newWords
-
-            // Start animating from where we left off
-            if timer == nil {
-                displayedWordCount = previousCount
-                startAnimation()
+        // New text extends what we've committed — queue the new words for animation
+        if committedText.isEmpty || newText.hasPrefix(committedText) {
+            let suffix: String
+            if committedText.isEmpty {
+                suffix = newText
+            } else {
+                suffix = String(newText.dropFirst(committedText.count))
+                    .trimmingCharacters(in: .whitespaces)
             }
+
+            let newWords = suffix.split(separator: " ").map(String.init)
+            guard !newWords.isEmpty else { return }
+
+            pendingWords.append(contentsOf: newWords)
+            committedText = newText
+            startAnimation()
         } else {
-            // Same word count but text changed (within-word change)
-            targetText = text
-            targetWords = newWords
-            displayedWordCount = newWords.count
-            displayedText = text
+            // Text changed fundamentally (e.g., reset) — show immediately
+            animationTimer?.invalidate()
+            animationTimer = nil
+            pendingWords.removeAll()
+            displayedText = newText
+            committedText = newText
         }
     }
 
     private func startAnimation() {
-        timer?.invalidate()
-        timer = Timer.scheduledTimer(withTimeInterval: wordDelay, repeats: true) { [weak self] _ in
-            self?.animateNextWord()
+        // If timer is already running, new words are in the queue — it'll pick them up
+        guard animationTimer == nil else { return }
+
+        // Show first word immediately for responsiveness
+        showNextWord()
+        guard !pendingWords.isEmpty else { return }
+
+        animationTimer = Timer.scheduledTimer(withTimeInterval: wordInterval, repeats: true) { [weak self] timer in
+            guard let self = self else { timer.invalidate(); return }
+
+            self.showNextWord()
+
+            if self.pendingWords.isEmpty {
+                timer.invalidate()
+                self.animationTimer = nil
+            }
         }
     }
 
-    private func animateNextWord() {
-        guard displayedWordCount < targetWords.count else {
-            timer?.invalidate()
-            timer = nil
-            return
+    private func showNextWord() {
+        guard !pendingWords.isEmpty else { return }
+        let word = pendingWords.removeFirst()
+        if displayedText.isEmpty {
+            displayedText = word
+        } else {
+            displayedText += " " + word
         }
-
-        displayedWordCount += 1
-        let wordsToShow = targetWords.prefix(displayedWordCount)
-        displayedText = wordsToShow.joined(separator: " ")
     }
 
     func stop() {
-        timer?.invalidate()
-        timer = nil
-    }
-
-    deinit {
-        timer?.invalidate()
+        animationTimer?.invalidate()
+        animationTimer = nil
+        pendingWords.removeAll()
+        committedText = ""
     }
 }
 

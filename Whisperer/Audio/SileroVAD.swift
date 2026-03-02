@@ -180,6 +180,12 @@ class SileroVAD {
     /// Lightweight speech check using raw probabilities
     /// Faster than containsSpeech() — skips segment boundary computation and allocation
     func hasSpeech(samples: [Float]) -> Bool {
+        return hasSpeech(samples: samples, threshold: threshold)
+    }
+
+    /// Lightweight speech check with custom threshold
+    /// Thread-safe: accepts threshold as parameter instead of mutating instance property
+    func hasSpeech(samples: [Float], threshold customThreshold: Float) -> Bool {
         ctxLock.lock()
         defer { ctxLock.unlock() }
 
@@ -196,7 +202,7 @@ class SileroVAD {
         guard count > 0, let probsPtr = whisper_vad_probs(vadCtx) else { return true }
 
         let probs = UnsafeBufferPointer(start: probsPtr, count: Int(count))
-        return probs.contains(where: { $0 > threshold })
+        return probs.contains(where: { $0 > customThreshold })
     }
 
     /// Detect speech asynchronously

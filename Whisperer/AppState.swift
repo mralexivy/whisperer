@@ -432,14 +432,6 @@ class AppState: ObservableObject {
 
         soundPlayer?.playStartSound()
 
-        // Mute other audio if enabled
-        Task {
-            try? await Task.sleep(nanoseconds: 50_000_000)
-            if muteOtherAudioDuringRecording {
-                audioMuter?.muteSystemAudio()
-            }
-        }
-
         Task {
             do {
                 streamingTranscriber = StreamingTranscriber(whisperBridge: bridge, vad: sileroVAD, language: selectedLanguage)
@@ -457,6 +449,12 @@ class AppState: ObservableObject {
 
                 let audioURL = try await audioRecorder?.startRecording()
                 currentAudioURL = audioURL
+
+                // Mute AFTER engine is running and audio HAL has stabilized
+                if muteOtherAudioDuringRecording {
+                    try? await Task.sleep(nanoseconds: 300_000_000)  // 300ms post-engine stabilization
+                    audioMuter?.muteSystemAudio()
+                }
             } catch {
                 errorMessage = "Failed to start recording: \(error.localizedDescription)"
                 state = .idle
@@ -531,16 +529,6 @@ class AppState: ObservableObject {
         // Play sound immediately (non-blocking)
         soundPlayer?.playStartSound()
 
-        // Mute other audio sources if enabled (after sound plays)
-        Task {
-            // Small delay to let sound play before muting
-            try? await Task.sleep(nanoseconds: 50_000_000)  // 50ms
-
-            if muteOtherAudioDuringRecording {
-                audioMuter?.muteSystemAudio()
-            }
-        }
-
         // Start recording immediately
         Task {
             do {
@@ -553,7 +541,7 @@ class AppState: ObservableObject {
                         }
                     }
                 }
-                print("✅ Streaming transcriber initialized (VAD: \(sileroVAD != nil ? "enabled" : "disabled"))")
+                Logger.info("Streaming transcriber initialized (VAD: \(sileroVAD != nil ? "enabled" : "disabled"))", subsystem: .transcription)
 
                 // Connect audio samples to streaming transcriber
                 audioRecorder?.onStreamingSamples = { [weak self] samples in
@@ -562,6 +550,14 @@ class AppState: ObservableObject {
 
                 let audioURL = try await audioRecorder?.startRecording()
                 currentAudioURL = audioURL
+
+                // Mute AFTER engine is running and audio HAL has stabilized.
+                // Muting before engine.start() gets undone by HAL reconfiguration,
+                // causing audio to unmute ~1s into recording (especially with headphones).
+                if muteOtherAudioDuringRecording {
+                    try? await Task.sleep(nanoseconds: 300_000_000)  // 300ms post-engine stabilization
+                    audioMuter?.muteSystemAudio()
+                }
             } catch {
                 errorMessage = "Failed to start recording: \(error.localizedDescription)"
                 state = .idle
