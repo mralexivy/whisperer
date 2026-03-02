@@ -385,18 +385,13 @@ struct MenuBarView: View {
 
                 Spacer()
 
-                // Model badge
+                // Version badge
                 HStack(spacing: 4) {
-                    if appState.isModelLoaded {
-                        Image(systemName: "checkmark.circle.fill")
-                            .foregroundColor(MBColors.accent)
-                            .font(.system(size: 10))
-                    } else if appState.state == .idle {
-                        ProgressView()
-                            .scaleEffect(0.5)
-                    }
+                    Image(systemName: "info.circle.fill")
+                        .foregroundColor(MBColors.accent)
+                        .font(.system(size: 10))
 
-                    Text(appState.selectedModel.displayName)
+                    Text("Version \(Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "?") (Build \(Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "?"))")
                         .font(.system(size: 11, weight: .medium))
                         .foregroundColor(MBColors.textSecondary)
                 }
@@ -907,7 +902,7 @@ struct StatusTabView: View {
                     Text("System-Wide Dictation")
                         .font(.caption)
                         .foregroundColor(MBColors.textTertiary)
-                    Text(isEnabled ? "Press \(shortcutKey) → Speak → Release" : "Disabled")
+                    Text(isEnabled ? "\(shortcutKey) → Speak → Release" : "Disabled")
                         .font(.system(size: 13, weight: .medium))
                         .foregroundColor(MBColors.textPrimary)
                 }
@@ -1236,32 +1231,6 @@ struct SettingsTabView: View {
                     settingsCard(title: "Shortcut", icon: "keyboard", color: .red) {
                         ShortcutRecorderView()
                     }
-                }
-
-                // Workspace
-                settingsCard(title: "Workspace", icon: "square.grid.2x2.fill", color: .indigo) {
-                    Button(action: {
-                        HistoryWindowManager.shared.showWindowAndDismissMenu()
-                    }) {
-                        HStack {
-                            VStack(alignment: .leading, spacing: 3) {
-                                Text("View transcription history")
-                                    .font(.system(size: 13, weight: .medium))
-                                    .foregroundColor(MBColors.textPrimary)
-                                Text("Open workspace window")
-                                    .font(.system(size: 11))
-                                    .foregroundColor(MBColors.textSecondary)
-                            }
-
-                            Spacer()
-
-                            Image(systemName: "arrow.up.forward")
-                                .font(.system(size: 13))
-                                .foregroundColor(MBColors.accent)
-                        }
-                        .contentShape(Rectangle())
-                    }
-                    .buttonStyle(.plain)
                 }
 
                 // Permissions
@@ -1853,7 +1822,7 @@ struct DiagnosticsView: View {
             // Log file info
             HStack {
                 VStack(alignment: .leading, spacing: 2) {
-                    Text("Log file")
+                    Text("Today's log")
                         .font(.system(size: 12, weight: .medium))
                         .foregroundColor(MBColors.textPrimary)
                     Text(logFileSize)

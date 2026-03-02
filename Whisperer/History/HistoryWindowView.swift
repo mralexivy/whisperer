@@ -425,6 +425,7 @@ struct TranscriptionsView: View {
     @State private var selectedFilter: TranscriptionFilter = .all
     @State private var selectedTranscription: TranscriptionRecord?
     @State private var detailPanelWidth: CGFloat = 420
+    @State private var dailyQuote: String = DailyQuotes.random
 
     private let minDetailWidth: CGFloat = 320
     private let maxDetailWidth: CGFloat = 600
@@ -468,6 +469,9 @@ struct TranscriptionsView: View {
                 selectedTranscription = first
             }
         }
+        .onReceive(NotificationCenter.default.publisher(for: NSWindow.didBecomeKeyNotification)) { _ in
+            dailyQuote = DailyQuotes.random
+        }
         .onChange(of: historyManager.transcriptions.count) { _ in
             // Select first item when data loads if nothing is selected
             if selectedTranscription == nil, let first = historyManager.transcriptions.first {
@@ -480,7 +484,7 @@ struct TranscriptionsView: View {
 
     private var headerView: some View {
         VStack(spacing: 0) {
-            HStack(spacing: 14) {
+            HStack(alignment: .top, spacing: 14) {
                 // Avatar — blue-purple gradient fill with shadow
                 ZStack {
                     RoundedRectangle(cornerRadius: 12)
@@ -517,12 +521,54 @@ struct TranscriptionsView: View {
                         .font(.system(size: 20, weight: .bold, design: .rounded))
                         .foregroundColor(WhispererColors.primaryText(colorScheme))
 
-                    Text("Welcome back")
+                    Text(greeting)
                         .font(.system(size: 12))
                         .foregroundColor(WhispererColors.secondaryText(colorScheme))
                 }
 
                 Spacer()
+
+                // Daily quote with decorative quotation marks
+                VStack(alignment: .trailing, spacing: 2) {
+                    Text(dailyQuote)
+                        .font(.system(size: 13, weight: .light, design: .rounded))
+                        .foregroundColor(Color.white.opacity(0.55))
+                        .italic()
+                        .lineSpacing(4)
+                        .lineLimit(2)
+                        .frame(maxWidth: 280, alignment: .leading)
+                        .overlay(alignment: .topLeading) {
+                            Text("\u{201C}")
+                                .font(.system(size: 28, weight: .bold, design: .rounded))
+                                .foregroundStyle(
+                                    LinearGradient(
+                                        colors: [WhispererColors.accentBlue, WhispererColors.accentPurple],
+                                        startPoint: .leading,
+                                        endPoint: .trailing
+                                    )
+                                )
+                                .offset(x: -18, y: -10)
+                        }
+                        .overlay(alignment: .bottomTrailing) {
+                            Text("\u{201D}")
+                                .font(.system(size: 28, weight: .bold, design: .rounded))
+                                .foregroundStyle(
+                                    LinearGradient(
+                                        colors: [WhispererColors.accentBlue, WhispererColors.accentPurple],
+                                        startPoint: .leading,
+                                        endPoint: .trailing
+                                    )
+                                )
+                                .offset(x: 18, y: 10)
+                        }
+                        .padding(.leading, 18)
+                        .padding(.trailing, 18)
+
+                    Text("Whisperer")
+                        .font(.system(size: 10, weight: .medium))
+                        .foregroundColor(Color.white.opacity(0.3))
+                }
+                .padding(.trailing, 4)
             }
             .padding(.horizontal, 20)
             .frame(height: 72)
@@ -741,6 +787,117 @@ struct TranscriptionsView: View {
 
     private var firstName: String {
         NSFullUserName().split(separator: " ").first.map(String.init) ?? "User"
+    }
+
+    private var greeting: String {
+        let calendar = Calendar.current
+        let now = Date()
+        let hour = calendar.component(.hour, from: now)
+        let weekday = calendar.component(.weekday, from: now)
+        let day = calendar.ordinality(of: .day, in: .era, for: now) ?? 0
+
+        // Time-of-day greetings — the main pool
+        let timeMessages: [String]
+        switch hour {
+        case 5..<8:
+            timeMessages = [
+                "You're up early. I like that",
+                "Early bird gets the words",
+                "Coffee first, then conquer",
+                "Up before the sun? Respect",
+                "The world's still sleeping",
+                "Best time to get things done",
+            ]
+        case 8..<12:
+            timeMessages = [
+                "Good morning",
+                "Morning! Big day ahead?",
+                "Let's make today count",
+                "Ready to crush it today?",
+                "Fresh day, fresh start",
+                "Morning. What's the plan?",
+            ]
+        case 12..<14:
+            timeMessages = [
+                "Lunch can wait, right?",
+                "Halfway through the day",
+                "Good midday",
+                "Powering through, I see",
+                "Hope your morning was solid",
+            ]
+        case 14..<17:
+            timeMessages = [
+                "Good afternoon",
+                "Afternoon hustle. Love to see it",
+                "The home stretch",
+                "Keep the momentum going",
+                "Almost there. Finish strong",
+            ]
+        case 17..<20:
+            timeMessages = [
+                "Good evening",
+                "Wrapping up for the day?",
+                "One more thing before you go?",
+                "Hope today was a good one",
+                "Evening vibes. Nice",
+            ]
+        case 20..<22:
+            timeMessages = [
+                "Still at it? Impressive",
+                "Your dedication is showing",
+                "Evening grind. Respect",
+                "Shouldn't you be relaxing?",
+                "Going the extra mile tonight",
+            ]
+        default:
+            timeMessages = [
+                "What are you doing up so late?",
+                "Shouldn't you be sleeping?",
+                "Your bed misses you",
+                "The best ideas come at night",
+                "Go to sleep... after this one thing",
+                "Does anyone know you're still up?",
+                "Okay, one more. Then bed",
+                "Night owl energy",
+            ]
+        }
+
+        // Day-of-week greetings
+        let weekdayMessages: [String]
+        switch weekday {
+        case 1: weekdayMessages = ["Sunday funday", "Productive Sunday, huh?"]
+        case 2: weekdayMessages = ["Monday again. We got this", "New week, new energy"]
+        case 3: weekdayMessages = ["Tuesday momentum", "Let's keep it rolling"]
+        case 4: weekdayMessages = ["Hump day. Downhill from here", "Midweek already"]
+        case 5: weekdayMessages = ["Thursday. So close to Friday", "One more day"]
+        case 6: weekdayMessages = ["It's Friday! You made it", "TGIF", "Weekend countdown: started"]
+        case 7: weekdayMessages = ["Working on a Saturday? Dedication", "Saturday vibes"]
+        default: weekdayMessages = ["Welcome back"]
+        }
+
+        let universalMessages = [
+            "Welcome back",
+            "Look who's here",
+            "Missed you. A little",
+            "Back for more?",
+            "Good to see you again",
+            "The usual?",
+            "Right where we left off",
+        ]
+
+        // Pick category first, then pick within it.
+        // 3 out of 5 days → time-of-day, 1 → day-of-week, 1 → universal.
+        // Ensures time-relevant greetings appear most often.
+        let pool: [String]
+        switch day % 5 {
+        case 0, 1, 2: pool = timeMessages
+        case 3: pool = weekdayMessages
+        default: pool = universalMessages
+        }
+
+        // Deterministic within time window — stable across view redraws
+        let index = (day + hour) % pool.count
+        return pool[index]
     }
 
     private var groupedTranscriptions: [Date: [TranscriptionRecord]] {

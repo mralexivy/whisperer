@@ -53,8 +53,10 @@ final class Logger {
 
     private let queue = DispatchQueue(label: "whisperer.logger", qos: .utility)
     private var fileHandle: FileHandle?
-    private let logFileURL: URL
+    private var logFileURL: URL
+    private let logsDir: URL
     private let dateFormatter: DateFormatter
+    private let fileDateFormatter: DateFormatter
     private let osLog = OSLog(subsystem: "com.ivy.whisperer", category: "general")
 
     // Minimum log level to write
@@ -77,11 +79,11 @@ final class Logger {
         set { shared.minimumLevel = newValue ? .debug : .info }
     }
 
-    // Maximum log file size before rotation (10 MB)
-    private let maxFileSize: UInt64 = 10 * 1024 * 1024
+    // Track the current log date to detect day changes
+    private var currentLogDate: String
 
-    // Number of rotated logs to keep
-    private let maxRotatedFiles = 7
+    // Number of daily log files to keep
+    private let maxDaysToKeep = 7
 
     private init() {
         // Load persisted log level, default to .info for release, .debug for debug builds
@@ -93,19 +95,26 @@ final class Logger {
         let savedLevel = UserDefaults.standard.object(forKey: "logMinimumLevel") as? Int ?? defaultLevel
         minimumLevel = LogLevel(rawValue: savedLevel) ?? .info
 
-        // Setup date formatter
+        // Setup date formatters
         dateFormatter = DateFormatter()
         dateFormatter.dateFormat = "yyyy-MM-dd HH:mm:ss.SSS"
 
+        fileDateFormatter = DateFormatter()
+        fileDateFormatter.dateFormat = "yyyy-MM-dd"
+
         // Create log directory
-        let logsDir = FileManager.default.homeDirectoryForCurrentUser
+        logsDir = FileManager.default.homeDirectoryForCurrentUser
             .appendingPathComponent("Library/Logs/Whisperer")
         try? FileManager.default.createDirectory(at: logsDir, withIntermediateDirectories: true)
 
-        logFileURL = logsDir.appendingPathComponent("whisperer.log")
+        // Use today's date in the filename
+        let today = fileDateFormatter.string(from: Date())
+        currentLogDate = today
+        logFileURL = logsDir.appendingPathComponent("whisperer-\(today).log")
 
-        // Open log file
+        // Open log file and clean up old logs
         openLogFile()
+        cleanupOldLogs()
 
         // Write startup marker
         let startupMessage = "\n" + String(repeating: "=", count: 60) + "\n"
@@ -152,7 +161,7 @@ final class Logger {
     }
 
     static var logsDirectoryURL: URL {
-        return shared.logFileURL.deletingLastPathComponent()
+        return shared.logsDir
     }
 
     static func openLogInFinder() {
@@ -204,56 +213,59 @@ final class Logger {
             FileManager.default.createFile(atPath: logFileURL.path, contents: nil)
         }
 
-        // Check if rotation is needed
-        rotateIfNeeded()
-
         // Open for appending
         fileHandle = try? FileHandle(forWritingTo: logFileURL)
         fileHandle?.seekToEndOfFile()
     }
 
     private func writeToFile(_ text: String) {
+        // Check if the day has changed — rotate to a new file if so
+        let today = fileDateFormatter.string(from: Date())
+        if today != currentLogDate {
+            rotateToDailyFile(date: today)
+        }
+
         guard let data = text.data(using: .utf8) else { return }
         fileHandle?.write(data)
-
-        // Periodically check file size
-        if let size = try? FileManager.default.attributesOfItem(atPath: logFileURL.path)[.size] as? UInt64,
-           size > maxFileSize {
-            rotateLogFiles()
-        }
     }
 
-    private func rotateIfNeeded() {
-        guard let attrs = try? FileManager.default.attributesOfItem(atPath: logFileURL.path),
-              let size = attrs[.size] as? UInt64,
-              size > maxFileSize else { return }
-        rotateLogFiles()
-    }
-
-    private func rotateLogFiles() {
+    /// Switch to a new daily log file
+    private func rotateToDailyFile(date: String) {
+        fileHandle?.synchronizeFile()
         fileHandle?.closeFile()
         fileHandle = nil
 
-        let logsDir = logFileURL.deletingLastPathComponent()
+        currentLogDate = date
+        logFileURL = logsDir.appendingPathComponent("whisperer-\(date).log")
 
-        // Rotate existing files
-        for i in (1..<maxRotatedFiles).reversed() {
-            let oldPath = logsDir.appendingPathComponent("whisperer.\(i).log")
-            let newPath = logsDir.appendingPathComponent("whisperer.\(i + 1).log")
-            try? FileManager.default.moveItem(at: oldPath, to: newPath)
+        openLogFile()
+        cleanupOldLogs()
+    }
+
+    /// Delete log files older than maxDaysToKeep days
+    private func cleanupOldLogs() {
+        guard let files = try? FileManager.default.contentsOfDirectory(atPath: logsDir.path) else { return }
+
+        let logFiles = files.filter { $0.hasPrefix("whisperer-") && $0.hasSuffix(".log") }
+
+        // Also clean up legacy numbered logs from the old rotation scheme
+        let legacyFiles = files.filter {
+            $0 == "whisperer.log" ||
+            ($0.hasPrefix("whisperer.") && $0.hasSuffix(".log") && $0 != "whisperer.log")
+        }
+        for legacy in legacyFiles {
+            try? FileManager.default.removeItem(at: logsDir.appendingPathComponent(legacy))
         }
 
-        // Rename current log to .1.log
-        let rotatedPath = logsDir.appendingPathComponent("whisperer.1.log")
-        try? FileManager.default.moveItem(at: logFileURL, to: rotatedPath)
+        // Keep only the most recent maxDaysToKeep daily log files
+        guard logFiles.count > maxDaysToKeep else { return }
 
-        // Delete oldest file if over limit
-        let oldestPath = logsDir.appendingPathComponent("whisperer.\(maxRotatedFiles).log")
-        try? FileManager.default.removeItem(at: oldestPath)
-
-        // Create new log file
-        FileManager.default.createFile(atPath: logFileURL.path, contents: nil)
-        fileHandle = try? FileHandle(forWritingTo: logFileURL)
+        // Date-named files sort lexicographically (yyyy-MM-dd)
+        let sorted = logFiles.sorted()
+        let toDelete = sorted.dropLast(maxDaysToKeep)
+        for file in toDelete {
+            try? FileManager.default.removeItem(at: logsDir.appendingPathComponent(file))
+        }
     }
 
     // MARK: - Flush (for crash handling)
