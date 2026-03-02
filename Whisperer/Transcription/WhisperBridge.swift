@@ -420,6 +420,12 @@ class WhisperBridge {
         wparams.temperature = 0.0
         wparams.temperature_inc = 0.0
 
+        // With temperature=0, all decoders produce identical output — only need 1 (default is 5)
+        wparams.greedy.best_of = 1
+
+        // Limit decoder prompt context to 128 tokens (~100 words) — sufficient for dictation
+        wparams.n_max_text_ctx = 128
+
         // Explicit thresholds (match defaults, protect against future changes)
         wparams.no_speech_thold = 0.6
         wparams.logprob_thold = -1.0
