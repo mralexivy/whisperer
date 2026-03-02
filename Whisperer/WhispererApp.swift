@@ -642,6 +642,15 @@ struct StatusTabView: View {
                         scrollTo: .microphone
                     )
 
+                    infoCard(
+                        icon: "text.bubble",
+                        title: "Live Preview",
+                        value: appState.liveTranscriptionEnabled ? "On" : "Off",
+                        detail: nil,
+                        color: .purple,
+                        navigateTo: .settings
+                    )
+
                 }
 
                 // System-Wide Dictation card with toggle and shortcut flow
@@ -1175,6 +1184,27 @@ struct SettingsTabView: View {
                         Spacer()
 
                         Toggle("", isOn: $appState.muteOtherAudioDuringRecording)
+                            .toggleStyle(.switch)
+                            .tint(MBColors.accent)
+                            .labelsHidden()
+                    }
+                }
+
+                // Live Preview
+                settingsCard(title: "Live Preview", icon: "text.bubble", color: .purple) {
+                    HStack {
+                        VStack(alignment: .leading, spacing: 3) {
+                            Text("Show live transcription")
+                                .font(.system(size: 13, weight: .medium))
+                                .foregroundColor(MBColors.textPrimary)
+                            Text("Display words as you speak")
+                                .font(.system(size: 11))
+                                .foregroundColor(MBColors.textSecondary)
+                        }
+
+                        Spacer()
+
+                        Toggle("", isOn: $appState.liveTranscriptionEnabled)
                             .toggleStyle(.switch)
                             .tint(MBColors.accent)
                             .labelsHidden()

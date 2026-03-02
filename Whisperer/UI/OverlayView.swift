@@ -34,7 +34,7 @@ struct OverlayView: View {
     var body: some View {
         VStack(spacing: 8) {
             // Live transcription card (shown during recording)
-            if appState.state.isRecording && !appState.liveTranscription.isEmpty {
+            if appState.liveTranscriptionEnabled && appState.state.isRecording && !appState.liveTranscription.isEmpty {
                 LiveTranscriptionCard(appState: appState)
             }
 

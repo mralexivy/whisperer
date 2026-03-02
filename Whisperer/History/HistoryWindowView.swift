@@ -1055,6 +1055,50 @@ struct HistorySettingsView: View {
                         .font(.system(size: 12))
                         .foregroundColor(WhispererColors.secondaryText(colorScheme))
                 }
+
+                // Live transcription preview toggle
+                SettingsRow(colorScheme: colorScheme) {
+                    HStack(spacing: 14) {
+                        ZStack {
+                            RoundedRectangle(cornerRadius: 8)
+                                .fill(
+                                    LinearGradient(
+                                        colors: [
+                                            Color.purple.opacity(0.18),
+                                            Color.purple.opacity(0.10)
+                                        ],
+                                        startPoint: .topLeading,
+                                        endPoint: .bottomTrailing
+                                    )
+                                )
+                                .frame(width: 36, height: 36)
+
+                            Image(systemName: "text.bubble")
+                                .font(.system(size: 14, weight: .semibold))
+                                .foregroundColor(.purple)
+                        }
+
+                        VStack(alignment: .leading, spacing: 3) {
+                            Text("Live Transcription Preview")
+                                .font(.system(size: 13, weight: .medium))
+                                .foregroundColor(WhispererColors.primaryText(colorScheme))
+
+                            Text("Show words as you speak during recording")
+                                .font(.system(size: 11))
+                                .foregroundColor(WhispererColors.secondaryText(colorScheme))
+                        }
+
+                        Spacer()
+
+                        Toggle("", isOn: Binding(
+                            get: { AppState.shared.liveTranscriptionEnabled },
+                            set: { AppState.shared.liveTranscriptionEnabled = $0 }
+                        ))
+                            .toggleStyle(.switch)
+                            .tint(WhispererColors.accent)
+                            .labelsHidden()
+                    }
+                }
             }
         }
     }

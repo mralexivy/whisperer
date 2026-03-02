@@ -58,6 +58,11 @@ class AppState: ObservableObject {
             UserDefaults.standard.set(muteOtherAudioDuringRecording, forKey: "muteOtherAudioDuringRecording")
         }
     }
+    @Published var liveTranscriptionEnabled: Bool = true {  // Show live transcription preview during recording
+        didSet {
+            UserDefaults.standard.set(liveTranscriptionEnabled, forKey: "liveTranscriptionEnabled")
+        }
+    }
 
     // System-wide dictation opt-in (default OFF for App Store compliance)
     @Published var systemWideDictationEnabled: Bool = false {
@@ -144,6 +149,11 @@ class AppState: ObservableObject {
         // Load mute preference (default true if not set)
         if UserDefaults.standard.object(forKey: "muteOtherAudioDuringRecording") != nil {
             muteOtherAudioDuringRecording = UserDefaults.standard.bool(forKey: "muteOtherAudioDuringRecording")
+        }
+
+        // Load live transcription preference (default true if not set)
+        if UserDefaults.standard.object(forKey: "liveTranscriptionEnabled") != nil {
+            liveTranscriptionEnabled = UserDefaults.standard.bool(forKey: "liveTranscriptionEnabled")
         }
 
         // Load language preference (default English)
@@ -435,7 +445,9 @@ class AppState: ObservableObject {
                 streamingTranscriber = StreamingTranscriber(whisperBridge: bridge, vad: sileroVAD, language: selectedLanguage)
                 streamingTranscriber?.start { [weak self] text in
                     Task { @MainActor in
-                        self?.liveTranscription = text
+                        if self?.liveTranscriptionEnabled == true {
+                            self?.liveTranscription = text
+                        }
                     }
                 }
 
@@ -536,7 +548,9 @@ class AppState: ObservableObject {
                 streamingTranscriber = StreamingTranscriber(whisperBridge: bridge, vad: sileroVAD, language: selectedLanguage)
                 streamingTranscriber?.start { [weak self] text in
                     Task { @MainActor in
-                        self?.liveTranscription = text
+                        if self?.liveTranscriptionEnabled == true {
+                            self?.liveTranscription = text
+                        }
                     }
                 }
                 print("✅ Streaming transcriber initialized (VAD: \(sileroVAD != nil ? "enabled" : "disabled"))")
