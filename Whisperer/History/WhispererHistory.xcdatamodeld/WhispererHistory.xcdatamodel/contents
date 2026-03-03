@@ -26,6 +26,7 @@
         <attribute name="modelUsed" attributeType="String"/>
         <attribute name="notes" optional="YES" attributeType="String"/>
         <attribute name="timestamp" attributeType="Date" usesScalarValueType="NO"/>
+        <attribute name="targetAppName" optional="YES" attributeType="String"/>
         <attribute name="transcription" attributeType="String"/>
         <attribute name="wordCount" attributeType="Integer 32" defaultValueString="0" usesScalarValueType="YES"/>
     </entity>

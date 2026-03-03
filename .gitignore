@@ -43,6 +43,9 @@ Carthage/Build/
 *.dSYM
 *.zip
 
+# whisper.cpp bindings build artifacts
+whisper.cpp/bindings/java/bin/
+
 # fastlane
 fastlane/report.xml
 fastlane/Preview.html

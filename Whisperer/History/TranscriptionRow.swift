@@ -98,8 +98,11 @@ struct TranscriptionRow: View {
                         .lineSpacing(3)
                         .fixedSize(horizontal: false, vertical: true)
 
-                    // Bottom metadata: wpm · words · Language
+                    // Bottom metadata: wpm · words · Language · source
                     HStack(spacing: 10) {
+                        if transcription.targetAppName == "File Import" {
+                            metadataPill(icon: "doc.text", text: "File", color: .purple)
+                        }
                         metadataPill(icon: "speedometer", text: "\(transcription.wordsPerMinute) wpm", color: .orange)
                         metadataPill(icon: "text.word.spacing", text: "\(transcription.wordCount) words", color: WhispererColors.accentBlue)
                         metadataPill(icon: "globe", text: languageDisplay, color: .red)

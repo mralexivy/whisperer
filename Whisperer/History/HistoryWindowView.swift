@@ -87,6 +87,8 @@ enum TimeFormatSetting: String, CaseIterable {
 
 enum HistorySidebarItem: String, CaseIterable, Identifiable {
     case transcriptions = "Transcriptions"
+    case fileTranscription = "File Transcription"
+    case statistics = "Statistics"
     case dictionary = "Dictionary"
     case settings = "Settings"
 
@@ -95,6 +97,8 @@ enum HistorySidebarItem: String, CaseIterable, Identifiable {
     var icon: String {
         switch self {
         case .transcriptions: return "waveform.and.mic"
+        case .fileTranscription: return "doc.text.magnifyingglass"
+        case .statistics: return "chart.bar.fill"
         case .dictionary: return "book.closed"
         case .settings: return "gearshape"
         }
@@ -103,6 +107,8 @@ enum HistorySidebarItem: String, CaseIterable, Identifiable {
     var color: Color {
         switch self {
         case .transcriptions: return WhispererColors.accentBlue
+        case .fileTranscription: return .purple
+        case .statistics: return .green
         case .dictionary: return .red
         case .settings: return .orange
         }
@@ -134,6 +140,10 @@ struct HistoryWindowView: View {
                 switch selectedSidebarItem {
                 case .transcriptions:
                     TranscriptionsView()
+                case .fileTranscription:
+                    FileTranscriptionView()
+                case .statistics:
+                    StatisticsView()
                 case .dictionary:
                     DictionaryView()
                 case .settings:
@@ -1445,6 +1455,7 @@ struct HistorySettingsView: View {
 struct SettingsCard<Content: View>: View {
     let colorScheme: ColorScheme
     var borderColor: Color? = nil
+    var fillHeight: Bool = false
     @ViewBuilder let content: () -> Content
 
     @State private var isHovered = false
@@ -1452,7 +1463,7 @@ struct SettingsCard<Content: View>: View {
     var body: some View {
         content()
             .padding(20)
-            .frame(maxWidth: .infinity, alignment: .leading)
+            .frame(maxWidth: .infinity, maxHeight: fillHeight ? .infinity : nil, alignment: .topLeading)
             .background(
                 RoundedRectangle(cornerRadius: 14)
                     .fill(isHovered ? WhispererColors.elevatedBackground(colorScheme).opacity(0.3) : WhispererColors.cardBackground(colorScheme))

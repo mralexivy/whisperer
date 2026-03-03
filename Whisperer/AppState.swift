@@ -7,6 +7,7 @@
 
 import Foundation
 import Combine
+import AppKit
 
 enum RecordingState: Equatable {
     case idle
@@ -113,6 +114,9 @@ class AppState: ObservableObject {
 
     // Pre-loaded WhisperBridge - keeps model in memory for instant recording start
     private var whisperBridge: WhisperBridge?
+
+    /// Read-only access to the pre-loaded WhisperBridge for file transcription
+    var fileTranscriptionBridge: WhisperBridge? { whisperBridge }
     private var loadedModel: WhisperModel? = nil
     @Published var isModelLoaded: Bool = false
 
@@ -124,6 +128,7 @@ class AppState: ObservableObject {
     private var streamingTranscriber: StreamingTranscriber?
 
     private var currentAudioURL: URL?
+    private var lastTargetAppName: String?
 
     // Model path for selected model
     private var modelPath: URL {
@@ -521,6 +526,12 @@ class AppState: ObservableObject {
 
         // Capture the frontmost app BEFORE our overlay steals focus
         textInjector?.captureTargetApp()
+        if let frontApp = NSWorkspace.shared.frontmostApplication,
+           frontApp.bundleIdentifier != Bundle.main.bundleIdentifier {
+            lastTargetAppName = frontApp.localizedName
+        } else {
+            lastTargetAppName = nil
+        }
 
         // INSTANT: Set state immediately so overlay appears right away
         state = .recording(startTime: Date())
@@ -680,7 +691,8 @@ class AppState: ObservableObject {
                         duration: transcriber.recordedDuration,
                         language: selectedLanguage.rawValue,
                         modelUsed: selectedModel.rawValue,
-                        corrections: DictionaryManager.shared.lastCorrections
+                        corrections: DictionaryManager.shared.lastCorrections,
+                        targetAppName: self.lastTargetAppName
                     )
                     try await HistoryManager.shared.saveTranscription(record)
                     Logger.debug("Transcription saved to history database", subsystem: .app)

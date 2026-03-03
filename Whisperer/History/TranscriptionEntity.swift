@@ -25,6 +25,7 @@ public class TranscriptionEntity: NSManagedObject {
     @NSManaged public var createdAt: Date
     @NSManaged public var lastModifiedAt: Date
     @NSManaged public var correctionsData: Data?
+    @NSManaged public var targetAppName: String?
 
     // Computed properties
     var displayText: String {
@@ -77,7 +78,7 @@ extension TranscriptionEntity {
 // MARK: - Convenience Initializer
 
 extension TranscriptionEntity {
-    static func create(in context: NSManagedObjectContext, transcription: String, audioFileURL: String?, duration: Double, language: String, modelUsed: String, corrections: [AppliedCorrection] = []) -> TranscriptionEntity {
+    static func create(in context: NSManagedObjectContext, transcription: String, audioFileURL: String?, duration: Double, language: String, modelUsed: String, corrections: [AppliedCorrection] = [], targetAppName: String? = nil) -> TranscriptionEntity {
         let entity = TranscriptionEntity(context: context)
         let now = Date()
 
@@ -96,6 +97,7 @@ extension TranscriptionEntity {
         entity.createdAt = now
         entity.lastModifiedAt = now
         entity.corrections = corrections
+        entity.targetAppName = targetAppName
 
         return entity
     }

@@ -41,7 +41,8 @@ class HistoryManager: ObservableObject {
                 duration: record.duration,
                 language: record.language,
                 modelUsed: record.modelUsed,
-                corrections: record.corrections
+                corrections: record.corrections,
+                targetAppName: record.targetAppName
             )
 
             do {
@@ -53,6 +54,8 @@ class HistoryManager: ObservableObject {
 
         await loadTranscriptions()
         await updateStatistics()
+
+        NotificationCenter.default.post(name: NSNotification.Name("TranscriptionSaved"), object: nil)
     }
 
     // MARK: - Read
