@@ -1211,6 +1211,49 @@ struct SettingsTabView: View {
                     }
                 }
 
+                // Prompt Words
+                settingsCard(title: "Prompt Words", icon: "text.word.spacing", color: .cyan) {
+                    VStack(alignment: .leading, spacing: 10) {
+                        HStack {
+                            VStack(alignment: .leading, spacing: 3) {
+                                Text("Recognition hints")
+                                    .font(.system(size: 13, weight: .medium))
+                                    .foregroundColor(MBColors.textPrimary)
+                                Text("Bias transcription toward specific words (\(appState.promptWords.count) words)")
+                                    .font(.system(size: 11))
+                                    .foregroundColor(MBColors.textSecondary)
+                            }
+
+                            Spacer()
+
+                            Toggle("", isOn: $appState.promptWordsEnabled)
+                                .toggleStyle(.switch)
+                                .tint(MBColors.accent)
+                                .labelsHidden()
+                        }
+
+                        if !appState.promptWords.isEmpty && appState.promptWordsEnabled {
+                            FlowLayout(spacing: 5) {
+                                ForEach(appState.promptWords.prefix(12), id: \.self) { word in
+                                    Text(word)
+                                        .font(.system(size: 10, weight: .medium))
+                                        .foregroundColor(MBColors.textSecondary)
+                                        .padding(.horizontal, 7)
+                                        .padding(.vertical, 3)
+                                        .background(Capsule().fill(MBColors.accent.opacity(0.12)))
+                                }
+                                if appState.promptWords.count > 12 {
+                                    Text("+\(appState.promptWords.count - 12) more")
+                                        .font(.system(size: 10, weight: .medium))
+                                        .foregroundColor(MBColors.textTertiary)
+                                        .padding(.horizontal, 7)
+                                        .padding(.vertical, 3)
+                                }
+                            }
+                        }
+                    }
+                }
+
                 // Launch at Login
                 settingsCard(title: "Launch at Login", icon: "arrow.right.to.line", color: .cyan) {
                     HStack {

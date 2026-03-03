@@ -438,6 +438,7 @@ class WhisperBridge {
         // Context carrying: use previous transcription as prompt for better continuity
         if let prompt = initialPrompt, !prompt.isEmpty {
             wparams.no_context = false  // Enable context usage
+            Logger.debug("Initial prompt: '\(prompt.prefix(100))'", subsystem: .transcription)
         } else {
             wparams.no_context = true
         }

@@ -74,17 +74,21 @@ class StreamingTranscriber {
     // Language for transcription
     private var language: TranscriptionLanguage
 
+    // Prompt words for whisper.cpp initial_prompt (biases recognition toward specific vocabulary)
+    private var initialPrompt: String?
+
     // Periodic re-transcription timer
     private var reTranscriptionTask: Task<Void, Never>?
     private var isStopped: Bool = false
     private let firstRetranscriptionDelay: UInt64 = 1_500_000_000  // 1.5s
     private let retranscriptionInterval: UInt64 = 2_000_000_000    // 2.0s
 
-    /// Initialize with a pre-loaded WhisperBridge, optional VAD, and language setting
-    init(whisperBridge: WhisperBridge, vad: SileroVAD? = nil, language: TranscriptionLanguage = .english) {
+    /// Initialize with a pre-loaded WhisperBridge, optional VAD, language setting, and prompt words
+    init(whisperBridge: WhisperBridge, vad: SileroVAD? = nil, language: TranscriptionLanguage = .english, initialPrompt: String? = nil) {
         self.whisper = whisperBridge
         self.vad = vad
         self.language = language
+        self.initialPrompt = initialPrompt
     }
 
     /// Start streaming transcription with periodic re-transcription
@@ -179,9 +183,9 @@ class StreamingTranscriber {
         let duration = Double(samples.count) / sampleRate
         Logger.debug("Re-transcribing \(String(format: "%.1f", duration))s of audio...", subsystem: .transcription)
 
-        // Re-transcribe ALL audio — singleSegment:false, no initialPrompt, no maxTokens limit
+        // Re-transcribe ALL audio — singleSegment:false, no maxTokens limit
         // This matches the final pass parameters for maximum accuracy
-        whisper.transcribeAsync(samples: samples, language: language) { [weak self] text in
+        whisper.transcribeAsync(samples: samples, initialPrompt: initialPrompt, language: language) { [weak self] text in
             guard let self = self else { return }
             defer { self.isProcessing = false }
 
@@ -321,6 +325,7 @@ class StreamingTranscriber {
         // Full re-transcription of the complete recording
         let rawText = whisper.transcribe(
             samples: allSamples,
+            initialPrompt: initialPrompt,
             language: language
         )
 

@@ -173,12 +173,19 @@ class FileTranscriptionManager: ObservableObject {
 
                     let context: String? = accumulatedText.isEmpty ? nil : String(accumulatedText.suffix(self.contextMaxLength))
 
+                    // Prepend prompt words to context for improved recognition
+                    let promptPrefix = await AppState.shared.promptWordsString
+                    let combinedPrompt: String? = {
+                        let parts = [promptPrefix, context].compactMap { $0 }
+                        return parts.isEmpty ? nil : parts.joined(separator: " ")
+                    }()
+
                     // Transcribe on background thread — whisperBridge.transcribe() is blocking
                     let text = await Task.detached(priority: .userInitiated) { [weak self] () -> String in
                         guard self != nil else { return "" }
                         return bridge.transcribe(
                             samples: chunkData,
-                            initialPrompt: context,
+                            initialPrompt: combinedPrompt,
                             language: language,
                             singleSegment: false
                         )

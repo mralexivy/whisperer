@@ -7,6 +7,25 @@
 
 import SwiftUI
 
+private enum DictionaryTab: String, CaseIterable {
+    case corrections = "Corrections"
+    case promptWords = "Prompt Words"
+
+    var icon: String {
+        switch self {
+        case .corrections: return "book.closed.fill"
+        case .promptWords: return "text.word.spacing"
+        }
+    }
+
+    var color: Color {
+        switch self {
+        case .corrections: return WhispererColors.accentBlue
+        case .promptWords: return .cyan
+        }
+    }
+}
+
 struct DictionaryView: View {
     @Environment(\.colorScheme) var colorScheme
     @ObservedObject var dictionaryManager = DictionaryManager.shared
@@ -18,6 +37,7 @@ struct DictionaryView: View {
     @State private var displayLimit = 50
     @State private var showDropdown = false
     @State private var detailPanelWidth: CGFloat = 420
+    @State private var selectedTab: DictionaryTab = .corrections
     private let minDetailWidth: CGFloat = 320
     private let maxDetailWidth: CGFloat = 600
     @Namespace private var scrollNamespace
@@ -63,48 +83,54 @@ struct DictionaryView: View {
                 VStack(spacing: 0) {
                     headerView
 
-                    Group {
-                        DictionaryPacksView(selectedPackId: $selectedPackId, showDropdown: $showDropdown)
-                        toolbarView
-                        entryList
+                    switch selectedTab {
+                    case .corrections:
+                        Group {
+                            DictionaryPacksView(selectedPackId: $selectedPackId, showDropdown: $showDropdown)
+                            toolbarView
+                            entryList
+                        }
+                        .opacity(dictionaryManager.isEnabled ? 1.0 : 0.4)
+                        .allowsHitTesting(dictionaryManager.isEnabled)
+                        .animation(.easeInOut(duration: 0.2), value: dictionaryManager.isEnabled)
+
+                    case .promptWords:
+                        PromptWordsSection()
                     }
+                }
+                .frame(minWidth: 400, maxWidth: .infinity)
+
+                // Right panel (only for corrections tab)
+                if selectedTab == .corrections, let entry = selectedEntry {
+                    ResizableDivider(colorScheme: colorScheme) { delta in
+                        let newWidth = detailPanelWidth - delta
+                        detailPanelWidth = min(max(newWidth, minDetailWidth), maxDetailWidth)
+                    }
+                    EntryDetailView(
+                        entry: entry,
+                        onClose: { selectedEntry = nil },
+                        onUpdate: { updated in
+                            Task {
+                                try? await dictionaryManager.updateEntry(updated)
+                            }
+                        },
+                        onDelete: {
+                            Task {
+                                try? await dictionaryManager.deleteEntry(entry)
+                                selectedEntry = nil
+                            }
+                        }
+                    )
+                    .id(entry.id)
+                    .frame(width: detailPanelWidth)
                     .opacity(dictionaryManager.isEnabled ? 1.0 : 0.4)
                     .allowsHitTesting(dictionaryManager.isEnabled)
                     .animation(.easeInOut(duration: 0.2), value: dictionaryManager.isEnabled)
                 }
-                .frame(minWidth: 400, maxWidth: .infinity)
-
-                // Right panel
-                if let entry = selectedEntry {
-                ResizableDivider(colorScheme: colorScheme) { delta in
-                    let newWidth = detailPanelWidth - delta
-                    detailPanelWidth = min(max(newWidth, minDetailWidth), maxDetailWidth)
-                }
-                EntryDetailView(
-                    entry: entry,
-                    onClose: { selectedEntry = nil },
-                    onUpdate: { updated in
-                        Task {
-                            try? await dictionaryManager.updateEntry(updated)
-                        }
-                    },
-                    onDelete: {
-                        Task {
-                            try? await dictionaryManager.deleteEntry(entry)
-                            selectedEntry = nil
-                        }
-                    }
-                )
-                .id(entry.id)
-                .frame(width: detailPanelWidth)
-                .opacity(dictionaryManager.isEnabled ? 1.0 : 0.4)
-                .allowsHitTesting(dictionaryManager.isEnabled)
-                .animation(.easeInOut(duration: 0.2), value: dictionaryManager.isEnabled)
-            }
             }
 
-            // Dropdown overlay - on top of everything
-            if showDropdown {
+            // Dropdown overlay - on top of everything (corrections tab only)
+            if selectedTab == .corrections, showDropdown {
                 PackDropdownOverlay(
                     selectedPackId: $selectedPackId,
                     showDropdown: $showDropdown,
@@ -127,24 +153,21 @@ struct DictionaryView: View {
         .onChange(of: dictionaryManager.selectedEntryId) { newValue in
             // When an entry is selected from correction popover, highlight it
             if let entryId = newValue {
-                // Clear any active filters/search to ensure entry is visible
+                selectedTab = .corrections
                 searchText = ""
 
-                // Find the entry
                 if let entry = dictionaryManager.entries.first(where: { $0.id == entryId }) {
                     withAnimation(.spring(response: 0.3)) {
                         selectedEntry = entry
                         highlightedEntryId = entryId
                     }
 
-                    // Clear highlight after 2 seconds
                     DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
                         withAnimation {
                             highlightedEntryId = nil
                         }
                     }
 
-                    // Clear the navigation state
                     DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
                         dictionaryManager.selectedEntryId = nil
                     }
@@ -158,14 +181,14 @@ struct DictionaryView: View {
     private var headerView: some View {
         VStack(spacing: 0) {
             HStack(spacing: 14) {
-                // Icon — blue-purple gradient fill with shadow
+                // Icon — changes based on selected tab
                 ZStack {
                     RoundedRectangle(cornerRadius: 12)
                         .fill(
                             LinearGradient(
                                 colors: [
-                                    WhispererColors.accentBlue.opacity(0.18),
-                                    WhispererColors.accentPurple.opacity(0.10)
+                                    selectedTab.color.opacity(0.18),
+                                    selectedTab.color.opacity(0.10)
                                 ],
                                 startPoint: .topLeading,
                                 endPoint: .bottomTrailing
@@ -174,19 +197,13 @@ struct DictionaryView: View {
                         .frame(width: 44, height: 44)
                         .overlay(
                             RoundedRectangle(cornerRadius: 12)
-                                .stroke(WhispererColors.accentBlue.opacity(0.2), lineWidth: 0.5)
+                                .stroke(selectedTab.color.opacity(0.2), lineWidth: 0.5)
                         )
-                        .shadow(color: WhispererColors.accentBlue.opacity(0.1), radius: 6, y: 2)
+                        .shadow(color: selectedTab.color.opacity(0.1), radius: 6, y: 2)
 
-                    Image(systemName: "book.closed.fill")
+                    Image(systemName: selectedTab.icon)
                         .font(.system(size: 18))
-                        .foregroundStyle(
-                            LinearGradient(
-                                colors: [WhispererColors.accentBlue, WhispererColors.accentPurple],
-                                startPoint: .top,
-                                endPoint: .bottom
-                            )
-                        )
+                        .foregroundColor(selectedTab.color)
                 }
 
                 VStack(alignment: .leading, spacing: 2) {
@@ -194,27 +211,98 @@ struct DictionaryView: View {
                         .font(.system(size: 20, weight: .bold, design: .rounded))
                         .foregroundColor(WhispererColors.primaryText(colorScheme))
 
-                    Text("\(dictionaryManager.entries.count) corrections from \(dictionaryManager.packs.filter { $0.isEnabled }.count) packs")
+                    Text(headerSubtitle)
                         .font(.system(size: 12, weight: .regular))
                         .foregroundColor(WhispererColors.secondaryText(colorScheme))
                 }
 
                 Spacer()
 
-                // Global toggle with label
+                // Toggle — dictionary enabled or prompt words enabled based on tab
                 HStack(spacing: 8) {
-                    Text(dictionaryManager.isEnabled ? "Active" : "Disabled")
-                        .font(.system(size: 12, weight: .medium))
-                        .foregroundColor(dictionaryManager.isEnabled ? WhispererColors.accent : WhispererColors.secondaryText(colorScheme))
+                    if selectedTab == .corrections {
+                        Text(dictionaryManager.isEnabled ? "Active" : "Disabled")
+                            .font(.system(size: 12, weight: .medium))
+                            .foregroundColor(dictionaryManager.isEnabled ? WhispererColors.accent : WhispererColors.secondaryText(colorScheme))
 
-                    Toggle("", isOn: $dictionaryManager.isEnabled)
+                        Toggle("", isOn: $dictionaryManager.isEnabled)
+                            .toggleStyle(.switch)
+                            .tint(WhispererColors.accent)
+                            .labelsHidden()
+                    } else {
+                        Text(AppState.shared.promptWordsEnabled ? "Active" : "Disabled")
+                            .font(.system(size: 12, weight: .medium))
+                            .foregroundColor(AppState.shared.promptWordsEnabled ? .cyan : WhispererColors.secondaryText(colorScheme))
+
+                        Toggle("", isOn: Binding(
+                            get: { AppState.shared.promptWordsEnabled },
+                            set: { AppState.shared.promptWordsEnabled = $0 }
+                        ))
                         .toggleStyle(.switch)
-                        .tint(WhispererColors.accent)
+                        .tint(.cyan)
                         .labelsHidden()
+                    }
                 }
             }
             .padding(.horizontal, 20)
             .padding(.vertical, 16)
+
+            // Centered tab bar — icon left, label right
+            HStack(spacing: 0) {
+                Spacer()
+                HStack(spacing: 6) {
+                    ForEach(DictionaryTab.allCases, id: \.self) { tab in
+                        let isSelected = selectedTab == tab
+                        Button(action: {
+                            withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+                                selectedTab = tab
+                            }
+                        }) {
+                            HStack(spacing: 8) {
+                                Image(systemName: tab.icon)
+                                    .font(.system(size: 18, weight: .medium))
+                                    .foregroundColor(isSelected ? tab.color : WhispererColors.tertiaryText(colorScheme))
+
+                                Text(tab.rawValue)
+                                    .font(.system(size: 14, weight: isSelected ? .semibold : .medium))
+                                    .foregroundColor(isSelected ? WhispererColors.primaryText(colorScheme) : WhispererColors.tertiaryText(colorScheme))
+                            }
+                            .padding(.horizontal, 24)
+                            .padding(.vertical, 12)
+                            .contentShape(RoundedRectangle(cornerRadius: 12))
+                            .background(
+                                RoundedRectangle(cornerRadius: 12)
+                                    .fill(isSelected ? tab.color.opacity(0.12) : Color.clear)
+                            )
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 12)
+                                    .stroke(isSelected ? tab.color.opacity(0.2) : Color.clear, lineWidth: 1)
+                            )
+                        }
+                        .buttonStyle(.plain)
+                        .onHover { hovering in
+                            if hovering {
+                                NSCursor.pointingHand.push()
+                            } else {
+                                NSCursor.pop()
+                            }
+                        }
+                    }
+                }
+                .padding(4)
+                .background(
+                    RoundedRectangle(cornerRadius: 14)
+                        .fill(WhispererColors.cardBackground(colorScheme))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 14)
+                                .stroke(WhispererColors.border(colorScheme), lineWidth: 1)
+                        )
+                        .shadow(color: Color.black.opacity(0.1), radius: 4, y: 2)
+                )
+                Spacer()
+            }
+            .padding(.horizontal, 20)
+            .padding(.bottom, 14)
 
             // Gradient separator
             Rectangle()
@@ -232,6 +320,16 @@ struct DictionaryView: View {
                 .frame(height: 1)
         }
         .background(WhispererColors.background(colorScheme))
+    }
+
+    private var headerSubtitle: String {
+        switch selectedTab {
+        case .corrections:
+            return "\(dictionaryManager.entries.count) corrections from \(dictionaryManager.packs.filter { $0.isEnabled }.count) packs"
+        case .promptWords:
+            let count = AppState.shared.promptWords.count
+            return count == 0 ? "No prompt words configured" : "\(count) words configured"
+        }
     }
 
     // MARK: - Toolbar

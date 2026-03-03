@@ -65,6 +65,34 @@ class AppState: ObservableObject {
         }
     }
 
+    // Prompt words — biases whisper toward recognizing specific vocabulary during transcription
+    @Published var promptWords: [String] = [] {
+        didSet {
+            UserDefaults.standard.set(promptWords, forKey: "promptWords")
+        }
+    }
+    @Published var promptWordsEnabled: Bool = true {
+        didSet {
+            UserDefaults.standard.set(promptWordsEnabled, forKey: "promptWordsEnabled")
+        }
+    }
+
+    /// Assembled prompt words string for whisper.cpp initial_prompt.
+    /// Formatted as a simple comma-separated list — whisper treats this as "previous context"
+    /// and biases recognition toward these words.
+    var promptWordsString: String? {
+        guard promptWordsEnabled, !promptWords.isEmpty else { return nil }
+        return promptWords.joined(separator: ", ")
+    }
+
+    /// Approximate token count for prompt words (word count as rough estimate)
+    var promptWordsTokenCount: Int {
+        promptWords.reduce(0) { $0 + $1.split(separator: " ").count }
+    }
+
+    /// Maximum recommended word count (conservative limit under 244 tokens)
+    static let maxPromptWordsTokens = 200
+
     // System-wide dictation opt-in (default OFF for App Store compliance)
     @Published var systemWideDictationEnabled: Bool = false {
         didSet {
@@ -178,6 +206,14 @@ class AppState: ObservableObject {
             _hasCompletedOnboarding = Published(wrappedValue: UserDefaults.standard.bool(forKey: "hasCompletedOnboarding"))
         }
 
+        // Load prompt words
+        if let savedPromptWords = UserDefaults.standard.stringArray(forKey: "promptWords") {
+            _promptWords = Published(wrappedValue: savedPromptWords)
+        }
+        if UserDefaults.standard.object(forKey: "promptWordsEnabled") != nil {
+            _promptWordsEnabled = Published(wrappedValue: UserDefaults.standard.bool(forKey: "promptWordsEnabled"))
+        }
+
         // Start monitoring audio device changes
         audioDeviceManager.startMonitoring()
 
@@ -194,6 +230,37 @@ class AppState: ObservableObject {
                     self.audioRecorder?.selectedDeviceID = nil
                 }
             }
+    }
+
+    // MARK: - Prompt Words
+
+    /// Add a prompt word if under the token limit. Returns false if rejected (duplicate, empty, or over limit).
+    func addPromptWord(_ word: String) -> Bool {
+        let trimmed = word.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return false }
+
+        // Check for duplicates (case-insensitive)
+        guard !promptWords.contains(where: { $0.caseInsensitiveCompare(trimmed) == .orderedSame }) else {
+            Logger.debug("Prompt word '\(trimmed)' already exists", subsystem: .transcription)
+            return false
+        }
+
+        // Check token limit
+        let newTokenCount = promptWordsTokenCount + trimmed.split(separator: " ").count
+        guard newTokenCount <= Self.maxPromptWordsTokens else {
+            Logger.warning("Prompt word limit reached (\(promptWordsTokenCount)/\(Self.maxPromptWordsTokens))", subsystem: .transcription)
+            return false
+        }
+
+        promptWords.append(trimmed)
+        Logger.info("Added prompt word: '\(trimmed)' (\(promptWordsTokenCount)/\(Self.maxPromptWordsTokens) words)", subsystem: .transcription)
+        return true
+    }
+
+    /// Remove a prompt word by value
+    func removePromptWord(_ word: String) {
+        promptWords.removeAll { $0 == word }
+        Logger.debug("Removed prompt word: '\(word)'", subsystem: .transcription)
     }
 
     // MARK: - Model Selection
@@ -439,7 +506,7 @@ class AppState: ObservableObject {
 
         Task {
             do {
-                streamingTranscriber = StreamingTranscriber(whisperBridge: bridge, vad: sileroVAD, language: selectedLanguage)
+                streamingTranscriber = StreamingTranscriber(whisperBridge: bridge, vad: sileroVAD, language: selectedLanguage, initialPrompt: promptWordsString)
                 streamingTranscriber?.start { [weak self] text in
                     Task { @MainActor in
                         if self?.liveTranscriptionEnabled == true {
@@ -544,7 +611,7 @@ class AppState: ObservableObject {
         Task {
             do {
                 // Create streaming transcriber with pre-loaded bridge, optional VAD, and language
-                streamingTranscriber = StreamingTranscriber(whisperBridge: bridge, vad: sileroVAD, language: selectedLanguage)
+                streamingTranscriber = StreamingTranscriber(whisperBridge: bridge, vad: sileroVAD, language: selectedLanguage, initialPrompt: promptWordsString)
                 streamingTranscriber?.start { [weak self] text in
                     Task { @MainActor in
                         if self?.liveTranscriptionEnabled == true {
