@@ -435,12 +435,13 @@ class WhisperBridge {
         // Prevents hallucination spirals where whisper generates 100+ repeated tokens
         wparams.max_tokens = maxTokens
 
-        // Context carrying: use previous transcription as prompt for better continuity
+        // Always start fresh — streaming mode re-transcribes ALL audio each call,
+        // so carrying decoder state between calls degrades quality.
+        // initial_prompt (prompt words) still works with no_context=true because
+        // whisper.cpp adds initial_prompt tokens AFTER clearing prompt_past.
+        wparams.no_context = true
         if let prompt = initialPrompt, !prompt.isEmpty {
-            wparams.no_context = false  // Enable context usage
             Logger.debug("Initial prompt: '\(prompt.prefix(100))'", subsystem: .transcription)
-        } else {
-            wparams.no_context = true
         }
 
         // Helper to run transcription with current wparams

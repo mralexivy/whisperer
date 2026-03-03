@@ -88,8 +88,8 @@ enum TimeFormatSetting: String, CaseIterable {
 enum HistorySidebarItem: String, CaseIterable, Identifiable {
     case transcriptions = "Transcriptions"
     case fileTranscription = "File Transcription"
-    case statistics = "Statistics"
     case dictionary = "Dictionary"
+    case statistics = "Statistics"
     case settings = "Settings"
 
     var id: String { rawValue }
@@ -98,7 +98,7 @@ enum HistorySidebarItem: String, CaseIterable, Identifiable {
         switch self {
         case .transcriptions: return "waveform.and.mic"
         case .fileTranscription: return "doc.text.magnifyingglass"
-        case .statistics: return "chart.bar.fill"
+        case .statistics: return "chart.xyaxis.line"
         case .dictionary: return "book.closed"
         case .settings: return "gearshape"
         }
@@ -108,7 +108,7 @@ enum HistorySidebarItem: String, CaseIterable, Identifiable {
         switch self {
         case .transcriptions: return WhispererColors.accentBlue
         case .fileTranscription: return .purple
-        case .statistics: return .green
+        case .statistics: return .cyan
         case .dictionary: return .red
         case .settings: return .orange
         }

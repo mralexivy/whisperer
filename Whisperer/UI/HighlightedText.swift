@@ -380,7 +380,6 @@ struct FlowLayout: Layout {
         for subview in subviews {
             let idealSize = subview.sizeThatFits(.unspecified)
 
-            // If the item is wider than the container, constrain it so Text can wrap
             let size: CGSize
             if idealSize.width > maxWidth {
                 size = subview.sizeThatFits(ProposedViewSize(width: maxWidth, height: nil))
@@ -388,14 +387,12 @@ struct FlowLayout: Layout {
                 size = idealSize
             }
 
-            // Check if we need to wrap to next line
             if currentX + size.width > maxWidth && currentX > 0 {
                 currentX = 0
                 currentY += lineHeight + lineSpacing
                 lineHeight = 0
             }
 
-            // If still wider than remaining space, constrain to remaining width
             let availableWidth = maxWidth - currentX
             let finalSize: CGSize
             if size.width > availableWidth && availableWidth > 0 {

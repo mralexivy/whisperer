@@ -6,6 +6,7 @@
 //
 
 import SwiftUI
+import AVFoundation
 
 struct TranscriptionDetailView: View {
     @Environment(\.colorScheme) var colorScheme
@@ -15,6 +16,7 @@ struct TranscriptionDetailView: View {
     @State private var editedText: String
     @State private var notes: String
     @State private var isEditing = false
+    @State private var isRetranscribing = false
 
     init(transcription: TranscriptionRecord, onClose: @escaping () -> Void) {
         self.transcription = transcription
@@ -155,41 +157,49 @@ struct TranscriptionDetailView: View {
 
                 Spacer()
 
-                Button(action: {
-                    if isEditing {
-                        saveChanges()
+                HStack(spacing: 8) {
+                    // Re-transcribe button — only when audio exists and not editing
+                    if transcription.audioURL != nil && !isEditing {
+                        RetranscribeButton(isRetranscribing: isRetranscribing, colorScheme: colorScheme, action: retranscribe)
+                            .help("Re-transcribe with current model and settings")
                     }
-                    withAnimation(.spring(response: 0.3)) {
-                        isEditing.toggle()
+
+                    Button(action: {
+                        if isEditing {
+                            saveChanges()
+                        }
+                        withAnimation(.spring(response: 0.3)) {
+                            isEditing.toggle()
+                        }
+                    }) {
+                        HStack(spacing: 5) {
+                            Image(systemName: isEditing ? "checkmark" : "pencil")
+                                .font(.system(size: 10, weight: .semibold))
+                            Text(isEditing ? "Save" : "Edit")
+                                .font(.system(size: 12, weight: .medium))
+                        }
+                        .foregroundColor(isEditing ? .white : WhispererColors.primaryText(colorScheme))
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 7)
+                        .background(
+                            Capsule()
+                                .fill(
+                                    isEditing
+                                        ? AnyShapeStyle(WhispererColors.accentGradient)
+                                        : AnyShapeStyle(WhispererColors.elevatedBackground(colorScheme))
+                                )
+                        )
+                        .overlay(
+                            Capsule()
+                                .stroke(isEditing ? Color.clear : WhispererColors.border(colorScheme), lineWidth: 0.5)
+                        )
+                        .shadow(
+                            color: isEditing ? WhispererColors.accentBlue.opacity(0.25) : Color.clear,
+                            radius: 4, y: 1
+                        )
                     }
-                }) {
-                    HStack(spacing: 5) {
-                        Image(systemName: isEditing ? "checkmark" : "pencil")
-                            .font(.system(size: 10, weight: .semibold))
-                        Text(isEditing ? "Save" : "Edit")
-                            .font(.system(size: 12, weight: .medium))
-                    }
-                    .foregroundColor(isEditing ? .white : WhispererColors.primaryText(colorScheme))
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 7)
-                    .background(
-                        Capsule()
-                            .fill(
-                                isEditing
-                                    ? AnyShapeStyle(WhispererColors.accentGradient)
-                                    : AnyShapeStyle(WhispererColors.elevatedBackground(colorScheme))
-                            )
-                    )
-                    .overlay(
-                        Capsule()
-                            .stroke(isEditing ? Color.clear : WhispererColors.border(colorScheme), lineWidth: 0.5)
-                    )
-                    .shadow(
-                        color: isEditing ? WhispererColors.accentBlue.opacity(0.25) : Color.clear,
-                        radius: 4, y: 1
-                    )
+                    .buttonStyle(.plain)
                 }
-                .buttonStyle(.plain)
             }
 
             if isEditing {
@@ -388,6 +398,75 @@ struct TranscriptionDetailView: View {
         }
     }
 
+    private func retranscribe() {
+        guard let audioURL = transcription.audioURL else { return }
+        guard let bridge = AppState.shared.fileTranscriptionBridge else {
+            Logger.warning("Cannot re-transcribe: model not loaded", subsystem: .transcription)
+            return
+        }
+        guard AppState.shared.state == .idle else {
+            Logger.warning("Cannot re-transcribe: recording in progress", subsystem: .transcription)
+            return
+        }
+
+        isRetranscribing = true
+
+        Task.detached(priority: .userInitiated) { [weak bridge] in
+            guard let bridge = bridge else {
+                await MainActor.run { isRetranscribing = false }
+                return
+            }
+
+            do {
+                // Load audio samples from saved WAV file (already 16kHz mono Float32)
+                let audioFile = try AVAudioFile(forReading: audioURL)
+                let frameCount = AVAudioFrameCount(audioFile.length)
+                guard frameCount > 0,
+                      let buffer = AVAudioPCMBuffer(pcmFormat: audioFile.processingFormat, frameCapacity: frameCount) else {
+                    Logger.error("Failed to create audio buffer for re-transcription", subsystem: .transcription)
+                    await MainActor.run { isRetranscribing = false }
+                    return
+                }
+                try audioFile.read(into: buffer)
+
+                guard let channelData = buffer.floatChannelData else {
+                    Logger.error("No channel data in audio buffer", subsystem: .transcription)
+                    await MainActor.run { isRetranscribing = false }
+                    return
+                }
+                let samples = Array(UnsafeBufferPointer(start: channelData[0], count: Int(buffer.frameLength)))
+
+                // Transcribe with current settings
+                let language = await AppState.shared.selectedLanguage
+                let promptWords = await AppState.shared.promptWordsString
+                let rawText = bridge.transcribe(samples: samples, initialPrompt: promptWords, language: language)
+
+                // Apply dictionary corrections
+                let finalText = DictionaryManager.shared.correctText(rawText)
+
+                guard !finalText.isEmpty else {
+                    Logger.warning("Re-transcription produced empty result", subsystem: .transcription)
+                    await MainActor.run { isRetranscribing = false }
+                    return
+                }
+
+                Logger.info("Re-transcription complete: '\(finalText.prefix(80))'", subsystem: .transcription)
+
+                await MainActor.run {
+                    editedText = finalText
+                    isRetranscribing = false
+                }
+
+                // Save to history
+                try? await HistoryManager.shared.editTranscription(transcription, newText: finalText)
+
+            } catch {
+                Logger.error("Re-transcription failed: \(error.localizedDescription)", subsystem: .transcription)
+                await MainActor.run { isRetranscribing = false }
+            }
+        }
+    }
+
     private func shareTranscription() {
         let picker = NSSharingServicePicker(items: [transcription.displayText])
         if let window = NSApp.keyWindow {
@@ -426,6 +505,53 @@ struct DetailHeaderButton: View {
                 .scaleEffect(isHovered ? 1.06 : 1.0)
         }
         .buttonStyle(.plain)
+        .onHover { hovering in
+            withAnimation(.easeInOut(duration: 0.12)) {
+                isHovered = hovering
+            }
+        }
+    }
+}
+
+// MARK: - Retranscribe Button
+
+struct RetranscribeButton: View {
+    let isRetranscribing: Bool
+    let colorScheme: ColorScheme
+    let action: () -> Void
+
+    @State private var isHovered = false
+
+    var body: some View {
+        Button(action: action) {
+            ZStack {
+                if isRetranscribing {
+                    ProgressView()
+                        .controlSize(.mini)
+                        .scaleEffect(0.65)
+                } else {
+                    Image(systemName: "arrow.clockwise")
+                        .font(.system(size: 13, weight: .medium))
+                        .foregroundColor(isHovered ? WhispererColors.primaryText(colorScheme) : WhispererColors.secondaryText(colorScheme))
+                }
+            }
+            .frame(width: 32, height: 32)
+            .background(
+                Circle()
+                    .fill(isHovered ? WhispererColors.elevatedBackground(colorScheme) : WhispererColors.elevatedBackground(colorScheme).opacity(0.6))
+            )
+            .overlay(
+                Circle()
+                    .stroke(isHovered ? WhispererColors.border(colorScheme) : Color.clear, lineWidth: 0.5)
+            )
+            .shadow(
+                color: isHovered ? Color.black.opacity(colorScheme == .dark ? 0.08 : 0.06) : Color.clear,
+                radius: 3, y: 1
+            )
+            .scaleEffect(isHovered ? 1.06 : 1.0)
+        }
+        .buttonStyle(.plain)
+        .disabled(isRetranscribing)
         .onHover { hovering in
             withAnimation(.easeInOut(duration: 0.12)) {
                 isHovered = hovering

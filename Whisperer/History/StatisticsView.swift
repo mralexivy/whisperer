@@ -235,64 +235,158 @@ struct StatisticsView: View {
         }
     }
 
+    private func metricValue(for day: DailyActivity) -> Double {
+        switch activityMetric {
+        case .words: return Double(day.wordCount)
+        case .time: return day.duration
+        case .sessions: return Double(day.sessionCount)
+        }
+    }
+
+    private func yAxisTicks(maxValue: Double) -> [Double] {
+        guard maxValue > 0 else { return [0] }
+        let rawStep = maxValue / 3.0
+        let magnitude = pow(10, floor(log10(rawStep)))
+        let normalized = rawStep / magnitude
+        let niceStep: Double
+        if normalized <= 1.5 { niceStep = 1 * magnitude }
+        else if normalized <= 3.5 { niceStep = 2.5 * magnitude }
+        else if normalized <= 7.5 { niceStep = 5 * magnitude }
+        else { niceStep = 10 * magnitude }
+        var ticks: [Double] = []
+        var tick = 0.0
+        while tick <= maxValue {
+            ticks.append(tick)
+            tick += niceStep
+        }
+        if ticks.last != nil && ticks.last! < maxValue {
+            ticks.append(tick)
+        }
+        return ticks
+    }
+
+    private func yAxisLabel(_ value: Double) -> String {
+        switch activityMetric {
+        case .words:
+            let count = Int(value)
+            if count >= 1000 { return String(format: "%.0fK", value / 1000) }
+            return "\(count)"
+        case .time:
+            let minutes = Int(value) / 60
+            let hours = Int(value) / 3600
+            if hours > 0 { return "\(hours)h" }
+            return "\(minutes)m"
+        case .sessions:
+            return "\(Int(value))"
+        }
+    }
+
     private var barChart: some View {
         let data = statsManager.dailyActivity
-        let maxValue: Double = {
+        let rawMax: Double = {
             switch activityMetric {
-            case .words: return Double(data.map(\.wordCount).max() ?? 1)
-            case .time: return data.map(\.duration).max() ?? 1
-            case .sessions: return Double(data.map(\.sessionCount).max() ?? 1)
+            case .words: return Double(data.map(\.wordCount).max() ?? 0)
+            case .time: return data.map(\.duration).max() ?? 0
+            case .sessions: return Double(data.map(\.sessionCount).max() ?? 0)
             }
         }()
+        let ticks = yAxisTicks(maxValue: rawMax)
+        let chartMax = ticks.last ?? 1
 
         return GeometryReader { geo in
-            HStack(alignment: .bottom, spacing: max(4, (geo.size.width - CGFloat(data.count) * 24) / CGFloat(max(data.count - 1, 1)))) {
-                ForEach(Array(data.enumerated()), id: \.offset) { index, day in
-                    VStack(spacing: 6) {
-                        ZStack(alignment: .top) {
-                            if hoveredBarIndex == index {
-                                barTooltip(for: day)
-                                    .offset(y: -30)
-                            }
+            let yAxisWidth: CGFloat = 32
+            let dayLabelHeight: CGFloat = 16
+            let chartHeight = geo.size.height - dayLabelHeight
+            let barAreaWidth = geo.size.width - yAxisWidth - 4
 
-                            RoundedRectangle(cornerRadius: 4)
-                                .fill(
-                                    hoveredBarIndex == index
-                                        ? LinearGradient(colors: [WhispererColors.accentBlue, WhispererColors.accentPurple], startPoint: .bottom, endPoint: .top)
-                                        : LinearGradient(colors: [WhispererColors.accentBlue.opacity(0.2), WhispererColors.accentBlue.opacity(0.12)], startPoint: .bottom, endPoint: .top)
-                                )
-                                .frame(width: 24, height: barHeight(for: day, maxValue: maxValue, containerHeight: geo.size.height - 26))
-                                .animation(.spring(response: 0.5, dampingFraction: 0.7), value: activityMetric)
-                        }
-                        .frame(height: geo.size.height - 20, alignment: .bottom)
-
-                        Text(day.dayLabel)
-                            .font(.system(size: 10, weight: .medium))
-                            .foregroundColor(
-                                hoveredBarIndex == index
-                                    ? WhispererColors.primaryText(colorScheme)
-                                    : WhispererColors.tertiaryText(colorScheme)
-                            )
-                    }
-                    .frame(maxWidth: .infinity)
-                    .onHover { hovering in
-                        withAnimation(.easeInOut(duration: 0.12)) {
-                            hoveredBarIndex = hovering ? index : nil
-                        }
+            HStack(alignment: .top, spacing: 4) {
+                // Y-axis labels + gridlines
+                ZStack(alignment: .topTrailing) {
+                    ForEach(ticks, id: \.self) { tick in
+                        let ratio = chartMax > 0 ? CGFloat(tick / chartMax) : 0
+                        let y = chartHeight - (ratio * chartHeight)
+                        Text(yAxisLabel(tick))
+                            .font(.system(size: 9, weight: .medium, design: .rounded))
+                            .foregroundColor(WhispererColors.tertiaryText(colorScheme))
+                            .position(x: yAxisWidth / 2, y: y)
                     }
                 }
+                .frame(width: yAxisWidth, height: chartHeight)
+
+                // Bars area with gridlines
+                ZStack(alignment: .topLeading) {
+                    // Horizontal gridlines
+                    ForEach(ticks, id: \.self) { tick in
+                        let ratio = chartMax > 0 ? CGFloat(tick / chartMax) : 0
+                        let y = chartHeight - (ratio * chartHeight)
+                        Rectangle()
+                            .fill(Color.white.opacity(tick == 0 ? 0.08 : 0.04))
+                            .frame(height: 0.5)
+                            .offset(y: y)
+                    }
+
+                    // Bars
+                    HStack(alignment: .bottom, spacing: 0) {
+                        ForEach(Array(data.enumerated()), id: \.offset) { index, day in
+                            let bh = barHeight(for: day, maxValue: chartMax, containerHeight: chartHeight - 4)
+                            VStack(spacing: 0) {
+                                Spacer(minLength: 0)
+
+                                RoundedRectangle(cornerRadius: 4)
+                                    .fill(
+                                        hoveredBarIndex == index
+                                            ? LinearGradient(colors: [WhispererColors.accentBlue, WhispererColors.accentPurple], startPoint: .bottom, endPoint: .top)
+                                            : LinearGradient(colors: [WhispererColors.accentBlue.opacity(0.25), WhispererColors.accentBlue.opacity(0.15)], startPoint: .bottom, endPoint: .top)
+                                    )
+                                    .frame(
+                                        width: max(8, min(24, barAreaWidth / CGFloat(max(data.count, 1)) - 6)),
+                                        height: bh
+                                    )
+                                    .overlay(alignment: .top) {
+                                        if hoveredBarIndex == index {
+                                            barTooltip(for: day)
+                                                .fixedSize()
+                                                .offset(y: -28)
+                                                .zIndex(10)
+                                        }
+                                    }
+                                    .animation(.spring(response: 0.5, dampingFraction: 0.7), value: activityMetric)
+                            }
+                            .frame(maxWidth: .infinity)
+                            .frame(height: chartHeight)
+                            .onHover { hovering in
+                                withAnimation(.easeInOut(duration: 0.12)) {
+                                    hoveredBarIndex = hovering ? index : nil
+                                }
+                            }
+                        }
+                    }
+                    .frame(height: chartHeight)
+
+                    // Day labels row
+                    HStack(spacing: 0) {
+                        ForEach(Array(data.enumerated()), id: \.offset) { index, day in
+                            Text(day.dayLabel)
+                                .font(.system(size: 10, weight: .medium))
+                                .foregroundColor(
+                                    hoveredBarIndex == index
+                                        ? WhispererColors.primaryText(colorScheme)
+                                        : WhispererColors.tertiaryText(colorScheme)
+                                )
+                                .frame(maxWidth: .infinity)
+                        }
+                    }
+                    .offset(y: chartHeight + 2)
+                }
+                .frame(width: barAreaWidth)
             }
         }
     }
 
     private func barHeight(for day: DailyActivity, maxValue: Double, containerHeight: CGFloat) -> CGFloat {
-        guard maxValue > 0 else { return 4 }
-        let value: Double
-        switch activityMetric {
-        case .words: value = Double(day.wordCount)
-        case .time: value = day.duration
-        case .sessions: value = Double(day.sessionCount)
-        }
+        guard maxValue > 0 else { return 2 }
+        let value = metricValue(for: day)
+        if value == 0 { return 2 }
         let ratio = value / maxValue
         return max(4, CGFloat(ratio) * containerHeight)
     }
@@ -322,21 +416,39 @@ struct StatisticsView: View {
 
     private var summaryPills: some View {
         let data = statsManager.dailyActivity
-        let peakDay = data.max(by: { $0.wordCount < $1.wordCount })
-        let avgWords = data.isEmpty ? 0 : data.reduce(0) { $0 + $1.wordCount } / data.count
+
+        let peakDay = data.max(by: { metricValue(for: $0) < metricValue(for: $1) })
+        let peakValue = peakDay.map { metricValue(for: $0) } ?? 0
+
+        let totalValue = data.reduce(0.0) { $0 + metricValue(for: $1) }
+        let avgValue = data.isEmpty ? 0.0 : totalValue / Double(data.count)
 
         return HStack(spacing: 6) {
-            if let peak = peakDay, peak.wordCount > 0 {
+            if let peak = peakDay, peakValue > 0 {
+                let peakText: String = {
+                    switch activityMetric {
+                    case .words: return "Peak \(peak.dayLabel) · \(statsManager.formattedWords(peak.wordCount)) words"
+                    case .time: return "Peak \(peak.dayLabel) · \(statsManager.formattedDuration(peak.duration))"
+                    case .sessions: return "Peak \(peak.dayLabel) · \(peak.sessionCount) sessions"
+                    }
+                }()
                 statsPill(
                     icon: "arrow.up",
-                    text: "Peak \(peak.dayLabel) · \(statsManager.formattedWords(peak.wordCount)) words",
+                    text: peakText,
                     color: WhispererColors.accentBlue
                 )
             }
-            if avgWords > 0 {
+            if avgValue > 0 {
+                let avgText: String = {
+                    switch activityMetric {
+                    case .words: return "⌀ \(statsManager.formattedWords(Int(avgValue))) / day"
+                    case .time: return "⌀ \(statsManager.formattedDuration(avgValue)) / day"
+                    case .sessions: return "⌀ \(String(format: "%.1f", avgValue)) / day"
+                    }
+                }()
                 statsPill(
                     icon: "divide",
-                    text: "⌀ \(statsManager.formattedWords(avgWords)) / day",
+                    text: avgText,
                     color: Color(hex: "F97316")
                 )
             }
