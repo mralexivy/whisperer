@@ -107,8 +107,9 @@ class HistoryWindowManager {
         for window in NSApp.windows where window.isVisible {
             // Skip our own history window
             if window === historyWindow { continue }
-            // Skip overlay panels (OverlayPanel is a non-activating NSPanel for recording UI)
+            // Skip overlay panels (non-activating NSPanels for recording UI and picker)
             if window is OverlayPanel { continue }
+            if window is TranscriptionPickerPanel { continue }
 
             // The MenuBarExtra window is an NSPanel with a specific size (360x580)
             // or at a high window level. Match by type + level.

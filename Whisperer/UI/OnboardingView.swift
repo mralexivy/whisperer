@@ -35,6 +35,7 @@ struct OnboardingView: View {
     @ObservedObject var appState = AppState.shared
     @ObservedObject var permissionManager = PermissionManager.shared
     @State private var currentPage = 0
+    @State private var ringRotation: Double = 0
 
     var onComplete: (() -> Void)?
 
@@ -208,58 +209,105 @@ struct OnboardingView: View {
         VStack(spacing: 0) {
             Spacer()
 
-            // App icon — custom dark-themed rendering
+            // Orbital hero — concentric rings with orbiting feature icons
             ZStack {
-                // Glow behind icon
+                // Outer ring (slow rotation)
+                Circle()
+                    .stroke(OnboardingColors.accentPurple.opacity(0.04), lineWidth: 1)
+                    .frame(width: 210, height: 210)
+                    .rotationEffect(.degrees(ringRotation))
+
+                // Middle ring
+                Circle()
+                    .stroke(OnboardingColors.accentBlue.opacity(0.06), lineWidth: 1.5)
+                    .frame(width: 156, height: 156)
+
+                // Inner ring (gradient)
+                Circle()
+                    .stroke(
+                        LinearGradient(
+                            colors: [OnboardingColors.accentBlue.opacity(0.10), OnboardingColors.accentPurple.opacity(0.10)],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        ),
+                        lineWidth: 1.5
+                    )
+                    .frame(width: 106, height: 106)
+
+                // Radial glow
                 Circle()
                     .fill(
                         RadialGradient(
-                            colors: [OnboardingColors.accentBlue.opacity(0.25), .clear],
+                            colors: [OnboardingColors.accentPurple.opacity(0.12), .clear],
                             center: .center,
-                            startRadius: 20,
-                            endRadius: 100
+                            startRadius: 10,
+                            endRadius: 105
                         )
                     )
-                    .frame(width: 180, height: 180)
+                    .frame(width: 210, height: 210)
 
-                // Icon container
-                RoundedRectangle(cornerRadius: 28)
-                    .fill(
-                        LinearGradient(
-                            colors: [
-                                OnboardingColors.accentBlue.opacity(0.18),
-                                OnboardingColors.accentPurple.opacity(0.10)
-                            ],
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
+                // Central app icon
+                ZStack {
+                    RoundedRectangle(cornerRadius: 22)
+                        .fill(
+                            LinearGradient(
+                                colors: [
+                                    OnboardingColors.accentPurple.opacity(0.14),
+                                    OnboardingColors.accentBlue.opacity(0.10)
+                                ],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            )
                         )
-                    )
-                    .frame(width: 120, height: 120)
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 28)
-                            .stroke(OnboardingColors.accentBlue.opacity(0.25), lineWidth: 1)
-                    )
-                    .shadow(color: OnboardingColors.accentBlue.opacity(0.2), radius: 20, y: 8)
+                        .frame(width: 80, height: 80)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 22)
+                                .stroke(
+                                    LinearGradient(
+                                        colors: [
+                                            OnboardingColors.accentPurple.opacity(0.16),
+                                            OnboardingColors.accentBlue.opacity(0.10)
+                                        ],
+                                        startPoint: .topLeading,
+                                        endPoint: .bottomTrailing
+                                    ),
+                                    lineWidth: 1.5
+                                )
+                        )
+                        .shadow(color: OnboardingColors.accentPurple.opacity(0.08), radius: 16, y: 4)
 
-                // Waveform icon
-                Image(systemName: "waveform")
-                    .font(.system(size: 48, weight: .medium))
-                    .foregroundStyle(
-                        LinearGradient(
-                            colors: [OnboardingColors.accentBlue, OnboardingColors.accentPurple],
-                            startPoint: .top,
-                            endPoint: .bottom
+                    Image(systemName: "waveform")
+                        .font(.system(size: 30, weight: .light))
+                        .foregroundStyle(
+                            LinearGradient(
+                                colors: [OnboardingColors.accentBlue, OnboardingColors.accentPurple],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            )
                         )
-                    )
+                }
+
+                // Orbiting feature icons
+                orbitIcon("mic.fill", color: .red, angle: -40, radius: 94)
+                orbitIcon("bolt.fill", color: .orange, angle: 30, radius: 90)
+                orbitIcon("globe", color: .blue, angle: 105, radius: 92)
+                orbitIcon("lock.fill", color: .green, angle: 185, radius: 88)
+                orbitIcon("text.cursor", color: .cyan, angle: 255, radius: 94)
+            }
+            .frame(height: 220)
+            .onAppear {
+                withAnimation(.linear(duration: 60).repeatForever(autoreverses: false)) {
+                    ringRotation = 360
+                }
             }
 
             // Title
-            VStack(spacing: 6) {
+            VStack(spacing: 4) {
                 Text("Welcome to")
-                    .font(.system(size: 16, weight: .medium))
+                    .font(.system(size: 15, weight: .medium))
                     .foregroundColor(OnboardingColors.textSecondary)
                 Text("Whisperer")
-                    .font(.system(size: 40, weight: .bold))
+                    .font(.system(size: 38, weight: .bold))
                     .foregroundStyle(
                         LinearGradient(
                             colors: [OnboardingColors.accentBlue, OnboardingColors.accentPurple],
@@ -268,15 +316,15 @@ struct OnboardingView: View {
                         )
                     )
             }
-            .padding(.top, 24)
+            .padding(.top, 10)
 
             // Subtitle
             Text("Offline voice-to-text for your Mac.\nPowered by whisper.cpp with Apple Silicon GPU acceleration.")
-                .font(.system(size: 14))
+                .font(.system(size: 13))
                 .foregroundColor(OnboardingColors.textSecondary)
                 .multilineTextAlignment(.center)
                 .lineSpacing(3)
-                .padding(.top, 12)
+                .padding(.top, 8)
 
             // Feature pills — colorful with icons
             HStack(spacing: 8) {
@@ -285,7 +333,7 @@ struct OnboardingView: View {
                 featurePill("Fast", icon: "bolt.fill", color: .orange)
                 featurePill("100+ Languages", icon: "globe", color: OnboardingColors.accentPurple)
             }
-            .padding(.top, 20)
+            .padding(.top, 12)
 
             // Begin Onboarding button
             Button(action: {
@@ -302,9 +350,10 @@ struct OnboardingView: View {
                 .padding(.vertical, 14)
                 .background(OnboardingColors.accentGradient)
                 .clipShape(Capsule())
+                .shadow(color: OnboardingColors.accentBlue.opacity(0.3), radius: 8, y: 3)
             }
             .buttonStyle(.plain)
-            .padding(.top, 32)
+            .padding(.top, 18)
 
             Spacer()
         }
@@ -529,7 +578,7 @@ struct OnboardingView: View {
 
             // How it works — horizontal cards with colorful icons
             VStack(spacing: 10) {
-                privacyCard(icon: "keyboard.fill", color: OnboardingColors.accentBlue, title: "Hold Shortcut Key", subtitle: "Press and hold Fn to start")
+                privacyCard(icon: "keyboard.fill", color: OnboardingColors.accentBlue, title: "Fn Hold to Dictate · ⌥V Paste Transcription", subtitle: "Press and hold Fn to start")
                 privacyCard(icon: "waveform", color: .red, title: "Speak Naturally", subtitle: "Talk at your normal pace")
                 privacyCard(icon: "text.cursor", color: .green, title: "Release — Text Appears", subtitle: "Transcribed text is inserted instantly")
             }
@@ -705,6 +754,28 @@ struct OnboardingView: View {
             .frame(width: size + 20, height: size + 20)
             .background(color.opacity(0.1))
             .clipShape(RoundedRectangle(cornerRadius: (size + 20) / 3.5))
+    }
+
+    private func orbitIcon(_ name: String, color: Color, angle: Double, radius: CGFloat) -> some View {
+        let radians = angle * .pi / 180
+        let x = cos(radians) * radius
+        let y = sin(radians) * radius
+
+        return ZStack {
+            RoundedRectangle(cornerRadius: 9)
+                .fill(color.opacity(0.10))
+                .frame(width: 32, height: 32)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 9)
+                        .stroke(color.opacity(0.08), lineWidth: 0.5)
+                )
+                .shadow(color: color.opacity(0.06), radius: 4, y: 1)
+
+            Image(systemName: name)
+                .font(.system(size: 13, weight: .medium))
+                .foregroundColor(color.opacity(0.6))
+        }
+        .offset(x: x, y: y)
     }
 
     // MARK: - Actions

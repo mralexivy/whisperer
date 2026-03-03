@@ -10,10 +10,15 @@ import Cocoa
 import Carbon.HIToolbox
 
 class GlobalKeyListener {
-    // Callbacks
+    // Recording callbacks
     var onShortcutPressed: (() -> Void)?
     var onShortcutReleased: (() -> Void)?
     var onShortcutCancelled: (() -> Void)?
+
+    // Picker callbacks (Option+V transcription picker)
+    var onPickerActivated: (() -> Void)?
+    var onPickerCycled: (() -> Void)?
+    var onPickerConfirmed: (() -> Void)?
     // Legacy callbacks (for backwards compatibility)
     var onFnPressed: (() -> Void)? {
         get { onShortcutPressed }
@@ -45,6 +50,10 @@ class GlobalKeyListener {
     private var carbonHotKeyRef: EventHotKeyRef?
     private var carbonEventHandler: EventHandlerRef?
 
+    // Carbon hotkey for picker (Option+V)
+    private var pickerHotKeyRef: EventHotKeyRef?
+    private var pickerEventHandler: EventHandlerRef?
+
     // Polling fallback for Fn release detection (safety net for Globe/Fn key edge cases)
     private var releaseCheckTimer: DispatchSourceTimer?
 
@@ -52,6 +61,7 @@ class GlobalKeyListener {
     private var isShortcutActive = false
     private var fnDown = false
     private var recordingInProgress = false
+    private var pickerVisible = false
 
     // For toggle mode
     private var isRecordingToggled = false
@@ -70,6 +80,9 @@ class GlobalKeyListener {
 
         // Setup Carbon hotkey for key+modifier shortcuts (e.g., Cmd+Shift+Space)
         registerCarbonHotKeyIfNeeded()
+
+        // Setup Carbon hotkey for transcription picker (Option+V)
+        registerPickerHotKey()
 
         Logger.info("GlobalKeyListener started with shortcut: \(shortcutConfig.displayString)", subsystem: .keyListener)
     }
@@ -93,8 +106,10 @@ class GlobalKeyListener {
             localFlagsChangedMonitor = nil
         }
 
-        // Unregister Carbon hotkey
+        // Unregister Carbon hotkeys
         unregisterCarbonHotKey()
+        unregisterPickerHotKey()
+        pickerVisible = false
 
         Logger.info("GlobalKeyListener stopped", subsystem: .keyListener)
     }
@@ -130,6 +145,19 @@ class GlobalKeyListener {
     }
 
     private func handleFlagsChanged(_ event: NSEvent, config: ShortcutConfig) {
+        // Picker: detect Option release while picker is visible
+        if pickerVisible {
+            let currentMods = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
+            if !currentMods.contains(.option) {
+                Logger.info("Option released — confirming picker selection", subsystem: .keyListener)
+                pickerVisible = false
+                DispatchQueue.main.async { [weak self] in
+                    self?.onPickerConfirmed?()
+                }
+                return
+            }
+        }
+
         // Fn key detection using keyCode 63
         if event.keyCode == 63 {
             handleFnKeyEvent(event, config: config)
@@ -452,6 +480,107 @@ class GlobalKeyListener {
         if let handler = carbonEventHandler {
             RemoveEventHandler(handler)
             carbonEventHandler = nil
+        }
+    }
+
+    // MARK: - Picker Hot Key (Option+V for transcription picker)
+
+    private func registerPickerHotKey() {
+        // Skip if user's recording shortcut is also Option+V
+        let config = shortcutConfig
+        let recordingUsesOptionV = config.keyCode == 9 &&
+            NSEvent.ModifierFlags(rawValue: config.modifierFlags).contains(.option)
+        guard !recordingUsesOptionV else {
+            Logger.warning("Option+V conflicts with recording shortcut — picker hotkey not registered", subsystem: .keyListener)
+            return
+        }
+
+        // Register Option+V (V keyCode = 0x09 = 9)
+        let hotKeyID = EventHotKeyID(
+            signature: OSType(0x57485350), // "WHSP"
+            id: 2
+        )
+
+        let status = RegisterEventHotKey(
+            UInt32(9),                // V key
+            UInt32(optionKey),        // Option modifier
+            hotKeyID,
+            GetApplicationEventTarget(),
+            0,
+            &pickerHotKeyRef
+        )
+
+        guard status == noErr else {
+            Logger.error("Failed to register picker hotkey (Option+V): \(status)", subsystem: .keyListener)
+            return
+        }
+
+        // Install dedicated event handler for picker
+        var eventSpecs = [
+            EventTypeSpec(eventClass: OSType(kEventClassKeyboard), eventKind: UInt32(kEventHotKeyPressed)),
+            EventTypeSpec(eventClass: OSType(kEventClassKeyboard), eventKind: UInt32(kEventHotKeyReleased))
+        ]
+
+        let handlerResult = InstallEventHandler(
+            GetApplicationEventTarget(),
+            { (_, event, userData) -> OSStatus in
+                guard let userData = userData else { return OSStatus(eventNotHandledErr) }
+                let listener = Unmanaged<GlobalKeyListener>.fromOpaque(userData).takeUnretainedValue()
+                listener.handlePickerHotKeyEvent(event)
+                return noErr
+            },
+            eventSpecs.count,
+            &eventSpecs,
+            Unmanaged.passUnretained(self).toOpaque(),
+            &pickerEventHandler
+        )
+
+        if handlerResult == noErr {
+            Logger.info("Picker hotkey registered (Option+V)", subsystem: .keyListener)
+        } else {
+            Logger.error("Failed to install picker event handler: \(handlerResult)", subsystem: .keyListener)
+        }
+    }
+
+    private func handlePickerHotKeyEvent(_ event: EventRef?) {
+        guard let event = event else { return }
+
+        let eventKind = GetEventKind(event)
+
+        stateQueue.async { [weak self] in
+            guard let self = self else { return }
+
+            // Only handle key pressed (V down while Option held)
+            guard eventKind == UInt32(kEventHotKeyPressed) else { return }
+
+            // Don't open picker during recording
+            guard !self.recordingInProgress else { return }
+
+            if !self.pickerVisible {
+                // First press: show picker
+                Logger.info("Picker activated (Option+V)", subsystem: .keyListener)
+                self.pickerVisible = true
+                DispatchQueue.main.async { [weak self] in
+                    self?.onPickerActivated?()
+                }
+            } else {
+                // Subsequent presses: cycle to next item
+                Logger.debug("Picker cycled (Option+V)", subsystem: .keyListener)
+                DispatchQueue.main.async { [weak self] in
+                    self?.onPickerCycled?()
+                }
+            }
+        }
+    }
+
+    private func unregisterPickerHotKey() {
+        if let hotKeyRef = pickerHotKeyRef {
+            UnregisterEventHotKey(hotKeyRef)
+            pickerHotKeyRef = nil
+        }
+        if let handler = pickerEventHandler {
+            RemoveEventHandler(handler)
+            pickerEventHandler = nil
         }
     }
 

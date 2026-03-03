@@ -482,6 +482,24 @@ class AppState: ObservableObject {
                 self?.cancelRecording()
             }
         }
+
+        // Transcription picker callbacks (Option+V)
+        listener.onPickerActivated = { [weak self] in
+            Task { @MainActor in
+                guard self?.state == .idle else { return }
+                TranscriptionPickerState.shared.show()
+            }
+        }
+        listener.onPickerCycled = {
+            Task { @MainActor in
+                TranscriptionPickerState.shared.cycleNext()
+            }
+        }
+        listener.onPickerConfirmed = {
+            Task { @MainActor in
+                TranscriptionPickerState.shared.confirmSelection()
+            }
+        }
     }
 
     // MARK: - In-App Transcription
@@ -583,6 +601,11 @@ class AppState: ObservableObject {
 
     func startRecording() {
         guard state == .idle else { return }
+
+        // Dismiss transcription picker if visible
+        if TranscriptionPickerState.shared.isVisible {
+            TranscriptionPickerState.shared.dismiss()
+        }
 
         // Check if model is loaded first
         guard let bridge = whisperBridge else {

@@ -23,6 +23,7 @@ struct WhispererApp: App {
 
 class AppDelegate: NSObject, NSApplicationDelegate {
     var overlayPanel: OverlayPanel?
+    var pickerPanel: TranscriptionPickerPanel?
     let appState = AppState.shared
     private var isShuttingDown = false
     private var rightClickMenu: NSMenu?
@@ -122,6 +123,9 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     private func setupOverlay() {
         overlayPanel = OverlayPanel()
         // Panel manages its own visibility based on app state
+
+        pickerPanel = TranscriptionPickerPanel()
+        // Panel manages its own visibility based on TranscriptionPickerState
     }
 
     private func checkPermissions() async {
@@ -911,7 +915,7 @@ struct StatusTabView: View {
                     Text("System-Wide Dictation")
                         .font(.caption)
                         .foregroundColor(MBColors.textTertiary)
-                    Text(isEnabled ? "\(shortcutKey) → Speak → Release" : "Disabled")
+                    Text(isEnabled ? "\(shortcutKey) → Speak → Release · ⌥V Picker" : "Disabled")
                         .font(.system(size: 13, weight: .medium))
                         .foregroundColor(MBColors.textPrimary)
                 }
@@ -1157,7 +1161,40 @@ struct SettingsTabView: View {
                             .labelsHidden()
                         }
 
-                        if !appState.systemWideDictationEnabled {
+                        if appState.systemWideDictationEnabled {
+                            HStack(spacing: 8) {
+                                ZStack {
+                                    RoundedRectangle(cornerRadius: 5)
+                                        .fill(Color.cyan.opacity(0.15))
+                                        .frame(width: 24, height: 24)
+                                    Image(systemName: "doc.on.doc.fill")
+                                        .foregroundColor(.cyan)
+                                        .font(.system(size: 10, weight: .medium))
+                                }
+
+                                VStack(alignment: .leading, spacing: 1) {
+                                    Text("Quick Paste")
+                                        .font(.system(size: 12, weight: .medium))
+                                        .foregroundColor(MBColors.textPrimary)
+                                    Text("Access recent transcriptions instantly")
+                                        .font(.system(size: 10))
+                                        .foregroundColor(MBColors.textSecondary)
+                                }
+
+                                Spacer()
+
+                                Text("⌥V")
+                                    .font(.system(size: 11, weight: .semibold, design: .monospaced))
+                                    .foregroundColor(.white.opacity(0.6))
+                                    .padding(.horizontal, 8)
+                                    .padding(.vertical, 4)
+                                    .background(Color.white.opacity(0.08))
+                                    .cornerRadius(5)
+                            }
+                            .padding(8)
+                            .background(MBColors.accent.opacity(0.06))
+                            .cornerRadius(6)
+                        } else {
                             Text("Enable to hold a shortcut key and dictate text into any app. Requires Accessibility permission.")
                                 .font(.system(size: 10))
                                 .foregroundColor(MBColors.textSecondary)
