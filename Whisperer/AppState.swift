@@ -120,6 +120,14 @@ class AppState: ObservableObject {
     @Published var selectedLanguage: TranscriptionLanguage = .english {
         didSet {
             UserDefaults.standard.set(selectedLanguage.rawValue, forKey: "selectedLanguage")
+
+            // SpeechAnalyzer needs re-prepare for new locale (model download may be required)
+            if selectedBackendType == .speechAnalyzer && isModelLoaded && oldValue != selectedLanguage {
+                Logger.info("Language changed to \(selectedLanguage.displayName), re-preparing SpeechAnalyzer", subsystem: .model)
+                isModelLoaded = false
+                whisperBridge = nil
+                preloadSpeechAnalyzer()
+            }
         }
     }
 
@@ -127,6 +135,7 @@ class AppState: ObservableObject {
     @Published var selectedModel: WhisperModel = .largeTurboQ5
     @Published var downloadingModel: WhisperModel? = nil
     @Published var downloadProgress: Double = 0
+    @Published var downloadRetryInfo: String?
 
     // Component references
     var audioRecorder: AudioRecorder?
@@ -140,13 +149,84 @@ class AppState: ObservableObject {
     let audioDeviceManager = AudioDeviceManager.shared
     private var deviceSubscription: AnyCancellable?
 
-    // Pre-loaded WhisperBridge - keeps model in memory for instant recording start
-    private var whisperBridge: WhisperBridge?
+    // Pre-loaded transcription backend - keeps model in memory for instant recording start
+    private var whisperBridge: TranscriptionBackend?
 
-    /// Read-only access to the pre-loaded WhisperBridge for file transcription
-    var fileTranscriptionBridge: WhisperBridge? { whisperBridge }
+    /// Read-only access to the pre-loaded backend for file transcription
+    var fileTranscriptionBridge: TranscriptionBackend? { whisperBridge }
+
+    /// Selected transcription backend engine
+    @Published var selectedBackendType: BackendType = .whisperCpp
+    @Published var selectedParakeetModel: ParakeetModelVariant = .v3
+
+    /// Display name of the model actively used for transcription (for history records)
+    var activeModelDisplayName: String {
+        switch selectedBackendType {
+        case .whisperCpp: return selectedModel.displayName
+        case .parakeet: return selectedParakeetModel.displayName
+        case .speechAnalyzer: return "Apple Speech"
+        }
+    }
     private var loadedModel: WhisperModel? = nil
+    private var loadedParakeetModel: ParakeetModelVariant? = nil
     @Published var isModelLoaded: Bool = false
+
+    // Parakeet model download/load state
+    @Published var isDownloadingParakeet: Bool = false
+    @Published var isLoadingParakeet: Bool = false
+    @Published var parakeetDownloadStatus: String = ""
+    private var parakeetLoadTask: Task<Void, Never>?
+
+    // SpeechAnalyzer (macOS 26+) load state
+    @Published var isLoadingSpeechAnalyzer: Bool = false
+    @Published var speechAnalyzerStatus: String = ""
+    private var speechAnalyzerLoadTask: Task<Void, Never>?
+
+    // LLM post-processing
+    @Published var llmEnabled: Bool = false {
+        didSet {
+            UserDefaults.standard.set(llmEnabled, forKey: "llmEnabled")
+        }
+    }
+    @Published var selectedLLMModel: LLMModelVariant = .qwen3_4B {
+        didSet {
+            UserDefaults.standard.set(selectedLLMModel.rawValue, forKey: "selectedLLMModel")
+        }
+    }
+    @Published var selectedLLMTask: LLMTask = .rewrite {
+        didSet {
+            UserDefaults.standard.set(selectedLLMTask.rawValue, forKey: "selectedLLMTask")
+        }
+    }
+    @Published var llmCustomPrompt: String = "" {
+        didSet {
+            UserDefaults.standard.set(llmCustomPrompt, forKey: "llmCustomPrompt")
+        }
+    }
+    @Published var llmTranslateLanguage: String = "English" {
+        didSet {
+            UserDefaults.standard.set(llmTranslateLanguage, forKey: "llmTranslateLanguage")
+        }
+    }
+    var llmPostProcessor: LLMPostProcessor?
+
+    // Filler word removal (strips "um", "uh", "er" from final output)
+    @Published var fillerWordRemovalEnabled: Bool = false {
+        didSet {
+            UserDefaults.standard.set(fillerWordRemovalEnabled, forKey: "fillerWordRemovalEnabled")
+        }
+    }
+
+    // CTC vocabulary boosting for Parakeet (boosts dictionary terms in final pass)
+    @Published var vocabularyBoostingEnabled: Bool = true {
+        didSet {
+            UserDefaults.standard.set(vocabularyBoostingEnabled, forKey: "vocabularyBoostingEnabled")
+            if vocabularyBoostingEnabled && selectedBackendType == .parakeet {
+                reconfigureVocabularyBoosting()
+            }
+        }
+    }
+    private var dictionaryRebuildObserver: Any?
 
     // Pre-loaded Silero VAD for voice activity detection
     private var sileroVAD: SileroVAD?
@@ -158,7 +238,7 @@ class AppState: ObservableObject {
     private var currentAudioURL: URL?
     private var lastTargetAppName: String?
 
-    // Model path for selected model
+    // Model path for selected whisper.cpp model
     private var modelPath: URL {
         ModelDownloader.shared.modelPath(for: selectedModel)
     }
@@ -206,12 +286,60 @@ class AppState: ObservableObject {
             _hasCompletedOnboarding = Published(wrappedValue: UserDefaults.standard.bool(forKey: "hasCompletedOnboarding"))
         }
 
+        // Load backend type and Parakeet model selection
+        if let savedBackend = UserDefaults.standard.string(forKey: "selectedBackendType"),
+           let backend = BackendType(rawValue: savedBackend) {
+            // Migrate old "MLX" backend to Parakeet
+            selectedBackendType = backend
+        } else if UserDefaults.standard.string(forKey: "selectedBackendType") == "MLX" {
+            selectedBackendType = .parakeet
+            UserDefaults.standard.set(BackendType.parakeet.rawValue, forKey: "selectedBackendType")
+        }
+        if let savedParakeet = UserDefaults.standard.string(forKey: "selectedParakeetModel"),
+           let parakeetModel = ParakeetModelVariant(rawValue: savedParakeet) {
+            selectedParakeetModel = parakeetModel
+        }
+
+        // Load LLM settings
+        if UserDefaults.standard.object(forKey: "llmEnabled") != nil {
+            _llmEnabled = Published(wrappedValue: UserDefaults.standard.bool(forKey: "llmEnabled"))
+        }
+        if let savedLLMModel = UserDefaults.standard.string(forKey: "selectedLLMModel"),
+           let llmModel = LLMModelVariant(rawValue: savedLLMModel) {
+            _selectedLLMModel = Published(wrappedValue: llmModel)
+        }
+        if let savedLLMTask = UserDefaults.standard.string(forKey: "selectedLLMTask"),
+           let llmTask = LLMTask(rawValue: savedLLMTask) {
+            _selectedLLMTask = Published(wrappedValue: llmTask)
+        }
+        if let savedCustomPrompt = UserDefaults.standard.string(forKey: "llmCustomPrompt") {
+            _llmCustomPrompt = Published(wrappedValue: savedCustomPrompt)
+        }
+        if let savedTranslateLang = UserDefaults.standard.string(forKey: "llmTranslateLanguage") {
+            _llmTranslateLanguage = Published(wrappedValue: savedTranslateLang)
+        }
+
         // Load prompt words
         if let savedPromptWords = UserDefaults.standard.stringArray(forKey: "promptWords") {
             _promptWords = Published(wrappedValue: savedPromptWords)
         }
         if UserDefaults.standard.object(forKey: "promptWordsEnabled") != nil {
             _promptWordsEnabled = Published(wrappedValue: UserDefaults.standard.bool(forKey: "promptWordsEnabled"))
+        }
+
+        // Load filler word and vocabulary boosting settings
+        if UserDefaults.standard.object(forKey: "fillerWordRemovalEnabled") != nil {
+            _fillerWordRemovalEnabled = Published(wrappedValue: UserDefaults.standard.bool(forKey: "fillerWordRemovalEnabled"))
+        }
+        if UserDefaults.standard.object(forKey: "vocabularyBoostingEnabled") != nil {
+            _vocabularyBoostingEnabled = Published(wrappedValue: UserDefaults.standard.bool(forKey: "vocabularyBoostingEnabled"))
+        }
+
+        // Observe dictionary rebuilds to reconfigure CTC vocabulary boosting
+        dictionaryRebuildObserver = NotificationCenter.default.addObserver(
+            forName: .dictionaryDidRebuild, object: nil, queue: .main
+        ) { [weak self] _ in
+            self?.reconfigureVocabularyBoosting()
         }
 
         // Start monitoring audio device changes
@@ -273,18 +401,18 @@ class AppState: ObservableObject {
     /// Select a model (must be downloaded first)
     func selectModel(_ model: WhisperModel) {
         guard isModelDownloaded(model) else {
-            print("⚠️ Cannot select model \(model.displayName) - not downloaded")
+            Logger.warning("Cannot select model \(model.displayName) - not downloaded", subsystem: .model)
             return
         }
 
         guard model != selectedModel || loadedModel != model else {
-            print("✅ Model \(model.displayName) already selected")
+            Logger.debug("Model \(model.displayName) already selected", subsystem: .model)
             return
         }
 
         selectedModel = model
         UserDefaults.standard.set(model.rawValue, forKey: "selectedModel")
-        print("🔄 Switched to model: \(model.displayName)")
+        Logger.info("Switched to model: \(model.displayName)", subsystem: .model)
 
         // Reload the model
         isModelLoaded = false
@@ -293,43 +421,119 @@ class AppState: ObservableObject {
         preloadModel()
     }
 
+    /// Select a Parakeet model variant
+    func selectParakeetModel(_ model: ParakeetModelVariant) {
+        guard model != selectedParakeetModel || loadedParakeetModel != model else {
+            Logger.info("Parakeet \(model.displayName) already selected", subsystem: .model)
+            return
+        }
+
+        selectedParakeetModel = model
+        UserDefaults.standard.set(model.rawValue, forKey: "selectedParakeetModel")
+        Logger.info("Switched to Parakeet model: \(model.displayName)", subsystem: .model)
+
+        if selectedBackendType == .parakeet {
+            // Cancel any in-flight Parakeet load
+            parakeetLoadTask?.cancel()
+            parakeetLoadTask = nil
+
+            isModelLoaded = false
+            whisperBridge = nil
+            loadedParakeetModel = nil
+            preloadModel()
+        }
+    }
+
+    /// Switch the active transcription backend
+    func selectBackend(_ backend: BackendType) {
+        guard backend != selectedBackendType else { return }
+
+        // Release the current bridge — don't cache across engine types.
+        // Models are 500MB-1.5GB each; caching all three wastes 2-4GB.
+        releaseCurrentBridge()
+
+        selectedBackendType = backend
+        UserDefaults.standard.set(backend.rawValue, forKey: "selectedBackendType")
+        Logger.info("Switched backend to \(backend.displayName)", subsystem: .model)
+
+        // Cancel any in-flight loads
+        parakeetLoadTask?.cancel()
+        parakeetLoadTask = nil
+        isLoadingParakeet = false
+        speechAnalyzerLoadTask?.cancel()
+        speechAnalyzerLoadTask = nil
+        isLoadingSpeechAnalyzer = false
+
+        isModelLoaded = false
+        // Don't auto-load — user must explicitly select a model in the new engine
+    }
+
+    /// Release the active transcription bridge and free its memory
+    private func releaseCurrentBridge() {
+        guard let bridge = whisperBridge else { return }
+
+        let backendName = selectedBackendType.displayName
+        bridge.prepareForShutdown()
+
+        // Release SpeechAnalyzer reserved locales
+        if #available(macOS 26.0, *), let saBridge = bridge as? SpeechAnalyzerBridge {
+            Task.detached { [weak saBridge] in
+                await saBridge?.clearCache()
+            }
+        }
+
+        whisperBridge = nil
+        loadedModel = nil
+        loadedParakeetModel = nil
+        isModelLoaded = false
+
+        Logger.info("Released \(backendName) bridge (freeing memory)", subsystem: .model)
+    }
+
     /// Download a model
     func downloadModel(_ model: WhisperModel) async {
         guard downloadingModel == nil else {
-            print("⚠️ Already downloading a model")
+            Logger.warning("Already downloading a model", subsystem: .model)
             return
         }
 
         guard !isModelDownloaded(model) else {
-            print("✅ Model \(model.displayName) already downloaded")
+            Logger.debug("Model \(model.displayName) already downloaded", subsystem: .model)
             selectModel(model)
             return
         }
 
         downloadingModel = model
         downloadProgress = 0
+        downloadRetryInfo = nil
         state = .downloadingModel(progress: 0)
 
         do {
-            try await ModelDownloader.shared.downloadModel(model) { [weak self] progress in
+            try await ModelDownloader.shared.downloadModel(model, progressCallback: { [weak self] progress in
                 Task { @MainActor in
                     self?.downloadProgress = progress
                     self?.state = .downloadingModel(progress: progress)
                 }
-            }
+            }, retryStatusCallback: { [weak self] attempt, maxAttempts in
+                Task { @MainActor in
+                    self?.downloadRetryInfo = "Retrying download (\(attempt)/\(maxAttempts))..."
+                }
+            })
 
-            print("✅ Downloaded \(model.displayName)")
+            Logger.info("Downloaded \(model.displayName)", subsystem: .model)
             downloadingModel = nil
             downloadProgress = 0
+            downloadRetryInfo = nil
             state = .idle
 
             // Auto-select the newly downloaded model
             selectModel(model)
         } catch {
-            print("❌ Failed to download \(model.displayName): \(error)")
+            Logger.error("Failed to download \(model.displayName): \(error)", subsystem: .model)
             errorMessage = "Failed to download \(model.displayName): \(error.localizedDescription)"
             downloadingModel = nil
             downloadProgress = 0
+            downloadRetryInfo = nil
             state = .idle
         }
     }
@@ -339,50 +543,313 @@ class AppState: ObservableObject {
     /// Pre-load the Whisper model into memory for instant recording start
     /// Call this once after model download completes
     func preloadModel() {
+        switch selectedBackendType {
+        case .whisperCpp:
+            preloadWhisperCppModel()
+        case .parakeet:
+            preloadParakeetModel()
+        case .speechAnalyzer:
+            preloadSpeechAnalyzer()
+        }
+    }
+
+    private func preloadWhisperCppModel() {
         let model = selectedModel
         let path = modelPath
 
         guard FileManager.default.fileExists(atPath: path.path) else {
-            print("⚠️ Model file not found, cannot preload: \(path.path)")
+            Logger.warning("Model file not found, cannot preload: \(path.path)", subsystem: .model)
             return
         }
 
+        // Memory safety check — warn if available memory is low for this model
+        let availableGB = SystemMemory.availableGB()
+        let requiredGB = model.requiredMemoryGB
+        if availableGB < requiredGB {
+            Logger.warning("Low memory for \(model.displayName): available \(String(format: "%.1f", availableGB)) GB, required \(String(format: "%.1f", requiredGB)) GB", subsystem: .model)
+            errorMessage = "Low memory for \(model.displayName). Required: \(String(format: "%.1f", requiredGB)) GB, Available: \(String(format: "%.1f", availableGB)) GB. Consider a smaller model."
+        }
+
         guard whisperBridge == nil || loadedModel != model else {
-            print("✅ Model \(model.displayName) already loaded")
+            Logger.info("Model \(model.displayName) already loaded", subsystem: .model)
             isModelLoaded = true
-            // Also preload VAD if not loaded
             preloadVAD()
             return
         }
 
         let modelDisplayName = model.displayName
-        print("🔄 Pre-loading \(modelDisplayName)...")
+        Logger.info("Pre-loading \(modelDisplayName)...", subsystem: .model)
         let startTime = Date()
 
         Task.detached(priority: .userInitiated) { [weak self] in
             do {
                 let bridge = try WhisperBridge(modelPath: path)
 
-                // Warm up Metal GPU shaders by running a tiny transcription.
-                // The first whisper_full() call compiles Metal shaders; subsequent calls use the cache.
-                // Without this, the user's first recording has a noticeable delay.
-                let warmupSamples = [Float](repeating: 0, count: 16000) // 1s of silence at 16kHz
+                // Warm up Metal GPU shaders
+                let warmupSamples = [Float](repeating: 0, count: 16000)
                 _ = bridge.transcribe(samples: warmupSamples)
 
                 let loadTime = Date().timeIntervalSince(startTime)
-                print("✅ \(modelDisplayName) pre-loaded in \(String(format: "%.2f", loadTime))s (includes GPU warm-up)")
+                Logger.info("\(modelDisplayName) pre-loaded in \(String(format: "%.2f", loadTime))s (includes GPU warm-up)", subsystem: .model)
 
                 await MainActor.run { [weak self] in
                     guard let self = self else { return }
                     self.whisperBridge = bridge
                     self.loadedModel = model
+                    self.loadedParakeetModel = nil
                     self.isModelLoaded = true
-                    // Also preload VAD after whisper model is loaded
                     self.preloadVAD()
                 }
             } catch {
-                print("❌ Failed to pre-load \(modelDisplayName): \(error)")
+                Logger.error("Failed to pre-load \(modelDisplayName): \(error)", subsystem: .model)
             }
+        }
+    }
+
+    /// Check if Parakeet model is already downloaded
+    func isParakeetModelCached(_ variant: ParakeetModelVariant? = nil) -> Bool {
+        FluidAudioBridge.isModelCached(variant: variant ?? selectedParakeetModel)
+    }
+
+    /// Download Parakeet model (separate from loading)
+    func downloadParakeetModel(_ variant: ParakeetModelVariant? = nil) {
+        let variant = variant ?? selectedParakeetModel
+        guard !isDownloadingParakeet else { return }
+
+        isDownloadingParakeet = true
+        parakeetDownloadStatus = "Downloading \(variant.displayName)..."
+        downloadProgress = 0
+        state = .downloadingModel(progress: 0)
+
+        Task.detached(priority: .userInitiated) { [weak self] in
+            do {
+                try await FluidAudioBridge.downloadModel(variant: variant)
+                Logger.info("Parakeet \(variant.displayName) downloaded", subsystem: .model)
+
+                await MainActor.run { [weak self] in
+                    guard let self = self else { return }
+                    self.isDownloadingParakeet = false
+                    self.parakeetDownloadStatus = ""
+                    self.downloadProgress = 0
+                    self.state = .idle
+
+                    // Auto-load after download if this is the active backend
+                    if self.selectedBackendType == .parakeet && self.selectedParakeetModel == variant {
+                        self.preloadParakeetModel()
+                    }
+                }
+            } catch {
+                Logger.error("Failed to download Parakeet \(variant.displayName): \(error)", subsystem: .model)
+                await MainActor.run { [weak self] in
+                    guard let self = self else { return }
+                    self.isDownloadingParakeet = false
+                    self.parakeetDownloadStatus = ""
+                    self.downloadProgress = 0
+                    self.state = .idle
+                    self.errorMessage = "Failed to download Parakeet: \(error.localizedDescription)"
+                }
+            }
+        }
+    }
+
+    private func preloadParakeetModel() {
+        let variant = selectedParakeetModel
+
+        guard whisperBridge == nil || loadedParakeetModel != variant else {
+            Logger.info("Parakeet \(variant.displayName) already loaded", subsystem: .model)
+            isModelLoaded = true
+            isLoadingParakeet = false
+            preloadVAD()
+            return
+        }
+
+        // Check if model is cached — if not, download first
+        guard isParakeetModelCached(variant) else {
+            Logger.info("Parakeet \(variant.displayName) not cached, starting download...", subsystem: .model)
+            downloadParakeetModel(variant)
+            return
+        }
+
+        // Cancel any previous load task
+        parakeetLoadTask?.cancel()
+
+        Logger.info("Pre-loading Parakeet \(variant.displayName)...", subsystem: .model)
+        isLoadingParakeet = true
+        parakeetDownloadStatus = "Loading \(variant.displayName)..."
+        let startTime = Date()
+
+        parakeetLoadTask = Task.detached(priority: .userInitiated) { [weak self] in
+            do {
+                let bridge = try await FluidAudioBridge.loadFromCache(variant: variant)
+
+                guard !Task.isCancelled else { return }
+
+                // Warm up both ANE/CoreML managers (streaming + final pass)
+                let warmupSamples = [Float](repeating: 0, count: 16000)
+
+                // Warm up streaming manager
+                bridge.setMode(.streaming)
+                await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
+                    bridge.transcribeAsync(
+                        samples: warmupSamples,
+                        initialPrompt: nil,
+                        language: .auto,
+                        singleSegment: false,
+                        maxTokens: 0
+                    ) { _ in
+                        continuation.resume()
+                    }
+                }
+
+                guard !Task.isCancelled else { return }
+
+                // Warm up final-pass manager
+                bridge.setMode(.finalPass)
+                await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
+                    bridge.transcribeAsync(
+                        samples: warmupSamples,
+                        initialPrompt: nil,
+                        language: .auto,
+                        singleSegment: false,
+                        maxTokens: 0
+                    ) { _ in
+                        continuation.resume()
+                    }
+                }
+                bridge.setMode(.streaming)
+
+                guard !Task.isCancelled else { return }
+
+                let loadTime = Date().timeIntervalSince(startTime)
+                Logger.info("Parakeet \(variant.displayName) pre-loaded in \(String(format: "%.2f", loadTime))s (dual manager, ANE warm-up)", subsystem: .model)
+
+                await MainActor.run { [weak self] in
+                    guard let self = self else { return }
+                    // Verify this is still the selected model (user may have switched)
+                    guard self.selectedParakeetModel == variant else { return }
+                    self.whisperBridge = bridge
+                    self.loadedModel = nil
+                    self.loadedParakeetModel = variant
+                    self.isModelLoaded = true
+                    self.isLoadingParakeet = false
+                    self.parakeetDownloadStatus = ""
+                    self.preloadVAD()
+
+                    // Configure CTC vocabulary boosting on the final-pass manager
+                    if self.vocabularyBoostingEnabled {
+                        self.configureVocabularyBoostingOnBridge(bridge, variant: variant)
+                    }
+                }
+            } catch {
+                guard !Task.isCancelled else { return }
+                Logger.error("Failed to pre-load Parakeet \(variant.displayName): \(error)", subsystem: .model)
+                await MainActor.run { [weak self] in
+                    guard let self = self else { return }
+                    self.isLoadingParakeet = false
+                    self.parakeetDownloadStatus = ""
+                    self.errorMessage = "Failed to load Parakeet: \(error.localizedDescription)"
+                }
+            }
+        }
+    }
+
+    private func preloadSpeechAnalyzer() {
+        guard #available(macOS 26.0, *) else {
+            Logger.warning("SpeechAnalyzer requires macOS 26+", subsystem: .model)
+            return
+        }
+
+        guard whisperBridge == nil else {
+            Logger.info("SpeechAnalyzer already loaded", subsystem: .model)
+            isModelLoaded = true
+            preloadVAD()
+            return
+        }
+
+        // Cancel any previous load task
+        speechAnalyzerLoadTask?.cancel()
+
+        Logger.info("Pre-loading Apple SpeechAnalyzer...", subsystem: .model)
+        isLoadingSpeechAnalyzer = true
+        speechAnalyzerStatus = "Preparing Apple Speech..."
+        let startTime = Date()
+        let language = selectedLanguage
+
+        speechAnalyzerLoadTask = Task.detached(priority: .userInitiated) { [weak self] in
+            do {
+                let locale = language.locale ?? Locale.current
+                let bridge = try await SpeechAnalyzerBridge.prepare(locale: locale) { progress in
+                    Task { @MainActor [weak self] in
+                        self?.speechAnalyzerStatus = "Downloading model... \(Int(progress * 100))%"
+                    }
+                }
+
+                guard !Task.isCancelled else { return }
+
+                let loadTime = Date().timeIntervalSince(startTime)
+                Logger.info("SpeechAnalyzer pre-loaded in \(String(format: "%.2f", loadTime))s", subsystem: .model)
+
+                await MainActor.run { [weak self] in
+                    guard let self = self else { return }
+                    guard self.selectedBackendType == .speechAnalyzer else { return }
+                    self.whisperBridge = bridge
+                    self.loadedModel = nil
+                    self.loadedParakeetModel = nil
+                    self.isModelLoaded = true
+                    self.isLoadingSpeechAnalyzer = false
+                    self.speechAnalyzerStatus = ""
+                    self.preloadVAD()
+                }
+            } catch {
+                guard !Task.isCancelled else { return }
+                Logger.error("Failed to pre-load SpeechAnalyzer: \(error)", subsystem: .model)
+                await MainActor.run { [weak self] in
+                    guard let self = self else { return }
+                    self.isLoadingSpeechAnalyzer = false
+                    self.speechAnalyzerStatus = ""
+                    self.errorMessage = "Failed to load Apple Speech: \(error.localizedDescription)"
+                }
+            }
+        }
+    }
+
+    /// Pre-load the LLM model if enabled
+    func preloadLLM() {
+        guard llmEnabled else { return }
+        guard llmPostProcessor == nil || llmPostProcessor?.isModelLoaded != true else { return }
+
+        let processor = LLMPostProcessor()
+        llmPostProcessor = processor
+        let variant = selectedLLMModel
+
+        Task {
+            do {
+                try await processor.loadModel(variant)
+                Logger.info("LLM \(variant.displayName) pre-loaded", subsystem: .model)
+            } catch {
+                Logger.error("Failed to pre-load LLM \(variant.displayName): \(error)", subsystem: .model)
+            }
+        }
+    }
+
+    /// Apply LLM post-processing to transcribed text if enabled
+    private func applyLLMPostProcessing(_ text: String) async -> String {
+        guard llmEnabled, let processor = llmPostProcessor, processor.isModelLoaded else {
+            return text
+        }
+
+        do {
+            let processed = try await processor.process(
+                text: text,
+                task: selectedLLMTask,
+                customPrompt: selectedLLMTask == .custom ? llmCustomPrompt : nil,
+                targetLanguage: selectedLLMTask == .translate ? llmTranslateLanguage : nil
+            )
+            Logger.info("LLM post-processed: \(text.prefix(30))... → \(processed.prefix(30))...", subsystem: .transcription)
+            return processed
+        } catch {
+            Logger.error("LLM post-processing failed: \(error)", subsystem: .transcription)
+            return text
         }
     }
 
@@ -390,7 +857,7 @@ class AppState: ObservableObject {
     /// VAD is completely optional - the app works fine without it
     func preloadVAD() {
         guard sileroVAD == nil else {
-            print("✅ Silero VAD already loaded")
+            Logger.debug("Silero VAD already loaded", subsystem: .model)
             isVADLoaded = true
             return
         }
@@ -400,31 +867,30 @@ class AppState: ObservableObject {
         // First ensure the VAD model is downloaded
         Task.detached(priority: .userInitiated) { [weak self] in
             do {
-                print("📥 Checking for Silero VAD model...")
+                Logger.debug("Checking for Silero VAD model...", subsystem: .model)
 
                 // Download VAD model if needed (small ~2MB download)
                 try await ModelDownloader.shared.ensureVADModelDownloaded()
 
                 // Double-check file exists and has reasonable size
                 guard FileManager.default.fileExists(atPath: vadPath.path) else {
-                    print("⚠️ VAD model file not found at: \(vadPath.path)")
-                    print("   App will continue without VAD (no speech detection)")
+                    Logger.warning("VAD model file not found — app will continue without speech detection", subsystem: .model)
                     return
                 }
 
                 // Verify file size
                 if let attrs = try? FileManager.default.attributesOfItem(atPath: vadPath.path),
                    let size = attrs[.size] as? Int64 {
-                    print("📦 VAD model found: \(String(format: "%.2f", Double(size) / 1024.0 / 1024.0)) MB")
+                    Logger.debug("VAD model found: \(String(format: "%.2f", Double(size) / 1024.0 / 1024.0)) MB", subsystem: .model)
                 }
 
-                print("🔄 Pre-loading Silero VAD...")
+                Logger.info("Pre-loading Silero VAD...", subsystem: .model)
                 let startTime = Date()
 
                 // Load VAD model (now calls ggml_backend_load_all first)
                 let vad = try SileroVAD(modelPath: vadPath)
                 let loadTime = Date().timeIntervalSince(startTime)
-                print("✅ Silero VAD pre-loaded in \(String(format: "%.2f", loadTime))s")
+                Logger.info("Silero VAD pre-loaded in \(String(format: "%.2f", loadTime))s", subsystem: .model)
 
                 await MainActor.run { [weak self] in
                     guard let self = self else { return }
@@ -432,15 +898,46 @@ class AppState: ObservableObject {
                     self.isVADLoaded = true
                 }
             } catch {
-                print("⚠️ Failed to load Silero VAD: \(error.localizedDescription)")
-                print("   This is OK - VAD is optional for better performance")
-                print("   App will work fine without speech detection")
+                Logger.warning("Failed to load Silero VAD: \(error.localizedDescription) — app will work without speech detection", subsystem: .model)
                 // VAD is completely optional, continue without it
                 await MainActor.run { [weak self] in
                     self?.isVADLoaded = false
                 }
             }
         }
+    }
+
+    // MARK: - Vocabulary Boosting
+
+    /// Configure CTC vocabulary boosting on a FluidAudioBridge's final-pass manager
+    private func configureVocabularyBoostingOnBridge(_ bridge: FluidAudioBridge, variant: ParakeetModelVariant) {
+        Task.detached(priority: .utility) { [weak self] in
+            guard let self = self else { return }
+            do {
+                let entries = await DictionaryManager.shared.entries
+                guard let vocabBundle = try await VocabularyStore.buildVocabulary(entries: entries) else {
+                    Logger.debug("No vocabulary terms for CTC boosting", subsystem: .transcription)
+                    return
+                }
+                try await bridge.configureVocabularyBoosting(
+                    vocabulary: vocabBundle.vocabulary,
+                    ctcModels: vocabBundle.ctcModels
+                )
+            } catch {
+                Logger.warning("Failed to configure vocabulary boosting: \(error.localizedDescription)", subsystem: .transcription)
+                // Non-fatal — transcription still works without boosting
+            }
+        }
+    }
+
+    /// Reconfigure vocabulary boosting after dictionary changes
+    private func reconfigureVocabularyBoosting() {
+        guard vocabularyBoostingEnabled,
+              selectedBackendType == .parakeet,
+              let bridge = whisperBridge as? FluidAudioBridge else { return }
+
+        let variant = selectedParakeetModel
+        configureVocabularyBoostingOnBridge(bridge, variant: variant)
     }
 
     // MARK: - Global Dictation Lifecycle
@@ -524,7 +1021,7 @@ class AppState: ObservableObject {
 
         Task {
             do {
-                streamingTranscriber = StreamingTranscriber(whisperBridge: bridge, vad: sileroVAD, language: selectedLanguage, initialPrompt: promptWordsString)
+                streamingTranscriber = StreamingTranscriber(backend: bridge, vad: sileroVAD, language: selectedLanguage, initialPrompt: promptWordsString, fillerWordRemovalEnabled: fillerWordRemovalEnabled)
                 streamingTranscriber?.start { [weak self] text in
                     Task { @MainActor in
                         if self?.liveTranscriptionEnabled == true {
@@ -586,7 +1083,9 @@ class AppState: ObservableObject {
             streamingTranscriber = nil
 
             if !finalText.isEmpty {
-                lastInAppTranscription = finalText
+                // Apply LLM post-processing if enabled
+                let processedText = await applyLLMPostProcessing(finalText)
+                lastInAppTranscription = processedText
             } else {
                 errorMessage = "No speech detected"
             }
@@ -610,7 +1109,7 @@ class AppState: ObservableObject {
         // Check if model is loaded first
         guard let bridge = whisperBridge else {
             errorMessage = "Model not loaded yet. Please wait..."
-            print("⚠️ Cannot start recording - model not pre-loaded")
+            Logger.warning("Cannot start recording - model not pre-loaded", subsystem: .app)
             return
         }
 
@@ -634,7 +1133,7 @@ class AppState: ObservableObject {
         Task {
             do {
                 // Create streaming transcriber with pre-loaded bridge, optional VAD, and language
-                streamingTranscriber = StreamingTranscriber(whisperBridge: bridge, vad: sileroVAD, language: selectedLanguage, initialPrompt: promptWordsString)
+                streamingTranscriber = StreamingTranscriber(backend: bridge, vad: sileroVAD, language: selectedLanguage, initialPrompt: promptWordsString, fillerWordRemovalEnabled: fillerWordRemovalEnabled)
                 streamingTranscriber?.start { [weak self] text in
                     Task { @MainActor in
                         if self?.liveTranscriptionEnabled == true {
@@ -707,7 +1206,7 @@ class AppState: ObservableObject {
             let transcriber = streamingTranscriber
             if let transcriber {
                 finalText = await transcriber.stopAsync()
-                print("🎤 Final transcription: '\(finalText)'")
+                Logger.debug("Final transcription: '\(finalText)'", subsystem: .transcription)
             }
             streamingTranscriber = nil
 
@@ -716,12 +1215,15 @@ class AppState: ObservableObject {
                 if saveRecordings, let transcriber {
                     saveRecordingFromTranscriber(transcriber, transcription: finalText)
                 }
-                Logger.debug("Entering dictated text: '\(finalText)'", subsystem: .app)
-                state = .inserting(text: finalText)
-                await insertText(finalText)
+
+                // Apply LLM post-processing if enabled
+                let processedText = await applyLLMPostProcessing(finalText)
+
+                Logger.debug("Entering dictated text: '\(processedText)'", subsystem: .app)
+                state = .inserting(text: processedText)
+                await insertText(processedText)
             } else {
-                // No speech detected
-                print("⚠️ No speech detected in recording")
+                Logger.debug("No speech detected in recording", subsystem: .app)
                 errorMessage = "No speech detected"
                 state = .idle
             }
@@ -770,17 +1272,25 @@ class AppState: ObservableObject {
 
         // Save recording from in-memory samples
         if transcriber.saveRecording(to: destURL) {
-            print("✅ Recording saved to: \(destURL.path)")
+            Logger.info("Recording saved to: \(destURL.path)", subsystem: .app)
 
             // Save to history database
             Task {
                 do {
+                    // Use detected language when auto-detect is active, otherwise use user selection
+                    let recordedLanguage: String
+                    if self.selectedLanguage == .auto, let detected = self.whisperBridge?.lastDetectedLanguage {
+                        recordedLanguage = detected
+                    } else {
+                        recordedLanguage = self.selectedLanguage.rawValue
+                    }
+
                     let record = TranscriptionRecord(
                         transcription: transcription,
                         audioFileURL: fileName,
                         duration: transcriber.recordedDuration,
-                        language: selectedLanguage.rawValue,
-                        modelUsed: selectedModel.rawValue,
+                        language: recordedLanguage,
+                        modelUsed: activeModelDisplayName,
                         corrections: DictionaryManager.shared.lastCorrections,
                         targetAppName: self.lastTargetAppName
                     )
@@ -828,6 +1338,12 @@ class AppState: ObservableObject {
     func releaseWhisperResources() {
         Logger.debug("Releasing whisper resources...", subsystem: .transcription)
 
+        // Remove dictionary rebuild observer
+        if let observer = dictionaryRebuildObserver {
+            NotificationCenter.default.removeObserver(observer)
+            dictionaryRebuildObserver = nil
+        }
+
         // Stop any streaming transcription
         streamingTranscriber = nil
 
@@ -838,14 +1354,32 @@ class AppState: ObservableObject {
             isVADLoaded = false
         }
 
-        // Free whisper context (this is the critical one that was crashing)
-        if whisperBridge != nil {
-            Logger.debug("Freeing WhisperBridge context", subsystem: .transcription)
+        // Free active transcription bridge
+        if let bridge = whisperBridge {
+            Logger.debug("Freeing transcription backend context", subsystem: .transcription)
+            bridge.prepareForShutdown()
+            if #available(macOS 26.0, *), let saBridge = bridge as? SpeechAnalyzerBridge {
+                Task.detached { [weak saBridge] in
+                    await saBridge?.clearCache()
+                }
+            }
             whisperBridge = nil
             loadedModel = nil
+            loadedParakeetModel = nil
             isModelLoaded = false
         }
 
-        Logger.debug("Whisper resources released", subsystem: .transcription)
+        // Cancel SpeechAnalyzer load task
+        speechAnalyzerLoadTask?.cancel()
+        speechAnalyzerLoadTask = nil
+
+        // Free LLM resources
+        if llmPostProcessor != nil {
+            Logger.debug("Freeing LLM resources", subsystem: .transcription)
+            llmPostProcessor?.unloadModel()
+            llmPostProcessor = nil
+        }
+
+        Logger.debug("Transcription resources released", subsystem: .transcription)
     }
 }

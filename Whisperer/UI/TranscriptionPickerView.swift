@@ -34,6 +34,7 @@ struct TranscriptionPickerView: View {
                 )
                 .shadow(color: Color.black.opacity(0.4), radius: 20, y: 8)
                 .frame(width: 380)
+                .tahoeTextFix()
 
                 // "Copied" feedback overlay
                 if pickerState.showCopiedFeedback {
@@ -79,6 +80,7 @@ struct TranscriptionPickerView: View {
         .padding(.horizontal, 16)
         .padding(.top, 14)
         .padding(.bottom, 10)
+
     }
 
     // MARK: - Divider
@@ -143,6 +145,7 @@ struct TranscriptionPickerView: View {
         .padding(.horizontal, 16)
         .padding(.top, 8)
         .padding(.bottom, 12)
+
     }
 
     // MARK: - Copied Feedback
@@ -230,6 +233,7 @@ private struct PickerRow: View {
                 .stroke(isSelected ? accentBlue.opacity(0.25) : Color.clear, lineWidth: 1)
         )
         .animation(.easeInOut(duration: 0.1), value: isSelected)
+
     }
 
     private func relativeTime(_ date: Date) -> String {

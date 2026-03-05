@@ -91,6 +91,7 @@ struct OverlayView: View {
             )
         }
         .background(Color.clear)
+        .tahoeTextFix()
         .onAppear {
             withAnimation(.easeInOut(duration: 1.0).repeatForever(autoreverses: true)) {
                 isPulsing = true
@@ -241,6 +242,7 @@ struct ProcessingIndicator: View {
         .onAppear {
             isAnimating = true
         }
+
     }
 
     private func barHeight(for index: Int) -> CGFloat {
@@ -277,6 +279,7 @@ struct DownloadIndicator: View {
                 .font(.system(size: 10, weight: .bold))
                 .foregroundColor(.white)
         }
+
     }
 }
 

@@ -69,19 +69,22 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         // Hide dock icon
         NSApp.setActivationPolicy(.accessory)
 
-        // Initialize components
-        setupComponents()
-
-        // Show overlay panel
-        setupOverlay()
-
-        // Check permissions
-        Task {
-            await checkPermissions()
-        }
-
-        // Show onboarding window on first launch
+        // Show onboarding window on first launch (pure UI, runs immediately)
         OnboardingWindowManager.shared.showIfNeeded()
+
+        // Defer heavy service initialization to let MenuBarExtra complete initial layout.
+        // Prevents potential EXC_BAD_ACCESS from AttributeGraph metadata processing
+        // during concurrent service init and SwiftUI layout.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
+            guard let self = self else { return }
+
+            self.setupComponents()
+            self.setupOverlay()
+
+            Task {
+                await self.checkPermissions()
+            }
+        }
     }
 
     private func setupComponents() {
@@ -344,6 +347,7 @@ struct MenuBarView: View {
             footerView
         }
         .frame(width: 360, height: 580)
+        .tahoeTextFix()
         .background(MBColors.background)
         .background(MenuBarWindowConfigurator())
         .environment(\.colorScheme, .dark)
@@ -418,6 +422,7 @@ struct MenuBarView: View {
                 endPoint: .bottom
             )
         )
+
     }
 
     private var statusIcon: String {
@@ -481,6 +486,7 @@ struct MenuBarView: View {
         .padding(.horizontal, 16)
         .padding(.vertical, 8)
         .background(MBColors.cardSurface)
+
     }
 
     private func tabButton(_ tab: MenuTab) -> some View {
@@ -595,6 +601,7 @@ struct MenuBarView: View {
                     alignment: .top
                 )
         )
+
     }
 
 }
@@ -614,6 +621,30 @@ struct StatusTabView: View {
         return false
     }
 
+    private var activeModelName: String {
+        switch appState.selectedBackendType {
+        case .whisperCpp: return appState.selectedModel.displayName
+        case .parakeet: return appState.selectedParakeetModel.displayName
+        case .speechAnalyzer: return "On-Device"
+        }
+    }
+
+    private var activeModelDetail: String? {
+        switch appState.selectedBackendType {
+        case .whisperCpp: return appState.selectedModel.sizeDescription
+        case .parakeet: return nil
+        case .speechAnalyzer: return nil
+        }
+    }
+
+    private var activeModelColor: Color {
+        switch appState.selectedBackendType {
+        case .whisperCpp: return .blue
+        case .parakeet: return .green
+        case .speechAnalyzer: return .cyan
+        }
+    }
+
     var body: some View {
         ScrollView(showsIndicators: false) {
             VStack(alignment: .leading, spacing: 16) {
@@ -628,11 +659,11 @@ struct StatusTabView: View {
                 // Quick info cards
                 VStack(spacing: 12) {
                     infoCard(
-                        icon: "cpu",
-                        title: "Model",
-                        value: appState.selectedModel.displayName,
-                        detail: appState.selectedModel.sizeDescription,
-                        color: .blue,
+                        icon: appState.selectedBackendType.iconName,
+                        title: appState.selectedBackendType.displayName,
+                        value: activeModelName,
+                        detail: activeModelDetail,
+                        color: activeModelColor,
                         navigateTo: .models
                     )
 
@@ -889,6 +920,7 @@ struct StatusTabView: View {
         .onHover { hovering in
             if hovering { NSCursor.pointingHand.push() } else { NSCursor.pop() }
         }
+
     }
 
     private var systemWideDictationCard: some View {
@@ -1033,42 +1065,269 @@ struct ModelsTabView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            // Recommended
-            modelSection(
-                title: "Recommended",
-                icon: "sparkles",
-                color: MBColors.accent,
-                models: [.largeTurboQ5],
-                sectionId: "recommended"
-            )
+            // Backend picker
+            backendPicker
 
-            // Turbo & Optimized
-            modelSection(
-                title: "Turbo & Optimized",
-                icon: "bolt.fill",
-                color: .orange,
-                models: [.largeTurbo, .largeV3Q5],
-                sectionId: "turbo"
-            )
+            if appState.selectedBackendType == .whisperCpp {
+                // Recommended
+                modelSection(
+                    title: "Recommended",
+                    icon: "sparkles",
+                    color: MBColors.accent,
+                    models: [.largeTurboQ5],
+                    sectionId: "recommended"
+                )
 
-            // Standard
-            modelSection(
-                title: "Standard",
-                icon: "cube.fill",
-                color: .blue,
-                models: [.tiny, .base, .small, .medium, .largeV3],
-                sectionId: "standard"
-            )
+                // Turbo & Optimized
+                modelSection(
+                    title: "Turbo & Optimized",
+                    icon: "bolt.fill",
+                    color: .orange,
+                    models: [.largeTurbo, .largeV3Q5],
+                    sectionId: "turbo"
+                )
 
-            // Distilled
-            modelSection(
-                title: "Distilled",
-                icon: "wand.and.stars",
-                color: .red,
-                models: WhisperModel.allCases.filter { $0.isDistilled },
-                sectionId: "distilled"
+                // Standard
+                modelSection(
+                    title: "Standard",
+                    icon: "cube.fill",
+                    color: .blue,
+                    models: [.tiny, .base, .small, .medium, .largeV3],
+                    sectionId: "standard"
+                )
+
+                // Distilled
+                modelSection(
+                    title: "Distilled",
+                    icon: "wand.and.stars",
+                    color: .red,
+                    models: WhisperModel.allCases.filter { $0.isDistilled },
+                    sectionId: "distilled"
+                )
+            } else if appState.selectedBackendType == .parakeet {
+                // Parakeet models
+                parakeetModelSection
+            } else if appState.selectedBackendType == .speechAnalyzer {
+                // Apple Speech section
+                speechAnalyzerSection
+            }
+        }
+    }
+
+    private var backendPicker: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 10) {
+                ZStack {
+                    RoundedRectangle(cornerRadius: 6)
+                        .fill(Color.purple.opacity(0.15))
+                        .frame(width: 26, height: 26)
+                    Image(systemName: "cpu")
+                        .foregroundColor(.purple)
+                        .font(.system(size: 12, weight: .medium))
+                }
+
+                Text("Engine")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundColor(MBColors.textPrimary)
+
+                Spacer()
+            }
+
+            HStack(spacing: 0) {
+                ForEach(Array(BackendType.allCases.enumerated()), id: \.element.id) { index, backend in
+                    let isSelected = appState.selectedBackendType == backend
+
+                    Button(action: {
+                        appState.selectBackend(backend)
+                    }) {
+                        HStack(spacing: 4) {
+                            Image(systemName: backend.iconName)
+                                .font(.system(size: 10, weight: .medium))
+                            Text(backend.displayName)
+                                .font(.system(size: 11, weight: isSelected ? .semibold : .medium))
+                                .lineLimit(1)
+                        }
+                        .foregroundColor(isSelected ? .white : MBColors.textSecondary)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 7)
+                        .background(
+                            RoundedRectangle(cornerRadius: 6)
+                                .fill(isSelected ? MBColors.accent : Color.clear)
+                        )
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .onHover { hovering in
+                        if hovering {
+                            NSCursor.pointingHand.push()
+                        } else {
+                            NSCursor.pop()
+                        }
+                    }
+                }
+            }
+            .padding(2)
+            .background(
+                RoundedRectangle(cornerRadius: 8)
+                    .fill(MBColors.elevated.opacity(0.5))
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 8)
+                    .stroke(MBColors.border, lineWidth: 1)
             )
         }
+        .padding(12)
+        .background(MBColors.cardSurface)
+        .cornerRadius(10)
+        .overlay(
+            RoundedRectangle(cornerRadius: 10)
+                .stroke(MBColors.border, lineWidth: 1)
+        )
+    }
+
+    private var parakeetModelSection: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 10) {
+                ZStack {
+                    RoundedRectangle(cornerRadius: 6)
+                        .fill(Color.green.opacity(0.15))
+                        .frame(width: 26, height: 26)
+                    Image(systemName: "bird.fill")
+                        .foregroundColor(.green)
+                        .font(.system(size: 12, weight: .medium))
+                }
+
+                Text("Parakeet Models")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundColor(MBColors.textPrimary)
+
+                Spacer()
+            }
+
+            VStack(spacing: 4) {
+                ForEach(ParakeetModelVariant.allCases) { model in
+                    ParakeetModelRow(model: model)
+                }
+            }
+
+            if appState.isDownloadingParakeet || appState.isLoadingParakeet {
+                VStack(alignment: .leading, spacing: 6) {
+                    HStack(spacing: 6) {
+                        ProgressView()
+                            .scaleEffect(0.5)
+                            .frame(width: 12, height: 12)
+                        Text(appState.parakeetDownloadStatus)
+                            .font(.system(size: 11, weight: .medium))
+                            .foregroundColor(MBColors.textSecondary)
+                    }
+
+                    if appState.isDownloadingParakeet {
+                        // Indeterminate progress bar
+                        ProgressView()
+                            .progressViewStyle(.linear)
+                            .tint(MBColors.accent)
+                    }
+                }
+                .padding(.leading, 20)
+            }
+        }
+        .padding(12)
+        .background(MBColors.cardSurface)
+        .cornerRadius(10)
+        .overlay(
+            RoundedRectangle(cornerRadius: 10)
+                .stroke(MBColors.border, lineWidth: 1)
+        )
+    }
+
+    private var speechAnalyzerSection: some View {
+        let isActive = appState.isModelLoaded && appState.selectedBackendType == .speechAnalyzer
+        let isLoading = appState.isLoadingSpeechAnalyzer
+        let isHighlighted = isActive || isLoading
+
+        return VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 10) {
+                ZStack {
+                    RoundedRectangle(cornerRadius: 6)
+                        .fill(Color.cyan.opacity(0.15))
+                        .frame(width: 26, height: 26)
+                    Image(systemName: "apple.logo")
+                        .foregroundColor(.cyan)
+                        .font(.system(size: 12, weight: .medium))
+                }
+
+                Text("Apple Speech")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundColor(MBColors.textPrimary)
+
+                Spacer()
+            }
+
+            // Clickable model row
+            Button(action: {
+                if !isActive && !isLoading {
+                    appState.preloadModel()
+                }
+            }) {
+                HStack(spacing: 10) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("On-Device Model")
+                            .font(.system(size: 12, weight: isHighlighted ? .semibold : .regular))
+                            .foregroundColor(isHighlighted ? MBColors.textPrimary : MBColors.textSecondary)
+
+                        Text("System-managed \u{2022} macOS 26+")
+                            .font(.caption2)
+                            .foregroundColor(MBColors.textTertiary)
+                    }
+
+                    Spacer()
+
+                    if isLoading {
+                        HStack(spacing: 4) {
+                            ProgressView()
+                                .scaleEffect(0.5)
+                                .frame(width: 12, height: 12)
+                            Text("Loading")
+                                .font(.caption2)
+                                .foregroundColor(MBColors.accent)
+                        }
+                    } else if isActive {
+                        Text("Active")
+                            .font(.system(size: 10, weight: .semibold))
+                            .foregroundColor(MBColors.accent)
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 3)
+                            .background(Capsule().fill(MBColors.accent.opacity(0.15)))
+                    }
+                }
+                .padding(.vertical, 6)
+                .padding(.horizontal, 8)
+                .background(
+                    RoundedRectangle(cornerRadius: 6)
+                        .fill(isHighlighted ? MBColors.accent.opacity(0.12) : Color.clear)
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: 6)
+                        .stroke(isHighlighted ? MBColors.accent.opacity(0.3) : Color.clear, lineWidth: 1)
+                )
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .onHover { hovering in
+                if hovering {
+                    NSCursor.pointingHand.push()
+                } else {
+                    NSCursor.pop()
+                }
+            }
+        }
+        .padding(12)
+        .background(MBColors.cardSurface)
+        .cornerRadius(10)
+        .overlay(
+            RoundedRectangle(cornerRadius: 10)
+                .stroke(MBColors.border, lineWidth: 1)
+        )
     }
 
     private func modelSection(title: String, icon: String, color: Color, models: [WhisperModel], sectionId: String) -> some View {
@@ -1103,12 +1362,11 @@ struct ModelsTabView: View {
             .buttonStyle(.plain)
 
             if expandedSection == sectionId {
-                VStack(spacing: 6) {
+                VStack(spacing: 4) {
                     ForEach(models, id: \.self) { model in
                         ModelMenuItem(model: model)
                     }
                 }
-                .padding(.leading, 20)
             }
         }
         .padding(12)
@@ -1291,6 +1549,49 @@ struct SettingsTabView: View {
                     }
                 }
 
+                // Vocabulary Boosting (Parakeet CTC rescoring)
+                settingsCard(title: "Vocabulary Boosting", icon: "text.magnifyingglass", color: .green) {
+                    HStack {
+                        VStack(alignment: .leading, spacing: 3) {
+                            Text("CTC rescoring")
+                                .font(.system(size: 13, weight: .medium))
+                                .foregroundColor(MBColors.textPrimary)
+                            Text("Boost dictionary terms in Parakeet final pass")
+                                .font(.system(size: 11))
+                                .foregroundColor(MBColors.textSecondary)
+                        }
+
+                        Spacer()
+
+                        Toggle("", isOn: $appState.vocabularyBoostingEnabled)
+                            .toggleStyle(.switch)
+                            .tint(MBColors.accent)
+                            .labelsHidden()
+                            .disabled(appState.selectedBackendType != .parakeet)
+                    }
+                }
+
+                // Filler Word Removal
+                settingsCard(title: "Filler Words", icon: "text.redaction", color: .orange) {
+                    HStack {
+                        VStack(alignment: .leading, spacing: 3) {
+                            Text("Remove filler words")
+                                .font(.system(size: 13, weight: .medium))
+                                .foregroundColor(MBColors.textPrimary)
+                            Text("Strip um, uh, er from output")
+                                .font(.system(size: 11))
+                                .foregroundColor(MBColors.textSecondary)
+                        }
+
+                        Spacer()
+
+                        Toggle("", isOn: $appState.fillerWordRemovalEnabled)
+                            .toggleStyle(.switch)
+                            .tint(MBColors.accent)
+                            .labelsHidden()
+                    }
+                }
+
                 // Launch at Login
                 settingsCard(title: "Launch at Login", icon: "arrow.right.to.line", color: .cyan) {
                     HStack {
@@ -1346,6 +1647,11 @@ struct SettingsTabView: View {
                 // Permissions
                 settingsCard(title: "Permissions", icon: "lock.shield.fill", color: .red) {
                     PermissionsView()
+                }
+
+                // AI Post-Processing
+                settingsCard(title: "AI Post-Processing", icon: "sparkles", color: .purple) {
+                    LLMSettingsView()
                 }
 
                 // Diagnostics
@@ -1424,6 +1730,8 @@ struct ModelMenuItem: View {
     let model: WhisperModel
     @ObservedObject var appState = AppState.shared
 
+    var isActive: Bool { appState.selectedModel == model && appState.isModelLoaded && appState.selectedBackendType == .whisperCpp }
+    var isHighlighted: Bool { isActive }
     var isSelected: Bool { appState.selectedModel == model }
     var isDownloaded: Bool { appState.isModelDownloaded(model) }
     var isDownloading: Bool { appState.downloadingModel == model }
@@ -1431,58 +1739,76 @@ struct ModelMenuItem: View {
     var body: some View {
         Button(action: { handleTap() }) {
             HStack(spacing: 10) {
-                // Selection indicator
-                ZStack {
-                    Circle()
-                        .stroke(isSelected ? MBColors.accent : MBColors.textTertiary, lineWidth: 2)
-                        .frame(width: 18, height: 18)
-
-                    if isSelected {
-                        Circle()
-                            .fill(MBColors.accent)
-                            .frame(width: 10, height: 10)
-                    }
-                }
-
                 VStack(alignment: .leading, spacing: 2) {
                     Text(model.displayName)
-                        .font(.system(size: 12, weight: isSelected ? .semibold : .regular))
-                        .foregroundColor(isSelected ? MBColors.textPrimary : MBColors.textSecondary)
+                        .font(.system(size: 12, weight: isHighlighted ? .semibold : .regular))
+                        .foregroundColor(isHighlighted ? MBColors.textPrimary : MBColors.textSecondary)
 
                     HStack(spacing: 6) {
                         Text(model.sizeDescription)
                             .font(.caption2)
-                        Text("•")
+                        Text("\u{2022}")
                             .font(.caption2)
                         Text(model.speedDescription)
                             .font(.caption2)
                     }
                     .foregroundColor(MBColors.textTertiary)
                 }
+        
 
                 Spacer()
 
                 statusBadge
             }
             .padding(.vertical, 6)
+            .padding(.horizontal, 8)
+            .background(
+                RoundedRectangle(cornerRadius: 6)
+                    .fill(isHighlighted ? MBColors.accent.opacity(0.12) : Color.clear)
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 6)
+                    .stroke(isHighlighted ? MBColors.accent.opacity(0.3) : Color.clear, lineWidth: 1)
+            )
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        .onHover { hovering in
+            if hovering {
+                NSCursor.pointingHand.push()
+            } else {
+                NSCursor.pop()
+            }
+        }
         .disabled(isDownloading || appState.downloadingModel != nil)
     }
 
     @ViewBuilder var statusBadge: some View {
         if isDownloading {
-            HStack(spacing: 4) {
-                ProgressView()
-                    .scaleEffect(0.5)
-                Text("\(Int(appState.downloadProgress * 100))%")
-                    .font(.caption2)
-                    .foregroundColor(MBColors.accent)
+            VStack(spacing: 2) {
+                HStack(spacing: 4) {
+                    ProgressView()
+                        .scaleEffect(0.5)
+                    Text("\(Int(appState.downloadProgress * 100))%")
+                        .font(.caption2)
+                        .foregroundColor(MBColors.accent)
+                }
+                if let retryInfo = appState.downloadRetryInfo {
+                    Text(retryInfo)
+                        .font(.system(size: 9))
+                        .foregroundColor(.orange)
+                }
             }
+        } else if isActive {
+            Text("Active")
+                .font(.system(size: 10, weight: .semibold))
+                .foregroundColor(MBColors.accent)
+                .padding(.horizontal, 8)
+                .padding(.vertical, 3)
+                .background(Capsule().fill(MBColors.accent.opacity(0.15)))
         } else if isDownloaded {
             Image(systemName: "checkmark.circle.fill")
-                .foregroundColor(MBColors.accent)
+                .foregroundColor(MBColors.accent.opacity(0.5))
                 .font(.system(size: 14))
         } else {
             HStack(spacing: 4) {
@@ -1503,6 +1829,94 @@ struct ModelMenuItem: View {
                 await appState.downloadModel(model)
             }
         }
+    }
+}
+
+// MARK: - Parakeet Model Row
+
+struct ParakeetModelRow: View {
+    let model: ParakeetModelVariant
+    @ObservedObject var appState = AppState.shared
+
+    var isActive: Bool { appState.selectedParakeetModel == model && appState.isModelLoaded && appState.selectedBackendType == .parakeet }
+    var isLoading: Bool { appState.selectedParakeetModel == model && appState.selectedBackendType == .parakeet && (appState.isDownloadingParakeet || appState.isLoadingParakeet) }
+    var isHighlighted: Bool { isActive || isLoading }
+    var isSelected: Bool { appState.selectedParakeetModel == model }
+    var isCached: Bool { appState.isParakeetModelCached(model) }
+
+    var body: some View {
+        Button(action: {
+            if isCached {
+                appState.selectParakeetModel(model)
+            } else {
+                appState.downloadParakeetModel(model)
+            }
+        }) {
+            HStack(spacing: 10) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(model.displayName)
+                        .font(.system(size: 12, weight: isHighlighted ? .semibold : .regular))
+                        .foregroundColor(isHighlighted ? MBColors.textPrimary : MBColors.textSecondary)
+
+                    Text(model.languageDescription)
+                        .font(.caption2)
+                        .foregroundColor(MBColors.textTertiary)
+                }
+        
+
+                Spacer()
+
+                if isLoading {
+                    HStack(spacing: 4) {
+                        ProgressView()
+                            .scaleEffect(0.5)
+                            .frame(width: 12, height: 12)
+                        Text("Loading")
+                            .font(.caption2)
+                            .foregroundColor(MBColors.accent)
+                    }
+                } else if isActive {
+                    Text("Active")
+                        .font(.system(size: 10, weight: .semibold))
+                        .foregroundColor(MBColors.accent)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 3)
+                        .background(Capsule().fill(MBColors.accent.opacity(0.15)))
+                } else if isCached {
+                    Image(systemName: "checkmark.circle.fill")
+                        .foregroundColor(MBColors.accent.opacity(0.5))
+                        .font(.system(size: 14))
+                } else {
+                    HStack(spacing: 4) {
+                        Image(systemName: "arrow.down.circle")
+                            .font(.system(size: 14))
+                        Text("Download")
+                            .font(.caption2)
+                    }
+                    .foregroundColor(MBColors.accent)
+                }
+            }
+            .padding(.vertical, 6)
+            .padding(.horizontal, 8)
+            .background(
+                RoundedRectangle(cornerRadius: 6)
+                    .fill(isHighlighted ? MBColors.accent.opacity(0.12) : Color.clear)
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 6)
+                    .stroke(isHighlighted ? MBColors.accent.opacity(0.3) : Color.clear, lineWidth: 1)
+            )
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .onHover { hovering in
+            if hovering {
+                NSCursor.pointingHand.push()
+            } else {
+                NSCursor.pop()
+            }
+        }
+        .disabled(appState.isDownloadingParakeet)
     }
 }
 
@@ -1902,6 +2316,8 @@ struct DiagnosticsView: View {
     @State private var logFileSize: String = "..."
     @State private var verboseLogging: Bool = Logger.isVerbose
 
+    private let diagnosticSubsystems: [LogSubsystem] = [.audio, .transcription, .textInjection, .model]
+
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             // Verbose logging toggle
@@ -1975,6 +2391,31 @@ struct DiagnosticsView: View {
             Divider()
                 .opacity(0.3)
 
+            // Per-subsystem debug channels
+            VStack(alignment: .leading, spacing: 6) {
+                Text("Debug Channels")
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundColor(MBColors.textPrimary)
+                Text("Enable debug logs for specific subsystems")
+                    .font(.system(size: 11))
+                    .foregroundColor(MBColors.textSecondary)
+
+                ForEach(diagnosticSubsystems, id: \.self) { subsystem in
+                    SubsystemToggleRow(subsystem: subsystem)
+                }
+            }
+
+            Divider()
+                .opacity(0.3)
+
+            // SpeechAnalyzer test (macOS 26+)
+            if #available(macOS 26.0, *) {
+                SpeechAnalyzerTestSection()
+            }
+
+            Divider()
+                .opacity(0.3)
+
             // Version info
             HStack {
                 Text("Version")
@@ -2010,6 +2451,98 @@ struct DiagnosticsView: View {
             }
         } else {
             logFileSize = "Not found"
+        }
+    }
+}
+
+private struct SubsystemToggleRow: View {
+    let subsystem: LogSubsystem
+    @State private var isVerbose: Bool
+
+    init(subsystem: LogSubsystem) {
+        self.subsystem = subsystem
+        self._isVerbose = State(initialValue: Logger.isSubsystemVerbose(subsystem))
+    }
+
+    var body: some View {
+        HStack {
+            Text(subsystem.rawValue)
+                .font(.system(size: 11, weight: .medium))
+                .foregroundColor(MBColors.textSecondary)
+            Spacer()
+            Toggle("", isOn: $isVerbose)
+                .toggleStyle(.switch)
+                .tint(MBColors.accent)
+                .labelsHidden()
+                .controlSize(.mini)
+                .onChange(of: isVerbose) { _, newValue in
+                    Logger.setSubsystemVerbose(newValue, for: subsystem)
+                }
+        }
+    }
+}
+
+// MARK: - SpeechAnalyzer Test Section
+
+@available(macOS 26.0, *)
+private struct SpeechAnalyzerTestSection: View {
+    @StateObject private var diagnostics = SpeechAnalyzerDiagnostics()
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack {
+                Text("SpeechAnalyzer Test")
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundColor(MBColors.textPrimary)
+
+                Spacer()
+
+                Button(action: { diagnostics.runDiagnostics() }) {
+                    HStack(spacing: 4) {
+                        if diagnostics.isRunning {
+                            ProgressView()
+                                .controlSize(.mini)
+                                .scaleEffect(0.7)
+                        } else {
+                            Image(systemName: "play.fill")
+                                .font(.system(size: 9))
+                        }
+                        Text(diagnostics.isRunning ? "Running..." : "Run Test")
+                            .font(.system(size: 11, weight: .medium))
+                    }
+                    .foregroundColor(MBColors.textSecondary)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 5)
+                    .background(MBColors.pill)
+                    .cornerRadius(6)
+                }
+                .buttonStyle(.plain)
+                .disabled(diagnostics.isRunning)
+            }
+
+            if !diagnostics.status.isEmpty {
+                Text(diagnostics.status)
+                    .font(.system(size: 11))
+                    .foregroundColor(MBColors.textSecondary)
+            }
+
+            ForEach(diagnostics.results) { result in
+                HStack(spacing: 6) {
+                    Image(systemName: result.passed ? "checkmark.circle.fill" : "xmark.circle.fill")
+                        .foregroundColor(result.passed ? .green : .red)
+                        .font(.system(size: 10))
+
+                    VStack(alignment: .leading, spacing: 1) {
+                        Text(result.actualText.isEmpty ? "[empty]" : result.actualText)
+                            .font(.system(size: 10.5, weight: .medium))
+                            .foregroundColor(MBColors.textPrimary)
+                            .lineLimit(1)
+                        Text("\(String(format: "%.1f", result.duration))s, \(String(format: "%.0f", result.latencyMs))ms")
+                            .font(.system(size: 9.5))
+                            .foregroundColor(MBColors.textSecondary)
+                    }
+                }
+            }
         }
     }
 }
@@ -2120,6 +2653,160 @@ struct AboutView: View {
     private func openWebsite() {
         if let url = URL(string: "https://whispererapp.com") {
             NSWorkspace.shared.open(url)
+        }
+    }
+}
+
+// MARK: - LLM Settings View
+
+struct LLMSettingsView: View {
+    @ObservedObject var appState = AppState.shared
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            // Enable toggle
+            HStack {
+                Text("Post-process with AI")
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundColor(MBColors.textPrimary)
+                Spacer()
+                Toggle("", isOn: $appState.llmEnabled)
+                    .toggleStyle(.switch)
+                    .tint(MBColors.accent)
+                    .labelsHidden()
+            }
+
+            if appState.llmEnabled {
+                // Model picker
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("Model")
+                        .font(.system(size: 11, weight: .medium))
+                        .foregroundColor(MBColors.textSecondary)
+
+                    ForEach(LLMModelVariant.allCases) { variant in
+                        Button(action: {
+                            appState.selectedLLMModel = variant
+                        }) {
+                            HStack(spacing: 8) {
+                                ZStack {
+                                    Circle()
+                                        .stroke(appState.selectedLLMModel == variant ? MBColors.accent : MBColors.textTertiary, lineWidth: 2)
+                                        .frame(width: 14, height: 14)
+                                    if appState.selectedLLMModel == variant {
+                                        Circle()
+                                            .fill(MBColors.accent)
+                                            .frame(width: 8, height: 8)
+                                    }
+                                }
+
+                                Text(variant.displayName)
+                                    .font(.system(size: 11, weight: appState.selectedLLMModel == variant ? .semibold : .regular))
+                                    .foregroundColor(appState.selectedLLMModel == variant ? MBColors.textPrimary : MBColors.textSecondary)
+
+                                Spacer()
+
+                                Text(variant.sizeDescription)
+                                    .font(.caption2)
+                                    .foregroundColor(MBColors.textTertiary)
+
+                                Text(variant.speedDescription)
+                                    .font(.caption2)
+                                    .foregroundColor(MBColors.accent.opacity(0.8))
+                            }
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+
+                // Task picker
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("Task")
+                        .font(.system(size: 11, weight: .medium))
+                        .foregroundColor(MBColors.textSecondary)
+
+                    HStack(spacing: 6) {
+                        ForEach(LLMTask.allCases) { task in
+                            Button(action: {
+                                appState.selectedLLMTask = task
+                            }) {
+                                Text(task.displayName)
+                                    .font(.system(size: 10, weight: appState.selectedLLMTask == task ? .semibold : .medium))
+                                    .foregroundColor(appState.selectedLLMTask == task ? .white : MBColors.textSecondary)
+                                    .padding(.horizontal, 8)
+                                    .padding(.vertical, 4)
+                                    .background(
+                                        Capsule()
+                                            .fill(appState.selectedLLMTask == task ? MBColors.accent : Color.clear)
+                                    )
+                                    .overlay(
+                                        Capsule()
+                                            .stroke(appState.selectedLLMTask == task ? Color.clear : MBColors.border, lineWidth: 1)
+                                    )
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    }
+                }
+
+                // Custom prompt field
+                if appState.selectedLLMTask == .custom {
+                    TextField("Custom prompt...", text: $appState.llmCustomPrompt)
+                        .textFieldStyle(.plain)
+                        .font(.system(size: 11))
+                        .foregroundColor(MBColors.textPrimary)
+                        .padding(8)
+                        .background(
+                            RoundedRectangle(cornerRadius: 6)
+                                .fill(MBColors.elevated)
+                        )
+                }
+
+                // Translation language
+                if appState.selectedLLMTask == .translate {
+                    HStack {
+                        Text("Target language")
+                            .font(.system(size: 11, weight: .medium))
+                            .foregroundColor(MBColors.textSecondary)
+                        Spacer()
+                        TextField("English", text: $appState.llmTranslateLanguage)
+                            .textFieldStyle(.plain)
+                            .font(.system(size: 11))
+                            .foregroundColor(MBColors.textPrimary)
+                            .frame(width: 100)
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 4)
+                            .background(
+                                RoundedRectangle(cornerRadius: 6)
+                                    .fill(MBColors.elevated)
+                            )
+                    }
+                }
+
+                // Load/status button
+                if let processor = appState.llmPostProcessor, processor.isModelLoaded {
+                    HStack {
+                        Image(systemName: "checkmark.circle.fill")
+                            .foregroundColor(.green)
+                            .font(.system(size: 12))
+                        Text("\(appState.selectedLLMModel.displayName) loaded")
+                            .font(.caption2)
+                            .foregroundColor(MBColors.textSecondary)
+                    }
+                } else {
+                    Button(action: {
+                        appState.preloadLLM()
+                    }) {
+                        HStack(spacing: 4) {
+                            Image(systemName: "arrow.down.circle")
+                                .font(.system(size: 12))
+                            Text("Load Model")
+                                .font(.system(size: 11, weight: .medium))
+                        }
+                        .foregroundColor(MBColors.accent)
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
         }
     }
 }

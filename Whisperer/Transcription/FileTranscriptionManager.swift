@@ -273,12 +273,21 @@ class FileTranscriptionManager: ObservableObject {
 
         let audioFileName = fileManager.fileExists(atPath: destURL.path) ? destFileName : nil
 
+        // Use detected language when auto-detect is active, otherwise use user selection
+        let recordedLanguage: String
+        if AppState.shared.selectedLanguage == .auto,
+           let detected = AppState.shared.fileTranscriptionBridge?.lastDetectedLanguage {
+            recordedLanguage = detected
+        } else {
+            recordedLanguage = AppState.shared.selectedLanguage.rawValue
+        }
+
         let record = TranscriptionRecord(
             transcription: transcriptionResult,
             audioFileURL: audioFileName,
             duration: fileDuration,
-            language: AppState.shared.selectedLanguage.rawValue,
-            modelUsed: AppState.shared.selectedModel.rawValue,
+            language: recordedLanguage,
+            modelUsed: AppState.shared.activeModelDisplayName,
             targetAppName: "File Import"
         )
 

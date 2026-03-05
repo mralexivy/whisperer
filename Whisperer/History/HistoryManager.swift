@@ -164,6 +164,24 @@ class HistoryManager: ObservableObject {
         await loadTranscriptions()
     }
 
+    func retranscribe(_ record: TranscriptionRecord, newText: String, language: String, modelUsed: String) async throws {
+        let fetchRequest: NSFetchRequest<TranscriptionEntity> = TranscriptionEntity.fetchRequest()
+        fetchRequest.predicate = NSPredicate(format: "id == %@", record.id as CVarArg)
+        fetchRequest.fetchLimit = 1
+
+        guard let entity = try context.fetch(fetchRequest).first else {
+            throw HistoryError.recordNotFound
+        }
+
+        entity.editedTranscription = newText
+        entity.language = language
+        entity.modelUsed = modelUsed
+        entity.lastModifiedAt = Date()
+
+        try context.save()
+        await loadTranscriptions()
+    }
+
     func updateNotes(_ record: TranscriptionRecord, notes: String?) async throws {
         let fetchRequest: NSFetchRequest<TranscriptionEntity> = TranscriptionEntity.fetchRequest()
         fetchRequest.predicate = NSPredicate(format: "id == %@", record.id as CVarArg)

@@ -35,7 +35,7 @@ enum LogLevel: Int, Comparable {
 
 // MARK: - Log Subsystem
 
-enum LogSubsystem: String {
+enum LogSubsystem: String, CaseIterable {
     case app = "App"
     case audio = "Audio"
     case transcription = "Transcription"
@@ -79,6 +79,26 @@ final class Logger {
         set { shared.minimumLevel = newValue ? .debug : .info }
     }
 
+    /// Per-subsystem verbose overrides.
+    /// When a subsystem is set to verbose, its debug messages are logged
+    /// even when the global minimum level is .info.
+    private var verboseSubsystems: Set<LogSubsystem> = []
+
+    /// Check if a specific subsystem has verbose logging enabled
+    static func isSubsystemVerbose(_ subsystem: LogSubsystem) -> Bool {
+        shared.verboseSubsystems.contains(subsystem)
+    }
+
+    /// Enable or disable verbose logging for a specific subsystem
+    static func setSubsystemVerbose(_ verbose: Bool, for subsystem: LogSubsystem) {
+        if verbose {
+            shared.verboseSubsystems.insert(subsystem)
+        } else {
+            shared.verboseSubsystems.remove(subsystem)
+        }
+        UserDefaults.standard.set(verbose, forKey: "logVerbose_\(subsystem.rawValue)")
+    }
+
     // Track the current log date to detect day changes
     private var currentLogDate: String
 
@@ -94,6 +114,13 @@ final class Logger {
         #endif
         let savedLevel = UserDefaults.standard.object(forKey: "logMinimumLevel") as? Int ?? defaultLevel
         minimumLevel = LogLevel(rawValue: savedLevel) ?? .info
+
+        // Load per-subsystem verbose flags
+        for subsystem in LogSubsystem.allCases {
+            if UserDefaults.standard.bool(forKey: "logVerbose_\(subsystem.rawValue)") {
+                verboseSubsystems.insert(subsystem)
+            }
+        }
 
         // Setup date formatters
         dateFormatter = DateFormatter()
@@ -176,7 +203,7 @@ final class Logger {
     // MARK: - Private Methods
 
     private func log(_ message: String, level: LogLevel, subsystem: LogSubsystem, file: String, line: Int) {
-        guard level >= minimumLevel else { return }
+        guard level >= minimumLevel || (level == .debug && verboseSubsystems.contains(subsystem)) else { return }
 
         let fileName = (file as NSString).lastPathComponent
         let timestamp = dateFormatter.string(from: Date())

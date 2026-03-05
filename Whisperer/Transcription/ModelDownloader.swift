@@ -33,6 +33,20 @@ enum VADModel: String, CaseIterable {
     static var `default`: VADModel { .sileroV6 }
 }
 
+enum ModelDownloadError: Error, LocalizedError {
+    case invalidFileSize
+    case maxRetriesExhausted(lastError: Error)
+
+    var errorDescription: String? {
+        switch self {
+        case .invalidFileSize:
+            return "Downloaded model file is corrupted or incomplete"
+        case .maxRetriesExhausted(let lastError):
+            return "Download failed after 3 attempts: \(lastError.localizedDescription)"
+        }
+    }
+}
+
 class ModelDownloader {
     static let shared = ModelDownloader()
 
@@ -54,9 +68,29 @@ class ModelDownloader {
         appSupportDir.appendingPathComponent(model.rawValue)
     }
 
-    /// Check if a specific model is downloaded
+    /// Check if a specific model is downloaded and valid (not corrupted)
     func isModelDownloaded(_ model: WhisperModel) -> Bool {
-        return FileManager.default.fileExists(atPath: modelPath(for: model).path)
+        return isModelFileValid(model)
+    }
+
+    /// Check if a model file exists and passes size validation.
+    /// Returns false (and deletes the file) if the file is corrupted/truncated.
+    func isModelFileValid(_ model: WhisperModel) -> Bool {
+        let path = modelPath(for: model)
+        guard FileManager.default.fileExists(atPath: path.path) else { return false }
+
+        guard let attrs = try? FileManager.default.attributesOfItem(atPath: path.path),
+              let size = attrs[.size] as? Int64 else {
+            return false
+        }
+
+        if size < model.minimumFileSizeBytes {
+            Logger.warning("Model \(model.displayName) file is corrupted (\(size) bytes, minimum \(model.minimumFileSizeBytes)), deleting", subsystem: .model)
+            try? FileManager.default.removeItem(at: path)
+            return false
+        }
+
+        return true
     }
 
     /// Get list of all downloaded models
@@ -64,19 +98,68 @@ class ModelDownloader {
         return WhisperModel.allCases.filter { isModelDownloaded($0) }
     }
 
-    /// Download a specific model
-    func downloadModel(_ model: WhisperModel, progressCallback: @escaping (Double) -> Void) async throws {
+    /// Download a specific model with retry logic and file validation
+    func downloadModel(
+        _ model: WhisperModel,
+        progressCallback: @escaping (Double) -> Void,
+        retryStatusCallback: ((Int, Int) -> Void)? = nil
+    ) async throws {
         let destination = modelPath(for: model)
 
-        if FileManager.default.fileExists(atPath: destination.path) {
-            print("Model \(model.displayName) already exists at: \(destination.path)")
+        // Check if valid model already exists (size-validated, not just file existence)
+        if isModelFileValid(model) {
+            Logger.info("Model \(model.displayName) already exists and is valid", subsystem: .model)
             return
         }
 
-        print("Downloading \(model.displayName) from: \(model.downloadURL)")
-        print("To: \(destination.path)")
+        // Clean up any corrupted partial file before downloading
+        if FileManager.default.fileExists(atPath: destination.path) {
+            Logger.warning("Removing invalid model file before re-download", subsystem: .model)
+            try? FileManager.default.removeItem(at: destination)
+        }
 
-        try await performDownload(url: model.downloadURL, destination: destination, progressCallback: progressCallback)
+        Logger.info("Downloading \(model.displayName) from: \(model.downloadURL)", subsystem: .model)
+
+        let maxAttempts = 3
+        var lastError: Error?
+
+        for attempt in 1...maxAttempts {
+            do {
+                if attempt > 1 {
+                    let backoffSeconds = UInt64(1 << (attempt - 2))  // 1s, 2s
+                    Logger.info("Retrying download (\(attempt)/\(maxAttempts)) after \(backoffSeconds)s backoff...", subsystem: .model)
+
+                    retryStatusCallback?(attempt, maxAttempts)
+                    progressCallback(0)
+
+                    try await Task.sleep(nanoseconds: backoffSeconds * 1_000_000_000)
+
+                    // Clean up partial file from previous attempt
+                    if FileManager.default.fileExists(atPath: destination.path) {
+                        try? FileManager.default.removeItem(at: destination)
+                    }
+                }
+
+                try await performDownload(url: model.downloadURL, destination: destination, progressCallback: progressCallback)
+
+                // Post-download validation
+                guard isModelFileValid(model) else {
+                    Logger.error("Downloaded model \(model.displayName) failed size validation (attempt \(attempt)/\(maxAttempts))", subsystem: .model)
+                    throw ModelDownloadError.invalidFileSize
+                }
+
+                Logger.info("Model \(model.displayName) downloaded and validated successfully", subsystem: .model)
+                return
+
+            } catch {
+                lastError = error
+                Logger.warning("Download attempt \(attempt)/\(maxAttempts) failed: \(error.localizedDescription)", subsystem: .model)
+
+                if error is CancellationError { throw error }
+            }
+        }
+
+        throw ModelDownloadError.maxRetriesExhausted(lastError: lastError ?? ModelDownloadError.invalidFileSize)
     }
 
     /// Delete a downloaded model
@@ -84,7 +167,7 @@ class ModelDownloader {
         let path = modelPath(for: model)
         if FileManager.default.fileExists(atPath: path.path) {
             try FileManager.default.removeItem(at: path)
-            print("Deleted model: \(model.displayName)")
+            Logger.info("Deleted model: \(model.displayName)", subsystem: .model)
         }
     }
 
@@ -105,7 +188,7 @@ class ModelDownloader {
            let size = attrs[.size] as? Int64 {
             if size < 500_000 {
                 // File is corrupted/incomplete, delete it
-                print("⚠️ VAD model file is corrupted (\(size) bytes), deleting...")
+                Logger.warning("VAD model file is corrupted (\(size) bytes), deleting", subsystem: .model)
                 try? FileManager.default.removeItem(at: path)
                 return false
             }
@@ -118,12 +201,11 @@ class ModelDownloader {
         let destination = vadModelPath(for: model)
 
         if FileManager.default.fileExists(atPath: destination.path) {
-            print("VAD model \(model.displayName) already exists at: \(destination.path)")
+            Logger.info("VAD model \(model.displayName) already exists", subsystem: .model)
             return
         }
 
-        print("Downloading \(model.displayName) from: \(model.downloadURL)")
-        print("To: \(destination.path)")
+        Logger.info("Downloading VAD \(model.displayName)", subsystem: .model)
 
         try await performDownload(url: model.downloadURL, destination: destination, progressCallback: progressCallback)
     }
@@ -256,6 +338,6 @@ private class DownloadDelegate: NSObject, URLSessionDownloadDelegate {
     }
 
     func urlSession(_ session: URLSession, taskIsWaitingForConnectivity task: URLSessionTask) {
-        print("Waiting for network connectivity...")
+        Logger.debug("Waiting for network connectivity...", subsystem: .model)
     }
 }

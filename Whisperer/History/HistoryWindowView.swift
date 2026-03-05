@@ -90,6 +90,7 @@ enum HistorySidebarItem: String, CaseIterable, Identifiable {
     case fileTranscription = "File Transcription"
     case dictionary = "Dictionary"
     case statistics = "Statistics"
+    case benchmark = "Benchmark"
     case settings = "Settings"
 
     var id: String { rawValue }
@@ -99,6 +100,7 @@ enum HistorySidebarItem: String, CaseIterable, Identifiable {
         case .transcriptions: return "waveform.and.mic"
         case .fileTranscription: return "doc.text.magnifyingglass"
         case .statistics: return "chart.xyaxis.line"
+        case .benchmark: return "gauge.with.dots.needle.67percent"
         case .dictionary: return "book.closed"
         case .settings: return "gearshape"
         }
@@ -109,6 +111,7 @@ enum HistorySidebarItem: String, CaseIterable, Identifiable {
         case .transcriptions: return WhispererColors.accentBlue
         case .fileTranscription: return .purple
         case .statistics: return .cyan
+        case .benchmark: return Color(hex: "22C55E")
         case .dictionary: return .red
         case .settings: return .orange
         }
@@ -144,6 +147,8 @@ struct HistoryWindowView: View {
                     FileTranscriptionView()
                 case .statistics:
                     StatisticsView()
+                case .benchmark:
+                    BenchmarkView()
                 case .dictionary:
                     DictionaryView()
                 case .settings:
@@ -152,6 +157,7 @@ struct HistoryWindowView: View {
             }
         }
         .frame(minWidth: isSidebarCollapsed ? 700 : 1100, minHeight: 700)
+        .tahoeTextFix()
         .background(WhispererColors.background(colorScheme))
         .onReceive(NotificationCenter.default.publisher(for: .switchToDictionaryTab)) { notification in
             withAnimation(.spring(response: 0.3)) {
@@ -254,6 +260,7 @@ struct HistoryWindowView: View {
         .padding(20)
         .frame(height: 84, alignment: .center)
         .background(WhispererColors.sidebarBackground(colorScheme))
+
     }
 
     private func sidebarStatsCard(_ stats: HistoryStatistics) -> some View {
@@ -375,6 +382,7 @@ struct HistoryWindowView: View {
                 .frame(height: 1),
             alignment: .top
         )
+
     }
 }
 
@@ -756,6 +764,7 @@ struct TranscriptionsView: View {
             Spacer()
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+
     }
 
     private func sectionHeader(for date: Date) -> some View {
@@ -782,6 +791,7 @@ struct TranscriptionsView: View {
         .padding(.top, 16)
         .padding(.bottom, 10)
         .background(WhispererColors.background(colorScheme))
+
     }
 
     // MARK: - Helpers

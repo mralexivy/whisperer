@@ -769,6 +769,8 @@ class DictionaryManager: ObservableObject {
             // Swap reference on main thread (fast pointer assignment, no race)
             DispatchQueue.main.async { [weak self] in
                 self?.correctionEngine = newEngine
+                // Notify observers (e.g., AppState reconfigures CTC vocabulary boosting)
+                NotificationCenter.default.post(name: .dictionaryDidRebuild, object: nil)
             }
         }
         rebuildWorkItem = workItem

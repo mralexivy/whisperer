@@ -91,6 +91,7 @@ struct OnboardingView: View {
             }
         }
         .frame(width: 860, height: 540)
+        .tahoeTextFix()
         .clipShape(RoundedRectangle(cornerRadius: 20))
         .overlay(
             RoundedRectangle(cornerRadius: 20)
@@ -201,6 +202,7 @@ struct OnboardingView: View {
                 }
             }
         }
+
     }
 
     // MARK: - Page 0: Welcome Splash

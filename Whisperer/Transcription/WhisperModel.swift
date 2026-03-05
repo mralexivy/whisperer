@@ -100,6 +100,39 @@ enum WhisperModel: String, CaseIterable, Identifiable {
         }
     }
 
+    /// Minimum file size in bytes for a valid download (~65-75% of actual size).
+    /// Files smaller than this are corrupted or truncated.
+    var minimumFileSizeBytes: Int64 {
+        switch self {
+        case .tiny:           return 50_000_000      // actual ~75 MB
+        case .base:           return 100_000_000     // actual ~142 MB
+        case .small:          return 350_000_000     // actual ~466 MB
+        case .medium:         return 1_100_000_000   // actual ~1.5 GB
+        case .largeV3:        return 2_000_000_000   // actual ~2.9 GB
+        case .largeTurbo:     return 1_100_000_000   // actual ~1.5 GB
+        case .largeTurboQ5:   return 400_000_000     // actual ~547 MB
+        case .largeV3Q5:      return 750_000_000     // actual ~1.1 GB
+        case .distilLargeV3:  return 500_000_000     // actual ~756 MB
+        case .distilSmallEn:  return 110_000_000     // actual ~166 MB
+        }
+    }
+
+    /// Approximate memory required to load and run this model (file size + Metal GPU overhead)
+    var requiredMemoryGB: Double {
+        switch self {
+        case .tiny:           return 0.2
+        case .base:           return 0.3
+        case .small:          return 0.8
+        case .medium:         return 2.5
+        case .largeV3:        return 5.0
+        case .largeTurbo:     return 2.5
+        case .largeTurboQ5:   return 1.0
+        case .largeV3Q5:      return 2.0
+        case .distilLargeV3:  return 1.5
+        case .distilSmallEn:  return 0.4
+        }
+    }
+
     var modelDescription: String {
         switch self {
         case .largeTurboQ5:

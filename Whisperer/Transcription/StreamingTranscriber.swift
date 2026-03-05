@@ -13,7 +13,7 @@ import AVFoundation
 import Accelerate
 
 class StreamingTranscriber {
-    private var whisper: WhisperBridge
+    private var whisper: TranscriptionBackend
     private var vad: SileroVAD?
 
     private let sampleRate: Double = 16000.0
@@ -80,15 +80,32 @@ class StreamingTranscriber {
     // Periodic re-transcription timer
     private var reTranscriptionTask: Task<Void, Never>?
     private var isStopped: Bool = false
-    private let firstRetranscriptionDelay: UInt64 = 1_500_000_000  // 1.5s
-    private let retranscriptionInterval: UInt64 = 2_000_000_000    // 2.0s
+    private let firstRetranscriptionDelay: UInt64
+    private let retranscriptionInterval: UInt64
 
-    /// Initialize with a pre-loaded WhisperBridge, optional VAD, language setting, and prompt words
-    init(whisperBridge: WhisperBridge, vad: SileroVAD? = nil, language: TranscriptionLanguage = .english, initialPrompt: String? = nil) {
-        self.whisper = whisperBridge
+    // Filler word removal (applied in final pass)
+    private var fillerWordRemovalEnabled: Bool
+
+    // Chunk skip tracking for diagnostics
+    private var skippedCycles: Int = 0
+
+    /// Initialize with a pre-loaded WhisperBridge, optional VAD, language setting, prompt words, and filler word removal
+    init(
+        backend: TranscriptionBackend,
+        vad: SileroVAD? = nil,
+        language: TranscriptionLanguage = .english,
+        initialPrompt: String? = nil,
+        fillerWordRemovalEnabled: Bool = false,
+        firstRetranscriptionDelay: UInt64 = 1_000_000_000,  // 1.0s — time before first live preview
+        retranscriptionInterval: UInt64 = 1_500_000_000     // 1.5s — interval between re-transcriptions
+    ) {
+        self.whisper = backend
         self.vad = vad
         self.language = language
         self.initialPrompt = initialPrompt
+        self.fillerWordRemovalEnabled = fillerWordRemovalEnabled
+        self.firstRetranscriptionDelay = firstRetranscriptionDelay
+        self.retranscriptionInterval = retranscriptionInterval
     }
 
     /// Start streaming transcription with periodic re-transcription
@@ -117,7 +134,16 @@ class StreamingTranscriber {
                 guard let self = self, !self.isStopped else { break }
 
                 if !self.isProcessing {
+                    if self.skippedCycles > 0 {
+                        Logger.debug("Resumed after skipping \(self.skippedCycles) cycle(s)", subsystem: .transcription)
+                        self.skippedCycles = 0
+                    }
                     self.performReTranscription()
+                } else {
+                    self.skippedCycles += 1
+                    if self.skippedCycles == 1 {
+                        Logger.debug("Skipping re-transcription cycle (previous still running)", subsystem: .transcription)
+                    }
                 }
 
                 try? await Task.sleep(nanoseconds: self.retranscriptionInterval)
@@ -198,16 +224,57 @@ class StreamingTranscriber {
                 return
             }
 
-            // REPLACE fullTranscription (not append) — each re-transcription is a complete result
-            self.fullTranscription = trimmed
+            // Smart diff: keep stable prefix to reduce live text flickering
+            let previousText = self.fullTranscription
+            let displayText = self.smartDiffUpdate(previous: previousText, new: trimmed)
+            self.fullTranscription = displayText
 
-            let transcription = trimmed
+            let transcription = displayText
             DispatchQueue.main.async {
                 self.onTranscription?(transcription)
             }
 
             Logger.debug("Re-transcription result (\(String(format: "%.1f", duration))s): '\(trimmed.prefix(80))\(trimmed.count > 80 ? "..." : "")'", subsystem: .transcription)
         }
+    }
+
+    // MARK: - Smart Diff Updates
+
+    /// Keep stable prefix of previous transcription, only update trailing words.
+    /// Prevents text flickering during periodic re-transcription by comparing word-level
+    /// longest common prefix. If >50% of previous words match, preserve original casing.
+    private func smartDiffUpdate(previous: String, new: String) -> String {
+        guard !previous.isEmpty, !new.isEmpty else { return new }
+
+        let prevWords = previous.split(separator: " ", omittingEmptySubsequences: true)
+        let newWords = new.split(separator: " ", omittingEmptySubsequences: true)
+        guard !prevWords.isEmpty, !newWords.isEmpty else { return new }
+
+        // Find longest common prefix (case/punctuation insensitive)
+        var commonLen = 0
+        for i in 0..<min(prevWords.count, newWords.count) {
+            let prevNorm = prevWords[i].lowercased().filter { $0.isLetter || $0.isNumber }
+            let newNorm = newWords[i].lowercased().filter { $0.isLetter || $0.isNumber }
+            if prevNorm == newNorm {
+                commonLen = i + 1
+            } else {
+                break
+            }
+        }
+
+        // If >50% of previous words are stable, keep prefix + append new suffix.
+        // Use NEW word forms for the prefix to pick up updated punctuation
+        // (prevents artifacts like "We want to. try this" when "to." → "to try")
+        let stabilityRatio = Double(commonLen) / Double(prevWords.count)
+        if stabilityRatio > 0.5 && commonLen > 0 {
+            let kept = newWords[0..<commonLen].joined(separator: " ")
+            if commonLen < newWords.count {
+                return kept + " " + newWords[commonLen...].joined(separator: " ")
+            }
+            return kept
+        }
+
+        return new
     }
 
     // MARK: - Energy Detection
@@ -322,16 +389,48 @@ class StreamingTranscriber {
             return clearAndReturn("")
         }
 
-        // Full re-transcription of the complete recording
-        let rawText = whisper.transcribe(
+        // Switch to final-pass mode for Parakeet (uses CTC vocab-boosted manager)
+        if let bridge = whisper as? FluidAudioBridge {
+            bridge.setMode(.finalPass)
+        }
+
+        // Full re-transcription of the complete recording.
+        // For SpeechAnalyzer: streaming may have missed tail audio if the user stopped
+        // before the next re-transcription cycle fired. Safe to call here because streaming
+        // is cancelled and isProcessing=false (no concurrent GCD/cooperative thread contention).
+        let rawText: String
+        let finalPassResult = whisper.transcribe(
             samples: allSamples,
             initialPrompt: initialPrompt,
             language: language
         )
 
-        let finalResult: String
+        if #available(macOS 26.0, *), whisper is SpeechAnalyzerBridge {
+            // Use final pass if it produced a result, fall back to streaming if it timed out
+            if !finalPassResult.isEmpty {
+                rawText = finalPassResult
+                Logger.debug("SpeechAnalyzer: Final pass succeeded (\(rawText.count) chars)", subsystem: .transcription)
+            } else {
+                rawText = fullTranscription
+                Logger.debug("SpeechAnalyzer: Final pass empty, using streaming result (\(rawText.count) chars)", subsystem: .transcription)
+            }
+        } else {
+            rawText = finalPassResult
+        }
+
+        // Restore streaming mode
+        if let bridge = whisper as? FluidAudioBridge {
+            bridge.setMode(.streaming)
+        }
+
+        var finalResult: String
         if !rawText.isEmpty {
             finalResult = DictionaryManager.shared.correctText(rawText)
+
+            // Remove filler words if enabled
+            if fillerWordRemovalEnabled {
+                finalResult = FillerWordFilter.removeFillers(from: finalResult)
+            }
         } else {
             finalResult = ""
         }
@@ -367,8 +466,74 @@ class StreamingTranscriber {
             Logger.debug("In-flight re-transcription completed after \(waitCount * 50)ms", subsystem: .transcription)
         }
 
-        // Now do the synchronous stop (final pass)
+        // SpeechAnalyzer: use direct async path to avoid cooperative thread pool starvation.
+        // The sync transcribe() path blocks a cooperative thread on DispatchSemaphore.wait(),
+        // starving the Task.detached inside performTranscription() — causing 5s+ timeouts.
+        if #available(macOS 26.0, *), let speechBridge = whisper as? SpeechAnalyzerBridge {
+            return await stopWithSpeechAnalyzer(speechBridge)
+        }
+
+        // Other backends: use synchronous stop (final pass)
         return stop()
+    }
+
+    /// SpeechAnalyzer-specific async final pass — mirrors stop() but calls the async API directly.
+    @available(macOS 26.0, *)
+    private func stopWithSpeechAnalyzer(_ speechBridge: SpeechAnalyzerBridge) async -> String {
+        isProcessing = false
+
+        // Get the complete recording
+        var allSamples: [Float] = []
+        do {
+            try allSamplesLock.withLock {
+                allSamples = allRecordedSamples
+            }
+        } catch {
+            Logger.error("Failed to acquire allSamplesLock in stopWithSpeechAnalyzer: \(error.localizedDescription)", subsystem: .transcription)
+        }
+
+        let totalDuration = Double(allSamples.count) / sampleRate
+        Logger.debug("SpeechAnalyzer final pass (async): \(String(format: "%.1f", totalDuration))s of audio", subsystem: .transcription)
+
+        // Need minimum audio length
+        let minSamples = Int(0.3 * sampleRate)
+        guard allSamples.count >= minSamples else {
+            Logger.debug("Recording too short (\(String(format: "%.2f", totalDuration))s), skipping", subsystem: .transcription)
+            return clearAndReturn("")
+        }
+
+        // VAD check
+        if let vad = vad, !vad.containsSpeech(samples: allSamples) {
+            Logger.debug("VAD: No speech in recording", subsystem: .transcription)
+            return clearAndReturn("")
+        }
+
+        // Direct async transcription — no semaphores, no thread starvation
+        let finalPassResult = await speechBridge.transcribeDirectAsync(
+            samples: allSamples,
+            language: language
+        )
+
+        let rawText: String
+        if !finalPassResult.isEmpty {
+            rawText = finalPassResult
+            Logger.debug("SpeechAnalyzer: Async final pass succeeded (\(rawText.count) chars)", subsystem: .transcription)
+        } else {
+            rawText = fullTranscription
+            Logger.debug("SpeechAnalyzer: Async final pass empty, using streaming result (\(rawText.count) chars)", subsystem: .transcription)
+        }
+
+        var finalResult: String
+        if !rawText.isEmpty {
+            finalResult = DictionaryManager.shared.correctText(rawText)
+            if fillerWordRemovalEnabled {
+                finalResult = FillerWordFilter.removeFillers(from: finalResult)
+            }
+        } else {
+            finalResult = ""
+        }
+
+        return clearAndReturn(finalResult)
     }
 
     /// Get current full transcription (streaming result, before final pass)

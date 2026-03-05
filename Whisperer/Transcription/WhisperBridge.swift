@@ -217,6 +217,12 @@ enum TranscriptionLanguage: String, CaseIterable, Codable {
         case .yoruba: return "Yoruba"
         }
     }
+
+    /// Convert to Locale for SpeechAnalyzer. Returns nil for .auto (use Locale.current).
+    var locale: Locale? {
+        guard self != .auto else { return nil }
+        return Locale(identifier: rawValue)
+    }
 }
 
 // MARK: - Whisper Error
@@ -235,7 +241,7 @@ enum WhisperError: Error, LocalizedError {
     }
 }
 
-class WhisperBridge {
+class WhisperBridge: TranscriptionBackend {
     private var ctx: OpaquePointer?
     private let modelPath: URL
     private let queue = DispatchQueue(label: "whisper.transcribe", qos: .userInteractive)
@@ -247,6 +253,9 @@ class WhisperBridge {
 
     // Transcription timeout (default 30 seconds, longer on Intel)
     var transcriptionTimeout: TimeInterval = 30.0
+
+    // Language detected during the last transcription (from whisper_full_lang_id)
+    private(set) var lastDetectedLanguage: String?
 
     // Threshold for filtering segments based on no_speech probability.
     // Segments with no_speech_prob above this are considered non-speech hallucinations.
@@ -489,6 +498,12 @@ class WhisperBridge {
         if result != 0 {
             Logger.error("Whisper transcription failed with code: \(result)", subsystem: .transcription)
             return ""
+        }
+
+        // Extract detected language (useful when auto-detect is enabled)
+        let langId = whisper_full_lang_id(ctx)
+        if langId >= 0, let langStr = whisper_lang_str(langId) {
+            lastDetectedLanguage = String(cString: langStr)
         }
 
         var text = ""

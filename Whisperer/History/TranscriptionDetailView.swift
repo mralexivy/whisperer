@@ -374,12 +374,18 @@ struct TranscriptionDetailView: View {
 
     private var modelDisplay: String {
         let model = transcription.modelUsed
-        if model.contains("large-v3-turbo") { return "Large V3 Turbo" }
+        // Legacy records stored Whisper filenames — map to display names
+        if model.contains("large-v3-turbo-q5") { return "Large V3 Turbo Q5" }
+        else if model.contains("large-v3-turbo") { return "Large V3 Turbo" }
+        else if model.contains("large-v3-q5") { return "Large V3 Q5" }
         else if model.contains("large-v3") { return "Large V3" }
+        else if model.contains("distil-large") { return "Distil Large V3" }
+        else if model.contains("distil-small") { return "Distil Small" }
         else if model.contains("medium") { return "Medium" }
         else if model.contains("small") { return "Small" }
         else if model.contains("base") { return "Base" }
         else if model.contains("tiny") { return "Tiny" }
+        // New records already store display names (e.g., "Parakeet v3 (Multilingual)", "Apple Speech")
         return model
     }
 
@@ -436,10 +442,19 @@ struct TranscriptionDetailView: View {
                 }
                 let samples = Array(UnsafeBufferPointer(start: channelData[0], count: Int(buffer.frameLength)))
 
-                // Transcribe with current settings
+                // Transcribe with currently selected language and engine
                 let language = await AppState.shared.selectedLanguage
                 let promptWords = await AppState.shared.promptWordsString
+                let modelName = await AppState.shared.activeModelDisplayName
                 let rawText = bridge.transcribe(samples: samples, initialPrompt: promptWords, language: language)
+
+                // Resolve language for history: detected language when auto, otherwise user selection
+                let recordedLanguage: String
+                if language == .auto, let detected = bridge.lastDetectedLanguage {
+                    recordedLanguage = detected
+                } else {
+                    recordedLanguage = language.rawValue
+                }
 
                 // Apply dictionary corrections
                 let finalText = DictionaryManager.shared.correctText(rawText)
@@ -450,15 +465,15 @@ struct TranscriptionDetailView: View {
                     return
                 }
 
-                Logger.info("Re-transcription complete: '\(finalText.prefix(80))'", subsystem: .transcription)
+                Logger.info("Re-transcription complete (\(modelName), lang=\(recordedLanguage)): '\(finalText.prefix(80))'", subsystem: .transcription)
 
                 await MainActor.run {
                     editedText = finalText
                     isRetranscribing = false
                 }
 
-                // Save to history
-                try? await HistoryManager.shared.editTranscription(transcription, newText: finalText)
+                // Save to history with updated language and model
+                try? await HistoryManager.shared.retranscribe(transcription, newText: finalText, language: recordedLanguage, modelUsed: modelName)
 
             } catch {
                 Logger.error("Re-transcription failed: \(error.localizedDescription)", subsystem: .transcription)
