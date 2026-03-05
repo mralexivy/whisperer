@@ -444,6 +444,10 @@ struct TranscriptionsView: View {
     @State private var selectedTranscription: TranscriptionRecord?
     @State private var detailPanelWidth: CGFloat = 420
     @State private var dailyQuote: String = DailyQuotes.random
+    @State private var dateRangeStart: Date?
+    @State private var dateRangeEnd: Date?
+    @State private var showCalendarPicker = false
+    @State private var datesWithTranscriptions: Set<Date> = []
 
     private let minDetailWidth: CGFloat = 320
     private let maxDetailWidth: CGFloat = 600
@@ -685,7 +689,13 @@ struct TranscriptionsView: View {
                     performSearch()
                 }
 
+                if let start = dateRangeStart {
+                    dateRangeChip(start: start, end: dateRangeEnd ?? start)
+                }
+
                 Spacer()
+
+                calendarButton
             }
         }
         .padding(.horizontal, 20)
@@ -696,8 +706,16 @@ struct TranscriptionsView: View {
 
     private var transcriptionList: some View {
         Group {
-            if historyManager.transcriptions.isEmpty {
+            if historyManager.transcriptions.isEmpty && !historyManager.isLoadingPage {
                 emptyStateView
+            } else if historyManager.transcriptions.isEmpty && historyManager.isLoadingPage {
+                // Initial load — show centered loading
+                VStack {
+                    Spacer()
+                    loadingIndicator
+                    Spacer()
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
                 ScrollView {
                     LazyVStack(alignment: .leading, spacing: 0, pinnedViews: [.sectionHeaders]) {
@@ -720,12 +738,36 @@ struct TranscriptionsView: View {
                                 .padding(.bottom, 8)
                             }
                         }
+
+                        // Sentinel + loading indicator for next page
+                        if historyManager.hasMorePages {
+                            loadingIndicator
+                                .id("sentinel-\(historyManager.transcriptions.count)")
+                                .onAppear {
+                                    Task {
+                                        await historyManager.loadNextPage()
+                                    }
+                                }
+                        }
                     }
                     .padding(.horizontal, 20)
                     .padding(.bottom, 20)
                 }
             }
         }
+    }
+
+    private var loadingIndicator: some View {
+        HStack(spacing: 8) {
+            ProgressView()
+                .controlSize(.small)
+                .tint(WhispererColors.accentBlue)
+            Text("Loading...")
+                .font(.system(size: 12, weight: .medium))
+                .foregroundColor(WhispererColors.secondaryText(colorScheme))
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 16)
     }
 
     private var emptyStateView: some View {
@@ -940,12 +982,120 @@ struct TranscriptionsView: View {
     }
 
     private func performSearch() {
+        var dateRange: (start: Date, end: Date)?
+        if let start = dateRangeStart {
+            dateRange = (start: start, end: dateRangeEnd ?? start)
+        }
         Task {
             await historyManager.loadTranscriptions(
                 filter: selectedFilter,
-                searchQuery: searchText.isEmpty ? nil : searchText
+                searchQuery: searchText.isEmpty ? nil : searchText,
+                dateRange: dateRange
             )
         }
+    }
+
+    private func performSearchWithDateRange(start: Date, end: Date) {
+        Task {
+            await historyManager.loadTranscriptions(
+                filter: selectedFilter,
+                searchQuery: searchText.isEmpty ? nil : searchText,
+                dateRange: (start: start, end: end)
+            )
+        }
+    }
+
+    // MARK: - Calendar Filter
+
+    private var calendarButton: some View {
+        let isActive = dateRangeStart != nil
+        return Button(action: {
+            Task { datesWithTranscriptions = await historyManager.fetchDatesWithTranscriptions() }
+            showCalendarPicker.toggle()
+        }) {
+            Image(systemName: "calendar")
+                .font(.system(size: 12, weight: .medium))
+                .foregroundColor(isActive ? .white : WhispererColors.secondaryText(colorScheme))
+                .padding(.horizontal, 10)
+                .padding(.vertical, 7)
+                .background(
+                    Capsule()
+                        .fill(isActive ? WhispererColors.accentBlue : Color.clear)
+                )
+                .overlay(
+                    Capsule()
+                        .stroke(isActive ? Color.clear : WhispererColors.border(colorScheme), lineWidth: 1)
+                )
+                .shadow(
+                    color: isActive ? WhispererColors.accentBlue.opacity(0.25) : Color.clear,
+                    radius: 4, y: 1
+                )
+        }
+        .buttonStyle(.plain)
+        .onHover { hovering in
+            if hovering { NSCursor.pointingHand.push() } else { NSCursor.pop() }
+        }
+        .popover(isPresented: $showCalendarPicker, arrowEdge: .top) {
+            CalendarPickerView(
+                startDate: $dateRangeStart,
+                endDate: $dateRangeEnd,
+                datesWithTranscriptions: datesWithTranscriptions,
+                colorScheme: colorScheme,
+                onApply: { start, end in
+                    dateRangeStart = start
+                    dateRangeEnd = end
+                    performSearchWithDateRange(start: start, end: end)
+                },
+                onPresetApply: { start, end in
+                    dateRangeStart = start
+                    dateRangeEnd = end
+                    showCalendarPicker = false
+                    performSearchWithDateRange(start: start, end: end)
+                },
+                onReset: {
+                    dateRangeStart = nil
+                    dateRangeEnd = nil
+                    showCalendarPicker = false
+                    performSearch()
+                }
+            )
+        }
+    }
+
+    private func dateRangeChip(start: Date, end: Date) -> some View {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "MMM d"
+        let startStr = formatter.string(from: start)
+        let endStr = formatter.string(from: end)
+        let label = Calendar.current.isDate(start, inSameDayAs: end) ? startStr : "\(startStr) – \(endStr)"
+
+        return HStack(spacing: 4) {
+            Image(systemName: "calendar")
+                .font(.system(size: 10, weight: .semibold))
+            Text(label)
+                .font(.system(size: 11, weight: .semibold))
+            Button(action: {
+                withAnimation(.spring(response: 0.3)) {
+                    dateRangeStart = nil
+                    dateRangeEnd = nil
+                }
+                performSearch()
+            }) {
+                Image(systemName: "xmark")
+                    .font(.system(size: 8, weight: .bold))
+            }
+            .buttonStyle(.plain)
+            .onHover { hovering in
+                if hovering { NSCursor.pointingHand.push() } else { NSCursor.pop() }
+            }
+        }
+        .foregroundColor(WhispererColors.accentBlue)
+        .padding(.horizontal, 8)
+        .padding(.vertical, 5)
+        .background(
+            Capsule()
+                .fill(WhispererColors.accentBlue.opacity(0.12))
+        )
     }
 }
 
@@ -1672,6 +1822,344 @@ struct RetentionOptionButton: View {
     }
 }
 
+// MARK: - Calendar Picker
+
+struct CalendarPickerView: View {
+    @Binding var startDate: Date?
+    @Binding var endDate: Date?
+    let datesWithTranscriptions: Set<Date>
+    let colorScheme: ColorScheme
+    let onApply: (_ start: Date, _ end: Date) -> Void
+    let onPresetApply: (_ start: Date, _ end: Date) -> Void
+    let onReset: () -> Void
+
+    @State private var leftMonth: Date = Calendar.current.date(byAdding: .month, value: -1, to: Date()) ?? Date()
+    @State private var rightMonth: Date = Date()
+
+    private let calendar = Calendar.current
+    private let columns = Array(repeating: GridItem(.flexible(), spacing: 0), count: 7)
+    private var weekdaySymbols: [String] {
+        let symbols = calendar.veryShortWeekdaySymbols
+        let offset = calendar.firstWeekday - 1
+        return Array(symbols[offset...]) + Array(symbols[..<offset])
+    }
+
+    var body: some View {
+        VStack(spacing: 0) {
+            // Two calendars side by side
+            HStack(alignment: .top, spacing: 0) {
+                // Left calendar — FROM
+                calendarGrid(
+                    month: $leftMonth,
+                    label: "FROM",
+                    labelColor: WhispererColors.accentBlue,
+                    side: .start
+                )
+
+                // Vertical divider
+                Rectangle()
+                    .fill(WhispererColors.border(colorScheme))
+                    .frame(width: 0.5)
+                    .padding(.vertical, 16)
+
+                // Right calendar — TO
+                calendarGrid(
+                    month: $rightMonth,
+                    label: "TO",
+                    labelColor: WhispererColors.accentPurple,
+                    side: .end
+                )
+            }
+
+            // Divider
+            Rectangle()
+                .fill(WhispererColors.border(colorScheme))
+                .frame(height: 0.5)
+                .padding(.horizontal, 16)
+
+            // Quick presets + reset
+            HStack(spacing: 6) {
+                presetButton("Today") {
+                    let today = calendar.startOfDay(for: Date())
+                    applyRange(today, today)
+                }
+                presetButton("7 Days") {
+                    let today = calendar.startOfDay(for: Date())
+                    applyRange(calendar.date(byAdding: .day, value: -6, to: today)!, today)
+                }
+                presetButton("30 Days") {
+                    let today = calendar.startOfDay(for: Date())
+                    applyRange(calendar.date(byAdding: .day, value: -29, to: today)!, today)
+                }
+                presetButton("This Month") {
+                    let today = Date()
+                    applyRange(
+                        calendar.date(from: calendar.dateComponents([.year, .month], from: today))!,
+                        calendar.startOfDay(for: today)
+                    )
+                }
+
+                Spacer()
+
+                if startDate != nil {
+                    Button(action: onReset) {
+                        Text("Reset")
+                            .font(.system(size: 11, weight: .medium))
+                            .foregroundColor(.red.opacity(0.8))
+                    }
+                    .buttonStyle(.plain)
+                    .onHover { hovering in
+                        if hovering { NSCursor.pointingHand.push() } else { NSCursor.pop() }
+                    }
+                }
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 12)
+        }
+        .frame(width: 580)
+        .background(WhispererColors.cardBackground(colorScheme))
+        .environment(\.colorScheme, .dark)
+    }
+
+    // MARK: - Calendar Side
+
+    private enum CalendarSide {
+        case start, end
+    }
+
+    // MARK: - Calendar Grid
+
+    private func calendarGrid(month: Binding<Date>, label: String, labelColor: Color, side: CalendarSide) -> some View {
+        VStack(spacing: 0) {
+            // Label
+            HStack {
+                Text(label)
+                    .font(.system(size: 10, weight: .bold))
+                    .tracking(1.0)
+                    .foregroundColor(labelColor)
+                Spacer()
+            }
+            .padding(.horizontal, 16)
+            .padding(.top, 14)
+            .padding(.bottom, 6)
+
+            // Month navigation
+            HStack {
+                Button(action: {
+                    withAnimation(.easeInOut(duration: 0.2)) {
+                        month.wrappedValue = calendar.date(byAdding: .month, value: -1, to: month.wrappedValue) ?? month.wrappedValue
+                    }
+                }) {
+                    Image(systemName: "chevron.left")
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundColor(WhispererColors.accentBlue)
+                        .frame(width: 24, height: 24)
+                        .background(Circle().fill(WhispererColors.accentBlue.opacity(0.1)))
+                }
+                .buttonStyle(.plain)
+                .onHover { hovering in if hovering { NSCursor.pointingHand.push() } else { NSCursor.pop() } }
+
+                Spacer()
+
+                Text(monthYearString(for: month.wrappedValue))
+                    .font(.system(size: 13, weight: .bold, design: .rounded))
+                    .foregroundColor(.white)
+
+                Spacer()
+
+                Button(action: {
+                    withAnimation(.easeInOut(duration: 0.2)) {
+                        month.wrappedValue = calendar.date(byAdding: .month, value: 1, to: month.wrappedValue) ?? month.wrappedValue
+                    }
+                }) {
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundColor(canGoForward(month: month.wrappedValue) ? WhispererColors.accentBlue : WhispererColors.secondaryText(colorScheme))
+                        .frame(width: 24, height: 24)
+                        .background(Circle().fill(canGoForward(month: month.wrappedValue) ? WhispererColors.accentBlue.opacity(0.1) : Color.clear))
+                }
+                .buttonStyle(.plain)
+                .disabled(!canGoForward(month: month.wrappedValue))
+                .onHover { hovering in if hovering { NSCursor.pointingHand.push() } else { NSCursor.pop() } }
+            }
+            .padding(.horizontal, 12)
+            .padding(.bottom, 8)
+
+            // Weekday labels
+            LazyVGrid(columns: columns, spacing: 0) {
+                ForEach(Array(weekdaySymbols.enumerated()), id: \.offset) { _, symbol in
+                    Text(symbol)
+                        .font(.system(size: 9, weight: .bold))
+                        .tracking(0.3)
+                        .foregroundColor(WhispererColors.secondaryText(colorScheme))
+                        .frame(height: 20)
+                }
+            }
+            .padding(.horizontal, 10)
+
+            // Day grid
+            LazyVGrid(columns: columns, spacing: 2) {
+                ForEach(Array(daysInMonth(for: month.wrappedValue).enumerated()), id: \.offset) { _, date in
+                    if let date = date {
+                        dayCell(for: date, side: side)
+                    } else {
+                        Color.clear.frame(height: 34)
+                    }
+                }
+            }
+            .padding(.horizontal, 10)
+            .padding(.bottom, 10)
+        }
+        .frame(maxWidth: .infinity)
+    }
+
+    // MARK: - Day Cell
+
+    private func dayCell(for date: Date, side: CalendarSide) -> some View {
+        let isToday = calendar.isDateInToday(date)
+        let isStart = startDate.map { calendar.isDate($0, inSameDayAs: date) } ?? false
+        let isEnd = endDate.map { calendar.isDate($0, inSameDayAs: date) } ?? false
+        let isInRange = isDateInRange(date)
+        let hasTranscription = datesWithTranscriptions.contains(calendar.startOfDay(for: date))
+        let isFuture = date > Date()
+        let dayNumber = calendar.component(.day, from: date)
+
+        return Button(action: {
+            guard !isFuture else { return }
+            selectDate(date, side: side)
+        }) {
+            VStack(spacing: 1) {
+                Text("\(dayNumber)")
+                    .font(.system(size: 12, weight: isStart || isEnd ? .bold : .medium))
+                    .foregroundColor(
+                        isFuture ? .white.opacity(0.2) :
+                        (isStart || isEnd) ? .white :
+                        .white.opacity(0.85)
+                    )
+
+                Circle()
+                    .fill(hasTranscription ? WhispererColors.accentBlue : Color.clear)
+                    .frame(width: 4, height: 4)
+            }
+            .frame(width: 30, height: 34)
+            .background(
+                Group {
+                    if isStart {
+                        Circle()
+                            .fill(WhispererColors.accentBlue)
+                            .frame(width: 30, height: 30)
+                    } else if isEnd {
+                        Circle()
+                            .fill(WhispererColors.accentPurple)
+                            .frame(width: 30, height: 30)
+                    } else if isInRange {
+                        RoundedRectangle(cornerRadius: 4)
+                            .fill(WhispererColors.accentBlue.opacity(0.12))
+                            .frame(height: 30)
+                    } else if isToday {
+                        Circle()
+                            .stroke(WhispererColors.accentBlue.opacity(0.3), lineWidth: 1.5)
+                            .frame(width: 30, height: 30)
+                    }
+                }
+            )
+        }
+        .buttonStyle(.plain)
+        .disabled(isFuture)
+        .onHover { hovering in
+            if !isFuture {
+                if hovering { NSCursor.pointingHand.push() } else { NSCursor.pop() }
+            }
+        }
+    }
+
+    // MARK: - Preset Button
+
+    private func presetButton(_ title: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Text(title)
+                .font(.system(size: 11, weight: .medium))
+                .foregroundColor(.cyan)
+                .padding(.horizontal, 10)
+                .padding(.vertical, 5)
+                .background(Capsule().fill(Color.cyan.opacity(0.1)))
+                .overlay(Capsule().stroke(Color.cyan.opacity(0.2), lineWidth: 0.5))
+        }
+        .buttonStyle(.plain)
+        .onHover { hovering in
+            if hovering { NSCursor.pointingHand.push() } else { NSCursor.pop() }
+        }
+    }
+
+    // MARK: - Helpers
+
+    private func applyRange(_ start: Date, _ end: Date) {
+        startDate = start
+        endDate = end
+        onPresetApply(start, end)
+    }
+
+    private func selectDate(_ date: Date, side: CalendarSide) {
+        let day = calendar.startOfDay(for: date)
+
+        switch side {
+        case .start:
+            startDate = day
+            // If end is before new start, clear it
+            if let end = endDate, end < day {
+                endDate = nil
+            }
+            // Apply with current end or same day
+            let effectiveEnd = endDate ?? day
+            onApply(day, effectiveEnd)
+
+        case .end:
+            endDate = day
+            // If start is after new end, clear it
+            if let start = startDate, start > day {
+                startDate = nil
+            }
+            // Apply with current start or same day
+            let effectiveStart = startDate ?? day
+            onApply(effectiveStart, day)
+        }
+    }
+
+    private func monthYearString(for month: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "MMM yyyy"
+        return formatter.string(from: month)
+    }
+
+    private func canGoForward(month: Date) -> Bool {
+        let nextMonth = calendar.date(byAdding: .month, value: 1, to: month) ?? month
+        let startOfNextMonth = calendar.date(from: calendar.dateComponents([.year, .month], from: nextMonth))!
+        return startOfNextMonth <= Date()
+    }
+
+    private func isDateInRange(_ date: Date) -> Bool {
+        guard let start = startDate, let end = endDate else { return false }
+        let day = calendar.startOfDay(for: date)
+        return day >= calendar.startOfDay(for: start) && day <= calendar.startOfDay(for: end)
+    }
+
+    private func daysInMonth(for month: Date) -> [Date?] {
+        let components = calendar.dateComponents([.year, .month], from: month)
+        guard let firstDay = calendar.date(from: components),
+              let range = calendar.range(of: .day, in: .month, for: firstDay) else { return [] }
+
+        let rawWeekday = calendar.component(.weekday, from: firstDay)
+        let firstWeekday = (rawWeekday - calendar.firstWeekday + 7) % 7
+
+        var days: [Date?] = Array(repeating: nil, count: firstWeekday)
+        for day in range {
+            days.append(calendar.date(byAdding: .day, value: day - 1, to: firstDay))
+        }
+        while days.count % 7 != 0 { days.append(nil) }
+        return days
+    }
+}
+
 // MARK: - Filter Tab
 
 struct FilterTab: View {
@@ -1712,6 +2200,7 @@ struct FilterTab: View {
             withAnimation(.easeInOut(duration: 0.12)) {
                 isHovered = hovering
             }
+            if hovering { NSCursor.pointingHand.push() } else { NSCursor.pop() }
         }
     }
 }

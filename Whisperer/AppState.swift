@@ -159,6 +159,29 @@ class AppState: ObservableObject {
     @Published var selectedBackendType: BackendType = .whisperCpp
     @Published var selectedParakeetModel: ParakeetModelVariant = .v3
 
+    /// Cached Apple Speech supported language codes (populated after SpeechAnalyzer prepares)
+    @Published private(set) var speechAnalyzerSupportedLanguageCodes: Set<String> = []
+
+    /// User-facing hint when the selected language isn't supported by the current backend
+    var languageCompatibilityHint: String? {
+        guard selectedLanguage != .auto else { return nil }
+        guard !selectedBackendType.supportsLanguage(
+            selectedLanguage,
+            parakeetVariant: selectedParakeetModel,
+            speechAnalyzerLanguageCodes: speechAnalyzerSupportedLanguageCodes
+        ) else { return nil }
+
+        switch selectedBackendType {
+        case .whisperCpp: return nil
+        case .parakeet:
+            return selectedParakeetModel == .v2
+                ? "Parakeet v2 supports English only — language will be ignored"
+                : "\(selectedLanguage.displayName) isn't supported by Parakeet — language will be auto-detected"
+        case .speechAnalyzer:
+            return "\(selectedLanguage.displayName) isn't available in Apple Speech — will use system language"
+        }
+    }
+
     /// Display name of the model actively used for transcription (for history records)
     var activeModelDisplayName: String {
         switch selectedBackendType {
@@ -214,6 +237,13 @@ class AppState: ObservableObject {
     @Published var fillerWordRemovalEnabled: Bool = false {
         didSet {
             UserDefaults.standard.set(fillerWordRemovalEnabled, forKey: "fillerWordRemovalEnabled")
+        }
+    }
+
+    // Add a trailing space after inserted transcription so the cursor is ready for the next word
+    @Published var appendTrailingSpace: Bool = false {
+        didSet {
+            UserDefaults.standard.set(appendTrailingSpace, forKey: "appendTrailingSpace")
         }
     }
 
@@ -327,12 +357,15 @@ class AppState: ObservableObject {
             _promptWordsEnabled = Published(wrappedValue: UserDefaults.standard.bool(forKey: "promptWordsEnabled"))
         }
 
-        // Load filler word and vocabulary boosting settings
+        // Load filler word, vocabulary boosting, and trailing space settings
         if UserDefaults.standard.object(forKey: "fillerWordRemovalEnabled") != nil {
             _fillerWordRemovalEnabled = Published(wrappedValue: UserDefaults.standard.bool(forKey: "fillerWordRemovalEnabled"))
         }
         if UserDefaults.standard.object(forKey: "vocabularyBoostingEnabled") != nil {
             _vocabularyBoostingEnabled = Published(wrappedValue: UserDefaults.standard.bool(forKey: "vocabularyBoostingEnabled"))
+        }
+        if UserDefaults.standard.object(forKey: "appendTrailingSpace") != nil {
+            _appendTrailingSpace = Published(wrappedValue: UserDefaults.standard.bool(forKey: "appendTrailingSpace"))
         }
 
         // Observe dictionary rebuilds to reconfigure CTC vocabulary boosting
@@ -793,6 +826,7 @@ class AppState: ObservableObject {
                     guard let self = self else { return }
                     guard self.selectedBackendType == .speechAnalyzer else { return }
                     self.whisperBridge = bridge
+                    self.speechAnalyzerSupportedLanguageCodes = bridge.supportedLanguageCodes
                     self.loadedModel = nil
                     self.loadedParakeetModel = nil
                     self.isModelLoaded = true
@@ -1219,9 +1253,13 @@ class AppState: ObservableObject {
                 // Apply LLM post-processing if enabled
                 let processedText = await applyLLMPostProcessing(finalText)
 
-                Logger.debug("Entering dictated text: '\(processedText)'", subsystem: .app)
-                state = .inserting(text: processedText)
-                await insertText(processedText)
+                var textToInsert = processedText
+                if appendTrailingSpace {
+                    textToInsert += " "
+                }
+                Logger.debug("Entering dictated text: '\(textToInsert)'", subsystem: .app)
+                state = .inserting(text: textToInsert)
+                await insertText(textToInsert)
             } else {
                 Logger.debug("No speech detected in recording", subsystem: .app)
                 errorMessage = "No speech detected"

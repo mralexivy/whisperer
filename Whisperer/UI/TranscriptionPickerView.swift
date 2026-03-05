@@ -73,7 +73,7 @@ struct TranscriptionPickerView: View {
 
             Spacer()
 
-            Text("⌥V to cycle")
+            Text("⌥+V to cycle")
                 .font(.system(size: 10, weight: .medium))
                 .foregroundColor(.white.opacity(0.35))
         }

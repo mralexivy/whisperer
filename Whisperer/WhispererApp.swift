@@ -320,6 +320,7 @@ private struct MenuBarWindowConfigurator: NSViewRepresentable {
 enum SettingsScrollTarget: String {
     case dictation
     case microphone
+    case livePreview
 }
 
 struct MenuBarView: View {
@@ -327,6 +328,7 @@ struct MenuBarView: View {
     @ObservedObject var permissionManager = PermissionManager.shared
     @State private var selectedTab: MenuTab = .status
     @State private var settingsScrollTarget: SettingsScrollTarget?
+    @State private var showAboutPopover = false
 
     var body: some View {
         VStack(spacing: 0) {
@@ -336,12 +338,12 @@ struct MenuBarView: View {
             // Tab bar
             tabBar
 
-            // Content area - flexible height based on content
-            tabContent
-                .padding(.horizontal, 16)
-                .padding(.vertical, 12)
-
-            Spacer(minLength: 0)
+            // Content area - scrollable
+            ScrollView(showsIndicators: false) {
+                tabContent
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 12)
+            }
 
             // Footer
             footerView
@@ -393,20 +395,28 @@ struct MenuBarView: View {
 
                 Spacer()
 
-                // Version badge
-                HStack(spacing: 4) {
-                    Image(systemName: "info.circle.fill")
-                        .foregroundColor(MBColors.accent)
-                        .font(.system(size: 10))
-
-                    Text("Version \(Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "?") (Build \(Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "?"))")
-                        .font(.system(size: 11, weight: .medium))
-                        .foregroundColor(MBColors.textSecondary)
+                // About button
+                Button(action: { showAboutPopover.toggle() }) {
+                    HStack(spacing: 4) {
+                        Image(systemName: "info.circle.fill")
+                            .foregroundColor(MBColors.accent)
+                            .font(.system(size: 12))
+                        Text("About")
+                            .font(.system(size: 11, weight: .semibold))
+                            .foregroundColor(MBColors.textPrimary)
+                    }
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 6)
+                    .background(MBColors.pill)
+                    .cornerRadius(12)
                 }
-                .padding(.horizontal, 8)
-                .padding(.vertical, 4)
-                .background(MBColors.pill)
-                .cornerRadius(12)
+                .buttonStyle(.plain)
+                .popover(isPresented: $showAboutPopover, arrowEdge: .top) {
+                    AboutPopoverContent()
+                        .frame(width: 320)
+                        .background(MBColors.background)
+                        .environment(\.colorScheme, .dark)
+                }
             }
 
             // Error banner if present
@@ -683,7 +693,8 @@ struct StatusTabView: View {
                         value: appState.liveTranscriptionEnabled ? "On" : "Off",
                         detail: nil,
                         color: .purple,
-                        navigateTo: .settings
+                        navigateTo: .settings,
+                        scrollTo: .livePreview
                     )
 
                 }
@@ -947,9 +958,20 @@ struct StatusTabView: View {
                     Text("System-Wide Dictation")
                         .font(.caption)
                         .foregroundColor(MBColors.textTertiary)
-                    Text(isEnabled ? "\(shortcutKey) → Speak → Release · ⌥V Picker" : "Disabled")
-                        .font(.system(size: 13, weight: .medium))
-                        .foregroundColor(MBColors.textPrimary)
+                    if isEnabled {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Label("\(shortcutKey) → Speak → Release", systemImage: "mic.fill")
+                                .font(.system(size: 12, weight: .medium))
+                                .foregroundColor(MBColors.textPrimary)
+                            Label("⌥+V", systemImage: "clock.arrow.circlepath")
+                                .font(.system(size: 12, weight: .medium))
+                                .foregroundColor(MBColors.textPrimary)
+                        }
+                    } else {
+                        Text("Disabled")
+                            .font(.system(size: 13, weight: .medium))
+                            .foregroundColor(MBColors.textPrimary)
+                    }
                 }
 
                 Spacer()
@@ -1065,57 +1087,17 @@ struct ModelsTabView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            // Backend picker
-            backendPicker
+            // Language picker — here because language support depends on the selected engine
+            languageSection
 
-            if appState.selectedBackendType == .whisperCpp {
-                // Recommended
-                modelSection(
-                    title: "Recommended",
-                    icon: "sparkles",
-                    color: MBColors.accent,
-                    models: [.largeTurboQ5],
-                    sectionId: "recommended"
-                )
-
-                // Turbo & Optimized
-                modelSection(
-                    title: "Turbo & Optimized",
-                    icon: "bolt.fill",
-                    color: .orange,
-                    models: [.largeTurbo, .largeV3Q5],
-                    sectionId: "turbo"
-                )
-
-                // Standard
-                modelSection(
-                    title: "Standard",
-                    icon: "cube.fill",
-                    color: .blue,
-                    models: [.tiny, .base, .small, .medium, .largeV3],
-                    sectionId: "standard"
-                )
-
-                // Distilled
-                modelSection(
-                    title: "Distilled",
-                    icon: "wand.and.stars",
-                    color: .red,
-                    models: WhisperModel.allCases.filter { $0.isDistilled },
-                    sectionId: "distilled"
-                )
-            } else if appState.selectedBackendType == .parakeet {
-                // Parakeet models
-                parakeetModelSection
-            } else if appState.selectedBackendType == .speechAnalyzer {
-                // Apple Speech section
-                speechAnalyzerSection
-            }
+            // Engine picker + models
+            engineSection
         }
     }
 
-    private var backendPicker: some View {
-        VStack(alignment: .leading, spacing: 8) {
+    private var engineSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            // Engine header + segmented control
             HStack(spacing: 10) {
                 ZStack {
                     RoundedRectangle(cornerRadius: 6)
@@ -1175,6 +1157,45 @@ struct ModelsTabView: View {
                 RoundedRectangle(cornerRadius: 8)
                     .stroke(MBColors.border, lineWidth: 1)
             )
+
+            // Models for selected engine
+            if appState.selectedBackendType == .whisperCpp {
+                modelSection(
+                    title: "Recommended",
+                    icon: "sparkles",
+                    color: MBColors.accent,
+                    models: [.largeTurboQ5],
+                    sectionId: "recommended"
+                )
+
+                modelSection(
+                    title: "Turbo & Optimized",
+                    icon: "bolt.fill",
+                    color: .orange,
+                    models: [.largeTurbo, .largeV3Q5],
+                    sectionId: "turbo"
+                )
+
+                modelSection(
+                    title: "Standard",
+                    icon: "cube.fill",
+                    color: .blue,
+                    models: [.tiny, .base, .small, .medium, .largeV3],
+                    sectionId: "standard"
+                )
+
+                modelSection(
+                    title: "Distilled",
+                    icon: "wand.and.stars",
+                    color: .red,
+                    models: WhisperModel.allCases.filter { $0.isDistilled },
+                    sectionId: "distilled"
+                )
+            } else if appState.selectedBackendType == .parakeet {
+                parakeetModelSection
+            } else if appState.selectedBackendType == .speechAnalyzer {
+                speechAnalyzerSection
+            }
         }
         .padding(12)
         .background(MBColors.cardSurface)
@@ -1182,6 +1203,36 @@ struct ModelsTabView: View {
         .overlay(
             RoundedRectangle(cornerRadius: 10)
                 .stroke(MBColors.border, lineWidth: 1)
+        )
+    }
+
+    private var languageSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(spacing: 8) {
+                ZStack {
+                    RoundedRectangle(cornerRadius: 6)
+                        .fill(Color.blue.opacity(0.15))
+                        .frame(width: 26, height: 26)
+                    Image(systemName: "globe")
+                        .foregroundColor(.blue)
+                        .font(.system(size: 12, weight: .medium))
+                }
+
+                Text("Language")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundColor(MBColors.textPrimary)
+            }
+
+            LanguagePickerView()
+        }
+        .padding(14)
+        .background(
+            RoundedRectangle(cornerRadius: 12)
+                .fill(MBColors.cardSurface)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 12)
+                        .stroke(MBColors.border, lineWidth: 1)
+                )
         )
     }
 
@@ -1231,13 +1282,6 @@ struct ModelsTabView: View {
                 .padding(.leading, 20)
             }
         }
-        .padding(12)
-        .background(MBColors.cardSurface)
-        .cornerRadius(10)
-        .overlay(
-            RoundedRectangle(cornerRadius: 10)
-                .stroke(MBColors.border, lineWidth: 1)
-        )
     }
 
     private var speechAnalyzerSection: some View {
@@ -1321,13 +1365,6 @@ struct ModelsTabView: View {
                 }
             }
         }
-        .padding(12)
-        .background(MBColors.cardSurface)
-        .cornerRadius(10)
-        .overlay(
-            RoundedRectangle(cornerRadius: 10)
-                .stroke(MBColors.border, lineWidth: 1)
-        )
     }
 
     private func modelSection(title: String, icon: String, color: Color, models: [WhisperModel], sectionId: String) -> some View {
@@ -1369,13 +1406,6 @@ struct ModelsTabView: View {
                 }
             }
         }
-        .padding(12)
-        .background(MBColors.cardSurface)
-        .cornerRadius(10)
-        .overlay(
-            RoundedRectangle(cornerRadius: 10)
-                .stroke(MBColors.border, lineWidth: 1)
-        )
     }
 }
 
@@ -1420,6 +1450,9 @@ struct SettingsTabView: View {
                         }
 
                         if appState.systemWideDictationEnabled {
+                            // Shortcut recorder inline
+                            ShortcutRecorderView()
+
                             HStack(spacing: 8) {
                                 ZStack {
                                     RoundedRectangle(cornerRadius: 5)
@@ -1441,7 +1474,7 @@ struct SettingsTabView: View {
 
                                 Spacer()
 
-                                Text("⌥V")
+                                Text("⌥+V")
                                     .font(.system(size: 11, weight: .semibold, design: .monospaced))
                                     .foregroundColor(.white.opacity(0.6))
                                     .padding(.horizontal, 8)
@@ -1505,6 +1538,7 @@ struct SettingsTabView: View {
                             .labelsHidden()
                     }
                 }
+                .id(SettingsScrollTarget.livePreview)
 
                 // Prompt Words
                 settingsCard(title: "Prompt Words", icon: "text.word.spacing", color: .cyan) {
@@ -1592,6 +1626,27 @@ struct SettingsTabView: View {
                     }
                 }
 
+                // Add Space After Text
+                settingsCard(title: "Text Output", icon: "character.cursor.ibeam", color: .teal) {
+                    HStack {
+                        VStack(alignment: .leading, spacing: 3) {
+                            Text("Add space after text")
+                                .font(.system(size: 13, weight: .medium))
+                                .foregroundColor(MBColors.textPrimary)
+                            Text("Insert a trailing space so you can keep typing")
+                                .font(.system(size: 11))
+                                .foregroundColor(MBColors.textSecondary)
+                        }
+
+                        Spacer()
+
+                        Toggle("", isOn: $appState.appendTrailingSpace)
+                            .toggleStyle(.switch)
+                            .tint(MBColors.accent)
+                            .labelsHidden()
+                    }
+                }
+
                 // Launch at Login
                 settingsCard(title: "Launch at Login", icon: "arrow.right.to.line", color: .cyan) {
                     HStack {
@@ -1626,23 +1681,11 @@ struct SettingsTabView: View {
                     }
                 }
 
-                // Language Settings
-                settingsCard(title: "Language", icon: "globe", color: .blue) {
-                    LanguagePickerView()
-                }
-
                 // Microphone Settings
                 settingsCard(title: "Microphone", icon: "mic.fill", color: .green) {
                     MicrophonePickerView()
                 }
                 .id(SettingsScrollTarget.microphone)
-
-                // Keyboard Shortcut (only when system-wide dictation is enabled)
-                if appState.systemWideDictationEnabled {
-                    settingsCard(title: "Shortcut", icon: "keyboard", color: .red) {
-                        ShortcutRecorderView()
-                    }
-                }
 
                 // Permissions
                 settingsCard(title: "Permissions", icon: "lock.shield.fill", color: .red) {
@@ -1659,15 +1702,6 @@ struct SettingsTabView: View {
                     DiagnosticsView()
                 }
 
-                // Pro Pack
-                settingsCard(title: "Pro Pack", icon: "wand.and.stars", color: .indigo) {
-                    PurchaseView()
-                }
-
-                // About
-                settingsCard(title: "About", icon: "info.circle.fill", color: .blue) {
-                    AboutView()
-                }
             }
             }
             .onAppear {
@@ -2032,6 +2066,19 @@ struct LanguagePickerView: View {
                         Text(appState.selectedLanguage.displayName)
                             .font(.system(size: 11))
                             .foregroundColor(MBColors.textSecondary)
+
+                        if let hint = appState.languageCompatibilityHint {
+                            HStack(spacing: 5) {
+                                Image(systemName: "info.circle.fill")
+                                    .font(.system(size: 10))
+                                    .foregroundColor(.orange)
+                                Text(hint)
+                                    .font(.system(size: 10.5, weight: .medium))
+                                    .foregroundColor(.orange.opacity(0.85))
+                                    .lineLimit(2)
+                            }
+                            .padding(.top, 2)
+                        }
                     }
 
                     Spacer()
@@ -2139,6 +2186,18 @@ struct LanguagePickerView: View {
                         .padding(.horizontal, 6)
                         .padding(.vertical, 2)
                         .background(MBColors.pill)
+                        .cornerRadius(4)
+                } else if appState.selectedBackendType != .whisperCpp && !appState.selectedBackendType.supportsLanguage(
+                    language,
+                    parakeetVariant: appState.selectedParakeetModel,
+                    speechAnalyzerLanguageCodes: appState.speechAnalyzerSupportedLanguageCodes
+                ) {
+                    Text("Unsupported")
+                        .font(.caption2)
+                        .foregroundColor(.orange.opacity(0.7))
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 2)
+                        .background(Color.orange.opacity(0.1))
                         .cornerRadius(4)
                 }
             }
@@ -2547,12 +2606,345 @@ private struct SpeechAnalyzerTestSection: View {
     }
 }
 
-// MARK: - About View
+// MARK: - About Popover
+
+struct AboutPopoverContent: View {
+    @ObservedObject var storeManager = StoreManager.shared
+    @State private var isLoadingProducts = false
+
+    private static let accent = Color(red: 0.357, green: 0.424, blue: 0.969)
+    private static let accentPurple = Color(red: 0.545, green: 0.361, blue: 0.965)
+
+    private var appVersion: String {
+        let version = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.0"
+        let build = Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "1"
+        return "Version \(version) (\(build))"
+    }
+
+    var body: some View {
+        ScrollView(showsIndicators: false) {
+            VStack(alignment: .leading, spacing: 0) {
+                // Header with gradient background
+                headerSection
+                    .padding(16)
+                    .background(
+                        LinearGradient(
+                            colors: [Self.accent.opacity(0.08), Self.accentPurple.opacity(0.04), Color.clear],
+                            startPoint: .top,
+                            endPoint: .bottom
+                        )
+                    )
+
+                // Pro section
+                proSection
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 12)
+
+                // Thin separator
+                Rectangle()
+                    .fill(Color.white.opacity(0.06))
+                    .frame(height: 1)
+                    .padding(.horizontal, 16)
+
+                // Links + copyright
+                VStack(alignment: .leading, spacing: 10) {
+                    linksSection
+
+                    Text("© 2026 Whisperer. All rights reserved.")
+                        .font(.system(size: 10))
+                        .foregroundColor(MBColors.textTertiary)
+                        .frame(maxWidth: .infinity, alignment: .center)
+                        .padding(.top, 2)
+                }
+                .padding(16)
+            }
+        }
+    }
+
+    // MARK: - Header
+
+    private var headerSection: some View {
+        HStack(spacing: 14) {
+            ZStack {
+                RoundedRectangle(cornerRadius: 14)
+                    .fill(
+                        LinearGradient(
+                            colors: [Self.accent.opacity(0.25), Self.accentPurple.opacity(0.25)],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                    )
+                    .frame(width: 50, height: 50)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 14)
+                            .stroke(
+                                LinearGradient(colors: [Self.accent.opacity(0.3), Self.accentPurple.opacity(0.3)], startPoint: .topLeading, endPoint: .bottomTrailing),
+                                lineWidth: 1
+                            )
+                    )
+
+                Image(systemName: "waveform")
+                    .font(.system(size: 22, weight: .semibold))
+                    .foregroundStyle(
+                        LinearGradient(colors: [Self.accent, Self.accentPurple], startPoint: .leading, endPoint: .trailing)
+                    )
+            }
+
+            VStack(alignment: .leading, spacing: 4) {
+                HStack(spacing: 8) {
+                    Text("Whisperer")
+                        .font(.system(size: 16, weight: .bold, design: .rounded))
+                        .foregroundColor(MBColors.textPrimary)
+
+                    Text(storeManager.isPro ? "Pro" : "Basic")
+                        .font(.system(size: 9, weight: .bold))
+                        .tracking(0.5)
+                        .textCase(.uppercase)
+                        .foregroundColor(.white)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 3)
+                        .background(
+                            Capsule().fill(
+                                storeManager.isPro
+                                    ? LinearGradient(colors: [.green, .green.opacity(0.8)], startPoint: .leading, endPoint: .trailing)
+                                    : LinearGradient(colors: [Self.accent, Self.accentPurple], startPoint: .leading, endPoint: .trailing)
+                            )
+                        )
+                }
+
+                Text("Offline Voice Transcription")
+                    .font(.system(size: 11))
+                    .foregroundColor(MBColors.textSecondary)
+
+                Text(appVersion)
+                    .font(.system(size: 10, weight: .medium))
+                    .foregroundColor(MBColors.textTertiary)
+            }
+
+            Spacer()
+        }
+    }
+
+    // MARK: - Pro Section
+
+    private var proSection: some View {
+        Group {
+            if storeManager.isPro {
+                HStack(spacing: 12) {
+                    ZStack {
+                        Circle()
+                            .fill(Color.green.opacity(0.15))
+                            .frame(width: 36, height: 36)
+                        Image(systemName: "checkmark.seal.fill")
+                            .foregroundColor(.green)
+                            .font(.system(size: 18))
+                    }
+
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Pro Pack Active")
+                            .font(.system(size: 13, weight: .semibold))
+                            .foregroundColor(MBColors.textPrimary)
+                        Text("All Pro features unlocked — thank you!")
+                            .font(.system(size: 11))
+                            .foregroundColor(MBColors.textSecondary)
+                    }
+
+                    Spacer()
+                }
+                .padding(14)
+                .background(
+                    RoundedRectangle(cornerRadius: 12)
+                        .fill(Color.green.opacity(0.06))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 12)
+                                .stroke(Color.green.opacity(0.15), lineWidth: 1)
+                        )
+                )
+            } else {
+                VStack(alignment: .leading, spacing: 12) {
+                    // Feature list with per-element colorful icons
+                    VStack(alignment: .leading, spacing: 8) {
+                        proFeatureRow(icon: "keyboard", color: .orange, title: "Code Mode", description: "Speak parentheses, brackets, and use casing commands")
+                        proFeatureRow(icon: "app.badge", color: .cyan, title: "Per-App Profiles", description: "Auto-switch settings for Slack, VS Code, and more")
+                        proFeatureRow(icon: "book.closed", color: .green, title: "Personal Dictionary", description: "Custom words, names, and technical terms")
+                        proFeatureRow(icon: "arrow.up.doc", color: .indigo, title: "Pro Text Entry", description: "Clipboard-safe paste with app-specific fallbacks")
+                    }
+
+                    // Purchase button
+                    Button(action: {
+                        Task {
+                            if storeManager.products.isEmpty {
+                                isLoadingProducts = true
+                                await storeManager.loadProducts()
+                                isLoadingProducts = false
+                            }
+                            if !storeManager.products.isEmpty {
+                                try? await storeManager.purchase()
+                            }
+                        }
+                    }) {
+                        HStack(spacing: 8) {
+                            if storeManager.isPurchasing || isLoadingProducts {
+                                ProgressView()
+                                    .scaleEffect(0.7)
+                            }
+
+                            Text(storeManager.isPurchasing ? "Processing..." : isLoadingProducts ? "Loading..." : "Upgrade to Pro")
+                                .font(.system(size: 13, weight: .semibold))
+
+                            Spacer()
+
+                            if let price = storeManager.proPackPrice, !storeManager.isPurchasing && !isLoadingProducts {
+                                Text(price)
+                                    .font(.system(size: 13, weight: .bold))
+                            }
+                        }
+                        .foregroundColor(.white)
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 11)
+                        .background(
+                            LinearGradient(
+                                colors: [Self.accent, Self.accentPurple],
+                                startPoint: .leading,
+                                endPoint: .trailing
+                            )
+                        )
+                        .cornerRadius(10)
+                        .shadow(color: Self.accent.opacity(0.25), radius: 8, y: 4)
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(storeManager.isPurchasing || isLoadingProducts)
+
+                    // Restore + one-time note
+                    HStack {
+                        Button(action: {
+                            Task { await storeManager.restorePurchases() }
+                        }) {
+                            Text("Restore Purchases")
+                                .font(.system(size: 10.5, weight: .medium))
+                                .foregroundColor(Self.accent)
+                        }
+                        .buttonStyle(.plain)
+
+                        Spacer()
+
+                        HStack(spacing: 4) {
+                            Image(systemName: "lock.fill")
+                                .font(.system(size: 8))
+                            Text("One-time purchase")
+                                .font(.system(size: 10))
+                        }
+                        .foregroundColor(MBColors.textTertiary)
+                    }
+
+                    // Error
+                    if let error = storeManager.errorMessage {
+                        Text(error)
+                            .font(.system(size: 10.5))
+                            .foregroundColor(.red)
+                            .padding(8)
+                            .background(Color.red.opacity(0.1))
+                            .cornerRadius(6)
+                    }
+                }
+                .padding(14)
+                .background(
+                    RoundedRectangle(cornerRadius: 12)
+                        .fill(MBColors.cardSurface)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 12)
+                                .stroke(
+                                    LinearGradient(
+                                        colors: [Self.accent.opacity(0.2), Self.accentPurple.opacity(0.2), MBColors.border],
+                                        startPoint: .topLeading,
+                                        endPoint: .bottomTrailing
+                                    ),
+                                    lineWidth: 1
+                                )
+                        )
+                )
+            }
+        }
+    }
+
+    // MARK: - Links
+
+    private var linksSection: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            linkButton(icon: "hand.raised", color: .orange, title: "Privacy Policy") {
+                if let url = URL(string: "https://whispererapp.com/privacy") {
+                    NSWorkspace.shared.open(url)
+                }
+            }
+
+            linkButton(icon: "globe", color: .blue, title: "Website") {
+                if let url = URL(string: "https://whispererapp.com") {
+                    NSWorkspace.shared.open(url)
+                }
+            }
+        }
+    }
+
+    private func linkButton(icon: String, color: Color, title: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            HStack(spacing: 10) {
+                ZStack {
+                    RoundedRectangle(cornerRadius: 5)
+                        .fill(color.opacity(0.15))
+                        .frame(width: 22, height: 22)
+                    Image(systemName: icon)
+                        .foregroundColor(color)
+                        .font(.system(size: 10, weight: .medium))
+                }
+
+                Text(title)
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundColor(MBColors.textPrimary)
+
+                Spacer()
+
+                Image(systemName: "arrow.up.right")
+                    .font(.system(size: 9, weight: .semibold))
+                    .foregroundColor(MBColors.textTertiary)
+            }
+            .padding(.vertical, 6)
+            .padding(.horizontal, 8)
+            .background(MBColors.elevated.opacity(0.5))
+            .cornerRadius(8)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+    }
+
+    private func proFeatureRow(icon: String, color: Color, title: String, description: String) -> some View {
+        HStack(alignment: .top, spacing: 10) {
+            ZStack {
+                RoundedRectangle(cornerRadius: 6)
+                    .fill(color.opacity(0.15))
+                    .frame(width: 26, height: 26)
+                Image(systemName: icon)
+                    .foregroundColor(color)
+                    .font(.system(size: 12, weight: .medium))
+            }
+
+            VStack(alignment: .leading, spacing: 1) {
+                Text(title)
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundColor(MBColors.textPrimary)
+                Text(description)
+                    .font(.system(size: 10.5))
+                    .foregroundColor(MBColors.textSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+    }
+}
+
+// MARK: - About View (used in workspace window)
 
 struct AboutView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
-            // App info
             HStack(spacing: 12) {
                 Image(systemName: "waveform")
                     .font(.system(size: 32))
@@ -2572,42 +2964,6 @@ struct AboutView: View {
                         .foregroundColor(MBColors.textTertiary)
                 }
             }
-
-            Divider()
-                .opacity(0.3)
-
-            // Links
-            VStack(alignment: .leading, spacing: 10) {
-                Text("Legal & Information")
-                    .font(.system(size: 12, weight: .semibold))
-                    .foregroundColor(MBColors.textPrimary)
-
-                linkButton(
-                    icon: "hand.raised",
-                    title: "Privacy Policy",
-                    action: openPrivacyPolicy
-                )
-
-                linkButton(
-                    icon: "globe",
-                    title: "Website",
-                    action: openWebsite
-                )
-            }
-
-            Divider()
-                .opacity(0.3)
-
-            // Copyright
-            Text("© 2026 Whisperer. All rights reserved.")
-                .font(.system(size: 10))
-                .foregroundColor(MBColors.textTertiary)
-                .frame(maxWidth: .infinity, alignment: .center)
-
-            Text("Powered by whisper.cpp — 100% offline")
-                .font(.system(size: 10))
-                .foregroundColor(MBColors.textTertiary)
-                .frame(maxWidth: .infinity, alignment: .center)
         }
     }
 
@@ -2615,45 +2971,6 @@ struct AboutView: View {
         let version = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.0"
         let build = Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "1"
         return "Version \(version) (Build \(build))"
-    }
-
-    private func linkButton(icon: String, title: String, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            HStack(spacing: 8) {
-                Image(systemName: icon)
-                    .foregroundColor(MBColors.accent)
-                    .font(.system(size: 12))
-                    .frame(width: 18)
-
-                Text(title)
-                    .font(.system(size: 12))
-                    .foregroundColor(MBColors.textPrimary)
-
-                Spacer()
-
-                Image(systemName: "chevron.right")
-                    .font(.system(size: 10))
-                    .foregroundColor(MBColors.textTertiary)
-            }
-            .padding(.vertical, 6)
-            .padding(.horizontal, 8)
-            .background(MBColors.elevated)
-            .cornerRadius(6)
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-    }
-
-    private func openPrivacyPolicy() {
-        if let url = URL(string: "https://whispererapp.com/privacy") {
-            NSWorkspace.shared.open(url)
-        }
-    }
-
-    private func openWebsite() {
-        if let url = URL(string: "https://whispererapp.com") {
-            NSWorkspace.shared.open(url)
-        }
     }
 }
 

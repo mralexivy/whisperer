@@ -26,6 +26,11 @@ nonisolated final class SpeechAnalyzerBridge: TranscriptionBackend {
     /// Supported locales snapshot from prepare() — avoids async lookup per transcription
     private let supportedLocalesSnapshot: [Locale]
 
+    /// ISO 639-1 language codes supported by this SpeechAnalyzer instance
+    var supportedLanguageCodes: Set<String> {
+        Set(supportedLocalesSnapshot.compactMap { $0.language.languageCode?.identifier })
+    }
+
     /// Audio converter for format conversion (lazy, created on first use)
     private var converter: AVAudioConverter?
 

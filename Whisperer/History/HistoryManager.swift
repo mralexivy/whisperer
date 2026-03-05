@@ -15,6 +15,15 @@ class HistoryManager: ObservableObject {
 
     @Published var transcriptions: [TranscriptionRecord] = []
     @Published var statistics: HistoryStatistics?
+    @Published private(set) var hasMorePages: Bool = true
+    @Published private(set) var isLoadingPage: Bool = false
+
+    private let pageSize = 50
+    private var currentOffset = 0
+    private var currentFilter: TranscriptionFilter = .all
+    private var currentSearchQuery: String?
+    private var currentDateRange: (start: Date, end: Date)?
+    private var loadGeneration: Int = 0
 
     private let database = HistoryDatabase.shared
     private var context: NSManagedObjectContext {
@@ -52,7 +61,7 @@ class HistoryManager: ObservableObject {
             }
         }
 
-        await loadTranscriptions()
+        await loadTranscriptions(filter: currentFilter, searchQuery: currentSearchQuery, dateRange: currentDateRange)
         await updateStatistics()
 
         NotificationCenter.default.post(name: NSNotification.Name("TranscriptionSaved"), object: nil)
@@ -60,14 +69,37 @@ class HistoryManager: ObservableObject {
 
     // MARK: - Read
 
-    func loadTranscriptions(filter: TranscriptionFilter = .all, searchQuery: String? = nil) async {
+    /// Resets pagination and loads the first page. Called on filter/search/date changes.
+    func loadTranscriptions(filter: TranscriptionFilter = .all, searchQuery: String? = nil, dateRange: (start: Date, end: Date)? = nil) async {
+        // Increment generation to invalidate any in-flight sentinel loads
+        loadGeneration += 1
+        currentFilter = filter
+        currentSearchQuery = searchQuery
+        currentDateRange = dateRange
+        currentOffset = 0
+        hasMorePages = true
+        isLoadingPage = false
+        transcriptions = []
+
+        await fetchNextPage()
+    }
+
+    /// Loads the next page of results and appends to existing transcriptions.
+    func loadNextPage() async {
+        await fetchNextPage()
+    }
+
+    private func fetchNextPage() async {
+        guard !isLoadingPage, hasMorePages else { return }
+        isLoadingPage = true
+        let generation = loadGeneration
+
         let fetchRequest: NSFetchRequest<TranscriptionEntity> = TranscriptionEntity.fetchRequest()
         fetchRequest.sortDescriptors = [NSSortDescriptor(key: "timestamp", ascending: false)]
 
-        // Apply filter
         var predicates: [NSPredicate] = []
 
-        switch filter {
+        switch currentFilter {
         case .all:
             break
         case .pinned:
@@ -76,22 +108,55 @@ class HistoryManager: ObservableObject {
             predicates.append(NSPredicate(format: "isFlagged == YES"))
         }
 
-        // Apply search
-        if let query = searchQuery, !query.isEmpty {
+        if let query = currentSearchQuery, !query.isEmpty {
             predicates.append(NSPredicate(format: "transcription CONTAINS[cd] %@ OR editedTranscription CONTAINS[cd] %@ OR notes CONTAINS[cd] %@", query, query, query))
+        }
+
+        if let range = currentDateRange {
+            predicates.append(NSPredicate(format: "timestamp >= %@", range.start as NSDate))
+            let endOfDay = Calendar.current.date(byAdding: .day, value: 1, to: range.end) ?? range.end
+            predicates.append(NSPredicate(format: "timestamp < %@", endOfDay as NSDate))
         }
 
         if !predicates.isEmpty {
             fetchRequest.predicate = NSCompoundPredicate(andPredicateWithSubpredicates: predicates)
         }
 
-        fetchRequest.fetchLimit = 500
+        fetchRequest.fetchOffset = currentOffset
+        fetchRequest.fetchLimit = pageSize
 
         do {
             let entities = try context.fetch(fetchRequest)
-            transcriptions = entities.map { TranscriptionRecord(from: $0) }
+
+            // Discard results if a newer loadTranscriptions invalidated this fetch
+            guard generation == loadGeneration else {
+                isLoadingPage = false
+                return
+            }
+
+            let newRecords = entities.map { TranscriptionRecord(from: $0) }
+
+            transcriptions.append(contentsOf: newRecords)
+            currentOffset += newRecords.count
+            hasMorePages = newRecords.count == pageSize
         } catch {
-            Logger.error("Failed to load transcriptions: \(error)", subsystem: .app)
+            Logger.error("Failed to load transcriptions page: \(error)", subsystem: .app)
+        }
+
+        isLoadingPage = false
+    }
+
+    /// Returns the set of dates (start of day) that have at least one transcription.
+    func fetchDatesWithTranscriptions() async -> Set<Date> {
+        let fetchRequest: NSFetchRequest<TranscriptionEntity> = TranscriptionEntity.fetchRequest()
+        fetchRequest.propertiesToFetch = ["timestamp"]
+
+        do {
+            let entities = try context.fetch(fetchRequest)
+            return Set(entities.map { Calendar.current.startOfDay(for: $0.timestamp) })
+        } catch {
+            Logger.error("Failed to fetch transcription dates: \(error)", subsystem: .app)
+            return []
         }
     }
 
@@ -113,7 +178,10 @@ class HistoryManager: ObservableObject {
         entity.lastModifiedAt = Date()
 
         try context.save()
-        await loadTranscriptions()
+
+        if let index = transcriptions.firstIndex(where: { $0.id == record.id }) {
+            transcriptions[index] = TranscriptionRecord(from: entity)
+        }
     }
 
     func togglePin(_ record: TranscriptionRecord) async throws {
@@ -129,7 +197,13 @@ class HistoryManager: ObservableObject {
         entity.lastModifiedAt = Date()
 
         try context.save()
-        await loadTranscriptions()
+
+        if currentFilter == .pinned, !entity.isPinned {
+            transcriptions.removeAll { $0.id == record.id }
+            currentOffset = max(0, currentOffset - 1)
+        } else if let index = transcriptions.firstIndex(where: { $0.id == record.id }) {
+            transcriptions[index] = TranscriptionRecord(from: entity)
+        }
     }
 
     func toggleFlag(_ record: TranscriptionRecord) async throws {
@@ -145,7 +219,13 @@ class HistoryManager: ObservableObject {
         entity.lastModifiedAt = Date()
 
         try context.save()
-        await loadTranscriptions()
+
+        if currentFilter == .flagged, !entity.isFlagged {
+            transcriptions.removeAll { $0.id == record.id }
+            currentOffset = max(0, currentOffset - 1)
+        } else if let index = transcriptions.firstIndex(where: { $0.id == record.id }) {
+            transcriptions[index] = TranscriptionRecord(from: entity)
+        }
     }
 
     func editTranscription(_ record: TranscriptionRecord, newText: String) async throws {
@@ -161,7 +241,10 @@ class HistoryManager: ObservableObject {
         entity.lastModifiedAt = Date()
 
         try context.save()
-        await loadTranscriptions()
+
+        if let index = transcriptions.firstIndex(where: { $0.id == record.id }) {
+            transcriptions[index] = TranscriptionRecord(from: entity)
+        }
     }
 
     func retranscribe(_ record: TranscriptionRecord, newText: String, language: String, modelUsed: String) async throws {
@@ -179,7 +262,10 @@ class HistoryManager: ObservableObject {
         entity.lastModifiedAt = Date()
 
         try context.save()
-        await loadTranscriptions()
+
+        if let index = transcriptions.firstIndex(where: { $0.id == record.id }) {
+            transcriptions[index] = TranscriptionRecord(from: entity)
+        }
     }
 
     func updateNotes(_ record: TranscriptionRecord, notes: String?) async throws {
@@ -195,7 +281,10 @@ class HistoryManager: ObservableObject {
         entity.lastModifiedAt = Date()
 
         try context.save()
-        await loadTranscriptions()
+
+        if let index = transcriptions.firstIndex(where: { $0.id == record.id }) {
+            transcriptions[index] = TranscriptionRecord(from: entity)
+        }
     }
 
     // MARK: - Delete
@@ -212,7 +301,8 @@ class HistoryManager: ObservableObject {
         context.delete(entity)
         try context.save()
 
-        await loadTranscriptions()
+        transcriptions.removeAll { $0.id == record.id }
+        currentOffset = max(0, currentOffset - 1)
         await updateStatistics()
     }
 
@@ -238,7 +328,7 @@ class HistoryManager: ObservableObject {
 
             try context.save()
 
-            await loadTranscriptions()
+            await loadTranscriptions(filter: currentFilter, searchQuery: currentSearchQuery, dateRange: currentDateRange)
             await updateStatistics()
         } catch {
             Logger.error("Failed to delete all transcriptions: \(error)", subsystem: .app)

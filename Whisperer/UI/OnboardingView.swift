@@ -580,7 +580,7 @@ struct OnboardingView: View {
 
             // How it works — horizontal cards with colorful icons
             VStack(spacing: 10) {
-                privacyCard(icon: "keyboard.fill", color: OnboardingColors.accentBlue, title: "Fn Hold to Dictate · ⌥V Paste Transcription", subtitle: "Press and hold Fn to start")
+                privacyCard(icon: "keyboard.fill", color: OnboardingColors.accentBlue, title: "Fn Hold to Dictate · ⌥+V Paste Transcription", subtitle: "Press and hold Fn to start")
                 privacyCard(icon: "waveform", color: .red, title: "Speak Naturally", subtitle: "Talk at your normal pace")
                 privacyCard(icon: "text.cursor", color: .green, title: "Release — Text Appears", subtitle: "Transcribed text is inserted instantly")
             }

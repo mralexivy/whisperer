@@ -111,3 +111,32 @@ extension TranscriptionBackend {
         transcribeAsync(samples: samples, initialPrompt: initialPrompt, language: language, singleSegment: singleSegment, maxTokens: maxTokens, completion: completion)
     }
 }
+
+// MARK: - Language Support
+
+extension BackendType {
+    private static let parakeetV2Languages: Set<String> = ["en"]
+    private static let parakeetV3Languages: Set<String> = [
+        "bg", "hr", "cs", "da", "nl", "en", "et", "fi", "fr", "de",
+        "el", "hu", "it", "lv", "lt", "mt", "pl", "pt", "ro", "sk",
+        "sl", "es", "sv", "ru", "uk"
+    ]
+
+    func supportsLanguage(
+        _ language: TranscriptionLanguage,
+        parakeetVariant: ParakeetModelVariant? = nil,
+        speechAnalyzerLanguageCodes: Set<String>? = nil
+    ) -> Bool {
+        guard language != .auto else { return true }
+        switch self {
+        case .whisperCpp: return true
+        case .parakeet:
+            let supported = (parakeetVariant == .v2) ? Self.parakeetV2Languages : Self.parakeetV3Languages
+            return supported.contains(language.rawValue)
+        case .speechAnalyzer:
+            // Don't warn when locales haven't been loaded yet
+            guard let codes = speechAnalyzerLanguageCodes, !codes.isEmpty else { return true }
+            return codes.contains(language.rawValue)
+        }
+    }
+}
