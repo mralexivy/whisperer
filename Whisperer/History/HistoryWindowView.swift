@@ -90,7 +90,6 @@ enum HistorySidebarItem: String, CaseIterable, Identifiable {
     case fileTranscription = "File Transcription"
     case dictionary = "Dictionary"
     case statistics = "Statistics"
-    case benchmark = "Benchmark"
     case settings = "Settings"
 
     var id: String { rawValue }
@@ -100,7 +99,6 @@ enum HistorySidebarItem: String, CaseIterable, Identifiable {
         case .transcriptions: return "waveform.and.mic"
         case .fileTranscription: return "doc.text.magnifyingglass"
         case .statistics: return "chart.xyaxis.line"
-        case .benchmark: return "gauge.with.dots.needle.67percent"
         case .dictionary: return "book.closed"
         case .settings: return "gearshape"
         }
@@ -111,7 +109,6 @@ enum HistorySidebarItem: String, CaseIterable, Identifiable {
         case .transcriptions: return WhispererColors.accentBlue
         case .fileTranscription: return .purple
         case .statistics: return .cyan
-        case .benchmark: return Color(hex: "22C55E")
         case .dictionary: return .red
         case .settings: return .orange
         }
@@ -147,8 +144,6 @@ struct HistoryWindowView: View {
                     FileTranscriptionView()
                 case .statistics:
                     StatisticsView()
-                case .benchmark:
-                    BenchmarkView()
                 case .dictionary:
                     DictionaryView()
                 case .settings:
