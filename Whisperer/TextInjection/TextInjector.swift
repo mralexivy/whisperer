@@ -2,7 +2,7 @@
 //  TextInjector.swift
 //  Whisperer
 //
-//  Assistive text entry for dictation.
+//  Text entry for dictation via clipboard paste.
 //  Enters transcribed text into the focused app via clipboard + paste,
 //  similar to Apple's built-in dictation.
 //

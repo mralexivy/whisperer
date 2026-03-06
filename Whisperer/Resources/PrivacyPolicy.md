@@ -41,15 +41,10 @@ Whisperer requires the following macOS permissions to function:
 
 The microphone permission allows the app to capture audio when you hold the recording shortcut. This audio is processed entirely on your device and is never transmitted over the network.
 
-### Accessibility Permission
-**Purpose**: Insert transcribed text into applications
+### Accessibility Permission (Optional)
+**Purpose**: Auto-paste transcribed text into applications
 
-The Accessibility permission allows Whisperer to automatically paste the transcribed text into any text field you're focused on. This is a macOS system permission required for cross-application text insertion.
-
-### Input Monitoring Permission
-**Purpose**: Detect keyboard shortcuts globally
-
-Input Monitoring allows the app to detect when you press and release your recording shortcut (e.g., the Fn key) while using other applications.
+If you enable the optional Auto-Paste feature, the Accessibility permission allows Whisperer to automatically paste transcribed text into the text field you're focused on. Without this permission, transcribed text is copied to your clipboard for manual pasting. This is a macOS system permission required for cross-application text pasting via simulated Cmd+V.
 
 ## Data Storage
 

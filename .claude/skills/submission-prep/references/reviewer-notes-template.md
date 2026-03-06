@@ -3,50 +3,49 @@
 Fill in `{VERSION}` with current version. Must be under 4000 characters.
 
 ```
-Thank you for your feedback. v{VERSION} makes significant architectural changes to address every Guideline 2.4.5 concern.
+Whisperer v{VERSION} — Addressing Guideline 2.4.5 Feedback
 
 WHAT IS WHISPERER:
-An assistive dictation tool — an alternative text input method for users who cannot or prefer not to type (RSI, carpal tunnel, mobility limitations, temporary injuries, or anyone who works faster by voice). It provides the same "dictate anywhere you can type" capability as Apple's built-in Dictation, but runs a local Whisper AI model for 100% offline, private transcription. No data ever leaves the Mac.
+An offline voice-to-text productivity tool for macOS. Users record speech, the app transcribes it locally using whisper.cpp with Metal GPU acceleration, and the transcribed text is available for use. 100% offline — no data leaves the device, no cloud services, no accounts.
 
-ALL FLAGGED APIs REMOVED:
-Every API cited in the rejection has been deleted from source and binary:
-• CGEventTap/CGEventTapCreate — REMOVED. No event taps of any kind.
-• IOHIDManager/IOKit HID — REMOVED. No hardware-level monitoring.
-• NSEvent globalMonitor with keyDown/keyUp — REMOVED. No keystroke monitoring.
-• Input Monitoring permission — REMOVED entirely.
-• AXUIElementCopyAttributeValue — REMOVED. We no longer read AX element attributes.
-• AXUIElementSetAttributeValue — REMOVED. We no longer write to AX elements.
-• NSAppleEventsUsageDescription — REMOVED from Info.plist.
-None of these symbols exist in our binary.
+ACCESSIBILITY IS FULLY OPTIONAL (DEFAULT OFF):
+In direct response to your feedback, Accessibility is genuinely optional. The app ships with auto-paste disabled by default (autoPasteEnabled = false in UserDefaults). Users who never enable auto-paste will never see an Accessibility permission prompt, and the app never calls AXIsProcessTrusted() unless the user explicitly opts in.
 
-KEY ARCHITECTURAL CHANGES:
-1. System-wide dictation is OPT-IN (default OFF). A 4-page onboarding guides first-run setup. The final page presents dictation as explicitly "Optional" with "Enable" and "Set Up Later" buttons. The core app — recording, transcription, history, clipboard copy — works fully without it and without Accessibility.
+Two modes of operation:
+1. Clipboard mode (DEFAULT): Transcribed text is copied to clipboard. User presses Cmd+V to paste. Recording, transcription, history, model management — everything works without Accessibility.
+2. Auto-paste mode (OPT-IN): User explicitly enables auto-paste via Settings toggle or during onboarding (page is labeled "Optional" with "Use Clipboard Mode" as alternative). Only then is Accessibility requested.
 
-2. Text entry rewritten — clipboard+paste ONLY. All direct AX element manipulation removed. The mechanism is now: copy transcription to NSPasteboard → post one Cmd+V via CGEvent.post. Same clipboard-paste approach as macOS built-in Dictation. No AX elements are read, queried, or modified.
+WHY ACCESSIBILITY IS NEEDED FOR AUTO-PASTE:
+CGEvent.post() requires AXIsProcessTrusted() to deliver a synthetic Cmd+V keystroke to the frontmost app — this is a macOS system requirement. The mechanism is: copy text to NSPasteboard → post one Cmd+V via CGEvent.post(tap: .cgAnnotatedSessionEventTap). Same clipboard+paste approach used by macOS built-in Dictation. No AX elements are read, queried, or modified.
 
-PERMISSIONS — WHY EACH IS NEEDED:
+HOW OPT-IN WORKS (code-level detail):
+1. AppState.autoPasteEnabled defaults to false
+2. PermissionManager only tracks accessibility status when isAccessibilityTrackingEnabled = true (set by auto-paste toggle)
+3. TextInjector.insertText() checks: guard autoPasteEnabled && hasAccessibilityPermission() — otherwise copies to clipboard only
+4. Onboarding page 5 ("Auto-Paste") is labeled "Optional" with two paths: "Enable Auto-Paste" and "Use Clipboard Mode"
+5. Periodic permission checks skip accessibility entirely when auto-paste is disabled
 
-1. Microphone (required)
-Records voice for on-device speech-to-text — the core function of a dictation app. Audio captured only while user holds their trigger key. All processing runs locally via whisper.cpp (MIT licensed). No audio ever transmitted.
+NO BANNED APIs:
+• No CGEventTap or event monitoring of any kind
+• No IOHIDManager or IOKit HID
+• No global keyDown/keyUp monitors
+• No AXUIElementCopyAttributeValue or AXUIElementSetAttributeValue
+• No direct AX element manipulation — only AXIsProcessTrusted() for permission check
 
-2. Accessibility (optional — only when user enables system-wide dictation)
-CGEvent.post requires AXIsProcessTrusted() to deliver a Cmd+V paste keystroke to the frontmost app. That is the sole reason this permission is needed. We post one paste event so dictated text appears where the user is typing — the same assistive behavior as Apple's built-in Dictation and Voice Control.
-Without Accessibility: app still works fully. Transcriptions copy to clipboard for manual paste.
+SHORTCUT DETECTION (not keystroke monitoring):
+• Fn key: NSEvent.addGlobalMonitorForEvents(matching: .flagsChanged) — modifier state changes only, keyCode 63
+• Custom shortcuts: Carbon RegisterEventHotKey — standard macOS hotkey API
 
-SHORTCUT DETECTION (no keystroke monitoring):
-• Fn key: NSEvent.addGlobalMonitorForEvents(matching: .flagsChanged) — modifier state only. Detects Fn press/release via keyCode 63. No typed characters observed.
-• Custom shortcuts: Carbon RegisterEventHotKey — standard macOS hotkey API. No Input Monitoring needed.
-
-DOES NOT: create event taps • use IOKit HID • monitor keystrokes • read/write AX elements • log or transmit input • require Input Monitoring • use ChatGPT/OpenAI cloud
+PERMISSIONS:
+• Microphone (required) — records voice for on-device transcription
+• Accessibility (optional, default OFF) — only for CGEvent.post to deliver Cmd+V
 
 HOW TO TEST:
-Core (no Accessibility): Launch → onboarding → grant Microphone → "Set Up Later" → menu bar → record → speak → transcription appears → copy to clipboard.
-System-wide (optional): Settings → enable System-Wide Dictation → grant Accessibility → TextEdit → hold Fn → speak → release → text at cursor.
-Tip: Set Globe key to "Do Nothing" in System Settings → Keyboard → Modifier Keys.
+Clipboard mode (default): Launch → onboarding → grant Microphone → skip Auto-Paste ("Use Clipboard Mode") → menu bar → hold Fn → speak → release → text copied to clipboard → Cmd+V to paste.
+Auto-paste (opt-in): Settings → enable Auto-Paste toggle → grant Accessibility → open TextEdit → hold Fn → speak → release → text appears at cursor.
 
 NO SIGN-IN REQUIRED — uncheck "Sign-in required."
 PRIVACY: 100% offline. No data transmitted. No accounts. No analytics.
 EXPORT: HTTPS only (exempt). No proprietary encryption.
-CHINA (Guideline 5): No ChatGPT/OpenAI cloud. whisper.cpp runs on-device. No network needed. Previous "OpenAI" metadata removed.
-IAP: com.ivy.whisperer.propack
+IAP: com.ivy.whisperer.propack (non-consumable)
 ```

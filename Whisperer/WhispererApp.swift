@@ -1433,7 +1433,7 @@ struct SettingsTabView: View {
                                 Text("Dictate anywhere")
                                     .font(.system(size: 13, weight: .medium))
                                     .foregroundColor(MBColors.textPrimary)
-                                Text("Assistive dictation — enter text wherever you type, just like Apple's built-in dictation")
+                                Text("Paste transcribed text wherever you type, just like Apple's built-in dictation")
                                     .font(.system(size: 11))
                                     .foregroundColor(MBColors.textSecondary)
                             }

@@ -2,16 +2,28 @@
 
 ## Current Status
 
-Version 1.0 (2) submitted after addressing Guideline 2.4.5 rejection in v1.0 (1).
+Version 1.1 (4) — resubmission addressing Guideline 2.4.5 rejection of v1.1 (2). Accessibility is now fully optional with auto-paste opt-in (default OFF).
 
 ### Rejection History
 
 **v1.0 (1) — Rejected (Guideline 2.4.5)**
 - Apple flagged: "Your app uses Accessibility features for non-accessibility purposes" and "Your app accesses user keystrokes for purposes other than assistive accessibility features"
 - Root cause: `CGEventTap`, `IOHIDManager`, global `keyDown`/`keyUp` monitors, and `CGEvent.post` for simulated paste
-- Resolution: Removed all red-flag APIs, reframed as assistive dictation tool. See "Guideline 2.4.5 Compliance" section below.
+- Resolution: Removed all red-flag APIs, replaced with flagsChanged + Carbon hotkeys
+
+**v1.1 (2) — Rejected (Guideline 2.4.5)**
+- Apple flagged: "The app requests access to Accessibility features on macOS but does not use these features for accessibility purposes. Specifically, the app uses Accessibility features to dictate audio and transcribe to text."
+- Root cause: Accessibility was still requested during onboarding, not truly optional
+- Resolution: Made Accessibility fully optional with auto-paste opt-in (default OFF), lazy accessibility tracking, clipboard-only fallback as default mode
+
+**v1.1 (3) — Rejected (Guideline 2.4.5)**
+- Apple flagged: Same as v1.1 (2) — "The app requests access to Accessibility features on macOS but does not use these features for accessibility purposes."
+- Root cause: Binary still contained "assistive" framing strings; Privacy Policy referenced removed Input Monitoring permission
+- Resolution: Removed all "assistive" framing from binary strings, cleaned Privacy Policy, updated reviewer notes to explain CGEvent.post system requirement
 
 ### What's Implemented
+- **Auto-Paste Opt-In** — Accessibility is optional (default OFF). App works fully with clipboard-only mode. User explicitly opts in via Settings toggle or onboarding.
+- **Lazy Accessibility Tracking** — PermissionManager only checks AXIsProcessTrusted() when auto-paste is enabled
 - **Receipt Validation** (`Licensing/ReceiptValidator.swift`) — Validates App Store receipt on launch. Exits with code 173 on failure (triggers receipt refresh). Only runs in Release builds.
 - **StoreKit 2 Integration** (`Store/StoreManager.swift`) — Pro Pack IAP infrastructure. Product ID: `com.ivy.whisperer.propack`.
 - **Purchase UI** (`UI/PurchaseView.swift`) — Purchase flow with Restore Purchases.
@@ -21,20 +33,37 @@ Version 1.0 (2) submitted after addressing Guideline 2.4.5 rejection in v1.0 (1)
 
 ## Guideline 2.4.5 Compliance
 
-### What Was Removed
+### Auto-Paste Architecture (v1.1 build 3)
+
+The app has two text delivery modes:
+
+| Mode | Default? | Accessibility Required? | How It Works |
+|------|----------|------------------------|--------------|
+| Clipboard (default) | Yes | No | Text copied to clipboard, user presses Cmd+V |
+| Auto-paste (opt-in) | No | Yes | Text copied + CGEvent.post simulates Cmd+V |
+
+Accessibility is needed ONLY because `CGEvent.post()` requires `AXIsProcessTrusted()` to deliver synthetic keystrokes to other apps — a macOS system requirement. No AX elements are read, queried, or modified.
+
+### Code-Level Opt-In Flow
+1. `AppState.autoPasteEnabled` defaults to `false` (UserDefaults)
+2. `PermissionManager.isAccessibilityTrackingEnabled` defaults to `false` — no polling
+3. User enables auto-paste → `enableAccessibilityTracking()` called → `requestAccessibilityPermission()` triggered
+4. `TextInjector.insertText()` guards: `autoPasteEnabled && hasAccessibilityPermission()` → else clipboard only
+
+### Banned APIs (all removed)
 | API Removed | Replacement |
 |-------------|-------------|
 | `CGEvent.tapCreate` (keyboard event monitoring) | `NSEvent.addGlobalMonitorForEvents(matching: .flagsChanged)` for Fn key |
 | `IOHIDManager` (hardware input monitoring) | Carbon `RegisterEventHotKey` for non-Fn shortcuts |
 | Global `keyDown`/`keyUp` monitors | Removed entirely — not needed |
 | Input Monitoring permission type | Removed from PermissionManager and UI |
-| Fn calibration (cookie-based, IOKit HID) | Removed — Fn detected via flagsChanged keyCode 63 |
+| `AXUIElementCopyAttributeValue` / `AXUIElementSetAttributeValue` | Removed — no AX element manipulation |
 
-### What Was Kept (with justification)
+### Approved APIs
 | API Kept | Justification |
 |----------|--------------|
-| `AXUIElement` text injection | Core assistive function — inserts dictated text as assistive input |
-| `CGEvent.post(tap: .cgAnnotatedSessionEventTap)` | Posts synthetic Cmd+V for clipboard fallback — posting ≠ monitoring |
+| `AXIsProcessTrusted()` | Permission check only — required by CGEvent.post |
+| `CGEvent.post(tap: .cgAnnotatedSessionEventTap)` | Posts synthetic Cmd+V for auto-paste — posting ≠ monitoring |
 | `NSEvent.addGlobalMonitorForEvents(matching: .flagsChanged)` | Monitors modifier state changes only, NOT keystrokes |
 | Carbon `RegisterEventHotKey` | Standard macOS hotkey mechanism, used by many approved apps |
 
@@ -59,8 +88,9 @@ NOT present (intentionally removed): `com.apple.security.network.server`
 ```xml
 ITSAppUsesNonExemptEncryption = NO     <!-- HTTPS only, exempt -->
 NSMicrophoneUsageDescription = "Whisperer needs microphone access to transcribe your voice."
-NSAppleEventsUsageDescription = "Whisperer needs automation access to insert transcribed text into applications."
 ```
+
+NOT present (intentionally removed): `NSAppleEventsUsageDescription`
 
 ## App Store Connect Configuration
 
@@ -95,11 +125,12 @@ Run `/submission-prep` to execute the automated checklist. It covers:
 - [ ] Receipt validation triggers exit(173) without receipt (expected)
 - [ ] Pro Pack products load in Sandbox
 - [ ] Purchase and Restore work in Sandbox
-- [ ] Microphone and Accessibility permissions prompt correctly (NO Input Monitoring prompt)
+- [ ] Microphone permission prompts correctly (NO Accessibility prompt unless auto-paste enabled)
+- [ ] Accessibility prompt appears ONLY when user enables auto-paste
+- [ ] Clipboard mode works without Accessibility (transcribe → text in clipboard → manual Cmd+V)
+- [ ] Auto-paste works when enabled (transcribe → text appears at cursor)
 - [ ] Model downloads successfully
 - [ ] Transcription works end-to-end
-- [ ] Text injection works in various apps (TextEdit, Safari, Notes)
-- [ ] Clipboard fallback works when Accessibility is denied
 - [ ] Hold-to-record with Fn key works
 - [ ] Custom shortcuts work (Carbon hotkey path)
 - [ ] Audio recovery works across multiple recording sessions
@@ -113,11 +144,13 @@ Run `/submission-prep` to execute the automated checklist. It covers:
 - [ ] Description and keywords entered
 - [ ] Build uploaded and processed
 - [ ] Reviewer notes provided (generated by `/submission-prep`)
+- [ ] Response message pasted in reply to rejection
 
 ## Common Rejection Reasons & Lessons Learned
 
 1. **Guideline 2.4.5 — Keystroke access** — CGEventTap, IOHIDManager, and global keyDown/keyUp monitors are red flags. Use flagsChanged for modifier keys and Carbon hotkeys for shortcuts instead.
-2. **Guideline 2.4.5 — Accessibility misuse** — Frame AXUIElement usage as assistive text input, not automation. The usage description and reviewer notes must clearly state the assistive purpose.
+2. **Guideline 2.4.5 — Accessibility misuse** — Making Accessibility optional is not enough if it's still prompted during onboarding. Must be truly opt-in with a working default mode that doesn't use it.
+3. **Guideline 2.4.5 — Framing** — Explain WHY Accessibility is needed (CGEvent.post system requirement), not just WHAT it does. Apple needs to understand it's a platform limitation, not an architectural choice.
 3. **Permissions not explained** — Ensure NSMicrophoneUsageDescription is clear. Remove any permission types no longer used (we removed Input Monitoring entirely).
 4. **App crashes** — Test audio engine recovery across multiple recording sessions. Validate audio format after `outputFormat(forBus:)` to catch device errors early.
 5. **Privacy policy issues** — Verify URL works and is accurate

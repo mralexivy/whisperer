@@ -19,7 +19,7 @@ enum PermissionType: String, CaseIterable {
         case .microphone:
             return "Record audio from your microphone"
         case .accessibility:
-            return "Assistive dictation — enter text wherever you type"
+            return "Auto-paste — enter text wherever you type"
         }
     }
 
