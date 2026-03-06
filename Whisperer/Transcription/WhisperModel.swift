@@ -6,6 +6,7 @@
 //
 
 import Foundation
+import SwiftUI
 
 enum WhisperModel: String, CaseIterable, Identifiable {
     // Standard models
@@ -36,7 +37,7 @@ enum WhisperModel: String, CaseIterable, Identifiable {
         case .medium: return "Medium"
         case .largeV3: return "Large V3"
         case .largeTurbo: return "Large V3 Turbo"
-        case .largeTurboQ5: return "Large V3 Turbo Q5"
+        case .largeTurboQ5: return "Whisperer V3"
         case .largeV3Q5: return "Large V3 Q5"
         case .distilLargeV3: return "Distil Large V3"
         case .distilSmallEn: return "Distil Small (EN)"
@@ -132,6 +133,41 @@ enum WhisperModel: String, CaseIterable, Identifiable {
         case .distilSmallEn:  return 0.4
         }
     }
+
+    var categoryIcon: String {
+        switch self {
+        case .largeTurboQ5:
+            return "sparkles"
+        case .largeTurbo, .largeV3Q5:
+            return "bolt.fill"
+        case .distilLargeV3, .distilSmallEn:
+            return "wand.and.stars"
+        default:
+            return "cube.fill"
+        }
+    }
+
+    var categoryColor: Color {
+        switch self {
+        case .largeTurboQ5:
+            return Color(red: 0.357, green: 0.424, blue: 0.969) // accent
+        case .largeTurbo, .largeV3Q5:
+            return .orange
+        case .distilLargeV3, .distilSmallEn:
+            return .red
+        default:
+            return .blue
+        }
+    }
+
+    var isRecommended: Bool { self == .largeTurboQ5 }
+
+    /// Display order with recommended model first
+    static let displayOrder: [WhisperModel] = [
+        .largeTurboQ5, .largeTurbo, .largeV3Q5,
+        .distilLargeV3, .distilSmallEn,
+        .tiny, .base, .small, .medium, .largeV3,
+    ]
 
     var modelDescription: String {
         switch self {

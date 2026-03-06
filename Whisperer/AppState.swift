@@ -207,6 +207,10 @@ class AppState: ObservableObject {
     private var loadedParakeetModel: ParakeetModelVariant? = nil
     @Published var isModelLoaded: Bool = false
 
+    // Whisper model load state
+    @Published var isLoadingWhisper: Bool = false
+    private var whisperLoadTask: Task<Void, Never>?
+
     // Parakeet model download/load state
     @Published var isDownloadingParakeet: Bool = false
     @Published var isLoadingParakeet: Bool = false
@@ -217,6 +221,15 @@ class AppState: ObservableObject {
     @Published var isLoadingSpeechAnalyzer: Bool = false
     @Published var speechAnalyzerStatus: String = ""
     private var speechAnalyzerLoadTask: Task<Void, Never>?
+
+    /// True when any model download or load is in progress — blocks model selection UI
+    var isModelBusy: Bool {
+        downloadingModel != nil ||
+        isLoadingWhisper ||
+        isDownloadingParakeet ||
+        isLoadingParakeet ||
+        isLoadingSpeechAnalyzer
+    }
 
     // LLM post-processing
     @Published var llmEnabled: Bool = false {
@@ -478,6 +491,8 @@ class AppState: ObservableObject {
 
     /// Select a model (must be downloaded first)
     func selectModel(_ model: WhisperModel) {
+        guard state == .idle else { return }
+
         guard isModelDownloaded(model) else {
             Logger.warning("Cannot select model \(model.displayName) - not downloaded", subsystem: .model)
             return
@@ -501,6 +516,8 @@ class AppState: ObservableObject {
 
     /// Select a Parakeet model variant
     func selectParakeetModel(_ model: ParakeetModelVariant) {
+        guard state == .idle else { return }
+
         guard model != selectedParakeetModel || loadedParakeetModel != model else {
             Logger.info("Parakeet \(model.displayName) already selected", subsystem: .model)
             return
@@ -524,6 +541,7 @@ class AppState: ObservableObject {
 
     /// Switch the active transcription backend
     func selectBackend(_ backend: BackendType) {
+        guard state == .idle else { return }
         guard backend != selectedBackendType else { return }
 
         // Release the current bridge — don't cache across engine types.
@@ -535,6 +553,9 @@ class AppState: ObservableObject {
         Logger.info("Switched backend to \(backend.displayName)", subsystem: .model)
 
         // Cancel any in-flight loads
+        whisperLoadTask?.cancel()
+        whisperLoadTask = nil
+        isLoadingWhisper = false
         parakeetLoadTask?.cancel()
         parakeetLoadTask = nil
         isLoadingParakeet = false
@@ -604,7 +625,11 @@ class AppState: ObservableObject {
             downloadRetryInfo = nil
             state = .idle
 
-            // Auto-select the newly downloaded model
+            // Auto-select the newly downloaded model (only if still on Whisper backend)
+            guard selectedBackendType == .whisperCpp else {
+                Logger.info("Backend switched during download, skipping auto-select of \(model.displayName)", subsystem: .model)
+                return
+            }
             selectModel(model)
         } catch {
             Logger.error("Failed to download \(model.displayName): \(error)", subsystem: .model)
@@ -651,35 +676,51 @@ class AppState: ObservableObject {
         guard whisperBridge == nil || loadedModel != model else {
             Logger.info("Model \(model.displayName) already loaded", subsystem: .model)
             isModelLoaded = true
+            isLoadingWhisper = false
             preloadVAD()
             return
         }
 
+        // Cancel any in-flight Whisper load
+        whisperLoadTask?.cancel()
+
         let modelDisplayName = model.displayName
         Logger.info("Pre-loading \(modelDisplayName)...", subsystem: .model)
+        isLoadingWhisper = true
         let startTime = Date()
 
-        Task.detached(priority: .userInitiated) { [weak self] in
+        whisperLoadTask = Task.detached(priority: .userInitiated) { [weak self] in
             do {
                 let bridge = try WhisperBridge(modelPath: path)
+
+                guard !Task.isCancelled else { return }
 
                 // Warm up Metal GPU shaders
                 let warmupSamples = [Float](repeating: 0, count: 16000)
                 _ = bridge.transcribe(samples: warmupSamples)
+
+                guard !Task.isCancelled else { return }
 
                 let loadTime = Date().timeIntervalSince(startTime)
                 Logger.info("\(modelDisplayName) pre-loaded in \(String(format: "%.2f", loadTime))s (includes GPU warm-up)", subsystem: .model)
 
                 await MainActor.run { [weak self] in
                     guard let self = self else { return }
+                    guard self.selectedModel == model else { return }
                     self.whisperBridge = bridge
                     self.loadedModel = model
                     self.loadedParakeetModel = nil
                     self.isModelLoaded = true
+                    self.isLoadingWhisper = false
                     self.preloadVAD()
                 }
             } catch {
+                guard !Task.isCancelled else { return }
                 Logger.error("Failed to pre-load \(modelDisplayName): \(error)", subsystem: .model)
+                await MainActor.run { [weak self] in
+                    self?.isLoadingWhisper = false
+                    self?.errorMessage = "Failed to load \(modelDisplayName): \(error.localizedDescription)"
+                }
             }
         }
     }
@@ -699,9 +740,30 @@ class AppState: ObservableObject {
         downloadProgress = 0
         state = .downloadingModel(progress: 0)
 
+        // Poll the download directory to track file-level progress.
+        // FluidAudio's DownloadUtils doesn't expose a progress callback,
+        // so we count files appearing on disk vs the expected total.
+        let cacheDir = FluidAudioBridge.cacheDirectory(for: variant)
+        let progressTask = Task.detached(priority: .utility) { [weak self] in
+            // Expected file count for Parakeet models (4 .mlmodelc dirs + vocab + metadata)
+            // Each .mlmodelc dir contains ~4-5 files. The HF API reports ~23 total files.
+            let expectedFileCount = 23
+            while !Task.isCancelled {
+                try? await Task.sleep(nanoseconds: 500_000_000) // 500ms
+                let fileCount = Self.countFilesRecursively(at: cacheDir)
+                let progress = min(Double(fileCount) / Double(expectedFileCount), 0.95)
+                await MainActor.run { [weak self] in
+                    guard let self, self.isDownloadingParakeet else { return }
+                    self.downloadProgress = progress
+                    self.state = .downloadingModel(progress: progress)
+                }
+            }
+        }
+
         Task.detached(priority: .userInitiated) { [weak self] in
             do {
                 try await FluidAudioBridge.downloadModel(variant: variant)
+                progressTask.cancel()
                 Logger.info("Parakeet \(variant.displayName) downloaded", subsystem: .model)
 
                 await MainActor.run { [weak self] in
@@ -717,6 +779,7 @@ class AppState: ObservableObject {
                     }
                 }
             } catch {
+                progressTask.cancel()
                 Logger.error("Failed to download Parakeet \(variant.displayName): \(error)", subsystem: .model)
                 await MainActor.run { [weak self] in
                     guard let self = self else { return }
@@ -728,6 +791,22 @@ class AppState: ObservableObject {
                 }
             }
         }
+    }
+
+    /// Count files recursively in a directory (for download progress tracking)
+    private nonisolated static func countFilesRecursively(at url: URL) -> Int {
+        guard let enumerator = FileManager.default.enumerator(
+            at: url,
+            includingPropertiesForKeys: [.isRegularFileKey],
+            options: [.skipsHiddenFiles]
+        ) else { return 0 }
+        var count = 0
+        for case let fileURL as URL in enumerator {
+            if (try? fileURL.resourceValues(forKeys: [.isRegularFileKey]).isRegularFile) == true {
+                count += 1
+            }
+        }
+        return count
     }
 
     private func preloadParakeetModel() {
@@ -1113,7 +1192,20 @@ class AppState: ObservableObject {
                     self?.streamingTranscriber?.addSamples(samples)
                 }
 
-                let audioURL = try await audioRecorder?.startRecording()
+                // Race audio setup against a 5s timeout — engine.start() can hang
+                // indefinitely when the audio unit is broken (error 1852797029)
+                let audioURL = try await withThrowingTaskGroup(of: URL?.self) { group in
+                    group.addTask { [weak self] in
+                        try await self?.audioRecorder?.startRecording()
+                    }
+                    group.addTask {
+                        try await Task.sleep(nanoseconds: 5_000_000_000) // 5s
+                        throw CancellationError()
+                    }
+                    let result = try await group.next()!
+                    group.cancelAll()
+                    return result
+                }
                 currentAudioURL = audioURL
 
                 // Mute AFTER engine is running and audio HAL has stabilized
@@ -1123,6 +1215,8 @@ class AppState: ObservableObject {
                 }
             } catch {
                 errorMessage = "Failed to start recording: \(error.localizedDescription)"
+                streamingTranscriber = nil
+                liveTranscription = ""
                 state = .idle
                 isInAppMode = false
                 if muteOtherAudioDuringRecording {
@@ -1230,7 +1324,20 @@ class AppState: ObservableObject {
                     self?.streamingTranscriber?.addSamples(samples)
                 }
 
-                let audioURL = try await audioRecorder?.startRecording()
+                // Race audio setup against a 5s timeout — engine.start() can hang
+                // indefinitely when the audio unit is broken (error 1852797029)
+                let audioURL = try await withThrowingTaskGroup(of: URL?.self) { group in
+                    group.addTask { [weak self] in
+                        try await self?.audioRecorder?.startRecording()
+                    }
+                    group.addTask {
+                        try await Task.sleep(nanoseconds: 5_000_000_000) // 5s
+                        throw CancellationError()
+                    }
+                    let result = try await group.next()!
+                    group.cancelAll()
+                    return result
+                }
                 currentAudioURL = audioURL
 
                 // Mute AFTER engine is running and audio HAL has stabilized.
@@ -1242,6 +1349,8 @@ class AppState: ObservableObject {
                 }
             } catch {
                 errorMessage = "Failed to start recording: \(error.localizedDescription)"
+                streamingTranscriber = nil
+                liveTranscription = ""
                 state = .idle
                 // Unmute on error since we're not recording
                 if muteOtherAudioDuringRecording {

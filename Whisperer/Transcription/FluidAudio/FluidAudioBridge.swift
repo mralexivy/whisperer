@@ -73,6 +73,12 @@ nonisolated class FluidAudioBridge: TranscriptionBackend {
         return AsrModels.modelsExist(at: cacheDir, version: version)
     }
 
+    /// Cache directory for a given Parakeet variant
+    static func cacheDirectory(for variant: ParakeetModelVariant) -> URL {
+        let version: AsrModelVersion = variant == .v2 ? .v2 : .v3
+        return AsrModels.defaultCacheDirectory(for: version)
+    }
+
     /// Download Parakeet models without loading them
     static func downloadModel(variant: ParakeetModelVariant) async throws {
         let version: AsrModelVersion = variant == .v2 ? .v2 : .v3

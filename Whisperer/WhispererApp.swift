@@ -1089,7 +1089,6 @@ struct StatusTabView: View {
 
 struct ModelsTabView: View {
     @ObservedObject var appState = AppState.shared
-    @State private var expandedSection: String? = "recommended"
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -1145,6 +1144,7 @@ struct ModelsTabView: View {
                         .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
+                    .disabled(appState.isModelBusy)
                     .onHover { hovering in
                         if hovering {
                             NSCursor.pointingHand.push()
@@ -1155,6 +1155,7 @@ struct ModelsTabView: View {
                 }
             }
             .padding(2)
+            .opacity(appState.isModelBusy ? 0.5 : 1.0)
             .background(
                 RoundedRectangle(cornerRadius: 8)
                     .fill(MBColors.elevated.opacity(0.5))
@@ -1165,43 +1166,37 @@ struct ModelsTabView: View {
             )
 
             // Models for selected engine
-            if appState.selectedBackendType == .whisperCpp {
-                modelSection(
-                    title: "Recommended",
-                    icon: "sparkles",
-                    color: MBColors.accent,
-                    models: [.largeTurboQ5],
-                    sectionId: "recommended"
-                )
+            Group {
+                if appState.selectedBackendType == .whisperCpp {
+                    HStack(spacing: 10) {
+                        ZStack {
+                            RoundedRectangle(cornerRadius: 6)
+                                .fill(MBColors.accent.opacity(0.15))
+                                .frame(width: 26, height: 26)
+                            Image(systemName: "waveform")
+                                .foregroundColor(MBColors.accent)
+                                .font(.system(size: 12, weight: .medium))
+                        }
 
-                modelSection(
-                    title: "Turbo & Optimized",
-                    icon: "bolt.fill",
-                    color: .orange,
-                    models: [.largeTurbo, .largeV3Q5],
-                    sectionId: "turbo"
-                )
+                        Text("Whisper Models")
+                            .font(.system(size: 12, weight: .semibold))
+                            .foregroundColor(MBColors.textPrimary)
 
-                modelSection(
-                    title: "Standard",
-                    icon: "cube.fill",
-                    color: .blue,
-                    models: [.tiny, .base, .small, .medium, .largeV3],
-                    sectionId: "standard"
-                )
+                        Spacer()
+                    }
 
-                modelSection(
-                    title: "Distilled",
-                    icon: "wand.and.stars",
-                    color: .red,
-                    models: WhisperModel.allCases.filter { $0.isDistilled },
-                    sectionId: "distilled"
-                )
-            } else if appState.selectedBackendType == .parakeet {
-                parakeetModelSection
-            } else if appState.selectedBackendType == .speechAnalyzer {
-                speechAnalyzerSection
+                    VStack(spacing: 4) {
+                        ForEach(WhisperModel.displayOrder) { model in
+                            ModelMenuItem(model: model)
+                        }
+                    }
+                } else if appState.selectedBackendType == .parakeet {
+                    parakeetModelSection
+                } else if appState.selectedBackendType == .speechAnalyzer {
+                    speechAnalyzerSection
+                }
             }
+            .padding(.horizontal, 4)
         }
         .padding(12)
         .background(MBColors.cardSurface)
@@ -1290,9 +1285,15 @@ struct ModelsTabView: View {
         }
     }
 
+    private var speechAnalyzerAvailable: Bool {
+        if #available(macOS 26.0, *) { return true }
+        return false
+    }
+
     private var speechAnalyzerSection: some View {
         let isActive = appState.isModelLoaded && appState.selectedBackendType == .speechAnalyzer
         let isLoading = appState.isLoadingSpeechAnalyzer
+        let isAvailable = speechAnalyzerAvailable
         let isHighlighted = isActive || isLoading
 
         return VStack(alignment: .leading, spacing: 8) {
@@ -1315,17 +1316,22 @@ struct ModelsTabView: View {
 
             // Clickable model row
             Button(action: {
-                if !isActive && !isLoading {
+                if isAvailable && !isActive && !isLoading {
                     appState.preloadModel()
                 }
             }) {
                 HStack(spacing: 10) {
+                    Image(systemName: "apple.logo")
+                        .foregroundColor(.cyan)
+                        .font(.system(size: 10, weight: .medium))
+                        .frame(width: 16)
+
                     VStack(alignment: .leading, spacing: 2) {
                         Text("On-Device Model")
                             .font(.system(size: 12, weight: isHighlighted ? .semibold : .regular))
                             .foregroundColor(isHighlighted ? MBColors.textPrimary : MBColors.textSecondary)
 
-                        Text("System-managed \u{2022} macOS 26+")
+                        Text(isAvailable ? "System-managed \u{2022} On-device" : "Requires macOS 26+")
                             .font(.caption2)
                             .foregroundColor(MBColors.textTertiary)
                     }
@@ -1348,6 +1354,10 @@ struct ModelsTabView: View {
                             .padding(.horizontal, 8)
                             .padding(.vertical, 3)
                             .background(Capsule().fill(MBColors.accent.opacity(0.15)))
+                    } else if isAvailable {
+                        Image(systemName: "checkmark.circle.fill")
+                            .foregroundColor(MBColors.accent.opacity(0.5))
+                            .font(.system(size: 14))
                     }
                 }
                 .padding(.vertical, 6)
@@ -1363,52 +1373,13 @@ struct ModelsTabView: View {
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
+            .disabled(!isAvailable || appState.isModelBusy)
+            .opacity(!isAvailable ? 0.5 : 1.0)
             .onHover { hovering in
                 if hovering {
                     NSCursor.pointingHand.push()
                 } else {
                     NSCursor.pop()
-                }
-            }
-        }
-    }
-
-    private func modelSection(title: String, icon: String, color: Color, models: [WhisperModel], sectionId: String) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Button(action: {
-                withAnimation(.easeInOut(duration: 0.2)) {
-                    expandedSection = expandedSection == sectionId ? nil : sectionId
-                }
-            }) {
-                HStack(spacing: 10) {
-                    ZStack {
-                        RoundedRectangle(cornerRadius: 6)
-                            .fill(color.opacity(0.15))
-                            .frame(width: 26, height: 26)
-                        Image(systemName: icon)
-                            .foregroundColor(color)
-                            .font(.system(size: 12, weight: .medium))
-                    }
-
-                    Text(title)
-                        .font(.system(size: 12, weight: .semibold))
-                        .foregroundColor(MBColors.textPrimary)
-
-                    Spacer()
-
-                    Image(systemName: expandedSection == sectionId ? "chevron.up" : "chevron.down")
-                        .font(.caption)
-                        .foregroundColor(MBColors.textTertiary)
-                }
-                .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-
-            if expandedSection == sectionId {
-                VStack(spacing: 4) {
-                    ForEach(models, id: \.self) { model in
-                        ModelMenuItem(model: model)
-                    }
                 }
             }
         }
@@ -1801,10 +1772,26 @@ struct ModelMenuItem: View {
     var body: some View {
         Button(action: { handleTap() }) {
             HStack(spacing: 10) {
+                Image(systemName: model.categoryIcon)
+                    .foregroundColor(model.categoryColor)
+                    .font(.system(size: 10, weight: .medium))
+                    .frame(width: 16)
+
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(model.displayName)
-                        .font(.system(size: 12, weight: isHighlighted ? .semibold : .regular))
-                        .foregroundColor(isHighlighted ? MBColors.textPrimary : MBColors.textSecondary)
+                    HStack(spacing: 6) {
+                        Text(model.displayName)
+                            .font(.system(size: 12, weight: isHighlighted ? .semibold : .regular))
+                            .foregroundColor(isHighlighted ? MBColors.textPrimary : MBColors.textSecondary)
+
+                        if model.isRecommended {
+                            Text("Recommended")
+                                .font(.system(size: 9, weight: .semibold))
+                                .foregroundColor(MBColors.accent)
+                                .padding(.horizontal, 5)
+                                .padding(.vertical, 1)
+                                .background(Capsule().fill(MBColors.accent.opacity(0.15)))
+                        }
+                    }
 
                     HStack(spacing: 6) {
                         Text(model.sizeDescription)
@@ -1816,7 +1803,6 @@ struct ModelMenuItem: View {
                     }
                     .foregroundColor(MBColors.textTertiary)
                 }
-        
 
                 Spacer()
 
@@ -1842,8 +1828,10 @@ struct ModelMenuItem: View {
                 NSCursor.pop()
             }
         }
-        .disabled(isDownloading || appState.downloadingModel != nil)
+        .disabled(appState.isModelBusy)
     }
+
+    var isLoading: Bool { appState.isLoadingWhisper && appState.selectedModel == model && appState.selectedBackendType == .whisperCpp }
 
     @ViewBuilder var statusBadge: some View {
         if isDownloading {
@@ -1860,6 +1848,14 @@ struct ModelMenuItem: View {
                         .font(.system(size: 9))
                         .foregroundColor(.orange)
                 }
+            }
+        } else if isLoading {
+            HStack(spacing: 4) {
+                ProgressView()
+                    .scaleEffect(0.5)
+                Text("Loading")
+                    .font(.caption2)
+                    .foregroundColor(MBColors.accent)
             }
         } else if isActive {
             Text("Active")
@@ -1915,6 +1911,11 @@ struct ParakeetModelRow: View {
             }
         }) {
             HStack(spacing: 10) {
+                Image(systemName: "bird.fill")
+                    .foregroundColor(.green)
+                    .font(.system(size: 10, weight: .medium))
+                    .frame(width: 16)
+
                 VStack(alignment: .leading, spacing: 2) {
                     Text(model.displayName)
                         .font(.system(size: 12, weight: isHighlighted ? .semibold : .regular))
@@ -1924,7 +1925,6 @@ struct ParakeetModelRow: View {
                         .font(.caption2)
                         .foregroundColor(MBColors.textTertiary)
                 }
-        
 
                 Spacer()
 
@@ -1978,7 +1978,7 @@ struct ParakeetModelRow: View {
                 NSCursor.pop()
             }
         }
-        .disabled(appState.isDownloadingParakeet)
+        .disabled(appState.isModelBusy)
     }
 }
 
