@@ -105,6 +105,19 @@ class AppState: ObservableObject {
         }
     }
 
+    // Auto-paste opt-in — when enabled, uses Accessibility to simulate Cmd+V.
+    // When disabled, transcribed text is copied to clipboard only.
+    @Published var autoPasteEnabled: Bool = false {
+        didSet {
+            UserDefaults.standard.set(autoPasteEnabled, forKey: "autoPasteEnabled")
+            if autoPasteEnabled {
+                PermissionManager.shared.enableAccessibilityTracking()
+            } else {
+                PermissionManager.shared.disableAccessibilityTracking()
+            }
+        }
+    }
+
     // In-app transcription mode (no Accessibility required)
     @Published var isInAppMode: Bool = false
     @Published var lastInAppTranscription: String = ""
@@ -257,6 +270,8 @@ class AppState: ObservableObject {
         }
     }
     private var dictionaryRebuildObserver: Any?
+    private var appActivationObserver: Any?
+    private var clipboardNotificationObserver: Any?
 
     // Pre-loaded Silero VAD for voice activity detection
     private var sileroVAD: SileroVAD?
@@ -309,6 +324,16 @@ class AppState: ObservableObject {
         if UserDefaults.standard.object(forKey: "systemWideDictationEnabled") != nil {
             // Use _systemWideDictationEnabled to avoid triggering didSet during init
             _systemWideDictationEnabled = Published(wrappedValue: UserDefaults.standard.bool(forKey: "systemWideDictationEnabled"))
+        }
+
+        // Load auto-paste preference (default OFF)
+        if UserDefaults.standard.object(forKey: "autoPasteEnabled") != nil {
+            _autoPasteEnabled = Published(wrappedValue: UserDefaults.standard.bool(forKey: "autoPasteEnabled"))
+        }
+
+        // Enable accessibility tracking if auto-paste was previously enabled
+        if autoPasteEnabled {
+            PermissionManager.shared.enableAccessibilityTracking()
         }
 
         // Load onboarding state
@@ -373,6 +398,26 @@ class AppState: ObservableObject {
             forName: .dictionaryDidRebuild, object: nil, queue: .main
         ) { [weak self] _ in
             self?.reconfigureVocabularyBoosting()
+        }
+
+        // Recheck accessibility when app becomes active (user returns from System Settings)
+        appActivationObserver = NotificationCenter.default.addObserver(
+            forName: NSApplication.didBecomeActiveNotification, object: nil, queue: .main
+        ) { [weak self] _ in
+            guard self != nil else { return }
+            Task { @MainActor in
+                PermissionManager.shared.recheckAccessibilityIfNeeded()
+            }
+        }
+
+        // Show feedback when text is copied to clipboard (accessibility fallback)
+        clipboardNotificationObserver = NotificationCenter.default.addObserver(
+            forName: NSNotification.Name("TextCopiedToClipboard"), object: nil, queue: .main
+        ) { [weak self] _ in
+            guard self != nil else { return }
+            Task { @MainActor [weak self] in
+                self?.errorMessage = "Text copied to clipboard — press ⌘V to paste"
+            }
         }
 
         // Start monitoring audio device changes
@@ -1135,6 +1180,9 @@ class AppState: ObservableObject {
     func startRecording() {
         guard state == .idle else { return }
 
+        // Recheck accessibility status before recording (event-based check)
+        PermissionManager.shared.recheckAccessibilityIfNeeded()
+
         // Dismiss transcription picker if visible
         if TranscriptionPickerState.shared.isVisible {
             TranscriptionPickerState.shared.dismiss()
@@ -1376,10 +1424,18 @@ class AppState: ObservableObject {
     func releaseWhisperResources() {
         Logger.debug("Releasing whisper resources...", subsystem: .transcription)
 
-        // Remove dictionary rebuild observer
+        // Remove notification observers
         if let observer = dictionaryRebuildObserver {
             NotificationCenter.default.removeObserver(observer)
             dictionaryRebuildObserver = nil
+        }
+        if let observer = appActivationObserver {
+            NotificationCenter.default.removeObserver(observer)
+            appActivationObserver = nil
+        }
+        if let observer = clipboardNotificationObserver {
+            NotificationCenter.default.removeObserver(observer)
+            clipboardNotificationObserver = nil
         }
 
         // Stop any streaming transcription

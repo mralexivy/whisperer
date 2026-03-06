@@ -132,25 +132,28 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func checkPermissions() async {
-        // Only request microphone on startup (core feature).
-        // Accessibility is requested only when user enables system-wide dictation.
+        // Only request microphone on startup if onboarding is complete.
+        // During onboarding, microphone is requested on the dedicated page.
+        // Accessibility is requested only when user enables auto-paste.
         await MainActor.run {
             let permissionManager = PermissionManager.shared
 
-            if permissionManager.microphoneStatus != .granted {
+            if appState.hasCompletedOnboarding && permissionManager.microphoneStatus != .granted {
                 permissionManager.requestMicrophonePermission()
             }
         }
 
-        // Check if selected model is downloaded
-        let selectedModel = await MainActor.run { appState.selectedModel }
-        if !ModelDownloader.shared.isModelDownloaded(selectedModel) {
-            // Download the selected model
-            await appState.downloadModel(selectedModel)
-        } else {
-            // Model already exists - pre-load it immediately
-            await MainActor.run {
-                self.appState.preloadModel()
+        // Only auto-download/preload if onboarding is complete.
+        // During onboarding, the model download page (page 5) handles this.
+        let onboardingDone = await MainActor.run { appState.hasCompletedOnboarding }
+        if onboardingDone {
+            let selectedModel = await MainActor.run { appState.selectedModel }
+            if !ModelDownloader.shared.isModelDownloaded(selectedModel) {
+                await appState.downloadModel(selectedModel)
+            } else {
+                await MainActor.run {
+                    self.appState.preloadModel()
+                }
             }
         }
     }
@@ -353,6 +356,9 @@ struct MenuBarView: View {
         .background(MBColors.background)
         .background(MenuBarWindowConfigurator())
         .environment(\.colorScheme, .dark)
+        .onAppear {
+            PermissionManager.shared.recheckAccessibilityIfNeeded()
+        }
     }
 
     // MARK: - Header
@@ -627,7 +633,7 @@ struct StatusTabView: View {
     /// Whether to show permission warnings (mode-aware)
     private var showPermissionWarning: Bool {
         if permissionManager.microphoneStatus != .granted { return true }
-        if appState.systemWideDictationEnabled && permissionManager.accessibilityStatus != .granted { return true }
+        if appState.autoPasteEnabled && permissionManager.accessibilityStatus != .granted { return true }
         return false
     }
 
@@ -1027,8 +1033,8 @@ struct StatusTabView: View {
                 if permissionManager.microphoneStatus != .granted {
                     missingPermissionBadge("Mic", icon: "mic.fill")
                 }
-                // Only show Accessibility as missing when system-wide dictation is enabled
-                if appState.systemWideDictationEnabled && permissionManager.accessibilityStatus != .granted {
+                // Only show Accessibility as missing when auto-paste is enabled
+                if appState.autoPasteEnabled && permissionManager.accessibilityStatus != .granted {
                     missingPermissionBadge("Accessibility", icon: "accessibility")
                 }
             }
@@ -1037,7 +1043,7 @@ struct StatusTabView: View {
                 if permissionManager.microphoneStatus != .granted {
                     permissionManager.requestMicrophonePermission()
                 }
-                if appState.systemWideDictationEnabled && permissionManager.accessibilityStatus != .granted {
+                if appState.autoPasteEnabled && permissionManager.accessibilityStatus != .granted {
                     permissionManager.requestAccessibilityPermission()
                 }
             }) {
@@ -1434,16 +1440,7 @@ struct SettingsTabView: View {
 
                             Spacer()
 
-                            Toggle("", isOn: Binding(
-                                get: { appState.systemWideDictationEnabled },
-                                set: { newValue in
-                                    appState.systemWideDictationEnabled = newValue
-                                    // Request Accessibility permission when first enabled
-                                    if newValue && PermissionManager.shared.accessibilityStatus != .granted {
-                                        PermissionManager.shared.requestAccessibilityPermission()
-                                    }
-                                }
-                            ))
+                            Toggle("", isOn: $appState.systemWideDictationEnabled)
                             .toggleStyle(.switch)
                             .tint(MBColors.accent)
                             .labelsHidden()
@@ -1486,7 +1483,7 @@ struct SettingsTabView: View {
                             .background(MBColors.accent.opacity(0.06))
                             .cornerRadius(6)
                         } else {
-                            Text("Enable to hold a shortcut key and dictate text into any app. Requires Accessibility permission.")
+                            Text("Enable to hold a shortcut key and dictate text into any app.")
                                 .font(.system(size: 10))
                                 .foregroundColor(MBColors.textSecondary)
                                 .padding(8)
@@ -1496,6 +1493,37 @@ struct SettingsTabView: View {
                     }
                 }
                 .id(SettingsScrollTarget.dictation)
+
+                // Auto-Paste
+                settingsCard(title: "Auto-Paste", icon: "doc.on.clipboard", color: .purple) {
+                        HStack {
+                            VStack(alignment: .leading, spacing: 3) {
+                                Text("Auto-paste text")
+                                    .font(.system(size: 13, weight: .medium))
+                                    .foregroundColor(MBColors.textPrimary)
+                                Text(appState.autoPasteEnabled
+                                     ? "Text is pasted automatically where you type"
+                                     : "Text is copied to clipboard — press ⌘V to paste")
+                                    .font(.system(size: 11))
+                                    .foregroundColor(MBColors.textSecondary)
+                            }
+
+                            Spacer()
+
+                            Toggle("", isOn: Binding(
+                                get: { appState.autoPasteEnabled },
+                                set: { newValue in
+                                    appState.autoPasteEnabled = newValue
+                                    if newValue && PermissionManager.shared.accessibilityStatus != .granted {
+                                        PermissionManager.shared.requestAccessibilityPermission()
+                                    }
+                                }
+                            ))
+                            .toggleStyle(.switch)
+                            .tint(MBColors.accent)
+                            .labelsHidden()
+                        }
+                    }
 
                 // Audio Settings - compact card
                 settingsCard(title: "Audio", icon: "speaker.wave.2.fill", color: .orange) {
@@ -2213,7 +2241,12 @@ struct LanguagePickerView: View {
 
 struct PermissionsView: View {
     @ObservedObject var permissionManager = PermissionManager.shared
+    @ObservedObject var appState = AppState.shared
     @State private var isExpanded = false
+
+    private var visiblePermissions: [PermissionType] {
+        return [.microphone, .accessibility]
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -2229,8 +2262,8 @@ struct PermissionsView: View {
                             .font(.system(size: 13, weight: .medium))
                             .foregroundColor(MBColors.textPrimary)
 
-                        if permissionManager.allPermissionsGranted {
-                            Text("All permissions granted")
+                        if permissionManager.microphoneStatus == .granted && (!appState.autoPasteEnabled || permissionManager.accessibilityStatus == .granted) {
+                            Text(appState.autoPasteEnabled ? "All permissions granted" : "Microphone granted · Accessibility optional")
                                 .font(.system(size: 11))
                                 .foregroundColor(.green)
                         } else {
@@ -2243,7 +2276,7 @@ struct PermissionsView: View {
                     Spacer()
 
                     // Status indicator
-                    if permissionManager.allPermissionsGranted {
+                    if permissionManager.microphoneStatus == .granted && (!appState.autoPasteEnabled || permissionManager.accessibilityStatus == .granted) {
                         Image(systemName: "checkmark.circle.fill")
                             .foregroundColor(.green)
                             .font(.system(size: 16))
@@ -2266,7 +2299,7 @@ struct PermissionsView: View {
                 VStack(alignment: .leading, spacing: 8) {
                     Divider()
 
-                    ForEach(PermissionType.allCases, id: \.self) { permission in
+                    ForEach(visiblePermissions, id: \.self) { permission in
                         permissionRow(permission)
                     }
 
@@ -2302,11 +2335,12 @@ struct PermissionsView: View {
 
     private func permissionRow(_ permission: PermissionType) -> some View {
         let status = permissionManager.status(for: permission)
+        let isAccessibilityNotRequired = permission == .accessibility && !appState.autoPasteEnabled
 
         return HStack(spacing: 10) {
             // Icon
             Image(systemName: permission.icon)
-                .foregroundColor(status == .granted ? .green : .orange)
+                .foregroundColor(isAccessibilityNotRequired ? MBColors.textTertiary : (status == .granted ? .green : .orange))
                 .font(.system(size: 12))
                 .frame(width: 20)
 
@@ -2314,9 +2348,9 @@ struct PermissionsView: View {
             VStack(alignment: .leading, spacing: 1) {
                 Text(permission.rawValue)
                     .font(.system(size: 12, weight: .medium))
-                    .foregroundColor(status == .granted ? MBColors.textPrimary : MBColors.textSecondary)
+                    .foregroundColor(isAccessibilityNotRequired ? MBColors.textTertiary : (status == .granted ? MBColors.textPrimary : MBColors.textSecondary))
 
-                Text(permission.description)
+                Text(isAccessibilityNotRequired ? "Enable Auto-Paste to use" : permission.description)
                     .font(.system(size: 10))
                     .foregroundColor(MBColors.textTertiary)
             }
@@ -2324,7 +2358,15 @@ struct PermissionsView: View {
             Spacer()
 
             // Status badge
-            if status == .granted {
+            if isAccessibilityNotRequired {
+                Text("Optional")
+                    .font(.caption2)
+                    .foregroundColor(MBColors.textTertiary)
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 2)
+                    .background(Color.white.opacity(0.06))
+                    .cornerRadius(4)
+            } else if status == .granted {
                 Text("Granted")
                     .font(.caption2)
                     .foregroundColor(.green)
@@ -2363,7 +2405,7 @@ struct PermissionsView: View {
         if permissionManager.microphoneStatus != .granted {
             permissionManager.requestMicrophonePermission()
         }
-        if permissionManager.accessibilityStatus != .granted {
+        if appState.autoPasteEnabled && permissionManager.accessibilityStatus != .granted {
             permissionManager.requestAccessibilityPermission()
         }
     }

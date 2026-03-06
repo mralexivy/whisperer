@@ -70,12 +70,13 @@ class PermissionManager: ObservableObject {
     static let shared = PermissionManager()
 
     @Published var microphoneStatus: PermissionStatus = .unknown
-    @Published var accessibilityStatus: PermissionStatus = .unknown
+    @Published var accessibilityStatus: PermissionStatus = .notDetermined
 
     private var checkTimer: Timer?
+    private var isAccessibilityTrackingEnabled = false
 
     private init() {
-        refreshAllPermissions()
+        checkMicrophonePermission()
         startPeriodicCheck()
     }
 
@@ -83,7 +84,9 @@ class PermissionManager: ObservableObject {
 
     func refreshAllPermissions() {
         checkMicrophonePermission()
-        checkAccessibilityPermission()
+        if isAccessibilityTrackingEnabled {
+            checkAccessibilityPermission()
+        }
     }
 
     func checkMicrophonePermission() {
@@ -100,12 +103,35 @@ class PermissionManager: ObservableObject {
     }
 
     func checkAccessibilityPermission() {
+        guard isAccessibilityTrackingEnabled else { return }
         if AXIsProcessTrusted() {
             accessibilityStatus = .granted
         } else {
-            // Can't distinguish between denied and not determined for accessibility
             accessibilityStatus = .denied
         }
+    }
+
+    // MARK: - Accessibility Tracking (Lazy)
+
+    /// Start tracking accessibility permission status.
+    /// Only call when the user explicitly enables auto-paste.
+    func enableAccessibilityTracking() {
+        isAccessibilityTrackingEnabled = true
+        checkAccessibilityPermission()
+    }
+
+    /// Stop tracking accessibility permission and reset status.
+    /// Call when the user disables auto-paste.
+    func disableAccessibilityTracking() {
+        isAccessibilityTrackingEnabled = false
+        accessibilityStatus = .notDetermined
+    }
+
+    /// Recheck accessibility status if tracking is active.
+    /// Called from event-based hooks (app activation, menu bar open, before recording).
+    func recheckAccessibilityIfNeeded() {
+        guard isAccessibilityTrackingEnabled else { return }
+        checkAccessibilityPermission()
     }
 
     // MARK: - Permission Requests
@@ -119,15 +145,29 @@ class PermissionManager: ObservableObject {
     }
 
     func requestAccessibilityPermission() {
+        // Enable tracking so periodic/event-based checks detect the grant
+        isAccessibilityTrackingEnabled = true
+
+        // AXIsProcessTrustedWithOptions with prompt: shows system alert on first call,
+        // which directs user to System Settings → Accessibility
         let options: NSDictionary = [kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String: true]
         let trusted = AXIsProcessTrustedWithOptions(options)
         if trusted {
             accessibilityStatus = .granted
-        } else {
-            // The system prompt only appears on the very first call.
-            // On subsequent attempts, open System Settings directly.
-            openSystemSettings(for: .accessibility)
-            accessibilityStatus = .denied
+            return
+        }
+
+        accessibilityStatus = .denied
+
+        // Wait for the system prompt to appear, then check again.
+        // If still not granted, open System Settings as fallback
+        // (the system prompt only shows on the very first call ever).
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) { [weak self] in
+            if AXIsProcessTrusted() {
+                self?.accessibilityStatus = .granted
+            } else {
+                self?.openSystemSettings(for: .accessibility)
+            }
         }
     }
 
@@ -142,16 +182,19 @@ class PermissionManager: ObservableObject {
     // MARK: - Overall Status
 
     var allPermissionsGranted: Bool {
-        microphoneStatus == .granted &&
-        accessibilityStatus == .granted
+        guard microphoneStatus == .granted else { return false }
+        if isAccessibilityTrackingEnabled {
+            return accessibilityStatus == .granted
+        }
+        return true
     }
 
     /// Permissions required for the current mode.
     /// Microphone is always required. Accessibility is only required
-    /// when system-wide dictation is enabled.
+    /// when auto-paste is enabled.
     var requiredPermissionsGranted: Bool {
         guard microphoneStatus == .granted else { return false }
-        if AppState.shared.systemWideDictationEnabled {
+        if isAccessibilityTrackingEnabled {
             return accessibilityStatus == .granted
         }
         return true
@@ -173,11 +216,12 @@ class PermissionManager: ObservableObject {
     // MARK: - Periodic Check
 
     private func startPeriodicCheck() {
-        // Check permissions every 2 seconds (user might grant them in System Settings)
         checkTimer = Timer.scheduledTimer(withTimeInterval: 2.0, repeats: true) { [weak self] _ in
             guard self != nil else { return }
             Task { @MainActor [weak self] in
-                self?.refreshAllPermissions()
+                self?.checkMicrophonePermission()
+                // Check accessibility if tracking is active (user may grant in System Settings)
+                self?.recheckAccessibilityIfNeeded()
             }
         }
     }

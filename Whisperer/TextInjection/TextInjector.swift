@@ -28,17 +28,6 @@ class TextInjector {
 
     // MARK: - Permission Check
 
-    static func requestAccessibilityPermission() {
-        let options: NSDictionary = [kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String: true]
-        let accessEnabled = AXIsProcessTrustedWithOptions(options)
-
-        if accessEnabled {
-            Logger.info("Accessibility permission granted", subsystem: .textInjection)
-        } else {
-            Logger.info("Accessibility permission not granted — user will be prompted", subsystem: .textInjection)
-        }
-    }
-
     static func hasAccessibilityPermission() -> Bool {
         return AXIsProcessTrusted()
     }
@@ -56,8 +45,8 @@ class TextInjector {
             app.activate()
         }
 
-        guard Self.hasAccessibilityPermission() else {
-            Logger.info("Accessibility not granted, copying to clipboard for manual paste", subsystem: .textInjection)
+        guard AppState.shared.autoPasteEnabled && Self.hasAccessibilityPermission() else {
+            Logger.info("Auto-paste disabled or accessibility not granted, copying to clipboard", subsystem: .textInjection)
             copyToClipboard(text)
             return
         }
