@@ -6,7 +6,7 @@ Fill in `{VERSION}` with current version. Must be under 4000 characters.
 Thank you for your feedback. v{VERSION} makes significant architectural changes to address every Guideline 2.4.5 concern.
 
 WHAT IS WHISPERER:
-An assistive dictation tool — an alternative text input method for users who cannot or prefer not to type (RSI, carpal tunnel, mobility limitations, temporary injuries, or anyone who works faster by voice). It provides the same "dictate anywhere you can type" capability as Apple's built-in Dictation, but runs a local Whisper AI model for 100% offline, private transcription. No data ever leaves the Mac.
+An offline voice-to-text productivity tool for macOS. It provides the same "dictate anywhere you can type" capability as Apple's built-in Dictation, but runs a local Whisper AI model for 100% offline, private transcription. Built for developers and knowledge workers who want fast voice input without cloud dependencies. No data ever leaves the Mac.
 
 ALL FLAGGED APIs REMOVED:
 Every API cited in the rejection has been deleted from source and binary:
