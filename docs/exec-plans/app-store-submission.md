@@ -63,7 +63,8 @@ Accessibility is needed ONLY because `CGEvent.post()` requires `AXIsProcessTrust
 | API Kept | Justification |
 |----------|--------------|
 | `AXIsProcessTrusted()` | Permission check only — required by CGEvent.post |
-| `CGEvent.post(tap: .cgAnnotatedSessionEventTap)` | Posts synthetic Cmd+V for auto-paste — posting ≠ monitoring |
+| `CGEvent.post(tap: .cgAnnotatedSessionEventTap)` | Posts synthetic keyboard events for auto-paste — posting ≠ monitoring |
+| `CGEvent.keyboardSetUnicodeString` | Sets unicode text payload on synthetic keyboard events — configures event data, not monitoring |
 | `NSEvent.addGlobalMonitorForEvents(matching: .flagsChanged)` | Monitors modifier state changes only, NOT keystrokes |
 | Carbon `RegisterEventHotKey` | Standard macOS hotkey mechanism, used by many approved apps |
 

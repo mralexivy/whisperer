@@ -182,13 +182,14 @@ class AudioRecorder: NSObject {
                 throw error
             }
             startupRetryCount += 1
+            let isTimeout = (error as? RecordingError) == .audioUnitTimeout
             Logger.warning("Recording setup failed (\(error.localizedDescription)), retrying with fresh engine and default device...", subsystem: .audio)
 
-            cleanupEngineState()
+            cleanupEngineState(asyncTeardown: isTimeout)
             selectedDeviceID = nil
 
             // Let the audio subsystem settle before retrying
-            try? await Task.sleep(nanoseconds: 200_000_000) // 200ms
+            try? await Task.sleep(nanoseconds: 100_000_000) // 100ms
 
             recordingStartTime = Date()
             return try await startRecordingInternal()
@@ -245,18 +246,17 @@ class AudioRecorder: NSObject {
             }
         }
 
-        let inputNode = audioEngine.inputNode
-
-        // Voice processing disabled - it causes ~500ms+ startup delay due to
+        // Voice processing disabled — it causes ~500ms+ startup delay due to
         // KeystrokeSuppressor initialization and stream setup timeouts.
-        // This delay cuts off the first words of speech.
         // Whisper handles raw audio well enough without preprocessing.
         Logger.debug("Voice processing disabled for instant startup", subsystem: .audio)
 
-        // CRITICAL: Force audio unit creation by querying format BEFORE setting device
-        // The audio unit is only created when we access outputFormat(forBus:)
-        // Without this, setInputDevice() fails because inputNode.audioUnit is nil
-        let initialFormat = inputNode.outputFormat(forBus: 0)
+        // CRITICAL: Query inputNode and format on GCD with timeout.
+        // CoreAudio's inputNode/outputFormat can hang indefinitely on broken
+        // audio hardware (error 1852797029). Running on GCD prevents blocking
+        // Swift cooperative threads — a hang leaks one GCD thread instead of
+        // poisoning the entire cooperative pool.
+        let (inputNode, initialFormat) = try await queryInputNodeFormat(engine: audioEngine)
 
         // Validate audio unit was created successfully — the outputFormat call can
         // fail internally (AVAudioIONodeImpl error) leaving the audio unit in a bad state
@@ -280,7 +280,7 @@ class AudioRecorder: NSObject {
         }
 
         // Re-query format after device change (format may be different for selected device)
-        let inputFormat = inputNode.outputFormat(forBus: 0)
+        let inputFormat = try await queryFormat(on: inputNode)
 
         // Validate format - must have valid sample rate and channels
         guard inputFormat.sampleRate > 0 && inputFormat.channelCount > 0 else {
@@ -441,18 +441,83 @@ class AudioRecorder: NSObject {
         return currentURL
     }
 
+    // MARK: - Timeout-Protected CoreAudio Queries
+
+    /// Query inputNode and its format on a GCD queue with timeout.
+    /// CoreAudio's inputNode access and outputFormat() can hang indefinitely
+    /// when audio hardware is broken (error 1852797029). Running on GCD
+    /// prevents blocking Swift cooperative threads.
+    private func queryInputNodeFormat(engine: AVAudioEngine, timeout: TimeInterval = 1.0) async throws -> (AVAudioInputNode, AVAudioFormat) {
+        try await withCheckedThrowingContinuation { continuation in
+            var resumed = false
+            let resumeLock = NSLock()
+
+            func resumeOnce(with result: Result<(AVAudioInputNode, AVAudioFormat), Error>) {
+                resumeLock.lock()
+                guard !resumed else { resumeLock.unlock(); return }
+                resumed = true
+                resumeLock.unlock()
+                continuation.resume(with: result)
+            }
+
+            DispatchQueue.main.asyncAfter(deadline: .now() + timeout) {
+                resumeOnce(with: .failure(RecordingError.audioUnitTimeout))
+            }
+
+            DispatchQueue.global(qos: .userInitiated).async {
+                let inputNode = engine.inputNode
+                let format = inputNode.outputFormat(forBus: 0)
+                resumeOnce(with: .success((inputNode, format)))
+            }
+        }
+    }
+
+    /// Re-query format on an existing inputNode with timeout.
+    private func queryFormat(on inputNode: AVAudioInputNode, timeout: TimeInterval = 1.0) async throws -> AVAudioFormat {
+        try await withCheckedThrowingContinuation { continuation in
+            var resumed = false
+            let resumeLock = NSLock()
+
+            func resumeOnce(with result: Result<AVAudioFormat, Error>) {
+                resumeLock.lock()
+                guard !resumed else { resumeLock.unlock(); return }
+                resumed = true
+                resumeLock.unlock()
+                continuation.resume(with: result)
+            }
+
+            DispatchQueue.main.asyncAfter(deadline: .now() + timeout) {
+                resumeOnce(with: .failure(RecordingError.audioUnitTimeout))
+            }
+
+            DispatchQueue.global(qos: .userInitiated).async {
+                let format = inputNode.outputFormat(forBus: 0)
+                resumeOnce(with: .success(format))
+            }
+        }
+    }
+
     // MARK: - Engine Cleanup
 
     /// Fully tear down the audio engine and all associated state.
     /// Safe to call even if the engine is nil or partially initialized.
-    private func cleanupEngineState() {
+    private func cleanupEngineState(asyncTeardown: Bool = false) {
         if let observer = configChangeObserver {
             NotificationCenter.default.removeObserver(observer)
             configChangeObserver = nil
         }
         if let engine = audioEngine {
-            engine.inputNode.removeTap(onBus: 0)
-            engine.stop()
+            if asyncTeardown {
+                // engine.stop() and removeTap can also hang on broken hardware — fire and forget on GCD
+                let engineRef = engine
+                DispatchQueue.global(qos: .utility).async {
+                    engineRef.inputNode.removeTap(onBus: 0)
+                    engineRef.stop()
+                }
+            } else {
+                engine.inputNode.removeTap(onBus: 0)
+                engine.stop()
+            }
         }
         audioEngine = nil
         converter = nil
@@ -525,4 +590,5 @@ enum RecordingError: Error {
     case fileCreationFailed
     case microphonePermissionDenied
     case audioUnitFailed
+    case audioUnitTimeout
 }

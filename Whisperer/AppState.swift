@@ -162,6 +162,10 @@ class AppState: ObservableObject {
     let audioDeviceManager = AudioDeviceManager.shared
     private var deviceSubscription: AnyCancellable?
 
+    // Main-thread watchdog: forces state to .idle if stuck in .recording/.stopping for >8s.
+    // Uses DispatchSourceTimer on the main RunLoop — independent of Swift cooperative thread pool.
+    private var stateWatchdog: DispatchSourceTimer?
+
     // Pre-loaded transcription backend - keeps model in memory for instant recording start
     private var whisperBridge: TranscriptionBackend?
 
@@ -1204,6 +1208,7 @@ class AppState: ObservableObject {
         // Set state immediately so UI updates
         state = .recording(startTime: Date())
         liveTranscription = ""
+        startStateWatchdog()  // 4s startup watchdog — cancelled when audio starts
 
         soundPlayer?.playStartSound()
 
@@ -1222,21 +1227,11 @@ class AppState: ObservableObject {
                     self?.streamingTranscriber?.addSamples(samples)
                 }
 
-                // Race audio setup against a 5s timeout — engine.start() can hang
-                // indefinitely when the audio unit is broken (error 1852797029)
-                let audioURL = try await withThrowingTaskGroup(of: URL?.self) { group in
-                    group.addTask { [weak self] in
-                        try await self?.audioRecorder?.startRecording()
-                    }
-                    group.addTask {
-                        try await Task.sleep(nanoseconds: 5_000_000_000) // 5s
-                        throw CancellationError()
-                    }
-                    let result = try await group.next()!
-                    group.cancelAll()
-                    return result
-                }
+                // AudioRecorder handles its own timeouts internally (1s per CoreAudio
+                // call on GCD, with retry). No TaskGroup race needed here.
+                let audioURL = try await audioRecorder?.startRecording()
                 currentAudioURL = audioURL
+                cancelStateWatchdog()  // Startup succeeded, audio is flowing
 
                 // Mute AFTER engine is running and audio HAL has stabilized
                 if muteOtherAudioDuringRecording {
@@ -1244,6 +1239,7 @@ class AppState: ObservableObject {
                     audioMuter?.muteSystemAudio()
                 }
             } catch {
+                cancelStateWatchdog()
                 errorMessage = "Failed to start recording: \(error.localizedDescription)"
                 streamingTranscriber = nil
                 liveTranscription = ""
@@ -1265,6 +1261,7 @@ class AppState: ObservableObject {
         }
 
         state = .stopping
+        startStateWatchdog(timeout: 5.0)
 
         Task {
             await audioRecorder?.stopRecording()
@@ -1277,13 +1274,18 @@ class AppState: ObservableObject {
 
             var finalText = ""
             if let transcriber = streamingTranscriber {
-                finalText = await transcriber.stopAsync()
+                finalText = await withTimeoutResult(seconds: 3.0) {
+                    await transcriber.stopAsync()
+                } ?? ""
 
-                if saveRecordings {
+                if saveRecordings && !finalText.isEmpty {
                     saveRecordingFromTranscriber(transcriber, transcription: finalText)
                 }
             }
             streamingTranscriber = nil
+
+            // Bail out if watchdog already forced idle
+            guard case .stopping = state else { return }
 
             if !finalText.isEmpty {
                 // Apply list formatting then LLM post-processing
@@ -1294,6 +1296,7 @@ class AppState: ObservableObject {
                 errorMessage = "No speech detected"
             }
 
+            cancelStateWatchdog()
             state = .idle
             isInAppMode = false
             liveTranscription = ""
@@ -1332,6 +1335,7 @@ class AppState: ObservableObject {
         // INSTANT: Set state immediately so overlay appears right away
         state = .recording(startTime: Date())
         liveTranscription = ""
+        startStateWatchdog()  // 4s startup watchdog — cancelled when audio starts
 
         // Play sound immediately (non-blocking)
         soundPlayer?.playStartSound()
@@ -1363,21 +1367,11 @@ class AppState: ObservableObject {
                     return
                 }
 
-                // Race audio setup against a 5s timeout — engine.start() can hang
-                // indefinitely when the audio unit is broken (error 1852797029)
-                let audioURL = try await withThrowingTaskGroup(of: URL?.self) { group in
-                    group.addTask { [weak self] in
-                        try await self?.audioRecorder?.startRecording()
-                    }
-                    group.addTask {
-                        try await Task.sleep(nanoseconds: 5_000_000_000) // 5s
-                        throw CancellationError()
-                    }
-                    let result = try await group.next()!
-                    group.cancelAll()
-                    return result
-                }
+                // AudioRecorder handles its own timeouts internally (1s per CoreAudio
+                // call on GCD, with retry). No TaskGroup race needed here.
+                let audioURL = try await audioRecorder?.startRecording()
                 currentAudioURL = audioURL
+                cancelStateWatchdog()  // Startup succeeded, audio is flowing
 
                 // Guard: if stopRecording() was called while audio was starting, stop the recorder
                 guard case .recording = state else {
@@ -1399,6 +1393,7 @@ class AppState: ObservableObject {
                     audioMuter?.muteSystemAudio()
                 }
             } catch {
+                cancelStateWatchdog()
                 errorMessage = "Failed to start recording: \(error.localizedDescription)"
                 streamingTranscriber = nil
                 liveTranscription = ""
@@ -1415,18 +1410,9 @@ class AppState: ObservableObject {
         guard case .recording = state else { return }
 
         state = .stopping
-
-        // Safety timeout: force-dismiss HUD if stop hangs (e.g., audio device errors)
-        Task { @MainActor [weak self] in
-            try? await Task.sleep(nanoseconds: 5_000_000_000) // 5s
-            guard let self, case .stopping = self.state else { return }
-            Logger.warning("stopRecording timed out after 5s, forcing idle", subsystem: .app)
-            self.streamingTranscriber = nil
-            self.state = .idle
-            self.liveTranscription = ""
-            // Force-stop audio recorder in case startRecording Task completed after our initial stop
-            await self.audioRecorder?.stopRecording()
-        }
+        // 5s stop watchdog — if transcription/processing hangs, force .idle.
+        // (Startup watchdog was already cancelled when audio started successfully.)
+        startStateWatchdog(timeout: 5.0)
 
         Task {
             await audioRecorder?.stopRecording()
@@ -1439,20 +1425,31 @@ class AppState: ObservableObject {
             // Play stop sound AFTER unmuting (so user hears it)
             soundPlayer?.playStopSound()
 
-            // Bail out if safety timeout already forced idle
+            // Bail out if watchdog already forced idle
             guard case .stopping = state else {
                 streamingTranscriber = nil
                 return
             }
 
-            // Get final transcription from streaming transcriber
+            // Get final transcription from streaming transcriber with timeout.
+            // FluidAudio/Parakeet can deadlock during the final pass if the
+            // cooperative thread pool is starved or the ANE hangs.
             var finalText = ""
             let transcriber = streamingTranscriber
             if let transcriber {
-                finalText = await transcriber.stopAsync()
-                Logger.debug("Final transcription: '\(finalText)'", subsystem: .transcription)
+                finalText = await withTimeoutResult(seconds: 3.0) {
+                    await transcriber.stopAsync()
+                } ?? ""
+                if finalText.isEmpty {
+                    Logger.debug("Final transcription empty or timed out", subsystem: .transcription)
+                } else {
+                    Logger.debug("Final transcription: '\(finalText)'", subsystem: .transcription)
+                }
             }
             streamingTranscriber = nil
+
+            // Bail out if watchdog already forced idle while we were transcribing
+            guard case .stopping = state else { return }
 
             if !finalText.isEmpty {
                 // Save recording if enabled (only when there are actual words)
@@ -1469,22 +1466,82 @@ class AppState: ObservableObject {
                     textToInsert += " "
                 }
                 Logger.debug("Entering dictated text: '\(textToInsert)'", subsystem: .app)
+                cancelStateWatchdog()
                 state = .inserting(text: textToInsert)
                 await insertText(textToInsert)
             } else {
                 Logger.debug("No speech detected in recording", subsystem: .app)
                 errorMessage = "No speech detected"
+                cancelStateWatchdog()
                 state = .idle
             }
         }
     }
 
+    /// Run an async operation with a timeout. Returns nil if the operation times out.
+    private func withTimeoutResult<T: Sendable>(seconds: TimeInterval, operation: @escaping @Sendable () async -> T) async -> T? {
+        await withTaskGroup(of: T?.self) { group in
+            group.addTask {
+                await operation()
+            }
+            group.addTask {
+                try? await Task.sleep(nanoseconds: UInt64(seconds * 1_000_000_000))
+                return nil
+            }
+            let result = await group.next() ?? nil
+            group.cancelAll()
+            return result
+        }
+    }
+
     /// Cancel recording without transcribing (e.g., Fn+key combo detected)
     /// Immediately stops recording, unmutes audio, and returns to idle state
+    // MARK: - State Watchdog
+
+    /// Start a main-thread watchdog that forces .idle if stuck in .recording/.stopping.
+    /// Uses DispatchSourceTimer on the main RunLoop — completely independent of the Swift
+    /// cooperative thread pool. Even if all cooperative threads are exhausted, this fires.
+    /// - Parameter timeout: Seconds before forcing idle. 4s for startup, 5s for stop/transcription.
+    private func startStateWatchdog(timeout: TimeInterval = 4.0) {
+        stateWatchdog?.cancel()
+        let timer = DispatchSource.makeTimerSource(queue: .main)
+        timer.schedule(deadline: .now() + timeout)
+        timer.setEventHandler { [weak self] in
+            guard let self else { return }
+            switch self.state {
+            case .recording, .stopping:
+                Logger.error("State watchdog: stuck in \(self.state) for \(timeout)s, forcing idle", subsystem: .app)
+                self.streamingTranscriber = nil
+                self.liveTranscription = ""
+                self.state = .idle
+                self.errorMessage = "Recording failed — audio device error. Please try again."
+                if self.muteOtherAudioDuringRecording {
+                    self.audioMuter?.unmuteSystemAudio()
+                }
+                // Fire-and-forget stop on GCD to avoid blocking main thread
+                if let recorder = self.audioRecorder {
+                    DispatchQueue.global(qos: .utility).async {
+                        Task { await recorder.stopRecording() }
+                    }
+                }
+            default:
+                break
+            }
+        }
+        timer.resume()
+        stateWatchdog = timer
+    }
+
+    private func cancelStateWatchdog() {
+        stateWatchdog?.cancel()
+        stateWatchdog = nil
+    }
+
     func cancelRecording() {
         guard case .recording = state else { return }
 
         Logger.debug("Recording cancelled (Fn+key combo)", subsystem: .app)
+        cancelStateWatchdog()
 
         Task {
             // Stop audio recording immediately

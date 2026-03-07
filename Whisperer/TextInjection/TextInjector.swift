@@ -2,9 +2,9 @@
 //  TextInjector.swift
 //  Whisperer
 //
-//  Text entry for dictation via clipboard paste.
-//  Enters transcribed text into the focused app via clipboard + paste,
-//  similar to Apple's built-in dictation.
+//  Text entry for dictation via CGEvent unicode or clipboard paste.
+//  Primary: posts keyboard events with unicode string (no clipboard disruption).
+//  Fallback: clipboard + simulated Cmd+V for long text or CGEvent failure.
 //
 
 import Cocoa
@@ -15,6 +15,10 @@ class TextInjector {
     // The PID of the app that was frontmost when recording started.
     // Must be captured BEFORE recording begins (before overlay steals focus).
     private var targetAppPID: pid_t?
+
+    // CGEvent keyboardSetUnicodeString has a practical limit on UTF-16 units per event.
+    // Beyond this, fall back to clipboard paste.
+    private static let cgEventUnicodeLimit = 200
 
     /// Call this before recording starts to capture which app should receive the text
     func captureTargetApp() {
@@ -51,15 +55,62 @@ class TextInjector {
             return
         }
 
-        // Enter dictated text via clipboard + paste (same mechanism as Apple's dictation)
+        // Wait for target app activation
+        try await Task.sleep(nanoseconds: 50_000_000) // 50ms
+
+        // Primary: CGEvent unicode insertion (no clipboard disruption).
+        // Splits long text into chunks to stay within per-event UTF-16 limit.
+        if enterViaCGEventUnicode(text) {
+            return
+        }
+        Logger.warning("CGEvent unicode failed, falling back to clipboard paste", subsystem: .textInjection)
+
+        // Fallback: clipboard + Cmd+V paste (CGEvent failure)
         try await enterViaClipboardPaste(text)
+    }
+
+    // MARK: - CGEvent Unicode Insertion
+
+    /// Inserts text by posting CGEvent keyboard events with unicode string data.
+    /// Splits long text into chunks of cgEventUnicodeLimit UTF-16 units each.
+    /// No clipboard involvement — instant, zero side effects.
+    private func enterViaCGEventUnicode(_ text: String) -> Bool {
+        let utf16Array = Array(text.utf16)
+        guard !utf16Array.isEmpty else { return false }
+
+        // Split into chunks and post each as a separate key event
+        let chunks = stride(from: 0, to: utf16Array.count, by: Self.cgEventUnicodeLimit).map {
+            Array(utf16Array[$0..<min($0 + Self.cgEventUnicodeLimit, utf16Array.count)])
+        }
+
+        for (i, chunk) in chunks.enumerated() {
+            guard let keyDown = CGEvent(keyboardEventSource: nil, virtualKey: 0, keyDown: true),
+                  let keyUp = CGEvent(keyboardEventSource: nil, virtualKey: 0, keyDown: false) else {
+                Logger.error("Failed to create CGEvent for unicode insertion (chunk \(i))", subsystem: .textInjection)
+                return false
+            }
+
+            keyDown.keyboardSetUnicodeString(stringLength: chunk.count, unicodeString: chunk)
+            keyUp.keyboardSetUnicodeString(stringLength: chunk.count, unicodeString: chunk)
+
+            keyDown.post(tap: .cgAnnotatedSessionEventTap)
+            usleep(1000) // 1ms between keyDown/keyUp
+            keyUp.post(tap: .cgAnnotatedSessionEventTap)
+
+            // Small delay between chunks to let the target app process each event
+            if i < chunks.count - 1 {
+                usleep(2000) // 2ms between chunks
+            }
+        }
+
+        Logger.debug("Text entered via CGEvent unicode (\(utf16Array.count) UTF-16 units, \(chunks.count) chunk(s))", subsystem: .textInjection)
+        return true
     }
 
     // MARK: - Clipboard + Paste
 
     private func enterViaClipboardPaste(_ text: String) async throws {
-        // Target app already activated — wait briefly for focus
-        try await Task.sleep(nanoseconds: 50_000_000) // 50ms for activation
+        // Activation delay already applied in insertText
 
         let pasteboard = NSPasteboard.general
 
