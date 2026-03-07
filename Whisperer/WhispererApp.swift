@@ -1291,7 +1291,7 @@ struct ModelsTabView: View {
     }
 
     private var speechAnalyzerSection: some View {
-        let isActive = appState.isModelLoaded && appState.selectedBackendType == .speechAnalyzer
+        let isActive = appState.isModelLoaded && appState.loadedBackendType == .speechAnalyzer
         let isLoading = appState.isLoadingSpeechAnalyzer
         let isAvailable = speechAnalyzerAvailable
         let isHighlighted = isActive || isLoading
@@ -1763,7 +1763,7 @@ struct ModelMenuItem: View {
     let model: WhisperModel
     @ObservedObject var appState = AppState.shared
 
-    var isActive: Bool { appState.selectedModel == model && appState.isModelLoaded && appState.selectedBackendType == .whisperCpp }
+    var isActive: Bool { appState.selectedModel == model && appState.isModelLoaded && appState.loadedBackendType == .whisperCpp }
     var isHighlighted: Bool { isActive }
     var isSelected: Bool { appState.selectedModel == model }
     var isDownloaded: Bool { appState.isModelDownloaded(model) }
@@ -1896,7 +1896,7 @@ struct ParakeetModelRow: View {
     let model: ParakeetModelVariant
     @ObservedObject var appState = AppState.shared
 
-    var isActive: Bool { appState.selectedParakeetModel == model && appState.isModelLoaded && appState.selectedBackendType == .parakeet }
+    var isActive: Bool { appState.selectedParakeetModel == model && appState.isModelLoaded && appState.loadedBackendType == .parakeet }
     var isLoading: Bool { appState.selectedParakeetModel == model && appState.selectedBackendType == .parakeet && (appState.isDownloadingParakeet || appState.isLoadingParakeet) }
     var isHighlighted: Bool { isActive || isLoading }
     var isSelected: Bool { appState.selectedParakeetModel == model }

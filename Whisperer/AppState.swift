@@ -197,7 +197,7 @@ class AppState: ObservableObject {
 
     /// Display name of the model actively used for transcription (for history records)
     var activeModelDisplayName: String {
-        switch selectedBackendType {
+        switch loadedBackendType ?? selectedBackendType {
         case .whisperCpp: return selectedModel.displayName
         case .parakeet: return selectedParakeetModel.displayName
         case .speechAnalyzer: return "Apple Speech"
@@ -206,6 +206,8 @@ class AppState: ObservableObject {
     private var loadedModel: WhisperModel? = nil
     private var loadedParakeetModel: ParakeetModelVariant? = nil
     @Published var isModelLoaded: Bool = false
+    /// Which backend type is currently loaded (may differ from selectedBackendType while browsing tabs)
+    @Published var loadedBackendType: BackendType? = nil
 
     // Whisper model load state
     @Published var isLoadingWhisper: Bool = false
@@ -507,10 +509,8 @@ class AppState: ObservableObject {
         UserDefaults.standard.set(model.rawValue, forKey: "selectedModel")
         Logger.info("Switched to model: \(model.displayName)", subsystem: .model)
 
-        // Reload the model
-        isModelLoaded = false
-        whisperBridge = nil
-        loadedModel = nil
+        // Release any existing bridge (may be from a different backend)
+        releaseCurrentBridge()
         preloadModel()
     }
 
@@ -527,16 +527,13 @@ class AppState: ObservableObject {
         UserDefaults.standard.set(model.rawValue, forKey: "selectedParakeetModel")
         Logger.info("Switched to Parakeet model: \(model.displayName)", subsystem: .model)
 
-        if selectedBackendType == .parakeet {
-            // Cancel any in-flight Parakeet load
-            parakeetLoadTask?.cancel()
-            parakeetLoadTask = nil
+        // Cancel any in-flight Parakeet load
+        parakeetLoadTask?.cancel()
+        parakeetLoadTask = nil
 
-            isModelLoaded = false
-            whisperBridge = nil
-            loadedParakeetModel = nil
-            preloadModel()
-        }
+        // Release any existing bridge (may be from a different backend)
+        releaseCurrentBridge()
+        preloadModel()
     }
 
     /// Switch the active transcription backend
@@ -544,27 +541,9 @@ class AppState: ObservableObject {
         guard state == .idle else { return }
         guard backend != selectedBackendType else { return }
 
-        // Release the current bridge — don't cache across engine types.
-        // Models are 500MB-1.5GB each; caching all three wastes 2-4GB.
-        releaseCurrentBridge()
-
         selectedBackendType = backend
         UserDefaults.standard.set(backend.rawValue, forKey: "selectedBackendType")
         Logger.info("Switched backend to \(backend.displayName)", subsystem: .model)
-
-        // Cancel any in-flight loads
-        whisperLoadTask?.cancel()
-        whisperLoadTask = nil
-        isLoadingWhisper = false
-        parakeetLoadTask?.cancel()
-        parakeetLoadTask = nil
-        isLoadingParakeet = false
-        speechAnalyzerLoadTask?.cancel()
-        speechAnalyzerLoadTask = nil
-        isLoadingSpeechAnalyzer = false
-
-        isModelLoaded = false
-        // Don't auto-load — user must explicitly select a model in the new engine
     }
 
     /// Release the active transcription bridge and free its memory
@@ -585,6 +564,7 @@ class AppState: ObservableObject {
         loadedModel = nil
         loadedParakeetModel = nil
         isModelLoaded = false
+        loadedBackendType = nil
 
         Logger.info("Released \(backendName) bridge (freeing memory)", subsystem: .model)
     }
@@ -676,6 +656,7 @@ class AppState: ObservableObject {
         guard whisperBridge == nil || loadedModel != model else {
             Logger.info("Model \(model.displayName) already loaded", subsystem: .model)
             isModelLoaded = true
+            loadedBackendType = .whisperCpp
             isLoadingWhisper = false
             preloadVAD()
             return
@@ -711,6 +692,7 @@ class AppState: ObservableObject {
                     self.loadedModel = model
                     self.loadedParakeetModel = nil
                     self.isModelLoaded = true
+                    self.loadedBackendType = .whisperCpp
                     self.isLoadingWhisper = false
                     self.preloadVAD()
                 }
@@ -815,6 +797,7 @@ class AppState: ObservableObject {
         guard whisperBridge == nil || loadedParakeetModel != variant else {
             Logger.info("Parakeet \(variant.displayName) already loaded", subsystem: .model)
             isModelLoaded = true
+            loadedBackendType = .parakeet
             isLoadingParakeet = false
             preloadVAD()
             return
@@ -888,6 +871,7 @@ class AppState: ObservableObject {
                     self.loadedModel = nil
                     self.loadedParakeetModel = variant
                     self.isModelLoaded = true
+                    self.loadedBackendType = .parakeet
                     self.isLoadingParakeet = false
                     self.parakeetDownloadStatus = ""
                     self.preloadVAD()
@@ -919,6 +903,7 @@ class AppState: ObservableObject {
         guard whisperBridge == nil else {
             Logger.info("SpeechAnalyzer already loaded", subsystem: .model)
             isModelLoaded = true
+            loadedBackendType = .speechAnalyzer
             preloadVAD()
             return
         }
@@ -954,6 +939,7 @@ class AppState: ObservableObject {
                     self.loadedModel = nil
                     self.loadedParakeetModel = nil
                     self.isModelLoaded = true
+                    self.loadedBackendType = .speechAnalyzer
                     self.isLoadingSpeechAnalyzer = false
                     self.speechAnalyzerStatus = ""
                     self.preloadVAD()
