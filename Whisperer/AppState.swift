@@ -209,7 +209,16 @@ class AppState: ObservableObject {
     }
     private var loadedModel: WhisperModel? = nil
     private var loadedParakeetModel: ParakeetModelVariant? = nil
-    @Published var isModelLoaded: Bool = false
+    @Published var isModelLoaded: Bool = false {
+        didSet {
+            if isModelLoaded { showModelLoadingToast = false }
+        }
+    }
+    @Published var showModelLoadingToast: Bool = false {
+        didSet {
+            NotificationCenter.default.post(name: NSNotification.Name("AppStateChanged"), object: nil)
+        }
+    }
     /// Which backend type is currently loaded (may differ from selectedBackendType while browsing tabs)
     @Published var loadedBackendType: BackendType? = nil
 
@@ -1195,12 +1204,16 @@ class AppState: ObservableObject {
 
     /// Start recording in in-app mode (no text entry into other apps, no Accessibility required)
     func startInAppRecording() {
-        guard state == .idle else { return }
-
-        guard let bridge = whisperBridge else {
-            errorMessage = "Model not loaded yet. Please wait..."
+        // Show loading indicator if model isn't ready (works even during download)
+        guard whisperBridge != nil else {
+            showModelLoadingToast = true
+            Logger.warning("Cannot start recording - model not pre-loaded", subsystem: .app)
             return
         }
+
+        guard state == .idle else { return }
+
+        let bridge = whisperBridge!
 
         isInAppMode = true
         lastInAppTranscription = ""
@@ -1306,6 +1319,13 @@ class AppState: ObservableObject {
     // MARK: - State Transitions
 
     func startRecording() {
+        // Show loading indicator if model isn't ready (works even during download)
+        guard whisperBridge != nil else {
+            showModelLoadingToast = true
+            Logger.warning("Cannot start recording - model not pre-loaded", subsystem: .app)
+            return
+        }
+
         guard state == .idle else { return }
 
         // Recheck accessibility status before recording (event-based check)
@@ -1316,12 +1336,7 @@ class AppState: ObservableObject {
             TranscriptionPickerState.shared.dismiss()
         }
 
-        // Check if model is loaded first
-        guard let bridge = whisperBridge else {
-            errorMessage = "Model not loaded yet. Please wait..."
-            Logger.warning("Cannot start recording - model not pre-loaded", subsystem: .app)
-            return
-        }
+        let bridge = whisperBridge!
 
         // Capture the frontmost app BEFORE our overlay steals focus
         textInjector?.captureTargetApp()

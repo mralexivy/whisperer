@@ -94,13 +94,14 @@ class OverlayPanel: NSPanel {
 
     private func updateVisibility() {
         let appState = AppState.shared
-        let shouldShow = appState.state != .idle
+        let shouldShow = appState.state != .idle || appState.showModelLoadingToast
 
         if shouldShow && !self.isVisible {
             // Reposition at bottom-center every time we show
             positionAtBottomCenter()
             self.orderFrontRegardless()
-            self.animator().alphaValue = 1.0
+            self.alphaValue = 1.0  // Instant show (no animation delay)
+            Logger.debug("Overlay panel shown (state=\(appState.state), toast=\(appState.showModelLoadingToast))", subsystem: .ui)
         } else if !shouldShow && self.isVisible {
             NSAnimationContext.runAnimationGroup { context in
                 context.duration = 0.2
