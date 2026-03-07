@@ -1609,6 +1609,51 @@ struct SettingsTabView: View {
                     }
                 }
 
+                // List Formatting
+                settingsCard(title: "List Formatting", icon: "list.number", color: .green) {
+                    VStack(alignment: .leading, spacing: 10) {
+                        HStack {
+                            VStack(alignment: .leading, spacing: 3) {
+                                Text("Auto-format lists")
+                                    .font(.system(size: 13, weight: .medium))
+                                    .foregroundColor(MBColors.textPrimary)
+                                Text("Detect numbered and bulleted lists")
+                                    .font(.system(size: 11))
+                                    .foregroundColor(MBColors.textSecondary)
+                            }
+
+                            Spacer()
+
+                            Toggle("", isOn: $appState.listFormattingEnabled)
+                                .toggleStyle(.switch)
+                                .tint(MBColors.accent)
+                                .labelsHidden()
+                        }
+
+                        if appState.listFormattingEnabled {
+                            Divider().overlay(MBColors.border)
+
+                            HStack {
+                                VStack(alignment: .leading, spacing: 3) {
+                                    Text("AI-enhanced detection")
+                                        .font(.system(size: 13, weight: .medium))
+                                        .foregroundColor(MBColors.textPrimary)
+                                    Text("Use LLM for complex list structures")
+                                        .font(.system(size: 11))
+                                        .foregroundColor(MBColors.textSecondary)
+                                }
+
+                                Spacer()
+
+                                Toggle("", isOn: $appState.listFormattingAIEnabled)
+                                    .toggleStyle(.switch)
+                                    .tint(MBColors.accent)
+                                    .labelsHidden()
+                            }
+                        }
+                    }
+                }
+
                 // Add Space After Text
                 settingsCard(title: "Text Output", icon: "character.cursor.ibeam", color: .teal) {
                     HStack {

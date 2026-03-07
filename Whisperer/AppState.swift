@@ -268,6 +268,18 @@ class AppState: ObservableObject {
         }
     }
 
+    // List formatting (detects and formats spoken numbered/bulleted lists)
+    @Published var listFormattingEnabled: Bool = false {
+        didSet {
+            UserDefaults.standard.set(listFormattingEnabled, forKey: "listFormattingEnabled")
+        }
+    }
+    @Published var listFormattingAIEnabled: Bool = false {
+        didSet {
+            UserDefaults.standard.set(listFormattingAIEnabled, forKey: "listFormattingAIEnabled")
+        }
+    }
+
     // Add a trailing space after inserted transcription so the cursor is ready for the next word
     @Published var appendTrailingSpace: Bool = false {
         didSet {
@@ -397,9 +409,15 @@ class AppState: ObservableObject {
             _promptWordsEnabled = Published(wrappedValue: UserDefaults.standard.bool(forKey: "promptWordsEnabled"))
         }
 
-        // Load filler word, vocabulary boosting, and trailing space settings
+        // Load filler word, list formatting, vocabulary boosting, and trailing space settings
         if UserDefaults.standard.object(forKey: "fillerWordRemovalEnabled") != nil {
             _fillerWordRemovalEnabled = Published(wrappedValue: UserDefaults.standard.bool(forKey: "fillerWordRemovalEnabled"))
+        }
+        if UserDefaults.standard.object(forKey: "listFormattingEnabled") != nil {
+            _listFormattingEnabled = Published(wrappedValue: UserDefaults.standard.bool(forKey: "listFormattingEnabled"))
+        }
+        if UserDefaults.standard.object(forKey: "listFormattingAIEnabled") != nil {
+            _listFormattingAIEnabled = Published(wrappedValue: UserDefaults.standard.bool(forKey: "listFormattingAIEnabled"))
         }
         if UserDefaults.standard.object(forKey: "vocabularyBoostingEnabled") != nil {
             _vocabularyBoostingEnabled = Published(wrappedValue: UserDefaults.standard.bool(forKey: "vocabularyBoostingEnabled"))
@@ -997,6 +1015,32 @@ class AppState: ObservableObject {
         }
     }
 
+    /// Apply list formatting to transcribed text (deterministic engine + optional LLM fallback)
+    private func applyListFormatting(_ text: String) async -> String {
+        guard listFormattingEnabled else { return text }
+
+        let result = ListFormatter.format(text)
+
+        // LLM fallback: if deterministic found nothing and AI mode enabled
+        if listFormattingAIEnabled, result == text,
+           let processor = llmPostProcessor, processor.isModelLoaded {
+            do {
+                let llmResult = try await processor.process(text: text, task: .listFormat)
+                Logger.info("LLM list formatting: \(text.prefix(30))... → \(llmResult.prefix(30))...", subsystem: .transcription)
+                return llmResult
+            } catch {
+                Logger.error("LLM list formatting failed: \(error)", subsystem: .transcription)
+                return text
+            }
+        }
+
+        if result != text {
+            Logger.info("List formatted: \(text.prefix(30))... → \(result.prefix(30))...", subsystem: .transcription)
+        }
+
+        return result
+    }
+
     /// Pre-load the Silero VAD model for voice activity detection
     /// VAD is completely optional - the app works fine without it
     func preloadVAD() {
@@ -1242,8 +1286,9 @@ class AppState: ObservableObject {
             streamingTranscriber = nil
 
             if !finalText.isEmpty {
-                // Apply LLM post-processing if enabled
-                let processedText = await applyLLMPostProcessing(finalText)
+                // Apply list formatting then LLM post-processing
+                let listFormatted = await applyListFormatting(finalText)
+                let processedText = await applyLLMPostProcessing(listFormatted)
                 lastInAppTranscription = processedText
             } else {
                 errorMessage = "No speech detected"
@@ -1310,6 +1355,14 @@ class AppState: ObservableObject {
                     self?.streamingTranscriber?.addSamples(samples)
                 }
 
+                // Guard: if stopRecording() was called before we got here, bail out
+                guard case .recording = state else {
+                    Logger.debug("startRecording Task: state changed before audio start, aborting", subsystem: .app)
+                    streamingTranscriber = nil
+                    liveTranscription = ""
+                    return
+                }
+
                 // Race audio setup against a 5s timeout — engine.start() can hang
                 // indefinitely when the audio unit is broken (error 1852797029)
                 let audioURL = try await withThrowingTaskGroup(of: URL?.self) { group in
@@ -1325,6 +1378,18 @@ class AppState: ObservableObject {
                     return result
                 }
                 currentAudioURL = audioURL
+
+                // Guard: if stopRecording() was called while audio was starting, stop the recorder
+                guard case .recording = state else {
+                    Logger.debug("startRecording Task: state changed during audio start, cleaning up", subsystem: .app)
+                    await audioRecorder?.stopRecording()
+                    streamingTranscriber = nil
+                    liveTranscription = ""
+                    if muteOtherAudioDuringRecording {
+                        audioMuter?.unmuteSystemAudio()
+                    }
+                    return
+                }
 
                 // Mute AFTER engine is running and audio HAL has stabilized.
                 // Muting before engine.start() gets undone by HAL reconfiguration,
@@ -1359,6 +1424,8 @@ class AppState: ObservableObject {
             self.streamingTranscriber = nil
             self.state = .idle
             self.liveTranscription = ""
+            // Force-stop audio recorder in case startRecording Task completed after our initial stop
+            await self.audioRecorder?.stopRecording()
         }
 
         Task {
@@ -1393,8 +1460,9 @@ class AppState: ObservableObject {
                     saveRecordingFromTranscriber(transcriber, transcription: finalText)
                 }
 
-                // Apply LLM post-processing if enabled
-                let processedText = await applyLLMPostProcessing(finalText)
+                // Apply list formatting then LLM post-processing
+                let listFormatted = await applyListFormatting(finalText)
+                let processedText = await applyLLMPostProcessing(listFormatted)
 
                 var textToInsert = processedText
                 if appendTrailingSpace {
