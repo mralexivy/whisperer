@@ -162,7 +162,7 @@ struct PurchaseView: View {
                         )
                         .cornerRadius(8)
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(.plain).pointerOnHover()
                     .disabled(storeManager.isPurchasing)
 
                     // Restore purchases button
@@ -175,7 +175,7 @@ struct PurchaseView: View {
                             .font(.system(size: 11))
                             .foregroundColor(Self.blueAccent)
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(.plain).pointerOnHover()
                 }
             } else {
                 // Loading state

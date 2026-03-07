@@ -59,7 +59,7 @@ struct OnboardingView: View {
                             .background(OnboardingColors.pillBackground)
                             .clipShape(Circle())
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(.plain).pointerOnHover()
                     Spacer()
                 }
                 .padding(.top, 16)
@@ -174,7 +174,7 @@ struct OnboardingView: View {
                             .background(OnboardingColors.pillBackground)
                             .clipShape(Circle())
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(.plain).pointerOnHover()
                 }
 
                 // Only show Continue on page 1 (features) — pages 2-4 have their own action buttons
@@ -194,7 +194,7 @@ struct OnboardingView: View {
                         .background(OnboardingColors.accentGradient)
                         .clipShape(Capsule())
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(.plain).pointerOnHover()
                 }
             }
         }
@@ -354,7 +354,7 @@ struct OnboardingView: View {
                 .clipShape(Capsule())
                 .shadow(color: OnboardingColors.accentBlue.opacity(0.3), radius: 8, y: 3)
             }
-            .buttonStyle(.plain)
+            .buttonStyle(.plain).pointerOnHover()
             .padding(.top, 18)
 
             Spacer()
@@ -495,7 +495,7 @@ struct OnboardingView: View {
                         .background(OnboardingColors.accentGradient)
                         .clipShape(Capsule())
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(.plain).pointerOnHover()
 
                     Button(action: {
                         withAnimation(.easeInOut(duration: 0.3)) { currentPage = 3 }
@@ -505,7 +505,7 @@ struct OnboardingView: View {
                             .foregroundColor(OnboardingColors.textSecondary)
                             .padding(.leading, 4)
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(.plain).pointerOnHover()
                 }
             }
             .padding(.leading, 36)
@@ -640,7 +640,7 @@ struct OnboardingView: View {
                         .background(OnboardingColors.accentGradient)
                         .clipShape(Capsule())
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(.plain).pointerOnHover()
 
                     Button(action: {
                         withAnimation(.easeInOut(duration: 0.3)) { currentPage = 4 }
@@ -650,7 +650,7 @@ struct OnboardingView: View {
                             .foregroundColor(OnboardingColors.textSecondary)
                             .padding(.leading, 4)
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(.plain).pointerOnHover()
 
                     Text("No special permissions required.\nUses the Fn key to start and stop recording.")
                         .font(.system(size: 11))
@@ -792,7 +792,7 @@ struct OnboardingView: View {
                                 .font(.system(size: 12, weight: .medium))
                                 .foregroundColor(OnboardingColors.accentBlue)
                         }
-                        .buttonStyle(.plain)
+                        .buttonStyle(.plain).pointerOnHover()
                     }
                     .padding(.vertical, 12)
                     .padding(.horizontal, 20)
@@ -811,7 +811,7 @@ struct OnboardingView: View {
                             .foregroundColor(OnboardingColors.textSecondary)
                             .padding(.leading, 4)
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(.plain).pointerOnHover()
                 } else {
                     Button(action: {
                         appState.autoPasteEnabled = true
@@ -829,7 +829,7 @@ struct OnboardingView: View {
                         .background(OnboardingColors.accentGradient)
                         .clipShape(Capsule())
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(.plain).pointerOnHover()
 
                     Button(action: {
                         withAnimation(.easeInOut(duration: 0.3)) { currentPage = 5 }
@@ -839,7 +839,7 @@ struct OnboardingView: View {
                             .foregroundColor(OnboardingColors.textSecondary)
                             .padding(.leading, 4)
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(.plain).pointerOnHover()
 
                     Text("Requires Accessibility permission to simulate\npaste into the focused application.")
                         .font(.system(size: 11))
@@ -1006,7 +1006,7 @@ struct OnboardingView: View {
                         .foregroundColor(OnboardingColors.textSecondary)
                         .padding(.leading, 4)
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(.plain).pointerOnHover()
 
                 if !appState.isModelLoaded {
                     Text("You can download models later\nfrom the menu bar Settings tab.")

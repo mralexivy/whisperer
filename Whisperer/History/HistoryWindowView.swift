@@ -200,8 +200,7 @@ struct HistoryWindowView: View {
                 sidebarStatsCard(stats)
             }
 
-            // Keyboard shortcut hint at bottom
-            shortcutHint
+            sidebarVersionLabel
         }
         .frame(width: 220)
         .background(WhispererColors.sidebarBackground(colorScheme))
@@ -325,59 +324,15 @@ struct HistoryWindowView: View {
         return "\(number)"
     }
 
-    private var shortcutHint: some View {
-        HStack(spacing: 6) {
-            Image(systemName: "keyboard")
-                .font(.system(size: 10))
-                .foregroundColor(WhispererColors.secondaryText(colorScheme).opacity(0.6))
+    private var sidebarVersionLabel: some View {
+        let version = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "?"
+        let build = Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "?"
 
-            HStack(spacing: 3) {
-                Text("Fn")
-                    .font(.system(size: 10, weight: .medium, design: .monospaced))
-                    .padding(.horizontal, 4)
-                    .padding(.vertical, 1)
-                    .background(
-                        RoundedRectangle(cornerRadius: 3)
-                            .fill(WhispererColors.pillBackground)
-                    )
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 3)
-                            .stroke(WhispererColors.border(colorScheme), lineWidth: 0.5)
-                    )
-
-                Text("+")
-                    .font(.system(size: 10))
-
-                Text("S")
-                    .font(.system(size: 10, weight: .medium, design: .monospaced))
-                    .padding(.horizontal, 5)
-                    .padding(.vertical, 1)
-                    .background(
-                        RoundedRectangle(cornerRadius: 3)
-                            .fill(WhispererColors.pillBackground)
-                    )
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 3)
-                            .stroke(WhispererColors.border(colorScheme), lineWidth: 0.5)
-                    )
-            }
-            .foregroundColor(WhispererColors.secondaryText(colorScheme))
-
-            Text("to toggle")
-                .font(.system(size: 10))
-                .foregroundColor(WhispererColors.secondaryText(colorScheme).opacity(0.5))
-        }
-        .padding(.vertical, 12)
-        .padding(.horizontal, 16)
-        .frame(maxWidth: .infinity)
-        .background(WhispererColors.elevatedBackground(colorScheme).opacity(0.4))
-        .overlay(
-            Rectangle()
-                .fill(WhispererColors.border(colorScheme))
-                .frame(height: 1),
-            alignment: .top
-        )
-
+        return Text("Whisperer v\(version) (\(build))")
+            .font(.system(size: 10, weight: .medium))
+            .foregroundColor(WhispererColors.secondaryText(colorScheme).opacity(0.4))
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 12)
     }
 }
 
@@ -420,7 +375,7 @@ struct SidebarNavItem: View {
                 radius: 4, y: 1
             )
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.plain).pointerOnHover()
         .onHover { hovering in
             withAnimation(.easeInOut(duration: 0.15)) {
                 isHovered = hovering
@@ -545,47 +500,36 @@ struct TranscriptionsView: View {
 
                 Spacer()
 
-                // Daily quote with decorative quotation marks
-                VStack(alignment: .trailing, spacing: 2) {
-                    Text(dailyQuote)
-                        .font(.system(size: 13, weight: .light, design: .rounded))
-                        .foregroundColor(Color.white.opacity(0.55))
-                        .italic()
-                        .lineSpacing(4)
-                        .lineLimit(2)
-                        .frame(maxWidth: 280, alignment: .leading)
-                        .overlay(alignment: .topLeading) {
-                            Text("\u{201C}")
-                                .font(.system(size: 28, weight: .bold, design: .rounded))
-                                .foregroundStyle(
-                                    LinearGradient(
-                                        colors: [WhispererColors.accentBlue, WhispererColors.accentPurple],
-                                        startPoint: .leading,
-                                        endPoint: .trailing
-                                    )
-                                )
-                                .offset(x: -18, y: -10)
-                        }
-                        .overlay(alignment: .bottomTrailing) {
-                            Text("\u{201D}")
-                                .font(.system(size: 28, weight: .bold, design: .rounded))
-                                .foregroundStyle(
-                                    LinearGradient(
-                                        colors: [WhispererColors.accentBlue, WhispererColors.accentPurple],
-                                        startPoint: .leading,
-                                        endPoint: .trailing
-                                    )
-                                )
-                                .offset(x: 18, y: 10)
-                        }
-                        .padding(.leading, 18)
-                        .padding(.trailing, 18)
+                // Daily quote
+                HStack(alignment: .center, spacing: 10) {
+                    Text("\u{201C}")
+                        .font(.system(size: 32, weight: .bold, design: .rounded))
+                        .foregroundStyle(
+                            LinearGradient(
+                                colors: [WhispererColors.accentBlue, WhispererColors.accentPurple],
+                                startPoint: .leading,
+                                endPoint: .trailing
+                            )
+                        )
+                        .offset(y: -2)
 
-                    Text("Whisperer")
-                        .font(.system(size: 10, weight: .medium))
-                        .foregroundColor(Color.white.opacity(0.3))
+                    Text(dailyQuote)
+                        .font(.system(size: 15, weight: .light, design: .rounded))
+                        .foregroundColor(.white.opacity(0.45))
+                        .italic()
+                        .lineLimit(1)
+
+                    Text("\u{201D}")
+                        .font(.system(size: 32, weight: .bold, design: .rounded))
+                        .foregroundStyle(
+                            LinearGradient(
+                                colors: [WhispererColors.accentBlue, WhispererColors.accentPurple],
+                                startPoint: .leading,
+                                endPoint: .trailing
+                            )
+                        )
+                        .offset(y: -2)
                 }
-                .padding(.trailing, 4)
             }
             .padding(.horizontal, 20)
             .frame(height: 72)
@@ -632,7 +576,7 @@ struct TranscriptionsView: View {
                             .font(.system(size: 13))
                             .foregroundColor(WhispererColors.secondaryText(colorScheme))
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(.plain).pointerOnHover()
                 } else {
                     // ⌘K shortcut badge
                     HStack(spacing: 2) {
@@ -1026,10 +970,7 @@ struct TranscriptionsView: View {
                     radius: 4, y: 1
                 )
         }
-        .buttonStyle(.plain)
-        .onHover { hovering in
-            if hovering { NSCursor.pointingHand.push() } else { NSCursor.pop() }
-        }
+        .buttonStyle(.plain).pointerOnHover()
         .popover(isPresented: $showCalendarPicker, arrowEdge: .top) {
             CalendarPickerView(
                 startDate: $dateRangeStart,
@@ -1079,10 +1020,7 @@ struct TranscriptionsView: View {
                 Image(systemName: "xmark")
                     .font(.system(size: 8, weight: .bold))
             }
-            .buttonStyle(.plain)
-            .onHover { hovering in
-                if hovering { NSCursor.pointingHand.push() } else { NSCursor.pop() }
-            }
+            .buttonStyle(.plain).pointerOnHover()
         }
         .foregroundColor(WhispererColors.accentBlue)
         .padding(.horizontal, 8)
@@ -1705,7 +1643,7 @@ struct DangerButton: View {
                 )
                 .scaleEffect(isHovered ? 1.02 : 1.0)
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.plain).pointerOnHover()
         .onHover { hovering in
             withAnimation(.easeInOut(duration: 0.15)) {
                 isHovered = hovering
@@ -1765,7 +1703,7 @@ struct TimeFormatCard: View {
             )
             .scaleEffect(isHovered && !isSelected ? 1.02 : 1.0)
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.plain).pointerOnHover()
         .onHover { hovering in
             withAnimation(.easeInOut(duration: 0.15)) {
                 isHovered = hovering
@@ -1808,7 +1746,7 @@ struct RetentionOptionButton: View {
                 )
                 .scaleEffect(isHovered && !isSelected ? 1.02 : 1.0)
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.plain).pointerOnHover()
         .onHover { hovering in
             withAnimation(.easeInOut(duration: 0.15)) {
                 isHovered = hovering
@@ -1902,10 +1840,7 @@ struct CalendarPickerView: View {
                             .font(.system(size: 11, weight: .medium))
                             .foregroundColor(.red.opacity(0.8))
                     }
-                    .buttonStyle(.plain)
-                    .onHover { hovering in
-                        if hovering { NSCursor.pointingHand.push() } else { NSCursor.pop() }
-                    }
+                    .buttonStyle(.plain).pointerOnHover()
                 }
             }
             .padding(.horizontal, 16)
@@ -1951,8 +1886,7 @@ struct CalendarPickerView: View {
                         .frame(width: 24, height: 24)
                         .background(Circle().fill(WhispererColors.accentBlue.opacity(0.1)))
                 }
-                .buttonStyle(.plain)
-                .onHover { hovering in if hovering { NSCursor.pointingHand.push() } else { NSCursor.pop() } }
+                .buttonStyle(.plain).pointerOnHover()
 
                 Spacer()
 
@@ -1973,9 +1907,8 @@ struct CalendarPickerView: View {
                         .frame(width: 24, height: 24)
                         .background(Circle().fill(canGoForward(month: month.wrappedValue) ? WhispererColors.accentBlue.opacity(0.1) : Color.clear))
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(.plain).pointerOnHover()
                 .disabled(!canGoForward(month: month.wrappedValue))
-                .onHover { hovering in if hovering { NSCursor.pointingHand.push() } else { NSCursor.pop() } }
             }
             .padding(.horizontal, 12)
             .padding(.bottom, 8)
@@ -2059,7 +1992,7 @@ struct CalendarPickerView: View {
                 }
             )
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.plain).pointerOnHover()
         .disabled(isFuture)
         .onHover { hovering in
             if !isFuture {
@@ -2080,10 +2013,7 @@ struct CalendarPickerView: View {
                 .background(Capsule().fill(Color.cyan.opacity(0.1)))
                 .overlay(Capsule().stroke(Color.cyan.opacity(0.2), lineWidth: 0.5))
         }
-        .buttonStyle(.plain)
-        .onHover { hovering in
-            if hovering { NSCursor.pointingHand.push() } else { NSCursor.pop() }
-        }
+        .buttonStyle(.plain).pointerOnHover()
     }
 
     // MARK: - Helpers
@@ -2190,12 +2120,11 @@ struct FilterTab: View {
                     radius: 4, y: 1
                 )
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.plain).pointerOnHover()
         .onHover { hovering in
             withAnimation(.easeInOut(duration: 0.12)) {
                 isHovered = hovering
             }
-            if hovering { NSCursor.pointingHand.push() } else { NSCursor.pop() }
         }
     }
 }

@@ -161,7 +161,7 @@ struct TranscriptionRow: View {
             .contentShape(RoundedRectangle(cornerRadius: 12))
             .scaleEffect(isHovered && !isSelected ? 1.006 : 1.0)
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.plain).pointerOnHover()
         .onHover { hovering in
             withAnimation(.easeInOut(duration: 0.15)) {
                 isHovered = hovering
@@ -368,7 +368,7 @@ struct RowActionButton: View {
                 )
                 .scaleEffect(isHovered ? 1.08 : 1.0)
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.plain).pointerOnHover()
         .onHover { hovering in
             withAnimation(.easeInOut(duration: 0.12)) {
                 isHovered = hovering

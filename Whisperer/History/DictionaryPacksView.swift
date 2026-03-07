@@ -84,7 +84,7 @@ struct DictionaryPacksView: View {
                     y: 1
                 )
             }
-            .buttonStyle(.plain)
+            .buttonStyle(.plain).pointerOnHover()
             .frame(maxWidth: 280)
 
             Spacer()
@@ -194,7 +194,7 @@ struct PackDropdownOverlay: View {
                                 .font(.system(size: 12))
                                 .foregroundColor(WhispererColors.secondaryText(colorScheme).opacity(0.5))
                         }
-                        .buttonStyle(.plain)
+                        .buttonStyle(.plain).pointerOnHover()
                     }
                 }
                 .padding(.horizontal, 12)
@@ -301,7 +301,7 @@ struct PackDropdownOverlay: View {
                         }
                         .font(.system(size: 11, weight: .semibold))
                         .foregroundColor(WhispererColors.accent)
-                        .buttonStyle(.plain)
+                        .buttonStyle(.plain).pointerOnHover()
                     }
                 }
                 .padding(.horizontal, 12)
@@ -499,7 +499,7 @@ struct DropdownItem: View {
             )
             .scaleEffect(isHovered ? 1.006 : 1.0)
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.plain).pointerOnHover()
         .onHover { hovering in
             withAnimation(.easeInOut(duration: 0.12)) {
                 isHovered = hovering
@@ -526,7 +526,7 @@ struct PackManagerSheet: View {
                         .font(.system(size: 22))
                         .foregroundColor(WhispererColors.secondaryText(colorScheme).opacity(0.5))
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(.plain).pointerOnHover()
             }
             .padding(20)
 

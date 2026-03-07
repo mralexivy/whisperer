@@ -41,7 +41,7 @@ struct ShortcutRecorderView: View {
                             .padding(.vertical, 5)
                             .contentShape(Rectangle())
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(.plain).pointerOnHover()
                     .foregroundColor(.secondary)
 
                     Button(action: { stopRecording(save: true) }) {
@@ -54,7 +54,7 @@ struct ShortcutRecorderView: View {
                             .cornerRadius(6)
                             .contentShape(Rectangle())
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(.plain).pointerOnHover()
                     .disabled(tempConfig == nil)
                 } else {
                     Button(action: { startRecording() }) {
@@ -71,7 +71,7 @@ struct ShortcutRecorderView: View {
                         .cornerRadius(6)
                         .contentShape(Rectangle())
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(.plain).pointerOnHover()
                 }
             }
 
@@ -241,7 +241,7 @@ struct ShortcutRecorderView: View {
             )
             .contentShape(Rectangle())
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.plain).pointerOnHover()
     }
 
     // MARK: - Recording Logic

@@ -272,7 +272,7 @@ private struct CorrectionPopoverContent: View {
                                 .fill(WhispererColors.elevatedBackground(colorScheme))
                         )
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(.plain).pointerOnHover()
             }
 
             Divider()
@@ -336,7 +336,7 @@ private struct CorrectionPopoverContent: View {
                         .fill(WhispererColors.accent.opacity(0.1))
                 )
             }
-            .buttonStyle(.plain)
+            .buttonStyle(.plain).pointerOnHover()
         }
         .padding(14)
         .frame(minWidth: 240, maxWidth: 300)

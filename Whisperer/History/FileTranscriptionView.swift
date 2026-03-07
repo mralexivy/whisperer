@@ -239,7 +239,7 @@ struct FileTranscriptionView: View {
                 .background(Capsule().fill(WhispererColors.accentGradient))
                 .shadow(color: WhispererColors.accentBlue.opacity(0.3), radius: 8, y: 3)
             }
-            .buttonStyle(.plain)
+            .buttonStyle(.plain).pointerOnHover()
             .padding(.top, 20)
             .padding(.bottom, 28)
         }
@@ -411,7 +411,7 @@ struct FileTranscriptionView: View {
                                 )
                                 .overlay(Circle().stroke(WhispererColors.border(colorScheme), lineWidth: 1))
                         }
-                        .buttonStyle(.plain)
+                        .buttonStyle(.plain).pointerOnHover()
                     }
 
                     // Divider
@@ -455,7 +455,7 @@ struct FileTranscriptionView: View {
                             .background(Capsule().fill(WhispererColors.accentGradient))
                             .shadow(color: WhispererColors.accentBlue.opacity(0.3), radius: 8, y: 3)
                         }
-                        .buttonStyle(.plain)
+                        .buttonStyle(.plain).pointerOnHover()
                     }
                 }
             }
@@ -552,7 +552,7 @@ struct FileTranscriptionView: View {
                                 .background(Circle().fill(Color.red.opacity(0.10)))
                                 .overlay(Circle().stroke(Color.red.opacity(0.15), lineWidth: 1))
                         }
-                        .buttonStyle(.plain)
+                        .buttonStyle(.plain).pointerOnHover()
                     }
 
                     // Progress bar
@@ -731,7 +731,7 @@ struct FileTranscriptionView: View {
                                 .background(Capsule().fill(WhispererColors.elevatedBackground(colorScheme)))
                                 .overlay(Capsule().stroke(WhispererColors.border(colorScheme), lineWidth: 1))
                         }
-                        .buttonStyle(.plain)
+                        .buttonStyle(.plain).pointerOnHover()
 
                         if manager.selectedFileURL != nil {
                             Button(action: { manager.transcribeFile(language: selectedLanguage) }) {
@@ -743,7 +743,7 @@ struct FileTranscriptionView: View {
                                     .background(Capsule().fill(WhispererColors.accentGradient))
                                     .shadow(color: WhispererColors.accentBlue.opacity(0.25), radius: 6, y: 2)
                             }
-                            .buttonStyle(.plain)
+                            .buttonStyle(.plain).pointerOnHover()
                         }
                     }
                 }
@@ -829,7 +829,7 @@ struct FileTranscriptionView: View {
                 .background(Capsule().fill(WhispererColors.accentBlue.opacity(0.10)))
                 .overlay(Capsule().stroke(WhispererColors.accentBlue.opacity(0.12), lineWidth: 0.5))
             }
-            .buttonStyle(.plain)
+            .buttonStyle(.plain).pointerOnHover()
 
             // Copy button
             Button(action: copyToClipboard) {
@@ -845,7 +845,7 @@ struct FileTranscriptionView: View {
                 .background(Capsule().fill(copiedFeedback ? Color(hex: "22C55E").opacity(0.12) : WhispererColors.elevatedBackground(colorScheme)))
                 .overlay(Capsule().stroke(copiedFeedback ? Color(hex: "22C55E").opacity(0.2) : WhispererColors.border(colorScheme), lineWidth: 1))
             }
-            .buttonStyle(.plain)
+            .buttonStyle(.plain).pointerOnHover()
 
             // Save button
             Button(action: {
@@ -868,7 +868,7 @@ struct FileTranscriptionView: View {
                 )
                 .shadow(color: (manager.savedToHistory ? Color(hex: "22C55E") : WhispererColors.accentBlue).opacity(0.2), radius: 4, y: 1)
             }
-            .buttonStyle(.plain)
+            .buttonStyle(.plain).pointerOnHover()
             .disabled(manager.savedToHistory)
         }
     }

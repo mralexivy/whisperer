@@ -79,7 +79,7 @@ struct AddDictionaryEntryView: View {
                             radius: 3, y: 1
                         )
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(.plain).pointerOnHover()
                 .onHover { hovering in
                     withAnimation(.easeOut(duration: 0.15)) {
                         isCloseHovered = hovering
@@ -345,7 +345,7 @@ struct AddDictionaryEntryView: View {
                         )
                         .scaleEffect(isCancelHovered ? 1.02 : 1.0)
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(.plain).pointerOnHover()
                 .onHover { hovering in
                     withAnimation(.easeOut(duration: 0.15)) {
                         isCancelHovered = hovering
@@ -371,7 +371,7 @@ struct AddDictionaryEntryView: View {
                         )
                         .scaleEffect(isAddHovered && isValid ? 1.02 : 1.0)
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(.plain).pointerOnHover()
                 .disabled(!isValid)
                 .onHover { hovering in
                     withAnimation(.easeOut(duration: 0.15)) {

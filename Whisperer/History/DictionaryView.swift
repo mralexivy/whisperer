@@ -279,14 +279,7 @@ struct DictionaryView: View {
                                     .stroke(isSelected ? tab.color.opacity(0.2) : Color.clear, lineWidth: 1)
                             )
                         }
-                        .buttonStyle(.plain)
-                        .onHover { hovering in
-                            if hovering {
-                                NSCursor.pointingHand.push()
-                            } else {
-                                NSCursor.pop()
-                            }
-                        }
+                        .buttonStyle(.plain).pointerOnHover()
                     }
                 }
                 .padding(4)
@@ -349,7 +342,7 @@ struct DictionaryView: View {
                         Image(systemName: "xmark.circle.fill")
                             .font(.system(size: 12))
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(.plain).pointerOnHover()
                 }
                 .foregroundColor(WhispererColors.accent)
                 .padding(.horizontal, 10)
@@ -380,7 +373,7 @@ struct DictionaryView: View {
                             .font(.system(size: 13))
                             .foregroundColor(WhispererColors.secondaryText(colorScheme))
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(.plain).pointerOnHover()
                 }
             }
             .padding(.horizontal, 12)
@@ -420,7 +413,7 @@ struct DictionaryView: View {
                     radius: 4, y: 1
                 )
             }
-            .buttonStyle(.plain)
+            .buttonStyle(.plain).pointerOnHover()
         }
         .padding(.horizontal, 20)
         .padding(.vertical, 12)
@@ -506,7 +499,7 @@ struct DictionaryView: View {
                                         radius: 4, y: 1
                                     )
                                 }
-                                .buttonStyle(.plain)
+                                .buttonStyle(.plain).pointerOnHover()
                                 .padding(.top, 6)
                             }
                         }
@@ -583,7 +576,7 @@ struct DictionaryView: View {
                     radius: 6, y: 2
                 )
             }
-            .buttonStyle(.plain)
+            .buttonStyle(.plain).pointerOnHover()
 
             Spacer()
         }
@@ -688,7 +681,7 @@ struct DictionaryEntryRow: View {
             )
             .scaleEffect(isHovered && !isSelected ? 1.006 : 1.0)
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.plain).pointerOnHover()
         .onHover { hovering in
             withAnimation(.easeInOut(duration: 0.15)) {
                 isHovered = hovering
@@ -745,7 +738,7 @@ struct EntryDetailView: View {
                             radius: 3, y: 1
                         )
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(.plain).pointerOnHover()
                 .onHover { hovering in
                     withAnimation(.easeOut(duration: 0.15)) {
                         isCloseHovered = hovering
@@ -893,7 +886,7 @@ struct EntryDetailView: View {
                             )
                             .scaleEffect(isSaveHovered ? 1.02 : 1.0)
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(.plain).pointerOnHover()
                     .disabled(incorrectForm.isEmpty || correctForm.isEmpty)
                     .onHover { hovering in
                         withAnimation(.easeOut(duration: 0.15)) {
@@ -920,7 +913,7 @@ struct EntryDetailView: View {
                                 )
                                 .scaleEffect(isDeleteHovered ? 1.02 : 1.0)
                         }
-                        .buttonStyle(.plain)
+                        .buttonStyle(.plain).pointerOnHover()
                         .onHover { hovering in
                             withAnimation(.easeOut(duration: 0.15)) {
                                 isDeleteHovered = hovering

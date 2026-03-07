@@ -8,6 +8,14 @@
 import SwiftUI
 import ServiceManagement
 
+extension View {
+    func pointerOnHover() -> some View {
+        self.onHover { hovering in
+            if hovering { NSCursor.pointingHand.push() } else { NSCursor.pop() }
+        }
+    }
+}
+
 @main
 struct WhispererApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
@@ -416,7 +424,7 @@ struct MenuBarView: View {
                     .background(MBColors.pill)
                     .cornerRadius(12)
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(.plain).pointerOnHover()
                 .popover(isPresented: $showAboutPopover, arrowEdge: .top) {
                     AboutPopoverContent()
                         .frame(width: 320)
@@ -479,7 +487,7 @@ struct MenuBarView: View {
                 Image(systemName: "doc.on.doc")
                     .font(.caption)
             }
-            .buttonStyle(.plain)
+            .buttonStyle(.plain).pointerOnHover()
             .foregroundColor(.red)
         }
         .padding(10)
@@ -529,10 +537,7 @@ struct MenuBarView: View {
             .cornerRadius(8)
             .contentShape(Rectangle())
         }
-        .buttonStyle(.plain)
-        .onHover { hovering in
-            if hovering { NSCursor.pointingHand.push() } else { NSCursor.pop() }
-        }
+        .buttonStyle(.plain).pointerOnHover()
         .frame(maxWidth: .infinity)
     }
 
@@ -570,7 +575,7 @@ struct MenuBarView: View {
                 .shadow(color: MBColors.accent.opacity(0.3), radius: 4, x: 0, y: 2)
                 .contentShape(Rectangle())
             }
-            .buttonStyle(.plain)
+            .buttonStyle(.plain).pointerOnHover()
 
             Spacer()
 
@@ -603,7 +608,7 @@ struct MenuBarView: View {
                 .shadow(color: Color.red.opacity(0.3), radius: 4, x: 0, y: 2)
                 .contentShape(Rectangle())
             }
-            .buttonStyle(.plain)
+            .buttonStyle(.plain).pointerOnHover()
             .keyboardShortcut("q")
         }
         .padding(.horizontal, 16)
@@ -776,7 +781,7 @@ struct StatusTabView: View {
                         .background(Color.red)
                         .cornerRadius(8)
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(.plain).pointerOnHover()
                 }
             } else if !appState.lastInAppTranscription.isEmpty {
                 // Show result
@@ -807,7 +812,7 @@ struct StatusTabView: View {
                             .background(MBColors.accent.opacity(0.15))
                             .cornerRadius(6)
                         }
-                        .buttonStyle(.plain)
+                        .buttonStyle(.plain).pointerOnHover()
 
                         Button(action: {
                             appState.lastInAppTranscription = ""
@@ -824,7 +829,7 @@ struct StatusTabView: View {
                             .background(MBColors.pill)
                             .cornerRadius(6)
                         }
-                        .buttonStyle(.plain)
+                        .buttonStyle(.plain).pointerOnHover()
 
                         Spacer()
 
@@ -845,7 +850,7 @@ struct StatusTabView: View {
                             .background(MBColors.accent)
                             .cornerRadius(6)
                         }
-                        .buttonStyle(.plain)
+                        .buttonStyle(.plain).pointerOnHover()
                     }
                 }
             } else {
@@ -869,7 +874,7 @@ struct StatusTabView: View {
                     )
                     .cornerRadius(8)
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(.plain).pointerOnHover()
                 .disabled(!appState.isModelLoaded || permissionManager.microphoneStatus != .granted)
             }
         }
@@ -933,11 +938,7 @@ struct StatusTabView: View {
                     .stroke(MBColors.border, lineWidth: 1)
             )
         }
-        .buttonStyle(.plain)
-        .onHover { hovering in
-            if hovering { NSCursor.pointingHand.push() } else { NSCursor.pop() }
-        }
-
+        .buttonStyle(.plain).pointerOnHover()
     }
 
     private var systemWideDictationCard: some View {
@@ -1002,10 +1003,7 @@ struct StatusTabView: View {
                     .stroke(MBColors.border, lineWidth: 1)
             )
         }
-        .buttonStyle(.plain)
-        .onHover { hovering in
-            if hovering { NSCursor.pointingHand.push() } else { NSCursor.pop() }
-        }
+        .buttonStyle(.plain).pointerOnHover()
     }
 
     private var permissionWarningBanner: some View {
@@ -1059,7 +1057,7 @@ struct StatusTabView: View {
                 .background(Color.orange)
                 .cornerRadius(6)
             }
-            .buttonStyle(.plain)
+            .buttonStyle(.plain).pointerOnHover()
         }
         .padding(12)
         .background(Color.orange.opacity(0.15))
@@ -1143,15 +1141,8 @@ struct ModelsTabView: View {
                         )
                         .contentShape(Rectangle())
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(.plain).pointerOnHover()
                     .disabled(appState.isModelBusy)
-                    .onHover { hovering in
-                        if hovering {
-                            NSCursor.pointingHand.push()
-                        } else {
-                            NSCursor.pop()
-                        }
-                    }
                 }
             }
             .padding(2)
@@ -1372,16 +1363,9 @@ struct ModelsTabView: View {
                 )
                 .contentShape(Rectangle())
             }
-            .buttonStyle(.plain)
+            .buttonStyle(.plain).pointerOnHover()
             .disabled(!isAvailable || appState.isModelBusy)
             .opacity(!isAvailable ? 0.5 : 1.0)
-            .onHover { hovering in
-                if hovering {
-                    NSCursor.pointingHand.push()
-                } else {
-                    NSCursor.pop()
-                }
-            }
         }
     }
 }
@@ -1820,14 +1804,7 @@ struct ModelMenuItem: View {
             )
             .contentShape(Rectangle())
         }
-        .buttonStyle(.plain)
-        .onHover { hovering in
-            if hovering {
-                NSCursor.pointingHand.push()
-            } else {
-                NSCursor.pop()
-            }
-        }
+        .buttonStyle(.plain).pointerOnHover()
         .disabled(appState.isModelBusy)
     }
 
@@ -1970,14 +1947,7 @@ struct ParakeetModelRow: View {
             )
             .contentShape(Rectangle())
         }
-        .buttonStyle(.plain)
-        .onHover { hovering in
-            if hovering {
-                NSCursor.pointingHand.push()
-            } else {
-                NSCursor.pop()
-            }
-        }
+        .buttonStyle(.plain).pointerOnHover()
         .disabled(appState.isModelBusy)
     }
 }
@@ -2054,7 +2024,7 @@ struct MicrophonePickerView: View {
             .padding(.vertical, 4)
             .contentShape(Rectangle())
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.plain).pointerOnHover()
     }
 }
 
@@ -2117,7 +2087,7 @@ struct LanguagePickerView: View {
                 }
                 .contentShape(Rectangle())
             }
-            .buttonStyle(.plain)
+            .buttonStyle(.plain).pointerOnHover()
 
             // Expanded view - search and language list (only when expanded)
             if isExpanded {
@@ -2141,7 +2111,7 @@ struct LanguagePickerView: View {
                                     .foregroundColor(MBColors.textTertiary)
                                     .font(.system(size: 12))
                             }
-                            .buttonStyle(.plain)
+                            .buttonStyle(.plain).pointerOnHover()
                         }
                     }
                     .padding(8)
@@ -2233,7 +2203,7 @@ struct LanguagePickerView: View {
             .padding(.horizontal, 4)
             .contentShape(Rectangle())
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.plain).pointerOnHover()
     }
 }
 
@@ -2292,7 +2262,7 @@ struct PermissionsView: View {
                 }
                 .contentShape(Rectangle())
             }
-            .buttonStyle(.plain)
+            .buttonStyle(.plain).pointerOnHover()
 
             // Expanded view - individual permission status
             if isExpanded {
@@ -2318,7 +2288,7 @@ struct PermissionsView: View {
                             .background(MBColors.accent)
                             .cornerRadius(6)
                         }
-                        .buttonStyle(.plain)
+                        .buttonStyle(.plain).pointerOnHover()
                         .padding(.top, 4)
                     }
                 }
@@ -2386,7 +2356,7 @@ struct PermissionsView: View {
                         .background(Color.orange)
                         .cornerRadius(4)
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(.plain).pointerOnHover()
             }
         }
         .padding(.vertical, 4)
@@ -2474,7 +2444,7 @@ struct DiagnosticsView: View {
                     .background(MBColors.pill)
                     .cornerRadius(6)
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(.plain).pointerOnHover()
             }
 
             // Crash log indicator
@@ -2617,7 +2587,7 @@ private struct SpeechAnalyzerTestSection: View {
                     .background(MBColors.pill)
                     .cornerRadius(6)
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(.plain).pointerOnHover()
                 .disabled(diagnostics.isRunning)
             }
 
@@ -2854,7 +2824,7 @@ struct AboutPopoverContent: View {
                         .cornerRadius(10)
                         .shadow(color: Self.accent.opacity(0.25), radius: 8, y: 4)
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(.plain).pointerOnHover()
                     .disabled(storeManager.isPurchasing || isLoadingProducts)
 
                     // Restore + one-time note
@@ -2866,7 +2836,7 @@ struct AboutPopoverContent: View {
                                 .font(.system(size: 10.5, weight: .medium))
                                 .foregroundColor(Self.accent)
                         }
-                        .buttonStyle(.plain)
+                        .buttonStyle(.plain).pointerOnHover()
 
                         Spacer()
 
@@ -2955,7 +2925,7 @@ struct AboutPopoverContent: View {
             .cornerRadius(8)
             .contentShape(Rectangle())
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.plain).pointerOnHover()
     }
 
     private func proFeatureRow(icon: String, color: Color, title: String, description: String) -> some View {
@@ -3073,7 +3043,7 @@ struct LLMSettingsView: View {
                                     .foregroundColor(MBColors.accent.opacity(0.8))
                             }
                         }
-                        .buttonStyle(.plain)
+                        .buttonStyle(.plain).pointerOnHover()
                     }
                 }
 
@@ -3102,7 +3072,7 @@ struct LLMSettingsView: View {
                                             .stroke(appState.selectedLLMTask == task ? Color.clear : MBColors.border, lineWidth: 1)
                                     )
                             }
-                            .buttonStyle(.plain)
+                            .buttonStyle(.plain).pointerOnHover()
                         }
                     }
                 }
@@ -3163,7 +3133,7 @@ struct LLMSettingsView: View {
                         }
                         .foregroundColor(MBColors.accent)
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(.plain).pointerOnHover()
                 }
             }
         }

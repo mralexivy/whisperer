@@ -100,7 +100,7 @@ struct PromptWordsSection: View {
                                 .fill(WhispererColors.accentGradient)
                         )
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(.plain).pointerOnHover()
             }
         }
         .padding(12)
@@ -153,7 +153,7 @@ struct PromptWordsSection: View {
                     .font(.system(size: 11, weight: .medium))
                     .foregroundColor(.red.opacity(0.8))
             }
-            .buttonStyle(.plain)
+            .buttonStyle(.plain).pointerOnHover()
         }
     }
 
@@ -182,7 +182,7 @@ struct PromptWordsSection: View {
                     .font(.system(size: 9, weight: .bold))
                     .foregroundColor(WhispererColors.tertiaryText(colorScheme))
             }
-            .buttonStyle(.plain)
+            .buttonStyle(.plain).pointerOnHover()
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 8)

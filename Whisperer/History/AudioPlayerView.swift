@@ -144,7 +144,7 @@ struct AudioPlayerView: View {
             }
             .scaleEffect(isPlayButtonHovered ? 1.06 : 1.0)
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.plain).pointerOnHover()
         .onHover { hovering in
             withAnimation(.easeOut(duration: 0.15)) {
                 isPlayButtonHovered = hovering

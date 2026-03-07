@@ -75,7 +75,7 @@ struct OverlayView: View {
                             .foregroundColor(.red)
                     }
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(.plain).pointerOnHover()
                 .help("Stop and close")
                 .accessibilityLabel("Stop recording and close")
             }

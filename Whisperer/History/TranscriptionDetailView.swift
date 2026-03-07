@@ -198,7 +198,7 @@ struct TranscriptionDetailView: View {
                             radius: 4, y: 1
                         )
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(.plain).pointerOnHover()
                 }
             }
 
@@ -519,7 +519,7 @@ struct DetailHeaderButton: View {
                 )
                 .scaleEffect(isHovered ? 1.06 : 1.0)
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.plain).pointerOnHover()
         .onHover { hovering in
             withAnimation(.easeInOut(duration: 0.12)) {
                 isHovered = hovering
@@ -565,7 +565,7 @@ struct RetranscribeButton: View {
             )
             .scaleEffect(isHovered ? 1.06 : 1.0)
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.plain).pointerOnHover()
         .disabled(isRetranscribing)
         .onHover { hovering in
             withAnimation(.easeInOut(duration: 0.12)) {
