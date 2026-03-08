@@ -331,11 +331,18 @@ private class DownloadDelegate: NSObject, URLSessionDownloadDelegate {
 
     func urlSession(_ session: URLSession, downloadTask: URLSessionDownloadTask, didWriteData bytesWritten: Int64, totalBytesWritten: Int64, totalBytesExpectedToWrite: Int64) {
         let progress = Double(totalBytesWritten) / Double(totalBytesExpectedToWrite)
+        let percent = Int(progress * 100)
+
+        // Only fire callback when percentage changes (every 1%)
+        guard percent != lastReportedPercent else { return }
+        lastReportedPercent = percent
 
         DispatchQueue.main.async { [weak self] in
             self?.progressCallback(progress)
         }
     }
+
+    private var lastReportedPercent: Int = -1
 
     func urlSession(_ session: URLSession, taskIsWaitingForConnectivity task: URLSessionTask) {
         Logger.debug("Waiting for network connectivity...", subsystem: .model)

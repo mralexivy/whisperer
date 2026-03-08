@@ -5116,6 +5116,8 @@ bool whisper_vad_detect_speech(
     struct ggml_tensor * prob  = ggml_graph_get_tensor(gf, "prob");
 
     // we are going to reuse the graph multiple times for each chunk
+    // Reset timing so we report per-call time, not cumulative across calls
+    vctx->t_vad_us = 0;
     const int64_t t_start_vad_us = ggml_time_us();
 
     for (int i = 0; i < n_chunks; i++) {

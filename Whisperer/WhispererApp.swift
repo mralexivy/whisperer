@@ -80,18 +80,20 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         // Show onboarding window on first launch (pure UI, runs immediately)
         OnboardingWindowManager.shared.showIfNeeded()
 
-        // Defer heavy service initialization to let MenuBarExtra complete initial layout.
-        // Prevents potential EXC_BAD_ACCESS from AttributeGraph metadata processing
-        // during concurrent service init and SwiftUI layout.
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
+        // Defer heavy service initialization until SwiftUI's AttributeGraph
+        // metadata processing has settled. The gate opens after 2 main-thread
+        // runloop yields (with a 3-second safety timeout).
+        AudioStartupGate.shared.scheduleOpen()
+        Task { [weak self] in
+            await AudioStartupGate.shared.waitForReady()
             guard let self = self else { return }
 
-            self.setupComponents()
-            self.setupOverlay()
-
-            Task {
-                await self.checkPermissions()
+            await MainActor.run {
+                self.setupComponents()
+                self.setupOverlay()
             }
+
+            await self.checkPermissions()
         }
     }
 
@@ -102,6 +104,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         appState.textInjector = TextInjector()
         appState.audioMuter = AudioMuter()
         appState.soundPlayer = SoundPlayer()
+        appState.textSelectionService = TextSelectionService()
 
         // Set initial selected microphone
         appState.audioRecorder?.selectedDeviceID = appState.audioDeviceManager.selectedDevice?.id
@@ -1482,22 +1485,56 @@ struct SettingsTabView: View {
 
                 // Audio Settings - compact card
                 settingsCard(title: "Audio", icon: "speaker.wave.2.fill", color: .orange) {
-                    HStack {
-                        VStack(alignment: .leading, spacing: 3) {
-                            Text("Mute other audio")
-                                .font(.system(size: 13, weight: .medium))
-                                .foregroundColor(MBColors.textPrimary)
-                            Text("Pause system audio while recording")
-                                .font(.system(size: 11))
-                                .foregroundColor(MBColors.textSecondary)
+                    VStack(spacing: 12) {
+                        HStack {
+                            VStack(alignment: .leading, spacing: 3) {
+                                Text("Mute other audio")
+                                    .font(.system(size: 13, weight: .medium))
+                                    .foregroundColor(MBColors.textPrimary)
+                                Text("Pause system audio while recording")
+                                    .font(.system(size: 11))
+                                    .foregroundColor(MBColors.textSecondary)
+                            }
+
+                            Spacer()
+
+                            Toggle("", isOn: $appState.muteOtherAudioDuringRecording)
+                                .toggleStyle(.switch)
+                                .tint(MBColors.accent)
+                                .labelsHidden()
                         }
 
-                        Spacer()
+                        Rectangle()
+                            .fill(Color.white.opacity(0.04))
+                            .frame(height: 1)
 
-                        Toggle("", isOn: $appState.muteOtherAudioDuringRecording)
-                            .toggleStyle(.switch)
+                        HStack {
+                            VStack(alignment: .leading, spacing: 3) {
+                                Text("Sound feedback")
+                                    .font(.system(size: 13, weight: .medium))
+                                    .foregroundColor(MBColors.textPrimary)
+                                Text("Audio cue on recording start/stop")
+                                    .font(.system(size: 11))
+                                    .foregroundColor(MBColors.textSecondary)
+                            }
+
+                            Spacer()
+
+                            Picker("", selection: Binding(
+                                get: { appState.soundPlayer?.soundOption ?? .defaultSounds },
+                                set: { newValue in
+                                    appState.soundPlayer?.soundOption = newValue
+                                    newValue.save()
+                                }
+                            )) {
+                                ForEach(SoundOption.allCases, id: \.self) { option in
+                                    Text(option.displayName).tag(option)
+                                }
+                            }
+                            .pickerStyle(.menu)
+                            .frame(width: 110)
                             .tint(MBColors.accent)
-                            .labelsHidden()
+                        }
                     }
                 }
 
@@ -2603,9 +2640,10 @@ private struct SubsystemToggleRow: View {
 @available(macOS 26.0, *)
 private struct SpeechAnalyzerTestSection: View {
     @StateObject private var diagnostics = SpeechAnalyzerDiagnostics()
+    @State private var pulseScale: CGFloat = 1.0
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
+        VStack(alignment: .leading, spacing: 8) {
             HStack {
                 Text("SpeechAnalyzer Test")
                     .font(.system(size: 12, weight: .medium))
@@ -2613,52 +2651,117 @@ private struct SpeechAnalyzerTestSection: View {
 
                 Spacer()
 
-                Button(action: { diagnostics.runDiagnostics() }) {
-                    HStack(spacing: 4) {
-                        if diagnostics.isRunning {
-                            ProgressView()
-                                .controlSize(.mini)
-                                .scaleEffect(0.7)
-                        } else {
-                            Image(systemName: "play.fill")
-                                .font(.system(size: 9))
-                        }
-                        Text(diagnostics.isRunning ? "Running..." : "Run Test")
-                            .font(.system(size: 11, weight: .medium))
-                    }
-                    .foregroundColor(MBColors.textSecondary)
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 5)
-                    .background(MBColors.pill)
-                    .cornerRadius(6)
-                }
-                .buttonStyle(.plain).pointerOnHover()
-                .disabled(diagnostics.isRunning)
+                testButton
             }
 
-            if !diagnostics.status.isEmpty {
-                Text(diagnostics.status)
-                    .font(.system(size: 11))
-                    .foregroundColor(MBColors.textSecondary)
-            }
+            switch diagnostics.state {
+            case .idle:
+                EmptyView()
 
-            ForEach(diagnostics.results) { result in
+            case .preparing:
                 HStack(spacing: 6) {
-                    Image(systemName: result.passed ? "checkmark.circle.fill" : "xmark.circle.fill")
-                        .foregroundColor(result.passed ? .green : .red)
-                        .font(.system(size: 10))
-
-                    VStack(alignment: .leading, spacing: 1) {
-                        Text(result.actualText.isEmpty ? "[empty]" : result.actualText)
-                            .font(.system(size: 10.5, weight: .medium))
-                            .foregroundColor(MBColors.textPrimary)
-                            .lineLimit(1)
-                        Text("\(String(format: "%.1f", result.duration))s, \(String(format: "%.0f", result.latencyMs))ms")
-                            .font(.system(size: 9.5))
-                            .foregroundColor(MBColors.textSecondary)
-                    }
+                    ProgressView()
+                        .controlSize(.mini)
+                        .scaleEffect(0.7)
+                    Text("Preparing...")
+                        .font(.system(size: 11))
+                        .foregroundColor(MBColors.textSecondary)
                 }
+
+            case .recording:
+                HStack(spacing: 8) {
+                    // Pulsing red dot
+                    Circle()
+                        .fill(Color.red)
+                        .frame(width: 8, height: 8)
+                        .scaleEffect(pulseScale)
+                        .onAppear {
+                            withAnimation(.easeInOut(duration: 0.6).repeatForever(autoreverses: true)) {
+                                pulseScale = 1.4
+                            }
+                        }
+                        .onDisappear { pulseScale = 1.0 }
+
+                    Text("Listening...")
+                        .font(.system(size: 11, weight: .medium))
+                        .foregroundColor(MBColors.textPrimary)
+
+                    Spacer()
+
+                    Text(String(format: "%.1fs", diagnostics.recordingDuration))
+                        .font(.system(size: 11, weight: .medium, design: .monospaced))
+                        .foregroundColor(MBColors.textSecondary)
+                }
+                .padding(.vertical, 2)
+
+            case .transcribing:
+                HStack(spacing: 6) {
+                    ProgressView()
+                        .controlSize(.mini)
+                        .scaleEffect(0.7)
+                    Text("Transcribing...")
+                        .font(.system(size: 11))
+                        .foregroundColor(MBColors.textSecondary)
+                }
+
+            case .done(let text, let latencyMs):
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(text)
+                        .font(.system(size: 11, weight: .medium))
+                        .foregroundColor(text.hasPrefix("(") ? MBColors.textSecondary : MBColors.textPrimary)
+                        .lineLimit(3)
+
+                    Text("\(String(format: "%.0f", latencyMs))ms")
+                        .font(.system(size: 10, design: .monospaced))
+                        .foregroundColor(MBColors.textSecondary)
+                }
+
+            case .error(let message):
+                Text(message)
+                    .font(.system(size: 11))
+                    .foregroundColor(.red.opacity(0.8))
+                    .lineLimit(2)
             }
+        }
+    }
+
+    @ViewBuilder
+    private var testButton: some View {
+        switch diagnostics.state {
+        case .recording:
+            Button(action: { diagnostics.stopTest() }) {
+                HStack(spacing: 4) {
+                    Image(systemName: "stop.fill")
+                        .font(.system(size: 8))
+                    Text("Stop")
+                        .font(.system(size: 11, weight: .medium))
+                }
+                .foregroundColor(.red)
+                .padding(.horizontal, 10)
+                .padding(.vertical, 5)
+                .background(Color.red.opacity(0.1))
+                .cornerRadius(6)
+            }
+            .buttonStyle(.plain).pointerOnHover()
+
+        case .preparing, .transcribing:
+            EmptyView()
+
+        default:
+            Button(action: { diagnostics.startTest() }) {
+                HStack(spacing: 4) {
+                    Image(systemName: "mic.fill")
+                        .font(.system(size: 9))
+                    Text("Test")
+                        .font(.system(size: 11, weight: .medium))
+                }
+                .foregroundColor(MBColors.textSecondary)
+                .padding(.horizontal, 10)
+                .padding(.vertical, 5)
+                .background(MBColors.pill)
+                .cornerRadius(6)
+            }
+            .buttonStyle(.plain).pointerOnHover()
         }
     }
 }

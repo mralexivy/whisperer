@@ -45,6 +45,7 @@ struct SpeechSegment {
 class SileroVAD {
     private var vadCtx: OpaquePointer?
     private let modelPath: URL
+    private let threadCount: Int32
     private let queue = DispatchQueue(label: "silero.vad", qos: .userInteractive)
     private let ctxLock = NSLock()
 
@@ -56,8 +57,9 @@ class SileroVAD {
     var speechPadMs: Int32 = 100                  // Padding around speech segments (more generous)
     var samplesOverlap: Float = 0.1               // Overlap between segments in seconds
 
-    init(modelPath: URL) throws {
+    init(modelPath: URL, threads: Int32 = 2) throws {
         self.modelPath = modelPath
+        self.threadCount = threads
 
         // Verify model file exists before attempting to load
         guard FileManager.default.fileExists(atPath: modelPath.path) else {
@@ -78,7 +80,7 @@ class SileroVAD {
         try loadModel()
     }
 
-    private static var backendsLoaded = false
+    static var backendsLoaded = false
 
     private func loadModel() throws {
         print("🔄 Loading Silero VAD from: \(modelPath.path)")
@@ -93,7 +95,7 @@ class SileroVAD {
         }
 
         var params = whisper_vad_default_context_params()
-        params.n_threads = Int32(max(1, ProcessInfo.processInfo.activeProcessorCount - 2))
+        params.n_threads = threadCount
         // Use CPU only for VAD - Whisper already uses the GPU/Metal backend
         // Using GPU for VAD causes Metal backend conflicts
         params.use_gpu = false

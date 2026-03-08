@@ -41,6 +41,7 @@ class AudioDeviceManager: ObservableObject {
     private var deviceConnectedObserver: NSObjectProtocol?
     private var deviceDisconnectedObserver: NSObjectProtocol?
     private var isMonitoring = false
+    private var cachedDeviceUIDs: Set<String> = []
 
     private init() {
         // Load saved preference
@@ -53,20 +54,38 @@ class AudioDeviceManager: ObservableObject {
     // MARK: - Device Enumeration
 
     func refreshDevices() {
-        let devices = enumerateInputDevices()
+        // Dispatch CoreAudio queries off main thread to prevent deadlocks
+        // during HAL topology changes (the HAL may hold internal locks when
+        // calling our listener, and synchronous queries would deadlock)
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            let devices = AudioDeviceManager.enumerateInputDevices()
+            DispatchQueue.main.async {
+                guard let self else { return }
+                let previousDevices = self.availableInputDevices
+                self.availableInputDevices = devices
 
-        DispatchQueue.main.async { [weak self] in
-            guard let self = self else { return }
+                // Diff detection for diagnostics
+                let newUIDs = Set(devices.map { $0.uid })
+                let added = newUIDs.subtracting(self.cachedDeviceUIDs)
+                let removed = self.cachedDeviceUIDs.subtracting(newUIDs)
+                if !added.isEmpty {
+                    let names = devices.filter { added.contains($0.uid) }.map { $0.name }
+                    Logger.info("Audio devices added: \(names)", subsystem: .audio)
+                }
+                if !removed.isEmpty {
+                    let names = previousDevices.filter { removed.contains($0.uid) }.map { $0.name }
+                    Logger.warning("Audio devices removed: \(names)", subsystem: .audio)
+                }
+                self.cachedDeviceUIDs = newUIDs
 
-            let previousDevices = self.availableInputDevices
-            self.availableInputDevices = devices
-
-            // Update selected device
-            self.updateSelectedDevice(previousDevices: previousDevices)
+                self.updateSelectedDevice(previousDevices: previousDevices)
+            }
         }
     }
 
-    private func enumerateInputDevices() -> [AudioDevice] {
+    // nonisolated static: pure CoreAudio C API calls, no instance state access.
+    // Must be callable from background threads for deadlock-free HAL queries.
+    private nonisolated static func enumerateInputDevices() -> [AudioDevice] {
         var propertyAddress = AudioObjectPropertyAddress(
             mSelector: kAudioHardwarePropertyDevices,
             mScope: kAudioObjectPropertyScopeGlobal,
@@ -83,7 +102,7 @@ class AudioDeviceManager: ObservableObject {
         )
 
         guard status == noErr else {
-            print("Failed to get devices property size: \(status)")
+            Logger.error("Failed to get devices property size: \(status)", subsystem: .audio)
             return []
         }
 
@@ -100,7 +119,7 @@ class AudioDeviceManager: ObservableObject {
         )
 
         guard status == noErr else {
-            print("Failed to get devices: \(status)")
+            Logger.error("Failed to get devices: \(status)", subsystem: .audio)
             return []
         }
 
@@ -115,11 +134,11 @@ class AudioDeviceManager: ObservableObject {
             }
         }
 
-        print("Found \(inputDevices.count) input devices: \(inputDevices.map { $0.name })")
+        Logger.info("Found \(inputDevices.count) input devices: \(inputDevices.map { $0.name })", subsystem: .audio)
         return inputDevices
     }
 
-    private func hasInputStreams(deviceID: AudioDeviceID) -> Bool {
+    private nonisolated static func hasInputStreams(deviceID: AudioDeviceID) -> Bool {
         var propertyAddress = AudioObjectPropertyAddress(
             mSelector: kAudioDevicePropertyStreams,
             mScope: kAudioDevicePropertyScopeInput,
@@ -138,7 +157,7 @@ class AudioDeviceManager: ObservableObject {
         return status == noErr && propertySize > 0
     }
 
-    private func getDeviceName(deviceID: AudioDeviceID) -> String? {
+    private nonisolated static func getDeviceName(deviceID: AudioDeviceID) -> String? {
         var propertyAddress = AudioObjectPropertyAddress(
             mSelector: kAudioDevicePropertyDeviceNameCFString,
             mScope: kAudioObjectPropertyScopeGlobal,
@@ -163,7 +182,7 @@ class AudioDeviceManager: ObservableObject {
         return name as String
     }
 
-    private func getDeviceUID(deviceID: AudioDeviceID) -> String? {
+    private nonisolated static func getDeviceUID(deviceID: AudioDeviceID) -> String? {
         var propertyAddress = AudioObjectPropertyAddress(
             mSelector: kAudioDevicePropertyDeviceUID,
             mScope: kAudioObjectPropertyScopeGlobal,
@@ -197,14 +216,14 @@ class AudioDeviceManager: ObservableObject {
                 // Preferred device is available
                 if selectedDevice?.uid != device.uid {
                     selectedDevice = device
-                    print("Switched to preferred device: \(device.name)")
+                    Logger.info("Switched to preferred device: \(device.name)", subsystem: .audio)
                 }
                 return
             } else {
                 // Preferred device not available - check if it was just disconnected
                 let wasConnected = previousDevices.contains(where: { $0.uid == preferredUID })
                 if wasConnected {
-                    print("Preferred device disconnected, falling back to default")
+                    Logger.warning("Preferred device disconnected, falling back to default", subsystem: .audio)
                 }
             }
         }
@@ -213,14 +232,14 @@ class AudioDeviceManager: ObservableObject {
         if let defaultDevice = getDefaultInputDevice() {
             if selectedDevice?.id != defaultDevice.id {
                 selectedDevice = defaultDevice
-                print("Using default input device: \(defaultDevice.name)")
+                Logger.info("Using default input device: \(defaultDevice.name)", subsystem: .audio)
             }
         } else if let first = availableInputDevices.first {
             selectedDevice = first
-            print("Using first available device: \(first.name)")
+            Logger.info("Using first available device: \(first.name)", subsystem: .audio)
         } else {
             selectedDevice = nil
-            print("No input devices available")
+            Logger.warning("No input devices available", subsystem: .audio)
         }
     }
 
@@ -228,13 +247,13 @@ class AudioDeviceManager: ObservableObject {
         if let device = device {
             preferredDeviceUID = device.uid
             selectedDevice = device
-            print("Selected device: \(device.name)")
+            Logger.info("Selected device: \(device.name)", subsystem: .audio)
         } else {
             // nil means use system default
             preferredDeviceUID = nil
             if let defaultDevice = getDefaultInputDevice() {
                 selectedDevice = defaultDevice
-                print("Cleared preference, using default: \(defaultDevice.name)")
+                Logger.info("Cleared preference, using default: \(defaultDevice.name)", subsystem: .audio)
             }
         }
     }
@@ -259,8 +278,8 @@ class AudioDeviceManager: ObservableObject {
         )
 
         guard status == noErr,
-              let name = getDeviceName(deviceID: deviceID),
-              let uid = getDeviceUID(deviceID: deviceID) else {
+              let name = Self.getDeviceName(deviceID: deviceID),
+              let uid = Self.getDeviceUID(deviceID: deviceID) else {
             return nil
         }
 
@@ -293,7 +312,7 @@ class AudioDeviceManager: ObservableObject {
         )
 
         if status != noErr {
-            print("Failed to start device list monitoring: \(status)")
+            Logger.error("Failed to start device list monitoring: \(status)", subsystem: .audio)
             return
         }
 
@@ -310,7 +329,7 @@ class AudioDeviceManager: ObservableObject {
                 // When default device changes, refresh devices and update selection
                 // if user is following system default (preferredDeviceUID is nil)
                 if self.preferredDeviceUID == nil {
-                    print("Default input device changed, updating selection")
+                    Logger.info("Default input device changed, updating selection", subsystem: .audio)
                     self.refreshDevices()
                 }
             }
@@ -324,7 +343,7 @@ class AudioDeviceManager: ObservableObject {
         )
 
         if defaultStatus != noErr {
-            print("Failed to start default device monitoring: \(defaultStatus)")
+            Logger.error("Failed to start default device monitoring: \(defaultStatus)", subsystem: .audio)
             // Continue anyway - we have the device list monitoring
         }
 
@@ -337,7 +356,7 @@ class AudioDeviceManager: ObservableObject {
         ) { [weak self] notification in
             if let device = notification.object as? AVCaptureDevice,
                device.hasMediaType(.audio) {
-                print("AVFoundation: Audio device connected - \(device.localizedName)")
+                Logger.info("AVFoundation: Audio device connected - \(device.localizedName)", subsystem: .audio)
                 self?.refreshDevices()
             }
         }
@@ -349,13 +368,13 @@ class AudioDeviceManager: ObservableObject {
         ) { [weak self] notification in
             if let device = notification.object as? AVCaptureDevice,
                device.hasMediaType(.audio) {
-                print("AVFoundation: Audio device disconnected - \(device.localizedName)")
+                Logger.warning("AVFoundation: Audio device disconnected - \(device.localizedName)", subsystem: .audio)
                 self?.refreshDevices()
             }
         }
 
         isMonitoring = true
-        print("Started monitoring audio device changes (CoreAudio + AVFoundation)")
+        Logger.info("Started monitoring audio device changes (CoreAudio + AVFoundation)", subsystem: .audio)
     }
 
     func stopMonitoring() {
@@ -407,7 +426,7 @@ class AudioDeviceManager: ObservableObject {
         }
 
         isMonitoring = false
-        print("Stopped monitoring audio device changes")
+        Logger.info("Stopped monitoring audio device changes", subsystem: .audio)
     }
 
     // Note: deinit removed - AudioDeviceManager is a singleton that lives for app lifetime

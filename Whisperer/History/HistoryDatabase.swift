@@ -96,6 +96,44 @@ class HistoryDatabase {
     private init() {
         // Load persistent container
         _ = persistentContainer
+        migrateWordCountsIfNeeded()
+    }
+
+    // MARK: - Migrations
+
+    /// One-time migration to recalculate wordCount for all existing records
+    /// using the corrected algorithm (components by whitespace+newlines).
+    /// Old code used split(separator: " ") which could produce different counts.
+    private func migrateWordCountsIfNeeded() {
+        let migrationKey = "wordCountMigrationV1Done"
+        guard !UserDefaults.standard.bool(forKey: migrationKey) else { return }
+        guard let container = persistentContainer else { return }
+
+        let context = container.newBackgroundContext()
+        context.perform {
+            let request: NSFetchRequest<TranscriptionEntity> = TranscriptionEntity.fetchRequest()
+            do {
+                let entities = try context.fetch(request)
+                var updated = 0
+                for entity in entities {
+                    let correctCount = Int32(entity.transcription
+                        .components(separatedBy: .whitespacesAndNewlines)
+                        .filter { !$0.isEmpty }
+                        .count)
+                    if entity.wordCount != correctCount {
+                        entity.wordCount = correctCount
+                        updated += 1
+                    }
+                }
+                if context.hasChanges {
+                    try context.save()
+                    Logger.info("Word count migration: updated \(updated) of \(entities.count) records", subsystem: .app)
+                }
+                UserDefaults.standard.set(true, forKey: migrationKey)
+            } catch {
+                Logger.error("Word count migration failed: \(error)", subsystem: .app)
+            }
+        }
     }
 }
 

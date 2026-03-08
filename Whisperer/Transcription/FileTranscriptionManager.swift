@@ -57,8 +57,16 @@ class FileTranscriptionManager: ObservableObject {
     @Published var fileDuration: Double = 0.0
     @Published var fileSize: String = ""
     @Published var savedToHistory: Bool = false
+    @Published var estimatedTimeRemaining: TimeInterval?
+    @Published var processingDuration: TimeInterval = 0
+
+    var speedMultiplier: Double? {
+        guard processingDuration > 0, fileDuration > 0, state == .complete else { return nil }
+        return fileDuration / processingDuration
+    }
 
     private var isCancelled = false
+    private var transcriptionStartTime: Date?
     private var transcriptionTask: Task<Void, Never>?
 
     // Chunked transcription constants
@@ -71,7 +79,7 @@ class FileTranscriptionManager: ObservableObject {
     private var overlapSamples: Int { Int(overlapDuration * sampleRate) }
 
     // Supported file extensions
-    static let audioExtensions: Set<String> = ["wav", "mp3", "m4a", "aac", "aiff", "flac", "opus", "ogg"]
+    static let audioExtensions: Set<String> = ["wav", "mp3", "m4a", "aac", "aiff", "flac", "opus", "ogg", "caf"]
     static let videoExtensions: Set<String> = ["mp4", "mov", "m4v"]
     static let allExtensions: Set<String> = audioExtensions.union(videoExtensions)
 
@@ -154,6 +162,8 @@ class FileTranscriptionManager: ObservableObject {
                     self.totalChunks = chunks
                     self.currentChunk = 0
                     self.state = .transcribing
+                    self.transcriptionStartTime = Date()
+                    self.estimatedTimeRemaining = nil
                 }
 
                 var accumulatedText = ""
@@ -214,6 +224,16 @@ class FileTranscriptionManager: ObservableObject {
                         self.currentChunk = chunkIndex + 1
                         self.progress = Double(chunkIndex + 1) / Double(chunks)
                         self.transcriptionResult = accumulatedText
+
+                        // Update ETA
+                        if let startTime = self.transcriptionStartTime, chunkIndex + 1 < chunks {
+                            let elapsed = Date().timeIntervalSince(startTime)
+                            let perChunk = elapsed / Double(chunkIndex + 1)
+                            let remaining = perChunk * Double(chunks - chunkIndex - 1)
+                            self.estimatedTimeRemaining = remaining
+                        } else {
+                            self.estimatedTimeRemaining = nil
+                        }
                     }
                 }
 
@@ -223,10 +243,14 @@ class FileTranscriptionManager: ObservableObject {
                 await MainActor.run {
                     self.transcriptionResult = finalText
                     self.progress = 1.0
+                    self.estimatedTimeRemaining = nil
+                    if let startTime = self.transcriptionStartTime {
+                        self.processingDuration = Date().timeIntervalSince(startTime)
+                    }
                     self.state = .complete
                 }
 
-                Logger.info("File transcription complete: \(finalText.split(separator: " ").count) words from \(chunks) chunks", subsystem: .transcription)
+                Logger.info("File transcription complete: \(finalText.components(separatedBy: .whitespacesAndNewlines).filter { !$0.isEmpty }.count) words from \(chunks) chunks", subsystem: .transcription)
 
             } catch {
                 Logger.error("File transcription failed: \(error.localizedDescription)", subsystem: .transcription)
@@ -527,5 +551,53 @@ class FileTranscriptionManager: ObservableObject {
             return String(format: "%d:%02d:%02d", hours, mins, secs)
         }
         return String(format: "%d:%02d", minutes, secs)
+    }
+
+    // MARK: - Export
+
+    func exportAsText(to url: URL) throws {
+        let wordCount = transcriptionResult.components(separatedBy: .whitespacesAndNewlines).filter { !$0.isEmpty }.count
+        let wpm = fileDuration > 0 ? Int(Double(wordCount) / (fileDuration / 60.0)) : 0
+
+        var content = """
+        Transcription: \(fileName)
+        Date: \(DateFormatter.localizedString(from: Date(), dateStyle: .long, timeStyle: .medium))
+        Duration: \(formatDuration(fileDuration))
+        Words: \(wordCount)
+        WPM: \(wpm)
+        Model: \(AppState.shared.activeModelDisplayName)
+        Language: \(AppState.shared.selectedLanguage.displayName)
+        ---
+
+        \(transcriptionResult)
+        """
+
+        if let speed = speedMultiplier {
+            content = content.replacingOccurrences(of: "---", with: "Speed: \(String(format: "%.1f", speed))x\n---")
+        }
+
+        try content.write(to: url, atomically: true, encoding: .utf8)
+    }
+
+    func exportAsJSON(to url: URL) throws {
+        let wordCount = transcriptionResult.components(separatedBy: .whitespacesAndNewlines).filter { !$0.isEmpty }.count
+        let wpm = fileDuration > 0 ? Int(Double(wordCount) / (fileDuration / 60.0)) : 0
+
+        let json: [String: Any] = [
+            "text": transcriptionResult,
+            "metadata": [
+                "filename": fileName,
+                "date": ISO8601DateFormatter().string(from: Date()),
+                "duration": fileDuration,
+                "model": AppState.shared.activeModelDisplayName,
+                "language": AppState.shared.selectedLanguage.displayName,
+                "wordCount": wordCount,
+                "wpm": wpm,
+                "speedMultiplier": speedMultiplier ?? 0
+            ] as [String: Any]
+        ]
+
+        let data = try JSONSerialization.data(withJSONObject: json, options: [.prettyPrinted, .sortedKeys])
+        try data.write(to: url, options: .atomic)
     }
 }

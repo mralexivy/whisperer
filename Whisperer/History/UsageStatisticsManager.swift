@@ -85,6 +85,62 @@ struct MonthlyTotal: Identifiable {
     let wordCount: Int
 }
 
+// MARK: - Milestones
+
+enum MilestoneCategory: String {
+    case words = "Words"
+    case sessions = "Sessions"
+    case streak = "Streak"
+}
+
+struct Milestone: Identifiable, Equatable {
+    let id = UUID()
+    let category: MilestoneCategory
+    let threshold: Int
+    let label: String
+    let icon: String
+    var achieved: Bool
+    var achievedDate: Date?
+
+    static func == (lhs: Milestone, rhs: Milestone) -> Bool {
+        lhs.category == rhs.category && lhs.threshold == rhs.threshold
+    }
+
+    static let all: [Milestone] = [
+        // Words
+        Milestone(category: .words, threshold: 1_000, label: "1K Words", icon: "text.word.spacing", achieved: false),
+        Milestone(category: .words, threshold: 5_000, label: "5K Words", icon: "text.word.spacing", achieved: false),
+        Milestone(category: .words, threshold: 10_000, label: "10K Words", icon: "text.word.spacing", achieved: false),
+        Milestone(category: .words, threshold: 50_000, label: "50K Words", icon: "text.word.spacing", achieved: false),
+        Milestone(category: .words, threshold: 100_000, label: "100K Words", icon: "text.word.spacing", achieved: false),
+        Milestone(category: .words, threshold: 500_000, label: "500K Words", icon: "text.word.spacing", achieved: false),
+        // Sessions
+        Milestone(category: .sessions, threshold: 50, label: "50 Sessions", icon: "mic.fill", achieved: false),
+        Milestone(category: .sessions, threshold: 100, label: "100 Sessions", icon: "mic.fill", achieved: false),
+        Milestone(category: .sessions, threshold: 500, label: "500 Sessions", icon: "mic.fill", achieved: false),
+        Milestone(category: .sessions, threshold: 1_000, label: "1K Sessions", icon: "mic.fill", achieved: false),
+        Milestone(category: .sessions, threshold: 5_000, label: "5K Sessions", icon: "mic.fill", achieved: false),
+        // Streak
+        Milestone(category: .streak, threshold: 7, label: "7-Day Streak", icon: "flame.fill", achieved: false),
+        Milestone(category: .streak, threshold: 14, label: "14-Day Streak", icon: "flame.fill", achieved: false),
+        Milestone(category: .streak, threshold: 30, label: "30-Day Streak", icon: "flame.fill", achieved: false),
+        Milestone(category: .streak, threshold: 60, label: "60-Day Streak", icon: "flame.fill", achieved: false),
+        Milestone(category: .streak, threshold: 100, label: "100-Day Streak", icon: "flame.fill", achieved: false),
+        Milestone(category: .streak, threshold: 365, label: "365-Day Streak", icon: "flame.fill", achieved: false),
+    ]
+}
+
+// MARK: - Personal Records
+
+struct PersonalRecords: Equatable {
+    var longestTranscriptionWords: Int = 0
+    var longestTranscriptionDate: Date?
+    var mostWordsInDay: Int = 0
+    var mostWordsInDayDate: Date?
+    var mostSessionsInDay: Int = 0
+    var mostSessionsInDayDate: Date?
+}
+
 // MARK: - Manager
 
 @MainActor
@@ -103,6 +159,23 @@ class UsageStatisticsManager: ObservableObject {
     @Published var monthlyTotals: [MonthlyTotal] = []
     @Published var growthPercentage: Double = 0
     @Published var activeStreak: Int = 0
+    @Published var bestStreak: Int = 0
+
+    // Time saved
+    @Published var timeSavedMinutes: Double = 0
+    @Published var userTypingWPM: Int = 40 {
+        didSet {
+            UserDefaults.standard.set(userTypingWPM, forKey: "userTypingWPM")
+        }
+    }
+
+    // Milestones
+    @Published var achievedMilestones: [Milestone] = []
+    @Published var nextMilestone: Milestone?
+    @Published var milestoneProgress: Double = 0
+
+    // Personal records
+    @Published var personalRecords: PersonalRecords = PersonalRecords()
 
     // Previous period for comparison
     @Published var previousPeriodWords: Int = 0
@@ -118,6 +191,13 @@ class UsageStatisticsManager: ObservableObject {
     private var transcriptionObserver: Any?
 
     init() {
+        if UserDefaults.standard.object(forKey: "userTypingWPM") != nil {
+            userTypingWPM = UserDefaults.standard.integer(forKey: "userTypingWPM")
+        }
+        if UserDefaults.standard.object(forKey: "bestStreak") != nil {
+            bestStreak = UserDefaults.standard.integer(forKey: "bestStreak")
+        }
+
         transcriptionObserver = NotificationCenter.default.addObserver(
             forName: NSNotification.Name("TranscriptionSaved"),
             object: nil,
@@ -158,6 +238,9 @@ class UsageStatisticsManager: ObservableObject {
         computeGrowth(current: currentEntities, previous: previousEntities)
         computeStreak(allEntities: allEntities)
         computeMonthlyTotals(allEntities: allEntities)
+        computeTimeSaved(allEntities: allEntities)
+        computeMilestones(allEntities: allEntities)
+        computePersonalRecords(allEntities: allEntities)
 
         isLoading = false
     }
@@ -347,6 +430,7 @@ class UsageStatisticsManager: ObservableObject {
         let calendar = Calendar.current
         let transcriptionDays = Set(allEntities.map { calendar.startOfDay(for: $0.timestamp) })
 
+        // Compute active streak (from today/yesterday backwards)
         var streak = 0
         var checkDate = calendar.startOfDay(for: Date())
 
@@ -366,6 +450,30 @@ class UsageStatisticsManager: ObservableObject {
         }
 
         activeStreak = streak
+
+        // Compute best-ever streak by scanning all days chronologically
+        let sortedDays = transcriptionDays.sorted()
+        var currentRun = 0
+        var longestRun = 0
+        var previousDay: Date?
+
+        for day in sortedDays {
+            if let prev = previousDay,
+               let nextExpected = calendar.date(byAdding: .day, value: 1, to: prev),
+               calendar.isDate(day, inSameDayAs: nextExpected) {
+                currentRun += 1
+            } else {
+                currentRun = 1
+            }
+            longestRun = max(longestRun, currentRun)
+            previousDay = day
+        }
+
+        // Persist best streak (only update if we beat the record)
+        if longestRun > bestStreak {
+            bestStreak = longestRun
+            UserDefaults.standard.set(bestStreak, forKey: "bestStreak")
+        }
     }
 
     // MARK: - Monthly Totals (Sparkline)
@@ -395,6 +503,109 @@ class UsageStatisticsManager: ObservableObject {
         }
 
         monthlyTotals = totals
+    }
+
+    // MARK: - Time Saved
+
+    private func computeTimeSaved(allEntities: [TranscriptionEntity]) {
+        let allWords = allEntities.reduce(0) { $0 + Int($1.wordCount) }
+        let typingWPM = max(userTypingWPM, 1)
+        let speakingWPM = 150.0
+
+        // Time it would take to type vs time spent speaking
+        let typingMinutes = Double(allWords) / Double(typingWPM)
+        let speakingMinutes = Double(allWords) / speakingWPM
+        timeSavedMinutes = max(0, typingMinutes - speakingMinutes)
+    }
+
+    var formattedTimeSaved: String {
+        if timeSavedMinutes < 1 {
+            return "< 1 min"
+        } else if timeSavedMinutes < 60 {
+            return "\(Int(timeSavedMinutes)) min"
+        } else {
+            let hours = Int(timeSavedMinutes) / 60
+            let mins = Int(timeSavedMinutes) % 60
+            return mins > 0 ? "\(hours)h \(mins)m" : "\(hours)h"
+        }
+    }
+
+    // MARK: - Milestones
+
+    private func computeMilestones(allEntities: [TranscriptionEntity]) {
+        let totalWordsAll = allEntities.reduce(0) { $0 + Int($1.wordCount) }
+        let totalSessionsAll = allEntities.count
+
+        var milestones = Milestone.all
+        for i in milestones.indices {
+            switch milestones[i].category {
+            case .words:
+                milestones[i].achieved = totalWordsAll >= milestones[i].threshold
+            case .sessions:
+                milestones[i].achieved = totalSessionsAll >= milestones[i].threshold
+            case .streak:
+                milestones[i].achieved = bestStreak >= milestones[i].threshold
+            }
+        }
+
+        achievedMilestones = milestones.filter { $0.achieved }
+
+        // Find next unachieved milestone (first unachieved in each category, pick closest)
+        let nextByCategory: [Milestone] = [MilestoneCategory.words, .sessions, .streak].compactMap { cat in
+            milestones.first { $0.category == cat && !$0.achieved }
+        }
+
+        if let next = nextByCategory.min(by: { progressFor($0, words: totalWordsAll, sessions: totalSessionsAll) > progressFor($1, words: totalWordsAll, sessions: totalSessionsAll) }) {
+            nextMilestone = next
+            milestoneProgress = progressFor(next, words: totalWordsAll, sessions: totalSessionsAll)
+        } else {
+            nextMilestone = nil
+            milestoneProgress = 1.0
+        }
+    }
+
+    private func progressFor(_ milestone: Milestone, words: Int, sessions: Int) -> Double {
+        let current: Int
+        switch milestone.category {
+        case .words: current = words
+        case .sessions: current = sessions
+        case .streak: current = bestStreak
+        }
+        return min(1.0, Double(current) / Double(max(milestone.threshold, 1)))
+    }
+
+    // MARK: - Personal Records
+
+    private func computePersonalRecords(allEntities: [TranscriptionEntity]) {
+        let calendar = Calendar.current
+        var records = PersonalRecords()
+
+        // Longest single transcription
+        if let longest = allEntities.max(by: { Int($0.wordCount) < Int($1.wordCount) }) {
+            records.longestTranscriptionWords = Int(longest.wordCount)
+            records.longestTranscriptionDate = longest.timestamp
+        }
+
+        // Most words and sessions in a single day
+        var dayWords: [Date: Int] = [:]
+        var daySessions: [Date: Int] = [:]
+        for entity in allEntities {
+            let day = calendar.startOfDay(for: entity.timestamp)
+            dayWords[day, default: 0] += Int(entity.wordCount)
+            daySessions[day, default: 0] += 1
+        }
+
+        if let (date, words) = dayWords.max(by: { $0.value < $1.value }) {
+            records.mostWordsInDay = words
+            records.mostWordsInDayDate = date
+        }
+
+        if let (date, count) = daySessions.max(by: { $0.value < $1.value }) {
+            records.mostSessionsInDay = count
+            records.mostSessionsInDayDate = date
+        }
+
+        personalRecords = records
     }
 
     // MARK: - Formatting Helpers

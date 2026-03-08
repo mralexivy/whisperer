@@ -118,7 +118,64 @@ struct ShortcutConfig: Codable, Equatable {
     }
 }
 
+// MARK: - Rewrite Shortcut Config
+
+struct RewriteShortcutConfig: Codable, Equatable {
+    var keyCode: UInt16
+    var modifierFlags: UInt
+    var isEnabled: Bool
+
+    // Default: Option+Shift+Space
+    static let defaultConfig = RewriteShortcutConfig(
+        keyCode: 49,  // Space
+        modifierFlags: NSEvent.ModifierFlags([.option, .shift]).rawValue,
+        isEnabled: false
+    )
+
+    var modifiers: NSEvent.ModifierFlags {
+        get { NSEvent.ModifierFlags(rawValue: modifierFlags) }
+        set { modifierFlags = newValue.rawValue }
+    }
+
+    var displayString: String {
+        guard isEnabled else { return "Not Set" }
+
+        var parts: [String] = []
+        let mods = modifiers
+        if mods.contains(.control) { parts.append("⌃") }
+        if mods.contains(.option) { parts.append("⌥") }
+        if mods.contains(.shift) { parts.append("⇧") }
+        if mods.contains(.command) { parts.append("⌘") }
+
+        if keyCode != 0 {
+            parts.append(keyCodeToDisplayString(keyCode))
+        }
+
+        return parts.isEmpty ? "Not Set" : parts.joined(separator: " + ")
+    }
+
+    static func load() -> RewriteShortcutConfig {
+        guard let data = UserDefaults.standard.data(forKey: "rewriteShortcutConfig"),
+              let config = try? JSONDecoder().decode(RewriteShortcutConfig.self, from: data) else {
+            return .defaultConfig
+        }
+        return config
+    }
+
+    func save() {
+        if let data = try? JSONEncoder().encode(self) {
+            UserDefaults.standard.set(data, forKey: "rewriteShortcutConfig")
+        }
+    }
+}
+
 // MARK: - Key Code to String
+
+func keyCodeToDisplayString(_ keyCode: UInt16) -> String {
+    return keyCodeToString(keyCode)
+}
+
+
 
 private func keyCodeToString(_ keyCode: UInt16) -> String {
     // Common key codes to readable strings

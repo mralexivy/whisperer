@@ -8,13 +8,63 @@
 import AppKit
 import SwiftUI
 
+enum OverlayPosition: String, CaseIterable {
+    case bottomCenter = "Bottom Center"
+    case topCenter = "Top Center"
+    case bottomLeft = "Bottom Left"
+    case bottomRight = "Bottom Right"
+}
+
+enum OverlaySize: String, CaseIterable {
+    case small = "Small"
+    case medium = "Medium"
+    case large = "Large"
+
+    var dimensions: (width: CGFloat, height: CGFloat) {
+        switch self {
+        case .small: return (340, 240)
+        case .medium: return (420, 300)
+        case .large: return (520, 360)
+        }
+    }
+
+    /// Scale factor relative to medium (1.0)
+    var scale: CGFloat {
+        switch self {
+        case .small: return 0.78
+        case .medium: return 1.0
+        case .large: return 1.2
+        }
+    }
+
+    static var current: OverlaySize {
+        let raw = UserDefaults.standard.string(forKey: "overlaySize") ?? OverlaySize.medium.rawValue
+        return OverlaySize(rawValue: raw) ?? .medium
+    }
+}
+
+// MARK: - Environment Key for Overlay Scale
+
+private struct OverlayScaleKey: EnvironmentKey {
+    static let defaultValue: CGFloat = 1.0
+}
+
+extension EnvironmentValues {
+    var overlayScale: CGFloat {
+        get { self[OverlayScaleKey.self] }
+        set { self[OverlayScaleKey.self] = newValue }
+    }
+}
+
 class OverlayPanel: NSPanel {
     private var stateObserver: NSObjectProtocol?
+    private var settingsObserver: NSObjectProtocol?
+    private var generation: UInt64 = 0
 
     init() {
         // Create the panel with proper style - fits transcription card + HUD capsule + shadows
         super.init(
-            contentRect: NSRect(x: 0, y: 0, width: 420, height: 220),
+            contentRect: NSRect(x: 0, y: 0, width: 420, height: 300),
             styleMask: [.borderless, .nonactivatingPanel],
             backing: .buffered,
             defer: false
@@ -29,7 +79,7 @@ class OverlayPanel: NSPanel {
         self.isOpaque = false
         self.hasShadow = false  // No window shadow - SwiftUI capsule has its own
 
-        // Create SwiftUI content
+        // Create SwiftUI content with size-aware scale
         let overlayView = OverlayView()
             .frame(maxWidth: .infinity)
             .background(Color.clear)
@@ -71,6 +121,15 @@ class OverlayPanel: NSPanel {
             self?.updateVisibility()
         }
 
+        // Observe overlay settings changes
+        settingsObserver = NotificationCenter.default.addObserver(
+            forName: .overlaySettingsChanged,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            self?.positionAtBottomCenter()
+        }
+
         // Check initial state
         updateVisibility()
     }
@@ -79,12 +138,34 @@ class OverlayPanel: NSPanel {
         guard let screen = NSScreen.main else { return }
 
         let screenRect = screen.visibleFrame
-        let panelWidth: CGFloat = 420
-        let panelHeight: CGFloat = 220
-        let bottomMargin: CGFloat = 10
 
-        let xPos = screenRect.origin.x + (screenRect.width - panelWidth) / 2
-        let yPos = screenRect.origin.y + bottomMargin
+        let positionPref = UserDefaults.standard.string(forKey: "overlayPosition")
+            .flatMap { OverlayPosition(rawValue: $0) } ?? .bottomCenter
+        let sizePref = UserDefaults.standard.string(forKey: "overlaySize")
+            .flatMap { OverlaySize(rawValue: $0) } ?? .medium
+
+        let dims = sizePref.dimensions
+        let panelWidth = dims.width
+        let panelHeight = dims.height
+        let margin: CGFloat = 10
+
+        let xPos: CGFloat
+        let yPos: CGFloat
+
+        switch positionPref {
+        case .bottomCenter:
+            xPos = screenRect.origin.x + (screenRect.width - panelWidth) / 2
+            yPos = screenRect.origin.y + margin
+        case .topCenter:
+            xPos = screenRect.origin.x + (screenRect.width - panelWidth) / 2
+            yPos = screenRect.origin.y + screenRect.height - panelHeight - margin
+        case .bottomLeft:
+            xPos = screenRect.origin.x + margin
+            yPos = screenRect.origin.y + margin
+        case .bottomRight:
+            xPos = screenRect.origin.x + screenRect.width - panelWidth - margin
+            yPos = screenRect.origin.y + margin
+        }
 
         self.setFrame(
             NSRect(x: xPos, y: yPos, width: panelWidth, height: panelHeight),
@@ -93,6 +174,9 @@ class OverlayPanel: NSPanel {
     }
 
     private func updateVisibility() {
+        generation &+= 1
+        let capturedGen = generation
+
         let appState = AppState.shared
         let shouldShow = appState.state != .idle || appState.showModelLoadingToast
 
@@ -106,7 +190,8 @@ class OverlayPanel: NSPanel {
             NSAnimationContext.runAnimationGroup { context in
                 context.duration = 0.2
                 self.animator().alphaValue = 0.0
-            } completionHandler: {
+            } completionHandler: { [weak self] in
+                guard let self = self, self.generation == capturedGen else { return }
                 self.orderOut(nil)
                 self.alphaValue = 1.0
             }

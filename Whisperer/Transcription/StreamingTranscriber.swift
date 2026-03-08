@@ -2,10 +2,9 @@
 //  StreamingTranscriber.swift
 //  Whisperer
 //
-//  Real-time audio transcription using whisper.cpp with periodic re-transcription.
-//  Instead of processing short chunks (which lack context and produce wrong words),
-//  this re-transcribes ALL accumulated audio every ~2s — giving whisper full context
-//  for accurate live preview. The final pass on stop is unchanged.
+//  VAD-chunked transcription pipeline. VAD pre-segments audio into speech regions,
+//  merges into bounded chunks (~20s), transcribes each chunk exactly once, stitches results.
+//  Replaces the O(n²) re-transcription-of-everything approach.
 //
 
 import Foundation
@@ -14,20 +13,28 @@ import Accelerate
 
 class StreamingTranscriber {
     private var whisper: TranscriptionBackend
-    private var vad: SileroVAD?
 
     private let sampleRate: Double = 16000.0
 
     // Memory bounds - maximum recording duration
     private let maxRecordingDuration: Double = 5.0 * 60.0  // 5 minutes
-    private var maxRecordingSamples: Int { Int(maxRecordingDuration * sampleRate) }  // 4,800,000 samples (~19MB)
+    private var maxRecordingSamples: Int { Int(maxRecordingDuration * sampleRate) }
     private var memoryLimitReached = false
 
-    // Full recording — the single source of truth for all transcription
+    // Full recording — single source of truth
     private var allRecordedSamples: [Float] = []
     private let allSamplesLock = SafeLock()
 
-    // Thread-safe processing flag — prevents overlapping re-transcriptions
+    // VAD-chunked pipeline state
+    private var vadSegmenter: VADSegmenter
+    private var lastVADScanIndex: Int = 0
+    private var lastTranscribedSampleIndex: Int = 0
+    private var completedChunkTexts: [String] = []
+    private var currentChunkLiveText: String = ""
+    private var pendingChunks: [VADSegmenter.AudioChunk] = []
+    private var isTranscribingChunk: Bool = false
+
+    // Thread-safe processing flag
     private let processingLock = SafeLock()
     private var _isProcessing = false
     private var isProcessing: Bool {
@@ -74,41 +81,37 @@ class StreamingTranscriber {
     // Language for transcription
     private var language: TranscriptionLanguage
 
-    // Prompt words for whisper.cpp initial_prompt (biases recognition toward specific vocabulary)
+    // Prompt words for whisper.cpp initial_prompt
     private var initialPrompt: String?
 
-    // Periodic re-transcription timer
-    private var reTranscriptionTask: Task<Void, Never>?
+    // VAD scan task
+    private var vadScanTask: Task<Void, Never>?
     private var isStopped: Bool = false
-    private let firstRetranscriptionDelay: UInt64
-    private let retranscriptionInterval: UInt64
 
     // Filler word removal (applied in final pass)
     private var fillerWordRemovalEnabled: Bool
 
-    // Chunk skip tracking for diagnostics
-    private var skippedCycles: Int = 0
+    // VAD scan interval
+    private let vadScanInterval: UInt64 = 500_000_000  // 500ms
 
-    /// Initialize with a pre-loaded WhisperBridge, optional VAD, language setting, prompt words, and filler word removal
+    /// Initialize with a pre-loaded backend
     init(
         backend: TranscriptionBackend,
         vad: SileroVAD? = nil,
         language: TranscriptionLanguage = .english,
         initialPrompt: String? = nil,
         fillerWordRemovalEnabled: Bool = false,
-        firstRetranscriptionDelay: UInt64 = 1_000_000_000,  // 1.0s — time before first live preview
-        retranscriptionInterval: UInt64 = 1_500_000_000     // 1.5s — interval between re-transcriptions
+        firstRetranscriptionDelay: UInt64 = 1_000_000_000,
+        retranscriptionInterval: UInt64 = 1_500_000_000
     ) {
         self.whisper = backend
-        self.vad = vad
         self.language = language
         self.initialPrompt = initialPrompt
         self.fillerWordRemovalEnabled = fillerWordRemovalEnabled
-        self.firstRetranscriptionDelay = firstRetranscriptionDelay
-        self.retranscriptionInterval = retranscriptionInterval
+        self.vadSegmenter = VADSegmenter(vad: vad, targetChunkDuration: 20.0, silenceForFinalization: 0.8)
     }
 
-    /// Start streaming transcription with periodic re-transcription
+    /// Start streaming transcription with VAD-chunked pipeline
     func start(onTranscription: @escaping (String) -> Void) {
         self.onTranscription = onTranscription
 
@@ -124,40 +127,32 @@ class StreamingTranscriber {
         isProcessing = false
         isStopped = false
         memoryLimitReached = false
+        lastVADScanIndex = 0
+        lastTranscribedSampleIndex = 0
+        completedChunkTexts = []
+        currentChunkLiveText = ""
+        pendingChunks = []
+        isTranscribingChunk = false
 
-        // Start periodic re-transcription timer
-        reTranscriptionTask = Task.detached(priority: .userInitiated) { [weak self] in
+        // Start VAD scan task
+        vadScanTask = Task.detached(priority: .userInitiated) { [weak self] in
             // Wait for initial audio to accumulate
-            try? await Task.sleep(nanoseconds: self?.firstRetranscriptionDelay ?? 1_500_000_000)
+            try? await Task.sleep(nanoseconds: 1_000_000_000)  // 1s
 
             while !Task.isCancelled {
                 guard let self = self, !self.isStopped else { break }
-
-                if !self.isProcessing {
-                    if self.skippedCycles > 0 {
-                        Logger.debug("Resumed after skipping \(self.skippedCycles) cycle(s)", subsystem: .transcription)
-                        self.skippedCycles = 0
-                    }
-                    self.performReTranscription()
-                } else {
-                    self.skippedCycles += 1
-                    if self.skippedCycles == 1 {
-                        Logger.debug("Skipping re-transcription cycle (previous still running)", subsystem: .transcription)
-                    }
-                }
-
-                try? await Task.sleep(nanoseconds: self.retranscriptionInterval)
+                self.scanAndProcessChunks()
+                try? await Task.sleep(nanoseconds: self.vadScanInterval)
             }
         }
 
-        Logger.debug("StreamingTranscriber started (periodic re-transcription mode, VAD: \(vad != nil))", subsystem: .transcription)
+        Logger.debug("StreamingTranscriber started (VAD-chunked pipeline)", subsystem: .transcription)
     }
 
-    /// Add audio samples from microphone (should be 16kHz mono float32)
+    /// Add audio samples from microphone
     func addSamples(_ samples: [Float]) {
         guard !samples.isEmpty else { return }
         guard !isStopped else { return }
-
         if memoryLimitReached { return }
 
         do {
@@ -165,7 +160,6 @@ class StreamingTranscriber {
                 if allRecordedSamples.count + samples.count > maxRecordingSamples {
                     Logger.warning("Memory limit reached (\(String(format: "%.1f", maxRecordingDuration/60))min), stopping sample collection", subsystem: .transcription)
                     memoryLimitReached = true
-
                     let remainingCapacity = maxRecordingSamples - allRecordedSamples.count
                     if remainingCapacity > 0 {
                         allRecordedSamples.append(contentsOf: samples.prefix(remainingCapacity))
@@ -179,119 +173,137 @@ class StreamingTranscriber {
         }
     }
 
-    // MARK: - Periodic Re-transcription
+    // MARK: - VAD Scan & Chunk Processing
 
-    /// Re-transcribe all accumulated audio for accurate live preview.
-    /// Each re-transcription has full audio context (like the final pass),
-    /// producing much more accurate text than short chunk-based processing.
-    private func performReTranscription() {
-        isProcessing = true
-
-        // Snapshot all recorded audio
-        var samples: [Float] = []
+    /// Scan new audio with VAD, emit chunks, transcribe them
+    private func scanAndProcessChunks() {
+        // Snapshot audio
+        var allSamples: [Float] = []
         do {
             try allSamplesLock.withLock {
-                samples = allRecordedSamples
+                allSamples = allRecordedSamples
             }
         } catch {
-            Logger.error("Failed to acquire allSamplesLock in performReTranscription: \(error.localizedDescription)", subsystem: .transcription)
-            isProcessing = false
+            Logger.error("Failed to acquire allSamplesLock in scanAndProcessChunks", subsystem: .transcription)
             return
         }
 
-        // Need minimum audio for meaningful transcription (0.5s)
-        let minSamples = Int(0.5 * sampleRate)
-        guard samples.count >= minSamples else {
-            isProcessing = false
-            return
+        guard allSamples.count > Int(0.5 * sampleRate) else { return }
+
+        // Run VAD scan on new audio
+        let result = vadSegmenter.scanAndEmitChunks(
+            allSamples: allSamples,
+            fromIndex: lastVADScanIndex,
+            lastTranscribedIndex: lastTranscribedSampleIndex
+        )
+        lastVADScanIndex = result.newScanIndex
+
+        // Queue new chunks
+        if !result.chunks.isEmpty {
+            pendingChunks.append(contentsOf: result.chunks)
+            Logger.debug("VAD emitted \(result.chunks.count) chunk(s), \(pendingChunks.count) pending", subsystem: .transcription)
         }
 
-        let duration = Double(samples.count) / sampleRate
-        Logger.debug("Re-transcribing \(String(format: "%.1f", duration))s of audio...", subsystem: .transcription)
+        // Process next pending chunk if not busy
+        processNextChunk()
+    }
 
-        // Re-transcribe ALL audio — singleSegment:false, no maxTokens limit
-        // This matches the final pass parameters for maximum accuracy
-        whisper.transcribeAsync(samples: samples, initialPrompt: initialPrompt, language: language) { [weak self] text in
+    /// Transcribe the next pending chunk
+    private func processNextChunk() {
+        guard !isTranscribingChunk, !pendingChunks.isEmpty else { return }
+
+        let chunk = pendingChunks.removeFirst()
+        isTranscribingChunk = true
+        isProcessing = true
+
+        let chunkDuration = Double(chunk.endSample - chunk.startSample) / sampleRate
+        Logger.debug("Transcribing chunk: \(String(format: "%.1f", chunkDuration))s (\(chunk.samples.count) samples)", subsystem: .transcription)
+
+        // Context from previous chunk
+        let prevText = completedChunkTexts.last
+        let prompt: String?
+        if let prev = prevText, !prev.isEmpty {
+            // Combine user's initial prompt words with context from previous chunk
+            var combinedPrompt = ""
+            if let ip = initialPrompt, !ip.isEmpty {
+                combinedPrompt = ip + " "
+            }
+            combinedPrompt += String(prev.suffix(100))
+            prompt = combinedPrompt
+        } else {
+            prompt = initialPrompt
+        }
+
+        // Set up live text callback on WhisperBridge if available
+        if let bridge = whisper as? WhisperBridge {
+            currentChunkLiveText = ""
+            bridge.onNewSegment = { [weak self] segmentText in
+                guard let self = self else { return }
+                self.currentChunkLiveText += (self.currentChunkLiveText.isEmpty ? "" : " ") + segmentText
+                self.updateLivePreview()
+            }
+            bridge.resetAbort()
+        }
+
+        whisper.transcribeAsync(
+            samples: chunk.samples,
+            initialPrompt: prompt,
+            language: language
+        ) { [weak self] text in
             guard let self = self else { return }
-            defer { self.isProcessing = false }
+
+            // Clear live segment callback
+            if let bridge = self.whisper as? WhisperBridge {
+                bridge.onNewSegment = nil
+            }
 
             let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
 
-            guard !trimmed.isEmpty else { return }
+            if !trimmed.isEmpty && !self.isHallucination(trimmed) {
+                // Deduplicate overlap with previous chunk
+                let deduped: String
+                if let prevText = self.completedChunkTexts.last, !prevText.isEmpty {
+                    deduped = VADSegmenter.deduplicateOverlap(previousText: prevText, newText: trimmed)
+                } else {
+                    deduped = trimmed
+                }
 
-            guard !self.isHallucination(trimmed) else {
-                Logger.debug("Re-transcription hallucination filtered: '\(trimmed.prefix(50))'", subsystem: .transcription)
-                return
+                if !deduped.isEmpty {
+                    self.completedChunkTexts.append(deduped)
+                }
             }
 
-            // Smart diff: keep stable prefix to reduce live text flickering
-            let previousText = self.fullTranscription
-            let displayText = self.smartDiffUpdate(previous: previousText, new: trimmed)
-            self.fullTranscription = displayText
+            self.lastTranscribedSampleIndex = chunk.endSample
+            self.currentChunkLiveText = ""
+            self.isTranscribingChunk = false
+            self.isProcessing = false
 
-            let transcription = displayText
-            DispatchQueue.main.async {
-                self.onTranscription?(transcription)
-            }
+            // Update live preview with completed chunks
+            self.updateLivePreview()
 
-            Logger.debug("Re-transcription result (\(String(format: "%.1f", duration))s): '\(trimmed.prefix(80))\(trimmed.count > 80 ? "..." : "")'", subsystem: .transcription)
+            // Process next pending chunk
+            self.processNextChunk()
         }
     }
 
-    // MARK: - Smart Diff Updates
-
-    /// Keep stable prefix of previous transcription, only update trailing words.
-    /// Prevents text flickering during periodic re-transcription by comparing word-level
-    /// longest common prefix. If >50% of previous words match, preserve original casing.
-    private func smartDiffUpdate(previous: String, new: String) -> String {
-        guard !previous.isEmpty, !new.isEmpty else { return new }
-
-        let prevWords = previous.split(separator: " ", omittingEmptySubsequences: true)
-        let newWords = new.split(separator: " ", omittingEmptySubsequences: true)
-        guard !prevWords.isEmpty, !newWords.isEmpty else { return new }
-
-        // Find longest common prefix (case/punctuation insensitive)
-        var commonLen = 0
-        for i in 0..<min(prevWords.count, newWords.count) {
-            let prevNorm = prevWords[i].lowercased().filter { $0.isLetter || $0.isNumber }
-            let newNorm = newWords[i].lowercased().filter { $0.isLetter || $0.isNumber }
-            if prevNorm == newNorm {
-                commonLen = i + 1
-            } else {
-                break
-            }
+    /// Compose live preview from completed chunks + current chunk text
+    private func updateLivePreview() {
+        var preview = completedChunkTexts.joined(separator: " ")
+        if !currentChunkLiveText.isEmpty {
+            if !preview.isEmpty { preview += " " }
+            preview += currentChunkLiveText
         }
 
-        // If >50% of previous words are stable, keep prefix + append new suffix.
-        // Use NEW word forms for the prefix to pick up updated punctuation
-        // (prevents artifacts like "We want to. try this" when "to." → "to try")
-        let stabilityRatio = Double(commonLen) / Double(prevWords.count)
-        if stabilityRatio > 0.5 && commonLen > 0 {
-            let kept = newWords[0..<commonLen].joined(separator: " ")
-            if commonLen < newWords.count {
-                return kept + " " + newWords[commonLen...].joined(separator: " ")
-            }
-            return kept
+        fullTranscription = preview
+
+        let text = preview
+        DispatchQueue.main.async { [weak self] in
+            self?.onTranscription?(text)
         }
-
-        return new
-    }
-
-    // MARK: - Energy Detection
-
-    /// Fast RMS energy check using vDSP
-    /// Threshold 0.003: built-in MacBook mic at arm's length produces speech RMS ~0.005-0.02.
-    private func hasEnergy(_ samples: [Float], threshold: Float = 0.003) -> Bool {
-        guard !samples.isEmpty else { return false }
-        var meanSquare: Float = 0
-        vDSP_measqv(samples, 1, &meanSquare, vDSP_Length(samples.count))
-        let rms = sqrt(meanSquare)
-        return rms > threshold
     }
 
     // MARK: - Hallucination Detection
 
-    /// Known whisper hallucination patterns — common outputs on silence or noise
     private static let hallucinationPatterns: [String] = [
         "thank you for watching",
         "thanks for watching",
@@ -306,17 +318,14 @@ class StreamingTranscriber {
         "goodbye",
     ]
 
-    /// Check if transcription text is a known hallucination pattern
     private func isHallucination(_ text: String) -> Bool {
         let lower = text.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         guard !lower.isEmpty else { return true }
 
-        // Single punctuation or very short meaningless output
         if lower.count <= 2 && !lower.contains(where: { $0.isLetter }) {
             return true
         }
 
-        // Check against known patterns
         for pattern in Self.hallucinationPatterns {
             if lower == pattern || lower.hasPrefix(pattern) {
                 Logger.debug("Hallucination detected: '\(text)' matches pattern '\(pattern)'", subsystem: .transcription)
@@ -324,24 +333,20 @@ class StreamingTranscriber {
             }
         }
 
-        // Check for repeated single word (e.g., "the the the the")
         let words = lower.split(separator: " ")
         if words.count >= 3 {
             let uniqueWords = Set(words)
             if uniqueWords.count == 1 {
-                Logger.debug("Hallucination detected: repeated word '\(words.first ?? "")'", subsystem: .transcription)
                 return true
             }
         }
 
-        // Check for repeating phrase pattern (e.g., "I'm going to be like, I'm going to be like")
         let maxPhraseLen = words.count / 3
         if maxPhraseLen >= 3 {
             for phraseLen in 3...min(6, maxPhraseLen) {
                 let phrase = words.prefix(phraseLen).joined(separator: " ")
                 let phraseCount = lower.components(separatedBy: phrase).count - 1
                 if phraseCount >= 3 {
-                    Logger.debug("Hallucination detected: phrase '\(phrase)' repeated \(phraseCount) times", subsystem: .transcription)
                     return true
                 }
             }
@@ -352,163 +357,167 @@ class StreamingTranscriber {
 
     // MARK: - Stop & Final Pass
 
-    /// Stop streaming and produce final transcription by re-transcribing the full recording.
-    /// The final pass uses VAD filtering and dictionary corrections for highest quality.
+    /// Stop streaming and return the best transcription.
     func stop() -> String {
         Logger.debug("Stopping StreamingTranscriber...", subsystem: .transcription)
 
-        // Cancel re-transcription timer
         isStopped = true
-        reTranscriptionTask?.cancel()
-        reTranscriptionTask = nil
-        isProcessing = false
+        vadScanTask?.cancel()
+        vadScanTask = nil
 
-        // Get the complete recording for final transcription
-        var allSamples: [Float] = []
-        do {
-            try allSamplesLock.withLock {
-                allSamples = allRecordedSamples
-            }
-        } catch {
-            Logger.error("Failed to acquire allSamplesLock in stop(): \(error.localizedDescription)", subsystem: .transcription)
+        // Abort any in-flight transcription
+        if let bridge = whisper as? WhisperBridge {
+            bridge.requestAbort()
+            bridge.onNewSegment = nil
         }
 
-        let totalDuration = Double(allSamples.count) / sampleRate
-        Logger.debug("Final pass: re-transcribing \(String(format: "%.1f", totalDuration))s of audio", subsystem: .transcription)
+        // Transcribe tail audio (unprocessed samples after last chunk)
+        transcribeTail()
 
-        // Need minimum audio length for meaningful transcription
-        let minSamples = Int(0.3 * sampleRate)  // 300ms
-        guard allSamples.count >= minSamples else {
-            Logger.debug("Recording too short (\(String(format: "%.2f", totalDuration))s), skipping", subsystem: .transcription)
+        // Combine all chunks
+        let rawText = completedChunkTexts.joined(separator: " ")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+
+        guard !rawText.isEmpty else {
             return clearAndReturn("")
         }
 
-        // VAD check: skip transcription if no speech detected in entire recording
-        if let vad = vad, !vad.containsSpeech(samples: allSamples) {
-            Logger.debug("VAD: No speech in recording", subsystem: .transcription)
-            return clearAndReturn("")
-        }
-
-        // Switch to final-pass mode for Parakeet (uses CTC vocab-boosted manager)
-        if let bridge = whisper as? FluidAudioBridge {
-            bridge.setMode(.finalPass)
-        }
-
-        // Full re-transcription of the complete recording.
-        // For SpeechAnalyzer: streaming may have missed tail audio if the user stopped
-        // before the next re-transcription cycle fired. Safe to call here because streaming
-        // is cancelled and isProcessing=false (no concurrent GCD/cooperative thread contention).
-        let rawText: String
-        let finalPassResult = whisper.transcribe(
-            samples: allSamples,
-            initialPrompt: initialPrompt,
-            language: language
-        )
-
-        if #available(macOS 26.0, *), whisper is SpeechAnalyzerBridge {
-            // Use final pass if it produced a result, fall back to streaming if it timed out
-            if !finalPassResult.isEmpty {
-                rawText = finalPassResult
-                Logger.debug("SpeechAnalyzer: Final pass succeeded (\(rawText.count) chars)", subsystem: .transcription)
-            } else {
-                rawText = fullTranscription
-                Logger.debug("SpeechAnalyzer: Final pass empty, using streaming result (\(rawText.count) chars)", subsystem: .transcription)
-            }
-        } else {
-            rawText = finalPassResult
-        }
-
-        // Restore streaming mode
-        if let bridge = whisper as? FluidAudioBridge {
-            bridge.setMode(.streaming)
-        }
-
-        var finalResult: String
-        if !rawText.isEmpty {
-            finalResult = DictionaryManager.shared.correctText(rawText)
-
-            // Remove filler words if enabled
-            if fillerWordRemovalEnabled {
-                finalResult = FillerWordFilter.removeFillers(from: finalResult)
-            }
-        } else {
-            finalResult = ""
+        var finalResult = DictionaryManager.shared.correctText(rawText)
+        if fillerWordRemovalEnabled {
+            finalResult = FillerWordFilter.removeFillers(from: finalResult)
         }
 
         return clearAndReturn(finalResult)
     }
 
-    /// Clear state and return the final result
-    private func clearAndReturn(_ result: String) -> String {
-        Logger.debug("StreamingTranscriber stopped (\(result.count) chars)", subsystem: .transcription)
-        return result
-    }
-
-    /// Stop asynchronously with proper cleanup (waits for in-flight re-transcription)
-    func stopAsync() async -> String {
-        Logger.debug("Stopping StreamingTranscriber (async)...", subsystem: .transcription)
-
-        // Cancel the re-transcription timer first
-        isStopped = true
-        reTranscriptionTask?.cancel()
-        reTranscriptionTask = nil
-
-        // Wait for any in-flight re-transcription to complete
-        var waitCount = 0
-        while isProcessing && waitCount < 40 {  // Max 2 seconds (40 * 50ms)
-            try? await Task.sleep(nanoseconds: 50_000_000)  // 50ms
-            waitCount += 1
-        }
-
-        if isProcessing {
-            Logger.warning("In-flight re-transcription still running after 2s, proceeding anyway", subsystem: .transcription)
-        } else if waitCount > 0 {
-            Logger.debug("In-flight re-transcription completed after \(waitCount * 50)ms", subsystem: .transcription)
-        }
-
-        // SpeechAnalyzer: use direct async path to avoid cooperative thread pool starvation.
-        // The sync transcribe() path blocks a cooperative thread on DispatchSemaphore.wait(),
-        // starving the Task.detached inside performTranscription() — causing 5s+ timeouts.
-        if #available(macOS 26.0, *), let speechBridge = whisper as? SpeechAnalyzerBridge {
-            return await stopWithSpeechAnalyzer(speechBridge)
-        }
-
-        // Other backends: use synchronous stop (final pass)
-        return stop()
-    }
-
-    /// SpeechAnalyzer-specific async final pass — mirrors stop() but calls the async API directly.
-    @available(macOS 26.0, *)
-    private func stopWithSpeechAnalyzer(_ speechBridge: SpeechAnalyzerBridge) async -> String {
-        isProcessing = false
-
-        // Get the complete recording
+    /// Transcribe remaining audio after the last completed chunk
+    private func transcribeTail() {
         var allSamples: [Float] = []
         do {
             try allSamplesLock.withLock {
                 allSamples = allRecordedSamples
             }
         } catch {
-            Logger.error("Failed to acquire allSamplesLock in stopWithSpeechAnalyzer: \(error.localizedDescription)", subsystem: .transcription)
+            Logger.error("Failed to acquire lock for tail transcription", subsystem: .transcription)
+            return
+        }
+
+        guard let tailChunk = vadSegmenter.finalizeTail(
+            allSamples: allSamples,
+            lastTranscribedIndex: lastTranscribedSampleIndex
+        ) else {
+            Logger.debug("No tail audio to transcribe", subsystem: .transcription)
+            return
+        }
+
+        let tailDuration = Double(tailChunk.endSample - tailChunk.startSample) / sampleRate
+        Logger.debug("Transcribing tail: \(String(format: "%.1f", tailDuration))s", subsystem: .transcription)
+
+        // Context from last chunk
+        let prompt: String?
+        if let prev = completedChunkTexts.last, !prev.isEmpty {
+            var combinedPrompt = ""
+            if let ip = initialPrompt, !ip.isEmpty {
+                combinedPrompt = ip + " "
+            }
+            combinedPrompt += String(prev.suffix(100))
+            prompt = combinedPrompt
+        } else {
+            prompt = initialPrompt
+        }
+
+        // Reset abort for tail transcription
+        if let bridge = whisper as? WhisperBridge {
+            bridge.resetAbort()
+        }
+
+        // Synchronous transcription for the tail
+        let text = whisper.transcribe(
+            samples: tailChunk.samples,
+            initialPrompt: prompt,
+            language: language,
+            singleSegment: false,
+            maxTokens: 0
+        ).trimmingCharacters(in: .whitespacesAndNewlines)
+
+        if !text.isEmpty && !isHallucination(text) {
+            let deduped: String
+            if let prevText = completedChunkTexts.last, !prevText.isEmpty {
+                deduped = VADSegmenter.deduplicateOverlap(previousText: prevText, newText: text)
+            } else {
+                deduped = text
+            }
+            if !deduped.isEmpty {
+                completedChunkTexts.append(deduped)
+            }
+        }
+    }
+
+    private func clearAndReturn(_ result: String) -> String {
+        Logger.debug("StreamingTranscriber stopped (\(result.count) chars)", subsystem: .transcription)
+        return result
+    }
+
+    /// Stop asynchronously with proper cleanup
+    func stopAsync() async -> String {
+        Logger.debug("Stopping StreamingTranscriber (async)...", subsystem: .transcription)
+
+        isStopped = true
+        vadScanTask?.cancel()
+        vadScanTask = nil
+
+        // Abort in-flight chunk transcription
+        if let bridge = whisper as? WhisperBridge {
+            bridge.requestAbort()
+        }
+
+        // Wait for in-flight chunk to complete (abort fires within ms)
+        var waitCount = 0
+        while isTranscribingChunk && waitCount < 40 {  // Max 2 seconds
+            try? await Task.sleep(nanoseconds: 50_000_000)
+            waitCount += 1
+        }
+
+        if isTranscribingChunk {
+            Logger.warning("In-flight chunk still transcribing after 2s, proceeding anyway", subsystem: .transcription)
+        } else if waitCount > 0 {
+            Logger.debug("In-flight chunk completed after \(waitCount * 50)ms", subsystem: .transcription)
+        }
+
+        // SpeechAnalyzer: use direct async path
+        if #available(macOS 26.0, *), let speechBridge = whisper as? SpeechAnalyzerBridge {
+            return await stopWithSpeechAnalyzer(speechBridge)
+        }
+
+        return stop()
+    }
+
+    /// SpeechAnalyzer-specific async final pass
+    @available(macOS 26.0, *)
+    private func stopWithSpeechAnalyzer(_ speechBridge: SpeechAnalyzerBridge) async -> String {
+        isProcessing = false
+
+        var allSamples: [Float] = []
+        do {
+            try allSamplesLock.withLock {
+                allSamples = allRecordedSamples
+            }
+        } catch {
+            Logger.error("Failed to acquire allSamplesLock in stopWithSpeechAnalyzer", subsystem: .transcription)
         }
 
         let totalDuration = Double(allSamples.count) / sampleRate
         Logger.debug("SpeechAnalyzer final pass (async): \(String(format: "%.1f", totalDuration))s of audio", subsystem: .transcription)
 
-        // Need minimum audio length
         let minSamples = Int(0.3 * sampleRate)
         guard allSamples.count >= minSamples else {
-            Logger.debug("Recording too short (\(String(format: "%.2f", totalDuration))s), skipping", subsystem: .transcription)
             return clearAndReturn("")
         }
 
-        // VAD check
-        if let vad = vad, !vad.containsSpeech(samples: allSamples) {
-            Logger.debug("VAD: No speech in recording", subsystem: .transcription)
+        if !hasEnergy(allSamples) {
             return clearAndReturn("")
         }
 
-        // Direct async transcription — no semaphores, no thread starvation
         let finalPassResult = await speechBridge.transcribeDirectAsync(
             samples: allSamples,
             language: language
@@ -517,10 +526,8 @@ class StreamingTranscriber {
         let rawText: String
         if !finalPassResult.isEmpty {
             rawText = finalPassResult
-            Logger.debug("SpeechAnalyzer: Async final pass succeeded (\(rawText.count) chars)", subsystem: .transcription)
         } else {
             rawText = fullTranscription
-            Logger.debug("SpeechAnalyzer: Async final pass empty, using streaming result (\(rawText.count) chars)", subsystem: .transcription)
         }
 
         var finalResult: String
@@ -536,12 +543,22 @@ class StreamingTranscriber {
         return clearAndReturn(finalResult)
     }
 
-    /// Get current full transcription (streaming result, before final pass)
+    // MARK: - Energy Detection
+
+    private func hasEnergy(_ samples: [Float], threshold: Float = 0.003) -> Bool {
+        guard !samples.isEmpty else { return false }
+        var meanSquare: Float = 0
+        vDSP_measqv(samples, 1, &meanSquare, vDSP_Length(samples.count))
+        let rms = sqrt(meanSquare)
+        return rms > threshold
+    }
+
+    // MARK: - Public Properties
+
     var currentTranscription: String {
         return fullTranscription
     }
 
-    /// Get total recorded audio duration in seconds
     var recordedDuration: Double {
         do {
             return try allSamplesLock.withLock {
@@ -554,8 +571,6 @@ class StreamingTranscriber {
     }
 
     /// Save recorded audio to WAV file
-    /// - Parameter url: Destination URL for the WAV file
-    /// - Returns: True if save was successful
     func saveRecording(to url: URL) -> Bool {
         var samples: [Float] = []
         do {
@@ -572,7 +587,6 @@ class StreamingTranscriber {
             return false
         }
 
-        // Create WAV file format: 16kHz mono PCM float32
         guard let format = AVAudioFormat(
             commonFormat: .pcmFormatFloat32,
             sampleRate: sampleRate,
@@ -590,7 +604,6 @@ class StreamingTranscriber {
 
         buffer.frameLength = AVAudioFrameCount(samples.count)
 
-        // Copy samples to buffer
         if let channelData = buffer.floatChannelData {
             samples.withUnsafeBufferPointer { ptr in
                 guard let baseAddress = ptr.baseAddress else { return }
@@ -598,7 +611,6 @@ class StreamingTranscriber {
             }
         }
 
-        // Write to file
         do {
             let file = try AVAudioFile(forWriting: url, settings: format.settings)
             try file.write(from: buffer)

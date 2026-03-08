@@ -45,9 +45,16 @@ class AudioRecorder: NSObject {
     private var startupRetryCount = 0  // Prevent infinite retry loops
     private var recordingStartTime: Date?  // Track when recording started for grace period
     private let startupGracePeriod: TimeInterval = 1.5  // Ignore config changes for 1.5s after start
+    private var recordingGeneration = 0  // Incremented each startRecording call; stale retries bail out
 
     // Notification observer for audio engine configuration changes
     private var configChangeObserver: NSObjectProtocol?
+
+    // Device-alive monitoring: detect when the recording device dies (e.g. monitor unplugged)
+    // This fires immediately when the device vanishes, unlike AVAudioEngineConfigurationChange
+    // which may be delayed or not fire at all.
+    private var monitoredDeviceID: AudioDeviceID?
+    private var deviceAliveListenerBlock: AudioObjectPropertyListenerBlock?
 
     override init() {
         super.init()
@@ -55,7 +62,8 @@ class AudioRecorder: NSObject {
     }
 
     deinit {
-        // Safety net: clean up observer if stopRecording() was never called
+        // Safety net: clean up observers if stopRecording() was never called
+        stopMonitoringDevice()
         if let observer = configChangeObserver {
             NotificationCenter.default.removeObserver(observer)
             configChangeObserver = nil
@@ -92,8 +100,9 @@ class AudioRecorder: NSObject {
             }
         }
 
-        // Stop current engine completely
-        cleanupEngineState()
+        // Stop current engine completely — use async teardown because the device
+        // may be dead, and engine.stop()/removeTap can block in CoreAudio's teardown
+        cleanupEngineState(asyncTeardown: true)
 
         // Wait a bit before restarting
         try? await Task.sleep(nanoseconds: 500_000_000)  // 500ms
@@ -170,10 +179,19 @@ class AudioRecorder: NSObject {
         recoveryAttempts = 0  // Reset recovery counter on new recording
         startupRetryCount = 0  // Reset startup retry counter
         recordingStartTime = Date()  // Set grace period start time
+        recordingGeneration += 1
+        let myGeneration = recordingGeneration
 
         do {
             return try await startRecordingInternal()
         } catch {
+            // A newer startRecording() call has taken over — don't retry or
+            // clean up, as that would destroy the new recording's engine.
+            guard recordingGeneration == myGeneration else {
+                Logger.debug("Stale recording attempt (gen \(myGeneration) vs \(recordingGeneration)), not retrying", subsystem: .audio)
+                throw error
+            }
+
             // First attempt failed — clean up completely and retry once with a fresh
             // engine and system default device. This handles cases where the audio unit
             // is left in a bad state by a previous session or device change.
@@ -190,6 +208,12 @@ class AudioRecorder: NSObject {
 
             // Let the audio subsystem settle before retrying
             try? await Task.sleep(nanoseconds: 100_000_000) // 100ms
+
+            // Check generation again after the sleep — another recording may have started
+            guard recordingGeneration == myGeneration else {
+                Logger.debug("Stale recording attempt after sleep (gen \(myGeneration) vs \(recordingGeneration)), not retrying", subsystem: .audio)
+                throw RecordingError.audioUnitFailed
+            }
 
             recordingStartTime = Date()
             return try await startRecordingInternal()
@@ -339,6 +363,13 @@ class AudioRecorder: NSObject {
             }
             try engine.start()
             isRecording = true
+
+            // Monitor the actual device the engine is using for disconnect detection.
+            // May differ from selectedDeviceID if fallback to system default occurred.
+            if let engineDeviceID = getEngineDeviceID() {
+                startMonitoringDevice(engineDeviceID)
+            }
+
             Logger.debug("Started recording", subsystem: .audio)
             return audioURL
         } catch {
@@ -497,11 +528,109 @@ class AudioRecorder: NSObject {
         }
     }
 
+    // MARK: - Device-Alive Monitoring
+
+    /// Query the AudioDeviceID currently bound to the engine's input audio unit.
+    /// Returns the actual device the engine is recording from (may differ from
+    /// selectedDeviceID if fallback to system default occurred).
+    private func getEngineDeviceID() -> AudioDeviceID? {
+        guard let au = audioEngine?.inputNode.audioUnit else { return nil }
+        var deviceID: AudioDeviceID = 0
+        var size = UInt32(MemoryLayout<AudioDeviceID>.size)
+        let status = AudioUnitGetProperty(
+            au,
+            kAudioOutputUnitProperty_CurrentDevice,
+            kAudioUnitScope_Global,
+            0,
+            &deviceID,
+            &size
+        )
+        return status == noErr ? deviceID : nil
+    }
+
+    /// Register a kAudioDevicePropertyDeviceIsAlive listener on the given device.
+    /// When the device dies (e.g. monitor unplugged), triggers recovery immediately —
+    /// faster and more reliable than AVAudioEngineConfigurationChange.
+    private func startMonitoringDevice(_ deviceID: AudioDeviceID) {
+        stopMonitoringDevice()
+
+        monitoredDeviceID = deviceID
+
+        var propertyAddress = AudioObjectPropertyAddress(
+            mSelector: kAudioDevicePropertyDeviceIsAlive,
+            mScope: kAudioObjectPropertyScopeGlobal,
+            mElement: kAudioObjectPropertyElementMain
+        )
+
+        deviceAliveListenerBlock = { [weak self] (_, _) in
+            self?.handleDeviceDied()
+        }
+
+        let status = AudioObjectAddPropertyListenerBlock(
+            deviceID,
+            &propertyAddress,
+            DispatchQueue.main,
+            deviceAliveListenerBlock!
+        )
+
+        if status != noErr {
+            Logger.warning("Failed to monitor device \(deviceID) alive status: \(status)", subsystem: .audio)
+            monitoredDeviceID = nil
+            deviceAliveListenerBlock = nil
+        } else {
+            Logger.debug("Monitoring device \(deviceID) alive status", subsystem: .audio)
+        }
+    }
+
+    /// Unregister the device-alive listener. Safe to call when no listener is active.
+    private func stopMonitoringDevice() {
+        guard let deviceID = monitoredDeviceID, let listenerBlock = deviceAliveListenerBlock else { return }
+
+        var propertyAddress = AudioObjectPropertyAddress(
+            mSelector: kAudioDevicePropertyDeviceIsAlive,
+            mScope: kAudioObjectPropertyScopeGlobal,
+            mElement: kAudioObjectPropertyElementMain
+        )
+
+        AudioObjectRemovePropertyListenerBlock(deviceID, &propertyAddress, DispatchQueue.main, listenerBlock)
+        Logger.debug("Stopped monitoring device \(deviceID) alive status", subsystem: .audio)
+        monitoredDeviceID = nil
+        deviceAliveListenerBlock = nil
+    }
+
+    /// Called when the monitored device's isAlive property changes.
+    /// Verifies the device is actually dead before triggering recovery.
+    private func handleDeviceDied() {
+        guard let deviceID = monitoredDeviceID else { return }
+
+        var isAlive: UInt32 = 1
+        var size = UInt32(MemoryLayout<UInt32>.size)
+        var propertyAddress = AudioObjectPropertyAddress(
+            mSelector: kAudioDevicePropertyDeviceIsAlive,
+            mScope: kAudioObjectPropertyScopeGlobal,
+            mElement: kAudioObjectPropertyElementMain
+        )
+
+        let status = AudioObjectGetPropertyData(deviceID, &propertyAddress, 0, nil, &size, &isAlive)
+
+        if status != noErr || isAlive == 0 {
+            Logger.warning("Device \(deviceID) died — triggering immediate recovery", subsystem: .audio)
+            stopMonitoringDevice()
+
+            if isRecording && autoRecoveryEnabled {
+                Task {
+                    await recoverAudioEngine()
+                }
+            }
+        }
+    }
+
     // MARK: - Engine Cleanup
 
     /// Fully tear down the audio engine and all associated state.
     /// Safe to call even if the engine is nil or partially initialized.
     private func cleanupEngineState(asyncTeardown: Bool = false) {
+        stopMonitoringDevice()
         if let observer = configChangeObserver {
             NotificationCenter.default.removeObserver(observer)
             configChangeObserver = nil

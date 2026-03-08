@@ -2,7 +2,7 @@
 //  SpeechAnalyzerDiagnostics.swift
 //  Whisperer
 //
-//  In-app diagnostic tests for SpeechAnalyzer transcription pipeline
+//  Live microphone test for SpeechAnalyzer transcription pipeline
 //
 
 #if canImport(Speech)
@@ -15,165 +15,192 @@ import Speech
 @MainActor
 final class SpeechAnalyzerDiagnostics: ObservableObject {
 
-    struct TestResult: Identifiable {
-        let id = UUID()
-        let fileName: String
-        let duration: Double
-        let expectedText: String
-        let actualText: String
-        let latencyMs: Double
-        let passed: Bool
+    enum TestState: Equatable {
+        case idle
+        case preparing
+        case recording
+        case transcribing
+        case done(text: String, latencyMs: Double)
+        case error(String)
     }
 
-    @Published var isRunning = false
-    @Published var results: [TestResult] = []
-    @Published var status: String = ""
+    @Published var state: TestState = .idle
+    @Published var recordingDuration: TimeInterval = 0
 
-    /// Run diagnostics using saved recordings from the Recordings directory.
-    /// Tests that SpeechAnalyzer produces correct full-sentence output.
-    func runDiagnostics() {
-        guard !isRunning else { return }
+    private var audioEngine: AVAudioEngine?
+    private var recordedSamples: [Float] = []
+    private var bridge: SpeechAnalyzerBridge?
+    private var durationTimer: Timer?
+    private var recordingStartTime: Date?
+
+    private static let maxDuration: TimeInterval = 15
+
+    func startTest() {
+        guard state == .idle || isTerminalState else { return }
+
+        state = .preparing
+        recordingDuration = 0
+        recordedSamples.removeAll()
 
         Task { [weak self] in
             guard let self = self else { return }
-            self.isRunning = true
-            self.results.removeAll()
 
-            // Gather test cases from saved recordings
-            let testCases = self.gatherTestCases()
-            guard !testCases.isEmpty else {
-                self.status = "No test recordings found"
-                self.isRunning = false
-                return
-            }
-
-            self.status = "Preparing SpeechAnalyzer..."
-
-            // Prepare a fresh bridge
-            let bridge: SpeechAnalyzerBridge
+            // Prepare bridge
             do {
-                bridge = try await SpeechAnalyzerBridge.prepare()
+                self.bridge = try await SpeechAnalyzerBridge.prepare()
             } catch {
-                self.status = "Failed to prepare SpeechAnalyzer: \(error.localizedDescription)"
-                self.isRunning = false
+                self.state = .error("Failed to prepare: \(error.localizedDescription)")
                 return
             }
 
-            // Run each test case
-            for (index, testCase) in testCases.enumerated() {
-                self.status = "Testing \(index + 1)/\(testCases.count): \(testCase.fileName)..."
+            // Set up audio capture
+            do {
+                try self.setupAudioCapture()
+                self.state = .recording
+                self.recordingStartTime = Date()
+                self.startDurationTimer()
+            } catch {
+                self.state = .error("Mic error: \(error.localizedDescription)")
+            }
+        }
+    }
 
-                guard let samples = self.loadSamplesFromWAV(url: testCase.url) else {
-                    self.results.append(TestResult(
-                        fileName: testCase.fileName,
-                        duration: 0,
-                        expectedText: testCase.expectedText,
-                        actualText: "[Failed to load WAV]",
-                        latencyMs: 0,
-                        passed: false
-                    ))
-                    continue
+    func stopTest() {
+        guard state == .recording else { return }
+        stopAudioCapture()
+        transcribeRecordedAudio()
+    }
+
+    func reset() {
+        stopAudioCapture()
+        state = .idle
+        recordingDuration = 0
+        recordedSamples.removeAll()
+    }
+
+    private var isTerminalState: Bool {
+        switch state {
+        case .done, .error: return true
+        default: return false
+        }
+    }
+
+    // MARK: - Audio Capture
+
+    private func setupAudioCapture() throws {
+        let engine = AVAudioEngine()
+        let inputNode = engine.inputNode
+
+        // Force audio unit creation
+        _ = inputNode.outputFormat(forBus: 0)
+
+        let recordingFormat = inputNode.outputFormat(forBus: 0)
+        guard recordingFormat.sampleRate > 0 else {
+            throw NSError(domain: "SpeechAnalyzerDiagnostics", code: -1,
+                         userInfo: [NSLocalizedDescriptionKey: "Invalid audio format"])
+        }
+
+        // Target: 16kHz mono Float32
+        guard let targetFormat = AVAudioFormat(
+            commonFormat: .pcmFormatFloat32,
+            sampleRate: 16_000,
+            channels: 1,
+            interleaved: false
+        ) else {
+            throw NSError(domain: "SpeechAnalyzerDiagnostics", code: -2,
+                         userInfo: [NSLocalizedDescriptionKey: "Cannot create target format"])
+        }
+
+        let converter = AVAudioConverter(from: recordingFormat, to: targetFormat)
+
+        inputNode.installTap(onBus: 0, bufferSize: 4096, format: recordingFormat) { [weak self] buffer, _ in
+            guard let self = self else { return }
+
+            if let converter = converter {
+                let ratio = targetFormat.sampleRate / recordingFormat.sampleRate
+                let capacity = AVAudioFrameCount(Double(buffer.frameLength) * ratio) + 1
+                guard let convertedBuffer = AVAudioPCMBuffer(pcmFormat: targetFormat, frameCapacity: capacity) else { return }
+
+                var nsError: NSError?
+                var consumed = false
+                converter.convert(to: convertedBuffer, error: &nsError) { _, statusPtr in
+                    defer { consumed = true }
+                    statusPtr.pointee = consumed ? .noDataNow : .haveData
+                    return consumed ? nil : buffer
                 }
 
-                let duration = Double(samples.count) / 16000.0
-                let start = CFAbsoluteTimeGetCurrent()
+                if let data = convertedBuffer.floatChannelData {
+                    let samples = Array(UnsafeBufferPointer(start: data[0], count: Int(convertedBuffer.frameLength)))
+                    DispatchQueue.main.async { [weak self] in
+                        self?.recordedSamples.append(contentsOf: samples)
+                        self?.enforceMaxDuration()
+                    }
+                }
+            } else if let data = buffer.floatChannelData {
+                let samples = Array(UnsafeBufferPointer(start: data[0], count: Int(buffer.frameLength)))
+                DispatchQueue.main.async { [weak self] in
+                    self?.recordedSamples.append(contentsOf: samples)
+                    self?.enforceMaxDuration()
+                }
+            }
+        }
 
-                // Test: sync transcribe (the path used by stop() final pass)
-                let result = bridge.transcribe(
-                    samples: samples,
-                    initialPrompt: nil,
-                    language: .english
-                )
+        try engine.start()
+        audioEngine = engine
+    }
 
-                let latencyMs = (CFAbsoluteTimeGetCurrent() - start) * 1000.0
-                let normalizedResult = result.lowercased().trimmingCharacters(in: .punctuationCharacters)
-                let normalizedExpected = testCase.expectedText.lowercased().trimmingCharacters(in: .punctuationCharacters)
+    private func stopAudioCapture() {
+        durationTimer?.invalidate()
+        durationTimer = nil
+        audioEngine?.inputNode.removeTap(onBus: 0)
+        audioEngine?.stop()
+        audioEngine = nil
+    }
 
-                // Pass if result contains most of the expected words
-                let expectedWords = Set(normalizedExpected.split(separator: " "))
-                let resultWords = Set(normalizedResult.split(separator: " "))
-                let matchRatio = expectedWords.isEmpty ? 0 : Double(expectedWords.intersection(resultWords).count) / Double(expectedWords.count)
-                let passed = matchRatio >= 0.6 && !result.isEmpty
+    private func startDurationTimer() {
+        durationTimer = Timer.scheduledTimer(withTimeInterval: 0.1, repeats: true) { [weak self] _ in
+            DispatchQueue.main.async { [weak self] in
+                guard let self = self, let start = self.recordingStartTime else { return }
+                self.recordingDuration = Date().timeIntervalSince(start)
+            }
+        }
+    }
 
-                self.results.append(TestResult(
-                    fileName: testCase.fileName,
-                    duration: duration,
-                    expectedText: testCase.expectedText,
-                    actualText: result,
-                    latencyMs: latencyMs,
-                    passed: passed
-                ))
+    private func enforceMaxDuration() {
+        let currentDuration = Double(recordedSamples.count) / 16_000.0
+        if currentDuration >= Self.maxDuration {
+            stopTest()
+        }
+    }
 
-                Logger.info("SpeechAnalyzer test: '\(testCase.fileName)' → '\(result)' (\(String(format: "%.0f", latencyMs))ms, \(passed ? "PASS" : "FAIL"))", subsystem: .transcription)
+    // MARK: - Transcription
+
+    private func transcribeRecordedAudio() {
+        guard !recordedSamples.isEmpty else {
+            state = .error("No audio recorded")
+            return
+        }
+
+        state = .transcribing
+        let samples = recordedSamples
+
+        Task { [weak self] in
+            guard let self = self, let bridge = self.bridge else {
+                self?.state = .error("Bridge not ready")
+                return
             }
 
-            let passCount = self.results.filter(\.passed).count
-            self.status = "\(passCount)/\(self.results.count) tests passed"
-            self.isRunning = false
-        }
-    }
+            let start = CFAbsoluteTimeGetCurrent()
+            let text = await bridge.transcribeDirectAsync(samples: samples, language: .auto)
+            let latencyMs = (CFAbsoluteTimeGetCurrent() - start) * 1000.0
 
-    // MARK: - Test Case Discovery
-
-    private struct TestCase {
-        let url: URL
-        let fileName: String
-        let expectedText: String
-    }
-
-    /// Finds recordings with recognizable expected text in the filename.
-    /// Filenames like "2026-03-04_18-07-07_Hello_how_are_you_doing_today.wav"
-    /// encode the expected transcription after the timestamp.
-    private func gatherTestCases() -> [TestCase] {
-        let fileManager = FileManager.default
-        let appSupport = fileManager.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
-        let recordingsDir = appSupport.appendingPathComponent("Whisperer/Recordings")
-
-        guard let files = try? fileManager.contentsOfDirectory(at: recordingsDir, includingPropertiesForKeys: nil) else {
-            return []
-        }
-
-        var testCases: [TestCase] = []
-        for file in files where file.pathExtension == "wav" {
-            let name = file.deletingPathExtension().lastPathComponent
-            // Extract expected text after "YYYY-MM-DD_HH-MM-SS_" prefix
-            // e.g., "2026-03-04_20-10-50_Hello" → "Hello"
-            // e.g., "2026-03-04_18-07-07_Hello_how_are_you" → "Hello how are you"
-            let parts = name.split(separator: "_", maxSplits: 2)
-            guard parts.count >= 3 else { continue }
-            // parts[0] = date, parts[1] = time, parts[2] = text with underscores
-            let expectedText = String(parts[2]).replacingOccurrences(of: "_", with: " ")
-            guard expectedText.count >= 3 else { continue }
-
-            testCases.append(TestCase(
-                url: file,
-                fileName: file.lastPathComponent,
-                expectedText: expectedText
-            ))
-        }
-
-        // Sort by date (most recent first), limit to 10
-        return testCases.sorted { $0.fileName > $1.fileName }.prefix(10).map { $0 }
-    }
-
-    // MARK: - Audio Loading
-
-    private func loadSamplesFromWAV(url: URL) -> [Float]? {
-        do {
-            let audioFile = try AVAudioFile(forReading: url)
-            let frameCount = AVAudioFrameCount(audioFile.length)
-            guard frameCount > 0 else { return nil }
-
-            guard let buffer = AVAudioPCMBuffer(pcmFormat: audioFile.processingFormat, frameCapacity: frameCount) else {
-                return nil
+            if text.isEmpty {
+                self.state = .done(text: "(no speech detected)", latencyMs: latencyMs)
+            } else {
+                self.state = .done(text: text, latencyMs: latencyMs)
             }
-            try audioFile.read(into: buffer)
 
-            guard let channelData = buffer.floatChannelData else { return nil }
-            return Array(UnsafeBufferPointer(start: channelData[0], count: Int(buffer.frameLength)))
-        } catch {
-            Logger.error("Failed to load WAV: \(error)", subsystem: .transcription)
-            return nil
+            Logger.info("SpeechAnalyzer test: '\(text)' (\(String(format: "%.0f", latencyMs))ms)", subsystem: .transcription)
         }
     }
 }

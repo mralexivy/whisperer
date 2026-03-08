@@ -87,7 +87,7 @@ extension TranscriptionEntity {
         entity.transcription = transcription
         entity.audioFileURL = audioFileURL
         entity.duration = duration
-        entity.wordCount = Int32(transcription.split(separator: " ").count)
+        entity.wordCount = Int32(transcription.components(separatedBy: .whitespacesAndNewlines).filter { !$0.isEmpty }.count)
         entity.language = language
         entity.modelUsed = modelUsed
         entity.isPinned = false

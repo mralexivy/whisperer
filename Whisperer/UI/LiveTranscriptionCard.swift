@@ -13,6 +13,7 @@ import Combine
 
 struct LiveTranscriptionCard: View {
     @ObservedObject var appState: AppState
+    @Environment(\.overlayScale) private var scale
     @StateObject private var textUpdater = SmoothTextUpdater()
     @State private var isPulsing = false
     @State private var showCursor = true
@@ -29,14 +30,12 @@ struct LiveTranscriptionCard: View {
             // Main card content
             VStack(spacing: 0) {
                 // Header: Gradient pulsing dot + "LIVE TRANSCRIPTION"
-                HStack(spacing: 8) {
+                HStack(spacing: 8 * scale) {
                     ZStack {
-                        // Glow ring
                         Circle()
                             .fill(blueAccent.opacity(isPulsing ? 0.25 : 0.0))
-                            .frame(width: 16, height: 16)
+                            .frame(width: 16 * scale, height: 16 * scale)
 
-                        // Gradient dot
                         Circle()
                             .fill(
                                 LinearGradient(
@@ -45,12 +44,12 @@ struct LiveTranscriptionCard: View {
                                     endPoint: .bottomTrailing
                                 )
                             )
-                            .frame(width: 8, height: 8)
+                            .frame(width: 8 * scale, height: 8 * scale)
                             .scaleEffect(isPulsing ? 1.2 : 1.0)
                     }
 
                     Text("LIVE TRANSCRIPTION")
-                        .font(.system(size: 11, weight: .bold, design: .rounded))
+                        .font(.system(size: 11 * scale, weight: .bold, design: .rounded))
                         .foregroundStyle(
                             LinearGradient(
                                 colors: [blueAccent, purpleAccent],
@@ -62,9 +61,9 @@ struct LiveTranscriptionCard: View {
 
                     Spacer()
                 }
-                .padding(.horizontal, 20)
-                .padding(.top, 14)
-                .padding(.bottom, 10)
+                .padding(.horizontal, 20 * scale)
+                .padding(.top, 14 * scale)
+                .padding(.bottom, 10 * scale)
 
                 // Gradient divider below header
                 Rectangle()
@@ -81,12 +80,12 @@ struct LiveTranscriptionCard: View {
                 ScrollViewReader { proxy in
                     ScrollView(.vertical, showsIndicators: false) {
                         Text(highlightedDisplayText)
-                            .font(.system(size: 16, weight: .regular, design: .rounded))
+                            .font(.system(size: 16 * scale, weight: .regular, design: .rounded))
                             .foregroundColor(.white.opacity(0.9))
-                            .lineSpacing(5)
+                            .lineSpacing(5 * scale)
                             .frame(maxWidth: .infinity, alignment: .leading)
-                            .padding(.horizontal, 20)
-                            .padding(.vertical, 14)
+                            .padding(.horizontal, 20 * scale)
+                            .padding(.vertical, 14 * scale)
                             .id("textEnd")
                     }
                     .onChange(of: textUpdater.displayedText) { _ in
@@ -95,22 +94,22 @@ struct LiveTranscriptionCard: View {
                         }
                     }
                 }
-                .frame(height: 72)
+                .frame(height: 72 * scale)
             }
             .background(
-                RoundedRectangle(cornerRadius: 14)
+                RoundedRectangle(cornerRadius: 14 * scale)
                     .fill(cardBackground)
             )
             .overlay(
-                RoundedRectangle(cornerRadius: 14)
+                RoundedRectangle(cornerRadius: 14 * scale)
                     .stroke(purpleAccent.opacity(0.15), lineWidth: 1)
             )
 
             // Speech bubble arrow pointing down to HUD
             SpeechBubbleArrow(color: cardBackground, borderColor: purpleAccent.opacity(0.15))
-                .frame(width: 20, height: 10)
+                .frame(width: 20 * scale, height: 10 * scale)
         }
-        .frame(width: 380)
+        .frame(width: 380 * scale)
         .tahoeTextFix()
         .accessibilityElement(children: .combine)
         .accessibilityLabel("Live transcription")

@@ -251,6 +251,14 @@ class WhisperBridge: TranscriptionBackend {
     private var isShuttingDown = false
     private var isInitialized = false
 
+    // Callbacks for chunked pipeline
+    var onNewSegment: ((String) -> Void)?   // Live text from new_segment_callback
+    private(set) var shouldAbort = false     // Checked by abort_callback
+    private var lastSegmentTime: Date?       // For stuck detection
+
+    func requestAbort() { shouldAbort = true }
+    func resetAbort() { shouldAbort = false; lastSegmentTime = nil }
+
     // Transcription timeout (default 30 seconds, longer on Intel)
     var transcriptionTimeout: TimeInterval = 30.0
 
@@ -443,6 +451,41 @@ class WhisperBridge: TranscriptionBackend {
         // Limit decoder output length (0 = no limit, >0 = max tokens per segment)
         // Prevents hallucination spirals where whisper generates 100+ repeated tokens
         wparams.max_tokens = maxTokens
+
+        // Set up callbacks for chunked pipeline
+        let userData = Unmanaged.passUnretained(self).toOpaque()
+
+        if onNewSegment != nil {
+            wparams.new_segment_callback = { ctx, state, nNew, userData in
+                guard let userData = userData, let ctx = ctx else { return }
+                let bridge = Unmanaged<WhisperBridge>.fromOpaque(userData).takeUnretainedValue()
+                bridge.lastSegmentTime = Date()
+
+                // Read the latest segments
+                let totalSegments = whisper_full_n_segments(ctx)
+                var newText = ""
+                for i in max(0, totalSegments - nNew)..<totalSegments {
+                    if let segText = whisper_full_get_segment_text(ctx, i) {
+                        newText += String(cString: segText)
+                    }
+                }
+                let trimmed = newText.trimmingCharacters(in: .whitespacesAndNewlines)
+                if !trimmed.isEmpty {
+                    bridge.onNewSegment?(trimmed)
+                }
+            }
+            wparams.new_segment_callback_user_data = userData
+        }
+
+        if shouldAbort == false {
+            // Only set abort callback if we might want to abort
+            wparams.abort_callback = { userData -> Bool in
+                guard let userData = userData else { return false }
+                let bridge = Unmanaged<WhisperBridge>.fromOpaque(userData).takeUnretainedValue()
+                return bridge.shouldAbort
+            }
+            wparams.abort_callback_user_data = userData
+        }
 
         // Always start fresh — streaming mode re-transcribes ALL audio each call,
         // so carrying decoder state between calls degrades quality.

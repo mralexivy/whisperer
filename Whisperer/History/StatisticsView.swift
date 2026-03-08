@@ -52,8 +52,14 @@ struct StatisticsView: View {
                     growthAndStreakColumn
                         .sectionFadeIn(index: 3, appeared: $appearedSections)
 
+                    HStack(alignment: .top, spacing: 12) {
+                        milestonesCard
+                        personalRecordsCard
+                    }
+                    .sectionFadeIn(index: 4, appeared: $appearedSections)
+
                     privacyFooter
-                        .sectionFadeIn(index: 4, appeared: $appearedSections)
+                        .sectionFadeIn(index: 5, appeared: $appearedSections)
                 }
 
                 Spacer(minLength: 40)
@@ -71,7 +77,7 @@ struct StatisticsView: View {
             // Reset animations on period change
             appearedSections = []
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
-                for i in 0..<5 {
+                for i in 0..<6 {
                     DispatchQueue.main.asyncAfter(deadline: .now() + Double(i) * 0.08) {
                         withAnimation(.easeOut(duration: 0.4)) {
                             _ = appearedSections.insert(i)
@@ -81,7 +87,7 @@ struct StatisticsView: View {
             }
         }
         .onAppear {
-            for i in 0..<5 {
+            for i in 0..<6 {
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.1 + Double(i) * 0.08) {
                     withAnimation(.easeOut(duration: 0.4)) {
                         _ = appearedSections.insert(i)
@@ -188,6 +194,14 @@ struct StatisticsView: View {
                 color: Color(hex: "06B6D4"),
                 colorScheme: colorScheme
             )
+            StatsSummaryCard(
+                icon: "clock.arrow.circlepath",
+                label: "TIME SAVED",
+                value: statsManager.formattedTimeSaved,
+                subLabel: "vs typing at \(statsManager.userTypingWPM) wpm",
+                color: Color(hex: "A855F7"),
+                colorScheme: colorScheme
+            )
         }
     }
 
@@ -244,7 +258,14 @@ struct StatisticsView: View {
     }
 
     private func yAxisTicks(maxValue: Double) -> [Double] {
-        guard maxValue > 0 else { return [0] }
+        guard maxValue > 0 else {
+            // Show placeholder ticks when empty so axis doesn't look broken
+            switch activityMetric {
+            case .words: return [0, 25, 50, 75]
+            case .time: return [0, 60, 120, 180]
+            case .sessions: return [0, 1, 2, 3]
+            }
+        }
         let rawStep = maxValue / 3.0
         let magnitude = pow(10, floor(log10(rawStep)))
         let normalized = rawStep / magnitude
@@ -366,7 +387,8 @@ struct StatisticsView: View {
                     // Day labels row
                     HStack(spacing: 0) {
                         ForEach(Array(data.enumerated()), id: \.offset) { index, day in
-                            Text(day.dayLabel)
+                            let showLabel = dayLabelVisible(index: index, total: data.count, day: day)
+                            Text(showLabel ? dayLabelText(for: day, total: data.count) : "")
                                 .font(.system(size: 10, weight: .medium))
                                 .foregroundColor(
                                     hoveredBarIndex == index
@@ -381,6 +403,26 @@ struct StatisticsView: View {
                 .frame(width: barAreaWidth)
             }
         }
+    }
+
+    private func dayLabelVisible(index: Int, total: Int, day: DailyActivity) -> Bool {
+        if total <= 14 { return true }
+        if total <= 31 {
+            // Month: show every ~5 days
+            return index % 5 == 0 || index == total - 1
+        }
+        // Year: show first day of each month
+        let calendar = Calendar.current
+        return calendar.component(.day, from: day.date) == 1
+    }
+
+    private func dayLabelText(for day: DailyActivity, total: Int) -> String {
+        if total <= 14 { return day.dayLabel }
+        if total <= 31 { return day.shortDateLabel }
+        // Year: show month abbreviation
+        let formatter = DateFormatter()
+        formatter.dateFormat = "MMM"
+        return formatter.string(from: day.date)
     }
 
     private func barHeight(for day: DailyActivity, maxValue: Double, containerHeight: CGFloat) -> CGFloat {
@@ -935,6 +977,13 @@ struct StatisticsView: View {
                             .foregroundColor(WhispererColors.secondaryText(colorScheme))
                             .multilineTextAlignment(.center)
                             .padding(.top, 4)
+
+                        if statsManager.bestStreak > 0 {
+                            Text("Best: \(statsManager.bestStreak) days")
+                                .font(.system(size: 10, weight: .medium))
+                                .foregroundColor(Color(hex: "F97316").opacity(0.7))
+                                .padding(.top, 2)
+                        }
                     }
                     Spacer()
                 }
@@ -1008,6 +1057,211 @@ struct StatisticsView: View {
         if streak < 7 { return "Building momentum" }
         if streak < 30 { return "On fire! Impressive consistency" }
         return "Legendary dedication"
+    }
+
+    // MARK: - Milestones
+
+    private var milestonesCard: some View {
+        SettingsCard(colorScheme: colorScheme, fillHeight: true) {
+            VStack(alignment: .leading, spacing: 14) {
+                SettingsSectionHeader(
+                    icon: "trophy.fill",
+                    title: "Milestones",
+                    colorScheme: colorScheme,
+                    color: Color(hex: "EAB308")
+                )
+
+                Text("\(statsManager.achievedMilestones.count) of \(Milestone.all.count) achieved")
+                    .font(.system(size: 11))
+                    .foregroundColor(WhispererColors.tertiaryText(colorScheme))
+                    .padding(.leading, 38)
+
+                // Next milestone progress
+                if let next = statsManager.nextMilestone {
+                    VStack(alignment: .leading, spacing: 8) {
+                        HStack(spacing: 8) {
+                            Image(systemName: next.icon)
+                                .font(.system(size: 12, weight: .semibold))
+                                .foregroundColor(Color(hex: "EAB308"))
+
+                            Text("Next: \(next.label)")
+                                .font(.system(size: 12, weight: .medium))
+                                .foregroundColor(WhispererColors.primaryText(colorScheme))
+
+                            Spacer()
+
+                            Text("\(Int(statsManager.milestoneProgress * 100))%")
+                                .font(.system(size: 11, weight: .medium, design: .rounded))
+                                .foregroundColor(Color(hex: "EAB308"))
+                                .monospacedDigit()
+                        }
+
+                        GeometryReader { geo in
+                            ZStack(alignment: .leading) {
+                                RoundedRectangle(cornerRadius: 3)
+                                    .fill(WhispererColors.border(colorScheme))
+                                    .frame(height: 5)
+
+                                RoundedRectangle(cornerRadius: 3)
+                                    .fill(
+                                        LinearGradient(
+                                            colors: [Color(hex: "EAB308"), Color(hex: "F97316")],
+                                            startPoint: .leading,
+                                            endPoint: .trailing
+                                        )
+                                    )
+                                    .frame(width: geo.size.width * statsManager.milestoneProgress, height: 5)
+                            }
+                        }
+                        .frame(height: 5)
+                    }
+                    .padding(12)
+                    .background(
+                        RoundedRectangle(cornerRadius: 10)
+                            .fill(Color(hex: "EAB308").opacity(0.05))
+                    )
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 10)
+                            .stroke(Color(hex: "EAB308").opacity(0.1), lineWidth: 1)
+                    )
+                }
+
+                // Achieved milestones grid
+                if !statsManager.achievedMilestones.isEmpty {
+                    let columns = [GridItem(.flexible()), GridItem(.flexible())]
+                    LazyVGrid(columns: columns, spacing: 8) {
+                        ForEach(statsManager.achievedMilestones.suffix(6)) { milestone in
+                            HStack(spacing: 6) {
+                                Image(systemName: milestone.icon)
+                                    .font(.system(size: 10, weight: .semibold))
+                                    .foregroundColor(milestoneColor(for: milestone.category))
+                                Text(milestone.label)
+                                    .font(.system(size: 10.5, weight: .medium))
+                                    .foregroundColor(WhispererColors.primaryText(colorScheme))
+                                Spacer()
+                            }
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 6)
+                            .background(
+                                RoundedRectangle(cornerRadius: 6)
+                                    .fill(milestoneColor(for: milestone.category).opacity(0.08))
+                            )
+                        }
+                    }
+                } else {
+                    emptyStateLabel("Complete your first milestone")
+                }
+            }
+        }
+    }
+
+    private func milestoneColor(for category: MilestoneCategory) -> Color {
+        switch category {
+        case .words: return WhispererColors.accentBlue
+        case .sessions: return Color(hex: "22C55E")
+        case .streak: return Color(hex: "F97316")
+        }
+    }
+
+    // MARK: - Personal Records
+
+    private var personalRecordsCard: some View {
+        SettingsCard(colorScheme: colorScheme, fillHeight: true) {
+            VStack(alignment: .leading, spacing: 14) {
+                SettingsSectionHeader(
+                    icon: "star.fill",
+                    title: "Personal Records",
+                    colorScheme: colorScheme,
+                    color: Color(hex: "A855F7")
+                )
+
+                Text("your personal bests")
+                    .font(.system(size: 11))
+                    .foregroundColor(WhispererColors.tertiaryText(colorScheme))
+                    .padding(.leading, 38)
+
+                let records = statsManager.personalRecords
+
+                VStack(spacing: 10) {
+                    personalRecordRow(
+                        icon: "doc.text",
+                        label: "Longest Transcription",
+                        value: records.longestTranscriptionWords > 0 ? "\(records.longestTranscriptionWords) words" : "—",
+                        date: records.longestTranscriptionDate,
+                        color: WhispererColors.accentBlue
+                    )
+
+                    personalRecordRow(
+                        icon: "calendar",
+                        label: "Most Words in a Day",
+                        value: records.mostWordsInDay > 0 ? statsManager.formattedWords(records.mostWordsInDay) : "—",
+                        date: records.mostWordsInDayDate,
+                        color: Color(hex: "22C55E")
+                    )
+
+                    personalRecordRow(
+                        icon: "mic.fill",
+                        label: "Most Sessions in a Day",
+                        value: records.mostSessionsInDay > 0 ? "\(records.mostSessionsInDay)" : "—",
+                        date: records.mostSessionsInDayDate,
+                        color: Color(hex: "F97316")
+                    )
+
+                    personalRecordRow(
+                        icon: "flame.fill",
+                        label: "Best Streak",
+                        value: statsManager.bestStreak > 0 ? "\(statsManager.bestStreak) days" : "—",
+                        date: nil,
+                        color: Color(hex: "EF4444")
+                    )
+                }
+            }
+        }
+    }
+
+    private func personalRecordRow(icon: String, label: String, value: String, date: Date?, color: Color) -> some View {
+        HStack(spacing: 10) {
+            ZStack {
+                RoundedRectangle(cornerRadius: 6)
+                    .fill(color.opacity(0.12))
+                    .frame(width: 28, height: 28)
+
+                Image(systemName: icon)
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundColor(color)
+            }
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(label)
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundColor(WhispererColors.secondaryText(colorScheme))
+
+                if let date = date {
+                    Text(recordDateFormatter.string(from: date))
+                        .font(.system(size: 9))
+                        .foregroundColor(WhispererColors.tertiaryText(colorScheme))
+                }
+            }
+
+            Spacer()
+
+            Text(value)
+                .font(.system(size: 14, weight: .light, design: .rounded))
+                .foregroundColor(WhispererColors.primaryText(colorScheme))
+                .monospacedDigit()
+        }
+        .padding(10)
+        .background(
+            RoundedRectangle(cornerRadius: 10)
+                .fill(WhispererColors.elevatedBackground(colorScheme).opacity(0.4))
+        )
+    }
+
+    private var recordDateFormatter: DateFormatter {
+        let f = DateFormatter()
+        f.dateStyle = .medium
+        f.timeStyle = .none
+        return f
     }
 
     // MARK: - Footer

@@ -576,7 +576,11 @@ struct FileTranscriptionView: View {
                                 .font(.system(size: 12, weight: .bold, design: .rounded))
                                 .foregroundColor(WhispererColors.accentBlue)
                             Spacer()
-                            if manager.totalChunks > 1 {
+                            if let eta = manager.estimatedTimeRemaining, eta > 0 {
+                                Text("~\(formatETA(eta)) remaining")
+                                    .font(.system(size: 11, weight: .medium))
+                                    .foregroundColor(WhispererColors.tertiaryText(colorScheme))
+                            } else if manager.totalChunks > 1 {
                                 Text("Chunk \(manager.currentChunk) of \(manager.totalChunks)")
                                     .font(.system(size: 11, weight: .medium))
                                     .foregroundColor(WhispererColors.tertiaryText(colorScheme))
@@ -676,7 +680,7 @@ struct FileTranscriptionView: View {
             CompletionStatCard(
                 icon: "text.word.spacing",
                 label: "WORDS",
-                value: "\(manager.transcriptionResult.split(separator: " ").count)",
+                value: "\(manager.transcriptionResult.components(separatedBy: .whitespacesAndNewlines).filter { !$0.isEmpty }.count)",
                 color: WhispererColors.accentBlue,
                 colorScheme: colorScheme
             )
@@ -687,6 +691,15 @@ struct FileTranscriptionView: View {
                 color: Color(hex: "F97316"),
                 colorScheme: colorScheme
             )
+            if let multiplier = manager.speedMultiplier, multiplier > 0 {
+                CompletionStatCard(
+                    icon: "gauge.with.dots.needle.67percent",
+                    label: "REALTIME",
+                    value: String(format: "%.1fx", multiplier),
+                    color: Color(hex: "A855F7"),
+                    colorScheme: colorScheme
+                )
+            }
         }
     }
 
@@ -847,6 +860,30 @@ struct FileTranscriptionView: View {
             }
             .buttonStyle(.plain).pointerOnHover()
 
+            // Export menu
+            Menu {
+                Button(action: { exportTranscription(format: .txt) }) {
+                    Label("Export as TXT", systemImage: "doc.plaintext")
+                }
+                Button(action: { exportTranscription(format: .json) }) {
+                    Label("Export as JSON", systemImage: "curlybraces")
+                }
+            } label: {
+                HStack(spacing: 5) {
+                    Image(systemName: "square.and.arrow.up")
+                        .font(.system(size: 11, weight: .medium))
+                    Text("Export")
+                        .font(.system(size: 12, weight: .semibold))
+                }
+                .foregroundColor(WhispererColors.secondaryText(colorScheme))
+                .padding(.horizontal, 12)
+                .padding(.vertical, 6)
+                .background(Capsule().fill(WhispererColors.elevatedBackground(colorScheme)))
+                .overlay(Capsule().stroke(WhispererColors.border(colorScheme), lineWidth: 1))
+            }
+            .menuStyle(.borderlessButton)
+            .pointerOnHover()
+
             // Save button
             Button(action: {
                 Task { await manager.saveToHistory() }
@@ -876,7 +913,7 @@ struct FileTranscriptionView: View {
     // MARK: - Helpers
 
     private var wpmValue: String {
-        let wordCount = manager.transcriptionResult.split(separator: " ").count
+        let wordCount = manager.transcriptionResult.components(separatedBy: .whitespacesAndNewlines).filter { !$0.isEmpty }.count
         guard manager.fileDuration > 0 else { return "0" }
         return "\(Int(Double(wordCount) / (manager.fileDuration / 60.0)))"
     }
@@ -933,6 +970,38 @@ struct FileTranscriptionView: View {
         }
 
         return true
+    }
+
+    private enum ExportFormat { case txt, json }
+
+    private func exportTranscription(format: ExportFormat) {
+        let panel = NSSavePanel()
+        let baseName = (manager.fileName as NSString).deletingPathExtension
+        panel.nameFieldStringValue = "\(baseName)_transcript.\(format == .txt ? "txt" : "json")"
+        panel.allowedContentTypes = format == .txt ? [.plainText] : [.json]
+
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+
+        do {
+            switch format {
+            case .txt:
+                try manager.exportAsText(to: url)
+            case .json:
+                try manager.exportAsJSON(to: url)
+            }
+        } catch {
+            Logger.error("Export failed: \(error.localizedDescription)", subsystem: .app)
+        }
+    }
+
+    private func formatETA(_ seconds: TimeInterval) -> String {
+        if seconds < 60 {
+            return "\(Int(seconds))s"
+        } else {
+            let minutes = Int(seconds) / 60
+            let secs = Int(seconds) % 60
+            return secs > 0 ? "\(minutes)m \(secs)s" : "\(minutes)m"
+        }
     }
 
     private func copyToClipboard() {

@@ -15,6 +15,10 @@ class GlobalKeyListener {
     var onShortcutReleased: (() -> Void)?
     var onShortcutCancelled: (() -> Void)?
 
+    // Rewrite mode callbacks
+    var onRewriteShortcutPressed: (() -> Void)?
+    var onRewriteShortcutReleased: (() -> Void)?
+
     // Picker callbacks (Option+V transcription picker)
     var onPickerActivated: (() -> Void)?
     var onPickerCycled: (() -> Void)?
@@ -54,6 +58,11 @@ class GlobalKeyListener {
     private var pickerHotKeyRef: EventHotKeyRef?
     private var pickerEventHandler: EventHandlerRef?
 
+    // Carbon hotkey for rewrite mode
+    private var rewriteHotKeyRef: EventHotKeyRef?
+    private var rewriteEventHandler: EventHandlerRef?
+    private var rewriteRecordingInProgress = false
+
     // Polling fallback for Fn release detection (safety net for Globe/Fn key edge cases)
     private var releaseCheckTimer: DispatchSourceTimer?
 
@@ -84,6 +93,9 @@ class GlobalKeyListener {
         // Setup Carbon hotkey for transcription picker (Option+V)
         registerPickerHotKey()
 
+        // Setup Carbon hotkey for rewrite mode
+        registerRewriteHotKeyIfNeeded()
+
         Logger.info("GlobalKeyListener started with shortcut: \(shortcutConfig.displayString)", subsystem: .keyListener)
     }
 
@@ -109,7 +121,9 @@ class GlobalKeyListener {
         // Unregister Carbon hotkeys
         unregisterCarbonHotKey()
         unregisterPickerHotKey()
+        unregisterRewriteHotKey()
         pickerVisible = false
+        rewriteRecordingInProgress = false
 
         Logger.info("GlobalKeyListener stopped", subsystem: .keyListener)
     }
@@ -581,6 +595,108 @@ class GlobalKeyListener {
         if let handler = pickerEventHandler {
             RemoveEventHandler(handler)
             pickerEventHandler = nil
+        }
+    }
+
+    // MARK: - Rewrite Hot Key
+
+    var rewriteShortcutConfig: RewriteShortcutConfig = .load() {
+        didSet {
+            rewriteShortcutConfig.save()
+            unregisterRewriteHotKey()
+            registerRewriteHotKeyIfNeeded()
+        }
+    }
+
+    private func registerRewriteHotKeyIfNeeded() {
+        let config = rewriteShortcutConfig
+        guard config.isEnabled, config.keyCode != 0 else { return }
+
+        var carbonModifiers: UInt32 = 0
+        let mods = config.modifiers
+        if mods.contains(.command) { carbonModifiers |= UInt32(cmdKey) }
+        if mods.contains(.option) { carbonModifiers |= UInt32(optionKey) }
+        if mods.contains(.control) { carbonModifiers |= UInt32(controlKey) }
+        if mods.contains(.shift) { carbonModifiers |= UInt32(shiftKey) }
+
+        let hotKeyID = EventHotKeyID(
+            signature: OSType(0x57485350), // "WHSP"
+            id: 3
+        )
+
+        let status = RegisterEventHotKey(
+            UInt32(config.keyCode),
+            carbonModifiers,
+            hotKeyID,
+            GetApplicationEventTarget(),
+            0,
+            &rewriteHotKeyRef
+        )
+
+        guard status == noErr else {
+            Logger.error("Failed to register rewrite hotkey: \(status)", subsystem: .keyListener)
+            return
+        }
+
+        var eventSpecs = [
+            EventTypeSpec(eventClass: OSType(kEventClassKeyboard), eventKind: UInt32(kEventHotKeyPressed)),
+            EventTypeSpec(eventClass: OSType(kEventClassKeyboard), eventKind: UInt32(kEventHotKeyReleased))
+        ]
+
+        let handlerResult = InstallEventHandler(
+            GetApplicationEventTarget(),
+            { (_, event, userData) -> OSStatus in
+                guard let userData = userData else { return OSStatus(eventNotHandledErr) }
+                let listener = Unmanaged<GlobalKeyListener>.fromOpaque(userData).takeUnretainedValue()
+                listener.handleRewriteHotKeyEvent(event)
+                return noErr
+            },
+            eventSpecs.count,
+            &eventSpecs,
+            Unmanaged.passUnretained(self).toOpaque(),
+            &rewriteEventHandler
+        )
+
+        if handlerResult == noErr {
+            Logger.info("Rewrite hotkey registered: \(config.displayString)", subsystem: .keyListener)
+        } else {
+            Logger.error("Failed to install rewrite event handler: \(handlerResult)", subsystem: .keyListener)
+        }
+    }
+
+    private func handleRewriteHotKeyEvent(_ event: EventRef?) {
+        guard let event = event else { return }
+        let eventKind = GetEventKind(event)
+
+        stateQueue.async { [weak self] in
+            guard let self = self else { return }
+
+            if eventKind == UInt32(kEventHotKeyPressed) {
+                guard !self.recordingInProgress, !self.rewriteRecordingInProgress else { return }
+                self.rewriteRecordingInProgress = true
+                Logger.info("Rewrite shortcut PRESSED", subsystem: .keyListener)
+                DispatchQueue.main.async { [weak self] in
+                    self?.onRewriteShortcutPressed?()
+                }
+            } else if eventKind == UInt32(kEventHotKeyReleased) {
+                guard self.rewriteRecordingInProgress else { return }
+                self.rewriteRecordingInProgress = false
+                Logger.info("Rewrite shortcut RELEASED", subsystem: .keyListener)
+                DispatchQueue.main.async { [weak self] in
+                    self?.onRewriteShortcutReleased?()
+                }
+            }
+        }
+    }
+
+    private func unregisterRewriteHotKey() {
+        if let hotKeyRef = rewriteHotKeyRef {
+            UnregisterEventHotKey(hotKeyRef)
+            rewriteHotKeyRef = nil
+        }
+        if let handler = rewriteEventHandler {
+            RemoveEventHandler(handler)
+            rewriteEventHandler = nil
         }
     }
 

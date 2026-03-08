@@ -71,7 +71,7 @@ struct TranscriptionRecord: Identifiable {
         self.transcription = transcription
         self.audioFileURL = audioFileURL
         self.duration = duration
-        self.wordCount = transcription.split(separator: " ").count
+        self.wordCount = transcription.components(separatedBy: .whitespacesAndNewlines).filter { !$0.isEmpty }.count
         self.language = language
         self.modelUsed = modelUsed
         self.isPinned = false

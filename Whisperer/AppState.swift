@@ -9,6 +9,11 @@ import Foundation
 import Combine
 import AppKit
 
+enum ActiveMode: Equatable {
+    case dictation
+    case rewrite
+}
+
 enum RecordingState: Equatable {
     case idle
     case recording(startTime: Date)
@@ -48,6 +53,11 @@ class AppState: ObservableObject {
         didSet {
             // Notify observers when state changes
             NotificationCenter.default.post(name: NSNotification.Name("AppStateChanged"), object: nil)
+            if state == .idle {
+                targetAppIcon = nil
+                activeMode = .dictation
+                capturedSelectedText = nil
+            }
         }
     }
     @Published var waveformAmplitudes: [Float] = Array(repeating: 0, count: 20)
@@ -322,6 +332,13 @@ class AppState: ObservableObject {
 
     private var currentAudioURL: URL?
     private var lastTargetAppName: String?
+    @Published var targetAppIcon: NSImage?
+
+    // Rewrite mode
+    @Published var activeMode: ActiveMode = .dictation
+    var textSelectionService: TextSelectionService?
+    var rewriteModeService: RewriteModeService?
+    private var capturedSelectedText: String?
 
     // Model path for selected whisper.cpp model
     private var modelPath: URL {
@@ -1028,6 +1045,33 @@ class AppState: ObservableObject {
         }
     }
 
+    /// Process transcription through rewrite mode LLM
+    private func processRewriteMode(transcription: String) async -> String {
+        // Initialize rewrite service lazily
+        if rewriteModeService == nil, let processor = llmPostProcessor {
+            rewriteModeService = RewriteModeService(llmProcessor: processor)
+        }
+
+        guard let service = rewriteModeService else {
+            Logger.warning("Rewrite mode: no LLM available, returning raw transcription", subsystem: .transcription)
+            return transcription
+        }
+
+        let profile = PromptProfileManager.shared.activeProfile
+        do {
+            let result = try await service.process(
+                instruction: transcription,
+                selectedText: capturedSelectedText,
+                rewritePrompt: profile?.rewritePrompt
+            )
+            Logger.info("Rewrite mode processed: \(transcription.prefix(30))... → \(result.prefix(30))...", subsystem: .transcription)
+            return result
+        } catch {
+            Logger.error("Rewrite mode failed: \(error)", subsystem: .transcription)
+            return transcription
+        }
+    }
+
     /// Apply list formatting to transcribed text (deterministic engine + optional LLM fallback)
     private func applyListFormatting(_ text: String) async -> String {
         guard listFormattingEnabled else { return text }
@@ -1181,6 +1225,18 @@ class AppState: ObservableObject {
             }
         }
 
+        // Rewrite mode callbacks
+        listener.onRewriteShortcutPressed = { [weak self] in
+            Task { @MainActor in
+                self?.startRewriteRecording()
+            }
+        }
+        listener.onRewriteShortcutReleased = { [weak self] in
+            Task { @MainActor in
+                self?.stopRecording()
+            }
+        }
+
         // Transcription picker callbacks (Option+V)
         listener.onPickerActivated = { [weak self] in
             Task { @MainActor in
@@ -1207,6 +1263,10 @@ class AppState: ObservableObject {
         // Show loading indicator if model isn't ready (works even during download)
         guard whisperBridge != nil else {
             showModelLoadingToast = true
+            // Safety timeout — dismiss if model never loads (e.g., no model downloaded)
+            DispatchQueue.main.asyncAfter(deadline: .now() + 10.0) { [weak self] in
+                self?.showModelLoadingToast = false
+            }
             Logger.warning("Cannot start recording - model not pre-loaded", subsystem: .app)
             return
         }
@@ -1322,6 +1382,10 @@ class AppState: ObservableObject {
         // Show loading indicator if model isn't ready (works even during download)
         guard whisperBridge != nil else {
             showModelLoadingToast = true
+            // Safety timeout — dismiss if model never loads (e.g., no model downloaded)
+            DispatchQueue.main.asyncAfter(deadline: .now() + 10.0) { [weak self] in
+                self?.showModelLoadingToast = false
+            }
             Logger.warning("Cannot start recording - model not pre-loaded", subsystem: .app)
             return
         }
@@ -1343,12 +1407,15 @@ class AppState: ObservableObject {
         if let frontApp = NSWorkspace.shared.frontmostApplication,
            frontApp.bundleIdentifier != Bundle.main.bundleIdentifier {
             lastTargetAppName = frontApp.localizedName
+            targetAppIcon = frontApp.icon
         } else {
             lastTargetAppName = nil
+            targetAppIcon = nil
         }
 
         // INSTANT: Set state immediately so overlay appears right away
-        state = .recording(startTime: Date())
+        let recordingStart = Date()
+        state = .recording(startTime: recordingStart)
         liveTranscription = ""
         startStateWatchdog()  // 4s startup watchdog — cancelled when audio starts
 
@@ -1408,6 +1475,13 @@ class AppState: ObservableObject {
                     audioMuter?.muteSystemAudio()
                 }
             } catch {
+                // Only handle the error if THIS recording is still the active one.
+                // A stale Task (from a timed-out queryInputNodeFormat) can arrive after
+                // a new recording has already started — setting state = .idle would kill it.
+                guard case .recording(let startTime) = state, startTime == recordingStart else {
+                    Logger.debug("Stale startRecording error ignored (state already changed): \(error.localizedDescription)", subsystem: .app)
+                    return
+                }
                 cancelStateWatchdog()
                 errorMessage = "Failed to start recording: \(error.localizedDescription)"
                 streamingTranscriber = nil
@@ -1425,9 +1499,10 @@ class AppState: ObservableObject {
         guard case .recording = state else { return }
 
         state = .stopping
-        // 5s stop watchdog — if transcription/processing hangs, force .idle.
-        // (Startup watchdog was already cancelled when audio started successfully.)
-        startStateWatchdog(timeout: 5.0)
+
+        // Fixed watchdog — chunked pipeline processes bounded chunks (~20s max),
+        // so stop time is predictable regardless of total recording duration.
+        startStateWatchdog(timeout: 15.0)
 
         Task {
             await audioRecorder?.stopRecording()
@@ -1446,17 +1521,27 @@ class AppState: ObservableObject {
                 return
             }
 
-            // Get final transcription from streaming transcriber with timeout.
-            // FluidAudio/Parakeet can deadlock during the final pass if the
-            // cooperative thread pool is starved or the ANE hangs.
+            // Get final transcription — chunked pipeline only transcribes the tail
+            // (bounded ~5s), so a fixed 10s timeout is sufficient.
             var finalText = ""
             let transcriber = streamingTranscriber
             if let transcriber {
-                finalText = await withTimeoutResult(seconds: 3.0) {
+                finalText = await withTimeoutResult(seconds: 10.0) {
                     await transcriber.stopAsync()
                 } ?? ""
+
+                // Fallback: if final pass timed out, use the live streaming result.
                 if finalText.isEmpty {
-                    Logger.debug("Final transcription empty or timed out", subsystem: .transcription)
+                    let streamingResult = transcriber.currentTranscription
+                    if !streamingResult.isEmpty {
+                        finalText = DictionaryManager.shared.correctText(streamingResult)
+                        if fillerWordRemovalEnabled {
+                            finalText = FillerWordFilter.removeFillers(from: finalText)
+                        }
+                        Logger.debug("Final pass timed out, using streaming result (\(finalText.count) chars)", subsystem: .transcription)
+                    } else {
+                        Logger.debug("Final transcription empty or timed out", subsystem: .transcription)
+                    }
                 } else {
                     Logger.debug("Final transcription: '\(finalText)'", subsystem: .transcription)
                 }
@@ -1472,14 +1557,16 @@ class AppState: ObservableObject {
                     saveRecordingFromTranscriber(transcriber, transcription: finalText)
                 }
 
-                // Apply list formatting then LLM post-processing
-                let listFormatted = await applyListFormatting(finalText)
-                let processedText = await applyLLMPostProcessing(listFormatted)
-
-                var textToInsert = processedText
-                if appendTrailingSpace {
-                    textToInsert += " "
+                // Route through rewrite mode or standard dictation
+                let textToInsert: String
+                if self.activeMode == .rewrite {
+                    textToInsert = await processRewriteMode(transcription: finalText)
+                } else {
+                    let listFormatted = await applyListFormatting(finalText)
+                    let processedText = await applyLLMPostProcessing(listFormatted)
+                    textToInsert = appendTrailingSpace ? processedText + " " : processedText
                 }
+
                 Logger.debug("Entering dictated text: '\(textToInsert)'", subsystem: .app)
                 cancelStateWatchdog()
                 state = .inserting(text: textToInsert)
@@ -1550,6 +1637,28 @@ class AppState: ObservableObject {
     private func cancelStateWatchdog() {
         stateWatchdog?.cancel()
         stateWatchdog = nil
+    }
+
+    // MARK: - Rewrite Mode Recording
+
+    func startRewriteRecording() {
+        guard whisperBridge != nil else {
+            showModelLoadingToast = true
+            DispatchQueue.main.asyncAfter(deadline: .now() + 10.0) { [weak self] in
+                self?.showModelLoadingToast = false
+            }
+            return
+        }
+        guard state == .idle else { return }
+
+        // Capture selected text BEFORE recording starts (before overlay steals focus)
+        capturedSelectedText = textSelectionService?.getSelectedText()
+        activeMode = .rewrite
+
+        Logger.info("Rewrite mode started (selected \(capturedSelectedText?.count ?? 0) chars)", subsystem: .app)
+
+        // Use the standard startRecording flow
+        startRecording()
     }
 
     func cancelRecording() {

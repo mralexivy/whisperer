@@ -91,6 +91,9 @@ enum HistorySidebarItem: String, CaseIterable, Identifiable {
     case dictionary = "Dictionary"
     case statistics = "Statistics"
     case settings = "Settings"
+    case commandMode = "Command Mode"
+    case setup = "Setup"
+    case feedback = "Feedback"
 
     var id: String { rawValue }
 
@@ -101,6 +104,9 @@ enum HistorySidebarItem: String, CaseIterable, Identifiable {
         case .statistics: return "chart.xyaxis.line"
         case .dictionary: return "book.closed"
         case .settings: return "gearshape"
+        case .commandMode: return "terminal.fill"
+        case .setup: return "checkmark.circle.fill"
+        case .feedback: return "envelope.fill"
         }
     }
 
@@ -111,7 +117,19 @@ enum HistorySidebarItem: String, CaseIterable, Identifiable {
         case .statistics: return .cyan
         case .dictionary: return .red
         case .settings: return .orange
+        case .commandMode: return Color(hex: "22C55E")
+        case .setup: return .blue
+        case .feedback: return Color(hex: "22C55E")
         }
+    }
+
+    /// Items shown in the sidebar (commandMode only in non-sandboxed builds)
+    static var visibleItems: [HistorySidebarItem] {
+        var items: [HistorySidebarItem] = [.transcriptions, .fileTranscription, .dictionary, .statistics, .setup, .feedback, .settings]
+        #if !ENABLE_APP_SANDBOX
+        items.insert(.commandMode, at: items.count - 3) // Before setup
+        #endif
+        return items
     }
 }
 
@@ -122,6 +140,17 @@ struct HistoryWindowView: View {
     @ObservedObject private var historyManager = HistoryManager.shared
     @State private var selectedSidebarItem: HistorySidebarItem = .transcriptions
     @State private var isSidebarCollapsed = false
+
+    #if !ENABLE_APP_SANDBOX
+    @StateObject private var commandModeService: CommandModeService = {
+        if let processor = AppState.shared.llmPostProcessor, processor.isModelLoaded {
+            return CommandModeService(llmProcessor: processor)
+        }
+        return CommandModeService(llmProcessor: LLMPostProcessor())
+    }()
+    #else
+    private let commandModeService: AnyObject? = nil
+    #endif
 
     var body: some View {
         HStack(spacing: 0) {
@@ -148,6 +177,16 @@ struct HistoryWindowView: View {
                     DictionaryView()
                 case .settings:
                     HistorySettingsView()
+                case .commandMode:
+                    #if !ENABLE_APP_SANDBOX
+                    CommandModeView(commandService: commandModeService)
+                    #else
+                    EmptyView()
+                    #endif
+                case .setup:
+                    SetupChecklistView()
+                case .feedback:
+                    FeedbackView()
                 }
             }
         }
@@ -178,7 +217,7 @@ struct HistoryWindowView: View {
 
             // Navigation items
             VStack(spacing: 4) {
-                ForEach(HistorySidebarItem.allCases) { item in
+                ForEach(HistorySidebarItem.visibleItems) { item in
                     SidebarNavItem(
                         item: item,
                         isSelected: selectedSidebarItem == item,
@@ -1058,6 +1097,8 @@ struct HistorySettingsView: View {
                 // Settings content
                 VStack(alignment: .leading, spacing: 28) {
                     displaySection
+                    overlaySection
+                    rewriteSection
                     dictionarySection
                     storageSection
                     dataManagementSection
@@ -1373,6 +1414,246 @@ struct HistorySettingsView: View {
         case 2: return "Balanced corrections (up to 2 character differences) — recommended"
         case 3: return "Lenient corrections (up to 3 character differences) — may have false positives"
         default: return "Balanced corrections — recommended"
+        }
+    }
+
+    // MARK: - Overlay Section
+
+    private var overlaySection: some View {
+        SettingsCard(colorScheme: colorScheme) {
+            VStack(alignment: .leading, spacing: 20) {
+                SettingsSectionHeader(
+                    icon: "rectangle.inset.bottomleading.filled",
+                    title: "Overlay",
+                    colorScheme: colorScheme,
+                    color: .blue
+                )
+
+                Text("recording panel appearance")
+                    .font(.system(size: 11))
+                    .foregroundColor(WhispererColors.tertiaryText(colorScheme))
+                    .padding(.leading, 38)
+
+                SettingsRow(colorScheme: colorScheme) {
+                    HStack(spacing: 14) {
+                        ZStack {
+                            RoundedRectangle(cornerRadius: 8)
+                                .fill(
+                                    LinearGradient(
+                                        colors: [Color.blue.opacity(0.18), Color.blue.opacity(0.10)],
+                                        startPoint: .topLeading,
+                                        endPoint: .bottomTrailing
+                                    )
+                                )
+                                .frame(width: 36, height: 36)
+
+                            Image(systemName: "arrow.up.and.down.and.arrow.left.and.right")
+                                .font(.system(size: 14, weight: .semibold))
+                                .foregroundColor(.blue)
+                        }
+
+                        VStack(alignment: .leading, spacing: 3) {
+                            Text("Position")
+                                .font(.system(size: 13, weight: .medium))
+                                .foregroundColor(WhispererColors.primaryText(colorScheme))
+
+                            Text("Where the recording overlay appears")
+                                .font(.system(size: 11))
+                                .foregroundColor(WhispererColors.secondaryText(colorScheme))
+                        }
+
+                        Spacer()
+
+                        Picker("", selection: Binding(
+                            get: {
+                                let raw = UserDefaults.standard.string(forKey: "overlayPosition") ?? OverlayPosition.bottomCenter.rawValue
+                                return OverlayPosition(rawValue: raw) ?? .bottomCenter
+                            },
+                            set: {
+                                UserDefaults.standard.set($0.rawValue, forKey: "overlayPosition")
+                                NotificationCenter.default.post(name: .overlaySettingsChanged, object: nil)
+                            }
+                        )) {
+                            ForEach(OverlayPosition.allCases, id: \.self) { pos in
+                                Text(pos.rawValue).tag(pos)
+                            }
+                        }
+                        .pickerStyle(.menu)
+                        .frame(width: 150)
+                        .tint(WhispererColors.accent)
+                    }
+                }
+
+                SettingsRow(colorScheme: colorScheme) {
+                    HStack(spacing: 14) {
+                        ZStack {
+                            RoundedRectangle(cornerRadius: 8)
+                                .fill(
+                                    LinearGradient(
+                                        colors: [Color.purple.opacity(0.18), Color.purple.opacity(0.10)],
+                                        startPoint: .topLeading,
+                                        endPoint: .bottomTrailing
+                                    )
+                                )
+                                .frame(width: 36, height: 36)
+
+                            Image(systemName: "arrow.up.left.and.arrow.down.right")
+                                .font(.system(size: 14, weight: .semibold))
+                                .foregroundColor(.purple)
+                        }
+
+                        VStack(alignment: .leading, spacing: 3) {
+                            Text("Size")
+                                .font(.system(size: 13, weight: .medium))
+                                .foregroundColor(WhispererColors.primaryText(colorScheme))
+
+                            Text("Recording overlay panel size")
+                                .font(.system(size: 11))
+                                .foregroundColor(WhispererColors.secondaryText(colorScheme))
+                        }
+
+                        Spacer()
+
+                        Picker("", selection: Binding(
+                            get: {
+                                let raw = UserDefaults.standard.string(forKey: "overlaySize") ?? OverlaySize.medium.rawValue
+                                return OverlaySize(rawValue: raw) ?? .medium
+                            },
+                            set: {
+                                UserDefaults.standard.set($0.rawValue, forKey: "overlaySize")
+                                NotificationCenter.default.post(name: .overlaySettingsChanged, object: nil)
+                            }
+                        )) {
+                            ForEach(OverlaySize.allCases, id: \.self) { size in
+                                Text(size.rawValue).tag(size)
+                            }
+                        }
+                        .pickerStyle(.menu)
+                        .frame(width: 110)
+                        .tint(WhispererColors.accent)
+                    }
+                }
+
+                // Sound feedback
+                SettingsRow(colorScheme: colorScheme) {
+                    HStack(spacing: 14) {
+                        ZStack {
+                            RoundedRectangle(cornerRadius: 8)
+                                .fill(
+                                    LinearGradient(
+                                        colors: [Color.cyan.opacity(0.18), Color.cyan.opacity(0.10)],
+                                        startPoint: .topLeading,
+                                        endPoint: .bottomTrailing
+                                    )
+                                )
+                                .frame(width: 36, height: 36)
+
+                            Image(systemName: "speaker.wave.2.fill")
+                                .font(.system(size: 14, weight: .semibold))
+                                .foregroundColor(.cyan)
+                        }
+
+                        VStack(alignment: .leading, spacing: 3) {
+                            Text("Sound Feedback")
+                                .font(.system(size: 13, weight: .medium))
+                                .foregroundColor(WhispererColors.primaryText(colorScheme))
+
+                            Text("Audio cue when recording starts and stops")
+                                .font(.system(size: 11))
+                                .foregroundColor(WhispererColors.secondaryText(colorScheme))
+                        }
+
+                        Spacer()
+
+                        Picker("", selection: Binding(
+                            get: { AppState.shared.soundPlayer?.soundOption ?? .defaultSounds },
+                            set: { newValue in
+                                AppState.shared.soundPlayer?.soundOption = newValue
+                                newValue.save()
+                            }
+                        )) {
+                            ForEach(SoundOption.allCases, id: \.self) { option in
+                                Text(option.displayName).tag(option)
+                            }
+                        }
+                        .pickerStyle(.menu)
+                        .frame(width: 110)
+                        .tint(WhispererColors.accent)
+                    }
+                }
+            }
+        }
+    }
+
+    // MARK: - Rewrite Section
+
+    private var rewriteSection: some View {
+        SettingsCard(colorScheme: colorScheme) {
+            VStack(alignment: .leading, spacing: 20) {
+                SettingsSectionHeader(
+                    icon: "wand.and.stars",
+                    title: "Rewrite Mode",
+                    colorScheme: colorScheme,
+                    color: Color(hex: "8B5CF6")
+                )
+
+                Text("AI-powered text editing via voice")
+                    .font(.system(size: 11))
+                    .foregroundColor(WhispererColors.tertiaryText(colorScheme))
+                    .padding(.leading, 38)
+
+                SettingsRow(colorScheme: colorScheme) {
+                    HStack(spacing: 14) {
+                        ZStack {
+                            RoundedRectangle(cornerRadius: 8)
+                                .fill(
+                                    LinearGradient(
+                                        colors: [Color(hex: "8B5CF6").opacity(0.18), Color(hex: "8B5CF6").opacity(0.10)],
+                                        startPoint: .topLeading,
+                                        endPoint: .bottomTrailing
+                                    )
+                                )
+                                .frame(width: 36, height: 36)
+
+                            Image(systemName: "keyboard")
+                                .font(.system(size: 14, weight: .semibold))
+                                .foregroundColor(Color(hex: "8B5CF6"))
+                        }
+
+                        VStack(alignment: .leading, spacing: 3) {
+                            Text("Rewrite Shortcut")
+                                .font(.system(size: 13, weight: .medium))
+                                .foregroundColor(WhispererColors.primaryText(colorScheme))
+
+                            Text("Hold to rewrite selected text with voice instructions")
+                                .font(.system(size: 11))
+                                .foregroundColor(WhispererColors.secondaryText(colorScheme))
+                        }
+
+                        Spacer()
+
+                        let config = AppState.shared.keyListener?.rewriteShortcutConfig ?? .defaultConfig
+                        Text(config.displayString)
+                            .font(.system(size: 12, weight: .medium, design: .monospaced))
+                            .foregroundColor(config.isEnabled ? WhispererColors.accent : WhispererColors.tertiaryText(colorScheme))
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 5)
+                            .background(
+                                RoundedRectangle(cornerRadius: 6)
+                                    .fill(WhispererColors.elevatedBackground(colorScheme))
+                            )
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 6)
+                                    .stroke(WhispererColors.border(colorScheme), lineWidth: 1)
+                            )
+                    }
+                }
+
+                Text("Select text in any app, hold the rewrite shortcut, and speak your instruction. The AI will rewrite the selected text accordingly. Configure the shortcut in the menu bar settings.")
+                    .font(.system(size: 12))
+                    .foregroundColor(WhispererColors.secondaryText(colorScheme))
+                    .lineSpacing(3)
+            }
         }
     }
 
