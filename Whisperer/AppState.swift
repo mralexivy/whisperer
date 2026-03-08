@@ -5,9 +5,10 @@
 //  Global application state machine for recording workflow
 //
 
-import Foundation
-import Combine
 import AppKit
+import Combine
+import FluidAudio
+import Foundation
 
 enum ActiveMode: Equatable {
     case dictation
@@ -72,6 +73,13 @@ class AppState: ObservableObject {
     @Published var liveTranscriptionEnabled: Bool = true {  // Show live transcription preview during recording
         didSet {
             UserDefaults.standard.set(liveTranscriptionEnabled, forKey: "liveTranscriptionEnabled")
+            if liveTranscriptionEnabled {
+                if isEouModelCached() {
+                    preloadEouModel()
+                } else {
+                    downloadEouModel()
+                }
+            }
         }
     }
 
@@ -242,6 +250,13 @@ class AppState: ObservableObject {
     @Published var parakeetDownloadStatus: String = ""
     private var parakeetLoadTask: Task<Void, Never>?
 
+    // Parakeet EOU (streaming live preview) download/load state
+    @Published var isDownloadingEou: Bool = false
+    @Published var eouDownloadProgress: Double = 0
+    @Published var eouDownloadStatus: String = ""
+    @Published var isEouModelLoaded: Bool = false
+    private var livePreviewEngine: LivePreviewEngine?
+
     // SpeechAnalyzer (macOS 26+) load state
     @Published var isLoadingSpeechAnalyzer: Bool = false
     @Published var speechAnalyzerStatus: String = ""
@@ -253,6 +268,7 @@ class AppState: ObservableObject {
         isLoadingWhisper ||
         isDownloadingParakeet ||
         isLoadingParakeet ||
+        isDownloadingEou ||
         isLoadingSpeechAnalyzer
     }
 
@@ -839,6 +855,117 @@ class AppState: ObservableObject {
         return count
     }
 
+    // MARK: - Parakeet EOU (Streaming Live Preview)
+
+    /// Directory where EOU 320ms models are cached
+    static var eouModelDirectory: URL {
+        let appSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
+        return appSupport
+            .appendingPathComponent("FluidAudio", isDirectory: true)
+            .appendingPathComponent("Models", isDirectory: true)
+            .appendingPathComponent("parakeet-eou-streaming/320ms", isDirectory: true)
+    }
+
+    /// Check if EOU 320ms models are already downloaded
+    func isEouModelCached() -> Bool {
+        let dir = Self.eouModelDirectory
+        let required = ["streaming_encoder.mlmodelc", "decoder.mlmodelc", "joint_decision.mlmodelc", "vocab.json"]
+        return required.allSatisfy { FileManager.default.fileExists(atPath: dir.appendingPathComponent($0).path) }
+    }
+
+    /// Download Parakeet EOU 320ms streaming model from HuggingFace
+    func downloadEouModel() {
+        guard !isDownloadingEou else { return }
+
+        isDownloadingEou = true
+        eouDownloadStatus = "Downloading EOU 320ms..."
+        eouDownloadProgress = 0
+
+        let cacheDir = Self.eouModelDirectory
+        let progressTask = Task.detached(priority: .utility) { [weak self] in
+            let expectedFileCount = 15
+            while !Task.isCancelled {
+                try? await Task.sleep(nanoseconds: 500_000_000)
+                let fileCount = Self.countFilesRecursively(at: cacheDir)
+                let progress = min(Double(fileCount) / Double(expectedFileCount), 0.95)
+                await MainActor.run { [weak self] in
+                    guard let self, self.isDownloadingEou else { return }
+                    self.eouDownloadProgress = progress
+                }
+            }
+        }
+
+        Task.detached(priority: .userInitiated) { [weak self] in
+            do {
+                let modelsParent = cacheDir.deletingLastPathComponent().deletingLastPathComponent()
+                try FileManager.default.createDirectory(at: modelsParent, withIntermediateDirectories: true)
+                try await DownloadUtils.downloadRepo(.parakeetEou320, to: modelsParent)
+                progressTask.cancel()
+                Logger.info("Parakeet EOU 320ms downloaded", subsystem: .model)
+
+                await MainActor.run { [weak self] in
+                    guard let self = self else { return }
+                    self.isDownloadingEou = false
+                    self.eouDownloadStatus = ""
+                    self.eouDownloadProgress = 0
+                    self.preloadEouModel()
+                }
+            } catch {
+                progressTask.cancel()
+                Logger.error("Failed to download Parakeet EOU: \(error)", subsystem: .model)
+                await MainActor.run { [weak self] in
+                    guard let self = self else { return }
+                    self.isDownloadingEou = false
+                    self.eouDownloadStatus = ""
+                    self.eouDownloadProgress = 0
+                    self.errorMessage = "Failed to download live transcription model: \(error.localizedDescription)"
+                }
+            }
+        }
+    }
+
+    /// Preload EOU model for live preview (if toggle enabled and model cached)
+    func preloadEouModel() {
+        guard liveTranscriptionEnabled else { return }
+        guard isEouModelCached() else { return }
+        guard livePreviewEngine == nil || !isEouModelLoaded else { return }
+
+        let engine = LivePreviewEngine()
+        self.livePreviewEngine = engine
+
+        Task.detached(priority: .utility) { [weak self] in
+            do {
+                try await engine.loadModel(modelDir: AppState.eouModelDirectory)
+                await MainActor.run { [weak self] in
+                    guard let self else { return }
+                    self.isEouModelLoaded = true
+                    Logger.info("EOU model preloaded for live preview", subsystem: .model)
+
+                    // If recording is already active, start the engine now.
+                    // Audio is already flowing via onStreamingSamples → feedAudio,
+                    // which is gated by isRunning (set by start()).
+                    if case .recording = self.state, self.liveTranscriptionEnabled {
+                        Task {
+                            await engine.start { [weak self] text in
+                                let cbTime = CACurrentMediaTime()
+                                Task { @MainActor in
+                                    Logger.debug("LivePreview: UI update (\(text.count) chars) t=\(String(format: "%.3f", cbTime))", subsystem: .transcription)
+                                    self?.liveTranscription = text
+                                }
+                            }
+                        }
+                    }
+                }
+            } catch {
+                Logger.error("Failed to preload EOU model: \(error)", subsystem: .model)
+                await MainActor.run { [weak self] in
+                    self?.livePreviewEngine = nil
+                    self?.isEouModelLoaded = false
+                }
+            }
+        }
+    }
+
     private func preloadParakeetModel() {
         let variant = selectedParakeetModel
 
@@ -1141,12 +1268,14 @@ class AppState: ObservableObject {
                     guard let self = self else { return }
                     self.sileroVAD = vad
                     self.isVADLoaded = true
+                    self.preloadEouModel()
                 }
             } catch {
                 Logger.warning("Failed to load Silero VAD: \(error.localizedDescription) — app will work without speech detection", subsystem: .model)
                 // VAD is completely optional, continue without it
                 await MainActor.run { [weak self] in
                     self?.isVADLoaded = false
+                    self?.preloadEouModel()
                 }
             }
         }
@@ -1288,9 +1417,22 @@ class AppState: ObservableObject {
         Task {
             do {
                 streamingTranscriber = StreamingTranscriber(backend: bridge, vad: sileroVAD, language: selectedLanguage, initialPrompt: promptWordsString, fillerWordRemovalEnabled: fillerWordRemovalEnabled)
+
+                // Start EOU live preview engine if available
+                if liveTranscriptionEnabled, let engine = livePreviewEngine, engine.isModelLoaded {
+                    await engine.start { [weak self] text in
+                        let cbTime = CACurrentMediaTime()
+                        Task { @MainActor in
+                            Logger.debug("LivePreview: UI update (\(text.count) chars) t=\(String(format: "%.3f", cbTime))", subsystem: .transcription)
+                            self?.liveTranscription = text
+                        }
+                    }
+                }
+
                 streamingTranscriber?.start { [weak self] text in
                     Task { @MainActor in
-                        if self?.liveTranscriptionEnabled == true {
+                        // Only use StreamingTranscriber for live preview when EOU is not active
+                        if self?.liveTranscriptionEnabled == true && !(self?.livePreviewEngine?.isModelLoaded == true) {
                             self?.liveTranscription = text
                         }
                     }
@@ -1298,6 +1440,7 @@ class AppState: ObservableObject {
 
                 audioRecorder?.onStreamingSamples = { [weak self] samples in
                     self?.streamingTranscriber?.addSamples(samples)
+                    self?.livePreviewEngine?.feedAudio(samples)
                 }
 
                 // AudioRecorder handles its own timeouts internally (1s per CoreAudio
@@ -1338,6 +1481,7 @@ class AppState: ObservableObject {
 
         Task {
             await audioRecorder?.stopRecording()
+            livePreviewEngine?.stop()
 
             if muteOtherAudioDuringRecording {
                 audioMuter?.unmuteSystemAudio()
@@ -1427,18 +1571,32 @@ class AppState: ObservableObject {
             do {
                 // Create streaming transcriber with pre-loaded bridge, optional VAD, and language
                 streamingTranscriber = StreamingTranscriber(backend: bridge, vad: sileroVAD, language: selectedLanguage, initialPrompt: promptWordsString, fillerWordRemovalEnabled: fillerWordRemovalEnabled)
+
+                // Start EOU live preview engine if available
+                if liveTranscriptionEnabled, let engine = livePreviewEngine, engine.isModelLoaded {
+                    await engine.start { [weak self] text in
+                        let cbTime = CACurrentMediaTime()
+                        Task { @MainActor in
+                            Logger.debug("LivePreview: UI update (\(text.count) chars) t=\(String(format: "%.3f", cbTime))", subsystem: .transcription)
+                            self?.liveTranscription = text
+                        }
+                    }
+                }
+
                 streamingTranscriber?.start { [weak self] text in
                     Task { @MainActor in
-                        if self?.liveTranscriptionEnabled == true {
+                        // Only use StreamingTranscriber for live preview when EOU is not active
+                        if self?.liveTranscriptionEnabled == true && !(self?.livePreviewEngine?.isModelLoaded == true) {
                             self?.liveTranscription = text
                         }
                     }
                 }
                 Logger.info("Streaming transcriber initialized (VAD: \(sileroVAD != nil ? "enabled" : "disabled"))", subsystem: .transcription)
 
-                // Connect audio samples to streaming transcriber
+                // Connect audio samples to streaming transcriber and live preview engine
                 audioRecorder?.onStreamingSamples = { [weak self] samples in
                     self?.streamingTranscriber?.addSamples(samples)
+                    self?.livePreviewEngine?.feedAudio(samples)
                 }
 
                 // Guard: if stopRecording() was called before we got here, bail out
@@ -1506,6 +1664,7 @@ class AppState: ObservableObject {
 
         Task {
             await audioRecorder?.stopRecording()
+            livePreviewEngine?.stop()
 
             // Unmute other audio sources now that recording is done
             if muteOtherAudioDuringRecording {
@@ -1784,6 +1943,11 @@ class AppState: ObservableObject {
 
         // Stop any streaming transcription
         streamingTranscriber = nil
+
+        // Free live preview engine
+        livePreviewEngine?.unloadModel()
+        livePreviewEngine = nil
+        isEouModelLoaded = false
 
         // Free VAD context first (smaller, faster)
         if sileroVAD != nil {

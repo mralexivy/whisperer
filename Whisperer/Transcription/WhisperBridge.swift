@@ -306,8 +306,12 @@ class WhisperBridge: TranscriptionBackend {
         }
     }()
 
-    init(modelPath: URL) throws {
+    // Whether this instance uses GPU acceleration (default true, false for CPU-only streaming)
+    private let useGPU: Bool
+
+    init(modelPath: URL, useGPU: Bool = true) throws {
         self.modelPath = modelPath
+        self.useGPU = useGPU
 
         // Use longer timeouts on Intel Macs
         if WhisperBridge.isAppleSilicon {
@@ -319,7 +323,7 @@ class WhisperBridge: TranscriptionBackend {
             self.transcriptionTimeout = 120.0  // 2 minutes for Intel
         }
 
-        Logger.info("Initializing WhisperBridge with model: \(modelPath.lastPathComponent)", subsystem: .transcription)
+        Logger.info("Initializing WhisperBridge with model: \(modelPath.lastPathComponent) (GPU: \(useGPU))", subsystem: .transcription)
         try loadModel()
         isInitialized = true
 
@@ -332,12 +336,9 @@ class WhisperBridge: TranscriptionBackend {
     private func loadModel() throws {
         var cparams = whisper_context_default_params()
 
-        // Both Apple Silicon and Intel use Metal GPU acceleration
-        // - Apple Silicon: Metal backend with flash attention
-        // - Intel: Metal backend (no flash attention support)
-        cparams.use_gpu = true
+        cparams.use_gpu = useGPU
 
-        if WhisperBridge.isAppleSilicon {
+        if useGPU && WhisperBridge.isAppleSilicon {
             cparams.flash_attn = true
         } else {
             cparams.flash_attn = false
@@ -349,7 +350,7 @@ class WhisperBridge: TranscriptionBackend {
         )
 
         // If GPU initialization failed, retry with CPU only
-        if ctx == nil {
+        if ctx == nil && useGPU {
             Logger.warning("GPU initialization failed, retrying with CPU only", subsystem: .transcription)
             cparams.use_gpu = false
             cparams.flash_attn = false

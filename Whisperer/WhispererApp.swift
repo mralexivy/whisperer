@@ -703,7 +703,7 @@ struct StatusTabView: View {
 
                     infoCard(
                         icon: "text.bubble",
-                        title: "Live Preview",
+                        title: "Live Transcription",
                         value: appState.liveTranscriptionEnabled ? "On" : "Off",
                         detail: nil,
                         color: .purple,
@@ -1276,6 +1276,7 @@ struct ModelsTabView: View {
                 }
                 .padding(.leading, 20)
             }
+
         }
     }
 
@@ -1538,24 +1539,62 @@ struct SettingsTabView: View {
                     }
                 }
 
-                // Live Preview
-                settingsCard(title: "Live Preview", icon: "text.bubble", color: .purple) {
-                    HStack {
-                        VStack(alignment: .leading, spacing: 3) {
-                            Text("Show live transcription")
-                                .font(.system(size: 13, weight: .medium))
-                                .foregroundColor(MBColors.textPrimary)
-                            Text("Display words as you speak")
-                                .font(.system(size: 11))
-                                .foregroundColor(MBColors.textSecondary)
+                // Live Transcription
+                settingsCard(title: "Live Transcription", icon: "text.bubble", color: .purple) {
+                    VStack(alignment: .leading, spacing: 8) {
+                        HStack {
+                            VStack(alignment: .leading, spacing: 3) {
+                                Text("Show live transcription")
+                                    .font(.system(size: 13, weight: .medium))
+                                    .foregroundColor(MBColors.textPrimary)
+                                Text("Display words as you speak")
+                                    .font(.system(size: 11))
+                                    .foregroundColor(MBColors.textSecondary)
+                            }
+
+                            Spacer()
+
+                            Toggle("", isOn: $appState.liveTranscriptionEnabled)
+                                .toggleStyle(.switch)
+                                .tint(MBColors.accent)
+                                .labelsHidden()
                         }
 
-                        Spacer()
-
-                        Toggle("", isOn: $appState.liveTranscriptionEnabled)
-                            .toggleStyle(.switch)
-                            .tint(MBColors.accent)
-                            .labelsHidden()
+                        if appState.liveTranscriptionEnabled {
+                            if appState.isDownloadingEou {
+                                VStack(alignment: .leading, spacing: 4) {
+                                    HStack(spacing: 6) {
+                                        ProgressView()
+                                            .scaleEffect(0.5)
+                                            .frame(width: 12, height: 12)
+                                        Text(appState.eouDownloadStatus)
+                                            .font(.system(size: 11, weight: .medium))
+                                            .foregroundColor(MBColors.textSecondary)
+                                    }
+                                    ProgressView(value: appState.eouDownloadProgress)
+                                        .progressViewStyle(.linear)
+                                        .tint(MBColors.accent)
+                                }
+                            } else if appState.isEouModelLoaded {
+                                HStack(spacing: 6) {
+                                    Image(systemName: "checkmark.circle.fill")
+                                        .font(.system(size: 12))
+                                        .foregroundColor(.green)
+                                    Text("Live transcription model ready")
+                                        .font(.system(size: 11, weight: .medium))
+                                        .foregroundColor(MBColors.textSecondary)
+                                }
+                            } else if appState.isEouModelCached() {
+                                HStack(spacing: 6) {
+                                    ProgressView()
+                                        .scaleEffect(0.5)
+                                        .frame(width: 12, height: 12)
+                                    Text("Loading model...")
+                                        .font(.system(size: 11, weight: .medium))
+                                        .foregroundColor(MBColors.textSecondary)
+                                }
+                            }
+                        }
                     }
                 }
                 .id(SettingsScrollTarget.livePreview)
