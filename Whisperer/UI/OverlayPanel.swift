@@ -135,7 +135,13 @@ class OverlayPanel: NSPanel {
     }
 
     private func positionAtBottomCenter() {
-        guard let screen = NSScreen.main else { return }
+        // Find screen containing the mouse cursor — this is where the user is actively working.
+        // Falls back to NSScreen.main (focused app screen) then first available screen.
+        let mouseLocation = NSEvent.mouseLocation
+        guard let screen = NSScreen.screens.first(where: { $0.frame.contains(mouseLocation) })
+                ?? NSScreen.main
+                ?? NSScreen.screens.first
+        else { return }
 
         let screenRect = screen.visibleFrame
 
