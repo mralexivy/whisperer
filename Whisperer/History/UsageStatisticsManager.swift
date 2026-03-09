@@ -302,12 +302,12 @@ class UsageStatisticsManager: ObservableObject {
         }
 
         // Fill in all days in the period
-        var activities: [DailyActivity] = []
+        var dailyActivities: [DailyActivity] = []
         let today = calendar.startOfDay(for: Date())
         for offset in stride(from: -(period.days - 1), through: 0, by: 1) {
             guard let day = calendar.date(byAdding: .day, value: offset, to: today) else { continue }
             let entry = dayMap[day]
-            activities.append(DailyActivity(
+            dailyActivities.append(DailyActivity(
                 date: day,
                 wordCount: entry?.words ?? 0,
                 duration: entry?.duration ?? 0,
@@ -315,7 +315,29 @@ class UsageStatisticsManager: ObservableObject {
             ))
         }
 
-        dailyActivity = activities
+        // Year view: group by week to avoid 365 tiny bars
+        if period == .year {
+            var weeklyActivities: [DailyActivity] = []
+            var weekStart = 0
+            while weekStart < dailyActivities.count {
+                let weekEnd = min(weekStart + 7, dailyActivities.count)
+                let chunk = dailyActivities[weekStart..<weekEnd]
+                let totalWords = chunk.reduce(0) { $0 + $1.wordCount }
+                let totalDuration = chunk.reduce(0.0) { $0 + $1.duration }
+                let totalSessions = chunk.reduce(0) { $0 + $1.sessionCount }
+                // Use the first day of the week as the representative date
+                weeklyActivities.append(DailyActivity(
+                    date: chunk.first!.date,
+                    wordCount: totalWords,
+                    duration: totalDuration,
+                    sessionCount: totalSessions
+                ))
+                weekStart = weekEnd
+            }
+            dailyActivity = weeklyActivities
+        } else {
+            dailyActivity = dailyActivities
+        }
     }
 
     // MARK: - App Usage

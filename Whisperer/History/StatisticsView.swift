@@ -290,12 +290,24 @@ struct StatisticsView: View {
         switch activityMetric {
         case .words:
             let count = Int(value)
-            if count >= 1000 { return String(format: "%.0fK", value / 1000) }
+            if count >= 1000 {
+                let k = value / 1000
+                // Use 1 decimal place to avoid duplicates (e.g. 1.5K vs 2K)
+                if k == k.rounded() {
+                    return String(format: "%.0fK", k)
+                }
+                return String(format: "%.1fK", k)
+            }
             return "\(count)"
         case .time:
-            let minutes = Int(value) / 60
-            let hours = Int(value) / 3600
-            if hours > 0 { return "\(hours)h" }
+            let totalSeconds = Int(value)
+            let hours = totalSeconds / 3600
+            let minutes = totalSeconds / 60
+            if hours > 0 {
+                let remainingMin = (totalSeconds % 3600) / 60
+                if remainingMin > 0 { return "\(hours)h\(remainingMin)m" }
+                return "\(hours)h"
+            }
             return "\(minutes)m"
         case .sessions:
             return "\(Int(value))"
@@ -315,7 +327,7 @@ struct StatisticsView: View {
         let chartMax = ticks.last ?? 1
 
         return GeometryReader { geo in
-            let yAxisWidth: CGFloat = 32
+            let yAxisWidth: CGFloat = 36
             let dayLabelHeight: CGFloat = 16
             let chartHeight = geo.size.height - dayLabelHeight
             let barAreaWidth = geo.size.width - yAxisWidth - 4
@@ -389,7 +401,9 @@ struct StatisticsView: View {
                         ForEach(Array(data.enumerated()), id: \.offset) { index, day in
                             let showLabel = dayLabelVisible(index: index, total: data.count, day: day)
                             Text(showLabel ? dayLabelText(for: day, total: data.count) : "")
-                                .font(.system(size: 10, weight: .medium))
+                                .font(.system(size: data.count > 14 ? 9 : 10, weight: .medium))
+                                .lineLimit(1)
+                                .fixedSize(horizontal: true, vertical: false)
                                 .foregroundColor(
                                     hoveredBarIndex == index
                                         ? WhispererColors.primaryText(colorScheme)
@@ -408,18 +422,22 @@ struct StatisticsView: View {
     private func dayLabelVisible(index: Int, total: Int, day: DailyActivity) -> Bool {
         if total <= 14 { return true }
         if total <= 31 {
-            // Month: show every ~5 days
-            return index % 5 == 0 || index == total - 1
+            // Month: show every 7 days to avoid overlap
+            return index % 7 == 0 || index == total - 1
         }
-        // Year: show first day of each month
-        let calendar = Calendar.current
-        return calendar.component(.day, from: day.date) == 1
+        // Year (weekly bars, ~52 total): show every ~4 weeks (monthly)
+        return index % 4 == 0
     }
 
     private func dayLabelText(for day: DailyActivity, total: Int) -> String {
         if total <= 14 { return day.dayLabel }
-        if total <= 31 { return day.shortDateLabel }
-        // Year: show month abbreviation
+        if total <= 31 {
+            // Compact format for month view
+            let formatter = DateFormatter()
+            formatter.dateFormat = "M/d"
+            return formatter.string(from: day.date)
+        }
+        // Year (weekly bars): show month abbreviation
         let formatter = DateFormatter()
         formatter.dateFormat = "MMM"
         return formatter.string(from: day.date)
@@ -458,20 +476,23 @@ struct StatisticsView: View {
 
     private var summaryPills: some View {
         let data = statsManager.dailyActivity
+        let isYearView = statsManager.selectedPeriod == .year
 
         let peakDay = data.max(by: { metricValue(for: $0) < metricValue(for: $1) })
         let peakValue = peakDay.map { metricValue(for: $0) } ?? 0
 
         let totalValue = data.reduce(0.0) { $0 + metricValue(for: $1) }
         let avgValue = data.isEmpty ? 0.0 : totalValue / Double(data.count)
+        let avgUnit = isYearView ? "/ week" : "/ day"
 
         return HStack(spacing: 6) {
             if let peak = peakDay, peakValue > 0 {
+                let peakLabel = isYearView ? peak.shortDateLabel : peak.dayLabel
                 let peakText: String = {
                     switch activityMetric {
-                    case .words: return "Peak \(peak.dayLabel) · \(statsManager.formattedWords(peak.wordCount)) words"
-                    case .time: return "Peak \(peak.dayLabel) · \(statsManager.formattedDuration(peak.duration))"
-                    case .sessions: return "Peak \(peak.dayLabel) · \(peak.sessionCount) sessions"
+                    case .words: return "Peak \(peakLabel) · \(statsManager.formattedWords(peak.wordCount)) words"
+                    case .time: return "Peak \(peakLabel) · \(statsManager.formattedDuration(peak.duration))"
+                    case .sessions: return "Peak \(peakLabel) · \(peak.sessionCount) sessions"
                     }
                 }()
                 statsPill(
@@ -483,9 +504,9 @@ struct StatisticsView: View {
             if avgValue > 0 {
                 let avgText: String = {
                     switch activityMetric {
-                    case .words: return "⌀ \(statsManager.formattedWords(Int(avgValue))) / day"
-                    case .time: return "⌀ \(statsManager.formattedDuration(avgValue)) / day"
-                    case .sessions: return "⌀ \(String(format: "%.1f", avgValue)) / day"
+                    case .words: return "⌀ \(statsManager.formattedWords(Int(avgValue))) \(avgUnit)"
+                    case .time: return "⌀ \(statsManager.formattedDuration(avgValue)) \(avgUnit)"
+                    case .sessions: return "⌀ \(String(format: "%.1f", avgValue)) \(avgUnit)"
                     }
                 }()
                 statsPill(
