@@ -119,16 +119,17 @@ nonisolated class LivePreviewEngine {
 
     /// Stop live preview. Flushes remaining audio and clears state.
     /// Called after audioRecorder.stopRecording() so no more feedAudio calls.
-    func stop() {
+    /// MUST be awaited before starting final transcription — the EOU model's finish()
+    /// runs on ANE, and concurrent ANE access with the main TDT model causes corrupted
+    /// inference (wrong language output, e.g. Cyrillic instead of English).
+    func stop() async {
         isRunning = false
         onPartialTranscript = nil
         sampleBuffer.removeAll()
 
-        Task { [weak self] in
-            guard let manager = self?.eouManager else { return }
-            _ = try? await manager.finish()
-            await manager.reset()
-        }
+        guard let manager = eouManager else { return }
+        _ = try? await manager.finish()
+        await manager.reset()
     }
 
     /// Release model from memory

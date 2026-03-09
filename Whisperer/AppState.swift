@@ -1481,7 +1481,7 @@ class AppState: ObservableObject {
 
         Task {
             await audioRecorder?.stopRecording()
-            livePreviewEngine?.stop()
+            await livePreviewEngine?.stop()
 
             if muteOtherAudioDuringRecording {
                 audioMuter?.unmuteSystemAudio()
@@ -1664,7 +1664,7 @@ class AppState: ObservableObject {
 
         Task {
             await audioRecorder?.stopRecording()
-            livePreviewEngine?.stop()
+            await livePreviewEngine?.stop()
 
             // Unmute other audio sources now that recording is done
             if muteOtherAudioDuringRecording {
