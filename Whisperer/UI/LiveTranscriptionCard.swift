@@ -110,7 +110,6 @@ struct LiveTranscriptionCard: View {
                 .frame(width: 20 * scale, height: 10 * scale)
         }
         .frame(width: 380 * scale)
-        .tahoeTextFix()
         .accessibilityElement(children: .combine)
         .accessibilityLabel("Live transcription")
         .accessibilityValue(textUpdater.displayedText.isEmpty ? "Listening..." : textUpdater.displayedText)

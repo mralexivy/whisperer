@@ -122,7 +122,6 @@ struct OverlayView: View {
         }
         .environment(\.overlayScale, scale)
         .background(Color.clear)
-        .tahoeTextFix()
         .onAppear {
             withAnimation(.easeInOut(duration: 1.0).repeatForever(autoreverses: true)) {
                 isPulsing = true

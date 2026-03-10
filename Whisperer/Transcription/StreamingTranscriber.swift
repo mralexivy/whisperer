@@ -273,7 +273,12 @@ class StreamingTranscriber {
                 }
             }
 
-            self.lastTranscribedSampleIndex = chunk.endSample
+            // Only advance past this chunk if transcription produced text or we're still
+            // recording. During stop, requestAbort() kills in-flight chunks — if we advance
+            // the index on an aborted (empty) chunk, the tail pass can't re-transcribe it.
+            if !trimmed.isEmpty || !self.isStopped {
+                self.lastTranscribedSampleIndex = chunk.endSample
+            }
             self.currentChunkLiveText = ""
             self.isTranscribingChunk = false
             self.isProcessing = false

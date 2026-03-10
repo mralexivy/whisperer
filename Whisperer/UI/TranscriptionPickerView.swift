@@ -34,7 +34,6 @@ struct TranscriptionPickerView: View {
                 )
                 .shadow(color: Color.black.opacity(0.4), radius: 20, y: 8)
                 .frame(width: 380)
-                .tahoeTextFix()
 
                 // "Copied" feedback overlay
                 if pickerState.showCopiedFeedback {

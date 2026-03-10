@@ -363,7 +363,6 @@ struct MenuBarView: View {
             footerView
         }
         .frame(width: 360, height: 580)
-        .tahoeTextFix()
         .background(MBColors.background)
         .background(MenuBarWindowConfigurator())
         .environment(\.colorScheme, .dark)

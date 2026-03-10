@@ -191,7 +191,6 @@ struct HistoryWindowView: View {
             }
         }
         .frame(minWidth: isSidebarCollapsed ? 700 : 1100, minHeight: 700)
-        .tahoeTextFix()
         .background(WhispererColors.background(colorScheme))
         .onReceive(NotificationCenter.default.publisher(for: .switchToDictionaryTab)) { notification in
             withAnimation(.spring(response: 0.3)) {
