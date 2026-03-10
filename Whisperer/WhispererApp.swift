@@ -313,14 +313,11 @@ private struct MenuBarWindowConfigurator: NSViewRepresentable {
             window.isOpaque = false
             window.hasShadow = false
 
-            // Remove visible border by configuring the content view layer
+            // Layer-backed for dark background — no masksToBounds/cornerRadius
+            // (CoreAnimation clipping triggers Tahoe text compositing bug)
             if let contentView = window.contentView {
                 contentView.wantsLayer = true
                 contentView.layer?.backgroundColor = NSColor(red: 0.047, green: 0.047, blue: 0.102, alpha: 1.0).cgColor
-                contentView.layer?.cornerRadius = 10
-                contentView.layer?.masksToBounds = true
-                contentView.layer?.borderWidth = 0
-                contentView.layer?.borderColor = NSColor.clear.cgColor
             }
         }
         return view
@@ -363,6 +360,7 @@ struct MenuBarView: View {
             footerView
         }
         .frame(width: 360, height: 580)
+        .clipShape(RoundedRectangle(cornerRadius: 10))
         .background(MBColors.background)
         .background(MenuBarWindowConfigurator())
         .environment(\.colorScheme, .dark)

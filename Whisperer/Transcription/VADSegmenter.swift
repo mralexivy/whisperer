@@ -230,7 +230,7 @@ class VADSegmenter {
 
         guard !prevWords.isEmpty, !newWords.isEmpty else { return newText }
 
-        let maxOverlapWords = min(5, prevWords.count, newWords.count)
+        let maxOverlapWords = min(15, prevWords.count, newWords.count)
 
         for overlapLen in stride(from: maxOverlapWords, through: 1, by: -1) {
             let prevTail = prevWords.suffix(overlapLen).map { $0.lowercased() }

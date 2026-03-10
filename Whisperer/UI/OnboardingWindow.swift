@@ -33,8 +33,8 @@ class OnboardingWindow: NSWindow {
         })
         let hostingView = NSHostingView(rootView: onboardingView)
         hostingView.wantsLayer = true
-        hostingView.layer?.cornerRadius = 20
-        hostingView.layer?.masksToBounds = true
+        // No masksToBounds/cornerRadius — CoreAnimation clipping triggers Tahoe text bug
+        // Rounding handled by SwiftUI .clipShape() in OnboardingView
         self.contentView = hostingView
     }
 

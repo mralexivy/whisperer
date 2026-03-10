@@ -29,6 +29,7 @@ class StreamingTranscriber {
     private var vadSegmenter: VADSegmenter
     private var lastVADScanIndex: Int = 0
     private var lastTranscribedSampleIndex: Int = 0
+    private var lastClaimedSampleIndex: Int = 0
     private var completedChunkTexts: [String] = []
     private var currentChunkLiveText: String = ""
     private var pendingChunks: [VADSegmenter.AudioChunk] = []
@@ -129,6 +130,7 @@ class StreamingTranscriber {
         memoryLimitReached = false
         lastVADScanIndex = 0
         lastTranscribedSampleIndex = 0
+        lastClaimedSampleIndex = 0
         completedChunkTexts = []
         currentChunkLiveText = ""
         pendingChunks = []
@@ -194,14 +196,17 @@ class StreamingTranscriber {
         let result = vadSegmenter.scanAndEmitChunks(
             allSamples: allSamples,
             fromIndex: lastVADScanIndex,
-            lastTranscribedIndex: lastTranscribedSampleIndex
+            lastTranscribedIndex: lastClaimedSampleIndex
         )
         lastVADScanIndex = result.newScanIndex
 
-        // Queue new chunks
+        // Queue new chunks and advance claimed index
         if !result.chunks.isEmpty {
             pendingChunks.append(contentsOf: result.chunks)
-            Logger.debug("VAD emitted \(result.chunks.count) chunk(s), \(pendingChunks.count) pending", subsystem: .transcription)
+            if let lastChunk = result.chunks.last {
+                lastClaimedSampleIndex = max(lastClaimedSampleIndex, lastChunk.endSample)
+            }
+            Logger.debug("VAD emitted \(result.chunks.count) chunk(s), \(pendingChunks.count) pending, claimed up to \(lastClaimedSampleIndex)", subsystem: .transcription)
         }
 
         // Process next pending chunk if not busy
@@ -210,7 +215,7 @@ class StreamingTranscriber {
 
     /// Transcribe the next pending chunk
     private func processNextChunk() {
-        guard !isTranscribingChunk, !pendingChunks.isEmpty else { return }
+        guard !isStopped, !isTranscribingChunk, !pendingChunks.isEmpty else { return }
 
         let chunk = pendingChunks.removeFirst()
         isTranscribingChunk = true
@@ -248,7 +253,8 @@ class StreamingTranscriber {
         whisper.transcribeAsync(
             samples: chunk.samples,
             initialPrompt: prompt,
-            language: language
+            language: language,
+            singleSegment: true
         ) { [weak self] text in
             guard let self = self else { return }
 
@@ -375,6 +381,9 @@ class StreamingTranscriber {
             bridge.requestAbort()
             bridge.onNewSegment = nil
         }
+
+        // Discard any pending chunks — the tail pass will cover unprocessed audio
+        pendingChunks.removeAll()
 
         // Transcribe tail audio (unprocessed samples after last chunk)
         transcribeTail()
