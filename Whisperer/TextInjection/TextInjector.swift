@@ -2,9 +2,9 @@
 //  TextInjector.swift
 //  Whisperer
 //
-//  Text entry for dictation via CGEvent unicode or clipboard paste.
-//  Primary: posts keyboard events with unicode string (no clipboard disruption).
-//  Fallback: clipboard + simulated Cmd+V for long text or CGEvent failure.
+//  Text entry for dictation.
+//  APP_STORE build: clipboard-only (no Accessibility, no CGEvent.post).
+//  Non-App Store build: CGEvent unicode or clipboard paste with simulated Cmd+V.
 //
 
 import Cocoa
@@ -16,9 +16,11 @@ class TextInjector {
     // Must be captured BEFORE recording begins (before overlay steals focus).
     private var targetAppPID: pid_t?
 
+    #if !APP_STORE
     // CGEvent keyboardSetUnicodeString has a practical limit on UTF-16 units per event.
     // Beyond this, fall back to clipboard paste.
     private static let cgEventUnicodeLimit = 200
+    #endif
 
     /// Call this before recording starts to capture which app should receive the text
     func captureTargetApp() {
@@ -32,9 +34,11 @@ class TextInjector {
 
     // MARK: - Permission Check
 
+    #if !APP_STORE
     static func hasAccessibilityPermission() -> Bool {
         return AXIsProcessTrusted()
     }
+    #endif
 
     // MARK: - Text Entry
 
@@ -49,6 +53,11 @@ class TextInjector {
             app.activate()
         }
 
+        #if APP_STORE
+        // App Store build: clipboard-only, no Accessibility
+        Logger.info("Clipboard mode — copying transcript to clipboard", subsystem: .textInjection)
+        copyToClipboard(text)
+        #else
         guard AppState.shared.autoPasteEnabled && Self.hasAccessibilityPermission() else {
             Logger.info("Auto-paste disabled or accessibility not granted, copying to clipboard", subsystem: .textInjection)
             copyToClipboard(text)
@@ -67,10 +76,12 @@ class TextInjector {
 
         // Fallback: clipboard + Cmd+V paste (CGEvent failure)
         try await enterViaClipboardPaste(text)
+        #endif
     }
 
     // MARK: - CGEvent Unicode Insertion
 
+    #if !APP_STORE
     /// Inserts text by posting CGEvent keyboard events with unicode string data.
     /// Splits long text into chunks of cgEventUnicodeLimit UTF-16 units each.
     /// No clipboard involvement — instant, zero side effects.
@@ -106,9 +117,11 @@ class TextInjector {
         Logger.debug("Text entered via CGEvent unicode (\(utf16Array.count) UTF-16 units, \(chunks.count) chunk(s))", subsystem: .textInjection)
         return true
     }
+    #endif
 
     // MARK: - Clipboard + Paste
 
+    #if !APP_STORE
     private func enterViaClipboardPaste(_ text: String) async throws {
         // Activation delay already applied in insertText
 
@@ -155,6 +168,7 @@ class TextInjector {
         keyDown.post(tap: .cgAnnotatedSessionEventTap)
         keyUp.post(tap: .cgAnnotatedSessionEventTap)
     }
+    #endif
 
     // MARK: - Clipboard Only (no Accessibility)
 

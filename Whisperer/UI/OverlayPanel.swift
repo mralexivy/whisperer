@@ -184,7 +184,7 @@ class OverlayPanel: NSPanel {
         let capturedGen = generation
 
         let appState = AppState.shared
-        let shouldShow = appState.state != .idle || appState.showModelLoadingToast
+        let shouldShow = appState.state != .idle || appState.showModelLoadingToast || appState.showClipboardToast
 
         if shouldShow && !self.isVisible {
             // Reposition at bottom-center every time we show
@@ -192,6 +192,10 @@ class OverlayPanel: NSPanel {
             self.orderFrontRegardless()
             self.alphaValue = 1.0  // Instant show (no animation delay)
             Logger.debug("Overlay panel shown (state=\(appState.state), toast=\(appState.showModelLoadingToast))", subsystem: .ui)
+        } else if shouldShow && self.isVisible {
+            // Cancel any in-progress fade-out (e.g., clipboard toast arriving while HUD is fading)
+            self.animator().alphaValue = 1.0
+            self.alphaValue = 1.0
         } else if !shouldShow && self.isVisible {
             NSAnimationContext.runAnimationGroup { context in
                 context.duration = 0.2

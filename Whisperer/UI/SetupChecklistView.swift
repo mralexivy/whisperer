@@ -19,7 +19,7 @@ struct SetupChecklistView: View {
     }
 
     private var checklistItems: [ChecklistItem] {
-        [
+        var items = [
             ChecklistItem(
                 icon: "cpu",
                 title: "Download Voice Model",
@@ -30,7 +30,7 @@ struct SetupChecklistView: View {
             ),
             ChecklistItem(
                 icon: "mic.fill",
-                title: "Grant Microphone Access",
+                title: "Microphone Access",
                 description: "Required for voice recording",
                 color: Color(hex: "22C55E"),
                 isComplete: permissionManager.microphoneStatus == .granted,
@@ -46,17 +46,20 @@ struct SetupChecklistView: View {
                 isComplete: appState.keyListener?.shortcutConfig != nil,
                 action: nil
             ),
-            ChecklistItem(
-                icon: "doc.on.clipboard",
-                title: "Enable Auto-Paste",
-                description: "Automatically insert text at cursor (optional)",
-                color: .blue,
-                isComplete: appState.autoPasteEnabled,
-                action: {
-                    appState.autoPasteEnabled = true
-                }
-            ),
         ]
+        #if !APP_STORE
+        items.append(ChecklistItem(
+            icon: "doc.on.clipboard",
+            title: "Enable Auto-Paste",
+            description: "Automatically insert text at cursor (optional)",
+            color: .blue,
+            isComplete: appState.autoPasteEnabled,
+            action: {
+                appState.autoPasteEnabled = true
+            }
+        ))
+        #endif
+        return items
     }
 
     private var allComplete: Bool {

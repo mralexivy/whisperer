@@ -65,6 +65,10 @@ class AppState: ObservableObject {
     @Published var errorMessage: String?
     @Published var saveRecordings: Bool = true  // Save recordings by default
     @Published var liveTranscription: String = ""  // Live transcription during recording
+
+    // Latest committed transcript for macOS Services provider
+    private(set) var lastTranscribedText: String = ""
+    private(set) var lastTranscriptionDate: Date?
     @Published var muteOtherAudioDuringRecording: Bool = true {  // Mute other audio sources during recording
         didSet {
             UserDefaults.standard.set(muteOtherAudioDuringRecording, forKey: "muteOtherAudioDuringRecording")
@@ -123,6 +127,7 @@ class AppState: ObservableObject {
         }
     }
 
+    #if !APP_STORE
     // Auto-paste opt-in — when enabled, uses Accessibility to simulate Cmd+V.
     // When disabled, transcribed text is copied to clipboard only.
     @Published var autoPasteEnabled: Bool = false {
@@ -135,6 +140,7 @@ class AppState: ObservableObject {
             }
         }
     }
+    #endif
 
     // In-app transcription mode (no Accessibility required)
     @Published var isInAppMode: Bool = false
@@ -233,6 +239,11 @@ class AppState: ObservableObject {
         }
     }
     @Published var showModelLoadingToast: Bool = false {
+        didSet {
+            NotificationCenter.default.post(name: NSNotification.Name("AppStateChanged"), object: nil)
+        }
+    }
+    @Published var showClipboardToast: Bool = false {
         didSet {
             NotificationCenter.default.post(name: NSNotification.Name("AppStateChanged"), object: nil)
         }
@@ -352,7 +363,9 @@ class AppState: ObservableObject {
 
     // Rewrite mode
     @Published var activeMode: ActiveMode = .dictation
+    #if !APP_STORE
     var textSelectionService: TextSelectionService?
+    #endif
     var rewriteModeService: RewriteModeService?
     private var capturedSelectedText: String?
 
@@ -399,6 +412,7 @@ class AppState: ObservableObject {
             _systemWideDictationEnabled = Published(wrappedValue: UserDefaults.standard.bool(forKey: "systemWideDictationEnabled"))
         }
 
+        #if !APP_STORE
         // Load auto-paste preference (default OFF)
         if UserDefaults.standard.object(forKey: "autoPasteEnabled") != nil {
             _autoPasteEnabled = Published(wrappedValue: UserDefaults.standard.bool(forKey: "autoPasteEnabled"))
@@ -408,6 +422,7 @@ class AppState: ObservableObject {
         if autoPasteEnabled {
             PermissionManager.shared.enableAccessibilityTracking()
         }
+        #endif
 
         // Load onboarding state
         if UserDefaults.standard.object(forKey: "hasCompletedOnboarding") != nil {
@@ -479,6 +494,7 @@ class AppState: ObservableObject {
             self?.reconfigureVocabularyBoosting()
         }
 
+        #if !APP_STORE
         // Recheck accessibility when app becomes active (user returns from System Settings)
         appActivationObserver = NotificationCenter.default.addObserver(
             forName: NSApplication.didBecomeActiveNotification, object: nil, queue: .main
@@ -488,14 +504,19 @@ class AppState: ObservableObject {
                 PermissionManager.shared.recheckAccessibilityIfNeeded()
             }
         }
+        #endif
 
-        // Show feedback when text is copied to clipboard (accessibility fallback)
+        // Show clipboard toast when text is copied
         clipboardNotificationObserver = NotificationCenter.default.addObserver(
             forName: NSNotification.Name("TextCopiedToClipboard"), object: nil, queue: .main
         ) { [weak self] _ in
             guard self != nil else { return }
             Task { @MainActor [weak self] in
-                self?.errorMessage = "Text copied to clipboard — press ⌘V to paste"
+                guard let self = self else { return }
+                self.showClipboardToast = true
+                DispatchQueue.main.asyncAfter(deadline: .now() + 2.5) { [weak self] in
+                    self?.showClipboardToast = false
+                }
             }
         }
 
@@ -1354,6 +1375,7 @@ class AppState: ObservableObject {
             }
         }
 
+        #if !APP_STORE
         // Rewrite mode callbacks
         listener.onRewriteShortcutPressed = { [weak self] in
             Task { @MainActor in
@@ -1365,6 +1387,7 @@ class AppState: ObservableObject {
                 self?.stopRecording()
             }
         }
+        #endif
 
         // Transcription picker callbacks (Option+V)
         listener.onPickerActivated = { [weak self] in
@@ -1536,8 +1559,10 @@ class AppState: ObservableObject {
 
         guard state == .idle else { return }
 
+        #if !APP_STORE
         // Recheck accessibility status before recording (event-based check)
         PermissionManager.shared.recheckAccessibilityIfNeeded()
+        #endif
 
         // Dismiss transcription picker if visible
         if TranscriptionPickerState.shared.isVisible {
@@ -1718,6 +1743,7 @@ class AppState: ObservableObject {
 
                 // Route through rewrite mode or standard dictation
                 let textToInsert: String
+                #if !APP_STORE
                 if self.activeMode == .rewrite {
                     textToInsert = await processRewriteMode(transcription: finalText)
                 } else {
@@ -1725,6 +1751,11 @@ class AppState: ObservableObject {
                     let processedText = await applyLLMPostProcessing(listFormatted)
                     textToInsert = appendTrailingSpace ? processedText + " " : processedText
                 }
+                #else
+                let listFormatted = await applyListFormatting(finalText)
+                let processedText = await applyLLMPostProcessing(listFormatted)
+                textToInsert = appendTrailingSpace ? processedText + " " : processedText
+                #endif
 
                 Logger.debug("Entering dictated text: '\(textToInsert)'", subsystem: .app)
                 cancelStateWatchdog()
@@ -1811,7 +1842,9 @@ class AppState: ObservableObject {
         guard state == .idle else { return }
 
         // Capture selected text BEFORE recording starts (before overlay steals focus)
+        #if !APP_STORE
         capturedSelectedText = textSelectionService?.getSelectedText()
+        #endif
         activeMode = .rewrite
 
         Logger.info("Rewrite mode started (selected \(capturedSelectedText?.count ?? 0) chars)", subsystem: .app)
@@ -1898,6 +1931,10 @@ class AppState: ObservableObject {
             state = .idle
             return
         }
+
+        // Store transcript for macOS Services provider
+        lastTranscribedText = text
+        lastTranscriptionDate = Date()
 
         // Dismiss HUD immediately — fade-out animation runs concurrently with text entry
         state = .idle

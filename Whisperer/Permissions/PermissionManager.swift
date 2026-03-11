@@ -12,14 +12,18 @@ import Combine
 
 enum PermissionType: String, CaseIterable {
     case microphone = "Microphone"
+    #if !APP_STORE
     case accessibility = "Accessibility"
+    #endif
 
     var description: String {
         switch self {
         case .microphone:
             return "Record audio from your microphone"
+        #if !APP_STORE
         case .accessibility:
             return "Auto-paste — enter text wherever you type"
+        #endif
         }
     }
 
@@ -27,15 +31,19 @@ enum PermissionType: String, CaseIterable {
         switch self {
         case .microphone:
             return URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone")
+        #if !APP_STORE
         case .accessibility:
             return URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility")
+        #endif
         }
     }
 
     var icon: String {
         switch self {
         case .microphone: return "mic.fill"
+        #if !APP_STORE
         case .accessibility: return "accessibility"
+        #endif
         }
     }
 }
@@ -70,10 +78,14 @@ class PermissionManager: ObservableObject {
     static let shared = PermissionManager()
 
     @Published var microphoneStatus: PermissionStatus = .unknown
+    #if !APP_STORE
     @Published var accessibilityStatus: PermissionStatus = .notDetermined
+    #endif
 
     private var checkTimer: Timer?
+    #if !APP_STORE
     private var isAccessibilityTrackingEnabled = false
+    #endif
 
     private init() {
         checkMicrophonePermission()
@@ -84,9 +96,11 @@ class PermissionManager: ObservableObject {
 
     func refreshAllPermissions() {
         checkMicrophonePermission()
+        #if !APP_STORE
         if isAccessibilityTrackingEnabled {
             checkAccessibilityPermission()
         }
+        #endif
     }
 
     func checkMicrophonePermission() {
@@ -102,6 +116,7 @@ class PermissionManager: ObservableObject {
         }
     }
 
+    #if !APP_STORE
     func checkAccessibilityPermission() {
         guard isAccessibilityTrackingEnabled else { return }
         if AXIsProcessTrusted() {
@@ -133,6 +148,7 @@ class PermissionManager: ObservableObject {
         guard isAccessibilityTrackingEnabled else { return }
         checkAccessibilityPermission()
     }
+    #endif
 
     // MARK: - Permission Requests
 
@@ -144,6 +160,7 @@ class PermissionManager: ObservableObject {
         }
     }
 
+    #if !APP_STORE
     func requestAccessibilityPermission() {
         // Enable tracking so periodic/event-based checks detect the grant
         isAccessibilityTrackingEnabled = true
@@ -170,6 +187,7 @@ class PermissionManager: ObservableObject {
             }
         }
     }
+    #endif
 
     // MARK: - System Settings
 
@@ -183,20 +201,24 @@ class PermissionManager: ObservableObject {
 
     var allPermissionsGranted: Bool {
         guard microphoneStatus == .granted else { return false }
+        #if !APP_STORE
         if isAccessibilityTrackingEnabled {
             return accessibilityStatus == .granted
         }
+        #endif
         return true
     }
 
     /// Permissions required for the current mode.
     /// Microphone is always required. Accessibility is only required
-    /// when auto-paste is enabled.
+    /// when auto-paste is enabled (non-App Store builds only).
     var requiredPermissionsGranted: Bool {
         guard microphoneStatus == .granted else { return false }
+        #if !APP_STORE
         if isAccessibilityTrackingEnabled {
             return accessibilityStatus == .granted
         }
+        #endif
         return true
     }
 
@@ -209,7 +231,9 @@ class PermissionManager: ObservableObject {
     func status(for type: PermissionType) -> PermissionStatus {
         switch type {
         case .microphone: return microphoneStatus
+        #if !APP_STORE
         case .accessibility: return accessibilityStatus
+        #endif
         }
     }
 
@@ -220,8 +244,10 @@ class PermissionManager: ObservableObject {
             guard self != nil else { return }
             Task { @MainActor [weak self] in
                 self?.checkMicrophonePermission()
+                #if !APP_STORE
                 // Check accessibility if tracking is active (user may grant in System Settings)
                 self?.recheckAccessibilityIfNeeded()
+                #endif
             }
         }
     }

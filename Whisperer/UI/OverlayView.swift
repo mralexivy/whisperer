@@ -22,9 +22,13 @@ struct OverlayView: View {
     private let blueAccent = Color(red: 0.357, green: 0.424, blue: 0.969)          // #5B6CF7
     private let purpleAccent = Color(red: 0.545, green: 0.361, blue: 0.965)        // #8B5CF6
 
+    #if APP_STORE
+    private var accentColor: Color { blueAccent }
+    #else
     private var accentColor: Color {
         appState.activeMode == .rewrite ? purpleAccent : blueAccent
     }
+    #endif
 
     // Scaled dimensions
     private var circleSize: CGFloat { 44 * scale }
@@ -38,7 +42,9 @@ struct OverlayView: View {
 
     var body: some View {
         VStack(spacing: 8 * scale) {
-            if appState.showModelLoadingToast {
+            if appState.showClipboardToast {
+                ClipboardToastIndicator(scale: scale)
+            } else if appState.showModelLoadingToast {
                 ModelLoadingIndicator(scale: scale)
             } else if appState.state != .idle {
                 // Live transcription card (shown during recording)
@@ -56,6 +62,7 @@ struct OverlayView: View {
                     DownloadingIndicator(scale: scale)
                 }
 
+                #if !APP_STORE
                 // Rewrite mode label
                 if appState.activeMode == .rewrite {
                     Text("REWRITE MODE")
@@ -63,6 +70,7 @@ struct OverlayView: View {
                         .tracking(1.0)
                         .foregroundColor(purpleAccent)
                 }
+                #endif
 
                 // Main control bar
                 HStack(spacing: spacing) {
@@ -339,9 +347,113 @@ struct ModelLoadingIndicator: View {
     }
 }
 
+// MARK: - Clipboard Toast Indicator
+
+struct ClipboardToastIndicator: View {
+    var scale: CGFloat = 1.0
+    @State private var checkmarkScale: CGFloat = 0.0
+    @State private var checkmarkOpacity: Double = 0.0
+    @State private var textOpacity: Double = 0.0
+    @State private var ringProgress: CGFloat = 0.0
+
+    private let hudBackground = Color(red: 0.078, green: 0.078, blue: 0.169)
+    private let accentGreen = Color(red: 0.286, green: 0.824, blue: 0.506)   // #49D281
+    private let accentBlue = Color(red: 0.357, green: 0.424, blue: 0.969)    // #5B6CF7
+
+    var body: some View {
+        HStack(spacing: 12 * scale) {
+            // Animated checkmark circle
+            ZStack {
+                // Background ring
+                Circle()
+                    .stroke(accentGreen.opacity(0.15), lineWidth: 2 * scale)
+                    .frame(width: 30 * scale, height: 30 * scale)
+
+                // Animated progress ring
+                Circle()
+                    .trim(from: 0, to: ringProgress)
+                    .stroke(accentGreen, style: StrokeStyle(lineWidth: 2 * scale, lineCap: .round))
+                    .frame(width: 30 * scale, height: 30 * scale)
+                    .rotationEffect(.degrees(-90))
+
+                // Checkmark icon
+                Image(systemName: "checkmark")
+                    .font(.system(size: 13 * scale, weight: .bold))
+                    .foregroundColor(accentGreen)
+                    .scaleEffect(checkmarkScale)
+                    .opacity(checkmarkOpacity)
+            }
+
+            // Text content
+            VStack(alignment: .leading, spacing: 2 * scale) {
+                Text("Copied to Clipboard")
+                    .font(.system(size: 13 * scale, weight: .semibold, design: .rounded))
+                    .foregroundColor(.white)
+
+                HStack(spacing: 4 * scale) {
+                    Text("Press")
+                        .font(.system(size: 11 * scale, weight: .medium))
+                        .foregroundColor(.white.opacity(0.45))
+
+                    // Key cap style ⌘V
+                    HStack(spacing: 2 * scale) {
+                        Text("⌘")
+                            .font(.system(size: 11 * scale, weight: .semibold))
+                        Text("V")
+                            .font(.system(size: 10 * scale, weight: .bold, design: .rounded))
+                    }
+                    .foregroundColor(.white.opacity(0.7))
+                    .padding(.horizontal, 5 * scale)
+                    .padding(.vertical, 2 * scale)
+                    .background(
+                        RoundedRectangle(cornerRadius: 4 * scale)
+                            .fill(Color.white.opacity(0.08))
+                    )
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 4 * scale)
+                            .stroke(Color.white.opacity(0.1), lineWidth: 0.5)
+                    )
+
+                    Text("to paste")
+                        .font(.system(size: 11 * scale, weight: .medium))
+                        .foregroundColor(.white.opacity(0.45))
+                }
+            }
+            .opacity(textOpacity)
+        }
+        .padding(.horizontal, 16 * scale)
+        .padding(.vertical, 10 * scale)
+        .background(
+            Capsule()
+                .fill(hudBackground)
+                .overlay(
+                    Capsule()
+                        .stroke(accentGreen.opacity(0.2), lineWidth: 1)
+                )
+                .shadow(color: accentGreen.opacity(0.1), radius: 8, y: 2)
+        )
+        .onAppear {
+            // Ring draws in
+            withAnimation(.easeOut(duration: 0.4)) {
+                ringProgress = 1.0
+            }
+            // Checkmark pops in after ring completes
+            withAnimation(.spring(response: 0.35, dampingFraction: 0.6).delay(0.3)) {
+                checkmarkScale = 1.0
+                checkmarkOpacity = 1.0
+            }
+            // Text fades in
+            withAnimation(.easeOut(duration: 0.3).delay(0.15)) {
+                textOpacity = 1.0
+            }
+        }
+    }
+}
+
 #Preview {
     VStack(spacing: 20) {
         OverlayView()
+        ClipboardToastIndicator()
     }
     .padding(40)
     .background(Color.black)

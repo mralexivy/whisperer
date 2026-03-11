@@ -5,7 +5,7 @@
 //  Persists command mode chat sessions (non-sandboxed builds only)
 //
 
-#if !ENABLE_APP_SANDBOX
+#if !APP_STORE
 
 import Foundation
 import Combine

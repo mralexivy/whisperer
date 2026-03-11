@@ -1,73 +1,98 @@
 ---
 name: app-store-check
 description: >
-  Scans Whisperer codebase for App Store Guideline 2.4.5 violations including
-  banned APIs (CGEventTap, IOHIDManager, global keyDown/keyUp monitors),
-  permission red flags, and framing issues. Use when modifying KeyListener,
-  TextInjector, or Permissions code, or before App Store submission. Use when
-  user says "check compliance", "App Store scan", "guideline check", "2.4.5",
-  or touches input handling or text injection code.
+  Scans Whisperer codebase for App Store Guideline 2.4.5 and 5.1.1(iv)
+  violations including banned APIs, permission red flags, directive
+  permission language, and features not hidden in APP_STORE build. Use
+  when modifying KeyListener, TextInjector, Permissions, or UI code, or
+  before App Store submission. Use when user says "check compliance",
+  "App Store scan", "guideline check", "2.4.5", or touches input
+  handling or text injection code.
 metadata:
-  version: 1.0.0
+  version: 2.0.0
   category: compliance
-  tags: [app-store, compliance, security, guideline-2.4.5]
+  tags: [app-store, compliance, security, guideline-2.4.5, guideline-5.1.1]
 ---
 
-# App Store Compliance Check — Guideline 2.4.5 Scan
+# App Store Compliance Check — Guideline 2.4.5 + 5.1.1(iv) Scan
 
-Full codebase scan for APIs that cause App Store rejection. Run before every submission.
+Full codebase scan for APIs and strings that cause App Store rejection. Run before every submission.
 
-## Step 1: Scan for Banned APIs
+## Step 1: Scan for Banned APIs (Guideline 2.4.5)
 
-Search the **entire** `Whisperer/` directory (not just changed files) for these red-flag patterns:
+Search the **entire** `Whisperer/` directory for these patterns. In APP_STORE build, ALL of these must be inside `#if !APP_STORE` blocks:
 
 ### Keystroke Monitoring APIs (instant rejection)
-- [ ] `CGEvent.tapCreate` or `CGEventTapCreate` — keyboard event monitoring/interception
-- [ ] `CGEventTapEnable` — enabling an event tap
-- [ ] `IOHIDManager` — hardware-level input device monitoring
-- [ ] `import IOKit.hid` — IOKit HID framework import
-- [ ] `IOHIDCheckAccess` or `IOHIDRequestAccess` — Input Monitoring permission APIs
-- [ ] `addGlobalMonitorForEvents` with `.keyDown` or `.keyUp` — global keystroke monitoring
-- [ ] `CGEvent(keyboardEventSource:` with `.cghidEventTap` tap point — only `.cgAnnotatedSessionEventTap` is acceptable for posting
+- [ ] `CGEvent.tapCreate` or `CGEventTapCreate`
+- [ ] `CGEventTapEnable`
+- [ ] `IOHIDManager` or `import IOKit.hid`
+- [ ] `IOHIDCheckAccess` or `IOHIDRequestAccess`
+- [ ] `addGlobalMonitorForEvents` with `.keyDown` or `.keyUp`
+
+### Accessibility APIs (must be inside #if !APP_STORE)
+- [ ] `AXIsProcessTrusted` — must not exist in App Store binary
+- [ ] `AXUIElementCopyAttributeValue` — must not exist in App Store binary
+- [ ] `AXUIElementSetAttributeValue` — must not exist in App Store binary
+- [ ] `CGEvent.post` — must not exist in App Store binary
+- [ ] `cgAnnotatedSessionEventTap` — must not exist in App Store binary
 
 ### Permission Red Flags
-- [ ] Any reference to `inputMonitoring` permission type — should have been removed entirely
-- [ ] `kTCCServiceListenEvent` — Input Monitoring TCC service name
+- [ ] Any reference to `inputMonitoring` permission type
+- [ ] `kTCCServiceListenEvent`
 
-### Framing Red Flags
-- [ ] User-facing strings containing "keystroke", "key logging", "input monitoring", or "automation" — should use "assistive", "dictation", "voice input" instead
-- [ ] `NSAppleEventsUsageDescription` mentioning "automation" without "assistive" context
+## Step 2: Scan for Directive Permission Language (Guideline 5.1.1(iv))
 
-## Step 2: Verify Approved APIs Are Used Correctly
+Apple rejects apps that direct users to grant permissions. Search ALL Swift files:
 
-Check that approved APIs follow required patterns:
+### Banned Button Text
+- [ ] "Grant Microphone Access" — use "Continue" instead
+- [ ] "Grant Permissions" — use "Open Permissions" instead
+- [ ] "Grant" + any permission name on a button
+- [ ] "Set Up Later" or any skip/delay button before a permission request
 
-### AXUIElement Usage
-- [ ] Every `AXUIElementCopyAttributeValue` or `AXUIElementSetAttributeValue` call has `AXUIElementSetMessagingTimeout` set beforehand (100ms recommended)
-- [ ] No AX calls dispatched to `DispatchQueue.global()` — must run inline to avoid latency from queue contention
-- [ ] AX usage is for text insertion only — not for reading other apps' UI or controlling other apps
+### Banned Strings in Binary
+- [ ] "Enable Auto-Paste" — must be inside `#if !APP_STORE`
+- [ ] "auto-paste" or "autoPaste" — must be inside `#if !APP_STORE`
+- [ ] "assistive" — must not appear in App Store binary
+
+## Step 3: Verify Features Hidden in APP_STORE Build
+
+These features must be wrapped with `#if !APP_STORE`:
+- [ ] Command Mode (sidebar item + related files) — uses `APP_STORE` flag, NOT `ENABLE_APP_SANDBOX`
+- [ ] Rewrite Mode (sidebar section, overlay label, accent color, shortcut callbacks, state routing)
+- [ ] AI Post-Processing (menu bar settings card)
+- [ ] Feedback (workspace sidebar item)
+- [ ] Auto-Paste toggle and Accessibility permission UI
+- [ ] TextSelectionService (entire file)
+- [ ] macOS Services / DictationServiceProvider (should be deleted entirely)
+
+IMPORTANT: `ENABLE_APP_SANDBOX` is a build setting, NOT a Swift compile flag. Any `#if !ENABLE_APP_SANDBOX` must be changed to `#if !APP_STORE`.
+
+## Step 4: Verify Approved APIs
+
+Check that remaining APIs follow required patterns:
 
 ### Carbon Hotkey Usage
 - [ ] `RegisterEventHotKey` has matching `UnregisterEventHotKey` in teardown
 - [ ] `InstallEventHandler` has matching `RemoveEventHandler` in teardown
-- [ ] `Unmanaged.passUnretained(self)` used (not `passRetained`) and the object outlives the handler
 
-### CGEvent.post Usage
-- [ ] Uses `.cgAnnotatedSessionEventTap` tap point (NOT `.cghidEventTap`)
-- [ ] Only used for posting synthetic Cmd+V paste, nothing else
+### flagsChanged Monitor
+- [ ] Only monitors `.flagsChanged` (modifier state), never `.keyDown` or `.keyUp`
 
-## Step 3: Verify Permissions Configuration
+## Step 5: Verify Binary (Post-Build)
 
-- [ ] `PermissionType` enum contains only `microphone` and `accessibility` — NO `inputMonitoring`
-- [ ] Info.plist has `NSMicrophoneUsageDescription` with "transcribe your voice" framing
-- [ ] No entitlements beyond: sandbox, network.client, audio-input, files.user-selected.read-write
+After building, scan the actual binary:
+```bash
+/usr/bin/strings .../whisperer.app/Contents/MacOS/whisperer | grep -iE "AXIsProcessTrusted|AXUIElement|CGEventTap|IOHIDManager|Grant.*Access|Grant.*Permission|Set Up Later|auto.?paste|autoPaste|Enable Auto-Paste|assistive"
+```
+Must return empty.
 
-## Step 4: Report
+## Step 6: Report
 
 For each violation found, report:
 - File path and line number
 - What was found
-- Why it causes rejection
-- The recommended replacement
+- Which guideline it violates (2.4.5 or 5.1.1(iv))
+- The fix
 
-If all clean, report: "App Store compliance check passed — no Guideline 2.4.5 violations found."
+If all clean: "App Store compliance check passed — no Guideline 2.4.5 or 5.1.1(iv) violations found."

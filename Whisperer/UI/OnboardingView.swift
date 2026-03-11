@@ -41,7 +41,11 @@ struct OnboardingView: View {
 
     var onComplete: (() -> Void)?
 
+    #if APP_STORE
+    private let totalPages = 5
+    #else
     private let totalPages = 6
+    #endif
 
     var body: some View {
         ZStack {
@@ -108,8 +112,12 @@ struct OnboardingView: View {
         case 1: featuresContent
         case 2: microphoneContent
         case 3: dictationContent
+        #if APP_STORE
+        case 4: modelDownloadContent
+        #else
         case 4: accessibilityContent
         case 5: modelDownloadContent
+        #endif
         default: EmptyView()
         }
     }
@@ -136,8 +144,12 @@ struct OnboardingView: View {
         case 1: rightPanelFeatures
         case 2: rightPanelMicrophone
         case 3: rightPanelDictation
+        #if APP_STORE
+        case 4: rightPanelModelDownload
+        #else
         case 4: rightPanelAccessibility
         case 5: rightPanelModelDownload
+        #endif
         default: EmptyView()
         }
     }
@@ -439,7 +451,7 @@ struct OnboardingView: View {
                     .font(.system(size: 34, weight: .bold))
                     .foregroundColor(OnboardingColors.textPrimary)
 
-                Text("Whisperer processes everything on-device.\nGrant microphone access to start\ntranscribing — nothing leaves your Mac.")
+                Text("Whisperer processes everything on-device.\nMicrophone access is needed to\ntranscribe — nothing leaves your Mac.")
                     .font(.system(size: 14))
                     .foregroundColor(OnboardingColors.textSecondary)
                     .lineSpacing(3)
@@ -485,7 +497,7 @@ struct OnboardingView: View {
                         HStack(spacing: 8) {
                             Image(systemName: "mic.fill")
                                 .font(.system(size: 13))
-                            Text("Grant Microphone Access")
+                            Text("Continue")
                                 .font(.system(size: 14, weight: .semibold))
                         }
                         .foregroundColor(.white)
@@ -493,16 +505,6 @@ struct OnboardingView: View {
                         .padding(.horizontal, 24)
                         .background(OnboardingColors.accentGradient)
                         .clipShape(Capsule())
-                    }
-                    .buttonStyle(.plain).pointerOnHover()
-
-                    Button(action: {
-                        withAnimation(.easeInOut(duration: 0.3)) { currentPage = 3 }
-                    }) {
-                        Text("Set Up Later")
-                            .font(.system(size: 13, weight: .medium))
-                            .foregroundColor(OnboardingColors.textSecondary)
-                            .padding(.leading, 4)
                     }
                     .buttonStyle(.plain).pointerOnHover()
                 }
@@ -644,7 +646,7 @@ struct OnboardingView: View {
                     Button(action: {
                         withAnimation(.easeInOut(duration: 0.3)) { currentPage = 4 }
                     }) {
-                        Text("Set Up Later")
+                        Text("Continue")
                             .font(.system(size: 13, weight: .medium))
                             .foregroundColor(OnboardingColors.textSecondary)
                             .padding(.leading, 4)
@@ -708,8 +710,9 @@ struct OnboardingView: View {
         }
     }
 
-    // MARK: - Page 5: Auto-Paste (Accessibility)
+    // MARK: - Page 5: Auto-Paste (Accessibility) — non-App Store only
 
+    #if !APP_STORE
     private var accessibilityContent: some View {
         VStack(alignment: .leading, spacing: 0) {
             Spacer()
@@ -895,6 +898,7 @@ struct OnboardingView: View {
             }
         }
     }
+    #endif
 
     // MARK: - Page 6: Model Download
 

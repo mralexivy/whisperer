@@ -2,8 +2,11 @@
 //  TextSelectionService.swift
 //  Whisperer
 //
-//  Reads selected text from the focused app using read-only Accessibility APIs
+//  Reads selected text from the focused app using read-only Accessibility APIs.
+//  Only available in non-App Store builds (requires AXIsProcessTrusted).
 //
+
+#if !APP_STORE
 
 import AppKit
 
@@ -92,3 +95,5 @@ class TextSelectionService {
         return readSelectedTextViaRange(from: element)
     }
 }
+
+#endif

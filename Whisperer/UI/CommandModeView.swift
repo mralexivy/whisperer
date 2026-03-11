@@ -5,7 +5,7 @@
 //  Chat-style command mode UI (non-sandboxed builds only)
 //
 
-#if !ENABLE_APP_SANDBOX
+#if !APP_STORE
 
 import SwiftUI
 

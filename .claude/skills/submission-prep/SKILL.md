@@ -9,7 +9,7 @@ description: >
   "generate reviewer notes", "upload to App Store Connect", or "prep for
   review".
 metadata:
-  version: 1.0.0
+  version: 2.0.0
   category: deployment
   tags: [app-store, submission, release, build]
 ---
@@ -36,6 +36,7 @@ Read `Whisperer/Info.plist` and verify:
 - [ ] `LSUIElement` is `true` (menu bar app)
 - [ ] `CFBundleShortVersionString` and `CFBundleVersion` are set
 - [ ] No `NSAppleEventsUsageDescription` (was removed for compliance)
+- [ ] No `NSServices` block (macOS Services were removed)
 
 ### Step 4: Verify Entitlements
 
@@ -46,101 +47,90 @@ Read `Whisperer/whisperer.entitlements` and verify:
 - [ ] `com.apple.security.files.user-selected.read-write` is `true`
 - [ ] No unexpected entitlements present (especially `network.server`)
 
-### Step 5: Verify Permissions Configuration
+### Step 5: Verify APP_STORE Compile Flag Removes All Accessibility
 
-Read `Whisperer/Permissions/PermissionManager.swift` and verify:
-- [ ] `PermissionType` enum has exactly two cases: `microphone` and `accessibility`
-- [ ] No references to `inputMonitoring` or Input Monitoring
-- [ ] `requiredPermissionsGranted` only requires Accessibility when `systemWideDictationEnabled` is true
-- [ ] Accessibility is optional — app works without it
+The App Store build uses `APP_STORE` compile flag (NOT `ENABLE_APP_SANDBOX` — that's a build setting, not a Swift flag). Verify these are wrapped with `#if !APP_STORE`:
+- [ ] `TextInjector`: `hasAccessibilityPermission()`, `enterViaCGEventUnicode()`, `enterViaClipboardPaste()`, `simulatePaste()`
+- [ ] `TextSelectionService`: entire file
+- [ ] `PermissionManager`: `PermissionType.accessibility`, all AX tracking/checking methods
+- [ ] `AppState`: `autoPasteEnabled` property, accessibility recheck observer, rewrite shortcut callbacks, rewrite state routing
+- [ ] `WhispererApp`: Auto-paste toggle, accessibility permission UI, AI Post-Processing settings card
+- [ ] `OnboardingView`: Accessibility page removed (no "Set Up Later" button)
+- [ ] `SetupChecklistView`: "Enable Auto-Paste" checklist item
+- [ ] `OverlayView`: Rewrite mode label, rewrite accent color
+- [ ] `HistoryWindowView`: Rewrite section, Command Mode sidebar item, Feedback sidebar item
 
-### Step 6: Verify TextInjector (Clipboard-Only Architecture)
+### Step 6: Verify Permission Request Language (Guideline 5.1.1(iv))
 
-Read `Whisperer/TextInjection/TextInjector.swift` and verify:
-- [ ] No `AXUIElementCopyAttributeValue` calls (MUST be removed)
-- [ ] No `AXUIElementSetAttributeValue` calls (MUST be removed)
-- [ ] No `getFocusedElement` or `insertIntoElement` methods
-- [ ] Text entry uses clipboard + paste only: `NSPasteboard` -> `CGEvent.post` (Cmd+V)
-- [ ] `AXIsProcessTrusted` used only to check permission, not to manipulate elements
-- [ ] Language uses "enter/entry" not "inject/insert" in user-facing strings
+Apple rejects directive permission language. Search for:
+- [ ] No "Grant Microphone Access" or "Grant [anything]" on buttons — use "Continue" or "Open Permissions"
+- [ ] No "Set Up Later" or skip/delay buttons before permission requests
+- [ ] No "Enable Auto-Paste to use" strings in App Store binary
+- [ ] Descriptive text before permission is informational only, not directive
 
-### Step 7: Verify System-Wide Dictation is Opt-In
+### Step 7: Verify Onboarding Flow
 
-Read `Whisperer/AppState.swift` and verify:
-- [ ] `systemWideDictationEnabled` defaults to `false`
-- [ ] Key listener is only created when `systemWideDictationEnabled` is `true`
-- [ ] `startGlobalDictation()` / `stopGlobalDictation()` lifecycle is correct
-
-### Step 8: Verify Onboarding Flow
-
-Read `Whisperer/UI/OnboardingView.swift` and `Whisperer/UI/OnboardingWindow.swift`:
-- [ ] Onboarding shows on first launch when `hasCompletedOnboarding` is false
-- [ ] Onboarding requests Microphone permission (required)
-- [ ] System-wide dictation page is labeled "Optional"
-- [ ] "Enable System-Wide Dictation" and "Set Up Later" buttons both present
-- [ ] Accessibility permission text says "detect shortcut key and paste transcribed text"
+Read `Whisperer/UI/OnboardingView.swift`:
+- [ ] Microphone page button says "Continue" (NOT "Grant Microphone Access")
+- [ ] No skip/delay button before permission dialog (NO "Set Up Later")
+- [ ] No Accessibility page in App Store build
 - [ ] Onboarding sets `hasCompletedOnboarding = true` on completion
-- [ ] No banned APIs used in onboarding
 
-### Step 9: Verify App Icon
+### Step 8: Verify App Icon
 
 Check `Whisperer/Assets.xcassets/AppIcon.appiconset/`:
-- [ ] All 10 macOS icon sizes present (16, 16@2x, 32, 32@2x, 128, 128@2x, 256, 256@2x, 512, 512@2x)
+- [ ] All 10 macOS icon sizes present
 - [ ] Icons use dark navy background with blue-purple gradient waveform
 - [ ] `Contents.json` references all filenames correctly
 
-### Step 10: Bump Version
+### Step 9: Bump Version
 
-Ask the user whether to bump minor version (e.g., 1.1 -> 1.2) or just build number.
+Ask the user whether to bump minor version or just build number.
 Update in BOTH places:
 - `Whisperer/Info.plist`: `CFBundleShortVersionString` and `CFBundleVersion`
-- `Whisperer.xcodeproj/project.pbxproj`: `MARKETING_VERSION` (both Debug and Release) and `CURRENT_PROJECT_VERSION` (both Debug and Release)
+- `Whisperer.xcodeproj/project.pbxproj`: `MARKETING_VERSION` and `CURRENT_PROJECT_VERSION`
 
-### Step 11: Build Release
-
-```bash
-xcodebuild clean build -project Whisperer.xcodeproj -scheme whisperer -configuration Release -destination "platform=macOS" 2>&1
-```
-
-Report build result (success/failure) and warning count. If build fails, stop and report errors.
-
-### Step 12: Archive
+### Step 10: Archive
 
 ```bash
-xcodebuild archive -project Whisperer.xcodeproj -scheme whisperer -configuration Release -destination "generic/platform=macOS" -archivePath build/Whisperer.xcarchive 2>&1
+xcodebuild clean archive -project Whisperer.xcodeproj -scheme whisperer -configuration Release -destination "platform=macOS" -archivePath build/whisperer.xcarchive ARCHS=arm64 CODE_SIGN_ENTITLEMENTS=Whisperer/whisperer.entitlements ENABLE_APP_SANDBOX=YES
 ```
 
-Do NOT pass `CODE_SIGN_IDENTITY` — the project uses automatic signing. If archive fails, report errors.
+CRITICAL overrides: `ARCHS=arm64` (FluidAudio fails on x86_64), `CODE_SIGN_ENTITLEMENTS=Whisperer/whisperer.entitlements` (sandbox entitlements), `ENABLE_APP_SANDBOX=YES`.
 
-### Step 13: Export and Upload to App Store Connect
+### Step 11: Verify Binary
 
-Create `build/ExportOptions.plist` if it doesn't exist (see `references/export-options.plist` for template), then export and upload:
+After archive, scan the binary for banned strings:
+```bash
+/usr/bin/strings build/whisperer.xcarchive/Products/Applications/whisperer.app/Contents/MacOS/whisperer | grep -iE "AXIsProcessTrusted|AXUIElement|CGEventTap|IOHIDManager|Grant.*Access|Grant.*Permission|Set Up Later|auto.?paste|autoPaste|Enable Auto-Paste|assistive"
+```
+Must return empty. If ANY match found, stop and fix.
+
+### Step 12: Export and Upload to App Store Connect
 
 ```bash
-xcodebuild -exportArchive -archivePath build/Whisperer.xcarchive -exportOptionsPlist build/ExportOptions.plist -exportPath build/export -allowProvisioningUpdates 2>&1
+xcodebuild -exportArchive -archivePath build/whisperer.xcarchive -exportOptionsPlist build/ExportOptions.plist -exportPath build/export
 ```
+
+ExportOptions.plist is at `build/ExportOptions.plist` (method=app-store-connect, destination=upload, teamID=8NM6EHZB4G, signingStyle=automatic).
 
 Verify output contains "EXPORT SUCCEEDED" and "Upload succeeded".
 
-### Step 14: Generate Submission Summary
+### Step 13: Generate Submission Summary
 
-Output a summary with build status, compliance status, version info, and upload status. Then generate reviewer notes and App Store metadata using the templates in `references/`.
-
-Consult these reference files for templates:
-- `references/reviewer-notes-template.md` — Reviewer notes (must be under 4000 characters)
-- `references/app-store-metadata.md` — App Store description, promotional text, keywords
-- `references/export-options.plist` — ExportOptions.plist template
+Output a summary with build status, compliance status, version info, and upload status. Then generate reviewer notes using `references/reviewer-notes-template.md`.
 
 ## Troubleshooting
 
 ### Build Fails
-- Check Xcode command line tools are selected: `xcode-select -p`
-- Verify signing: project uses automatic signing, do not pass `CODE_SIGN_IDENTITY`
+- Check Xcode command line tools: `xcode-select -p`
+- Project uses automatic signing — do not pass `CODE_SIGN_IDENTITY`
 
 ### Archive Fails
-- Ensure Release build succeeded first
-- Check disk space for archive (~500MB)
+- Ensure `ARCHS=arm64` is set (FluidAudio x86_64 Float16 issue)
+- Ensure sandbox entitlements override is present
 
 ### Upload Fails
-- Verify `teamID` in ExportOptions.plist matches your Apple Developer team
+- Verify `teamID` in ExportOptions.plist
 - Check App Store Connect for processing status
+- If build number already exists, bump CFBundleVersion

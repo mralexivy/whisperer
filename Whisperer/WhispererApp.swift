@@ -104,7 +104,10 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         appState.textInjector = TextInjector()
         appState.audioMuter = AudioMuter()
         appState.soundPlayer = SoundPlayer()
+        #if !APP_STORE
         appState.textSelectionService = TextSelectionService()
+        #endif
+
 
         // Set initial selected microphone
         appState.audioRecorder?.selectedDeviceID = appState.audioDeviceManager.selectedDevice?.id
@@ -365,7 +368,9 @@ struct MenuBarView: View {
         .background(MenuBarWindowConfigurator())
         .environment(\.colorScheme, .dark)
         .onAppear {
+            #if !APP_STORE
             PermissionManager.shared.recheckAccessibilityIfNeeded()
+            #endif
         }
     }
 
@@ -638,7 +643,9 @@ struct StatusTabView: View {
     /// Whether to show permission warnings (mode-aware)
     private var showPermissionWarning: Bool {
         if permissionManager.microphoneStatus != .granted { return true }
+        #if !APP_STORE
         if appState.autoPasteEnabled && permissionManager.accessibilityStatus != .granted { return true }
+        #endif
         return false
     }
 
@@ -1031,24 +1038,28 @@ struct StatusTabView: View {
                 if permissionManager.microphoneStatus != .granted {
                     missingPermissionBadge("Mic", icon: "mic.fill")
                 }
+                #if !APP_STORE
                 // Only show Accessibility as missing when auto-paste is enabled
                 if appState.autoPasteEnabled && permissionManager.accessibilityStatus != .granted {
                     missingPermissionBadge("Accessibility", icon: "accessibility")
                 }
+                #endif
             }
 
             Button(action: {
                 if permissionManager.microphoneStatus != .granted {
                     permissionManager.requestMicrophonePermission()
                 }
+                #if !APP_STORE
                 if appState.autoPasteEnabled && permissionManager.accessibilityStatus != .granted {
                     permissionManager.requestAccessibilityPermission()
                 }
+                #endif
             }) {
                 HStack {
                     Image(systemName: "lock.open.fill")
                         .font(.system(size: 10))
-                    Text("Grant Permissions")
+                    Text("Open Permissions")
                         .font(.system(size: 11, weight: .medium))
                 }
                 .foregroundColor(.white)
@@ -1450,7 +1461,8 @@ struct SettingsTabView: View {
                 }
                 .id(SettingsScrollTarget.dictation)
 
-                // Auto-Paste
+                #if !APP_STORE
+                // Auto-Paste (non-App Store only — requires Accessibility)
                 settingsCard(title: "Auto-Paste", icon: "doc.on.clipboard", color: .purple) {
                         HStack {
                             VStack(alignment: .leading, spacing: 3) {
@@ -1480,6 +1492,7 @@ struct SettingsTabView: View {
                             .labelsHidden()
                         }
                     }
+                #endif
 
                 // Audio Settings - compact card
                 settingsCard(title: "Audio", icon: "speaker.wave.2.fill", color: .orange) {
@@ -1793,10 +1806,12 @@ struct SettingsTabView: View {
                     PermissionsView()
                 }
 
+                #if !APP_STORE
                 // AI Post-Processing
                 settingsCard(title: "AI Post-Processing", icon: "sparkles", color: .purple) {
                     LLMSettingsView()
                 }
+                #endif
 
                 // Diagnostics
                 settingsCard(title: "Diagnostics", icon: "ladybug.fill", color: .gray) {
@@ -2333,7 +2348,19 @@ struct PermissionsView: View {
     @State private var isExpanded = false
 
     private var visiblePermissions: [PermissionType] {
+        #if APP_STORE
+        return [.microphone]
+        #else
         return [.microphone, .accessibility]
+        #endif
+    }
+
+    private var allPermissionsOK: Bool {
+        #if APP_STORE
+        return permissionManager.microphoneStatus == .granted
+        #else
+        return permissionManager.microphoneStatus == .granted && (!appState.autoPasteEnabled || permissionManager.accessibilityStatus == .granted)
+        #endif
     }
 
     var body: some View {
@@ -2350,6 +2377,17 @@ struct PermissionsView: View {
                             .font(.system(size: 13, weight: .medium))
                             .foregroundColor(MBColors.textPrimary)
 
+                        #if APP_STORE
+                        if permissionManager.microphoneStatus == .granted {
+                            Text("Microphone granted")
+                                .font(.system(size: 11))
+                                .foregroundColor(.green)
+                        } else {
+                            Text("Microphone permission missing")
+                                .font(.system(size: 11))
+                                .foregroundColor(.orange)
+                        }
+                        #else
                         if permissionManager.microphoneStatus == .granted && (!appState.autoPasteEnabled || permissionManager.accessibilityStatus == .granted) {
                             Text(appState.autoPasteEnabled ? "All permissions granted" : "Microphone granted · Accessibility optional")
                                 .font(.system(size: 11))
@@ -2359,12 +2397,13 @@ struct PermissionsView: View {
                                 .font(.system(size: 11))
                                 .foregroundColor(.orange)
                         }
+                        #endif
                     }
 
                     Spacer()
 
                     // Status indicator
-                    if permissionManager.microphoneStatus == .granted && (!appState.autoPasteEnabled || permissionManager.accessibilityStatus == .granted) {
+                    if allPermissionsOK {
                         Image(systemName: "checkmark.circle.fill")
                             .foregroundColor(.green)
                             .font(.system(size: 16))
@@ -2423,7 +2462,11 @@ struct PermissionsView: View {
 
     private func permissionRow(_ permission: PermissionType) -> some View {
         let status = permissionManager.status(for: permission)
+        #if !APP_STORE
         let isAccessibilityNotRequired = permission == .accessibility && !appState.autoPasteEnabled
+        #else
+        let isAccessibilityNotRequired = false
+        #endif
 
         return HStack(spacing: 10) {
             // Icon
@@ -2438,9 +2481,15 @@ struct PermissionsView: View {
                     .font(.system(size: 12, weight: .medium))
                     .foregroundColor(isAccessibilityNotRequired ? MBColors.textTertiary : (status == .granted ? MBColors.textPrimary : MBColors.textSecondary))
 
+                #if !APP_STORE
                 Text(isAccessibilityNotRequired ? "Enable Auto-Paste to use" : permission.description)
                     .font(.system(size: 10))
                     .foregroundColor(MBColors.textTertiary)
+                #else
+                Text(permission.description)
+                    .font(.system(size: 10))
+                    .foregroundColor(MBColors.textTertiary)
+                #endif
             }
 
             Spacer()
@@ -2484,8 +2533,10 @@ struct PermissionsView: View {
         switch permission {
         case .microphone:
             permissionManager.requestMicrophonePermission()
+        #if !APP_STORE
         case .accessibility:
             permissionManager.requestAccessibilityPermission()
+        #endif
         }
     }
 
@@ -2493,9 +2544,11 @@ struct PermissionsView: View {
         if permissionManager.microphoneStatus != .granted {
             permissionManager.requestMicrophonePermission()
         }
+        #if !APP_STORE
         if appState.autoPasteEnabled && permissionManager.accessibilityStatus != .granted {
             permissionManager.requestAccessibilityPermission()
         }
+        #endif
     }
 }
 

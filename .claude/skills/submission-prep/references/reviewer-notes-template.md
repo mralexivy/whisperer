@@ -3,53 +3,48 @@
 Fill in `{VERSION}` with current version. Must be under 4000 characters.
 
 ```
-Thank you for your feedback. v{VERSION} makes significant architectural changes to address every Guideline 2.4.5 concern.
+Thank you for your feedback. v{VERSION} addresses both Guideline 2.4.5 and Guideline 5.1.1(iv).
 
 WHAT IS WHISPERER:
-An offline voice-to-text productivity tool for macOS. It provides the same "dictate anywhere you can type" capability as Apple's built-in Dictation, but runs a local Whisper AI model for 100% offline, private transcription. Built for developers and knowledge workers who want fast voice input without cloud dependencies. No data ever leaves the Mac.
+An offline voice-to-text productivity tool for macOS. It provides the same "dictate anywhere you can type" capability as Apple's built-in Dictation, but runs a local Whisper AI model for 100% offline, private transcription. No data ever leaves the Mac. Built for developers and knowledge workers who want fast voice input without cloud dependencies.
 
-ALL FLAGGED APIs REMOVED:
-Every API cited in the rejection has been deleted from source and binary:
-• CGEventTap/CGEventTapCreate — REMOVED. No event taps of any kind.
-• IOHIDManager/IOKit HID — REMOVED. No hardware-level monitoring.
-• NSEvent globalMonitor with keyDown/keyUp — REMOVED. No keystroke monitoring.
-• Input Monitoring permission — REMOVED entirely.
-• AXUIElementCopyAttributeValue — REMOVED. We no longer read AX element attributes.
-• AXUIElementSetAttributeValue — REMOVED. We no longer write to AX elements.
-• NSAppleEventsUsageDescription — REMOVED from Info.plist.
-None of these symbols exist in our binary.
+GUIDELINE 2.4.5 — COMPLETE ACCESSIBILITY REMOVAL:
+All Accessibility code has been completely removed from this build. This is not a behavioral change or an opt-in toggle — the code does not exist in this version.
 
-ACCESSIBILITY IS NOW FULLY OPTIONAL (DEFAULT OFF):
-In direct response to your latest feedback, Accessibility is genuinely optional. The app ships with auto-paste disabled by default (autoPasteEnabled = false). Users who never enable it will never see an Accessibility prompt, and the app never calls AXIsProcessTrusted() unless the user explicitly opts in.
+The app has been rebuilt with a clipboard-only architecture:
+• Zero AXIsProcessTrusted references
+• Zero AXUIElement API calls
+• Zero CGEvent.post calls
+• Zero CGEventTap/CGEventTapCreate
+• Zero IOHIDManager/IOKit HID
+• Zero references to "auto-paste", "assistive", or Accessibility
+• No Input Monitoring permission
+• No Accessibility permission request — never prompted, never referenced
+• NSAppleEventsUsageDescription removed from Info.plist
 
-Two modes of operation:
-1. Clipboard mode (DEFAULT): Transcribed text copies to clipboard. User presses Cmd+V. Recording, transcription, history — everything works without Accessibility.
-2. Auto-paste mode (OPT-IN): User enables via Settings toggle or onboarding (page labeled "Optional" with "Use Clipboard Mode" as alternative). Only then is Accessibility requested.
+How text delivery works:
+Transcribed text is copied to NSPasteboard. User pastes with ⌘V. No synthetic keystrokes, no AX element interaction, no Accessibility permission involved. One mode only — clipboard.
 
-Code-level enforcement:
-• AppState.autoPasteEnabled defaults to false
-• PermissionManager only polls AXIsProcessTrusted() when auto-paste is enabled
-• TextInjector checks: guard autoPasteEnabled && hasAccessibilityPermission() — otherwise clipboard only
-• Onboarding page labeled "Optional" with two paths: "Enable Auto-Paste" and "Use Clipboard Mode"
-
-WHY ACCESSIBILITY IS NEEDED FOR AUTO-PASTE:
-CGEvent.post requires AXIsProcessTrusted() to deliver a Cmd+V paste keystroke to the frontmost app. That is the sole reason this permission is needed. The mechanism: copy to NSPasteboard → post one Cmd+V via CGEvent.post(tap: .cgAnnotatedSessionEventTap). Same clipboard+paste approach as macOS built-in Dictation and Voice Control. No AX elements are read, queried, or modified.
-Without Accessibility: app still works fully. Transcriptions copy to clipboard for manual paste.
+GUIDELINE 5.1.1(iv) — PERMISSION LANGUAGE FIXED:
+• "Grant Microphone Access" button → "Continue"
+• "Set Up Later" skip button → "Continue" (user always proceeds to system dialog)
+• "Grant Permissions" button → "Open Permissions"
+• Descriptive text is informational only, not directive
+No directive language or skip/exit buttons remain.
 
 SHORTCUT DETECTION (no keystroke monitoring):
 • Fn key: NSEvent.addGlobalMonitorForEvents(matching: .flagsChanged) — modifier state only. Detects Fn press/release via keyCode 63. No typed characters observed.
 • Custom shortcuts: Carbon RegisterEventHotKey — standard macOS hotkey API. No Input Monitoring needed.
 
-DOES NOT: create event taps • use IOKit HID • monitor keystrokes • read/write AX elements • log or transmit input • require Input Monitoring • use ChatGPT/OpenAI cloud
+DOES NOT: create event taps • use IOKit HID • monitor keystrokes • read/write AX elements • request Accessibility • log or transmit input • require Input Monitoring • use ChatGPT/OpenAI cloud
 
 HOW TO TEST:
-Clipboard mode (default): Launch → onboarding → grant Microphone → skip Auto-Paste ("Use Clipboard Mode") → menu bar → hold Fn → speak → release → text copied to clipboard → Cmd+V to paste.
-Auto-paste (opt-in): Settings → enable Auto-Paste → grant Accessibility → TextEdit → hold Fn → speak → release → text at cursor.
+Launch → onboarding → microphone permission (button says "Continue") → menu bar icon → hold Fn → speak → release → text copied to clipboard → ⌘V to paste in any app.
 Tip: Set Globe key to "Do Nothing" in System Settings → Keyboard → Modifier Keys.
 
 NO SIGN-IN REQUIRED — uncheck "Sign-in required."
 PRIVACY: 100% offline. No data transmitted. No accounts. No analytics.
 EXPORT: HTTPS only (exempt). No proprietary encryption.
-CHINA (Guideline 5): No ChatGPT/OpenAI cloud. whisper.cpp runs on-device. No network needed.
-IAP: com.ivy.whisperer.propack
+CHINA (Guideline 5): No ChatGPT/OpenAI cloud. whisper.cpp runs on-device. No network needed for transcription.
+IAP: com.ivy.whisperer.propack (Non-Consumable)
 ```

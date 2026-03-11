@@ -123,11 +123,13 @@ enum HistorySidebarItem: String, CaseIterable, Identifiable {
         }
     }
 
-    /// Items shown in the sidebar (commandMode only in non-sandboxed builds)
+    /// Items shown in the sidebar (commandMode and feedback only in non-App Store builds)
     static var visibleItems: [HistorySidebarItem] {
+        #if !APP_STORE
         var items: [HistorySidebarItem] = [.transcriptions, .fileTranscription, .dictionary, .statistics, .setup, .feedback, .settings]
-        #if !ENABLE_APP_SANDBOX
         items.insert(.commandMode, at: items.count - 3) // Before setup
+        #else
+        let items: [HistorySidebarItem] = [.transcriptions, .fileTranscription, .dictionary, .statistics, .setup, .settings]
         #endif
         return items
     }
@@ -141,7 +143,7 @@ struct HistoryWindowView: View {
     @State private var selectedSidebarItem: HistorySidebarItem = .transcriptions
     @State private var isSidebarCollapsed = false
 
-    #if !ENABLE_APP_SANDBOX
+    #if !APP_STORE
     @StateObject private var commandModeService: CommandModeService = {
         if let processor = AppState.shared.llmPostProcessor, processor.isModelLoaded {
             return CommandModeService(llmProcessor: processor)
@@ -178,7 +180,7 @@ struct HistoryWindowView: View {
                 case .settings:
                     HistorySettingsView()
                 case .commandMode:
-                    #if !ENABLE_APP_SANDBOX
+                    #if !APP_STORE
                     CommandModeView(commandService: commandModeService)
                     #else
                     EmptyView()
@@ -1098,7 +1100,9 @@ struct HistorySettingsView: View {
                 VStack(alignment: .leading, spacing: 28) {
                     displaySection
                     overlaySection
+                    #if !APP_STORE
                     rewriteSection
+                    #endif
                     dictionarySection
                     storageSection
                     dataManagementSection

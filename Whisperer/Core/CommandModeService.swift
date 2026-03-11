@@ -5,7 +5,7 @@
 //  Agentic voice-to-terminal using local LLM (non-sandboxed builds only)
 //
 
-#if !ENABLE_APP_SANDBOX
+#if !APP_STORE
 
 import Foundation
 import Combine
