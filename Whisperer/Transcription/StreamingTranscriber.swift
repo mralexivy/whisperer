@@ -81,6 +81,7 @@ class StreamingTranscriber {
 
     // Language for transcription
     private var language: TranscriptionLanguage
+    private var pinnedLanguage: TranscriptionLanguage?
 
     // Prompt words for whisper.cpp initial_prompt
     private var initialPrompt: String?
@@ -128,6 +129,7 @@ class StreamingTranscriber {
         isProcessing = false
         isStopped = false
         memoryLimitReached = false
+        pinnedLanguage = nil
         lastVADScanIndex = 0
         lastTranscribedSampleIndex = 0
         lastClaimedSampleIndex = 0
@@ -250,10 +252,13 @@ class StreamingTranscriber {
             bridge.resetAbort()
         }
 
+        let normalizedSamples = normalizeSamples(chunk.samples)
+
+        let effectiveLanguage = pinnedLanguage ?? language
         whisper.transcribeAsync(
-            samples: chunk.samples,
+            samples: normalizedSamples,
             initialPrompt: prompt,
-            language: language,
+            language: effectiveLanguage,
             singleSegment: true
         ) { [weak self] text in
             guard let self = self else { return }
@@ -266,6 +271,14 @@ class StreamingTranscriber {
             let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
 
             if !trimmed.isEmpty && !self.isHallucination(trimmed) {
+                // Pin language after first successful chunk when using auto-detect
+                if self.pinnedLanguage == nil && self.language == .auto,
+                   let detected = self.whisper.lastDetectedLanguage,
+                   let lang = TranscriptionLanguage(rawValue: detected) {
+                    self.pinnedLanguage = lang
+                    Logger.debug("Language pinned to \(lang.displayName) after first chunk", subsystem: .transcription)
+                }
+
                 // Deduplicate overlap with previous chunk
                 let deduped: String
                 if let prevText = self.completedChunkTexts.last, !prevText.isEmpty {
@@ -446,10 +459,12 @@ class StreamingTranscriber {
         }
 
         // Synchronous transcription for the tail
+        let normalizedSamples = normalizeSamples(tailChunk.samples)
+        let effectiveLanguage = pinnedLanguage ?? language
         let text = whisper.transcribe(
-            samples: tailChunk.samples,
+            samples: normalizedSamples,
             initialPrompt: prompt,
-            language: language,
+            language: effectiveLanguage,
             singleSegment: false,
             maxTokens: 0
         ).trimmingCharacters(in: .whitespacesAndNewlines)
@@ -555,6 +570,35 @@ class StreamingTranscriber {
         }
 
         return clearAndReturn(finalResult)
+    }
+
+    // MARK: - Audio Normalization
+
+    /// Peak-normalize samples to target amplitude for consistent Whisper input levels.
+    /// Quiet recordings benefit significantly from normalization — Whisper's encoder
+    /// produces stronger activations with higher-amplitude input.
+    private func normalizeSamples(_ samples: [Float], targetPeak: Float = 0.707) -> [Float] {
+        guard !samples.isEmpty else { return samples }
+
+        var maxVal: Float = 0
+        vDSP_maxmgv(samples, 1, &maxVal, vDSP_Length(samples.count))
+
+        // Skip if effectively silent (below noise floor)
+        guard maxVal > 0.001 else { return samples }
+        // Skip if already near target level
+        guard maxVal < targetPeak * 0.9 else { return samples }
+
+        let gain = targetPeak / maxVal
+        // Cap gain to prevent amplifying noise in very quiet recordings
+        let cappedGain = min(gain, 20.0)  // Max 20x boost (~26dB)
+
+        var result = [Float](repeating: 0, count: samples.count)
+        var gainVar = cappedGain
+        vDSP_vsmul(samples, 1, &gainVar, &result, 1, vDSP_Length(samples.count))
+
+        Logger.debug("Audio normalized: peak \(String(format: "%.4f", maxVal)) → \(String(format: "%.4f", maxVal * cappedGain)), gain \(String(format: "%.1f", cappedGain))x", subsystem: .transcription)
+
+        return result
     }
 
     // MARK: - Energy Detection

@@ -23,7 +23,8 @@ class VADSegmenter {
 
     // Chunk size parameters (informed by benchmark: ~730ms encoder cost per chunk)
     let targetChunkDuration: Double       // target seconds per chunk
-    let minChunkDuration: Double = 1.0    // minimum seconds to bother transcribing
+    let minChunkDuration: Double = 3.0    // minimum seconds per chunk — Whisper needs context
+    let minTailDuration: Double = 0.5     // minimum tail audio to transcribe (has context from previous chunks)
     let silenceForFinalization: Double     // silence gap to finalize a chunk
     let overlapDuration: Double = 0.3     // overlap between chunks for context
 
@@ -33,7 +34,7 @@ class VADSegmenter {
     init(
         vad: SileroVAD?,
         targetChunkDuration: Double = 20.0,
-        silenceForFinalization: Double = 0.8
+        silenceForFinalization: Double = 1.5
     ) {
         self.vad = vad
         self.targetChunkDuration = targetChunkDuration
@@ -150,7 +151,7 @@ class VADSegmenter {
     /// Create a chunk from remaining untranscribed audio (called on stop).
     func finalizeTail(allSamples: [Float], lastTranscribedIndex: Int) -> AudioChunk? {
         let remaining = allSamples.count - lastTranscribedIndex
-        let minSamples = Int(minChunkDuration * sampleRate)
+        let minSamples = Int(minTailDuration * sampleRate)
 
         guard remaining >= minSamples else { return nil }
 
