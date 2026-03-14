@@ -172,34 +172,67 @@ struct AudioPlayerView: View {
 
     // MARK: - Speed Control
 
+    @State private var isSpeedHovered = false
+
+    private func speedLabel(_ rate: Float) -> String {
+        if rate == 1.0 { return "1x" }
+        if rate == floor(rate) { return "\(Int(rate))x" }
+        return "\(String(format: "%.2g", rate))x"
+    }
+
+    private var speedAccentColor: Color {
+        player.playbackRate != 1.0 ? .orange : WhispererColors.secondaryText(colorScheme)
+    }
+
     private var speedControl: some View {
         Menu {
-            Button("0.5x") { player.setPlaybackRate(0.5) }
-            Button("0.75x") { player.setPlaybackRate(0.75) }
-            Button("1x") { player.setPlaybackRate(1.0) }
-            Button("1.25x") { player.setPlaybackRate(1.25) }
-            Button("1.5x") { player.setPlaybackRate(1.5) }
-            Button("2x") { player.setPlaybackRate(2.0) }
-        } label: {
-            HStack(spacing: 4) {
-                Image(systemName: "speedometer")
-                    .font(.system(size: 11))
-                Text(player.playbackRate == 1.0 ? "1x" : "\(String(format: "%.2g", player.playbackRate))x")
-                    .font(.system(size: 11, weight: .medium))
+            ForEach([0.5, 0.75, 1.0, 1.25, 1.5, 2.0] as [Float], id: \.self) { rate in
+                Button(action: { player.setPlaybackRate(rate) }) {
+                    HStack {
+                        Text(speedLabel(rate))
+                        if player.playbackRate == rate {
+                            Spacer()
+                            Image(systemName: "checkmark")
+                        }
+                    }
+                }
             }
-            .foregroundColor(WhispererColors.secondaryText(colorScheme))
-            .padding(.horizontal, 10)
-            .padding(.vertical, 6)
+        } label: {
+            HStack(spacing: 5) {
+                ZStack {
+                    RoundedRectangle(cornerRadius: 5)
+                        .fill(speedAccentColor.opacity(0.15))
+                        .frame(width: 22, height: 22)
+                    Image(systemName: "speedometer")
+                        .font(.system(size: 10, weight: .semibold))
+                        .foregroundColor(speedAccentColor)
+                }
+                Text(speedLabel(player.playbackRate))
+                    .font(.system(size: 12, weight: .semibold, design: .rounded))
+                    .foregroundColor(speedAccentColor)
+                Image(systemName: "chevron.down")
+                    .font(.system(size: 7, weight: .bold))
+                    .foregroundColor(speedAccentColor.opacity(0.6))
+            }
+            .padding(.leading, 5)
+            .padding(.trailing, 9)
+            .padding(.vertical, 5)
             .background(
-                Capsule()
-                    .fill(WhispererColors.elevatedBackground(colorScheme))
+                RoundedRectangle(cornerRadius: 10)
+                    .fill(speedAccentColor.opacity(isSpeedHovered ? 0.12 : 0.08))
             )
             .overlay(
-                Capsule()
-                    .stroke(WhispererColors.border(colorScheme), lineWidth: 0.5)
+                RoundedRectangle(cornerRadius: 10)
+                    .stroke(speedAccentColor.opacity(isSpeedHovered ? 0.2 : 0.1), lineWidth: 0.5)
             )
         }
         .menuStyle(.borderlessButton)
+        .fixedSize()
+        .onHover { hovering in
+            withAnimation(.easeOut(duration: 0.15)) {
+                isSpeedHovered = hovering
+            }
+        }
     }
 
     // MARK: - Actions
@@ -229,6 +262,13 @@ class AudioPlayer: NSObject, ObservableObject, AVAudioPlayerDelegate {
 
     private var audioPlayer: AVAudioPlayer?
     private var timer: Timer?
+
+    override init() {
+        super.init()
+        if UserDefaults.standard.object(forKey: "audioPlaybackSpeed") != nil {
+            playbackRate = UserDefaults.standard.float(forKey: "audioPlaybackSpeed")
+        }
+    }
 
     func load(url: URL) {
         do {
@@ -267,6 +307,7 @@ class AudioPlayer: NSObject, ObservableObject, AVAudioPlayerDelegate {
 
     func setPlaybackRate(_ rate: Float) {
         playbackRate = rate
+        UserDefaults.standard.set(rate, forKey: "audioPlaybackSpeed")
         if isPlaying {
             audioPlayer?.rate = rate
         }
