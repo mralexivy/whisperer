@@ -1694,11 +1694,11 @@ class AppState: ObservableObject {
                     return
                 }
                 cancelStateWatchdog()
-                errorMessage = "Failed to start recording: \(error.localizedDescription)"
+                Logger.error("Failed to start recording: \(error.localizedDescription)", subsystem: .app)
                 streamingTranscriber = nil
                 liveTranscription = ""
                 state = .idle
-                // Unmute on error since we're not recording
+                // Silent reset — no error message. Next Fn press starts fresh.
                 if muteOtherAudioDuringRecording {
                     audioMuter?.unmuteSystemAudio()
                 }
@@ -1706,14 +1706,16 @@ class AppState: ObservableObject {
         }
     }
 
-    /// Called when audio engine is running but no audio data arrives after recovery attempts.
+    /// Called when audio engine exhausts all recovery attempts.
+    /// Silently resets to idle so the next Fn press starts a clean recording.
     func handleAudioFlowTimeout() {
-        Logger.error("Audio flow timeout — no audio data after recovery attempts", subsystem: .audio)
+        Logger.error("Audio flow timeout — all recovery attempts exhausted, resetting to idle", subsystem: .audio)
         guard case .recording = state else { return }
+        cancelStateWatchdog()
         streamingTranscriber = nil
         liveTranscription = ""
         state = .idle
-        errorMessage = "Microphone not responding. Please check your audio device and try again."
+        // No error message — silent reset. Next Fn press creates a fresh engine.
         if muteOtherAudioDuringRecording {
             audioMuter?.unmuteSystemAudio()
         }
@@ -1836,7 +1838,7 @@ class AppState: ObservableObject {
                 self.streamingTranscriber = nil
                 self.liveTranscription = ""
                 self.state = .idle
-                self.errorMessage = "Recording failed — audio device error. Please try again."
+                // Silent reset — no error message. Next Fn press starts fresh.
                 if self.muteOtherAudioDuringRecording {
                     self.audioMuter?.unmuteSystemAudio()
                 }

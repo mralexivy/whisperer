@@ -119,12 +119,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             }
         }
 
-        // Setup device recovery callback
-        appState.audioRecorder?.onDeviceRecovery = { [weak self] message in
-            Task { @MainActor in
-                self?.appState.errorMessage = message
-            }
-        }
+        // Audio recovery is silent — no user-facing messages.
+        // onDeviceRecovery intentionally not wired to errorMessage.
 
         // Setup audio flow timeout callback — engine running but no data flowing
         appState.audioRecorder?.onAudioFlowTimeout = { [weak self] in
