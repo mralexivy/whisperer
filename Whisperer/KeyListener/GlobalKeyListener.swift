@@ -64,6 +64,10 @@ class GlobalKeyListener {
     private var rewriteEventHandler: EventHandlerRef?
     private var rewriteRecordingInProgress = false
 
+    // Carbon hotkey for hands-free L key (registered only during Fn hold-to-record)
+    private var handsFreeHotKeyRef: EventHotKeyRef?
+    private var handsFreeEventHandler: EventHandlerRef?
+
     // Polling fallback for Fn release detection (safety net for Globe/Fn key edge cases)
     private var releaseCheckTimer: DispatchSourceTimer?
 
@@ -130,6 +134,7 @@ class GlobalKeyListener {
         unregisterCarbonHotKey()
         unregisterPickerHotKey()
         unregisterRewriteHotKey()
+        unregisterHandsFreeHotKey()
         pickerVisible = false
         rewriteRecordingInProgress = false
 
@@ -353,6 +358,7 @@ class GlobalKeyListener {
         isRecordingToggled = false
         isHandsFreeMode = false
         lastStateChange = Date()
+        unregisterHandsFreeHotKey()
         stopReleaseCheckTimer()
         DispatchQueue.main.async { [weak self] in
             self?.onShortcutCancelled?()
@@ -390,12 +396,9 @@ class GlobalKeyListener {
             }
 
             // Check 2: L key pressed while Fn is held → "lock" hands-free mode
+            // (fallback for when Carbon hotkey registration failed)
             if !self.isHandsFreeMode && self.isHandsFreeKeyPressed() {
-                Logger.info("Fn+L detected — HANDS-FREE mode activated", subsystem: .keyListener)
-                self.isHandsFreeMode = true
-                DispatchQueue.main.async { [weak self] in
-                    self?.onHandsFreeActivated?()
-                }
+                self.activateHandsFreeMode()
                 return
             }
 
@@ -417,6 +420,9 @@ class GlobalKeyListener {
         }
         timer.resume()
         releaseCheckTimer = timer
+
+        // Register L key hotkey to intercept the keystroke before it reaches the focused app
+        registerHandsFreeHotKey()
     }
 
     /// Checks if L key is currently pressed (for Fn+L hands-free "lock" activation).
@@ -450,6 +456,111 @@ class GlobalKeyListener {
     private func stopReleaseCheckTimer() {
         releaseCheckTimer?.cancel()
         releaseCheckTimer = nil
+        unregisterHandsFreeHotKey()
+    }
+
+    // MARK: - Hands-Free Hot Key (L key, registered only during Fn recording)
+
+    /// Registers a Carbon hotkey for Fn+L to intercept the keystroke
+    /// before it reaches the focused app. Prevents "l" from being inserted into text fields.
+    private func registerHandsFreeHotKey() {
+        guard handsFreeHotKeyRef == nil else { return }
+
+        let hotKeyID = EventHotKeyID(
+            signature: OSType(0x57485350), // "WHSP"
+            id: 4
+        )
+
+        // kEventKeyModifierFnMask = 0x0020000 — Fn/Globe modifier for Carbon events
+        let fnModifier: UInt32 = 0x0020000
+
+        let status = RegisterEventHotKey(
+            UInt32(handsFreeKeyCode),
+            fnModifier,
+            hotKeyID,
+            GetApplicationEventTarget(),
+            0,
+            &handsFreeHotKeyRef
+        )
+
+        guard status == noErr else {
+            Logger.warning("Failed to register hands-free hotkey: \(status)", subsystem: .keyListener)
+            return
+        }
+
+        var eventSpecs = [
+            EventTypeSpec(eventClass: OSType(kEventClassKeyboard), eventKind: UInt32(kEventHotKeyPressed))
+        ]
+
+        let handlerResult = InstallEventHandler(
+            GetApplicationEventTarget(),
+            { (_, event, userData) -> OSStatus in
+                guard let userData = userData else { return OSStatus(eventNotHandledErr) }
+                let listener = Unmanaged<GlobalKeyListener>.fromOpaque(userData).takeUnretainedValue()
+                listener.handleHandsFreeHotKeyEvent(event)
+                return noErr
+            },
+            eventSpecs.count,
+            &eventSpecs,
+            Unmanaged.passUnretained(self).toOpaque(),
+            &handsFreeEventHandler
+        )
+
+        if handlerResult == noErr {
+            Logger.debug("Hands-free hotkey registered (L key)", subsystem: .keyListener)
+        } else {
+            Logger.warning("Failed to install hands-free event handler: \(handlerResult)", subsystem: .keyListener)
+        }
+    }
+
+    private func handleHandsFreeHotKeyEvent(_ event: EventRef?) {
+        guard event != nil else { return }
+
+        stateQueue.async { [weak self] in
+            guard let self = self else { return }
+            guard self.recordingInProgress, !self.isHandsFreeMode else { return }
+            self.activateHandsFreeMode()
+        }
+    }
+
+    private func unregisterHandsFreeHotKey() {
+        if let hotKeyRef = handsFreeHotKeyRef {
+            UnregisterEventHotKey(hotKeyRef)
+            handsFreeHotKeyRef = nil
+        }
+        if let handler = handsFreeEventHandler {
+            RemoveEventHandler(handler)
+            handsFreeEventHandler = nil
+        }
+    }
+
+    /// Shared hands-free activation logic used by both Carbon hotkey and polling fallback.
+    /// Must be called on stateQueue.
+    private func activateHandsFreeMode() {
+        guard !isHandsFreeMode else { return }
+        Logger.info("Fn+L detected — HANDS-FREE mode activated", subsystem: .keyListener)
+        isHandsFreeMode = true
+        unregisterHandsFreeHotKey()
+        // Post a Delete keystroke to remove the "l" that may have been inserted
+        // into the focused text field before the hotkey intercepted it.
+        // CGEvent.post (posting events) is an approved API — distinct from CGEventTap (monitoring).
+        deleteLastCharacter()
+        DispatchQueue.main.async { [weak self] in
+            self?.onHandsFreeActivated?()
+        }
+    }
+
+    /// Posts a synthetic Delete (backspace) keystroke to remove the "l" character
+    /// that may have been inserted into the focused text field.
+    private func deleteLastCharacter() {
+        let deleteKeyCode: CGKeyCode = 51  // Delete/Backspace
+        guard let keyDown = CGEvent(keyboardEventSource: nil, virtualKey: deleteKeyCode, keyDown: true),
+              let keyUp = CGEvent(keyboardEventSource: nil, virtualKey: deleteKeyCode, keyDown: false) else {
+            Logger.warning("Failed to create Delete CGEvent", subsystem: .keyListener)
+            return
+        }
+        keyDown.post(tap: .cgAnnotatedSessionEventTap)
+        keyUp.post(tap: .cgAnnotatedSessionEventTap)
     }
 
     // MARK: - Carbon Hot Key (for key+modifier shortcuts)
