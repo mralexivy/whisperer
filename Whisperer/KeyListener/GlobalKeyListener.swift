@@ -76,11 +76,11 @@ class GlobalKeyListener {
     // For toggle mode
     private var isRecordingToggled = false
 
-    // Fn+H hands-free mode (within holdToRecord)
-    // While holding Fn, press H → hands-free activates, release Fn → recording continues
+    // Fn+L hands-free mode (within holdToRecord)
+    // While holding Fn, press L → "locks" recording on, release Fn → recording continues
     // Press Fn again → stops recording
     private var isHandsFreeMode = false
-    private let handsFreeKeyCode: CGKeyCode = 4  // H key
+    private let handsFreeKeyCode: CGKeyCode = 37  // L key
 
     private let debounceInterval: TimeInterval = 0.02  // 20ms for instant response
     private var lastStateChange = Date()
@@ -389,9 +389,9 @@ class GlobalKeyListener {
                 return
             }
 
-            // Check 2: H key pressed while Fn is held → activate hands-free
+            // Check 2: L key pressed while Fn is held → "lock" hands-free mode
             if !self.isHandsFreeMode && self.isHandsFreeKeyPressed() {
-                Logger.info("Fn+H detected — HANDS-FREE mode activated", subsystem: .keyListener)
+                Logger.info("Fn+L detected — HANDS-FREE mode activated", subsystem: .keyListener)
                 self.isHandsFreeMode = true
                 DispatchQueue.main.async { [weak self] in
                     self?.onHandsFreeActivated?()
@@ -419,7 +419,7 @@ class GlobalKeyListener {
         releaseCheckTimer = timer
     }
 
-    /// Checks if H key is currently pressed (for Fn+H hands-free activation).
+    /// Checks if L key is currently pressed (for Fn+L hands-free "lock" activation).
     private func isHandsFreeKeyPressed() -> Bool {
         CGEventSource.keyState(.combinedSessionState, key: handsFreeKeyCode)
     }
@@ -439,7 +439,7 @@ class GlobalKeyListener {
 
         for keyCode: CGKeyCode in 0..<128 {
             guard !modifierKeyCodes.contains(keyCode) else { continue }
-            guard keyCode != handsFreeKeyCode else { continue }  // H handled separately
+            guard keyCode != handsFreeKeyCode else { continue }  // L handled separately
             if CGEventSource.keyState(.combinedSessionState, key: keyCode) {
                 return true
             }
