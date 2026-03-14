@@ -6,6 +6,7 @@
 //
 
 import SwiftUI
+import AppKit
 
 struct TranscriptionRow: View {
     let transcription: TranscriptionRecord
@@ -209,6 +210,12 @@ struct TranscriptionRow: View {
                 }
                 Button(action: shareTranscription) {
                     Label("Share", systemImage: "square.and.arrow.up")
+                }
+                if let audioURL = transcription.audioURL,
+                   FileManager.default.fileExists(atPath: audioURL.path) {
+                    Button(action: { NSWorkspace.shared.activateFileViewerSelecting([audioURL]) }) {
+                        Label("Show in Finder", systemImage: "folder")
+                    }
                 }
                 Divider()
                 Button(role: .destructive, action: deleteTranscription) {
