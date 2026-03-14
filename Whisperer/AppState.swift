@@ -301,7 +301,7 @@ class AppState: ObservableObject {
             UserDefaults.standard.set(llmEnabled, forKey: "llmEnabled")
         }
     }
-    @Published var selectedLLMModel: LLMModelVariant = .qwen3_4B {
+    @Published var selectedLLMModel: LLMModelVariant = .qwen3_5_4B {
         didSet {
             UserDefaults.standard.set(selectedLLMModel.rawValue, forKey: "selectedLLMModel")
         }
@@ -321,7 +321,7 @@ class AppState: ObservableObject {
             UserDefaults.standard.set(llmTranslateLanguage, forKey: "llmTranslateLanguage")
         }
     }
-    var llmPostProcessor: LLMPostProcessor?
+    @Published var llmPostProcessor: LLMPostProcessor?
 
     // Filler word removal (strips "um", "uh", "er" from final output)
     @Published var fillerWordRemovalEnabled: Bool = false {
@@ -1171,9 +1171,9 @@ class AppState: ObservableObject {
     /// Pre-load the LLM model if enabled
     func preloadLLM() {
         guard llmEnabled else { return }
-        guard llmPostProcessor == nil || llmPostProcessor?.isModelLoaded != true else { return }
+        if let existing = llmPostProcessor, (existing.isModelLoaded || existing.isLoading) { return }
 
-        let processor = LLMPostProcessor()
+        let processor = llmPostProcessor ?? LLMPostProcessor()
         llmPostProcessor = processor
         let variant = selectedLLMModel
 
@@ -1183,6 +1183,8 @@ class AppState: ObservableObject {
                 Logger.info("LLM \(variant.displayName) pre-loaded", subsystem: .model)
             } catch {
                 Logger.error("Failed to pre-load LLM \(variant.displayName): \(error)", subsystem: .model)
+                processor.errorMessage = "Failed to download model"
+                processor.isLoading = false
             }
         }
     }

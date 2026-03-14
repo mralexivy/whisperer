@@ -1818,6 +1818,11 @@ struct SettingsTabView: View {
                 settingsCard(title: "AI Post-Processing", icon: "sparkles", color: .purple) {
                     LLMSettingsView()
                 }
+
+                // Rewrite Mode
+                settingsCard(title: "Rewrite Mode", icon: "wand.and.stars", color: Color(red: 0.545, green: 0.361, blue: 0.965)) {
+                    RewriteSettingsView()
+                }
                 #endif
 
                 // Diagnostics
@@ -3247,6 +3252,7 @@ struct LLMSettingsView: View {
                     .toggleStyle(.switch)
                     .tint(MBColors.accent)
                     .labelsHidden()
+                    .disabled(appState.llmPostProcessor?.isLoading == true)
             }
 
             if appState.llmEnabled {
@@ -3297,26 +3303,34 @@ struct LLMSettingsView: View {
                         .font(.system(size: 11, weight: .medium))
                         .foregroundColor(MBColors.textSecondary)
 
-                    HStack(spacing: 6) {
-                        ForEach(LLMTask.allCases) { task in
-                            Button(action: {
-                                appState.selectedLLMTask = task
-                            }) {
-                                Text(task.displayName)
-                                    .font(.system(size: 10, weight: appState.selectedLLMTask == task ? .semibold : .medium))
-                                    .foregroundColor(appState.selectedLLMTask == task ? .white : MBColors.textSecondary)
-                                    .padding(.horizontal, 8)
-                                    .padding(.vertical, 4)
-                                    .background(
-                                        Capsule()
-                                            .fill(appState.selectedLLMTask == task ? MBColors.accent : Color.clear)
-                                    )
-                                    .overlay(
-                                        Capsule()
-                                            .stroke(appState.selectedLLMTask == task ? Color.clear : MBColors.border, lineWidth: 1)
-                                    )
+                    let tasks = LLMTask.allCases
+                    let firstRow = Array(tasks.prefix(4))
+                    let secondRow = Array(tasks.dropFirst(4))
+
+                    VStack(alignment: .leading, spacing: 6) {
+                        ForEach([firstRow, secondRow], id: \.self) { row in
+                            HStack(spacing: 6) {
+                                ForEach(row) { task in
+                                    Button(action: {
+                                        appState.selectedLLMTask = task
+                                    }) {
+                                        Text(task.displayName)
+                                            .font(.system(size: 10, weight: appState.selectedLLMTask == task ? .semibold : .medium))
+                                            .foregroundColor(appState.selectedLLMTask == task ? .white : MBColors.textSecondary)
+                                            .padding(.horizontal, 8)
+                                            .padding(.vertical, 4)
+                                            .background(
+                                                Capsule()
+                                                    .fill(appState.selectedLLMTask == task ? MBColors.accent : Color.clear)
+                                            )
+                                            .overlay(
+                                                Capsule()
+                                                    .stroke(appState.selectedLLMTask == task ? Color.clear : MBColors.border, lineWidth: 1)
+                                            )
+                                    }
+                                    .buttonStyle(.plain).pointerOnHover()
+                                }
                             }
-                            .buttonStyle(.plain).pointerOnHover()
                         }
                     }
                 }
@@ -3355,16 +3369,9 @@ struct LLMSettingsView: View {
                     }
                 }
 
-                // Load/status button
-                if let processor = appState.llmPostProcessor, processor.isModelLoaded {
-                    HStack {
-                        Image(systemName: "checkmark.circle.fill")
-                            .foregroundColor(.green)
-                            .font(.system(size: 12))
-                        Text("\(appState.selectedLLMModel.displayName) loaded")
-                            .font(.caption2)
-                            .foregroundColor(MBColors.textSecondary)
-                    }
+                // Load/status
+                if let processor = appState.llmPostProcessor {
+                    LLMLoadStatusView(processor: processor, modelName: appState.selectedLLMModel.displayName, onRetry: { appState.preloadLLM() })
                 } else {
                     Button(action: {
                         appState.preloadLLM()
@@ -3383,3 +3390,122 @@ struct LLMSettingsView: View {
         }
     }
 }
+
+private struct LLMLoadStatusView: View {
+    @ObservedObject var processor: LLMPostProcessor
+    let modelName: String
+    let onRetry: () -> Void
+
+    var body: some View {
+        if processor.isLoading {
+            VStack(alignment: .leading, spacing: 4) {
+                HStack(spacing: 6) {
+                    ProgressView()
+                        .controlSize(.small)
+                    Text(processor.loadProgress > 0
+                         ? "Downloading... \(Int(processor.loadProgress * 100))%"
+                         : "Loading...")
+                        .font(.system(size: 11, weight: .medium))
+                        .foregroundColor(MBColors.textSecondary)
+                }
+                if processor.loadProgress > 0 {
+                    ProgressView(value: processor.loadProgress)
+                        .tint(MBColors.accent)
+                }
+            }
+        } else if processor.isModelLoaded {
+            HStack {
+                Image(systemName: "checkmark.circle.fill")
+                    .foregroundColor(.green)
+                    .font(.system(size: 12))
+                Text("\(modelName) loaded")
+                    .font(.caption2)
+                    .foregroundColor(MBColors.textSecondary)
+            }
+        } else if let error = processor.errorMessage {
+            HStack(spacing: 4) {
+                Image(systemName: "exclamationmark.triangle.fill")
+                    .foregroundColor(.red)
+                    .font(.system(size: 11))
+                Text(error)
+                    .font(.system(size: 10, weight: .medium))
+                    .foregroundColor(.red.opacity(0.8))
+                Spacer()
+                Button("Retry") { onRetry() }
+                    .font(.system(size: 10, weight: .semibold))
+                    .foregroundColor(MBColors.accent)
+                    .buttonStyle(.plain).pointerOnHover()
+            }
+        } else {
+            Button(action: { onRetry() }) {
+                HStack(spacing: 4) {
+                    Image(systemName: "arrow.down.circle")
+                        .font(.system(size: 12))
+                    Text("Load Model")
+                        .font(.system(size: 11, weight: .medium))
+                }
+                .foregroundColor(MBColors.accent)
+            }
+            .buttonStyle(.plain).pointerOnHover()
+        }
+    }
+}
+
+// MARK: - Rewrite Settings View
+
+#if !APP_STORE
+private struct RewriteSettingsView: View {
+    @ObservedObject var appState = AppState.shared
+
+    private var currentConfig: RewriteShortcutConfig {
+        appState.keyListener?.rewriteShortcutConfig ?? .defaultConfig
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            // Enable toggle
+            HStack {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Rewrite selected text")
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundColor(MBColors.textPrimary)
+                    Text("Hold shortcut, speak instructions")
+                        .font(.system(size: 10))
+                        .foregroundColor(MBColors.textSecondary)
+                }
+                Spacer()
+                Toggle("", isOn: Binding(
+                    get: { currentConfig.isEnabled },
+                    set: { newValue in
+                        var config = currentConfig
+                        config.isEnabled = newValue
+                        appState.keyListener?.rewriteShortcutConfig = config
+                    }
+                ))
+                .toggleStyle(.switch)
+                .tint(MBColors.accent)
+                .labelsHidden()
+            }
+
+            if currentConfig.isEnabled {
+                RewriteShortcutRecorderView()
+
+                // LLM dependency warning
+                if !appState.llmEnabled || appState.llmPostProcessor?.isModelLoaded != true {
+                    HStack(spacing: 6) {
+                        Image(systemName: "exclamationmark.triangle.fill")
+                            .foregroundColor(.orange)
+                            .font(.system(size: 10))
+                        Text("Enable and load AI Post-Processing model for rewrite to work")
+                            .font(.system(size: 10))
+                            .foregroundColor(.orange)
+                    }
+                    .padding(8)
+                    .background(Color.orange.opacity(0.08))
+                    .cornerRadius(6)
+                }
+            }
+        }
+    }
+}
+#endif

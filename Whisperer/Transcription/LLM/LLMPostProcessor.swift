@@ -13,8 +13,10 @@ import MLXLMCommon
 @MainActor
 class LLMPostProcessor: ObservableObject {
     @Published var isModelLoaded = false
+    @Published var isLoading = false
     @Published var isProcessing = false
     @Published var loadProgress: Double = 0
+    @Published var errorMessage: String?
 
     private var modelContainer: ModelContainer?
     private var session: ChatSession?
@@ -23,6 +25,10 @@ class LLMPostProcessor: ObservableObject {
     // MARK: - Model Management
 
     func loadModel(_ variant: LLMModelVariant) async throws {
+        guard !isLoading else {
+            Logger.debug("LLM load already in progress, skipping", subsystem: .model)
+            return
+        }
         guard loadedVariant != variant else {
             Logger.info("LLM \(variant.displayName) already loaded", subsystem: .model)
             return
@@ -30,15 +36,28 @@ class LLMPostProcessor: ObservableObject {
 
         Logger.info("Loading LLM \(variant.displayName)...", subsystem: .model)
         isModelLoaded = false
+        isLoading = true
+        errorMessage = nil
         loadProgress = 0
 
         let configuration = ModelConfiguration(id: variant.huggingFaceId)
-        let container = try await LLMModelFactory.shared.loadContainer(configuration: configuration)
+        let container = try await LLMModelFactory.shared.loadContainer(
+            configuration: configuration,
+            progressHandler: { [weak self] progress in
+                Task { @MainActor in
+                    let fraction = progress.fractionCompleted
+                    if fraction > 0 {
+                        self?.loadProgress = fraction
+                    }
+                }
+            }
+        )
 
         modelContainer = container
         session = ChatSession(container)
         loadedVariant = variant
         isModelLoaded = true
+        isLoading = false
         loadProgress = 1.0
 
         Logger.info("LLM \(variant.displayName) loaded", subsystem: .model)
@@ -49,7 +68,9 @@ class LLMPostProcessor: ObservableObject {
         modelContainer = nil
         loadedVariant = nil
         isModelLoaded = false
+        isLoading = false
         loadProgress = 0
+        errorMessage = nil
         Logger.info("LLM unloaded", subsystem: .model)
     }
 
