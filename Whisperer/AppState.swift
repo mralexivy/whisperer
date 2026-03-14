@@ -90,15 +90,18 @@ class AppState: ObservableObject {
         }
     }
 
-    // Prompt words — biases whisper toward recognizing specific vocabulary during transcription
+    // Prompt words — biases recognition toward specific vocabulary
+    // Whisper: passed as initial_prompt. Parakeet: fed into CTC vocabulary boosting.
     @Published var promptWords: [String] = [] {
         didSet {
             UserDefaults.standard.set(promptWords, forKey: "promptWords")
+            reconfigureVocabularyBoosting()
         }
     }
     @Published var promptWordsEnabled: Bool = true {
         didSet {
             UserDefaults.standard.set(promptWordsEnabled, forKey: "promptWordsEnabled")
+            reconfigureVocabularyBoosting()
         }
     }
 
@@ -349,15 +352,6 @@ class AppState: ObservableObject {
         }
     }
 
-    // CTC vocabulary boosting for Parakeet (boosts dictionary terms in final pass)
-    @Published var vocabularyBoostingEnabled: Bool = true {
-        didSet {
-            UserDefaults.standard.set(vocabularyBoostingEnabled, forKey: "vocabularyBoostingEnabled")
-            if vocabularyBoostingEnabled && selectedBackendType == .parakeet {
-                reconfigureVocabularyBoosting()
-            }
-        }
-    }
     private var dictionaryRebuildObserver: Any?
     private var appActivationObserver: Any?
     private var clipboardNotificationObserver: Any?
@@ -482,7 +476,7 @@ class AppState: ObservableObject {
             _promptWordsEnabled = Published(wrappedValue: UserDefaults.standard.bool(forKey: "promptWordsEnabled"))
         }
 
-        // Load filler word, list formatting, vocabulary boosting, and trailing space settings
+        // Load filler word, list formatting, and trailing space settings
         if UserDefaults.standard.object(forKey: "fillerWordRemovalEnabled") != nil {
             _fillerWordRemovalEnabled = Published(wrappedValue: UserDefaults.standard.bool(forKey: "fillerWordRemovalEnabled"))
         }
@@ -491,9 +485,6 @@ class AppState: ObservableObject {
         }
         if UserDefaults.standard.object(forKey: "listFormattingAIEnabled") != nil {
             _listFormattingAIEnabled = Published(wrappedValue: UserDefaults.standard.bool(forKey: "listFormattingAIEnabled"))
-        }
-        if UserDefaults.standard.object(forKey: "vocabularyBoostingEnabled") != nil {
-            _vocabularyBoostingEnabled = Published(wrappedValue: UserDefaults.standard.bool(forKey: "vocabularyBoostingEnabled"))
         }
         if UserDefaults.standard.object(forKey: "appendTrailingSpace") != nil {
             _appendTrailingSpace = Published(wrappedValue: UserDefaults.standard.bool(forKey: "appendTrailingSpace"))
@@ -1088,9 +1079,7 @@ class AppState: ObservableObject {
                     self.preloadVAD()
 
                     // Configure CTC vocabulary boosting on the final-pass manager
-                    if self.vocabularyBoostingEnabled {
-                        self.configureVocabularyBoostingOnBridge(bridge, variant: variant)
-                    }
+                    self.configureVocabularyBoostingOnBridge(bridge, variant: variant)
                 }
             } catch {
                 guard !Task.isCancelled else { return }
@@ -1327,7 +1316,8 @@ class AppState: ObservableObject {
             guard let self = self else { return }
             do {
                 let entries = await DictionaryManager.shared.entries
-                guard let vocabBundle = try await VocabularyStore.buildVocabulary(entries: entries) else {
+                let words = await MainActor.run { self.promptWordsEnabled ? self.promptWords : [] }
+                guard let vocabBundle = try await VocabularyStore.buildVocabulary(entries: entries, promptWords: words) else {
                     Logger.debug("No vocabulary terms for CTC boosting", subsystem: .transcription)
                     return
                 }
@@ -1342,10 +1332,9 @@ class AppState: ObservableObject {
         }
     }
 
-    /// Reconfigure vocabulary boosting after dictionary changes
+    /// Reconfigure vocabulary boosting after dictionary or prompt word changes
     private func reconfigureVocabularyBoosting() {
-        guard vocabularyBoostingEnabled,
-              selectedBackendType == .parakeet,
+        guard selectedBackendType == .parakeet,
               let bridge = whisperBridge as? FluidAudioBridge else { return }
 
         let variant = selectedParakeetModel

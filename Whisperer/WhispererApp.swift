@@ -1659,28 +1659,6 @@ struct SettingsTabView: View {
                     }
                 }
 
-                // Vocabulary Boosting (Parakeet CTC rescoring)
-                settingsCard(title: "Vocabulary Boosting", icon: "text.magnifyingglass", color: .green) {
-                    HStack {
-                        VStack(alignment: .leading, spacing: 3) {
-                            Text("CTC rescoring")
-                                .font(.system(size: 13, weight: .medium))
-                                .foregroundColor(MBColors.textPrimary)
-                            Text("Boost dictionary terms in Parakeet final pass")
-                                .font(.system(size: 11))
-                                .foregroundColor(MBColors.textSecondary)
-                        }
-
-                        Spacer()
-
-                        Toggle("", isOn: $appState.vocabularyBoostingEnabled)
-                            .toggleStyle(.switch)
-                            .tint(MBColors.accent)
-                            .labelsHidden()
-                            .disabled(appState.selectedBackendType != .parakeet)
-                    }
-                }
-
                 // Filler Word Removal
                 settingsCard(title: "Filler Words", icon: "text.redaction", color: .orange) {
                     HStack {
