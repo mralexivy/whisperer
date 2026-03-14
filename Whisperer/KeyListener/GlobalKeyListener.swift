@@ -495,7 +495,10 @@ class GlobalKeyListener {
         let handlerResult = InstallEventHandler(
             GetApplicationEventTarget(),
             { (_, event, userData) -> OSStatus in
-                guard let userData = userData else { return OSStatus(eventNotHandledErr) }
+                guard let userData = userData, let event = event else { return OSStatus(eventNotHandledErr) }
+                var hotKeyID = EventHotKeyID()
+                let idStatus = GetEventParameter(event, EventParamName(kEventParamDirectObject), EventParamType(typeEventHotKeyID), nil, MemoryLayout<EventHotKeyID>.size, nil, &hotKeyID)
+                guard idStatus == noErr, hotKeyID.id == 4 else { return OSStatus(eventNotHandledErr) }
                 let listener = Unmanaged<GlobalKeyListener>.fromOpaque(userData).takeUnretainedValue()
                 listener.handleHandsFreeHotKeyEvent(event)
                 return noErr
@@ -609,7 +612,10 @@ class GlobalKeyListener {
         let handlerResult = InstallEventHandler(
             GetApplicationEventTarget(),
             { (_, event, userData) -> OSStatus in
-                guard let userData = userData else { return OSStatus(eventNotHandledErr) }
+                guard let userData = userData, let event = event else { return OSStatus(eventNotHandledErr) }
+                var hotKeyID = EventHotKeyID()
+                let idStatus = GetEventParameter(event, EventParamName(kEventParamDirectObject), EventParamType(typeEventHotKeyID), nil, MemoryLayout<EventHotKeyID>.size, nil, &hotKeyID)
+                guard idStatus == noErr, hotKeyID.id == 1 else { return OSStatus(eventNotHandledErr) }
                 let listener = Unmanaged<GlobalKeyListener>.fromOpaque(userData).takeUnretainedValue()
                 listener.handleCarbonHotKeyEvent(event)
                 return noErr
@@ -696,7 +702,11 @@ class GlobalKeyListener {
         let handlerResult = InstallEventHandler(
             GetApplicationEventTarget(),
             { (_, event, userData) -> OSStatus in
-                guard let userData = userData else { return OSStatus(eventNotHandledErr) }
+                guard let userData = userData, let event = event else { return OSStatus(eventNotHandledErr) }
+                // Only handle events for the picker hotkey (id=2)
+                var hotKeyID = EventHotKeyID()
+                let idStatus = GetEventParameter(event, EventParamName(kEventParamDirectObject), EventParamType(typeEventHotKeyID), nil, MemoryLayout<EventHotKeyID>.size, nil, &hotKeyID)
+                guard idStatus == noErr, hotKeyID.id == 2 else { return OSStatus(eventNotHandledErr) }
                 let listener = Unmanaged<GlobalKeyListener>.fromOpaque(userData).takeUnretainedValue()
                 listener.handlePickerHotKeyEvent(event)
                 return noErr
@@ -804,7 +814,11 @@ class GlobalKeyListener {
         let handlerResult = InstallEventHandler(
             GetApplicationEventTarget(),
             { (_, event, userData) -> OSStatus in
-                guard let userData = userData else { return OSStatus(eventNotHandledErr) }
+                guard let userData = userData, let event = event else { return OSStatus(eventNotHandledErr) }
+                // Only handle events for the rewrite hotkey (id=3)
+                var hotKeyID = EventHotKeyID()
+                let idStatus = GetEventParameter(event, EventParamName(kEventParamDirectObject), EventParamType(typeEventHotKeyID), nil, MemoryLayout<EventHotKeyID>.size, nil, &hotKeyID)
+                guard idStatus == noErr, hotKeyID.id == 3 else { return OSStatus(eventNotHandledErr) }
                 let listener = Unmanaged<GlobalKeyListener>.fromOpaque(userData).takeUnretainedValue()
                 listener.handleRewriteHotKeyEvent(event)
                 return noErr

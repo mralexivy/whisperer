@@ -81,6 +81,29 @@ struct LiveTranscriptionCard: View {
                         )
                         .transition(.opacity.combined(with: .scale(scale: 0.8)))
                     }
+
+                    #if !APP_STORE
+                    // AI mode badge (persistent while rewrite mode is active)
+                    if appState.activeMode == .rewrite, let modeName = appState.activeAIModeName {
+                        HStack(spacing: 4 * scale) {
+                            Circle()
+                                .fill(purpleAccent)
+                                .frame(width: 5 * scale, height: 5 * scale)
+
+                            Text(modeName.uppercased())
+                                .font(.system(size: 9 * scale, weight: .bold, design: .rounded))
+                                .tracking(0.8)
+                                .foregroundColor(purpleAccent)
+                        }
+                        .padding(.horizontal, 8 * scale)
+                        .padding(.vertical, 3 * scale)
+                        .background(
+                            Capsule()
+                                .fill(purpleAccent.opacity(0.12))
+                        )
+                        .transition(.opacity.combined(with: .scale(scale: 0.8)))
+                    }
+                    #endif
                 }
                 .padding(.horizontal, 20 * scale)
                 .padding(.top, 14 * scale)

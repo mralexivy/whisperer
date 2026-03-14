@@ -89,6 +89,7 @@ enum HistorySidebarItem: String, CaseIterable, Identifiable {
     case transcriptions = "Transcriptions"
     case fileTranscription = "File Transcription"
     case dictionary = "Dictionary"
+    case aiModes = "AI Modes"
     case statistics = "Statistics"
     case settings = "Settings"
     case commandMode = "Command Mode"
@@ -103,6 +104,7 @@ enum HistorySidebarItem: String, CaseIterable, Identifiable {
         case .fileTranscription: return "doc.text.magnifyingglass"
         case .statistics: return "chart.xyaxis.line"
         case .dictionary: return "book.closed"
+        case .aiModes: return "wand.and.sparkles"
         case .settings: return "gearshape"
         case .commandMode: return "terminal.fill"
         case .setup: return "checkmark.circle.fill"
@@ -116,6 +118,7 @@ enum HistorySidebarItem: String, CaseIterable, Identifiable {
         case .fileTranscription: return .purple
         case .statistics: return .cyan
         case .dictionary: return .red
+        case .aiModes: return Color(hex: "8B5CF6")
         case .settings: return .orange
         case .commandMode: return Color(hex: "22C55E")
         case .setup: return .blue
@@ -123,13 +126,13 @@ enum HistorySidebarItem: String, CaseIterable, Identifiable {
         }
     }
 
-    /// Items shown in the sidebar (commandMode and feedback only in non-App Store builds)
+    /// Items shown in the sidebar
     static var visibleItems: [HistorySidebarItem] {
         #if !APP_STORE
-        var items: [HistorySidebarItem] = [.transcriptions, .fileTranscription, .dictionary, .statistics, .setup, .feedback, .settings]
+        var items: [HistorySidebarItem] = [.transcriptions, .fileTranscription, .dictionary, .aiModes, .statistics, .setup, .feedback, .settings]
         items.insert(.commandMode, at: items.count - 3) // Before setup
         #else
-        let items: [HistorySidebarItem] = [.transcriptions, .fileTranscription, .dictionary, .statistics, .setup, .settings]
+        let items: [HistorySidebarItem] = [.transcriptions, .fileTranscription, .dictionary, .aiModes, .statistics, .setup, .settings]
         #endif
         return items
     }
@@ -177,6 +180,8 @@ struct HistoryWindowView: View {
                     StatisticsView()
                 case .dictionary:
                     DictionaryView()
+                case .aiModes:
+                    AIModesView()
                 case .settings:
                     HistorySettingsView()
                 case .commandMode:
@@ -198,6 +203,14 @@ struct HistoryWindowView: View {
         .onReceive(NotificationCenter.default.publisher(for: .switchToDictionaryTab)) { notification in
             withAnimation(.spring(response: 0.3)) {
                 selectedSidebarItem = .dictionary
+                if isSidebarCollapsed {
+                    isSidebarCollapsed = false
+                }
+            }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .switchToAIModesTab)) { _ in
+            withAnimation(.spring(response: 0.3)) {
+                selectedSidebarItem = .aiModes
                 if isSidebarCollapsed {
                     isSidebarCollapsed = false
                 }

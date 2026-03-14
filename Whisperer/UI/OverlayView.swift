@@ -53,25 +53,21 @@ struct OverlayView: View {
                     LiveTranscriptionCard(appState: appState)
                 }
 
-                // Processing indicator (shown during final pass)
+                // Processing indicator (shown during final pass or rewrite)
                 if case .stopping = appState.state {
                     ProcessingIndicator(scale: scale)
+                } else if case .rewriting = appState.state {
+                    AnimatedStatusCapsule(
+                        text: appState.activeAIModeName ?? "Rewriting",
+                        borderColor: purpleAccent,
+                        scale: scale
+                    )
                 }
 
                 // Download indicator (shown during model download)
                 if case .downloadingModel = appState.state {
                     DownloadingIndicator(scale: scale)
                 }
-
-                #if !APP_STORE
-                // Rewrite mode label
-                if appState.activeMode == .rewrite {
-                    Text("REWRITE MODE")
-                        .font(.system(size: 10 * scale, weight: .bold, design: .rounded))
-                        .tracking(1.0)
-                        .foregroundColor(purpleAccent)
-                }
-                #endif
 
                 // Main control bar — crossfades to hands-free toast when activated
                 ZStack {
@@ -90,6 +86,8 @@ struct OverlayView: View {
                             .frame(width: waveformWidth, height: waveformHeight)
 
                         if case .transcribing = appState.state {
+                            TranscribingIndicator(scale: scale)
+                        } else if case .rewriting = appState.state {
                             TranscribingIndicator(scale: scale)
                         } else if case .downloadingModel(let progress) = appState.state {
                             DownloadIndicator(progress: progress, scale: scale)

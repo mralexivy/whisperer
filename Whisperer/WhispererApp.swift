@@ -174,6 +174,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             } else {
                 await MainActor.run {
                     self.appState.preloadModel()
+                    self.appState.preloadLLM()
                 }
             }
         }
@@ -1753,11 +1754,6 @@ struct SettingsTabView: View {
                 settingsCard(title: "AI Post-Processing", icon: "sparkles", color: .purple) {
                     LLMSettingsView()
                 }
-
-                // Rewrite Mode
-                settingsCard(title: "Rewrite Mode", icon: "wand.and.stars", color: Color(red: 0.545, green: 0.361, blue: 0.965)) {
-                    RewriteSettingsView()
-                }
                 #endif
 
                 // Diagnostics
@@ -3174,6 +3170,11 @@ struct AboutView: View {
 
 struct LLMSettingsView: View {
     @ObservedObject var appState = AppState.shared
+    @ObservedObject var modeManager = AIModeManager.shared
+
+    private var rewriteConfig: RewriteShortcutConfig {
+        appState.keyListener?.rewriteShortcutConfig ?? .defaultConfig
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -3191,178 +3192,224 @@ struct LLMSettingsView: View {
             }
 
             if appState.llmEnabled {
-                // Model picker
-                VStack(alignment: .leading, spacing: 6) {
-                    Text("Model")
+                // Model picker with inline status
+                LLMModelPickerView(
+                    selectedModel: $appState.selectedLLMModel,
+                    processor: appState.llmPostProcessor,
+                    onRetry: { appState.preloadLLM() }
+                )
+
+                // Active mode display
+                HStack(spacing: 6) {
+                    Text("Mode")
                         .font(.system(size: 11, weight: .medium))
                         .foregroundColor(MBColors.textSecondary)
 
-                    ForEach(LLMModelVariant.allCases) { variant in
-                        Button(action: {
-                            appState.selectedLLMModel = variant
-                        }) {
-                            HStack(spacing: 8) {
-                                ZStack {
-                                    Circle()
-                                        .stroke(appState.selectedLLMModel == variant ? MBColors.accent : MBColors.textTertiary, lineWidth: 2)
-                                        .frame(width: 14, height: 14)
-                                    if appState.selectedLLMModel == variant {
-                                        Circle()
-                                            .fill(MBColors.accent)
-                                            .frame(width: 8, height: 8)
-                                    }
-                                }
+                    Spacer()
 
-                                Text(variant.displayName)
-                                    .font(.system(size: 11, weight: appState.selectedLLMModel == variant ? .semibold : .regular))
-                                    .foregroundColor(appState.selectedLLMModel == variant ? MBColors.textPrimary : MBColors.textSecondary)
-
-                                Spacer()
-
-                                Text(variant.sizeDescription)
-                                    .font(.caption2)
-                                    .foregroundColor(MBColors.textTertiary)
-
-                                Text(variant.speedDescription)
-                                    .font(.caption2)
-                                    .foregroundColor(MBColors.accent.opacity(0.8))
-                            }
-                        }
-                        .buttonStyle(.plain).pointerOnHover()
-                    }
-                }
-
-                // Task picker
-                VStack(alignment: .leading, spacing: 6) {
-                    Text("Task")
-                        .font(.system(size: 11, weight: .medium))
-                        .foregroundColor(MBColors.textSecondary)
-
-                    let tasks = LLMTask.allCases
-                    let firstRow = Array(tasks.prefix(4))
-                    let secondRow = Array(tasks.dropFirst(4))
-
-                    VStack(alignment: .leading, spacing: 6) {
-                        ForEach([firstRow, secondRow], id: \.self) { row in
-                            HStack(spacing: 6) {
-                                ForEach(row) { task in
-                                    Button(action: {
-                                        appState.selectedLLMTask = task
-                                    }) {
-                                        Text(task.displayName)
-                                            .font(.system(size: 10, weight: appState.selectedLLMTask == task ? .semibold : .medium))
-                                            .foregroundColor(appState.selectedLLMTask == task ? .white : MBColors.textSecondary)
-                                            .padding(.horizontal, 8)
-                                            .padding(.vertical, 4)
-                                            .background(
-                                                Capsule()
-                                                    .fill(appState.selectedLLMTask == task ? MBColors.accent : Color.clear)
-                                            )
-                                            .overlay(
-                                                Capsule()
-                                                    .stroke(appState.selectedLLMTask == task ? Color.clear : MBColors.border, lineWidth: 1)
-                                            )
-                                    }
-                                    .buttonStyle(.plain).pointerOnHover()
-                                }
-                            }
-                        }
-                    }
-                }
-
-                // Custom prompt field
-                if appState.selectedLLMTask == .custom {
-                    TextField("Custom prompt...", text: $appState.llmCustomPrompt)
-                        .textFieldStyle(.plain)
-                        .font(.system(size: 11))
+                    Text(modeManager.activeMode.name)
+                        .font(.system(size: 11, weight: .semibold))
                         .foregroundColor(MBColors.textPrimary)
-                        .padding(8)
-                        .background(
-                            RoundedRectangle(cornerRadius: 6)
-                                .fill(MBColors.elevated)
-                        )
-                }
 
-                // Translation language
-                if appState.selectedLLMTask == .translate {
-                    HStack {
-                        Text("Target language")
-                            .font(.system(size: 11, weight: .medium))
-                            .foregroundColor(MBColors.textSecondary)
-                        Spacer()
-                        TextField("English", text: $appState.llmTranslateLanguage)
-                            .textFieldStyle(.plain)
-                            .font(.system(size: 11))
-                            .foregroundColor(MBColors.textPrimary)
-                            .frame(width: 100)
-                            .padding(.horizontal, 8)
-                            .padding(.vertical, 4)
-                            .background(
-                                RoundedRectangle(cornerRadius: 6)
-                                    .fill(MBColors.elevated)
-                            )
-                    }
-                }
-
-                // Load/status
-                if let processor = appState.llmPostProcessor {
-                    LLMLoadStatusView(processor: processor, modelName: appState.selectedLLMModel.displayName, onRetry: { appState.preloadLLM() })
-                } else {
                     Button(action: {
-                        appState.preloadLLM()
+                        NotificationCenter.default.post(name: .switchToAIModesTab, object: nil)
+                        HistoryWindowManager.shared.showWindowAndDismissMenu()
                     }) {
-                        HStack(spacing: 4) {
-                            Image(systemName: "arrow.down.circle")
-                                .font(.system(size: 12))
-                            Text("Load Model")
-                                .font(.system(size: 11, weight: .medium))
-                        }
-                        .foregroundColor(MBColors.accent)
+                        Text("Edit")
+                            .font(.system(size: 10, weight: .medium))
+                            .foregroundColor(MBColors.accent)
                     }
                     .buttonStyle(.plain).pointerOnHover()
+                }
+
+                #if !APP_STORE
+                // Rewrite shortcut (merged from RewriteSettingsView)
+                Rectangle()
+                    .fill(MBColors.border)
+                    .frame(height: 1)
+                    .padding(.vertical, 2)
+
+                HStack {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Rewrite shortcut")
+                            .font(.system(size: 12, weight: .medium))
+                            .foregroundColor(MBColors.textPrimary)
+                        Text("Hold shortcut, speak instructions")
+                            .font(.system(size: 10))
+                            .foregroundColor(MBColors.textSecondary)
+                    }
+                    Spacer()
+                    Toggle("", isOn: Binding(
+                        get: { rewriteConfig.isEnabled },
+                        set: { newValue in
+                            var config = rewriteConfig
+                            config.isEnabled = newValue
+                            appState.keyListener?.rewriteShortcutConfig = config
+                        }
+                    ))
+                    .toggleStyle(.switch)
+                    .tint(MBColors.accent)
+                    .labelsHidden()
+                }
+
+                if rewriteConfig.isEnabled {
+                    RewriteShortcutRecorderView()
+                }
+                #endif
+            }
+        }
+    }
+}
+
+// MARK: - LLM Model Picker (observes processor for live status updates)
+
+private struct LLMModelPickerView: View {
+    @Binding var selectedModel: LLMModelVariant
+    var processor: LLMPostProcessor?
+    let onRetry: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text("Model")
+                .font(.system(size: 11, weight: .medium))
+                .foregroundColor(MBColors.textSecondary)
+
+            if let processor = processor {
+                LLMModelListView(selectedModel: $selectedModel, processor: processor, onRetry: onRetry)
+            } else {
+                // Processor not yet created — show static list
+                ForEach(LLMModelVariant.allCases) { variant in
+                    LLMModelRowStatic(variant: variant, isSelected: selectedModel == variant)
                 }
             }
         }
     }
 }
 
-private struct LLMLoadStatusView: View {
+private struct LLMModelListView: View {
+    @Binding var selectedModel: LLMModelVariant
     @ObservedObject var processor: LLMPostProcessor
+    let onRetry: () -> Void
+
+    private var isBusy: Bool {
+        processor.isLoading
+    }
+
+    var body: some View {
+        ForEach(LLMModelVariant.allCases) { variant in
+            let isSelected = selectedModel == variant
+
+            Button(action: {
+                selectedModel = variant
+            }) {
+                VStack(alignment: .leading, spacing: 0) {
+                    // Model row
+                    HStack(spacing: 8) {
+                        // Radio button
+                        ZStack {
+                            Circle()
+                                .stroke(isSelected ? MBColors.accent : MBColors.textTertiary, lineWidth: 2)
+                                .frame(width: 14, height: 14)
+                            if isSelected {
+                                Circle()
+                                    .fill(MBColors.accent)
+                                    .frame(width: 8, height: 8)
+                            }
+                        }
+
+                        Text(variant.displayName)
+                            .font(.system(size: 11, weight: isSelected ? .semibold : .regular))
+                            .foregroundColor(isSelected ? MBColors.textPrimary : MBColors.textSecondary)
+
+                        Spacer()
+
+                        if variant.isRecommended {
+                            Text("Recommended")
+                                .font(.system(size: 9, weight: .bold, design: .rounded))
+                                .foregroundColor(MBColors.accent)
+                                .padding(.horizontal, 6)
+                                .padding(.vertical, 2)
+                                .background(Capsule().fill(MBColors.accent.opacity(0.12)))
+                        }
+
+                        Text(variant.sizeDescription)
+                            .font(.caption2)
+                            .foregroundColor(MBColors.textTertiary)
+
+                        Text(variant.speedDescription)
+                            .font(.caption2)
+                            .foregroundColor(MBColors.accent.opacity(0.8))
+                    }
+
+                    // Phase-based status under the selected model
+                    if isSelected {
+                        LLMPhaseStatusView(phase: processor.loadPhase, modelName: variant.displayName, onRetry: onRetry)
+                    }
+                }
+                .opacity(isBusy && !isSelected ? 0.4 : 1.0)
+            }
+            .buttonStyle(.plain).pointerOnHover()
+            .disabled(isBusy)
+        }
+    }
+}
+
+// MARK: - Phase Status (downloading / loading / ready / error)
+
+private struct LLMPhaseStatusView: View {
+    let phase: LLMLoadPhase
     let modelName: String
     let onRetry: () -> Void
 
     var body: some View {
-        if processor.isLoading {
+        switch phase {
+        case .idle:
+            EmptyView()
+
+        case .downloading(let progress):
             VStack(alignment: .leading, spacing: 4) {
+                ProgressView(value: max(progress, 0.01))
+                    .tint(MBColors.accent)
                 HStack(spacing: 6) {
                     ProgressView()
-                        .controlSize(.small)
-                    Text(processor.loadProgress > 0
-                         ? "Downloading... \(Int(processor.loadProgress * 100))%"
-                         : "Loading...")
-                        .font(.system(size: 11, weight: .medium))
+                        .controlSize(.mini)
+                    Text("Downloading \(modelName)... \(Int(progress * 100))%")
+                        .font(.system(size: 10, weight: .medium))
                         .foregroundColor(MBColors.textSecondary)
                 }
-                if processor.loadProgress > 0 {
-                    ProgressView(value: processor.loadProgress)
-                        .tint(MBColors.accent)
-                }
             }
-        } else if processor.isModelLoaded {
-            HStack {
-                Image(systemName: "checkmark.circle.fill")
-                    .foregroundColor(.green)
-                    .font(.system(size: 12))
-                Text("\(modelName) loaded")
-                    .font(.caption2)
+            .padding(.leading, 22)
+            .padding(.top, 6)
+
+        case .loading:
+            HStack(spacing: 6) {
+                ProgressView()
+                    .controlSize(.mini)
+                Text("Loading \(modelName) into memory...")
+                    .font(.system(size: 10, weight: .medium))
                     .foregroundColor(MBColors.textSecondary)
             }
-        } else if let error = processor.errorMessage {
+            .padding(.leading, 22)
+            .padding(.top, 6)
+
+        case .ready:
+            HStack(spacing: 5) {
+                Image(systemName: "checkmark.circle.fill")
+                    .foregroundColor(.green)
+                    .font(.system(size: 10))
+                Text("\(modelName) ready")
+                    .font(.system(size: 10, weight: .medium))
+                    .foregroundColor(MBColors.textSecondary)
+            }
+            .padding(.leading, 22)
+            .padding(.top, 4)
+
+        case .error(let message):
             HStack(spacing: 4) {
                 Image(systemName: "exclamationmark.triangle.fill")
                     .foregroundColor(.red)
-                    .font(.system(size: 11))
-                Text(error)
+                    .font(.system(size: 10))
+                Text(message)
                     .font(.system(size: 10, weight: .medium))
                     .foregroundColor(.red.opacity(0.8))
                 Spacer()
@@ -3371,76 +3418,52 @@ private struct LLMLoadStatusView: View {
                     .foregroundColor(MBColors.accent)
                     .buttonStyle(.plain).pointerOnHover()
             }
-        } else {
-            Button(action: { onRetry() }) {
-                HStack(spacing: 4) {
-                    Image(systemName: "arrow.down.circle")
-                        .font(.system(size: 12))
-                    Text("Load Model")
-                        .font(.system(size: 11, weight: .medium))
-                }
-                .foregroundColor(MBColors.accent)
-            }
-            .buttonStyle(.plain).pointerOnHover()
+            .padding(.leading, 22)
+            .padding(.top, 4)
         }
     }
 }
 
-// MARK: - Rewrite Settings View
-
-#if !APP_STORE
-private struct RewriteSettingsView: View {
-    @ObservedObject var appState = AppState.shared
-
-    private var currentConfig: RewriteShortcutConfig {
-        appState.keyListener?.rewriteShortcutConfig ?? .defaultConfig
-    }
+private struct LLMModelRowStatic: View {
+    let variant: LLMModelVariant
+    let isSelected: Bool
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            // Enable toggle
-            HStack {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("Rewrite selected text")
-                        .font(.system(size: 12, weight: .medium))
-                        .foregroundColor(MBColors.textPrimary)
-                    Text("Hold shortcut, speak instructions")
-                        .font(.system(size: 10))
-                        .foregroundColor(MBColors.textSecondary)
-                }
-                Spacer()
-                Toggle("", isOn: Binding(
-                    get: { currentConfig.isEnabled },
-                    set: { newValue in
-                        var config = currentConfig
-                        config.isEnabled = newValue
-                        appState.keyListener?.rewriteShortcutConfig = config
-                    }
-                ))
-                .toggleStyle(.switch)
-                .tint(MBColors.accent)
-                .labelsHidden()
-            }
-
-            if currentConfig.isEnabled {
-                RewriteShortcutRecorderView()
-
-                // LLM dependency warning
-                if !appState.llmEnabled || appState.llmPostProcessor?.isModelLoaded != true {
-                    HStack(spacing: 6) {
-                        Image(systemName: "exclamationmark.triangle.fill")
-                            .foregroundColor(.orange)
-                            .font(.system(size: 10))
-                        Text("Enable and load AI Post-Processing model for rewrite to work")
-                            .font(.system(size: 10))
-                            .foregroundColor(.orange)
-                    }
-                    .padding(8)
-                    .background(Color.orange.opacity(0.08))
-                    .cornerRadius(6)
+        HStack(spacing: 8) {
+            ZStack {
+                Circle()
+                    .stroke(isSelected ? MBColors.accent : MBColors.textTertiary, lineWidth: 2)
+                    .frame(width: 14, height: 14)
+                if isSelected {
+                    Circle()
+                        .fill(MBColors.accent)
+                        .frame(width: 8, height: 8)
                 }
             }
+
+            Text(variant.displayName)
+                .font(.system(size: 11, weight: isSelected ? .semibold : .regular))
+                .foregroundColor(isSelected ? MBColors.textPrimary : MBColors.textSecondary)
+
+            Spacer()
+
+            if variant.isRecommended {
+                Text("Recommended")
+                    .font(.system(size: 9, weight: .bold, design: .rounded))
+                    .foregroundColor(MBColors.accent)
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 2)
+                    .background(Capsule().fill(MBColors.accent.opacity(0.12)))
+            }
+
+            Text(variant.sizeDescription)
+                .font(.caption2)
+                .foregroundColor(MBColors.textTertiary)
+
+            Text(variant.speedDescription)
+                .font(.caption2)
+                .foregroundColor(MBColors.accent.opacity(0.8))
         }
     }
 }
-#endif
+

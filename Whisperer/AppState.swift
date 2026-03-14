@@ -22,6 +22,7 @@ enum RecordingState: Equatable {
     case transcribing(audioPath: URL)
     case inserting(text: String)
     case downloadingModel(progress: Double)
+    case rewriting
 
     var isRecording: Bool {
         if case .recording = self { return true }
@@ -42,6 +43,8 @@ enum RecordingState: Equatable {
             return "Entering text..."
         case .downloadingModel(let progress):
             return "Downloading model... \(Int(progress * 100))%"
+        case .rewriting:
+            return "Rewriting..."
         }
     }
 }
@@ -57,6 +60,7 @@ class AppState: ObservableObject {
             if state == .idle {
                 targetAppIcon = nil
                 activeMode = .dictation
+                activeAIModeName = nil
                 capturedSelectedText = nil
                 isHandsFreeRecording = false
                 showHandsFreeToast = false
@@ -302,29 +306,29 @@ class AppState: ObservableObject {
     @Published var llmEnabled: Bool = false {
         didSet {
             UserDefaults.standard.set(llmEnabled, forKey: "llmEnabled")
+            if llmEnabled {
+                preloadLLM()
+            } else {
+                llmPostProcessor?.unloadModel()
+                llmPostProcessor = nil
+                rewriteModeService = nil
+            }
         }
     }
     @Published var selectedLLMModel: LLMModelVariant = .qwen3_5_4B {
         didSet {
             UserDefaults.standard.set(selectedLLMModel.rawValue, forKey: "selectedLLMModel")
-        }
-    }
-    @Published var selectedLLMTask: LLMTask = .rewrite {
-        didSet {
-            UserDefaults.standard.set(selectedLLMTask.rawValue, forKey: "selectedLLMTask")
-        }
-    }
-    @Published var llmCustomPrompt: String = "" {
-        didSet {
-            UserDefaults.standard.set(llmCustomPrompt, forKey: "llmCustomPrompt")
-        }
-    }
-    @Published var llmTranslateLanguage: String = "English" {
-        didSet {
-            UserDefaults.standard.set(llmTranslateLanguage, forKey: "llmTranslateLanguage")
+            if llmEnabled {
+                // Unload old model and load new one
+                llmPostProcessor?.unloadModel()
+                llmPostProcessor = nil
+                rewriteModeService = nil
+                preloadLLM()
+            }
         }
     }
     @Published var llmPostProcessor: LLMPostProcessor?
+    @Published var activeAIModeName: String?
 
     // Filler word removal (strips "um", "uh", "er" from final output)
     @Published var fillerWordRemovalEnabled: Bool = false {
@@ -457,16 +461,8 @@ class AppState: ObservableObject {
            let llmModel = LLMModelVariant(rawValue: savedLLMModel) {
             _selectedLLMModel = Published(wrappedValue: llmModel)
         }
-        if let savedLLMTask = UserDefaults.standard.string(forKey: "selectedLLMTask"),
-           let llmTask = LLMTask(rawValue: savedLLMTask) {
-            _selectedLLMTask = Published(wrappedValue: llmTask)
-        }
-        if let savedCustomPrompt = UserDefaults.standard.string(forKey: "llmCustomPrompt") {
-            _llmCustomPrompt = Published(wrappedValue: savedCustomPrompt)
-        }
-        if let savedTranslateLang = UserDefaults.standard.string(forKey: "llmTranslateLanguage") {
-            _llmTranslateLanguage = Published(wrappedValue: savedTranslateLang)
-        }
+        // Initialize AIModeManager (triggers migration from legacy LLMTask/PromptProfile)
+        _ = AIModeManager.shared
 
         // Load prompt words
         if let savedPromptWords = UserDefaults.standard.stringArray(forKey: "promptWords") {
@@ -1160,10 +1156,13 @@ class AppState: ObservableObject {
     /// Pre-load the LLM model if enabled
     func preloadLLM() {
         guard llmEnabled else { return }
-        if let existing = llmPostProcessor, (existing.isModelLoaded || existing.isLoading) { return }
 
         let processor = llmPostProcessor ?? LLMPostProcessor()
         llmPostProcessor = processor
+
+        // Skip if already loading or the correct model is loaded
+        if processor.isLoading { return }
+
         let variant = selectedLLMModel
 
         Task {
@@ -1172,7 +1171,9 @@ class AppState: ObservableObject {
                 Logger.info("LLM \(variant.displayName) pre-loaded", subsystem: .model)
             } catch {
                 Logger.error("Failed to pre-load LLM \(variant.displayName): \(error)", subsystem: .model)
-                processor.errorMessage = "Failed to download model"
+                let msg = "Failed to load model"
+                processor.errorMessage = msg
+                processor.loadPhase = .error(msg)
                 processor.isLoading = false
             }
         }
@@ -1184,14 +1185,16 @@ class AppState: ObservableObject {
             return text
         }
 
+        let mode = AIModeManager.shared.activeMode
+        guard !mode.systemPrompt.isEmpty else { return text }
+
         do {
             let processed = try await processor.process(
                 text: text,
-                task: selectedLLMTask,
-                customPrompt: selectedLLMTask == .custom ? llmCustomPrompt : nil,
-                targetLanguage: selectedLLMTask == .translate ? llmTranslateLanguage : nil
+                systemPrompt: mode.systemPrompt,
+                targetLanguage: mode.targetLanguage
             )
-            Logger.info("LLM post-processed: \(text.prefix(30))... → \(processed.prefix(30))...", subsystem: .transcription)
+            Logger.info("LLM post-processed (\(mode.name)): \(text.prefix(30))... → \(processed.prefix(30))...", subsystem: .transcription)
             return processed
         } catch {
             Logger.error("LLM post-processing failed: \(error)", subsystem: .transcription)
@@ -1211,14 +1214,15 @@ class AppState: ObservableObject {
             return transcription
         }
 
-        let profile = PromptProfileManager.shared.activeProfile
+        let mode = AIModeManager.shared.activeMode
+        let rewritePrompt = mode.rewritePrompt.isEmpty ? nil : mode.rewritePrompt
         do {
             let result = try await service.process(
                 instruction: transcription,
                 selectedText: capturedSelectedText,
-                rewritePrompt: profile?.rewritePrompt
+                rewritePrompt: rewritePrompt
             )
-            Logger.info("Rewrite mode processed: \(transcription.prefix(30))... → \(result.prefix(30))...", subsystem: .transcription)
+            Logger.info("Rewrite mode (\(mode.name)) processed: \(transcription.prefix(30))... → \(result.prefix(30))...", subsystem: .transcription)
             return result
         } catch {
             Logger.error("Rewrite mode failed: \(error)", subsystem: .transcription)
@@ -1236,7 +1240,8 @@ class AppState: ObservableObject {
         if listFormattingAIEnabled, result == text,
            let processor = llmPostProcessor, processor.isModelLoaded {
             do {
-                let llmResult = try await processor.process(text: text, task: .listFormat)
+                let listFormatPrompt = AIMode.builtInModes.first { $0.name == "List Format" }?.systemPrompt ?? ""
+                let llmResult = try await processor.process(text: text, systemPrompt: listFormatPrompt)
                 Logger.info("LLM list formatting: \(text.prefix(30))... → \(llmResult.prefix(30))...", subsystem: .transcription)
                 return llmResult
             } catch {
@@ -1393,15 +1398,19 @@ class AppState: ObservableObject {
         }
 
         #if !APP_STORE
-        // Rewrite mode callbacks
+        // Rewrite mode callback — single keypress rewrites selected text directly (no recording)
         listener.onRewriteShortcutPressed = { [weak self] in
             Task { @MainActor in
-                self?.startRewriteRecording()
-            }
-        }
-        listener.onRewriteShortcutReleased = { [weak self] in
-            Task { @MainActor in
-                self?.stopRecording()
+                guard let self = self else { return }
+                guard self.llmEnabled else {
+                    Logger.warning("Rewrite shortcut: AI post-processing not enabled", subsystem: .app)
+                    return
+                }
+                guard self.llmPostProcessor?.isModelLoaded == true else {
+                    Logger.warning("Rewrite shortcut: LLM model not loaded", subsystem: .app)
+                    return
+                }
+                await self.rewriteSelectedText()
             }
         }
         #endif
@@ -1773,21 +1782,10 @@ class AppState: ObservableObject {
                     saveRecordingFromTranscriber(transcriber, transcription: finalText)
                 }
 
-                // Route through rewrite mode or standard dictation
-                let textToInsert: String
-                #if !APP_STORE
-                if self.activeMode == .rewrite {
-                    textToInsert = await processRewriteMode(transcription: finalText)
-                } else {
-                    let listFormatted = await applyListFormatting(finalText)
-                    let processedText = await applyLLMPostProcessing(listFormatted)
-                    textToInsert = appendTrailingSpace ? processedText + " " : processedText
-                }
-                #else
+                // Standard dictation post-processing
                 let listFormatted = await applyListFormatting(finalText)
                 let processedText = await applyLLMPostProcessing(listFormatted)
-                textToInsert = appendTrailingSpace ? processedText + " " : processedText
-                #endif
+                let textToInsert = appendTrailingSpace ? processedText + " " : processedText
 
                 Logger.debug("Entering dictated text: '\(textToInsert)'", subsystem: .app)
                 cancelStateWatchdog()
@@ -1861,28 +1859,43 @@ class AppState: ObservableObject {
         stateWatchdog = nil
     }
 
-    // MARK: - Rewrite Mode Recording
+    // MARK: - Rewrite Selected Text
 
-    func startRewriteRecording() {
-        guard whisperBridge != nil else {
-            showModelLoadingToast = true
-            DispatchQueue.main.asyncAfter(deadline: .now() + 10.0) { [weak self] in
-                self?.showModelLoadingToast = false
-            }
+    /// Directly rewrites selected text through LLM — no recording, no voice input.
+    /// Triggered by rewrite shortcut (Option+Shift+Tab by default).
+    func rewriteSelectedText() async {
+        guard state == .idle else { return }
+        guard let processor = llmPostProcessor, processor.isModelLoaded else { return }
+
+        #if !APP_STORE
+        // Read text from clipboard
+        guard let clipboardText = NSPasteboard.general.string(forType: .string), !clipboardText.isEmpty else {
+            Logger.warning("Rewrite: clipboard is empty", subsystem: .app)
             return
         }
-        guard state == .idle else { return }
+        let selectedText = clipboardText
 
-        // Capture selected text BEFORE recording starts (before overlay steals focus)
-        #if !APP_STORE
-        capturedSelectedText = textSelectionService?.getSelectedText()
-        #endif
+        let mode = AIModeManager.shared.activeMode
         activeMode = .rewrite
+        activeAIModeName = mode.name
+        state = .rewriting
 
-        Logger.info("Rewrite mode started (selected \(capturedSelectedText?.count ?? 0) chars)", subsystem: .app)
+        Logger.info("Rewriting \(selectedText.count) chars with \(mode.name) mode", subsystem: .app)
 
-        // Use the standard startRecording flow
-        startRecording()
+        do {
+            let result = try await processor.process(
+                text: selectedText,
+                systemPrompt: mode.systemPrompt,
+                targetLanguage: mode.targetLanguage
+            )
+            Logger.info("Rewrite (\(mode.name)): \(selectedText.prefix(30))... → \(result.prefix(30))...", subsystem: .app)
+            state = .idle
+            await insertText(result)
+        } catch {
+            Logger.error("Rewrite failed: \(error)", subsystem: .transcription)
+            state = .idle
+        }
+        #endif
     }
 
     func cancelRecording() {

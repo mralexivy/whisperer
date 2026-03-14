@@ -76,10 +76,10 @@ class CommandModeService: ObservableObject {
 
         for turn in 0..<maxTurns {
             do {
+                let contextPrompt = turn == 0 ? prompt : buildContext()
                 let response = try await llmProcessor.process(
                     text: prompt + (turn > 0 ? "\n\n\(buildContext())" : ""),
-                    task: .custom,
-                    customPrompt: turn == 0 ? prompt : buildContext()
+                    systemPrompt: contextPrompt
                 )
 
                 // Parse response for command blocks

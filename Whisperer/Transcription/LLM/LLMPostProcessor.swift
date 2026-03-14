@@ -10,13 +10,28 @@ import Combine
 import MLXLLM
 import MLXLMCommon
 
+enum LLMLoadPhase: Equatable {
+    case idle
+    case downloading(progress: Double)
+    case loading
+    case ready
+    case error(String)
+}
+
 @MainActor
 class LLMPostProcessor: ObservableObject {
     @Published var isModelLoaded = false
     @Published var isLoading = false
     @Published var isProcessing = false
-    @Published var loadProgress: Double = 0
+    @Published var loadPhase: LLMLoadPhase = .idle
     @Published var errorMessage: String?
+
+    // Legacy — kept for backward compat with any code reading loadProgress
+    var loadProgress: Double {
+        if case .downloading(let p) = loadPhase { return p }
+        if case .ready = loadPhase { return 1.0 }
+        return 0
+    }
 
     private var modelContainer: ModelContainer?
     private var session: ChatSession?
@@ -38,7 +53,9 @@ class LLMPostProcessor: ObservableObject {
         isModelLoaded = false
         isLoading = true
         errorMessage = nil
-        loadProgress = 0
+        loadPhase = .loading
+
+        var didReceiveProgress = false
 
         let configuration = ModelConfiguration(id: variant.huggingFaceId)
         let container = try await LLMModelFactory.shared.loadContainer(
@@ -47,18 +64,26 @@ class LLMPostProcessor: ObservableObject {
                 Task { @MainActor in
                     let fraction = progress.fractionCompleted
                     if fraction > 0 {
-                        self?.loadProgress = fraction
+                        didReceiveProgress = true
+                        self?.loadPhase = .downloading(progress: fraction)
                     }
                 }
             }
         )
+
+        // Download done (if it happened) — now loading into memory
+        if didReceiveProgress {
+            loadPhase = .loading
+            Logger.info("LLM \(variant.displayName) downloaded, loading into memory...", subsystem: .model)
+        }
 
         modelContainer = container
         session = ChatSession(container)
         loadedVariant = variant
         isModelLoaded = true
         isLoading = false
-        loadProgress = 1.0
+        loadPhase = .ready
+        errorMessage = nil
 
         Logger.info("LLM \(variant.displayName) loaded", subsystem: .model)
     }
@@ -69,14 +94,13 @@ class LLMPostProcessor: ObservableObject {
         loadedVariant = nil
         isModelLoaded = false
         isLoading = false
-        loadProgress = 0
+        loadPhase = .idle
         errorMessage = nil
         Logger.info("LLM unloaded", subsystem: .model)
     }
 
     // MARK: - Processing
-
-    func process(text: String, task: LLMTask, customPrompt: String? = nil, targetLanguage: String? = nil) async throws -> String {
+    func process(text: String, systemPrompt: String, targetLanguage: String? = nil, temperature: Float = 0.3, topP: Float = 0.9) async throws -> String {
         guard let session = session else {
             Logger.warning("LLM not loaded, returning original text", subsystem: .transcription)
             return text
@@ -85,16 +109,15 @@ class LLMPostProcessor: ObservableObject {
         isProcessing = true
         defer { isProcessing = false }
 
+        guard !systemPrompt.isEmpty else {
+            return text
+        }
+
         var prompt: String
-        switch task {
-        case .translate:
-            let lang = targetLanguage ?? "English"
-            prompt = "\(task.systemPrompt) Translate to \(lang).\n\nText: \(text)"
-        case .custom:
-            let userPrompt = customPrompt ?? "Improve this text"
-            prompt = "\(userPrompt)\n\nText: \(text)"
-        default:
-            prompt = "\(task.systemPrompt)\n\nText: \(text)"
+        if let lang = targetLanguage, !lang.isEmpty {
+            prompt = "\(systemPrompt) Translate to \(lang).\n\nText: \(text)"
+        } else {
+            prompt = "\(systemPrompt)\n\nText: \(text)"
         }
 
         let result = try await session.respond(to: prompt)
