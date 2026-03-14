@@ -110,13 +110,15 @@ class AppState: ObservableObject {
         return promptWords.joined(separator: ", ")
     }
 
-    /// Approximate token count for prompt words (word count as rough estimate)
+    /// Approximate token count for prompt words (~4 characters per token, including ", " separators)
     var promptWordsTokenCount: Int {
-        promptWords.reduce(0) { $0 + $1.split(separator: " ").count }
+        guard !promptWords.isEmpty else { return 0 }
+        let totalChars = promptWords.joined(separator: ", ").count
+        return max(1, (totalChars + 3) / 4)  // ceil(totalChars / 4)
     }
 
-    /// Maximum recommended word count (conservative limit under 244 tokens)
-    static let maxPromptWordsTokens = 200
+    /// Whisper initial_prompt hard limit: 224 tokens (model architecture constraint)
+    static let maxPromptWordsTokens = 224
 
     // System-wide dictation opt-in (default OFF for App Store compliance)
     @Published var systemWideDictationEnabled: Bool = false {
@@ -561,15 +563,18 @@ class AppState: ObservableObject {
             return false
         }
 
-        // Check token limit
-        let newTokenCount = promptWordsTokenCount + trimmed.split(separator: " ").count
+        // Check token limit (~4 chars per token, account for ", " separator)
+        let separatorChars = promptWords.isEmpty ? 0 : 2  // ", " before new word
+        let newChars = trimmed.count + separatorChars
+        let currentChars = promptWords.isEmpty ? 0 : promptWords.joined(separator: ", ").count
+        let newTokenCount = max(1, (currentChars + newChars + 3) / 4)
         guard newTokenCount <= Self.maxPromptWordsTokens else {
-            Logger.warning("Prompt word limit reached (\(promptWordsTokenCount)/\(Self.maxPromptWordsTokens))", subsystem: .transcription)
+            Logger.warning("Prompt word limit reached (\(promptWordsTokenCount)/\(Self.maxPromptWordsTokens) tokens)", subsystem: .transcription)
             return false
         }
 
         promptWords.append(trimmed)
-        Logger.info("Added prompt word: '\(trimmed)' (\(promptWordsTokenCount)/\(Self.maxPromptWordsTokens) words)", subsystem: .transcription)
+        Logger.info("Added prompt word: '\(trimmed)' (\(promptWordsTokenCount)/\(Self.maxPromptWordsTokens) tokens)", subsystem: .transcription)
         return true
     }
 

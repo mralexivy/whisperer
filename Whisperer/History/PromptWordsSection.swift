@@ -12,6 +12,9 @@ struct PromptWordsSection: View {
     @ObservedObject private var appState = AppState.shared
     @State private var newWord = ""
     @State private var showLimitWarning = false
+    @State private var showClearAllConfirmation = false
+    @State private var isCancelHovered = false
+    @State private var isClearHovered = false
 
     private var tokenCountColor: Color {
         let count = appState.promptWordsTokenCount
@@ -21,25 +24,32 @@ struct PromptWordsSection: View {
     }
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 16) {
-                infoCard
+        ZStack {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 16) {
+                    infoCard
 
-                inputField
+                    inputField
 
-                if !appState.promptWords.isEmpty {
-                    tokenCounter
+                    if !appState.promptWords.isEmpty {
+                        tokenCounter
 
-                    wordPills
-                } else {
-                    emptyState
+                        wordPills
+                    } else {
+                        emptyState
+                    }
                 }
+                .padding(20)
             }
-            .padding(20)
+            .opacity(appState.promptWordsEnabled ? 1.0 : 0.4)
+            .allowsHitTesting(appState.promptWordsEnabled)
+            .animation(.easeInOut(duration: 0.2), value: appState.promptWordsEnabled)
+
+            // Confirmation overlay
+            if showClearAllConfirmation {
+                clearAllConfirmationOverlay
+            }
         }
-        .opacity(appState.promptWordsEnabled ? 1.0 : 0.4)
-        .allowsHitTesting(appState.promptWordsEnabled)
-        .animation(.easeInOut(duration: 0.2), value: appState.promptWordsEnabled)
         .background(WhispererColors.background(colorScheme))
     }
 
@@ -145,9 +155,7 @@ struct PromptWordsSection: View {
             Spacer()
 
             Button(action: {
-                withAnimation(.easeInOut(duration: 0.2)) {
-                    appState.promptWords.removeAll()
-                }
+                showClearAllConfirmation = true
             }) {
                 Text("Clear All")
                     .font(.system(size: 11, weight: .medium))
@@ -161,7 +169,7 @@ struct PromptWordsSection: View {
 
     private var wordPills: some View {
         FlowLayout(spacing: 8) {
-            ForEach(appState.promptWords, id: \.self) { word in
+            ForEach(appState.promptWords.sorted(by: { $0.localizedCaseInsensitiveCompare($1) == .orderedAscending }), id: \.self) { word in
                 wordPill(word)
             }
         }
@@ -215,6 +223,165 @@ struct PromptWordsSection: View {
         }
         .frame(maxWidth: .infinity)
         .padding(.vertical, 40)
+    }
+
+    // MARK: - Clear All Confirmation
+
+    private var clearAllConfirmationOverlay: some View {
+        ZStack {
+            // Full-area backdrop that blocks all interaction behind
+            Color.black.opacity(0.35)
+                .ignoresSafeArea()
+                .contentShape(Rectangle())
+                .onTapGesture {
+                    withAnimation(.spring(response: 0.25, dampingFraction: 0.9)) {
+                        showClearAllConfirmation = false
+                    }
+                }
+
+            VStack(alignment: .leading, spacing: 16) {
+                    // Icon + title row
+                    HStack(spacing: 11) {
+                        ZStack {
+                            RoundedRectangle(cornerRadius: 8)
+                                .fill(
+                                    LinearGradient(
+                                        colors: [Color.red.opacity(0.18), Color.red.opacity(0.08)],
+                                        startPoint: .topLeading,
+                                        endPoint: .bottomTrailing
+                                    )
+                                )
+                                .frame(width: 32, height: 32)
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 8)
+                                        .stroke(Color.red.opacity(0.12), lineWidth: 0.5)
+                                )
+
+                            Image(systemName: "trash.fill")
+                                .font(.system(size: 13, weight: .medium))
+                                .foregroundColor(.red)
+                        }
+
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Clear All Prompt Words?")
+                                .font(.system(size: 14, weight: .bold, design: .rounded))
+                                .foregroundColor(WhispererColors.primaryText(colorScheme))
+
+                            Text("\(appState.promptWords.count) words will be removed")
+                                .font(.system(size: 11, weight: .regular))
+                                .foregroundColor(WhispererColors.tertiaryText(colorScheme))
+                        }
+                    }
+
+                    // Description
+                    Text("All prompt words will be permanently deleted and Whisper will no longer use them for recognition hints. This action cannot be undone.")
+                        .font(.system(size: 12, weight: .regular))
+                        .foregroundColor(WhispererColors.secondaryText(colorScheme))
+                        .lineSpacing(4)
+                        .fixedSize(horizontal: false, vertical: true)
+
+                    // Separator
+                    Rectangle()
+                        .fill(
+                            LinearGradient(
+                                colors: [
+                                    WhispererColors.border(colorScheme).opacity(0.3),
+                                    WhispererColors.border(colorScheme),
+                                    WhispererColors.border(colorScheme).opacity(0.3)
+                                ],
+                                startPoint: .leading,
+                                endPoint: .trailing
+                            )
+                        )
+                        .frame(height: 0.5)
+
+                    // Right-aligned buttons — macOS convention
+                    HStack(spacing: 10) {
+                        Spacer()
+
+                        Button(action: {
+                            withAnimation(.spring(response: 0.25, dampingFraction: 0.9)) {
+                                showClearAllConfirmation = false
+                            }
+                        }) {
+                            Text("Cancel")
+                                .font(.system(size: 12, weight: .medium))
+                                .foregroundColor(WhispererColors.primaryText(colorScheme))
+                                .padding(.horizontal, 20)
+                                .padding(.vertical, 8)
+                                .background(
+                                    RoundedRectangle(cornerRadius: 7)
+                                        .fill(isCancelHovered
+                                            ? WhispererColors.elevatedBackground(colorScheme).opacity(1.5)
+                                            : WhispererColors.elevatedBackground(colorScheme))
+                                )
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 7)
+                                        .stroke(
+                                            isCancelHovered
+                                                ? WhispererColors.border(colorScheme).opacity(2)
+                                                : WhispererColors.border(colorScheme),
+                                            lineWidth: 1
+                                        )
+                                )
+                                .shadow(
+                                    color: Color.black.opacity(isCancelHovered ? 0.08 : 0.04),
+                                    radius: isCancelHovered ? 4 : 2,
+                                    y: 1
+                                )
+                                .scaleEffect(isCancelHovered ? 1.02 : 1.0)
+                        }
+                        .buttonStyle(.plain).pointerOnHover()
+                        .onHover { hovering in
+                            withAnimation(.easeOut(duration: 0.15)) { isCancelHovered = hovering }
+                        }
+
+                        Button(action: {
+                            withAnimation(.spring(response: 0.25, dampingFraction: 0.9)) {
+                                showClearAllConfirmation = false
+                            }
+                            withAnimation(.easeInOut(duration: 0.2)) {
+                                appState.promptWords.removeAll()
+                            }
+                        }) {
+                            Text("Clear All")
+                                .font(.system(size: 12, weight: .semibold))
+                                .foregroundColor(.white)
+                                .padding(.horizontal, 20)
+                                .padding(.vertical, 8)
+                                .background(
+                                    RoundedRectangle(cornerRadius: 7)
+                                        .fill(Color.red)
+                                )
+                                .shadow(
+                                    color: Color.red.opacity(isClearHovered ? 0.4 : 0.2),
+                                    radius: isClearHovered ? 8 : 4,
+                                    y: isClearHovered ? 2 : 1
+                                )
+                                .scaleEffect(isClearHovered ? 1.02 : 1.0)
+                        }
+                        .buttonStyle(.plain).pointerOnHover()
+                        .onHover { hovering in
+                            withAnimation(.easeOut(duration: 0.15)) { isClearHovered = hovering }
+                        }
+                }
+            }
+            .padding(.horizontal, 20)
+            .padding(.vertical, 18)
+            .frame(width: 380)
+            .background(
+                RoundedRectangle(cornerRadius: 12)
+                    .fill(WhispererColors.cardBackground(colorScheme))
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 12)
+                    .stroke(WhispererColors.border(colorScheme), lineWidth: 1)
+            )
+            .shadow(color: Color.black.opacity(0.2), radius: 16, y: 6)
+            .shadow(color: Color.black.opacity(0.08), radius: 4, y: 2)
+            .transition(.opacity.combined(with: .scale(scale: 0.95)))
+        }
+        .animation(.spring(response: 0.3, dampingFraction: 0.85), value: showClearAllConfirmation)
     }
 
     // MARK: - Actions
