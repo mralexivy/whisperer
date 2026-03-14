@@ -30,6 +30,12 @@ class AudioRecorder: NSObject {
     // Callback for device recovery events (message describing what happened)
     var onDeviceRecovery: ((String) -> Void)?
 
+    // Callback when audio engine is running but no data flows (silent recording)
+    var onAudioFlowTimeout: (() -> Void)?
+
+    // Tracks when the first audio callback fires after engine start
+    private var lastAudioCallbackTime: Date?
+
     // Target format for whisper: 16kHz mono
     private let targetSampleRate: Double = 16000.0
 
@@ -84,6 +90,7 @@ class AudioRecorder: NSObject {
         guard recoveryAttempts < maxRecoveryAttempts else {
             Logger.error("Max recovery attempts (\(maxRecoveryAttempts)) reached, giving up", subsystem: .audio)
             DispatchQueue.main.async { [weak self] in
+                self?.onAudioFlowTimeout?()
                 self?.onDeviceRecovery?("Microphone connection lost. Please check your audio device.")
             }
             await stopRecording()
@@ -92,6 +99,13 @@ class AudioRecorder: NSObject {
 
         recoveryAttempts += 1
         Logger.debug("Recovery attempt \(recoveryAttempts)/\(maxRecoveryAttempts)...", subsystem: .audio)
+
+        // Force fallback to system default device on recovery — the selected device
+        // may exist but produce no audio data (e.g., virtual device interference)
+        if selectedDeviceID != nil {
+            Logger.debug("Clearing selectedDeviceID for recovery (was: \(selectedDeviceID!))", subsystem: .audio)
+            selectedDeviceID = nil
+        }
 
         // Notify user that we're recovering
         if recoveryAttempts == 1 {
@@ -355,6 +369,7 @@ class AudioRecorder: NSObject {
         Logger.debug("Tap installed successfully", subsystem: .audio)
 
         // Start engine (use self.audioEngine in case we recreated it)
+        lastAudioCallbackTime = nil  // Reset for flow watchdog
         do {
             Logger.debug("Starting audio engine...", subsystem: .audio)
             guard let engine = self.audioEngine else {
@@ -370,6 +385,15 @@ class AudioRecorder: NSObject {
                 startMonitoringDevice(engineDeviceID)
             }
 
+            // Audio flow watchdog: if no audio data arrives within 2s, the engine
+            // started but the audio unit isn't actually capturing (e.g., -10877 errors
+            // from virtual device interference). Trigger recovery with default device.
+            DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) { [weak self] in
+                guard let self = self, self.isRecording, self.lastAudioCallbackTime == nil else { return }
+                Logger.error("Audio engine running but no data flowing after 2s — triggering recovery", subsystem: .audio)
+                Task { await self.recoverAudioEngine() }
+            }
+
             Logger.debug("Started recording", subsystem: .audio)
             return audioURL
         } catch {
@@ -379,6 +403,12 @@ class AudioRecorder: NSObject {
     }
 
     private func processAudioBufferSafe(buffer: AVAudioPCMBuffer, converter: AVAudioConverter, outputFormat: AVAudioFormat) throws {
+        // Track first audio data arrival for flow watchdog
+        if lastAudioCallbackTime == nil {
+            lastAudioCallbackTime = Date()
+            Logger.debug("First audio data received", subsystem: .audio)
+        }
+
         // Calculate output buffer size
         let ratio = outputFormat.sampleRate / buffer.format.sampleRate
         let outputFrameCapacity = AVAudioFrameCount(Double(buffer.frameLength) * ratio) + 1

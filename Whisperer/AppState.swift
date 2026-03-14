@@ -1706,6 +1706,19 @@ class AppState: ObservableObject {
         }
     }
 
+    /// Called when audio engine is running but no audio data arrives after recovery attempts.
+    func handleAudioFlowTimeout() {
+        Logger.error("Audio flow timeout — no audio data after recovery attempts", subsystem: .audio)
+        guard case .recording = state else { return }
+        streamingTranscriber = nil
+        liveTranscription = ""
+        state = .idle
+        errorMessage = "Microphone not responding. Please check your audio device and try again."
+        if muteOtherAudioDuringRecording {
+            audioMuter?.unmuteSystemAudio()
+        }
+    }
+
     func stopRecording() {
         guard case .recording = state else { return }
 

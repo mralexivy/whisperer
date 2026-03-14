@@ -126,6 +126,13 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             }
         }
 
+        // Setup audio flow timeout callback — engine running but no data flowing
+        appState.audioRecorder?.onAudioFlowTimeout = { [weak self] in
+            Task { @MainActor in
+                self?.appState.handleAudioFlowTimeout()
+            }
+        }
+
         // Only start global key listener if user has opted in
         if appState.systemWideDictationEnabled {
             appState.startGlobalDictation()
