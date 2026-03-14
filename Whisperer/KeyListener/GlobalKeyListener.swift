@@ -14,6 +14,7 @@ class GlobalKeyListener {
     var onShortcutPressed: (() -> Void)?
     var onShortcutReleased: (() -> Void)?
     var onShortcutCancelled: (() -> Void)?
+    var onHandsFreeActivated: (() -> Void)?
 
     // Rewrite mode callbacks
     var onRewriteShortcutPressed: (() -> Void)?
@@ -75,6 +76,12 @@ class GlobalKeyListener {
     // For toggle mode
     private var isRecordingToggled = false
 
+    // Fn+H hands-free mode (within holdToRecord)
+    // While holding Fn, press H → hands-free activates, release Fn → recording continues
+    // Press Fn again → stops recording
+    private var isHandsFreeMode = false
+    private let handsFreeKeyCode: CGKeyCode = 4  // H key
+
     private let debounceInterval: TimeInterval = 0.02  // 20ms for instant response
     private var lastStateChange = Date()
 
@@ -103,6 +110,7 @@ class GlobalKeyListener {
         fnDown = false
         recordingInProgress = false
         isRecordingToggled = false
+        isHandsFreeMode = false
 
         // Stop release check timer
         releaseCheckTimer?.cancel()
@@ -245,7 +253,19 @@ class GlobalKeyListener {
 
         switch config.recordingMode {
         case .holdToRecord:
-            if !recordingInProgress {
+            if isHandsFreeMode && recordingInProgress {
+                // Fn press during hands-free — stop recording
+                Logger.info("Shortcut PRESSED in hands-free — stopping (\(config.displayString))", subsystem: .keyListener)
+                isHandsFreeMode = false
+                recordingInProgress = false
+                isShortcutActive = false
+                lastStateChange = now
+                stopReleaseCheckTimer()
+                DispatchQueue.main.async { [weak self] in
+                    self?.onShortcutReleased?()
+                }
+            } else if !recordingInProgress {
+                // Normal press — start recording
                 Logger.info("Shortcut PRESSED (\(config.displayString))", subsystem: .keyListener)
                 recordingInProgress = true
                 isShortcutActive = true
@@ -298,7 +318,12 @@ class GlobalKeyListener {
 
         switch config.recordingMode {
         case .holdToRecord:
-            if recordingInProgress {
+            if isHandsFreeMode {
+                // In hands-free mode, ignore Fn release (stop happens on next press)
+                isShortcutActive = false
+                Logger.debug("Shortcut RELEASE ignored — hands-free mode active", subsystem: .keyListener)
+            } else if recordingInProgress {
+                // Normal hold release — stop recording
                 Logger.info("Shortcut RELEASED (\(config.displayString))", subsystem: .keyListener)
                 recordingInProgress = false
                 isShortcutActive = false
@@ -326,6 +351,7 @@ class GlobalKeyListener {
         recordingInProgress = false
         isShortcutActive = false
         isRecordingToggled = false
+        isHandsFreeMode = false
         lastStateChange = Date()
         stopReleaseCheckTimer()
         DispatchQueue.main.async { [weak self] in
@@ -354,31 +380,51 @@ class GlobalKeyListener {
             }
 
             // Check 1: Fn key released (event monitors may have missed it)
+            // Skip in hands-free mode — release is expected and should be ignored
             let currentFlags = NSEvent.modifierFlags
-            if !currentFlags.contains(.function) {
+            if !self.isHandsFreeMode && !currentFlags.contains(.function) {
                 Logger.info("Fn release detected via polling", subsystem: .keyListener)
                 self.handleShortcutDeactivated(config: config)
                 self.fnDown = false
                 return
             }
 
-            // Check 2: Any non-modifier key pressed while Fn is held → Fn+key combo
-            if self.isAnyNonModifierKeyPressed() {
-                self.handleShortcutCancelled(config: config, reason: "Fn+key via key state polling")
+            // Check 2: H key pressed while Fn is held → activate hands-free
+            if !self.isHandsFreeMode && self.isHandsFreeKeyPressed() {
+                Logger.info("Fn+H detected — HANDS-FREE mode activated", subsystem: .keyListener)
+                self.isHandsFreeMode = true
+                DispatchQueue.main.async { [weak self] in
+                    self?.onHandsFreeActivated?()
+                }
                 return
             }
 
-            // Check 3: Modifier key added while Fn is held (Fn+Cmd, Fn+Shift, etc.)
-            let extraModifiers: NSEvent.ModifierFlags = [.command, .control, .option, .shift]
-            if !currentFlags.intersection(extraModifiers).isEmpty {
-                self.handleShortcutCancelled(config: config, reason: "Fn+modifier via polling")
+            // Check 3 & 4: Only cancel on key/modifier combos when NOT in hands-free mode
+            // In hands-free mode, user has released Fn and can type freely — only Fn press stops recording
+            if !self.isHandsFreeMode {
+                // Check 3: Any non-modifier key (except H) pressed while Fn is held → Fn+key combo
+                if self.isAnyNonModifierKeyPressed() {
+                    self.handleShortcutCancelled(config: config, reason: "Fn+key via key state polling")
+                    return
+                }
+
+                // Check 4: Modifier key added while Fn is held (Fn+Cmd, Fn+Shift, etc.)
+                let extraModifiers: NSEvent.ModifierFlags = [.command, .control, .option, .shift]
+                if !currentFlags.intersection(extraModifiers).isEmpty {
+                    self.handleShortcutCancelled(config: config, reason: "Fn+modifier via polling")
+                }
             }
         }
         timer.resume()
         releaseCheckTimer = timer
     }
 
-    /// Checks if any non-modifier key is currently pressed.
+    /// Checks if H key is currently pressed (for Fn+H hands-free activation).
+    private func isHandsFreeKeyPressed() -> Bool {
+        CGEventSource.keyState(.combinedSessionState, key: handsFreeKeyCode)
+    }
+
+    /// Checks if any non-modifier key (except H) is currently pressed.
     /// Uses CGEventSource.keyState which queries the system key state table —
     /// a passive read, not event monitoring or interception.
     private func isAnyNonModifierKeyPressed() -> Bool {
@@ -393,6 +439,7 @@ class GlobalKeyListener {
 
         for keyCode: CGKeyCode in 0..<128 {
             guard !modifierKeyCodes.contains(keyCode) else { continue }
+            guard keyCode != handsFreeKeyCode else { continue }  // H handled separately
             if CGEventSource.keyState(.combinedSessionState, key: keyCode) {
                 return true
             }
@@ -706,6 +753,8 @@ class GlobalKeyListener {
     func resetToggleState() {
         isRecordingToggled = false
         isShortcutActive = false
+        isHandsFreeMode = false
+        recordingInProgress = false
     }
 
     deinit {

@@ -78,6 +78,7 @@ class OverlayPanel: NSPanel {
         self.backgroundColor = NSColor.clear
         self.isOpaque = false
         self.hasShadow = false  // No window shadow - SwiftUI capsule has its own
+        self.acceptsMouseMovedEvents = true  // Enable pointer cursor changes on hover
 
         // Create SwiftUI content with size-aware scale
         let overlayView = OverlayView()
@@ -208,7 +209,9 @@ class OverlayPanel: NSPanel {
         }
     }
 
-    override var canBecomeKey: Bool { false }
+    // canBecomeKey must be true for SwiftUI onHover/pointer tracking to work,
+    // but .nonactivatingPanel style prevents it from actually stealing focus
+    override var canBecomeKey: Bool { true }
     override var canBecomeMain: Bool { false }
 
     deinit {

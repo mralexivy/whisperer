@@ -11,6 +11,7 @@ struct OverlayView: View {
     @ObservedObject var appState = AppState.shared
     @AppStorage("overlaySize") private var overlaySizeRaw: String = OverlaySize.medium.rawValue
     @State private var isPulsing = false
+    @State private var isCloseHovered = false
 
     private var scale: CGFloat {
         (OverlaySize(rawValue: overlaySizeRaw) ?? .medium).scale
@@ -72,49 +73,59 @@ struct OverlayView: View {
                 }
                 #endif
 
-                // Main control bar
-                HStack(spacing: spacing) {
-                    // Left: Recording indicator with pulsing dot
-                    RecordingIndicator(isRecording: appState.state.isRecording, isPulsing: $isPulsing, scale: scale)
+                // Main control bar — crossfades to hands-free toast when activated
+                ZStack {
+                    // Normal recording controls
+                    HStack(spacing: spacing) {
+                        RecordingIndicator(isRecording: appState.state.isRecording, isPulsing: $isPulsing, scale: scale)
 
-                    // Target app icon
-                    if let icon = appState.targetAppIcon {
-                        Image(nsImage: icon)
-                            .resizable()
-                            .frame(width: appIconSize, height: appIconSize)
-                            .clipShape(RoundedRectangle(cornerRadius: 4 * scale))
-                    }
-
-                    // Center: Waveform
-                    WaveformView(amplitudes: appState.waveformAmplitudes)
-                        .frame(width: waveformWidth, height: waveformHeight)
-
-                    // Status indicator or mic button
-                    if case .transcribing = appState.state {
-                        TranscribingIndicator(scale: scale)
-                    } else if case .downloadingModel(let progress) = appState.state {
-                        DownloadIndicator(progress: progress, scale: scale)
-                    } else {
-                        MicButton(isRecording: appState.state.isRecording, scale: scale)
-                    }
-
-                    // Right: Close button
-                    Button(action: {
-                        appState.stopRecording()
-                    }) {
-                        ZStack {
-                            Circle()
-                                .fill(Color.red.opacity(0.1))
-                                .frame(width: buttonSize, height: buttonSize)
-
-                            Image(systemName: "xmark")
-                                .font(.system(size: 14 * scale, weight: .bold))
-                                .foregroundColor(.red)
+                        if let icon = appState.targetAppIcon {
+                            Image(nsImage: icon)
+                                .resizable()
+                                .frame(width: appIconSize, height: appIconSize)
+                                .clipShape(RoundedRectangle(cornerRadius: 4 * scale))
                         }
+
+                        WaveformView(amplitudes: appState.waveformAmplitudes)
+                            .frame(width: waveformWidth, height: waveformHeight)
+
+                        if case .transcribing = appState.state {
+                            TranscribingIndicator(scale: scale)
+                        } else if case .downloadingModel(let progress) = appState.state {
+                            DownloadIndicator(progress: progress, scale: scale)
+                        } else {
+                            MicMuteButton(isMuted: $appState.isMicMuted, scale: scale)
+                        }
+
+                        Button(action: {
+                            appState.stopRecording()
+                        }) {
+                            ZStack {
+                                Circle()
+                                    .fill(Color.red.opacity(isCloseHovered ? 0.25 : 0.1))
+                                    .frame(width: buttonSize, height: buttonSize)
+
+                                Image(systemName: "xmark")
+                                    .font(.system(size: 14 * scale, weight: .bold))
+                                    .foregroundColor(isCloseHovered ? .red.opacity(1) : .red.opacity(0.7))
+                            }
+                            .scaleEffect(isCloseHovered ? 1.12 : 1.0)
+                            .animation(.easeOut(duration: 0.15), value: isCloseHovered)
+                        }
+                        .buttonStyle(.plain)
+                        .onHover { hovering in
+                            isCloseHovered = hovering
+                        }
+                        .help("Stop and close")
+                        .accessibilityLabel("Stop recording and close")
                     }
-                    .buttonStyle(.plain).pointerOnHover()
-                    .help("Stop and close")
-                    .accessibilityLabel("Stop recording and close")
+                    .opacity(appState.showHandsFreeToast ? 0 : 1)
+
+                    // Hands-free toast (replaces controls for 3s)
+                    if appState.showHandsFreeToast {
+                        HandsFreeToastContent(scale: scale)
+                            .transition(.opacity)
+                    }
                 }
                 .padding(.horizontal, hPadding)
                 .padding(.vertical, vPadding)
@@ -124,8 +135,10 @@ struct OverlayView: View {
                 )
                 .overlay(
                     Capsule()
-                        .stroke(hudBorder, lineWidth: 1)
+                        .stroke(appState.showHandsFreeToast ? blueAccent.opacity(0.2) : hudBorder, lineWidth: 1)
                 )
+                .shadow(color: appState.showHandsFreeToast ? blueAccent.opacity(0.1) : .clear, radius: 8, y: 2)
+                .animation(.easeInOut(duration: 0.3), value: appState.showHandsFreeToast)
             }
         }
         .environment(\.overlayScale, scale)
@@ -144,6 +157,7 @@ struct RecordingIndicator: View {
     let isRecording: Bool
     @Binding var isPulsing: Bool
     var scale: CGFloat = 1.0
+    @State private var dotPulsing = false
 
     private let blueAccent = Color(red: 0.357, green: 0.424, blue: 0.969)  // #5B6CF7
 
@@ -157,34 +171,59 @@ struct RecordingIndicator: View {
                 .font(.system(size: 18 * scale))
                 .foregroundColor(blueAccent)
 
+            // Recording dot — gentle breathing pulse
             Circle()
                 .fill(blueAccent)
                 .frame(width: 10 * scale, height: 10 * scale)
-                .scaleEffect(isRecording && isPulsing ? 1.3 : 1.0)
-                .opacity(isRecording ? 1.0 : 0.4)
+                .scaleEffect(dotPulsing ? 1.2 : 0.9)
+                .opacity(dotPulsing ? 1.0 : 0.55)
                 .offset(x: 14 * scale, y: 14 * scale)
+                .animation(.easeInOut(duration: 1.2).repeatForever(autoreverses: true), value: dotPulsing)
+        }
+        .onChange(of: isRecording) { recording in
+            dotPulsing = recording
+        }
+        .onAppear {
+            if isRecording {
+                dotPulsing = true
+            }
         }
     }
 }
 
-// MARK: - Mic Button
+// MARK: - Mic Mute Button
 
-struct MicButton: View {
-    let isRecording: Bool
+struct MicMuteButton: View {
+    @Binding var isMuted: Bool
     var scale: CGFloat = 1.0
+    @State private var isHovered = false
 
     private let blueAccent = Color(red: 0.357, green: 0.424, blue: 0.969)  // #5B6CF7
 
     var body: some View {
-        ZStack {
-            Circle()
-                .fill(blueAccent.opacity(0.15))
-                .frame(width: 36 * scale, height: 36 * scale)
+        Button(action: {
+            isMuted.toggle()
+        }) {
+            ZStack {
+                Circle()
+                    .fill(isMuted
+                        ? Color.orange.opacity(isHovered ? 0.3 : 0.15)
+                        : blueAccent.opacity(isHovered ? 0.3 : 0.15))
+                    .frame(width: 36 * scale, height: 36 * scale)
 
-            Image(systemName: isRecording ? "mic.fill" : "mic.slash.fill")
-                .font(.system(size: 14 * scale))
-                .foregroundColor(isRecording ? blueAccent : .white.opacity(0.4))
+                Image(systemName: isMuted ? "mic.slash.fill" : "mic.fill")
+                    .font(.system(size: 14 * scale))
+                    .foregroundColor(isMuted ? .orange : blueAccent)
+            }
+            .scaleEffect(isHovered ? 1.12 : 1.0)
+            .animation(.easeOut(duration: 0.15), value: isHovered)
         }
+        .buttonStyle(.plain)
+        .onHover { hovering in
+            isHovered = hovering
+        }
+        .help(isMuted ? "Unmute microphone" : "Mute microphone")
+        .accessibilityLabel(isMuted ? "Unmute microphone" : "Mute microphone")
     }
 }
 
@@ -450,10 +489,90 @@ struct ClipboardToastIndicator: View {
     }
 }
 
+// MARK: - Hands-Free Toast Content (displayed inside the HUD capsule)
+
+struct HandsFreeToastContent: View {
+    var scale: CGFloat = 1.0
+    @State private var iconScale: CGFloat = 0.0
+    @State private var iconOpacity: Double = 0.0
+    @State private var textOpacity: Double = 0.0
+    @State private var ringProgress: CGFloat = 0.0
+
+    private let accentBlue = Color(red: 0.357, green: 0.424, blue: 0.969)      // #5B6CF7
+
+    var body: some View {
+        HStack(spacing: 12 * scale) {
+            // Animated icon circle
+            ZStack {
+                Circle()
+                    .stroke(accentBlue.opacity(0.15), lineWidth: 2 * scale)
+                    .frame(width: 30 * scale, height: 30 * scale)
+
+                Circle()
+                    .trim(from: 0, to: ringProgress)
+                    .stroke(accentBlue, style: StrokeStyle(lineWidth: 2 * scale, lineCap: .round))
+                    .frame(width: 30 * scale, height: 30 * scale)
+                    .rotationEffect(.degrees(-90))
+
+                Image(systemName: "mic.fill")
+                    .font(.system(size: 13 * scale, weight: .bold))
+                    .foregroundColor(accentBlue)
+                    .scaleEffect(iconScale)
+                    .opacity(iconOpacity)
+            }
+
+            // Text content
+            VStack(alignment: .leading, spacing: 2 * scale) {
+                Text("Hands-Free Mode")
+                    .font(.system(size: 13 * scale, weight: .semibold, design: .rounded))
+                    .foregroundColor(.white)
+
+                HStack(spacing: 4 * scale) {
+                    Text("Press")
+                        .font(.system(size: 11 * scale, weight: .medium))
+                        .foregroundColor(.white.opacity(0.45))
+
+                    Text("Fn")
+                        .font(.system(size: 10 * scale, weight: .bold, design: .rounded))
+                        .foregroundColor(.white.opacity(0.7))
+                        .padding(.horizontal, 5 * scale)
+                        .padding(.vertical, 2 * scale)
+                        .background(
+                            RoundedRectangle(cornerRadius: 4 * scale)
+                                .fill(Color.white.opacity(0.08))
+                        )
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 4 * scale)
+                                .stroke(Color.white.opacity(0.1), lineWidth: 0.5)
+                        )
+
+                    Text("to stop")
+                        .font(.system(size: 11 * scale, weight: .medium))
+                        .foregroundColor(.white.opacity(0.45))
+                }
+            }
+            .opacity(textOpacity)
+        }
+        .onAppear {
+            withAnimation(.easeOut(duration: 0.4)) {
+                ringProgress = 1.0
+            }
+            withAnimation(.spring(response: 0.35, dampingFraction: 0.6).delay(0.3)) {
+                iconScale = 1.0
+                iconOpacity = 1.0
+            }
+            withAnimation(.easeOut(duration: 0.3).delay(0.15)) {
+                textOpacity = 1.0
+            }
+        }
+    }
+}
+
 #Preview {
     VStack(spacing: 20) {
         OverlayView()
         ClipboardToastIndicator()
+        HandsFreeToastContent()
     }
     .padding(40)
     .background(Color.black)

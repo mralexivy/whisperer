@@ -60,6 +60,27 @@ struct LiveTranscriptionCard: View {
                         .tracking(1.2)
 
                     Spacer()
+
+                    // Hands-free badge in header (persistent while hands-free is active)
+                    if appState.isHandsFreeRecording {
+                        HStack(spacing: 4 * scale) {
+                            Circle()
+                                .fill(blueAccent)
+                                .frame(width: 5 * scale, height: 5 * scale)
+
+                            Text("HANDS-FREE")
+                                .font(.system(size: 9 * scale, weight: .bold, design: .rounded))
+                                .tracking(0.8)
+                                .foregroundColor(blueAccent)
+                        }
+                        .padding(.horizontal, 8 * scale)
+                        .padding(.vertical, 3 * scale)
+                        .background(
+                            Capsule()
+                                .fill(blueAccent.opacity(0.12))
+                        )
+                        .transition(.opacity.combined(with: .scale(scale: 0.8)))
+                    }
                 }
                 .padding(.horizontal, 20 * scale)
                 .padding(.top, 14 * scale)

@@ -58,6 +58,9 @@ class AppState: ObservableObject {
                 targetAppIcon = nil
                 activeMode = .dictation
                 capturedSelectedText = nil
+                isHandsFreeRecording = false
+                showHandsFreeToast = false
+                isMicMuted = false
             }
         }
     }
@@ -244,6 +247,13 @@ class AppState: ObservableObject {
         }
     }
     @Published var showClipboardToast: Bool = false {
+        didSet {
+            NotificationCenter.default.post(name: NSNotification.Name("AppStateChanged"), object: nil)
+        }
+    }
+    @Published var isHandsFreeRecording: Bool = false
+    @Published var isMicMuted: Bool = false
+    @Published var showHandsFreeToast: Bool = false {
         didSet {
             NotificationCenter.default.post(name: NSNotification.Name("AppStateChanged"), object: nil)
         }
@@ -1374,6 +1384,17 @@ class AppState: ObservableObject {
                 self?.cancelRecording()
             }
         }
+        listener.onHandsFreeActivated = { [weak self] in
+            Task { @MainActor in
+                guard let self = self else { return }
+                self.isHandsFreeRecording = true
+                self.showHandsFreeToast = true
+                Logger.info("Hands-free recording activated", subsystem: .app)
+                DispatchQueue.main.asyncAfter(deadline: .now() + 3.0) { [weak self] in
+                    self?.showHandsFreeToast = false
+                }
+            }
+        }
 
         #if !APP_STORE
         // Rewrite mode callbacks
@@ -1462,8 +1483,9 @@ class AppState: ObservableObject {
                 }
 
                 audioRecorder?.onStreamingSamples = { [weak self] samples in
-                    self?.streamingTranscriber?.addSamples(samples)
-                    self?.livePreviewEngine?.feedAudio(samples)
+                    guard let self = self, !self.isMicMuted else { return }
+                    self.streamingTranscriber?.addSamples(samples)
+                    self.livePreviewEngine?.feedAudio(samples)
                 }
 
                 // AudioRecorder handles its own timeouts internally (1s per CoreAudio
@@ -1620,8 +1642,9 @@ class AppState: ObservableObject {
 
                 // Connect audio samples to streaming transcriber and live preview engine
                 audioRecorder?.onStreamingSamples = { [weak self] samples in
-                    self?.streamingTranscriber?.addSamples(samples)
-                    self?.livePreviewEngine?.feedAudio(samples)
+                    guard let self = self, !self.isMicMuted else { return }
+                    self.streamingTranscriber?.addSamples(samples)
+                    self.livePreviewEngine?.feedAudio(samples)
                 }
 
                 // Guard: if stopRecording() was called before we got here, bail out
@@ -1948,9 +1971,9 @@ class AppState: ObservableObject {
     }
 
     func updateWaveform(amplitude: Float) {
-        // Shift array and add new amplitude
+        // Show flat waveform when mic is muted
         waveformAmplitudes.removeFirst()
-        waveformAmplitudes.append(amplitude)
+        waveformAmplitudes.append(isMicMuted ? 0 : amplitude)
     }
 
     func clearError() {
