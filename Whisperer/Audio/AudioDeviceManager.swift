@@ -9,6 +9,7 @@ import Foundation
 import CoreAudio
 import Combine
 import AVFoundation
+import AppKit
 
 @MainActor
 class AudioDeviceManager: ObservableObject {
@@ -20,7 +21,7 @@ class AudioDeviceManager: ObservableObject {
         let uid: String  // Persistent identifier across sessions
 
         static func == (lhs: AudioDevice, rhs: AudioDevice) -> Bool {
-            return lhs.uid == rhs.uid
+            return lhs.uid == rhs.uid && lhs.id == rhs.id
         }
 
         func hash(into hasher: inout Hasher) {
@@ -40,6 +41,7 @@ class AudioDeviceManager: ObservableObject {
     private var defaultDeviceListenerBlock: AudioObjectPropertyListenerBlock?
     private var deviceConnectedObserver: NSObjectProtocol?
     private var deviceDisconnectedObserver: NSObjectProtocol?
+    private var wakeObserver: NSObjectProtocol?
     private var isMonitoring = false
     private var cachedDeviceUIDs: Set<String> = []
 
@@ -373,6 +375,18 @@ class AudioDeviceManager: ObservableObject {
             }
         }
 
+        // Monitor sleep/wake — device IDs change after wake
+        wakeObserver = NSWorkspace.shared.notificationCenter.addObserver(
+            forName: NSWorkspace.didWakeNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            Logger.info("System wake detected, refreshing audio devices", subsystem: .audio)
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
+                self?.refreshDevices()
+            }
+        }
+
         isMonitoring = true
         Logger.info("Started monitoring audio device changes (CoreAudio + AVFoundation)", subsystem: .audio)
     }
@@ -423,6 +437,12 @@ class AudioDeviceManager: ObservableObject {
         if let observer = deviceDisconnectedObserver {
             NotificationCenter.default.removeObserver(observer)
             deviceDisconnectedObserver = nil
+        }
+
+        // Remove wake observer
+        if let observer = wakeObserver {
+            NSWorkspace.shared.notificationCenter.removeObserver(observer)
+            wakeObserver = nil
         }
 
         isMonitoring = false

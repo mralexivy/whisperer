@@ -46,6 +46,10 @@ class AudioRecorder: NSObject {
     // Selected input device (nil = use system default)
     var selectedDeviceID: AudioDeviceID?
 
+    // Silence detection — auto-recover if audio is dead
+    private var consecutiveSilentCallbacks: Int = 0
+    private let silenceRecoveryThreshold: Int = 18  // ~1.5s at 48kHz/4096 buffer
+
     // Auto-recovery state
     private var autoRecoveryEnabled = true
     private var recoveryAttempts = 0
@@ -286,6 +290,15 @@ class AudioRecorder: NSObject {
             throw RecordingError.audioUnitFailed
         }
 
+        // Re-resolve device ID — IDs may have changed since last recording (sleep/wake, monitor change)
+        if let deviceID = selectedDeviceID {
+            let currentDevice = await AudioDeviceManager.shared.selectedDevice
+            if let current = currentDevice, current.id != deviceID {
+                Logger.info("Device ID changed (\(deviceID) -> \(current.id)), using current ID", subsystem: .audio)
+                selectedDeviceID = current.id
+            }
+        }
+
         // Only set custom device if explicitly selected (not system default)
         // selectedDeviceID is only set when user picks a specific device in settings
         if let deviceID = selectedDeviceID {
@@ -353,6 +366,7 @@ class AudioRecorder: NSObject {
 
         // Start engine (use self.audioEngine in case we recreated it)
         lastAudioCallbackTime = nil  // Reset for flow watchdog
+        consecutiveSilentCallbacks = 0  // Reset silence detection
         do {
             Logger.debug("Starting audio engine...", subsystem: .audio)
             guard let engine = self.audioEngine else {
@@ -434,6 +448,20 @@ class AudioRecorder: NSObject {
             self?.onAmplitudeUpdate?(rms)
         }
 
+        // Silence detection — auto-recover if input device produces no audio
+        if rms < 0.001 {
+            consecutiveSilentCallbacks += 1
+            if consecutiveSilentCallbacks == silenceRecoveryThreshold {
+                Logger.warning("Audio silent for ~1.5s (device: \(selectedDeviceID.map(String.init) ?? "default")), recovering", subsystem: .audio)
+                selectedDeviceID = nil
+                DispatchQueue.main.async { [weak self] in
+                    Task { await self?.recoverAudioEngine() }
+                }
+            }
+        } else {
+            consecutiveSilentCallbacks = 0
+        }
+
         // Send samples to streaming transcriber (wrap in autoreleasepool to prevent memory buildup)
         autoreleasepool {
             onStreamingSamples?(samples)
@@ -461,6 +489,21 @@ class AudioRecorder: NSObject {
         }
 
         Logger.debug("Stopping audio recording...", subsystem: .audio)
+
+        // Wait for first audio data if engine hasn't produced any yet.
+        // After sleep/wake, the audio HAL needs extra time to initialize.
+        // Without this, a quick Fn tap after wake records 0 samples.
+        if lastAudioCallbackTime == nil {
+            Logger.debug("No audio data yet, waiting for engine warmup...", subsystem: .audio)
+            for _ in 0..<10 {  // Up to 500ms
+                try? await Task.sleep(nanoseconds: 50_000_000)
+                if lastAudioCallbackTime != nil { break }
+            }
+            if lastAudioCallbackTime == nil {
+                Logger.warning("Audio engine produced no data after 500ms wait", subsystem: .audio)
+            }
+        }
+
         isRecording = false
 
         // Drain delay: wait for pending audio buffers to be delivered
@@ -729,12 +772,27 @@ class AudioRecorder: NSObject {
         )
 
         if status == noErr {
-            Logger.debug("Set input device ID: \(deviceID)", subsystem: .audio)
+            Logger.debug("Set input device ID: \(deviceID) (\(deviceName(for: deviceID) ?? "unknown"))", subsystem: .audio)
             return true
         } else {
             Logger.warning("Failed to set input device (error: \(status)), using default", subsystem: .audio)
             return false
         }
+    }
+
+    /// Resolve a device ID to its human-readable name
+    private func deviceName(for deviceID: AudioDeviceID) -> String? {
+        var name: CFString = "" as CFString
+        var size = UInt32(MemoryLayout<CFString>.size)
+        var addr = AudioObjectPropertyAddress(
+            mSelector: kAudioDevicePropertyDeviceNameCFString,
+            mScope: kAudioObjectPropertyScopeGlobal,
+            mElement: kAudioObjectPropertyElementMain
+        )
+        let status = withUnsafeMutablePointer(to: &name) { ptr in
+            AudioObjectGetPropertyData(deviceID, &addr, 0, nil, &size, ptr)
+        }
+        return status == noErr ? name as String : nil
     }
 
     /// Check if a device ID is valid and has input capability

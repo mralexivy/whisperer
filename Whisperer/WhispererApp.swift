@@ -109,8 +109,10 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         #endif
 
 
-        // Set initial selected microphone
-        appState.audioRecorder?.selectedDeviceID = appState.audioDeviceManager.selectedDevice?.id
+        // Set initial selected microphone (only when user explicitly chose one)
+        if appState.audioDeviceManager.preferredDeviceUID != nil {
+            appState.audioRecorder?.selectedDeviceID = appState.audioDeviceManager.selectedDevice?.id
+        }
 
         // Setup audio callback for waveform
         appState.audioRecorder?.onAmplitudeUpdate = { [weak self] amplitude in
