@@ -19,7 +19,7 @@ struct HighlightedText: View {
     @State private var dismissTask: Task<Void, Never>?
 
     var body: some View {
-        FlowLayout(spacing: 4, lineSpacing: 6) {
+        FlowLayout(spacing: 0, lineSpacing: 6) {
             ForEach(textSegments) { segment in
                 if let correction = segment.correction {
                     // Corrected word - highlighted and hoverable
@@ -39,8 +39,11 @@ struct HighlightedText: View {
                             dismissPopover()
                         }
                     )
+                } else if segment.text == "\n" || segment.text == "\r" {
+                    // Line break — full-width spacer forces FlowLayout to next line
+                    Color.clear.frame(maxWidth: .infinity, maxHeight: 0)
                 } else {
-                    // Regular text
+                    // Regular word
                     Text(segment.text)
                         .foregroundColor(WhispererColors.primaryText(colorScheme))
                 }
@@ -53,7 +56,7 @@ struct HighlightedText: View {
 
     private var textSegments: [TextSegment] {
         guard !corrections.isEmpty else {
-            return [TextSegment(id: "plain-0", text: text, correction: nil)]
+            return splitPlainTextIntoWordSegments(text, startPosition: 0)
         }
 
         // Build a list of all correction locations in the text
@@ -91,37 +94,80 @@ struct HighlightedText: View {
             filteredRanges.append(item)
         }
 
-        // Build segments with stable IDs based on position
+        // Build segments — plain text split into individual words for inline flow
         var segments: [TextSegment] = []
         var currentIndex = text.startIndex
-        var segmentIndex = 0
 
         for item in filteredRanges {
-            // Add text before this correction
+            // Split plain text before this correction into individual words
             if currentIndex < item.range.lowerBound {
                 let beforeText = String(text[currentIndex..<item.range.lowerBound])
                 let position = text.distance(from: text.startIndex, to: currentIndex)
-                segments.append(TextSegment(id: "plain-\(position)", text: beforeText, correction: nil))
-                segmentIndex += 1
+                segments.append(contentsOf: splitPlainTextIntoWordSegments(beforeText, startPosition: position))
             }
 
-            // Add the correction with stable ID based on position
+            // Add the correction as a single segment
             let correctedText = String(text[item.range])
             let position = text.distance(from: text.startIndex, to: item.range.lowerBound)
             segments.append(TextSegment(id: "correction-\(position)", text: correctedText, correction: item.correction))
-            segmentIndex += 1
 
             currentIndex = item.range.upperBound
         }
 
-        // Add any remaining text after the last correction
+        // Split any remaining text after the last correction into words
         if currentIndex < text.endIndex {
             let remainingText = String(text[currentIndex...])
             let position = text.distance(from: text.startIndex, to: currentIndex)
-            segments.append(TextSegment(id: "plain-\(position)", text: remainingText, correction: nil))
+            segments.append(contentsOf: splitPlainTextIntoWordSegments(remainingText, startPosition: position))
         }
 
         return segments
+    }
+
+    /// Splits plain text into individual word segments for inline FlowLayout rendering.
+    /// Each word includes its trailing whitespace so FlowLayout spacing can be 0.
+    private func splitPlainTextIntoWordSegments(_ plainText: String, startPosition: Int) -> [TextSegment] {
+        guard !plainText.isEmpty else { return [] }
+
+        var words: [String] = []
+        var i = plainText.startIndex
+        while i < plainText.endIndex {
+            // Newlines become their own token to force line breaks
+            if plainText[i] == "\n" || plainText[i] == "\r" {
+                words.append(String(plainText[i]))
+                i = plainText.index(after: i)
+                continue
+            }
+
+            // Skip leading spaces (attach to the next word)
+            var wordStart = i
+            while wordStart < plainText.endIndex && (plainText[wordStart] == " " || plainText[wordStart] == "\t") {
+                wordStart = plainText.index(after: wordStart)
+            }
+
+            // Collect non-whitespace characters (the word itself)
+            var wordEnd = wordStart
+            while wordEnd < plainText.endIndex && plainText[wordEnd] != " " && plainText[wordEnd] != "\t" && plainText[wordEnd] != "\n" && plainText[wordEnd] != "\r" {
+                wordEnd = plainText.index(after: wordEnd)
+            }
+
+            // Collect trailing spaces/tabs (not newlines) — attach to this word
+            var spaceEnd = wordEnd
+            while spaceEnd < plainText.endIndex && (plainText[spaceEnd] == " " || plainText[spaceEnd] == "\t") {
+                spaceEnd = plainText.index(after: spaceEnd)
+            }
+
+            if spaceEnd > i {
+                words.append(String(plainText[i..<spaceEnd]))
+                i = spaceEnd
+            } else {
+                i = plainText.index(after: i)
+            }
+        }
+
+        return words.enumerated().map { (index, word) in
+            TextSegment(id: "word-\(startPosition)-\(index)", text: word, correction: nil)
+        }
     }
 
     // MARK: - Hover Handling
@@ -196,8 +242,8 @@ private struct CorrectedWordView: View {
     var body: some View {
         Text(text)
             .foregroundColor(WhispererColors.primaryText(colorScheme))
-            .padding(.horizontal, 4)
-            .padding(.vertical, 2)
+            .padding(.horizontal, 3)
+            .padding(.vertical, 1)
             .background(
                 RoundedRectangle(cornerRadius: 4)
                     .fill(Color.green.opacity(colorScheme == .dark ? 0.25 : 0.2))
