@@ -56,7 +56,6 @@ class AudioRecorder: NSObject {
     private let maxRecoveryAttempts = 5
     private var converter: AVAudioConverter?
     private var outputFormat: AVAudioFormat?
-    private var startupRetryCount = 0  // Prevent infinite retry loops
     private var recordingStartTime: Date?  // Track when recording started for grace period
     private let startupGracePeriod: TimeInterval = 1.5  // Ignore config changes for 1.5s after start
     private var recordingGeneration = 0  // Incremented each startRecording call; stale retries bail out
@@ -97,13 +96,15 @@ class AudioRecorder: NSObject {
         recoveryAttempts += 1
         Logger.debug("Silent recovery attempt \(recoveryAttempts)...", subsystem: .audio)
 
-        // Always fall back to system default device — the selected device
-        // may exist but produce no audio data (e.g., virtual device interference)
-        selectedDeviceID = nil
+        // Stop current engine completely — engine released on background thread
+        cleanupEngineState()
 
-        // Stop current engine completely — use async teardown because the device
-        // may be dead, and engine.stop()/removeTap can block in CoreAudio's teardown
-        cleanupEngineState(asyncTeardown: true)
+        // Fall back to built-in mic — the system default may be the same broken
+        // device that caused the failure (e.g., stale aggregate device after sleep)
+        selectedDeviceID = await findBuiltInMicID()
+        if selectedDeviceID == nil {
+            Logger.debug("No built-in mic found, will use system default", subsystem: .audio)
+        }
 
         // Backoff: 300ms first attempt, 500ms second, 1s third+
         let backoffNs: UInt64 = recoveryAttempts <= 1 ? 300_000_000 :
@@ -177,48 +178,51 @@ class AudioRecorder: NSObject {
             throw RecordingError.alreadyRecording
         }
 
-        recoveryAttempts = 0  // Reset recovery counter on new recording
-        startupRetryCount = 0  // Reset startup retry counter
-        recordingStartTime = Date()  // Set grace period start time
+        recoveryAttempts = 0
+        recordingStartTime = Date()
         recordingGeneration += 1
         let myGeneration = recordingGeneration
 
-        do {
-            return try await startRecordingInternal()
-        } catch {
-            // A newer startRecording() call has taken over — don't retry or
-            // clean up, as that would destroy the new recording's engine.
-            guard recordingGeneration == myGeneration else {
-                Logger.debug("Stale recording attempt (gen \(myGeneration) vs \(recordingGeneration)), not retrying", subsystem: .audio)
-                throw error
+        var lastError: Error?
+
+        for attempt in 1...3 {
+            do {
+                return try await startRecordingInternal()
+            } catch {
+                lastError = error
+
+                // A newer startRecording() call has taken over — don't retry
+                guard recordingGeneration == myGeneration else {
+                    Logger.debug("Stale recording attempt (gen \(myGeneration) vs \(recordingGeneration)), not retrying", subsystem: .audio)
+                    throw error
+                }
+
+                Logger.warning("Recording start failed (attempt \(attempt)/3): \(error.localizedDescription)", subsystem: .audio)
+
+                // Don't retry after the last attempt
+                guard attempt < 3 else { break }
+
+                cleanupEngineState()
+
+                // On retry 2+, use built-in mic explicitly — the system default
+                // may be a stale/dead device after sleep/wake
+                if attempt >= 2 {
+                    selectedDeviceID = await findBuiltInMicID()
+                }
+
+                // Let CoreAudio settle before retrying
+                try? await Task.sleep(nanoseconds: 300_000_000)
+
+                guard recordingGeneration == myGeneration else {
+                    Logger.debug("Stale recording attempt after sleep (gen \(myGeneration) vs \(recordingGeneration)), not retrying", subsystem: .audio)
+                    throw error
+                }
+
+                recordingStartTime = Date()
             }
-
-            // First attempt failed — clean up completely and retry once with a fresh
-            // engine and system default device. This handles cases where the audio unit
-            // is left in a bad state by a previous session or device change.
-            guard startupRetryCount == 0 else {
-                // Already retried, give up
-                throw error
-            }
-            startupRetryCount += 1
-            let isTimeout = (error as? RecordingError) == .audioUnitTimeout
-            Logger.warning("Recording setup failed (\(error.localizedDescription)), retrying with fresh engine and default device...", subsystem: .audio)
-
-            cleanupEngineState(asyncTeardown: isTimeout)
-            selectedDeviceID = nil
-
-            // Let the audio subsystem settle before retrying
-            try? await Task.sleep(nanoseconds: 100_000_000) // 100ms
-
-            // Check generation again after the sleep — another recording may have started
-            guard recordingGeneration == myGeneration else {
-                Logger.debug("Stale recording attempt after sleep (gen \(myGeneration) vs \(recordingGeneration)), not retrying", subsystem: .audio)
-                throw RecordingError.audioUnitFailed
-            }
-
-            recordingStartTime = Date()
-            return try await startRecordingInternal()
         }
+
+        throw lastError ?? RecordingError.audioUnitFailed
     }
 
     private func startRecordingInternal() async throws -> URL {
@@ -276,49 +280,55 @@ class AudioRecorder: NSObject {
         // Whisper handles raw audio well enough without preprocessing.
         Logger.debug("Voice processing disabled for instant startup", subsystem: .audio)
 
-        // CRITICAL: Query inputNode and format on GCD with timeout.
-        // CoreAudio's inputNode/outputFormat can hang indefinitely on broken
-        // audio hardware (error 1852797029). Running on GCD prevents blocking
-        // Swift cooperative threads — a hang leaks one GCD thread instead of
-        // poisoning the entire cooperative pool.
-        let (inputNode, initialFormat) = try await queryInputNodeFormat(engine: audioEngine)
+        // Force inputNode instantiation (creates the underlying AUHAL AudioUnit)
+        let inputNode = audioEngine.inputNode
 
-        // Validate audio unit was created successfully — the outputFormat call can
-        // fail internally (AVAudioIONodeImpl error) leaving the audio unit in a bad state
-        guard initialFormat.sampleRate > 0 && initialFormat.channelCount > 0 else {
-            Logger.error("Audio unit initialization failed (format: \(initialFormat.sampleRate)Hz, \(initialFormat.channelCount)ch)", subsystem: .audio)
-            throw RecordingError.audioUnitFailed
-        }
-
-        // Re-resolve device ID — IDs may have changed since last recording (sleep/wake, monitor change)
+        // Resolve and bind device BEFORE engine.prepare() — CoreAudio requires
+        // the device to be set before AudioUnit initialization. After sleep/wake,
+        // the system default device ID may be stale, so we re-resolve from AudioDeviceManager.
         if let deviceID = selectedDeviceID {
             let currentDevice = await AudioDeviceManager.shared.selectedDevice
             if let current = currentDevice, current.id != deviceID {
                 Logger.info("Device ID changed (\(deviceID) -> \(current.id)), using current ID", subsystem: .audio)
                 selectedDeviceID = current.id
             }
-        }
-
-        // Only set custom device if explicitly selected (not system default)
-        // selectedDeviceID is only set when user picks a specific device in settings
-        if let deviceID = selectedDeviceID {
-            if setInputDevice(deviceID, on: inputNode) {
-                Logger.debug("Using selected input device: \(deviceID)", subsystem: .audio)
+            if setInputDevice(selectedDeviceID!, on: inputNode) {
+                Logger.debug("Using selected input device: \(selectedDeviceID!) (\(deviceName(for: selectedDeviceID!) ?? "unknown"))", subsystem: .audio)
             } else {
-                // Device selection failed - clear it and use default
-                Logger.warning("Selected device unavailable, using system default", subsystem: .audio)
+                Logger.warning("Selected device unavailable, falling back to built-in mic", subsystem: .audio)
                 selectedDeviceID = nil
+                // Try built-in mic as fallback
+                if let builtInID = await findBuiltInMicID() {
+                    setInputDevice(builtInID, on: inputNode)
+                }
             }
         } else {
             Logger.debug("Using system default input device", subsystem: .audio)
         }
 
-        // Re-query format after device change (format may be different for selected device)
-        let inputFormat = try await queryFormat(on: inputNode)
+        // Prepare the engine — allocates resources and establishes the audio format
+        // for the bound device. Must happen after device binding, before format query.
+        audioEngine.prepare()
 
-        // Validate format - must have valid sample rate and channels
+        // Query the physical device format AFTER prepare.
+        // Use inputFormat(forBus: 0) — this is the physical device format, matching
+        // the reference app. outputFormat(forBus: 0) can return stale cached values
+        // after sleep/wake. Retry if format is 0Hz/0ch (HAL still initializing).
+        var inputFormat = inputNode.inputFormat(forBus: 0)
+        if inputFormat.sampleRate == 0 || inputFormat.channelCount == 0 {
+            Logger.warning("Initial format invalid (\(inputFormat.sampleRate)Hz, \(inputFormat.channelCount)ch), retrying...", subsystem: .audio)
+            for attempt in 1...5 {
+                usleep(100_000)  // 100ms — blocking, matches reference approach
+                inputFormat = inputNode.inputFormat(forBus: 0)
+                if inputFormat.sampleRate > 0 && inputFormat.channelCount > 0 {
+                    Logger.info("Format valid after retry \(attempt): \(inputFormat.sampleRate)Hz, \(inputFormat.channelCount)ch", subsystem: .audio)
+                    break
+                }
+            }
+        }
+
         guard inputFormat.sampleRate > 0 && inputFormat.channelCount > 0 else {
-            Logger.error("Invalid input format: \(inputFormat.sampleRate)Hz, \(inputFormat.channelCount) channels", subsystem: .audio)
+            Logger.error("Invalid input format after retries: \(inputFormat.sampleRate)Hz, \(inputFormat.channelCount) channels", subsystem: .audio)
             throw RecordingError.invalidFormat
         }
 
@@ -527,58 +537,15 @@ class AudioRecorder: NSObject {
 
     // MARK: - Timeout-Protected CoreAudio Queries
 
-    /// Query inputNode and its format on a GCD queue with timeout.
-    /// CoreAudio's inputNode access and outputFormat() can hang indefinitely
-    /// when audio hardware is broken (error 1852797029). Running on GCD
-    /// prevents blocking Swift cooperative threads.
-    private func queryInputNodeFormat(engine: AVAudioEngine, timeout: TimeInterval = 1.0) async throws -> (AVAudioInputNode, AVAudioFormat) {
-        try await withCheckedThrowingContinuation { continuation in
-            var resumed = false
-            let resumeLock = NSLock()
-
-            func resumeOnce(with result: Result<(AVAudioInputNode, AVAudioFormat), Error>) {
-                resumeLock.lock()
-                guard !resumed else { resumeLock.unlock(); return }
-                resumed = true
-                resumeLock.unlock()
-                continuation.resume(with: result)
-            }
-
-            DispatchQueue.main.asyncAfter(deadline: .now() + timeout) {
-                resumeOnce(with: .failure(RecordingError.audioUnitTimeout))
-            }
-
-            DispatchQueue.global(qos: .userInitiated).async {
-                let inputNode = engine.inputNode
-                let format = inputNode.outputFormat(forBus: 0)
-                resumeOnce(with: .success((inputNode, format)))
-            }
+    /// Find the built-in microphone device ID from AudioDeviceManager.
+    /// Used as a reliable fallback when the system default device is broken after sleep/wake.
+    private func findBuiltInMicID() async -> AudioDeviceID? {
+        let devices = await AudioDeviceManager.shared.availableInputDevices
+        if let builtIn = devices.first(where: { $0.name.contains("MacBook") || $0.name.contains("Built-in") }) {
+            Logger.debug("Found built-in mic: \(builtIn.name) (ID: \(builtIn.id))", subsystem: .audio)
+            return builtIn.id
         }
-    }
-
-    /// Re-query format on an existing inputNode with timeout.
-    private func queryFormat(on inputNode: AVAudioInputNode, timeout: TimeInterval = 1.0) async throws -> AVAudioFormat {
-        try await withCheckedThrowingContinuation { continuation in
-            var resumed = false
-            let resumeLock = NSLock()
-
-            func resumeOnce(with result: Result<AVAudioFormat, Error>) {
-                resumeLock.lock()
-                guard !resumed else { resumeLock.unlock(); return }
-                resumed = true
-                resumeLock.unlock()
-                continuation.resume(with: result)
-            }
-
-            DispatchQueue.main.asyncAfter(deadline: .now() + timeout) {
-                resumeOnce(with: .failure(RecordingError.audioUnitTimeout))
-            }
-
-            DispatchQueue.global(qos: .userInitiated).async {
-                let format = inputNode.outputFormat(forBus: 0)
-                resumeOnce(with: .success(format))
-            }
-        }
+        return nil
     }
 
     // MARK: - Device-Alive Monitoring
@@ -717,7 +684,9 @@ class AudioRecorder: NSObject {
 
     /// Fully tear down the audio engine and all associated state.
     /// Safe to call even if the engine is nil or partially initialized.
-    private func cleanupEngineState(asyncTeardown: Bool = false) {
+    /// Engine is always released on a background thread — CoreAudio dealloc
+    /// can block indefinitely on dead/stale hardware after sleep/wake.
+    private func cleanupEngineState() {
         stopAudioFlowWatchdog()
         stopMonitoringDevice()
         if let observer = configChangeObserver {
@@ -725,21 +694,17 @@ class AudioRecorder: NSObject {
             configChangeObserver = nil
         }
         if let engine = audioEngine {
-            if asyncTeardown {
-                // engine.stop() and removeTap can also hang on broken hardware — fire and forget on GCD
-                let engineRef = engine
-                DispatchQueue.global(qos: .utility).async {
-                    engineRef.inputNode.removeTap(onBus: 0)
-                    engineRef.stop()
-                }
-            } else {
-                engine.inputNode.removeTap(onBus: 0)
-                engine.stop()
-            }
+            engine.inputNode.removeTap(onBus: 0)
+            engine.stop()
         }
+        // Release on background thread — CoreAudio dealloc can block on dead hardware
+        let oldEngine = audioEngine
         audioEngine = nil
         converter = nil
         outputFormat = nil
+        if let oldEngine {
+            DispatchQueue.global(qos: .utility).async { _ = oldEngine }
+        }
     }
 
     // MARK: - Device Selection
@@ -823,5 +788,4 @@ enum RecordingError: Error {
     case fileCreationFailed
     case microphonePermissionDenied
     case audioUnitFailed
-    case audioUnitTimeout
 }
