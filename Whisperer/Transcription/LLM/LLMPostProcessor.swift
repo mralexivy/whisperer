@@ -34,7 +34,6 @@ class LLMPostProcessor: ObservableObject {
     }
 
     private var modelContainer: ModelContainer?
-    private var session: ChatSession?
     private var loadedVariant: LLMModelVariant?
 
     // MARK: - Model Management
@@ -78,7 +77,6 @@ class LLMPostProcessor: ObservableObject {
         }
 
         modelContainer = container
-        session = ChatSession(container)
         loadedVariant = variant
         isModelLoaded = true
         isLoading = false
@@ -89,7 +87,6 @@ class LLMPostProcessor: ObservableObject {
     }
 
     func unloadModel() {
-        session = nil
         modelContainer = nil
         loadedVariant = nil
         isModelLoaded = false
@@ -101,7 +98,7 @@ class LLMPostProcessor: ObservableObject {
 
     // MARK: - Processing
     func process(text: String, systemPrompt: String, targetLanguage: String? = nil, temperature: Float = 0.3, topP: Float = 0.9) async throws -> String {
-        guard let session = session else {
+        guard let container = modelContainer else {
             Logger.warning("LLM not loaded, returning original text", subsystem: .transcription)
             return text
         }
@@ -113,14 +110,20 @@ class LLMPostProcessor: ObservableObject {
             return text
         }
 
-        var prompt: String
+        // Fresh session per call — proper system/user message separation,
+        // no cross-call context leaking from previous transcriptions
+        var instructions = systemPrompt
         if let lang = targetLanguage, !lang.isEmpty {
-            prompt = "\(systemPrompt) Translate to \(lang).\n\nText: \(text)"
-        } else {
-            prompt = "\(systemPrompt)\n\nText: \(text)"
+            instructions += " Translate to \(lang)."
         }
 
-        let result = try await session.respond(to: prompt)
+        let session = ChatSession(
+            container,
+            instructions: instructions,
+            generateParameters: GenerateParameters(temperature: temperature, topP: topP)
+        )
+
+        let result = try await session.respond(to: text)
         return result.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 }

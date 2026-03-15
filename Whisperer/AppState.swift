@@ -1726,9 +1726,9 @@ class AppState: ObservableObject {
 
         state = .stopping
 
-        // Fixed watchdog — chunked pipeline processes bounded chunks (~20s max),
-        // so stop time is predictable regardless of total recording duration.
-        startStateWatchdog(timeout: 15.0)
+        // Tail transcription has a 4s timeout in FluidAudioBridge.
+        // 8s watchdog covers transcription + LLM post-processing with margin.
+        startStateWatchdog(timeout: 8.0)
 
         Task {
             await audioRecorder?.stopRecording()
@@ -1748,12 +1748,12 @@ class AppState: ObservableObject {
                 return
             }
 
-            // Get final transcription — chunked pipeline only transcribes the tail
-            // (bounded ~5s), so a fixed 10s timeout is sufficient.
+            // Get final transcription — tail transcription has a 4s timeout
+            // in FluidAudioBridge, so 5s here is plenty of margin.
             var finalText = ""
             let transcriber = streamingTranscriber
             if let transcriber {
-                finalText = await withTimeoutResult(seconds: 10.0) {
+                finalText = await withTimeoutResult(seconds: 5.0) {
                     await transcriber.stopAsync()
                 } ?? ""
 

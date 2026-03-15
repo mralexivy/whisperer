@@ -47,16 +47,16 @@ class RewriteModeService {
 
             User instruction: \(instruction)
 
-            Apply the instruction to the following text. Return only the result; no explanations.
+            Apply the instruction to the user's text. Return only the result.
             """
         }
 
         return """
-        You are a text editor. The user has selected text and given a voice instruction for how to modify it.
+        You are a text editor. The user has selected text and spoken an instruction for how to modify it.
 
         User instruction: \(instruction)
 
-        Apply the instruction to the text below. Return only the modified text; no explanations.
+        Apply the instruction to the user's text. Return only the modified text.
         """
     }
 
@@ -67,14 +67,16 @@ class RewriteModeService {
 
             User instruction: \(instruction)
 
-            Generate text based on the instruction. Return only the result; no explanations.
+            Generate text based on the instruction. Return only the result.
             """
         }
 
         return """
-        You are a writing assistant. The user has given a voice instruction for what to write.
+        You are a writing assistant. The user has spoken an instruction for what to write.
 
-        Generate text based on this instruction. Return only the text; no explanations.
+        User instruction: \(instruction)
+
+        Generate text based on this instruction. Return only the text.
         """
     }
 }

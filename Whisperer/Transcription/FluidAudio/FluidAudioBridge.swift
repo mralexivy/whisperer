@@ -157,7 +157,10 @@ nonisolated class FluidAudioBridge: TranscriptionBackend {
                     semaphore.signal()
                 }
 
-                semaphore.wait()
+                if semaphore.wait(timeout: .now() + 3.0) == .timedOut {
+                    Logger.error("FluidAudio transcription hung — bailing out", subsystem: .transcription)
+                    return ""
+                }
                 return result.trimmingCharacters(in: .whitespacesAndNewlines)
             }
         } catch SafeLockError.timeout {
@@ -200,7 +203,10 @@ nonisolated class FluidAudioBridge: TranscriptionBackend {
             outerSemaphore.signal()
         }
 
-        outerSemaphore.wait()
+        if outerSemaphore.wait(timeout: .now() + 4.0) == .timedOut {
+            Logger.error("FluidAudio transcription timed out — returning empty", subsystem: .transcription)
+            return ""
+        }
         return result
     }
 

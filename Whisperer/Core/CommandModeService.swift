@@ -57,7 +57,6 @@ class CommandModeService: ObservableObject {
         defer { isProcessing = false }
 
         // Build context from conversation history
-        let context = buildContext()
         let systemPrompt = """
         You are a terminal assistant. The user gives voice commands and you help execute them.
 
@@ -72,14 +71,15 @@ class CommandModeService: ObservableObject {
         Keep responses concise.
         """
 
-        let prompt = "\(systemPrompt)\n\n\(context)\n\nUser: \(transcription)"
-
         for turn in 0..<maxTurns {
             do {
-                let contextPrompt = turn == 0 ? prompt : buildContext()
+                let context = buildContext()
+                let userMessage = turn == 0
+                    ? "\(context)\n\nUser: \(transcription)"
+                    : context
                 let response = try await llmProcessor.process(
-                    text: prompt + (turn > 0 ? "\n\n\(buildContext())" : ""),
-                    systemPrompt: contextPrompt
+                    text: userMessage,
+                    systemPrompt: systemPrompt
                 )
 
                 // Parse response for command blocks
