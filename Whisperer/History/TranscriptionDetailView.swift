@@ -18,6 +18,8 @@ struct TranscriptionDetailView: View {
     @State private var notes: String
     @State private var isEditing = false
     @State private var isRetranscribing = false
+    @State private var showingOriginal = false
+    @State private var showRevertConfirmation = false
 
     init(transcription: TranscriptionRecord, onClose: @escaping () -> Void) {
         self.transcription = transcription
@@ -160,58 +162,48 @@ struct TranscriptionDetailView: View {
 
     // MARK: - Transcription Section
 
+    /// The text currently shown in the transcription card
+    private var activeTranscriptionText: String {
+        if transcription.hasAIEnhancement && showingOriginal {
+            return transcription.transcription
+        }
+        return editedText
+    }
+
     private var transcriptionSection: some View {
         VStack(alignment: .leading, spacing: 12) {
+            // Header row
             HStack {
                 sectionLabel("Transcription", icon: "text.alignleft", color: WhispererColors.accentBlue)
 
                 Spacer()
 
-                HStack(spacing: 8) {
-                    // Re-transcribe button — only when audio exists and not editing
-                    if transcription.audioURL != nil && !isEditing {
-                        RetranscribeButton(isRetranscribing: isRetranscribing, colorScheme: colorScheme, action: retranscribe)
-                            .help("Re-transcribe with current model and settings")
-                    }
-
+                if isEditing {
                     Button(action: {
-                        if isEditing {
-                            saveChanges()
-                        }
+                        saveChanges()
                         withAnimation(.spring(response: 0.3)) {
-                            isEditing.toggle()
+                            isEditing = false
                         }
                     }) {
                         HStack(spacing: 5) {
-                            Image(systemName: isEditing ? "checkmark" : "pencil")
+                            Image(systemName: "checkmark")
                                 .font(.system(size: 10, weight: .semibold))
-                            Text(isEditing ? "Save" : "Edit")
+                            Text("Save")
                                 .font(.system(size: 12, weight: .medium))
                         }
-                        .foregroundColor(isEditing ? .white : WhispererColors.primaryText(colorScheme))
+                        .foregroundColor(.white)
                         .padding(.horizontal, 12)
                         .padding(.vertical, 7)
-                        .background(
-                            Capsule()
-                                .fill(
-                                    isEditing
-                                        ? AnyShapeStyle(WhispererColors.accentGradient)
-                                        : AnyShapeStyle(WhispererColors.elevatedBackground(colorScheme))
-                                )
-                        )
-                        .overlay(
-                            Capsule()
-                                .stroke(isEditing ? Color.clear : WhispererColors.border(colorScheme), lineWidth: 0.5)
-                        )
-                        .shadow(
-                            color: isEditing ? WhispererColors.accentBlue.opacity(0.25) : Color.clear,
-                            radius: 4, y: 1
-                        )
+                        .background(Capsule().fill(WhispererColors.accentGradient))
+                        .shadow(color: WhispererColors.accentBlue.opacity(0.25), radius: 4, y: 1)
                     }
                     .buttonStyle(.plain).pointerOnHover()
+                } else {
+                    transcriptionHeaderMenu
                 }
             }
 
+            // Text content
             if isEditing {
                 TextEditor(text: $editedText)
                     .font(.system(size: 14))
@@ -237,26 +229,156 @@ struct TranscriptionDetailView: View {
                             .stroke(WhispererColors.accent.opacity(0.4), lineWidth: 1.5)
                     )
             } else {
-                // Show highlighted text with dictionary corrections
-                HighlightedText(text: editedText, corrections: transcription.corrections)
-                    .font(.system(size: 14))
-                    .lineSpacing(4)
-                    .foregroundColor(WhispererColors.primaryText(colorScheme))
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(14)
+                let borderColor = transcription.hasAIEnhancement && !showingOriginal
+                    ? Color.purple.opacity(colorScheme == .dark ? 0.15 : 0.12)
+                    : WhispererColors.border(colorScheme)
+
+                VStack(alignment: .leading, spacing: 0) {
+                    HighlightedText(text: activeTranscriptionText, corrections: showingOriginal ? [] : transcription.corrections)
+                        .font(.system(size: 14))
+                        .lineSpacing(4)
+                        .foregroundColor(WhispererColors.primaryText(colorScheme))
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(14)
+
+                    // Bottom bar: mode badge + menu (AI enhanced) or retranscribe
+                    transcriptionCardFooter
+                }
                     .background(
                         RoundedRectangle(cornerRadius: 12)
                             .fill(WhispererColors.cardBackground(colorScheme))
                     )
                     .overlay(
                         RoundedRectangle(cornerRadius: 12)
-                            .stroke(WhispererColors.border(colorScheme), lineWidth: 1)
+                            .stroke(borderColor, lineWidth: 1)
                     )
                     .shadow(
                         color: Color.black.opacity(colorScheme == .dark ? 0.04 : 0.025),
                         radius: 3, y: 1
                     )
             }
+        }
+    }
+
+    // MARK: - Transcription Header Menu
+
+    private var transcriptionHeaderMenu: some View {
+        Menu {
+            Button(action: {
+                withAnimation(.spring(response: 0.3)) { isEditing = true }
+            }) {
+                Label("Edit", systemImage: "pencil")
+            }
+
+            if transcription.hasAIEnhancement {
+                Divider()
+
+                Button(action: {
+                    withAnimation(.easeInOut(duration: 0.15)) { showingOriginal.toggle() }
+                }) {
+                    Label(
+                        showingOriginal ? "View AI Enhanced" : "View Original",
+                        systemImage: showingOriginal ? "wand.and.stars" : "doc.text"
+                    )
+                }
+
+                Button(role: .destructive, action: {
+                    withAnimation(.easeInOut(duration: 0.15)) { showRevertConfirmation = true }
+                }) {
+                    Label("Revert to Original", systemImage: "arrow.uturn.backward")
+                }
+            }
+
+            if transcription.audioURL != nil {
+                Divider()
+
+                Button(action: retranscribe) {
+                    Label("Re-transcribe", systemImage: "arrow.clockwise")
+                }
+                .disabled(isRetranscribing)
+            }
+        } label: {
+            HStack(spacing: 5) {
+                Image(systemName: isRetranscribing ? "progress.indicator" : "ellipsis.circle")
+                    .font(.system(size: 13, weight: .medium))
+            }
+            .foregroundColor(WhispererColors.secondaryText(colorScheme))
+            .frame(width: 32, height: 32)
+            .background(
+                Circle()
+                    .fill(WhispererColors.elevatedBackground(colorScheme).opacity(0.6))
+            )
+            .overlay(
+                Circle()
+                    .stroke(WhispererColors.border(colorScheme), lineWidth: 0.5)
+            )
+        }
+        .menuStyle(.borderlessButton)
+        .frame(width: 32)
+    }
+
+    // MARK: - Transcription Card Footer
+
+    @ViewBuilder
+    private var transcriptionCardFooter: some View {
+        if transcription.hasAIEnhancement {
+            HStack(spacing: 8) {
+                // AI enhanced + mode badge
+                let badgeColor: Color = showingOriginal ? WhispererColors.accentBlue : .purple
+                let badgeIcon = showingOriginal ? "doc.text" : "wand.and.stars"
+                let badgeText: String = {
+                    if showingOriginal { return "Original" }
+                    if let modeName = transcription.aiModeName {
+                        return "AI Enhanced \u{00B7} \(modeName)"
+                    }
+                    return "AI Enhanced"
+                }()
+
+                HStack(spacing: 4) {
+                    Image(systemName: badgeIcon)
+                        .font(.system(size: 9, weight: .semibold))
+                        .foregroundColor(badgeColor)
+                    Text(badgeText)
+                        .font(.system(size: 10.5, weight: .medium))
+                        .foregroundColor(badgeColor)
+                }
+                .padding(.horizontal, 7)
+                .padding(.vertical, 3)
+                .background(Capsule().fill(badgeColor.opacity(colorScheme == .dark ? 0.12 : 0.08)))
+
+                // Revert confirmation inline
+                if showRevertConfirmation {
+                    HStack(spacing: 4) {
+                        Button(action: revertAIEnhancement) {
+                            HStack(spacing: 3) {
+                                Image(systemName: "checkmark")
+                                    .font(.system(size: 9, weight: .bold))
+                                Text("Revert")
+                                    .font(.system(size: 10.5, weight: .semibold))
+                            }
+                            .foregroundColor(.white)
+                            .padding(.horizontal, 7)
+                            .padding(.vertical, 3)
+                            .background(Capsule().fill(Color.red))
+                        }
+                        .buttonStyle(.plain).pointerOnHover()
+
+                        Button(action: { withAnimation(.easeInOut(duration: 0.15)) { showRevertConfirmation = false } }) {
+                            Text("Cancel")
+                                .font(.system(size: 10.5, weight: .medium))
+                                .foregroundColor(WhispererColors.secondaryText(colorScheme))
+                                .padding(.horizontal, 7)
+                                .padding(.vertical, 3)
+                                .background(Capsule().fill(WhispererColors.elevatedBackground(colorScheme)))
+                        }
+                        .buttonStyle(.plain).pointerOnHover()
+                    }
+                }
+
+                Spacer()
+            }
+            .padding(.horizontal, 14)
+            .padding(.bottom, 10)
         }
     }
 
@@ -480,6 +602,7 @@ struct TranscriptionDetailView: View {
                 await MainActor.run {
                     editedText = finalText
                     isRetranscribing = false
+                    showingOriginal = false
                 }
 
                 // Save to history with updated language and model
@@ -489,6 +612,14 @@ struct TranscriptionDetailView: View {
                 Logger.error("Re-transcription failed: \(error.localizedDescription)", subsystem: .transcription)
                 await MainActor.run { isRetranscribing = false }
             }
+        }
+    }
+
+    private func revertAIEnhancement() {
+        Task {
+            try? await HistoryManager.shared.revertAIEnhancement(transcription)
+            showRevertConfirmation = false
+            editedText = transcription.transcription
         }
     }
 
@@ -504,16 +635,22 @@ struct TranscriptionDetailView: View {
 
 struct DetailHeaderButton: View {
     let icon: String
+    var iconColor: Color? = nil
     let colorScheme: ColorScheme
     let action: () -> Void
 
     @State private var isHovered = false
 
+    private var foreground: Color {
+        if let iconColor { return iconColor }
+        return isHovered ? WhispererColors.primaryText(colorScheme) : WhispererColors.secondaryText(colorScheme)
+    }
+
     var body: some View {
         Button(action: action) {
             Image(systemName: icon)
                 .font(.system(size: icon == "xmark" ? 11 : 13, weight: icon == "xmark" ? .bold : .medium))
-                .foregroundColor(isHovered ? WhispererColors.primaryText(colorScheme) : WhispererColors.secondaryText(colorScheme))
+                .foregroundColor(foreground)
                 .frame(width: 32, height: 32)
                 .background(
                     Circle()

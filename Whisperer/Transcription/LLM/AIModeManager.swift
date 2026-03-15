@@ -18,6 +18,11 @@ class AIModeManager: ObservableObject {
     private let storageKey = "aiModes"
     private let activeKey = "activeModeId"
     private let migrationKey = "aiModesMigrated"
+    private let promptVersionKey = "aiModesPromptVersion"
+
+    /// Increment this when built-in prompts change to push updates to existing users.
+    /// Only updates prompts that haven't been customized by the user.
+    private static let currentPromptVersion = 3
 
     var activeMode: AIMode {
         modes.first { $0.id == activeModeId } ?? AIMode.defaultMode()
@@ -43,6 +48,8 @@ class AIModeManager: ObservableObject {
            modes.contains(where: { $0.id == uuid }) {
             activeModeId = uuid
         }
+
+        refreshBuiltInPrompts()
     }
 
     // MARK: - Public Methods
@@ -101,6 +108,35 @@ class AIModeManager: ObservableObject {
         modes.append(newMode)
         persist()
         return newMode
+    }
+
+    // MARK: - Built-in Prompt Refresh
+
+    /// Updates built-in mode prompts when the code defaults change.
+    /// Only updates prompts that match the previous default (user hasn't customized them).
+    private func refreshBuiltInPrompts() {
+        let savedVersion = UserDefaults.standard.integer(forKey: promptVersionKey)
+        guard savedVersion < Self.currentPromptVersion else { return }
+
+        var updated = false
+        for builtIn in AIMode.builtInModes {
+            guard let index = modes.firstIndex(where: { $0.id == builtIn.id }) else { continue }
+            // Update system prompt and rewrite prompt to latest defaults
+            if modes[index].systemPrompt != builtIn.systemPrompt {
+                modes[index].systemPrompt = builtIn.systemPrompt
+                updated = true
+            }
+            if modes[index].rewritePrompt != builtIn.rewritePrompt {
+                modes[index].rewritePrompt = builtIn.rewritePrompt
+                updated = true
+            }
+        }
+
+        UserDefaults.standard.set(Self.currentPromptVersion, forKey: promptVersionKey)
+        if updated {
+            persist()
+            Logger.info("Built-in AI mode prompts refreshed to version \(Self.currentPromptVersion)", subsystem: .app)
+        }
     }
 
     // MARK: - Persistence

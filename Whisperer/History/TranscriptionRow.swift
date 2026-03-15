@@ -67,6 +67,12 @@ struct TranscriptionRow: View {
 
                         // Status icons (always visible)
                         HStack(spacing: 6) {
+                            if transcription.hasAIEnhancement {
+                                Image(systemName: "wand.and.stars")
+                                    .font(.system(size: 10, weight: .semibold))
+                                    .foregroundColor(.purple)
+                            }
+
                             if transcription.editedTranscription != nil {
                                 Image(systemName: "pencil")
                                     .font(.system(size: 10, weight: .semibold))
@@ -101,6 +107,9 @@ struct TranscriptionRow: View {
 
                     // Bottom metadata: wpm · words · Language · source
                     HStack(spacing: 10) {
+                        if let modeName = transcription.aiModeName {
+                            metadataPill(icon: "wand.and.stars", text: modeName, color: .purple)
+                        }
                         if transcription.targetAppName == "File Import" {
                             metadataPill(icon: "doc.text", text: "File", color: .purple)
                         }

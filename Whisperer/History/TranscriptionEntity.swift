@@ -26,10 +26,16 @@ public class TranscriptionEntity: NSManagedObject {
     @NSManaged public var lastModifiedAt: Date
     @NSManaged public var correctionsData: Data?
     @NSManaged public var targetAppName: String?
+    @NSManaged public var aiEnhancedText: String?
+    @NSManaged public var aiModeName: String?
 
     // Computed properties
     var displayText: String {
-        editedTranscription ?? transcription
+        editedTranscription ?? aiEnhancedText ?? transcription
+    }
+
+    var hasAIEnhancement: Bool {
+        aiEnhancedText != nil
     }
 
     var wordsPerMinute: Int {
@@ -78,11 +84,11 @@ extension TranscriptionEntity {
 // MARK: - Convenience Initializer
 
 extension TranscriptionEntity {
-    static func create(in context: NSManagedObjectContext, transcription: String, audioFileURL: String?, duration: Double, language: String, modelUsed: String, corrections: [AppliedCorrection] = [], targetAppName: String? = nil) -> TranscriptionEntity {
+    static func create(in context: NSManagedObjectContext, id: UUID = UUID(), transcription: String, audioFileURL: String?, duration: Double, language: String, modelUsed: String, corrections: [AppliedCorrection] = [], targetAppName: String? = nil, aiEnhancedText: String? = nil, aiModeName: String? = nil) -> TranscriptionEntity {
         let entity = TranscriptionEntity(context: context)
         let now = Date()
 
-        entity.id = UUID()
+        entity.id = id
         entity.timestamp = now
         entity.transcription = transcription
         entity.audioFileURL = audioFileURL
@@ -98,6 +104,8 @@ extension TranscriptionEntity {
         entity.lastModifiedAt = now
         entity.corrections = corrections
         entity.targetAppName = targetAppName
+        entity.aiEnhancedText = aiEnhancedText
+        entity.aiModeName = aiModeName
 
         return entity
     }

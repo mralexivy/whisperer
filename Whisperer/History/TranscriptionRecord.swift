@@ -24,10 +24,16 @@ struct TranscriptionRecord: Identifiable {
     let lastModifiedAt: Date
     let corrections: [AppliedCorrection]
     let targetAppName: String?
+    let aiEnhancedText: String?
+    let aiModeName: String?
 
     // Computed properties
     var displayText: String {
-        editedTranscription ?? transcription
+        editedTranscription ?? aiEnhancedText ?? transcription
+    }
+
+    var hasAIEnhancement: Bool {
+        aiEnhancedText != nil
     }
 
     var wordsPerMinute: Int {
@@ -61,12 +67,14 @@ struct TranscriptionRecord: Identifiable {
         self.lastModifiedAt = entity.lastModifiedAt
         self.corrections = entity.corrections
         self.targetAppName = entity.targetAppName
+        self.aiEnhancedText = entity.aiEnhancedText
+        self.aiModeName = entity.aiModeName
     }
 
     // For creating new records
-    init(transcription: String, audioFileURL: String?, duration: Double, language: String, modelUsed: String, corrections: [AppliedCorrection] = [], targetAppName: String? = nil) {
+    init(id: UUID = UUID(), transcription: String, audioFileURL: String?, duration: Double, language: String, modelUsed: String, corrections: [AppliedCorrection] = [], targetAppName: String? = nil, aiEnhancedText: String? = nil, aiModeName: String? = nil) {
         let now = Date()
-        self.id = UUID()
+        self.id = id
         self.timestamp = now
         self.transcription = transcription
         self.audioFileURL = audioFileURL
@@ -82,5 +90,7 @@ struct TranscriptionRecord: Identifiable {
         self.lastModifiedAt = now
         self.corrections = corrections
         self.targetAppName = targetAppName
+        self.aiEnhancedText = aiEnhancedText
+        self.aiModeName = aiModeName
     }
 }

@@ -45,13 +45,16 @@ class HistoryManager: ObservableObject {
         await context.perform {
             _ = TranscriptionEntity.create(
                 in: context,
+                id: record.id,
                 transcription: record.transcription,
                 audioFileURL: record.audioFileURL,
                 duration: record.duration,
                 language: record.language,
                 modelUsed: record.modelUsed,
                 corrections: record.corrections,
-                targetAppName: record.targetAppName
+                targetAppName: record.targetAppName,
+                aiEnhancedText: record.aiEnhancedText,
+                aiModeName: record.aiModeName
             )
 
             do {
@@ -109,7 +112,7 @@ class HistoryManager: ObservableObject {
         }
 
         if let query = currentSearchQuery, !query.isEmpty {
-            predicates.append(NSPredicate(format: "transcription CONTAINS[cd] %@ OR editedTranscription CONTAINS[cd] %@ OR notes CONTAINS[cd] %@", query, query, query))
+            predicates.append(NSPredicate(format: "transcription CONTAINS[cd] %@ OR editedTranscription CONTAINS[cd] %@ OR aiEnhancedText CONTAINS[cd] %@ OR notes CONTAINS[cd] %@", query, query, query, query))
         }
 
         if let range = currentDateRange {
@@ -259,6 +262,8 @@ class HistoryManager: ObservableObject {
         entity.editedTranscription = newText
         entity.language = language
         entity.modelUsed = modelUsed
+        entity.aiEnhancedText = nil
+        entity.aiModeName = nil
         entity.lastModifiedAt = Date()
 
         try context.save()
@@ -285,6 +290,32 @@ class HistoryManager: ObservableObject {
         if let index = transcriptions.firstIndex(where: { $0.id == record.id }) {
             transcriptions[index] = TranscriptionRecord(from: entity)
         }
+    }
+
+    // MARK: - AI Enhancement
+
+    func updateAIEnhancementById(_ id: UUID, aiText: String?, modeName: String?) async throws {
+        let fetchRequest: NSFetchRequest<TranscriptionEntity> = TranscriptionEntity.fetchRequest()
+        fetchRequest.predicate = NSPredicate(format: "id == %@", id as CVarArg)
+        fetchRequest.fetchLimit = 1
+
+        guard let entity = try context.fetch(fetchRequest).first else {
+            throw HistoryError.recordNotFound
+        }
+
+        entity.aiEnhancedText = aiText
+        entity.aiModeName = modeName
+        entity.lastModifiedAt = Date()
+
+        try context.save()
+
+        if let index = transcriptions.firstIndex(where: { $0.id == id }) {
+            transcriptions[index] = TranscriptionRecord(from: entity)
+        }
+    }
+
+    func revertAIEnhancement(_ record: TranscriptionRecord) async throws {
+        try await updateAIEnhancementById(record.id, aiText: nil, modeName: nil)
     }
 
     // MARK: - Delete

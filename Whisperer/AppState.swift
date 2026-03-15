@@ -1189,12 +1189,19 @@ class AppState: ObservableObject {
         guard !mode.systemPrompt.isEmpty else { return text }
 
         do {
+            Logger.debug("LLM processing with mode '\(mode.name)' (temp=\(mode.temperature), topP=\(mode.topP))", subsystem: .transcription)
+            Logger.debug("LLM system prompt: \(mode.systemPrompt.prefix(100))", subsystem: .transcription)
+            Logger.debug("LLM input: \(text)", subsystem: .transcription)
+
             let processed = try await processor.process(
                 text: text,
                 systemPrompt: mode.systemPrompt,
-                targetLanguage: mode.targetLanguage
+                targetLanguage: mode.targetLanguage,
+                temperature: mode.temperature,
+                topP: mode.topP
             )
-            Logger.info("LLM post-processed (\(mode.name)): \(text.prefix(30))... → \(processed.prefix(30))...", subsystem: .transcription)
+            Logger.info("LLM post-processed (\(mode.name)): \(text.prefix(60))... → \(processed.prefix(60))...", subsystem: .transcription)
+            Logger.debug("LLM output: \(processed)", subsystem: .transcription)
             return processed
         } catch {
             Logger.error("LLM post-processing failed: \(error)", subsystem: .transcription)
@@ -1540,13 +1547,14 @@ class AppState: ObservableObject {
             soundPlayer?.playStopSound()
 
             var finalText = ""
+            var savedRecordId: UUID?
             if let transcriber = streamingTranscriber {
                 finalText = await withTimeoutResult(seconds: 3.0) {
                     await transcriber.stopAsync()
                 } ?? ""
 
                 if saveRecordings && !finalText.isEmpty {
-                    saveRecordingFromTranscriber(transcriber, transcription: finalText)
+                    savedRecordId = saveRecordingFromTranscriber(transcriber, transcription: finalText)
                 }
             }
             streamingTranscriber = nil
@@ -1559,6 +1567,14 @@ class AppState: ObservableObject {
                 let listFormatted = await applyListFormatting(finalText)
                 let processedText = await applyLLMPostProcessing(listFormatted)
                 lastInAppTranscription = processedText
+
+                // Save AI enhancement if text was modified by post-processing
+                if processedText != finalText, let recordId = savedRecordId {
+                    let modeName = llmEnabled ? AIModeManager.shared.activeMode.name : "List Format"
+                    Task {
+                        try? await HistoryManager.shared.updateAIEnhancementById(recordId, aiText: processedText, modeName: modeName)
+                    }
+                }
             } else {
                 errorMessage = "No speech detected"
             }
@@ -1780,14 +1796,23 @@ class AppState: ObservableObject {
 
             if !finalText.isEmpty {
                 // Save recording if enabled (only when there are actual words)
+                var savedRecordId: UUID?
                 if saveRecordings, let transcriber {
-                    saveRecordingFromTranscriber(transcriber, transcription: finalText)
+                    savedRecordId = saveRecordingFromTranscriber(transcriber, transcription: finalText)
                 }
 
                 // Standard dictation post-processing
                 let listFormatted = await applyListFormatting(finalText)
                 let processedText = await applyLLMPostProcessing(listFormatted)
                 let textToInsert = appendTrailingSpace ? processedText + " " : processedText
+
+                // Save AI enhancement if text was modified by post-processing
+                if processedText != finalText, let recordId = savedRecordId {
+                    let modeName = llmEnabled ? AIModeManager.shared.activeMode.name : "List Format"
+                    Task {
+                        try? await HistoryManager.shared.updateAIEnhancementById(recordId, aiText: processedText, modeName: modeName)
+                    }
+                }
 
                 Logger.debug("Entering dictated text: '\(textToInsert)'", subsystem: .app)
                 cancelStateWatchdog()
@@ -1924,7 +1949,9 @@ class AppState: ObservableObject {
         }
     }
 
-    private func saveRecordingFromTranscriber(_ transcriber: StreamingTranscriber, transcription: String) {
+    @discardableResult
+    private func saveRecordingFromTranscriber(_ transcriber: StreamingTranscriber, transcription: String) -> UUID {
+        let recordId = UUID()
         let dateFormatter = DateFormatter()
         dateFormatter.dateFormat = "yyyy-MM-dd_HH-mm-ss"
         let timestamp = dateFormatter.string(from: Date())
@@ -1955,6 +1982,7 @@ class AppState: ObservableObject {
                     }
 
                     let record = TranscriptionRecord(
+                        id: recordId,
                         transcription: transcription,
                         audioFileURL: fileName,
                         duration: transcriber.recordedDuration,
@@ -1970,6 +1998,8 @@ class AppState: ObservableObject {
                 }
             }
         }
+
+        return recordId
     }
 
     private func insertText(_ text: String) async {

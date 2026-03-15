@@ -13,6 +13,8 @@
         <attribute name="useCount" attributeType="Integer 32" defaultValueString="0" usesScalarValueType="YES"/>
     </entity>
     <entity name="TranscriptionEntity" representedClassName="TranscriptionEntity" syncable="YES">
+        <attribute name="aiEnhancedText" optional="YES" attributeType="String"/>
+        <attribute name="aiModeName" optional="YES" attributeType="String"/>
         <attribute name="audioFileURL" optional="YES" attributeType="String"/>
         <attribute name="correctionsData" optional="YES" attributeType="Binary"/>
         <attribute name="createdAt" attributeType="Date" usesScalarValueType="NO"/>
