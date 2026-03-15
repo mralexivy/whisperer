@@ -66,8 +66,16 @@ struct HighlightedText: View {
             let searchText = text
             var searchStart = searchText.startIndex
 
-            // Find ALL occurrences of this correction's replacement in the text
+            // Find ALL occurrences of this correction's replacement in the text (word boundary only)
             while let range = searchText.range(of: correction.replacement, options: [.caseInsensitive], range: searchStart..<searchText.endIndex) {
+                // Check word boundaries to avoid matching inside other words (e.g., "ui" inside "suite")
+                let beforeOk = range.lowerBound == searchText.startIndex || !searchText[searchText.index(before: range.lowerBound)].isLetter
+                let afterOk = range.upperBound == searchText.endIndex || !searchText[range.upperBound].isLetter
+                guard beforeOk && afterOk else {
+                    searchStart = range.upperBound
+                    if searchStart >= searchText.endIndex { break }
+                    continue
+                }
                 correctionRanges.append((range: range, correction: correction))
 
                 // Move past this match
