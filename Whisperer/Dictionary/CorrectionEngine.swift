@@ -82,7 +82,10 @@ class CorrectionEngine {
                     let originalText = String(result[range])
                     result.replaceSubrange(range, with: replacement)
 
-                    corrections.append((range: range, original: originalText, replacement: replacement, category: entry.category, notes: entry.notes, entryId: entry.id))
+                    // Only record correction if the text actually changed
+                    if originalText != replacement {
+                        corrections.append((range: range, original: originalText, replacement: replacement, category: entry.category, notes: entry.notes, entryId: entry.id))
+                    }
 
                     // Adjust search range to continue after this replacement
                     let newIndex = result.index(range.lowerBound, offsetBy: replacement.count)
@@ -196,7 +199,9 @@ class CorrectionEngine {
                             let originalText = String(result[range])
                             result.replaceSubrange(range, with: entry.correctForm)
 
-                            corrections.append((range: range, original: originalText, replacement: entry.correctForm, category: entry.category, notes: entry.notes, entryId: entry.id))
+                            if originalText != entry.correctForm {
+                                corrections.append((range: range, original: originalText, replacement: entry.correctForm, category: entry.category, notes: entry.notes, entryId: entry.id))
+                            }
                             matched = true
                             i += phraseLength
                             break
@@ -224,7 +229,9 @@ class CorrectionEngine {
                                     let originalText = String(result[range])
                                     result.replaceSubrange(range, with: best.entry.correctForm)
 
-                                    corrections.append((range: range, original: originalText, replacement: best.entry.correctForm, category: best.entry.category, notes: "Segmentation correction", entryId: best.entry.id))
+                                    if originalText != best.entry.correctForm {
+                                        corrections.append((range: range, original: originalText, replacement: best.entry.correctForm, category: best.entry.category, notes: "Segmentation correction", entryId: best.entry.id))
+                                    }
                                     matched = true
                                     i += phraseLength
                                     break
@@ -256,7 +263,9 @@ class CorrectionEngine {
                 let originalText = String(result[range])
                 result.replaceSubrange(range, with: replacement)
 
-                corrections.append((range: range, original: originalText, replacement: replacement, category: entry.category, notes: entry.notes, entryId: entry.id))
+                if originalText != replacement {
+                    corrections.append((range: range, original: originalText, replacement: replacement, category: entry.category, notes: entry.notes, entryId: entry.id))
+                }
 
                 // Adjust search range
                 let newIndex = result.index(range.lowerBound, offsetBy: replacement.count)
