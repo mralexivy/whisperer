@@ -167,7 +167,6 @@ struct TranscriptionRow: View {
                 radius: isSelected ? 8 : (isHovered ? 6 : 3),
                 y: isSelected ? 3 : (isHovered ? 2 : 1)
             )
-            .clipShape(RoundedRectangle(cornerRadius: 12))
             .contentShape(RoundedRectangle(cornerRadius: 12))
             .scaleEffect(isHovered && !isSelected ? 1.006 : 1.0)
         }
