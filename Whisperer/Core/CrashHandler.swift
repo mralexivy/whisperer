@@ -199,9 +199,13 @@ final class CrashHandler {
         return logsDir.appendingPathComponent("crash.log")
     }
 
-    /// Check if crash log exists
+    /// Check if crash log exists and is recent (less than 24 hours old)
     static var hasCrashLog: Bool {
-        return FileManager.default.fileExists(atPath: crashLogURL.path)
+        guard let attrs = try? FileManager.default.attributesOfItem(atPath: crashLogURL.path),
+              let modified = attrs[.modificationDate] as? Date else {
+            return false
+        }
+        return Date().timeIntervalSince(modified) < 86400
     }
 }
 
