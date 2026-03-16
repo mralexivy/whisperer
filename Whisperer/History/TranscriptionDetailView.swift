@@ -20,12 +20,15 @@ struct TranscriptionDetailView: View {
     @State private var isRetranscribing = false
     @State private var showingOriginal = false
     @State private var showRevertConfirmation = false
+    @State private var showRetranscribePanel = false
+    @State private var retranscribeLanguage: TranscriptionLanguage
 
     init(transcription: TranscriptionRecord, onClose: @escaping () -> Void) {
         self.transcription = transcription
         self.onClose = onClose
         _editedText = State(initialValue: transcription.displayText)
         _notes = State(initialValue: transcription.notes ?? "")
+        _retranscribeLanguage = State(initialValue: TranscriptionLanguage(rawValue: transcription.language) ?? .auto)
     }
 
     var body: some View {
@@ -203,6 +206,11 @@ struct TranscriptionDetailView: View {
                 }
             }
 
+            // Retranscribe panel (inline, shown when user clicks Re-transcribe)
+            if showRetranscribePanel {
+                retranscribePanel
+            }
+
             // Text content
             if isEditing {
                 TextEditor(text: $editedText)
@@ -292,10 +300,12 @@ struct TranscriptionDetailView: View {
             if transcription.audioURL != nil {
                 Divider()
 
-                Button(action: retranscribe) {
+                Button(action: {
+                    withAnimation(.spring(response: 0.35)) { showRetranscribePanel = true }
+                }) {
                     Label("Re-transcribe", systemImage: "arrow.clockwise")
                 }
-                .disabled(isRetranscribing)
+                .disabled(isRetranscribing || showRetranscribePanel)
             }
         } label: {
             HStack(spacing: 5) {
@@ -380,6 +390,88 @@ struct TranscriptionDetailView: View {
             .padding(.horizontal, 14)
             .padding(.bottom, 10)
         }
+    }
+
+    // MARK: - Retranscribe Panel
+
+    private var retranscribePanel: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            // Language label + picker
+            HStack(spacing: 8) {
+                ZStack {
+                    RoundedRectangle(cornerRadius: 6)
+                        .fill(Color.blue.opacity(colorScheme == .dark ? 0.15 : 0.12))
+                        .frame(width: 24, height: 24)
+                        .shadow(color: Color.blue.opacity(0.06), radius: 2, y: 1)
+
+                    Image(systemName: "globe")
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundColor(.blue)
+                }
+
+                Text("Language")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundColor(WhispererColors.primaryText(colorScheme))
+
+                Spacer()
+
+                Picker("", selection: $retranscribeLanguage) {
+                    ForEach(TranscriptionLanguage.allCases, id: \.self) { lang in
+                        Text(lang.displayName).tag(lang)
+                    }
+                }
+                .pickerStyle(.menu)
+                .tint(WhispererColors.accentBlue)
+            }
+
+            // Action buttons
+            HStack {
+                Button(action: retranscribe) {
+                    HStack(spacing: 6) {
+                        if isRetranscribing {
+                            ProgressView()
+                                .controlSize(.mini)
+                                .scaleEffect(0.7)
+                        } else {
+                            Image(systemName: "arrow.clockwise")
+                                .font(.system(size: 11, weight: .semibold))
+                        }
+                        Text(isRetranscribing ? "Re-transcribing..." : "Re-transcribe")
+                            .font(.system(size: 12, weight: .semibold))
+                    }
+                    .foregroundColor(.white)
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 8)
+                    .background(Capsule().fill(WhispererColors.accentGradient))
+                    .shadow(color: WhispererColors.accentBlue.opacity(0.25), radius: 4, y: 1)
+                }
+                .buttonStyle(.plain).pointerOnHover()
+                .disabled(isRetranscribing)
+
+                Spacer()
+
+                Button(action: {
+                    withAnimation(.spring(response: 0.35)) { showRetranscribePanel = false }
+                }) {
+                    Text("Cancel")
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundColor(WhispererColors.secondaryText(colorScheme))
+                }
+                .buttonStyle(.plain).pointerOnHover()
+                .disabled(isRetranscribing)
+            }
+        }
+        .padding(14)
+        .background(
+            RoundedRectangle(cornerRadius: 10)
+                .fill(WhispererColors.elevatedBackground(colorScheme))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 10)
+                .stroke(WhispererColors.accent.opacity(0.15), lineWidth: 1)
+        )
+        .shadow(color: WhispererColors.accent.opacity(0.06), radius: 3, y: 1)
+        .transition(.opacity.combined(with: .move(edge: .top)))
     }
 
     // MARK: - Details Section
@@ -548,6 +640,7 @@ struct TranscriptionDetailView: View {
         }
 
         isRetranscribing = true
+        let language = retranscribeLanguage
 
         Task.detached(priority: .userInitiated) { [weak bridge] in
             guard let bridge = bridge else {
@@ -574,8 +667,6 @@ struct TranscriptionDetailView: View {
                 }
                 let samples = Array(UnsafeBufferPointer(start: channelData[0], count: Int(buffer.frameLength)))
 
-                // Transcribe with currently selected language and engine
-                let language = await AppState.shared.selectedLanguage
                 let promptWords = await AppState.shared.promptWordsString
                 let modelName = await AppState.shared.activeModelDisplayName
                 let rawText = bridge.transcribe(samples: samples, initialPrompt: promptWords, language: language)
@@ -603,6 +694,7 @@ struct TranscriptionDetailView: View {
                     editedText = finalText
                     isRetranscribing = false
                     showingOriginal = false
+                    withAnimation(.spring(response: 0.35)) { showRetranscribePanel = false }
                 }
 
                 // Save to history with updated language and model
