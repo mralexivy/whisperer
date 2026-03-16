@@ -197,9 +197,10 @@ class AppState: ObservableObject {
     let audioDeviceManager = AudioDeviceManager.shared
     private var deviceSubscription: AnyCancellable?
 
-    // Main-thread watchdog: forces state to .idle if stuck in .recording/.stopping for >8s.
+    // Main-thread watchdog: forces state to .idle if stuck in .recording/.stopping.
     // Uses DispatchSourceTimer on the main RunLoop — independent of Swift cooperative thread pool.
     private var stateWatchdog: DispatchSourceTimer?
+    private var lastStopActivityTime: Date?
 
     // Pre-loaded transcription backend - keeps model in memory for instant recording start
     private var whisperBridge: TranscriptionBackend?
@@ -1271,6 +1272,9 @@ class AppState: ObservableObject {
         let mode = AIModeManager.shared.activeMode
         guard !mode.systemPrompt.isEmpty else { return text }
 
+        activeAIModeName = mode.name
+        defer { activeAIModeName = nil }
+
         do {
             Logger.debug("LLM processing with mode '\(mode.name)' (temp=\(mode.temperature), topP=\(mode.topP))", subsystem: .transcription)
             Logger.debug("LLM system prompt: \(mode.systemPrompt.prefix(100))", subsystem: .transcription)
@@ -1617,7 +1621,7 @@ class AppState: ObservableObject {
         }
 
         state = .stopping
-        startStateWatchdog(timeout: 5.0)
+        startStopWatchdog()
 
         Task {
             await audioRecorder?.stopRecording()
@@ -1825,9 +1829,7 @@ class AppState: ObservableObject {
 
         state = .stopping
 
-        // Tail transcription has a 4s timeout in FluidAudioBridge.
-        // 8s watchdog covers transcription + LLM post-processing with margin.
-        startStateWatchdog(timeout: 8.0)
+        startStopWatchdog()
 
         Task {
             await audioRecorder?.stopRecording()
@@ -1967,6 +1969,51 @@ class AppState: ObservableObject {
     private func cancelStateWatchdog() {
         stateWatchdog?.cancel()
         stateWatchdog = nil
+    }
+
+    /// Activity-aware watchdog for the stop phase. Repeats every 2s and checks
+    /// whether transcription or LLM post-processing is still actively working.
+    /// Forces idle only after 5s of zero activity (truly stuck), so arbitrarily
+    /// long LLM runs succeed as long as isProcessing stays true.
+    private func startStopWatchdog() {
+        stateWatchdog?.cancel()
+        lastStopActivityTime = Date()
+        let timer = DispatchSource.makeTimerSource(queue: .main)
+        timer.schedule(deadline: .now() + 2, repeating: 2.0)
+        timer.setEventHandler { [weak self] in
+            guard let self else { return }
+            guard case .stopping = self.state else {
+                self.stateWatchdog?.cancel()
+                self.stateWatchdog = nil
+                return
+            }
+
+            let transcribing = self.streamingTranscriber?.isProcessing == true
+            let llmProcessing = self.llmPostProcessor?.isProcessing == true
+
+            if transcribing || llmProcessing {
+                self.lastStopActivityTime = Date()
+                return
+            }
+
+            let inactivity = Date().timeIntervalSince(self.lastStopActivityTime ?? Date())
+            if inactivity > 5.0 {
+                Logger.error("Stop watchdog: no activity for \(String(format: "%.1f", inactivity))s, forcing idle", subsystem: .app)
+                self.streamingTranscriber = nil
+                self.liveTranscription = ""
+                self.state = .idle
+                if self.muteOtherAudioDuringRecording {
+                    self.audioMuter?.unmuteSystemAudio()
+                }
+                if let recorder = self.audioRecorder {
+                    DispatchQueue.global(qos: .utility).async {
+                        Task { await recorder.stopRecording() }
+                    }
+                }
+            }
+        }
+        timer.resume()
+        stateWatchdog = timer
     }
 
     // MARK: - Rewrite Selected Text

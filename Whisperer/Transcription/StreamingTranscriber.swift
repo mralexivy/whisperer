@@ -38,7 +38,7 @@ class StreamingTranscriber {
     // Thread-safe processing flag
     private let processingLock = SafeLock()
     private var _isProcessing = false
-    private var isProcessing: Bool {
+    var isProcessing: Bool {
         get {
             do {
                 return try processingLock.withLock(timeout: 1.0) { _isProcessing }
