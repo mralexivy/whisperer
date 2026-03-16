@@ -796,6 +796,17 @@ struct StatusTabView: View {
                     }
                     .buttonStyle(.plain).pointerOnHover()
                 }
+            } else if appState.isInAppMode && appState.state == .stopping {
+                // Processing indicator during in-app stop
+                HStack(spacing: 8) {
+                    ProgressView()
+                        .controlSize(.small)
+                    Text(appState.activeAIModeName ?? "Processing")
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundColor(MBColors.textPrimary)
+                }
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 12)
             } else if !appState.lastInAppTranscription.isEmpty {
                 // Show result
                 VStack(spacing: 8) {

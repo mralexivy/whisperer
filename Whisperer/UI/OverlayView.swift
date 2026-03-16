@@ -55,7 +55,15 @@ struct OverlayView: View {
 
                 // Processing indicator (shown during final pass or rewrite)
                 if case .stopping = appState.state {
-                    ProcessingIndicator(scale: scale)
+                    if let aiModeName = appState.activeAIModeName {
+                        AnimatedStatusCapsule(
+                            text: aiModeName,
+                            borderColor: purpleAccent,
+                            scale: scale
+                        )
+                    } else {
+                        ProcessingIndicator(scale: scale)
+                    }
                 } else if case .rewriting = appState.state {
                     AnimatedStatusCapsule(
                         text: appState.activeAIModeName ?? "Rewriting",
@@ -309,7 +317,12 @@ private struct AnimatedStatusCapsule: View {
                         .stroke(borderColor.opacity(0.15), lineWidth: 1)
                 )
         )
-        .onAppear { isAnimating = true }
+        .onAppear {
+            isAnimating = false
+            DispatchQueue.main.async {
+                isAnimating = true
+            }
+        }
     }
 
     private func barHeight(for index: Int) -> CGFloat {
