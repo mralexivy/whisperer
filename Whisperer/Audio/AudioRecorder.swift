@@ -310,16 +310,15 @@ class AudioRecorder: NSObject {
         // for the bound device. Must happen after device binding, before format query.
         audioEngine.prepare()
 
-        // Query the physical device format AFTER prepare.
-        // Use inputFormat(forBus: 0) — this is the physical device format, matching
-        // the reference app. outputFormat(forBus: 0) can return stale cached values
-        // after sleep/wake. Retry if format is 0Hz/0ch (HAL still initializing).
-        var inputFormat = inputNode.inputFormat(forBus: 0)
+        // Query the node's output format AFTER prepare.
+        // The tap reads from the node's output, so the tap format must match outputFormat.
+        // Retry if format is 0Hz/0ch (HAL still initializing after sleep/wake).
+        var inputFormat = inputNode.outputFormat(forBus: 0)
         if inputFormat.sampleRate == 0 || inputFormat.channelCount == 0 {
             Logger.warning("Initial format invalid (\(inputFormat.sampleRate)Hz, \(inputFormat.channelCount)ch), retrying...", subsystem: .audio)
             for attempt in 1...5 {
-                usleep(100_000)  // 100ms — blocking, matches reference approach
-                inputFormat = inputNode.inputFormat(forBus: 0)
+                try? await Task.sleep(nanoseconds: 100_000_000)  // 100ms
+                inputFormat = inputNode.outputFormat(forBus: 0)
                 if inputFormat.sampleRate > 0 && inputFormat.channelCount > 0 {
                     Logger.info("Format valid after retry \(attempt): \(inputFormat.sampleRate)Hz, \(inputFormat.channelCount)ch", subsystem: .audio)
                     break
@@ -684,8 +683,6 @@ class AudioRecorder: NSObject {
 
     /// Fully tear down the audio engine and all associated state.
     /// Safe to call even if the engine is nil or partially initialized.
-    /// Engine is always released on a background thread — CoreAudio dealloc
-    /// can block indefinitely on dead/stale hardware after sleep/wake.
     private func cleanupEngineState() {
         stopAudioFlowWatchdog()
         stopMonitoringDevice()
@@ -697,14 +694,9 @@ class AudioRecorder: NSObject {
             engine.inputNode.removeTap(onBus: 0)
             engine.stop()
         }
-        // Release on background thread — CoreAudio dealloc can block on dead hardware
-        let oldEngine = audioEngine
         audioEngine = nil
         converter = nil
         outputFormat = nil
-        if let oldEngine {
-            DispatchQueue.global(qos: .utility).async { _ = oldEngine }
-        }
     }
 
     // MARK: - Device Selection
