@@ -137,6 +137,12 @@ nonisolated class LivePreviewEngine {
         isRunning = false
         onPartialTranscript = nil
         sampleBuffer.removeAll()
+        // Reset manager state to release any pending callbacks before deallocation
+        if let manager = eouManager {
+            Task {
+                await manager.reset()
+            }
+        }
         eouManager = nil
         Logger.debug("LivePreviewEngine: model unloaded", subsystem: .transcription)
     }

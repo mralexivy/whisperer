@@ -21,6 +21,17 @@ struct VocabularyStore {
     static let minSimilarity: Float = 0.72
     static let minCombinedConfidence: Float = 0.64
 
+    /// Cached CTC models — reused across vocabulary reconfigurations to prevent ~100MB leak per call
+    private static var cachedCtcModels: CtcModels?
+
+    /// Release cached CTC models (called during shutdown)
+    static func releaseCachedModels() {
+        if cachedCtcModels != nil {
+            cachedCtcModels = nil
+            Logger.debug("VocabularyStore: Released cached CTC models", subsystem: .transcription)
+        }
+    }
+
     /// Build tokenized vocabulary and CTC models from dictionary entries and prompt words.
     /// Returns nil if no valid terms are available.
     static func buildVocabulary(
@@ -69,8 +80,14 @@ struct VocabularyStore {
             return nil
         }
 
-        // Download and load CTC models
-        let ctcModels = try await CtcModels.downloadAndLoad(variant: .ctc110m)
+        // Reuse cached CTC models to avoid ~100MB leak per vocabulary reconfiguration
+        let ctcModels: CtcModels
+        if let cached = cachedCtcModels {
+            ctcModels = cached
+        } else {
+            ctcModels = try await CtcModels.downloadAndLoad(variant: .ctc110m)
+            cachedCtcModels = ctcModels
+        }
 
         // Sanitize config.json — HuggingFace files may contain trailing commas
         // that yyjson (strict JSON parser) rejects

@@ -16,10 +16,10 @@ nonisolated class FluidAudioBridge: TranscriptionBackend {
     // MARK: - Dual AsrManager
 
     /// Streaming manager: lightweight, no vocab boosting — used during periodic re-transcription
-    private let streamingManager: AsrManager
+    private var streamingManager: AsrManager?
     /// Final manager: separate instance with CTC vocab boosting — used for final pass on stop.
     /// Shares underlying MLModel objects (reference types), so memory overhead is ~100KB decoder state.
-    private let finalManager: AsrManager
+    private var finalManager: AsrManager?
 
     /// Controls which AsrManager handles transcription calls
     enum TranscriptionMode {
@@ -123,7 +123,8 @@ nonisolated class FluidAudioBridge: TranscriptionBackend {
         vocabulary: CustomVocabularyContext,
         ctcModels: CtcModels
     ) async throws {
-        try await finalManager.configureVocabularyBoosting(
+        guard let finalMgr = finalManager else { return }
+        try await finalMgr.configureVocabularyBoosting(
             vocabulary: vocabulary,
             ctcModels: ctcModels
         )
@@ -140,7 +141,7 @@ nonisolated class FluidAudioBridge: TranscriptionBackend {
                 guard let self = self else { return "" }
 
                 // Select manager based on current mode
-                let manager = self.currentMode == .finalPass ? self.finalManager : self.streamingManager
+                guard let manager = (self.currentMode == .finalPass ? self.finalManager : self.streamingManager) else { return "" }
 
                 // FluidAudio's transcribe is async — semaphore bridges to sync.
                 // Safe here because we're on a GCD thread, not a cooperative thread.
@@ -242,16 +243,28 @@ nonisolated class FluidAudioBridge: TranscriptionBackend {
     }
 
     func isContextHealthy() -> Bool {
-        !_isShuttingDown
+        !_isShuttingDown && streamingManager != nil
     }
 
     func prepareForShutdown() {
         _isShuttingDown = true
         queue.sync { }
+        // cleanup() nils individual MLModel properties but NOT the asrModels struct
+        // which also holds strong refs to the same models. Nilling the managers
+        // ensures the asrModels struct is deallocated too, freeing all MLModel objects.
+        streamingManager?.cleanup()
+        finalManager?.cleanup()
+        streamingManager = nil
+        finalManager = nil
     }
 
     deinit {
         _isShuttingDown = true
+        // Safety net: ensure MLModels are released even if prepareForShutdown wasn't called
+        streamingManager?.cleanup()
+        finalManager?.cleanup()
+        streamingManager = nil
+        finalManager = nil
         Logger.debug("FluidAudioBridge deallocated", subsystem: .model)
     }
 }

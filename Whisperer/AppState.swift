@@ -173,8 +173,7 @@ class AppState: ObservableObject {
             // SpeechAnalyzer needs re-prepare for new locale (model download may be required)
             if selectedBackendType == .speechAnalyzer && isModelLoaded && oldValue != selectedLanguage {
                 Logger.info("Language changed to \(selectedLanguage.displayName), re-preparing SpeechAnalyzer", subsystem: .model)
-                isModelLoaded = false
-                whisperBridge = nil
+                releaseCurrentBridge()
                 preloadSpeechAnalyzer()
             }
         }
@@ -309,9 +308,11 @@ class AppState: ObservableObject {
             if llmEnabled {
                 preloadLLM()
             } else {
+                let memBefore = BenchmarkUtilities.currentMemoryMB()
                 llmPostProcessor?.unloadModel()
                 llmPostProcessor = nil
                 rewriteModeService = nil
+                Logger.info("LLM disabled, unloaded (process memory: \(String(format: "%.0f", memBefore))MB)", subsystem: .model)
             }
         }
     }
@@ -319,11 +320,20 @@ class AppState: ObservableObject {
         didSet {
             UserDefaults.standard.set(selectedLLMModel.rawValue, forKey: "selectedLLMModel")
             if llmEnabled {
-                // Unload old model and load new one
+                // Unload old model — delay before loading new one to let ARC release GPU buffers
+                let memBefore = BenchmarkUtilities.currentMemoryMB()
+                Logger.info("Switching LLM: unloading old model (\(String(format: "%.0f", memBefore))MB)", subsystem: .model)
                 llmPostProcessor?.unloadModel()
                 llmPostProcessor = nil
                 rewriteModeService = nil
-                preloadLLM()
+
+                Task { @MainActor [weak self] in
+                    try? await Task.sleep(nanoseconds: 500_000_000) // 500ms for ARC to release GPU buffers
+                    guard let self, self.llmEnabled else { return }
+                    let memAfter = BenchmarkUtilities.currentMemoryMB()
+                    Logger.info("LLM unload freed \(String(format: "%.0f", memBefore - memAfter))MB, loading new model", subsystem: .model)
+                    self.preloadLLM()
+                }
             }
         }
     }
@@ -628,16 +638,42 @@ class AppState: ObservableObject {
         guard state == .idle else { return }
         guard backend != selectedBackendType else { return }
 
+        // Release current bridge and all satellite resources BEFORE switching
+        releaseCurrentBridge()
+
         selectedBackendType = backend
         UserDefaults.standard.set(backend.rawValue, forKey: "selectedBackendType")
         Logger.info("Switched backend to \(backend.displayName)", subsystem: .model)
+
+        preloadModel()
     }
 
-    /// Release the active transcription bridge and free its memory
+    /// Release the active transcription bridge and all satellite resources (EOU, VAD, CTC)
     private func releaseCurrentBridge() {
+        let memBefore = BenchmarkUtilities.currentMemoryMB()
+
+        // Cancel in-flight load tasks to prevent them from setting whisperBridge after we nil it
+        whisperLoadTask?.cancel()
+        whisperLoadTask = nil
+        parakeetLoadTask?.cancel()
+        parakeetLoadTask = nil
+        speechAnalyzerLoadTask?.cancel()
+        speechAnalyzerLoadTask = nil
+
+        // DON'T release LivePreviewEngine here — it's backend-agnostic and
+        // reloading CoreML models on every backend switch leaks compiled model cache.
+        // EOU is only released in releaseWhisperResources() (app shutdown).
+
+        // Release SileroVAD (~2MB)
+        if sileroVAD != nil {
+            sileroVAD = nil
+            isVADLoaded = false
+            Logger.debug("Released SileroVAD during bridge release", subsystem: .model)
+        }
+
         guard let bridge = whisperBridge else { return }
 
-        let backendName = selectedBackendType.displayName
+        let backendName = loadedBackendType?.displayName ?? selectedBackendType.displayName
         bridge.prepareForShutdown()
 
         // Release SpeechAnalyzer reserved locales
@@ -653,7 +689,12 @@ class AppState: ObservableObject {
         isModelLoaded = false
         loadedBackendType = nil
 
-        Logger.info("Released \(backendName) bridge (freeing memory)", subsystem: .model)
+        // Deferred measurement — ARC needs time to deallocate the bridge and free MLModel/Metal resources
+        Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 200_000_000) // 200ms for ARC
+            let memAfter = BenchmarkUtilities.currentMemoryMB()
+            Logger.info("Released \(backendName) bridge: \(String(format: "%.0f", memBefore))MB → \(String(format: "%.0f", memAfter))MB (freed \(String(format: "%.0f", memBefore - memAfter))MB)", subsystem: .model)
+        }
     }
 
     /// Download a model
@@ -775,6 +816,14 @@ class AppState: ObservableObject {
                 await MainActor.run { [weak self] in
                     guard let self = self else { return }
                     guard self.selectedModel == model else { return }
+
+                    // Safety: release any existing bridge that might still be loaded
+                    if let old = self.whisperBridge {
+                        old.prepareForShutdown()
+                        self.whisperBridge = nil
+                        Logger.warning("Safety release of existing bridge during Whisper preload", subsystem: .model)
+                    }
+
                     self.whisperBridge = bridge
                     self.loadedModel = model
                     self.loadedParakeetModel = nil
@@ -782,6 +831,8 @@ class AppState: ObservableObject {
                     self.loadedBackendType = .whisperCpp
                     self.isLoadingWhisper = false
                     self.preloadVAD()
+
+                    Logger.info("Whisper model loaded. Process memory: \(String(format: "%.0f", BenchmarkUtilities.currentMemoryMB()))MB", subsystem: .model)
                 }
             } catch {
                 guard !Task.isCancelled else { return }
@@ -951,7 +1002,17 @@ class AppState: ObservableObject {
     func preloadEouModel() {
         guard liveTranscriptionEnabled else { return }
         guard isEouModelCached() else { return }
-        guard livePreviewEngine == nil || !isEouModelLoaded else { return }
+
+        // Already loaded and running — skip
+        if livePreviewEngine != nil && isEouModelLoaded { return }
+
+        // Unload old engine if it exists (e.g. partial load failure)
+        if let oldEngine = livePreviewEngine {
+            oldEngine.unloadModel()
+            livePreviewEngine = nil
+            isEouModelLoaded = false
+            Logger.debug("Released old LivePreviewEngine before preload", subsystem: .model)
+        }
 
         let engine = LivePreviewEngine()
         self.livePreviewEngine = engine
@@ -1065,6 +1126,14 @@ class AppState: ObservableObject {
                     guard let self = self else { return }
                     // Verify this is still the selected model (user may have switched)
                     guard self.selectedParakeetModel == variant else { return }
+
+                    // Safety: release any existing bridge that might still be loaded
+                    if let old = self.whisperBridge {
+                        old.prepareForShutdown()
+                        self.whisperBridge = nil
+                        Logger.warning("Safety release of existing bridge during Parakeet preload", subsystem: .model)
+                    }
+
                     self.whisperBridge = bridge
                     self.loadedModel = nil
                     self.loadedParakeetModel = variant
@@ -1073,6 +1142,8 @@ class AppState: ObservableObject {
                     self.isLoadingParakeet = false
                     self.parakeetDownloadStatus = ""
                     self.preloadVAD()
+
+                    Logger.info("Parakeet model loaded. Process memory: \(String(format: "%.0f", BenchmarkUtilities.currentMemoryMB()))MB", subsystem: .model)
 
                     // Configure CTC vocabulary boosting on the final-pass manager
                     self.configureVocabularyBoostingOnBridge(bridge, variant: variant)
@@ -1130,6 +1201,14 @@ class AppState: ObservableObject {
                 await MainActor.run { [weak self] in
                     guard let self = self else { return }
                     guard self.selectedBackendType == .speechAnalyzer else { return }
+
+                    // Safety: release any existing bridge that might still be loaded
+                    if let old = self.whisperBridge {
+                        old.prepareForShutdown()
+                        self.whisperBridge = nil
+                        Logger.warning("Safety release of existing bridge during SpeechAnalyzer preload", subsystem: .model)
+                    }
+
                     self.whisperBridge = bridge
                     self.speechAnalyzerSupportedLanguageCodes = bridge.supportedLanguageCodes
                     self.loadedModel = nil
@@ -1139,6 +1218,8 @@ class AppState: ObservableObject {
                     self.isLoadingSpeechAnalyzer = false
                     self.speechAnalyzerStatus = ""
                     self.preloadVAD()
+
+                    Logger.info("SpeechAnalyzer loaded. Process memory: \(String(format: "%.0f", BenchmarkUtilities.currentMemoryMB()))MB", subsystem: .model)
                 }
             } catch {
                 guard !Task.isCancelled else { return }
@@ -1165,10 +1246,12 @@ class AppState: ObservableObject {
 
         let variant = selectedLLMModel
 
+        let memBefore = BenchmarkUtilities.currentMemoryMB()
         Task {
             do {
                 try await processor.loadModel(variant)
-                Logger.info("LLM \(variant.displayName) pre-loaded", subsystem: .model)
+                let memAfter = BenchmarkUtilities.currentMemoryMB()
+                Logger.info("LLM \(variant.displayName) pre-loaded. Process memory: \(String(format: "%.0f", memBefore))MB → \(String(format: "%.0f", memAfter))MB (+\(String(format: "%.0f", memAfter - memBefore))MB)", subsystem: .model)
             } catch {
                 Logger.error("Failed to pre-load LLM \(variant.displayName): \(error)", subsystem: .model)
                 let msg = "Failed to load model"
@@ -2095,6 +2178,11 @@ class AppState: ObservableObject {
             llmPostProcessor?.unloadModel()
             llmPostProcessor = nil
         }
+
+        // Free cached CTC models
+        #if arch(arm64)
+        VocabularyStore.releaseCachedModels()
+        #endif
 
         Logger.debug("Transcription resources released", subsystem: .transcription)
     }
