@@ -7,6 +7,7 @@
 
 import SwiftUI
 import AppKit
+import Combine
 
 // MARK: - Design System Colors
 
@@ -1606,8 +1607,10 @@ struct HistorySettingsView: View {
                         Picker("", selection: Binding(
                             get: { AppState.shared.soundPlayer?.soundOption ?? .defaultSounds },
                             set: { newValue in
+                                AppState.shared.objectWillChange.send()
                                 AppState.shared.soundPlayer?.soundOption = newValue
                                 newValue.save()
+                                AppState.shared.soundPlayer?.playStartSound()
                             }
                         )) {
                             ForEach(SoundOption.allCases, id: \.self) { option in

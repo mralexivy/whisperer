@@ -7,6 +7,7 @@
 
 import SwiftUI
 import ServiceManagement
+import Combine
 
 extension View {
     func pointerOnHover() -> some View {
@@ -1551,8 +1552,10 @@ struct SettingsTabView: View {
                             Picker("", selection: Binding(
                                 get: { appState.soundPlayer?.soundOption ?? .defaultSounds },
                                 set: { newValue in
+                                    appState.objectWillChange.send()
                                     appState.soundPlayer?.soundOption = newValue
                                     newValue.save()
+                                    appState.soundPlayer?.playStartSound()
                                 }
                             )) {
                                 ForEach(SoundOption.allCases, id: \.self) { option in
