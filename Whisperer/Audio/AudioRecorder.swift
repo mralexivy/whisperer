@@ -512,8 +512,8 @@ class AudioRecorder: NSObject {
         // Skip during grace period (covers muting disruption) and active recovery
         if rms < 0.001 {
             consecutiveSilentCallbacks += 1
-            let inGracePeriod = recordingStartTime.map { Date().timeIntervalSince($0) < 3.0 } ?? false
-            if consecutiveSilentCallbacks == silenceRecoveryThreshold && !isRecovering && !inGracePeriod {
+            let inGracePeriod = recordingStartTime.map { Date().timeIntervalSince($0) < 2.0 } ?? false
+            if consecutiveSilentCallbacks >= silenceRecoveryThreshold && !isRecovering && !inGracePeriod {
                 Logger.warning("Audio silent for ~1.5s (device: \(selectedDeviceID.map(String.init) ?? "default")), recovering", subsystem: .audio)
                 selectedDeviceID = nil
                 DispatchQueue.main.async { [weak self] in
@@ -754,13 +754,21 @@ class AudioRecorder: NSObject {
         if let engine = audioEngine {
             // ObjC exception safe — removeTap/stop can throw NSExceptions
             // when the engine is in a bad state (e.g., after device disconnect)
-            var err: NSError?
+            // Separate blocks so engine.stop() runs even if removeTap throws
+            var tapErr: NSError?
             ObjCTry({
                 engine.inputNode.removeTap(onBus: 0)
+            }, &tapErr)
+            if let tapErr = tapErr {
+                Logger.warning("removeTap caught exception: \(tapErr.localizedDescription)", subsystem: .audio)
+            }
+
+            var stopErr: NSError?
+            ObjCTry({
                 engine.stop()
-            }, &err)
-            if let err = err {
-                Logger.warning("Engine cleanup caught exception: \(err.localizedDescription)", subsystem: .audio)
+            }, &stopErr)
+            if let stopErr = stopErr {
+                Logger.warning("engine.stop caught exception: \(stopErr.localizedDescription)", subsystem: .audio)
             }
         }
         audioEngine = nil
