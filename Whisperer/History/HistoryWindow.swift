@@ -15,6 +15,10 @@ extension NSNotification.Name {
 
 class HistoryWindow: NSWindow {
 
+    private static let navyColor = NSColor(red: 0.047, green: 0.047, blue: 0.102, alpha: 1.0)
+    private var localKeyMonitor: Any?
+    private var savedToolbar: NSToolbar?
+
     init() {
         // Create window with standard style
         super.init(
@@ -32,7 +36,8 @@ class HistoryWindow: NSWindow {
         // Force dark appearance and blend titlebar with content
         self.appearance = NSAppearance(named: .darkAqua)
         self.titlebarAppearsTransparent = true
-        self.backgroundColor = NSColor(red: 0.047, green: 0.047, blue: 0.102, alpha: 1.0)
+        self.titlebarSeparatorStyle = .none
+        self.backgroundColor = Self.navyColor
         self.hasShadow = false
 
         // Add toolbar with sidebar toggle at leading edge
@@ -51,10 +56,10 @@ class HistoryWindow: NSWindow {
         // Layer-backed for dark background — no masksToBounds/cornerRadius
         // (CoreAnimation clipping triggers Tahoe text compositing bug)
         hostingView.wantsLayer = true
-        hostingView.layer?.backgroundColor = NSColor(red: 0.047, green: 0.047, blue: 0.102, alpha: 1.0).cgColor
+        hostingView.layer?.backgroundColor = Self.navyColor.cgColor
 
-        // Make sure window appears in mission control and window list
-        self.collectionBehavior = [.managed, .participatesInCycle]
+        // Make sure window appears in mission control, window list, and supports fullscreen
+        self.collectionBehavior = [.managed, .participatesInCycle, .fullScreenPrimary]
 
         // CRITICAL: Prevent AppKit from releasing window on close
         // We keep the window alive for reuse
@@ -62,6 +67,24 @@ class HistoryWindow: NSWindow {
 
         // Set delegate for window lifecycle events
         self.delegate = self
+
+        // Ctrl+Cmd+F fullscreen toggle — local monitor captures the shortcut
+        // even when NSHostingView has focus (keyDown override doesn't reach NSWindow)
+        localKeyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
+            guard let self = self, event.window === self else { return event }
+            if event.modifierFlags.intersection(.deviceIndependentFlagsMask) == [.control, .command],
+               event.charactersIgnoringModifiers == "f" {
+                self.toggleFullScreen(nil)
+                return nil
+            }
+            return event
+        }
+    }
+
+    deinit {
+        if let monitor = localKeyMonitor {
+            NSEvent.removeMonitor(monitor)
+        }
     }
 
     @objc func toggleSidebar(_ sender: Any?) {
@@ -119,5 +142,22 @@ extension HistoryWindow: NSWindowDelegate {
         Task { @MainActor in
             await HistoryManager.shared.loadTranscriptions()
         }
+    }
+
+    func windowWillEnterFullScreen(_ notification: Notification) {
+        // Remove toolbar entirely — its NSVisualEffectView causes the white bar.
+        // Traffic lights auto-hide in fullscreen so toolbar isn't needed.
+        savedToolbar = toolbar
+        toolbar = nil
+    }
+
+    func windowDidExitFullScreen(_ notification: Notification) {
+        // Restore toolbar for normal windowed mode
+        toolbar = savedToolbar
+        toolbarStyle = .unified
+        titleVisibility = .hidden
+        titlebarAppearsTransparent = true
+        titlebarSeparatorStyle = .none
+        backgroundColor = HistoryWindow.navyColor
     }
 }
