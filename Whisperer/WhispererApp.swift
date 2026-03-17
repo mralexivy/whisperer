@@ -824,6 +824,7 @@ struct StatusTabView: View {
                         Button(action: {
                             NSPasteboard.general.clearContents()
                             NSPasteboard.general.setString(appState.lastInAppTranscription, forType: .string)
+                            appState.lastInAppTranscription = ""
                         }) {
                             HStack(spacing: 4) {
                                 Image(systemName: "doc.on.doc")
@@ -835,23 +836,6 @@ struct StatusTabView: View {
                             .padding(.horizontal, 10)
                             .padding(.vertical, 6)
                             .background(MBColors.accent.opacity(0.15))
-                            .cornerRadius(6)
-                        }
-                        .buttonStyle(.plain).pointerOnHover()
-
-                        Button(action: {
-                            appState.lastInAppTranscription = ""
-                        }) {
-                            HStack(spacing: 4) {
-                                Image(systemName: "xmark")
-                                    .font(.system(size: 10))
-                                Text("Clear")
-                                    .font(.system(size: 11, weight: .medium))
-                            }
-                            .foregroundColor(MBColors.textSecondary)
-                            .padding(.horizontal, 10)
-                            .padding(.vertical, 6)
-                            .background(MBColors.pill)
                             .cornerRadius(6)
                         }
                         .buttonStyle(.plain).pointerOnHover()
