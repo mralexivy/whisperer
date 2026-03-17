@@ -262,6 +262,10 @@ class WhisperBridge: TranscriptionBackend {
     // Transcription timeout (default 30 seconds, longer on Intel)
     var transcriptionTimeout: TimeInterval = 30.0
 
+    // Consecutive transcription failure tracking — auto-recover after 2 failures
+    private var consecutiveFailures = 0
+    private let maxConsecutiveFailures = 2
+
     // Language detected during the last transcription (from whisper_full_lang_id)
     private(set) var lastDetectedLanguage: String?
 
@@ -540,9 +544,28 @@ class WhisperBridge: TranscriptionBackend {
         }
 
         if result != 0 {
-            Logger.error("Whisper transcription failed with code: \(result)", subsystem: .transcription)
+            consecutiveFailures += 1
+            Logger.error("Whisper transcription failed with code: \(result) (failure \(consecutiveFailures)/\(maxConsecutiveFailures))", subsystem: .transcription)
+
+            // After repeated failures (e.g., Metal encode errors), the GPU context
+            // may be corrupted. Schedule async recovery to reload the model.
+            if consecutiveFailures >= maxConsecutiveFailures {
+                Logger.warning("Consecutive failures reached \(maxConsecutiveFailures), scheduling context recovery", subsystem: .transcription)
+                let bridge = self
+                queue.async {
+                    do {
+                        try bridge.recoverContext()
+                        bridge.consecutiveFailures = 0
+                    } catch {
+                        Logger.error("Auto-recovery failed: \(error.localizedDescription)", subsystem: .transcription)
+                    }
+                }
+            }
             return ""
         }
+
+        // Reset failure counter on success
+        consecutiveFailures = 0
 
         // Extract detected language (useful when auto-detect is enabled)
         let langId = whisper_full_lang_id(ctx)

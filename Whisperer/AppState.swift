@@ -201,6 +201,7 @@ class AppState: ObservableObject {
     // Uses DispatchSourceTimer on the main RunLoop — independent of Swift cooperative thread pool.
     private var stateWatchdog: DispatchSourceTimer?
     private var lastStopActivityTime: Date?
+    private var stopWatchdogStartTime: Date?
 
     // Pre-loaded transcription backend - keeps model in memory for instant recording start
     private var whisperBridge: TranscriptionBackend?
@@ -1592,6 +1593,7 @@ class AppState: ObservableObject {
                 let audioURL = try await audioRecorder?.startRecording()
                 currentAudioURL = audioURL
                 cancelStateWatchdog()  // Startup succeeded, audio is flowing
+                startRecordingWatchdog()  // Long-running watchdog for stuck .recording state
 
                 // Mute AFTER engine is running and audio HAL has stabilized
                 if muteOtherAudioDuringRecording {
@@ -1625,7 +1627,12 @@ class AppState: ObservableObject {
 
         Task {
             await audioRecorder?.stopRecording()
-            await livePreviewEngine?.stop()
+
+            if let engine = livePreviewEngine {
+                await withTimeoutResult(seconds: 3.0) {
+                    await engine.stop()
+                }
+            }
 
             if muteOtherAudioDuringRecording {
                 audioMuter?.unmuteSystemAudio()
@@ -1768,6 +1775,7 @@ class AppState: ObservableObject {
                 let audioURL = try await audioRecorder?.startRecording()
                 currentAudioURL = audioURL
                 cancelStateWatchdog()  // Startup succeeded, audio is flowing
+                startRecordingWatchdog()  // Long-running watchdog for stuck .recording state
 
                 // Guard: if stopRecording() was called while audio was starting, stop the recorder
                 guard case .recording = state else {
@@ -1825,7 +1833,10 @@ class AppState: ObservableObject {
     }
 
     func stopRecording() {
-        guard case .recording = state else { return }
+        guard case .recording = state else {
+            Logger.warning("stopRecording() called but state is \(state), ignoring", subsystem: .app)
+            return
+        }
 
         state = .stopping
 
@@ -1833,7 +1844,14 @@ class AppState: ObservableObject {
 
         Task {
             await audioRecorder?.stopRecording()
-            await livePreviewEngine?.stop()
+
+            // Timeout the live preview engine stop — FluidAudio's finish()/reset()
+            // can hang if the ANE is busy or the model is in a bad state.
+            if let engine = livePreviewEngine {
+                await withTimeoutResult(seconds: 3.0) {
+                    await engine.stop()
+                }
+            }
 
             // Unmute other audio sources now that recording is done
             if muteOtherAudioDuringRecording {
@@ -1945,19 +1963,7 @@ class AppState: ObservableObject {
             switch self.state {
             case .recording, .stopping:
                 Logger.error("State watchdog: stuck in \(self.state) for \(timeout)s, forcing idle", subsystem: .app)
-                self.streamingTranscriber = nil
-                self.liveTranscription = ""
-                self.state = .idle
-                // Silent reset — no error message. Next Fn press starts fresh.
-                if self.muteOtherAudioDuringRecording {
-                    self.audioMuter?.unmuteSystemAudio()
-                }
-                // Fire-and-forget stop on GCD to avoid blocking main thread
-                if let recorder = self.audioRecorder {
-                    DispatchQueue.global(qos: .utility).async {
-                        Task { await recorder.stopRecording() }
-                    }
-                }
+                self.forceIdleFromWatchdog()
             default:
                 break
             }
@@ -1971,13 +1977,47 @@ class AppState: ObservableObject {
         stateWatchdog = nil
     }
 
+    /// Lightweight watchdog for the recording phase. Fires every 5s and checks
+    /// whether we're still in .recording state. Catches the case where the Fn
+    /// release event fires but stopRecording() never executes (main actor busy,
+    /// callback dropped, etc.). The 5-minute recording limit is enforced by
+    /// AudioRecorder, but this watchdog catches state-machine stuck scenarios.
+    /// Also acts as a fallback if the key listener's release event is lost.
+    private func startRecordingWatchdog() {
+        // Don't replace an existing stop watchdog — only install if no watchdog is active
+        guard stateWatchdog == nil else { return }
+        let timer = DispatchSource.makeTimerSource(queue: .main)
+        // Check every 10s — recording can legitimately last up to 5 minutes
+        timer.schedule(deadline: .now() + 10, repeating: 10.0)
+        timer.setEventHandler { [weak self] in
+            guard let self else { return }
+            guard case .recording(let startTime) = self.state else {
+                // State changed (to .stopping, .idle, etc.) — watchdog no longer needed
+                self.stateWatchdog?.cancel()
+                self.stateWatchdog = nil
+                return
+            }
+
+            let elapsed = Date().timeIntervalSince(startTime)
+            // 5.5 minutes = 5 min recording limit + 30s margin
+            if elapsed > 330 {
+                Logger.error("Recording watchdog: stuck in .recording for \(String(format: "%.0f", elapsed))s, forcing idle", subsystem: .app)
+                self.forceIdleFromWatchdog()
+            }
+        }
+        timer.resume()
+        stateWatchdog = timer
+    }
+
     /// Activity-aware watchdog for the stop phase. Repeats every 2s and checks
     /// whether transcription or LLM post-processing is still actively working.
-    /// Forces idle only after 5s of zero activity (truly stuck), so arbitrarily
-    /// long LLM runs succeed as long as isProcessing stays true.
+    /// Forces idle after 5s of zero activity OR after 20s absolute (even if
+    /// isProcessing stays true — e.g., whisper hung after encode failure).
     private func startStopWatchdog() {
         stateWatchdog?.cancel()
-        lastStopActivityTime = Date()
+        let now = Date()
+        lastStopActivityTime = now
+        stopWatchdogStartTime = now
         let timer = DispatchSource.makeTimerSource(queue: .main)
         timer.schedule(deadline: .now() + 2, repeating: 2.0)
         timer.setEventHandler { [weak self] in
@@ -1985,6 +2025,16 @@ class AppState: ObservableObject {
             guard case .stopping = self.state else {
                 self.stateWatchdog?.cancel()
                 self.stateWatchdog = nil
+                return
+            }
+
+            // Absolute timeout: force idle after 20s regardless of activity.
+            // Catches cases where isProcessing stays true (e.g., whisper hung
+            // after Metal encode failure, SafeLock held indefinitely).
+            let elapsed = Date().timeIntervalSince(self.stopWatchdogStartTime ?? Date())
+            if elapsed > 20.0 {
+                Logger.error("Stop watchdog: absolute timeout after \(String(format: "%.1f", elapsed))s, forcing idle", subsystem: .app)
+                self.forceIdleFromWatchdog()
                 return
             }
 
@@ -1999,21 +2049,28 @@ class AppState: ObservableObject {
             let inactivity = Date().timeIntervalSince(self.lastStopActivityTime ?? Date())
             if inactivity > 5.0 {
                 Logger.error("Stop watchdog: no activity for \(String(format: "%.1f", inactivity))s, forcing idle", subsystem: .app)
-                self.streamingTranscriber = nil
-                self.liveTranscription = ""
-                self.state = .idle
-                if self.muteOtherAudioDuringRecording {
-                    self.audioMuter?.unmuteSystemAudio()
-                }
-                if let recorder = self.audioRecorder {
-                    DispatchQueue.global(qos: .utility).async {
-                        Task { await recorder.stopRecording() }
-                    }
-                }
+                self.forceIdleFromWatchdog()
             }
         }
         timer.resume()
         stateWatchdog = timer
+    }
+
+    /// Force state to idle from a watchdog — shared cleanup for all watchdog paths.
+    private func forceIdleFromWatchdog() {
+        stateWatchdog?.cancel()
+        stateWatchdog = nil
+        streamingTranscriber = nil
+        liveTranscription = ""
+        state = .idle
+        if muteOtherAudioDuringRecording {
+            audioMuter?.unmuteSystemAudio()
+        }
+        if let recorder = audioRecorder {
+            DispatchQueue.global(qos: .utility).async {
+                Task { await recorder.stopRecording() }
+            }
+        }
     }
 
     // MARK: - Rewrite Selected Text

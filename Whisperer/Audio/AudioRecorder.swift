@@ -54,6 +54,7 @@ class AudioRecorder: NSObject {
     private var autoRecoveryEnabled = true
     private var recoveryAttempts = 0
     private let maxRecoveryAttempts = 5
+    private var recoveryTask: Task<Void, Never>?  // Tracked so stopRecording can cancel it
     private var converter: AVAudioConverter?
     private var outputFormat: AVAudioFormat?
     private var recordingStartTime: Date?  // Track when recording started for grace period
@@ -110,6 +111,12 @@ class AudioRecorder: NSObject {
         let backoffNs: UInt64 = recoveryAttempts <= 1 ? 300_000_000 :
                                 recoveryAttempts <= 2 ? 500_000_000 : 1_000_000_000
         try? await Task.sleep(nanoseconds: backoffNs)
+
+        // Check if recovery was cancelled (stopRecording called during backoff)
+        guard !Task.isCancelled else {
+            Logger.debug("Recovery cancelled (recording stopped during backoff)", subsystem: .audio)
+            return
+        }
 
         // Check if recording was stopped during the wait
         // (user may have released button during recovery)
@@ -235,6 +242,11 @@ class AudioRecorder: NSObject {
         }
         Logger.debug("Microphone permission confirmed", subsystem: .audio)
 
+        // Bail out if stop was called during the permission check
+        guard !Task.isCancelled else {
+            throw RecordingError.engineCleanedUp
+        }
+
         // Create temporary file for recording
         let tempDir = FileManager.default.temporaryDirectory
         let fileName = "recording_\(Date().timeIntervalSince1970).wav"
@@ -269,7 +281,7 @@ class AudioRecorder: NSObject {
 
             if self.isRecording && self.autoRecoveryEnabled {
                 Logger.debug("Attempting to recover from configuration change...", subsystem: .audio)
-                Task {
+                self.recoveryTask = Task {
                     await self.recoverAudioEngine()
                 }
             }
@@ -304,6 +316,12 @@ class AudioRecorder: NSObject {
             }
         } else {
             Logger.debug("Using system default input device", subsystem: .audio)
+        }
+
+        // Bail out if engine was torn down during async device resolution
+        guard !Task.isCancelled, self.audioEngine != nil else {
+            Logger.debug("Engine cleaned up during device setup, aborting", subsystem: .audio)
+            throw RecordingError.engineCleanedUp
         }
 
         // Prepare the engine — allocates resources and establishes the audio format
@@ -464,7 +482,8 @@ class AudioRecorder: NSObject {
                 Logger.warning("Audio silent for ~1.5s (device: \(selectedDeviceID.map(String.init) ?? "default")), recovering", subsystem: .audio)
                 selectedDeviceID = nil
                 DispatchQueue.main.async { [weak self] in
-                    Task { await self?.recoverAudioEngine() }
+                    guard let self = self else { return }
+                    self.recoveryTask = Task { await self.recoverAudioEngine() }
                 }
             }
         } else {
@@ -492,6 +511,12 @@ class AudioRecorder: NSObject {
     }
 
     func stopRecording() async {
+        // Cancel any in-progress audio recovery before tearing down.
+        // Recovery's startRecordingInternal() may be mid-execution — cancelling
+        // prevents it from racing with cleanupEngineState() below.
+        recoveryTask?.cancel()
+        recoveryTask = nil
+
         guard isRecording else {
             Logger.debug("stopRecording called but not recording", subsystem: .audio)
             return
@@ -637,7 +662,7 @@ class AudioRecorder: NSObject {
             stopMonitoringDevice()
 
             if isRecording && autoRecoveryEnabled {
-                Task {
+                recoveryTask = Task {
                     await recoverAudioEngine()
                 }
             }
@@ -661,13 +686,13 @@ class AudioRecorder: NSObject {
                 if elapsed > self.audioFlowTimeout {
                     Logger.error("Audio flow stopped — no data for \(String(format: "%.1f", elapsed))s, triggering recovery", subsystem: .audio)
                     self.stopAudioFlowWatchdog()  // Prevent re-entry during recovery
-                    Task { await self.recoverAudioEngine() }
+                    self.recoveryTask = Task { await self.recoverAudioEngine() }
                 }
             } else {
                 // No audio data has arrived since engine started
                 Logger.error("Audio engine running but no data flowing after startup — triggering recovery", subsystem: .audio)
                 self.stopAudioFlowWatchdog()
-                Task { await self.recoverAudioEngine() }
+                self.recoveryTask = Task { await self.recoverAudioEngine() }
             }
         }
         timer.resume()
@@ -780,4 +805,5 @@ enum RecordingError: Error {
     case fileCreationFailed
     case microphonePermissionDenied
     case audioUnitFailed
+    case engineCleanedUp  // Engine was torn down during async setup (stop called mid-recovery)
 }

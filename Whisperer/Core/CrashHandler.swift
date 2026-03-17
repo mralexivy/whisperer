@@ -120,10 +120,28 @@ final class CrashHandler {
     }
 
     private static func handleSignal(_ signal: Int32, name: String) {
+        // Capture stack trace — backtrace() is async-signal-safe on macOS
+        var callStack = [UnsafeMutableRawPointer?](repeating: nil, count: 128)
+        let frameCount = backtrace(&callStack, 128)
+        let symbols = backtrace_symbols(&callStack, frameCount)
+
+        var stackTrace = ""
+        if let symbols = symbols {
+            for i in 0..<Int(frameCount) {
+                if let symbol = symbols[i] {
+                    stackTrace += "  \(String(cString: symbol))\n"
+                }
+            }
+            free(symbols)
+        }
+
         let message = """
         FATAL SIGNAL RECEIVED
         Signal: \(name) (\(signal))
         Time: \(Date())
+
+        Stack Trace (\(frameCount) frames):
+        \(stackTrace)
         """
 
         // Try to log (may not work depending on signal)
