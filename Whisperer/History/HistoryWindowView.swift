@@ -455,37 +455,44 @@ struct TranscriptionsView: View {
 
     private let minDetailWidth: CGFloat = 320
     private let maxDetailWidth: CGFloat = 600
+    private let dividerWidth: CGFloat = 12
 
     var body: some View {
-        HStack(spacing: 0) {
-            // List panel
-            VStack(spacing: 0) {
-                headerView
-                toolbarView
-                transcriptionList
-            }
-            .frame(minWidth: 400, maxWidth: .infinity)
-            .clipped()
-
-            // Detail panel with resizable divider
-            if let selected = selectedTranscription {
-                // Resizable divider
-                ResizableDivider(colorScheme: colorScheme) { delta in
-                    let newWidth = detailPanelWidth - delta
-                    detailPanelWidth = min(max(newWidth, minDetailWidth), maxDetailWidth)
+        GeometryReader { geometry in
+            HStack(spacing: 0) {
+                // List panel
+                VStack(spacing: 0) {
+                    headerView
+                    toolbarView
+                    transcriptionList
                 }
-
-                TranscriptionDetailView(
-                    transcription: selected,
-                    onClose: { withAnimation(.spring(response: 0.3)) { selectedTranscription = nil } }
-                )
-                .id(selected.id) // Force view recreation when transcription changes
-                .frame(width: detailPanelWidth)
+                .frame(width: listPanelWidth(in: geometry.size.width))
                 .clipped()
-                .transition(.asymmetric(
-                    insertion: .move(edge: .trailing).combined(with: .opacity),
-                    removal: .move(edge: .trailing).combined(with: .opacity)
-                ))
+
+                // Detail panel with resizable divider
+                if let selected = selectedTranscription {
+                    // Resizable divider
+                    ResizableDivider(colorScheme: colorScheme) { delta in
+                        var transaction = Transaction()
+                        transaction.animation = nil
+                        withTransaction(transaction) {
+                            let newWidth = detailPanelWidth - delta
+                            detailPanelWidth = min(max(newWidth, minDetailWidth), maxDetailWidth)
+                        }
+                    }
+
+                    TranscriptionDetailView(
+                        transcription: selected,
+                        onClose: { withAnimation(.spring(response: 0.3)) { selectedTranscription = nil } }
+                    )
+                    .id(selected.id) // Force view recreation when transcription changes
+                    .frame(width: detailPanelWidth)
+                    .clipped()
+                    .transition(.asymmetric(
+                        insertion: .move(edge: .trailing).combined(with: .opacity),
+                        removal: .move(edge: .trailing).combined(with: .opacity)
+                    ))
+                }
             }
         }
         .background(WhispererColors.background(colorScheme))
@@ -504,6 +511,13 @@ struct TranscriptionsView: View {
                 selectedTranscription = first
             }
         }
+    }
+
+    private func listPanelWidth(in totalWidth: CGFloat) -> CGFloat {
+        if selectedTranscription != nil {
+            return totalWidth - detailPanelWidth - dividerWidth
+        }
+        return totalWidth
     }
 
     // MARK: - Header
@@ -2514,9 +2528,7 @@ struct ResizableDivider: View {
             DragGesture(minimumDistance: 1)
                 .onChanged { value in
                     if !isDragging {
-                        withAnimation(.easeInOut(duration: 0.1)) {
-                            isDragging = true
-                        }
+                        isDragging = true
                         lastTranslation = 0
                     }
                     let delta = value.translation.width - lastTranslation
@@ -2524,9 +2536,7 @@ struct ResizableDivider: View {
                     onDrag(delta)
                 }
                 .onEnded { _ in
-                    withAnimation(.easeOut(duration: 0.2)) {
-                        isDragging = false
-                    }
+                    isDragging = false
                     lastTranslation = 0
                 }
         )
