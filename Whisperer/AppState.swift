@@ -1669,8 +1669,6 @@ class AppState: ObservableObject {
                         try? await HistoryManager.shared.updateAIEnhancementById(recordId, aiText: processedText, modeName: modeName)
                     }
                 }
-            } else {
-                errorMessage = "No speech detected"
             }
 
             cancelStateWatchdog()
@@ -1923,7 +1921,6 @@ class AppState: ObservableObject {
                 await insertText(textToInsert)
             } else {
                 Logger.debug("No speech detected in recording", subsystem: .app)
-                errorMessage = "No speech detected"
                 cancelStateWatchdog()
                 state = .idle
             }
