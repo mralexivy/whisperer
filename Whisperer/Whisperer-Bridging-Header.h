@@ -13,4 +13,6 @@
 #include "../whisper.cpp/ggml/include/ggml-backend.h"
 #include "../whisper.cpp/include/whisper.h"
 
+#import "Core/ObjCExceptionCatcher.h"
+
 #endif /* Whisperer_Bridging_Header_h */

@@ -54,6 +54,7 @@ class AudioRecorder: NSObject {
     private var autoRecoveryEnabled = true
     private var recoveryAttempts = 0
     private let maxRecoveryAttempts = 5
+    private var isRecovering = false
     private var recoveryTask: Task<Void, Never>?  // Tracked so stopRecording can cancel it
     private var converter: AVAudioConverter?
     private var outputFormat: AVAudioFormat?
@@ -92,8 +93,9 @@ class AudioRecorder: NSObject {
     /// Silently recover the audio engine. No user-facing messages — just fix it.
     /// Keeps retrying with increasing backoff until it works or recording is stopped.
     private func recoverAudioEngine() async {
-        guard autoRecoveryEnabled else { return }
+        guard autoRecoveryEnabled, !isRecovering else { return }
 
+        isRecovering = true
         recoveryAttempts += 1
         Logger.debug("Silent recovery attempt \(recoveryAttempts)...", subsystem: .audio)
 
@@ -115,6 +117,7 @@ class AudioRecorder: NSObject {
         // Check if recovery was cancelled (stopRecording called during backoff)
         guard !Task.isCancelled else {
             Logger.debug("Recovery cancelled (recording stopped during backoff)", subsystem: .audio)
+            isRecovering = false
             return
         }
 
@@ -122,6 +125,7 @@ class AudioRecorder: NSObject {
         // (user may have released button during recovery)
         guard isRecording else {
             Logger.debug("Recording stopped during recovery, not restarting", subsystem: .audio)
+            isRecovering = false
             return
         }
 
@@ -130,15 +134,18 @@ class AudioRecorder: NSObject {
             _ = try await startRecordingInternal()
             Logger.info("Audio engine recovered silently (attempt \(recoveryAttempts))", subsystem: .audio)
             recoveryAttempts = 0  // Reset on success
+            isRecovering = false
         } catch {
             Logger.error("Recovery attempt \(recoveryAttempts) failed: \(error.localizedDescription)", subsystem: .audio)
 
             // Keep retrying until maxRecoveryAttempts, then notify AppState to
             // stop and reset so the NEXT recording attempt starts clean
             if recoveryAttempts < maxRecoveryAttempts {
+                isRecovering = false  // Allow next attempt
                 await recoverAudioEngine()
             } else {
                 Logger.error("All \(maxRecoveryAttempts) recovery attempts failed, resetting for next recording", subsystem: .audio)
+                isRecovering = false
                 // Signal AppState so it resets to idle — next Fn press starts fresh
                 DispatchQueue.main.async { [weak self] in
                     self?.onAudioFlowTimeout?()
@@ -186,6 +193,7 @@ class AudioRecorder: NSObject {
         }
 
         recoveryAttempts = 0
+        isRecovering = false
         recordingStartTime = Date()
         recordingGeneration += 1
         let myGeneration = recordingGeneration
@@ -279,11 +287,13 @@ class AudioRecorder: NSObject {
                 }
             }
 
-            if self.isRecording && self.autoRecoveryEnabled {
+            if self.isRecording && self.autoRecoveryEnabled && !self.isRecovering {
                 Logger.debug("Attempting to recover from configuration change...", subsystem: .audio)
                 self.recoveryTask = Task {
                     await self.recoverAudioEngine()
                 }
+            } else if self.isRecovering {
+                Logger.debug("Ignoring config change — recovery already in progress", subsystem: .audio)
             }
         }
 
@@ -376,22 +386,30 @@ class AudioRecorder: NSObject {
         Logger.debug("Converter: \(inputFormat.channelCount) channels → 1 channel, channel map: \(newConverter.channelMap)", subsystem: .audio)
 
         // Install tap on input node
+        // ObjC exception safe — installTap can throw NSExceptions when audio unit is in bad state
         let bufferSize: AVAudioFrameCount = 4096
         Logger.debug("Installing tap on input node (buffer size: \(bufferSize))", subsystem: .audio)
-        inputNode.installTap(onBus: 0, bufferSize: bufferSize, format: inputFormat) { [weak self] buffer, time in
-            // Wrap in do-catch to prevent crashes in audio callback
-            do {
-                guard let self = self, let converter = self.converter, let outputFormat = self.outputFormat else {
-                    return
+        var tapErr: NSError?
+        let tapInstalled = ObjCTry({
+            inputNode.installTap(onBus: 0, bufferSize: bufferSize, format: inputFormat) { [weak self] buffer, time in
+                do {
+                    guard let self = self, let converter = self.converter, let outputFormat = self.outputFormat else {
+                        return
+                    }
+                    try self.processAudioBufferSafe(buffer: buffer, converter: converter, outputFormat: outputFormat)
+                } catch {
+                    Logger.error("Error in audio callback: \(error.localizedDescription)", subsystem: .audio)
                 }
-                try self.processAudioBufferSafe(buffer: buffer, converter: converter, outputFormat: outputFormat)
-            } catch {
-                Logger.error("Error in audio callback: \(error.localizedDescription)", subsystem: .audio)
             }
+        }, &tapErr)
+        guard tapInstalled else {
+            Logger.error("Failed to install tap (NSException): \(tapErr?.localizedDescription ?? "unknown")", subsystem: .audio)
+            throw RecordingError.audioUnitFailed
         }
         Logger.debug("Tap installed successfully", subsystem: .audio)
 
         // Start engine (use self.audioEngine in case we recreated it)
+        // ObjC exception safe — engine.start() can throw both Swift errors and NSExceptions
         lastAudioCallbackTime = nil  // Reset for flow watchdog
         consecutiveSilentCallbacks = 0  // Reset silence detection
         do {
@@ -400,7 +418,22 @@ class AudioRecorder: NSObject {
                 Logger.error("Audio engine is nil, cannot start", subsystem: .audio)
                 throw RecordingError.fileCreationFailed
             }
-            try engine.start()
+            var startException: NSError?
+            var startSwiftError: Error?
+            let started = ObjCTry({
+                do {
+                    try engine.start()
+                } catch {
+                    startSwiftError = error
+                }
+            }, &startException)
+            if let startSwiftError = startSwiftError {
+                throw startSwiftError
+            }
+            guard started else {
+                Logger.error("Engine start caught NSException: \(startException?.localizedDescription ?? "unknown")", subsystem: .audio)
+                throw RecordingError.audioUnitFailed
+            }
             isRecording = true
 
             // Monitor the actual device the engine is using for disconnect detection.
@@ -476,9 +509,11 @@ class AudioRecorder: NSObject {
         }
 
         // Silence detection — auto-recover if input device produces no audio
+        // Skip during grace period (covers muting disruption) and active recovery
         if rms < 0.001 {
             consecutiveSilentCallbacks += 1
-            if consecutiveSilentCallbacks == silenceRecoveryThreshold {
+            let inGracePeriod = recordingStartTime.map { Date().timeIntervalSince($0) < 3.0 } ?? false
+            if consecutiveSilentCallbacks == silenceRecoveryThreshold && !isRecovering && !inGracePeriod {
                 Logger.warning("Audio silent for ~1.5s (device: \(selectedDeviceID.map(String.init) ?? "default")), recovering", subsystem: .audio)
                 selectedDeviceID = nil
                 DispatchQueue.main.async { [weak self] in
@@ -711,13 +746,22 @@ class AudioRecorder: NSObject {
     private func cleanupEngineState() {
         stopAudioFlowWatchdog()
         stopMonitoringDevice()
+        // Remove observer BEFORE teardown to prevent re-entrant recovery
         if let observer = configChangeObserver {
             NotificationCenter.default.removeObserver(observer)
             configChangeObserver = nil
         }
         if let engine = audioEngine {
-            engine.inputNode.removeTap(onBus: 0)
-            engine.stop()
+            // ObjC exception safe — removeTap/stop can throw NSExceptions
+            // when the engine is in a bad state (e.g., after device disconnect)
+            var err: NSError?
+            ObjCTry({
+                engine.inputNode.removeTap(onBus: 0)
+                engine.stop()
+            }, &err)
+            if let err = err {
+                Logger.warning("Engine cleanup caught exception: \(err.localizedDescription)", subsystem: .audio)
+            }
         }
         audioEngine = nil
         converter = nil
