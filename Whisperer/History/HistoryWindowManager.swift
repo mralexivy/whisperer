@@ -36,8 +36,12 @@ class HistoryWindowManager {
             createWindow()
         }
 
+        // Temporarily float above all windows, then reset to normal
+        // so the window doesn't permanently stay above other apps
+        historyWindow?.level = .floating
         historyWindow?.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
+        historyWindow?.level = .normal
     }
 
     /// Shows workspace and dismisses the menu bar popover window
