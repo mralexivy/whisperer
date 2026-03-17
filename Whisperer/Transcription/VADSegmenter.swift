@@ -155,6 +155,15 @@ class VADSegmenter {
 
         guard remaining >= minSamples else { return nil }
 
+        // VAD check: skip tail if no speech detected
+        if let vad = vad {
+            let tailSamples = Array(allSamples[lastTranscribedIndex...])
+            if !vad.containsSpeech(samples: tailSamples) {
+                Logger.debug("Tail has no speech (VAD), skipping transcription", subsystem: .transcription)
+                return nil
+            }
+        }
+
         return makeChunk(
             allSamples: allSamples,
             startSample: lastTranscribedIndex,

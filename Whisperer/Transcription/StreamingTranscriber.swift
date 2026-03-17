@@ -437,6 +437,12 @@ class StreamingTranscriber {
             return
         }
 
+        // Energy check as secondary guard (when VAD is nil)
+        if !hasEnergy(tailChunk.samples) {
+            Logger.debug("Tail audio has no energy, skipping", subsystem: .transcription)
+            return
+        }
+
         let tailDuration = Double(tailChunk.endSample - tailChunk.startSample) / sampleRate
         Logger.debug("Transcribing tail: \(String(format: "%.1f", tailDuration))s", subsystem: .transcription)
 
