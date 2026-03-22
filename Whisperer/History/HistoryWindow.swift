@@ -65,6 +65,10 @@ class HistoryWindow: NSWindow {
         // We keep the window alive for reuse
         self.isReleasedWhenClosed = false
 
+        // Disable macOS window restoration — restored windows bypass HistoryWindowManager
+        // and appear as unmanaged zombie windows that can't be interacted with
+        self.isRestorable = false
+
         // Set delegate for window lifecycle events
         self.delegate = self
 

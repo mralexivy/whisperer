@@ -31,6 +31,13 @@ class HistoryWindowManager {
             return
         }
 
+        // Close any orphaned HistoryWindow instances (e.g. from macOS window restoration)
+        // that aren't managed by us — they appear as stale, non-interactive zombie windows
+        for window in NSApp.windows where window is HistoryWindow && window !== historyWindow {
+            window.orderOut(nil)
+            window.close()
+        }
+
         // Create window lazily on first use (keep it alive for reuse)
         if historyWindow == nil {
             createWindow()
