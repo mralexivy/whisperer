@@ -1768,6 +1768,13 @@ class AppState: ObservableObject {
                     return
                 }
 
+                // Sync device selection — clears any recovery-override from previous recording
+                if self.audioDeviceManager.preferredDeviceUID != nil {
+                    self.audioRecorder?.selectedDeviceID = self.audioDeviceManager.selectedDevice?.id
+                } else {
+                    self.audioRecorder?.selectedDeviceID = nil
+                }
+
                 // AudioRecorder handles its own timeouts internally (1s per CoreAudio
                 // call on GCD, with retry). No TaskGroup race needed here.
                 let audioURL = try await audioRecorder?.startRecording()

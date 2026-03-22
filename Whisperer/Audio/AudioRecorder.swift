@@ -587,6 +587,9 @@ class AudioRecorder: NSObject {
         cleanupEngineState()
         recordingStartTime = nil
 
+        // Don't carry recovery device to next recording — let AppState set it fresh
+        selectedDeviceID = nil
+
         Logger.debug("Audio recording stopped", subsystem: .audio)
     }
 
