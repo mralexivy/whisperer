@@ -1270,6 +1270,11 @@ class AppState: ObservableObject {
             return text
         }
 
+        // Skip AI post-processing if text has no real word content (silence/hallucination leak)
+        guard text.contains(where: { $0.isLetter }) else {
+            return text
+        }
+
         let mode = AIModeManager.shared.activeMode
         guard !mode.systemPrompt.isEmpty else { return text }
 
@@ -1328,6 +1333,9 @@ class AppState: ObservableObject {
     /// Apply list formatting to transcribed text (deterministic engine + optional LLM fallback)
     private func applyListFormatting(_ text: String) async -> String {
         guard listFormattingEnabled else { return text }
+
+        // Skip list formatting if text has no real word content
+        guard text.contains(where: { $0.isLetter }) else { return text }
 
         let result = ListFormatter.format(text)
 
