@@ -3,13 +3,39 @@
 //  Whisperer
 //
 //  Microphone capture using AVAudioEngine for real-time streaming
-//  Also saves to WAV file for backup/replay
 //
 
 import AVFoundation
 import Accelerate
 import CoreAudio
 import AudioToolbox
+
+// MARK: - Failure Tracking
+
+enum RecordingFailureReason: String {
+    case explicitDeviceBindFailed = "explicit_device_bind_failed"
+    case audioUnitInitFailed = "audio_unit_init_failed"
+    case invalidFormat = "invalid_format"
+    case noAudioFlowAfterStart = "no_audio_flow_after_start"
+    case deviceLostDuringRecording = "device_lost_during_recording"
+    case restartOnDefaultFailed = "restart_on_default_failed"
+    case engineCreationFailed = "engine_creation_failed"
+    case tapInstallFailed = "tap_install_failed"
+    case microphonePermissionDenied = "microphone_permission_denied"
+}
+
+struct StartupFailure {
+    let stage: String          // "device_bind", "engine_prepare", "engine_start", "flow_verify"
+    let route: ResolvedInputRoute
+    let generation: Int
+    let reason: RecordingFailureReason
+    let osStatus: OSStatus?    // underlying CoreAudio error code
+    let elapsedMs: Int         // time from attempt start to failure
+
+    func log() {
+        Logger.error("StartupFailure [gen=\(generation)] stage=\(stage) route=\(route) reason=\(reason.rawValue) osStatus=\(osStatus.map(String.init) ?? "nil") elapsed=\(elapsedMs)ms", subsystem: .audio)
+    }
+}
 
 class AudioRecorder: NSObject {
     private var audioEngine: AVAudioEngine?
@@ -27,8 +53,8 @@ class AudioRecorder: NSObject {
     // Callback for streaming samples (16kHz mono float32)
     var onStreamingSamples: (([Float]) -> Void)?
 
-    // Callback for device recovery events (message describing what happened)
-    var onDeviceRecovery: ((String) -> Void)?
+    // Callback for device recovery events (reason describing what happened)
+    var onDeviceRecovery: ((RecordingFailureReason) -> Void)?
 
     // Callback when audio engine is running but no data flows (silent recording)
     var onAudioFlowTimeout: (() -> Void)?
@@ -43,115 +69,63 @@ class AudioRecorder: NSObject {
     // Target format for whisper: 16kHz mono
     private let targetSampleRate: Double = 16000.0
 
-    // Selected input device (nil = use system default)
-    var selectedDeviceID: AudioDeviceID?
-
     // Silence detection — auto-recover if audio is dead
     private var consecutiveSilentCallbacks: Int = 0
     private let silenceRecoveryThreshold: Int = 18  // ~1.5s at 48kHz/4096 buffer
 
-    // Auto-recovery state
-    private var autoRecoveryEnabled = true
-    private var recoveryAttempts = 0
-    private let maxRecoveryAttempts = 5
-    private var isRecovering = false
-    private var recoveryTask: Task<Void, Never>?  // Tracked so stopRecording can cancel it
+    // State machine — only the active generation may mutate terminal state
+    private enum RecorderState: CustomStringConvertible {
+        case idle
+        case starting(generation: Int)
+        case recording(generation: Int)
+        case stopping(generation: Int)
+        case recovering(generation: Int)
+
+        var generation: Int? {
+            switch self {
+            case .idle: return nil
+            case .starting(let g), .recording(let g), .stopping(let g), .recovering(let g): return g
+            }
+        }
+
+        var description: String {
+            switch self {
+            case .idle: return "idle"
+            case .starting(let g): return "starting(gen=\(g))"
+            case .recording(let g): return "recording(gen=\(g))"
+            case .stopping(let g): return "stopping(gen=\(g))"
+            case .recovering(let g): return "recovering(gen=\(g))"
+            }
+        }
+    }
+
+    private var recorderState: RecorderState = .idle
+    private var currentGeneration = 0
+
+    // Recovery state
+    private var recoveryTask: Task<Void, Never>?
     private var converter: AVAudioConverter?
     private var outputFormat: AVAudioFormat?
     private var recordingStartTime: Date?  // Track when recording started for grace period
     private let startupGracePeriod: TimeInterval = 1.5  // Ignore config changes for 1.5s after start
-    private var recordingGeneration = 0  // Incremented each startRecording call; stale retries bail out
 
     // Notification observer for audio engine configuration changes
     private var configChangeObserver: NSObjectProtocol?
 
-    // Device-alive monitoring: detect when the recording device dies (e.g. monitor unplugged)
-    // This fires immediately when the device vanishes, unlike AVAudioEngineConfigurationChange
-    // which may be delayed or not fire at all.
+    // Device-alive monitoring: detect when the recording device dies
     private var monitoredDeviceID: AudioDeviceID?
     private var deviceAliveListenerBlock: AudioObjectPropertyListenerBlock?
 
     override init() {
         super.init()
-        // Observer setup moved to startRecordingInternal() to observe only our engine
     }
 
     deinit {
-        // Safety net: clean up observers if stopRecording() was never called
         stopAudioFlowWatchdog()
         stopMonitoringDevice()
         if let observer = configChangeObserver {
             NotificationCenter.default.removeObserver(observer)
             configChangeObserver = nil
-        }
-    }
-
-    // MARK: - Audio Engine Observers
-    // Note: Observer is now registered per-recording session in startRecordingInternal()
-    // and removed in stopRecording() to only monitor our specific engine instance
-
-    /// Silently recover the audio engine. No user-facing messages — just fix it.
-    /// Keeps retrying with increasing backoff until it works or recording is stopped.
-    private func recoverAudioEngine() async {
-        guard autoRecoveryEnabled, !isRecovering else { return }
-
-        isRecovering = true
-        recoveryAttempts += 1
-        Logger.debug("Silent recovery attempt \(recoveryAttempts)...", subsystem: .audio)
-
-        // Stop current engine completely — engine released on background thread
-        cleanupEngineState()
-
-        // Fall back to built-in mic — the system default may be the same broken
-        // device that caused the failure (e.g., stale aggregate device after sleep)
-        selectedDeviceID = await findBuiltInMicID()
-        if selectedDeviceID == nil {
-            Logger.debug("No built-in mic found, will use system default", subsystem: .audio)
-        }
-
-        // Backoff: 300ms first attempt, 500ms second, 1s third+
-        let backoffNs: UInt64 = recoveryAttempts <= 1 ? 300_000_000 :
-                                recoveryAttempts <= 2 ? 500_000_000 : 1_000_000_000
-        try? await Task.sleep(nanoseconds: backoffNs)
-
-        // Check if recovery was cancelled (stopRecording called during backoff)
-        guard !Task.isCancelled else {
-            Logger.debug("Recovery cancelled (recording stopped during backoff)", subsystem: .audio)
-            isRecovering = false
-            return
-        }
-
-        // Check if recording was stopped during the wait
-        // (user may have released button during recovery)
-        guard isRecording else {
-            Logger.debug("Recording stopped during recovery, not restarting", subsystem: .audio)
-            isRecovering = false
-            return
-        }
-
-        // Try to restart
-        do {
-            _ = try await startRecordingInternal()
-            Logger.info("Audio engine recovered silently (attempt \(recoveryAttempts))", subsystem: .audio)
-            recoveryAttempts = 0  // Reset on success
-            isRecovering = false
-        } catch {
-            Logger.error("Recovery attempt \(recoveryAttempts) failed: \(error.localizedDescription)", subsystem: .audio)
-
-            // Keep retrying until maxRecoveryAttempts, then notify AppState to
-            // stop and reset so the NEXT recording attempt starts clean
-            if recoveryAttempts < maxRecoveryAttempts {
-                isRecovering = false  // Allow next attempt
-                await recoverAudioEngine()
-            } else {
-                Logger.error("All \(maxRecoveryAttempts) recovery attempts failed, resetting for next recording", subsystem: .audio)
-                isRecovering = false
-                // Signal AppState so it resets to idle — next Fn press starts fresh
-                DispatchQueue.main.async { [weak self] in
-                    self?.onAudioFlowTimeout?()
-                }
-                await stopRecording()
-            }
         }
     }
 
@@ -186,62 +160,81 @@ class AudioRecorder: NSObject {
 
     // MARK: - Recording
 
-    func startRecording() async throws -> URL {
+    /// Start recording with a resolved input route.
+    /// Three-attempt policy:
+    ///   1. Use requested route (explicit or default)
+    ///   2. Full teardown, system default
+    ///   3. Full teardown + 300ms settle, system default
+    func startRecording(route: ResolvedInputRoute) async throws -> URL {
         guard !isRecording else {
             Logger.warning("startRecording called but already recording", subsystem: .audio)
             throw RecordingError.alreadyRecording
         }
 
-        recoveryAttempts = 0
-        isRecovering = false
+        currentGeneration += 1
+        let generation = currentGeneration
         recordingStartTime = Date()
-        recordingGeneration += 1
-        let myGeneration = recordingGeneration
 
-        var lastError: Error?
+        // Attempt 1: use the provided route
+        recorderState = .starting(generation: generation)
+        let attemptStart = Date()
 
-        for attempt in 1...3 {
-            do {
-                return try await startRecordingInternal()
-            } catch {
-                lastError = error
-
-                // A newer startRecording() call has taken over — don't retry
-                guard recordingGeneration == myGeneration else {
-                    Logger.debug("Stale recording attempt (gen \(myGeneration) vs \(recordingGeneration)), not retrying", subsystem: .audio)
-                    throw error
-                }
-
-                Logger.warning("Recording start failed (attempt \(attempt)/3): \(error.localizedDescription)", subsystem: .audio)
-
-                // Don't retry after the last attempt
-                guard attempt < 3 else { break }
-
-                cleanupEngineState()
-
-                // On retry 2+, use built-in mic explicitly — the system default
-                // may be a stale/dead device after sleep/wake
-                if attempt >= 2 {
-                    selectedDeviceID = await findBuiltInMicID()
-                }
-
-                // Let CoreAudio settle before retrying
-                try? await Task.sleep(nanoseconds: 300_000_000)
-
-                guard recordingGeneration == myGeneration else {
-                    Logger.debug("Stale recording attempt after sleep (gen \(myGeneration) vs \(recordingGeneration)), not retrying", subsystem: .audio)
-                    throw error
-                }
-
-                recordingStartTime = Date()
+        do {
+            return try await startRecordingInternal(route: route, generation: generation)
+        } catch {
+            guard isGenerationCurrent(generation) else {
+                throw RecordingError.engineCleanedUp
             }
+
+            let elapsed = Int(Date().timeIntervalSince(attemptStart) * 1000)
+            let reason: RecordingFailureReason
+            switch route {
+            case .explicit(let uid, let deviceID):
+                reason = .explicitDeviceBindFailed
+                Logger.warning("Attempt 1 failed: explicit route uid=\(uid) id=\(deviceID) error=\(error.localizedDescription)", subsystem: .audio)
+            case .systemDefault:
+                reason = .audioUnitInitFailed
+                Logger.warning("Attempt 1 failed: default route error=\(error.localizedDescription)", subsystem: .audio)
+            }
+            StartupFailure(stage: "full_startup", route: route, generation: generation, reason: reason, osStatus: nil, elapsedMs: elapsed).log()
         }
 
-        throw lastError ?? RecordingError.audioUnitFailed
+        // Attempt 2: full teardown, system default
+        cleanupEngineState()
+        guard isGenerationCurrent(generation) else { throw RecordingError.engineCleanedUp }
+        recorderState = .starting(generation: generation)
+        recordingStartTime = Date()
+
+        do {
+            return try await startRecordingInternal(route: .systemDefault, generation: generation)
+        } catch {
+            guard isGenerationCurrent(generation) else { throw RecordingError.engineCleanedUp }
+            let elapsed = Int(Date().timeIntervalSince(recordingStartTime!) * 1000)
+            StartupFailure(stage: "full_startup", route: .systemDefault, generation: generation, reason: .restartOnDefaultFailed, osStatus: nil, elapsedMs: elapsed).log()
+        }
+
+        // Attempt 3: full teardown + 300ms settle, system default
+        cleanupEngineState()
+        try? await Task.sleep(nanoseconds: 300_000_000)
+        guard isGenerationCurrent(generation) else { throw RecordingError.engineCleanedUp }
+        recorderState = .starting(generation: generation)
+        recordingStartTime = Date()
+
+        do {
+            return try await startRecordingInternal(route: .systemDefault, generation: generation)
+        } catch {
+            let elapsed = Int(Date().timeIntervalSince(recordingStartTime!) * 1000)
+            StartupFailure(stage: "full_startup", route: .systemDefault, generation: generation, reason: .restartOnDefaultFailed, osStatus: nil, elapsedMs: elapsed).log()
+            recorderState = .idle
+            throw error
+        }
     }
 
-    private func startRecordingInternal() async throws -> URL {
+    private func isGenerationCurrent(_ generation: Int) -> Bool {
+        return currentGeneration == generation
+    }
 
+    private func startRecordingInternal(route: ResolvedInputRoute, generation: Int) async throws -> URL {
         // Check microphone permission first
         let hasPermission = await AudioRecorder.checkMicrophonePermission()
         guard hasPermission else {
@@ -250,8 +243,7 @@ class AudioRecorder: NSObject {
         }
         Logger.debug("Microphone permission confirmed", subsystem: .audio)
 
-        // Bail out if stop was called during the permission check
-        guard !Task.isCancelled else {
+        guard !Task.isCancelled, isGenerationCurrent(generation) else {
             throw RecordingError.engineCleanedUp
         }
 
@@ -261,24 +253,23 @@ class AudioRecorder: NSObject {
         let audioURL = tempDir.appendingPathComponent(fileName)
         currentURL = audioURL
 
-        // Setup audio engine
+        // Setup audio engine — fresh instance every time
         audioEngine = AVAudioEngine()
         guard let audioEngine = audioEngine else {
             Logger.error("Failed to create AVAudioEngine", subsystem: .audio)
             throw RecordingError.fileCreationFailed
         }
 
-        // Setup observer for THIS engine only (not all engines on the system)
+        // Setup observer for THIS engine only
         configChangeObserver = NotificationCenter.default.addObserver(
             forName: .AVAudioEngineConfigurationChange,
-            object: audioEngine,  // Only observe our engine, not all engines
+            object: audioEngine,
             queue: .main
         ) { [weak self] notification in
             guard let self = self else { return }
             Logger.warning("Audio engine configuration changed", subsystem: .audio)
 
             // Ignore config changes during startup grace period
-            // (audio muting and other system changes can trigger this right after start)
             if let startTime = self.recordingStartTime {
                 let elapsed = Date().timeIntervalSince(startTime)
                 if elapsed < self.startupGracePeriod {
@@ -287,65 +278,45 @@ class AudioRecorder: NSObject {
                 }
             }
 
-            if self.isRecording && self.autoRecoveryEnabled && !self.isRecovering {
-                Logger.debug("Attempting to recover from configuration change...", subsystem: .audio)
+            if self.isRecording, case .recording = self.recorderState {
+                Logger.debug("Config change during recording — triggering full recovery", subsystem: .audio)
                 self.recoveryTask = Task {
                     await self.recoverAudioEngine()
                 }
-            } else if self.isRecovering {
-                Logger.debug("Ignoring config change — recovery already in progress", subsystem: .audio)
             }
         }
 
-        // Voice processing disabled — it causes ~500ms+ startup delay due to
-        // KeystrokeSuppressor initialization and stream setup timeouts.
-        // Whisper handles raw audio well enough without preprocessing.
         Logger.debug("Voice processing disabled for instant startup", subsystem: .audio)
 
         // Force inputNode instantiation (creates the underlying AUHAL AudioUnit)
         let inputNode = audioEngine.inputNode
 
-        // Resolve and bind device BEFORE engine.prepare() — CoreAudio requires
-        // the device to be set before AudioUnit initialization. After sleep/wake,
-        // the system default device ID may be stale, so we re-resolve from AudioDeviceManager.
-        if let deviceID = selectedDeviceID {
-            let currentDevice = await AudioDeviceManager.shared.selectedDevice
-            if let current = currentDevice, current.id != deviceID {
-                Logger.info("Device ID changed (\(deviceID) -> \(current.id)), using current ID", subsystem: .audio)
-                selectedDeviceID = current.id
-            }
-            if setInputDevice(selectedDeviceID!, on: inputNode) {
-                Logger.debug("Using selected input device: \(selectedDeviceID!) (\(deviceName(for: selectedDeviceID!) ?? "unknown"))", subsystem: .audio)
+        // Bind device based on route
+        switch route {
+        case .explicit(let uid, let deviceID):
+            if setInputDevice(deviceID, on: inputNode) {
+                Logger.debug("Bound explicit device: uid=\(uid) id=\(deviceID) (\(deviceName(for: deviceID) ?? "unknown"))", subsystem: .audio)
             } else {
-                Logger.warning("Selected device unavailable, falling back to built-in mic", subsystem: .audio)
-                selectedDeviceID = nil
-                // Try built-in mic as fallback
-                if let builtInID = await findBuiltInMicID() {
-                    setInputDevice(builtInID, on: inputNode)
-                }
+                Logger.warning("Explicit device bind failed: uid=\(uid) id=\(deviceID), throwing to trigger default fallback", subsystem: .audio)
+                throw RecordingError.audioUnitFailed
             }
-        } else {
+        case .systemDefault:
             Logger.debug("Using system default input device", subsystem: .audio)
         }
 
-        // Bail out if engine was torn down during async device resolution
-        guard !Task.isCancelled, self.audioEngine != nil else {
-            Logger.debug("Engine cleaned up during device setup, aborting", subsystem: .audio)
+        guard !Task.isCancelled, self.audioEngine != nil, isGenerationCurrent(generation) else {
             throw RecordingError.engineCleanedUp
         }
 
-        // Prepare the engine — allocates resources and establishes the audio format
-        // for the bound device. Must happen after device binding, before format query.
+        // Prepare the engine — allocates resources for the bound device
         audioEngine.prepare()
 
-        // Query the node's output format AFTER prepare.
-        // The tap reads from the node's output, so the tap format must match outputFormat.
-        // Retry if format is 0Hz/0ch (HAL still initializing after sleep/wake).
+        // Query format AFTER prepare. Retry if 0Hz/0ch (HAL still initializing after sleep/wake).
         var inputFormat = inputNode.outputFormat(forBus: 0)
         if inputFormat.sampleRate == 0 || inputFormat.channelCount == 0 {
             Logger.warning("Initial format invalid (\(inputFormat.sampleRate)Hz, \(inputFormat.channelCount)ch), retrying...", subsystem: .audio)
             for attempt in 1...5 {
-                try? await Task.sleep(nanoseconds: 100_000_000)  // 100ms
+                try? await Task.sleep(nanoseconds: 100_000_000)
                 inputFormat = inputNode.outputFormat(forBus: 0)
                 if inputFormat.sampleRate > 0 && inputFormat.channelCount > 0 {
                     Logger.info("Format valid after retry \(attempt): \(inputFormat.sampleRate)Hz, \(inputFormat.channelCount)ch", subsystem: .audio)
@@ -379,14 +350,10 @@ class AudioRecorder: NSObject {
             throw RecordingError.invalidFormat
         }
         converter = newConverter
-
-        // Configure converter for proper downmixing from multi-channel to mono
-        // Map first input channel to mono output (channel 0)
         newConverter.channelMap = [0]
         Logger.debug("Converter: \(inputFormat.channelCount) channels → 1 channel, channel map: \(newConverter.channelMap)", subsystem: .audio)
 
         // Install tap on input node
-        // ObjC exception safe — installTap can throw NSExceptions when audio unit is in bad state
         let bufferSize: AVAudioFrameCount = 4096
         Logger.debug("Installing tap on input node (buffer size: \(bufferSize))", subsystem: .audio)
         var tapErr: NSError?
@@ -408,14 +375,12 @@ class AudioRecorder: NSObject {
         }
         Logger.debug("Tap installed successfully", subsystem: .audio)
 
-        // Start engine (use self.audioEngine in case we recreated it)
-        // ObjC exception safe — engine.start() can throw both Swift errors and NSExceptions
-        lastAudioCallbackTime = nil  // Reset for flow watchdog
-        consecutiveSilentCallbacks = 0  // Reset silence detection
+        // Start engine
+        lastAudioCallbackTime = nil
+        consecutiveSilentCallbacks = 0
         do {
             Logger.debug("Starting audio engine...", subsystem: .audio)
             guard let engine = self.audioEngine else {
-                Logger.error("Audio engine is nil, cannot start", subsystem: .audio)
                 throw RecordingError.fileCreationFailed
             }
             var startException: NSError?
@@ -435,19 +400,16 @@ class AudioRecorder: NSObject {
                 throw RecordingError.audioUnitFailed
             }
             isRecording = true
+            recorderState = .recording(generation: generation)
 
-            // Monitor the actual device the engine is using for disconnect detection.
-            // May differ from selectedDeviceID if fallback to system default occurred.
+            // Monitor the actual device the engine is using for disconnect detection
             if let engineDeviceID = getEngineDeviceID() {
                 startMonitoringDevice(engineDeviceID)
             }
 
-            // Continuous audio flow watchdog: checks every 2s that audio data is still
-            // arriving. Catches both initial startup failures AND mid-recording audio death
-            // (e.g., aggregate device disappears, audio unit silently stops producing data).
             startAudioFlowWatchdog()
 
-            Logger.debug("Started recording", subsystem: .audio)
+            Logger.debug("Started recording (route: \(route), gen: \(generation))", subsystem: .audio)
             return audioURL
         } catch {
             Logger.error("Failed to start audio engine: \(error.localizedDescription)", subsystem: .audio)
@@ -456,14 +418,13 @@ class AudioRecorder: NSObject {
     }
 
     private func processAudioBufferSafe(buffer: AVAudioPCMBuffer, converter: AVAudioConverter, outputFormat: AVAudioFormat) throws {
-        // Track audio data arrival — used by continuous flow watchdog
+        // Track audio data arrival
         let isFirst = lastAudioCallbackTime == nil
         lastAudioCallbackTime = Date()
         if isFirst {
             Logger.debug("First audio data received", subsystem: .audio)
         }
 
-        // Calculate output buffer size
         let ratio = outputFormat.sampleRate / buffer.format.sampleRate
         let outputFrameCapacity = AVAudioFrameCount(Double(buffer.frameLength) * ratio) + 1
 
@@ -472,7 +433,6 @@ class AudioRecorder: NSObject {
             throw RecordingError.invalidFormat
         }
 
-        // Convert to 16kHz mono
         var error: NSError?
         let inputBlock: AVAudioConverterInputBlock = { inNumPackets, outStatus in
             outStatus.pointee = .haveData
@@ -491,7 +451,6 @@ class AudioRecorder: NSObject {
             throw RecordingError.invalidFormat
         }
 
-        // Extract float samples
         guard let channelData = outputBuffer.floatChannelData else {
             Logger.error("No channel data in output buffer", subsystem: .audio)
             throw RecordingError.invalidFormat
@@ -513,9 +472,10 @@ class AudioRecorder: NSObject {
         if rms < 0.001 {
             consecutiveSilentCallbacks += 1
             let inGracePeriod = recordingStartTime.map { Date().timeIntervalSince($0) < 2.0 } ?? false
-            if consecutiveSilentCallbacks >= silenceRecoveryThreshold && !isRecovering && !inGracePeriod {
-                Logger.warning("Audio silent for ~1.5s (device: \(selectedDeviceID.map(String.init) ?? "default")), recovering", subsystem: .audio)
-                selectedDeviceID = nil
+            if consecutiveSilentCallbacks >= silenceRecoveryThreshold,
+               case .recording = recorderState,
+               !inGracePeriod {
+                Logger.warning("Audio silent for ~1.5s, triggering recovery to default route", subsystem: .audio)
                 DispatchQueue.main.async { [weak self] in
                     guard let self = self else { return }
                     self.recoveryTask = Task { await self.recoverAudioEngine() }
@@ -525,30 +485,22 @@ class AudioRecorder: NSObject {
             consecutiveSilentCallbacks = 0
         }
 
-        // Send samples to streaming transcriber (wrap in autoreleasepool to prevent memory buildup)
+        // Send samples to streaming transcriber
         autoreleasepool {
             onStreamingSamples?(samples)
         }
-
-        // Don't write to file during recording - it causes crashes on the real-time audio thread
-        // The streaming transcriber handles the audio directly
     }
 
     private func calculateRMS(samples: [Float]) -> Float {
         guard !samples.isEmpty else { return 0 }
-
         var sum: Float = 0
         vDSP_measqv(samples, 1, &sum, vDSP_Length(samples.count))
         let rms = sqrt(sum)
-
-        // Normalize (typical speech is around 0.1-0.3 RMS)
         return min(rms * 4.0, 1.0)
     }
 
     func stopRecording() async {
-        // Cancel any in-progress audio recovery before tearing down.
-        // Recovery's startRecordingInternal() may be mid-execution — cancelling
-        // prevents it from racing with cleanupEngineState() below.
+        // Cancel any in-progress recovery before tearing down
         recoveryTask?.cancel()
         recoveryTask = nil
 
@@ -557,14 +509,15 @@ class AudioRecorder: NSObject {
             return
         }
 
+        let generation = currentGeneration
+        recorderState = .stopping(generation: generation)
+
         Logger.debug("Stopping audio recording...", subsystem: .audio)
 
-        // Wait for first audio data if engine hasn't produced any yet.
-        // After sleep/wake, the audio HAL needs extra time to initialize.
-        // Without this, a quick Fn tap after wake records 0 samples.
+        // Wait for first audio data if engine hasn't produced any yet
         if lastAudioCallbackTime == nil {
             Logger.debug("No audio data yet, waiting for engine warmup...", subsystem: .audio)
-            for _ in 0..<10 {  // Up to 500ms
+            for _ in 0..<10 {
                 try? await Task.sleep(nanoseconds: 50_000_000)
                 if lastAudioCallbackTime != nil { break }
             }
@@ -575,20 +528,13 @@ class AudioRecorder: NSObject {
 
         isRecording = false
 
-        // Drain delay: wait for pending audio buffers to be delivered
-        // The tap callback continues running until we remove the tap.
-        // Buffer is 4096 frames at ~48kHz = ~85ms per buffer.
-        // Wait 200ms to cover ~2-3 buffer cycles, ensuring last words are captured.
+        // Drain delay: wait for pending audio buffers
         try? await Task.sleep(nanoseconds: 200_000_000)
-
         Logger.debug("Drain period complete, removing tap", subsystem: .audio)
 
-        // Tear down the engine and all associated state
         cleanupEngineState()
         recordingStartTime = nil
-
-        // Don't carry recovery device to next recording — let AppState set it fresh
-        selectedDeviceID = nil
+        recorderState = .idle
 
         Logger.debug("Audio recording stopped", subsystem: .audio)
     }
@@ -597,24 +543,56 @@ class AudioRecorder: NSObject {
         return currentURL
     }
 
-    // MARK: - Timeout-Protected CoreAudio Queries
+    // MARK: - Mid-Recording Recovery
 
-    /// Find the built-in microphone device ID from AudioDeviceManager.
-    /// Used as a reliable fallback when the system default device is broken after sleep/wake.
-    private func findBuiltInMicID() async -> AudioDeviceID? {
-        let devices = await AudioDeviceManager.shared.availableInputDevices
-        if let builtIn = devices.first(where: { $0.name.contains("MacBook") || $0.name.contains("Built-in") }) {
-            Logger.debug("Found built-in mic: \(builtIn.name) (ID: \(builtIn.id))", subsystem: .audio)
-            return builtIn.id
+    /// Full teardown + rebuild on system default route.
+    /// Called when device dies, audio stalls, or config changes mid-recording.
+    private func recoverAudioEngine() async {
+        guard case .recording(let generation) = recorderState else { return }
+
+        recorderState = .recovering(generation: generation)
+        Logger.info("Mid-recording recovery: full teardown + rebuild on default route (gen: \(generation))", subsystem: .audio)
+
+        // Full teardown
+        cleanupEngineState()
+
+        // Short settle delay
+        try? await Task.sleep(nanoseconds: 300_000_000)
+
+        guard isGenerationCurrent(generation), !Task.isCancelled else {
+            Logger.debug("Recovery cancelled (recording stopped or generation changed)", subsystem: .audio)
+            recorderState = .idle
+            return
         }
-        return nil
+
+        // Check if recording was stopped during the wait
+        guard isRecording else {
+            Logger.debug("Recording stopped during recovery, not restarting", subsystem: .audio)
+            recorderState = .idle
+            return
+        }
+
+        // Rebuild on system default
+        recorderState = .starting(generation: generation)
+        recordingStartTime = Date()
+        do {
+            _ = try await startRecordingInternal(route: .systemDefault, generation: generation)
+            Logger.info("Mid-recording recovery succeeded on default route (gen: \(generation))", subsystem: .audio)
+            DispatchQueue.main.async { [weak self] in
+                self?.onDeviceRecovery?(.deviceLostDuringRecording)
+            }
+        } catch {
+            Logger.error("Mid-recording recovery failed: \(error.localizedDescription)", subsystem: .audio)
+            recorderState = .idle
+            isRecording = false
+            DispatchQueue.main.async { [weak self] in
+                self?.onAudioFlowTimeout?()
+            }
+        }
     }
 
     // MARK: - Device-Alive Monitoring
 
-    /// Query the AudioDeviceID currently bound to the engine's input audio unit.
-    /// Returns the actual device the engine is recording from (may differ from
-    /// selectedDeviceID if fallback to system default occurred).
     private func getEngineDeviceID() -> AudioDeviceID? {
         guard let au = audioEngine?.inputNode.audioUnit else { return nil }
         var deviceID: AudioDeviceID = 0
@@ -630,9 +608,6 @@ class AudioRecorder: NSObject {
         return status == noErr ? deviceID : nil
     }
 
-    /// Register a kAudioDevicePropertyDeviceIsAlive listener on the given device.
-    /// When the device dies (e.g. monitor unplugged), triggers recovery immediately —
-    /// faster and more reliable than AVAudioEngineConfigurationChange.
     private func startMonitoringDevice(_ deviceID: AudioDeviceID) {
         stopMonitoringDevice()
 
@@ -664,7 +639,6 @@ class AudioRecorder: NSObject {
         }
     }
 
-    /// Unregister the device-alive listener. Safe to call when no listener is active.
     private func stopMonitoringDevice() {
         guard let deviceID = monitoredDeviceID, let listenerBlock = deviceAliveListenerBlock else { return }
 
@@ -680,8 +654,6 @@ class AudioRecorder: NSObject {
         deviceAliveListenerBlock = nil
     }
 
-    /// Called when the monitored device's isAlive property changes.
-    /// Verifies the device is actually dead before triggering recovery.
     private func handleDeviceDied() {
         guard let deviceID = monitoredDeviceID else { return }
 
@@ -696,10 +668,10 @@ class AudioRecorder: NSObject {
         let status = AudioObjectGetPropertyData(deviceID, &propertyAddress, 0, nil, &size, &isAlive)
 
         if status != noErr || isAlive == 0 {
-            Logger.warning("Device \(deviceID) died — triggering immediate recovery", subsystem: .audio)
+            Logger.warning("Device \(deviceID) died — triggering full recovery", subsystem: .audio)
             stopMonitoringDevice()
 
-            if isRecording && autoRecoveryEnabled {
+            if isRecording, case .recording = recorderState {
                 recoveryTask = Task {
                     await recoverAudioEngine()
                 }
@@ -709,25 +681,21 @@ class AudioRecorder: NSObject {
 
     // MARK: - Continuous Audio Flow Watchdog
 
-    /// Start a repeating timer that verifies audio data is still flowing.
-    /// Fires every 2s; if no audio callback has arrived in the last 3s, triggers recovery.
     private func startAudioFlowWatchdog() {
         stopAudioFlowWatchdog()
         let timer = DispatchSource.makeTimerSource(queue: .main)
-        // First check after 2s (initial startup), then every 2s thereafter
         timer.schedule(deadline: .now() + 2.0, repeating: 2.0)
         timer.setEventHandler { [weak self] in
-            guard let self = self, self.isRecording else { return }
+            guard let self = self, self.isRecording, case .recording = self.recorderState else { return }
 
             if let lastTime = self.lastAudioCallbackTime {
                 let elapsed = Date().timeIntervalSince(lastTime)
                 if elapsed > self.audioFlowTimeout {
                     Logger.error("Audio flow stopped — no data for \(String(format: "%.1f", elapsed))s, triggering recovery", subsystem: .audio)
-                    self.stopAudioFlowWatchdog()  // Prevent re-entry during recovery
+                    self.stopAudioFlowWatchdog()
                     self.recoveryTask = Task { await self.recoverAudioEngine() }
                 }
             } else {
-                // No audio data has arrived since engine started
                 Logger.error("Audio engine running but no data flowing after startup — triggering recovery", subsystem: .audio)
                 self.stopAudioFlowWatchdog()
                 self.recoveryTask = Task { await self.recoverAudioEngine() }
@@ -745,19 +713,14 @@ class AudioRecorder: NSObject {
     // MARK: - Engine Cleanup
 
     /// Fully tear down the audio engine and all associated state.
-    /// Safe to call even if the engine is nil or partially initialized.
     private func cleanupEngineState() {
         stopAudioFlowWatchdog()
         stopMonitoringDevice()
-        // Remove observer BEFORE teardown to prevent re-entrant recovery
         if let observer = configChangeObserver {
             NotificationCenter.default.removeObserver(observer)
             configChangeObserver = nil
         }
         if let engine = audioEngine {
-            // ObjC exception safe — removeTap/stop can throw NSExceptions
-            // when the engine is in a bad state (e.g., after device disconnect)
-            // Separate blocks so engine.stop() runs even if removeTap throws
             var tapErr: NSError?
             ObjCTry({
                 engine.inputNode.removeTap(onBus: 0)
@@ -781,23 +744,18 @@ class AudioRecorder: NSObject {
 
     // MARK: - Device Selection
 
-    /// Attempt to set a specific input device. Returns true if successful.
-    /// If this fails, the system default device will be used automatically.
     @discardableResult
     private func setInputDevice(_ deviceID: AudioDeviceID, on inputNode: AVAudioInputNode) -> Bool {
-        // Verify device exists and has input capability first
         guard isValidInputDevice(deviceID) else {
-            Logger.warning("Device \(deviceID) is not a valid input device, using default", subsystem: .audio)
+            Logger.warning("Device \(deviceID) is not a valid input device", subsystem: .audio)
             return false
         }
 
-        // Get the audio unit from the input node
         guard let au = inputNode.audioUnit else {
-            Logger.warning("Failed to get audio unit from input node, using default device", subsystem: .audio)
+            Logger.warning("Failed to get audio unit from input node", subsystem: .audio)
             return false
         }
 
-        // Set the device on the audio unit
         var deviceIDVar = deviceID
         let status = AudioUnitSetProperty(
             au,
@@ -812,12 +770,11 @@ class AudioRecorder: NSObject {
             Logger.debug("Set input device ID: \(deviceID) (\(deviceName(for: deviceID) ?? "unknown"))", subsystem: .audio)
             return true
         } else {
-            Logger.warning("Failed to set input device (error: \(status)), using default", subsystem: .audio)
+            Logger.warning("Failed to set input device \(deviceID) (error: \(status))", subsystem: .audio)
             return false
         }
     }
 
-    /// Resolve a device ID to its human-readable name
     private func deviceName(for deviceID: AudioDeviceID) -> String? {
         var name: CFString = "" as CFString
         var size = UInt32(MemoryLayout<CFString>.size)
@@ -832,7 +789,6 @@ class AudioRecorder: NSObject {
         return status == noErr ? name as String : nil
     }
 
-    /// Check if a device ID is valid and has input capability
     private func isValidInputDevice(_ deviceID: AudioDeviceID) -> Bool {
         var propertyAddress = AudioObjectPropertyAddress(
             mSelector: kAudioDevicePropertyStreams,
@@ -849,7 +805,6 @@ class AudioRecorder: NSObject {
             &dataSize
         )
 
-        // Device is valid if it has input streams (dataSize > 0)
         return status == noErr && dataSize > 0
     }
 }
@@ -860,5 +815,5 @@ enum RecordingError: Error {
     case fileCreationFailed
     case microphonePermissionDenied
     case audioUnitFailed
-    case engineCleanedUp  // Engine was torn down during async setup (stop called mid-recovery)
+    case engineCleanedUp
 }

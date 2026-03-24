@@ -195,7 +195,6 @@ class AppState: ObservableObject {
 
     // Audio device management
     let audioDeviceManager = AudioDeviceManager.shared
-    private var deviceSubscription: AnyCancellable?
 
     // Main-thread watchdog: forces state to .idle if stuck in .recording/.stopping.
     // Uses DispatchSourceTimer on the main RunLoop — independent of Swift cooperative thread pool.
@@ -531,22 +530,8 @@ class AppState: ObservableObject {
             }
         }
 
-        // Start monitoring audio device changes
+        // Start monitoring audio device changes (for UI device picker only)
         audioDeviceManager.startMonitoring()
-
-        // Subscribe to device changes to update audioRecorder
-        // Only set device ID if user explicitly selected a non-default device
-        deviceSubscription = audioDeviceManager.$selectedDevice
-            .sink { [weak self] device in
-                guard let self = self else { return }
-                // Only set custom device if user explicitly selected one (preferredDeviceUID is not nil)
-                // If preferredDeviceUID is nil, use system default (don't set any device)
-                if self.audioDeviceManager.preferredDeviceUID != nil {
-                    self.audioRecorder?.selectedDeviceID = device?.id
-                } else {
-                    self.audioRecorder?.selectedDeviceID = nil
-                }
-            }
     }
 
     // MARK: - Prompt Words
@@ -1601,9 +1586,11 @@ class AppState: ObservableObject {
                     self.livePreviewEngine?.feedAudio(samples)
                 }
 
-                // AudioRecorder handles its own timeouts internally (1s per CoreAudio
-                // call on GCD, with retry). No TaskGroup race needed here.
-                let audioURL = try await audioRecorder?.startRecording()
+                // Resolve input route fresh at recording time
+                let route = audioDeviceManager.resolveInputRouteForRecording()
+                Logger.info("In-app recording with route: \(route)", subsystem: .audio)
+
+                let audioURL = try await audioRecorder?.startRecording(route: route)
                 currentAudioURL = audioURL
                 cancelStateWatchdog()  // Startup succeeded, audio is flowing
                 startRecordingWatchdog()  // Long-running watchdog for stuck .recording state
@@ -1781,16 +1768,11 @@ class AppState: ObservableObject {
                     return
                 }
 
-                // Sync device selection — clears any recovery-override from previous recording
-                if self.audioDeviceManager.preferredDeviceUID != nil {
-                    self.audioRecorder?.selectedDeviceID = self.audioDeviceManager.selectedDevice?.id
-                } else {
-                    self.audioRecorder?.selectedDeviceID = nil
-                }
+                // Resolve input route fresh at recording time — no cached device IDs
+                let route = audioDeviceManager.resolveInputRouteForRecording()
+                Logger.info("Recording with route: \(route)", subsystem: .audio)
 
-                // AudioRecorder handles its own timeouts internally (1s per CoreAudio
-                // call on GCD, with retry). No TaskGroup race needed here.
-                let audioURL = try await audioRecorder?.startRecording()
+                let audioURL = try await audioRecorder?.startRecording(route: route)
                 currentAudioURL = audioURL
                 cancelStateWatchdog()  // Startup succeeded, audio is flowing
                 startRecordingWatchdog()  // Long-running watchdog for stuck .recording state

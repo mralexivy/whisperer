@@ -11,6 +11,22 @@ import Combine
 import AVFoundation
 import AppKit
 
+// MARK: - ResolvedInputRoute
+
+/// Represents the resolved audio input route at recording start time.
+/// Device identity is resolved fresh from CoreAudio — never cached.
+enum ResolvedInputRoute: Sendable, CustomStringConvertible {
+    case systemDefault
+    case explicit(uid: String, deviceID: AudioDeviceID)
+
+    var description: String {
+        switch self {
+        case .systemDefault: return "systemDefault"
+        case .explicit(let uid, let id): return "explicit(uid: \(uid), id: \(id))"
+        }
+    }
+}
+
 @MainActor
 class AudioDeviceManager: ObservableObject {
     static let shared = AudioDeviceManager()
@@ -286,6 +302,62 @@ class AudioDeviceManager: ObservableObject {
         }
 
         return AudioDevice(id: deviceID, name: name, uid: uid)
+    }
+
+    // MARK: - Route Resolution for Recording
+
+    /// Resolve the input route to use for a recording session.
+    /// If the user has a preferred device, resolves its UID to a current AudioDeviceID
+    /// via a fresh CoreAudio query. Returns .systemDefault if no preference or device not found.
+    func resolveInputRouteForRecording() -> ResolvedInputRoute {
+        guard let preferredUID = preferredDeviceUID else {
+            return .systemDefault
+        }
+        if let deviceID = Self.resolveDeviceIDByUID(preferredUID) {
+            return .explicit(uid: preferredUID, deviceID: deviceID)
+        }
+        Logger.warning("Preferred device UID '\(preferredUID)' not found, using default route", subsystem: .audio)
+        return .systemDefault
+    }
+
+    /// Pure HAL lookup: resolve a device UID to its current AudioDeviceID.
+    /// No caching, no fallback, no mutation. Returns nil if device not found.
+    nonisolated static func resolveDeviceIDByUID(_ uid: String) -> AudioDeviceID? {
+        var propertyAddress = AudioObjectPropertyAddress(
+            mSelector: kAudioHardwarePropertyDevices,
+            mScope: kAudioObjectPropertyScopeGlobal,
+            mElement: kAudioObjectPropertyElementMain
+        )
+
+        var propertySize: UInt32 = 0
+        var status = AudioObjectGetPropertyDataSize(
+            AudioObjectID(kAudioObjectSystemObject),
+            &propertyAddress,
+            0,
+            nil,
+            &propertySize
+        )
+        guard status == noErr, propertySize > 0 else { return nil }
+
+        let deviceCount = Int(propertySize) / MemoryLayout<AudioDeviceID>.size
+        var deviceIDs = [AudioDeviceID](repeating: 0, count: deviceCount)
+
+        status = AudioObjectGetPropertyData(
+            AudioObjectID(kAudioObjectSystemObject),
+            &propertyAddress,
+            0,
+            nil,
+            &propertySize,
+            &deviceIDs
+        )
+        guard status == noErr else { return nil }
+
+        for deviceID in deviceIDs {
+            if let deviceUID = getDeviceUID(deviceID: deviceID), deviceUID == uid {
+                return deviceID
+            }
+        }
+        return nil
     }
 
     // MARK: - Device Monitoring

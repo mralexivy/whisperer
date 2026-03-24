@@ -110,10 +110,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         #endif
 
 
-        // Set initial selected microphone (only when user explicitly chose one)
-        if appState.audioDeviceManager.preferredDeviceUID != nil {
-            appState.audioRecorder?.selectedDeviceID = appState.audioDeviceManager.selectedDevice?.id
-        }
+        // Device selection is resolved fresh at recording time via
+        // audioDeviceManager.resolveInputRouteForRecording() — no cached device IDs.
 
         // Setup audio callback for waveform
         appState.audioRecorder?.onAmplitudeUpdate = { [weak self] amplitude in
