@@ -1847,6 +1847,15 @@ struct ModelMenuItem: View {
                                 .padding(.vertical, 1)
                                 .background(Capsule().fill(MBColors.accent.opacity(0.15)))
                         }
+
+                        if let lang = model.supportedLanguage {
+                            Text(lang.displayName)
+                                .font(.system(size: 9, weight: .semibold))
+                                .foregroundColor(.blue)
+                                .padding(.horizontal, 5)
+                                .padding(.vertical, 1)
+                                .background(Capsule().fill(Color.blue.opacity(0.15)))
+                        }
                     }
 
                     HStack(spacing: 6) {
@@ -2117,10 +2126,13 @@ struct LanguagePickerView: View {
         }
     }
 
+    var isLanguageLocked: Bool { appState.selectedModel.isLanguageRestricted }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             // Collapsed view - current selection (always visible)
             Button(action: {
+                guard !isLanguageLocked else { return }
                 withAnimation(.easeInOut(duration: 0.2)) {
                     isExpanded.toggle()
                     if !isExpanded {
@@ -2137,7 +2149,17 @@ struct LanguagePickerView: View {
                             .font(.system(size: 11))
                             .foregroundColor(MBColors.textSecondary)
 
-                        if let hint = appState.languageCompatibilityHint {
+                        if isLanguageLocked {
+                            HStack(spacing: 5) {
+                                Image(systemName: "lock.fill")
+                                    .font(.system(size: 10))
+                                    .foregroundColor(MBColors.textTertiary)
+                                Text("Set by \(appState.selectedModel.displayName)")
+                                    .font(.system(size: 10.5, weight: .medium))
+                                    .foregroundColor(MBColors.textTertiary)
+                            }
+                            .padding(.top, 2)
+                        } else if let hint = appState.languageCompatibilityHint {
                             HStack(spacing: 5) {
                                 Image(systemName: "info.circle.fill")
                                     .font(.system(size: 10))
@@ -2153,9 +2175,11 @@ struct LanguagePickerView: View {
 
                     Spacer()
 
-                    Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
-                        .foregroundColor(MBColors.textTertiary)
-                        .font(.system(size: 11, weight: .semibold))
+                    if !isLanguageLocked {
+                        Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
+                            .foregroundColor(MBColors.textTertiary)
+                            .font(.system(size: 11, weight: .semibold))
+                    }
                 }
                 .contentShape(Rectangle())
             }

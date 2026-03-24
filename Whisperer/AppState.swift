@@ -608,6 +608,11 @@ class AppState: ObservableObject {
         UserDefaults.standard.set(model.rawValue, forKey: "selectedModel")
         Logger.info("Switched to model: \(model.displayName)", subsystem: .model)
 
+        // Auto-set language for language-restricted models
+        if let requiredLanguage = model.supportedLanguage {
+            selectedLanguage = requiredLanguage
+        }
+
         // Release any existing bridge (may be from a different backend)
         releaseCurrentBridge()
         preloadModel()

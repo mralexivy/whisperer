@@ -23,6 +23,9 @@ enum WhisperModel: String, CaseIterable, Identifiable {
     // Quantized models (smaller file size, good accuracy)
     case largeV3Q5 = "ggml-large-v3-q5_0.bin"
 
+    // Language-specific fine-tuned models
+    case ivritLargeTurbo = "ggml-ivrit-v3-turbo.bin"
+
     // Distilled models (faster inference, good accuracy)
     case distilLargeV3 = "ggml-distil-large-v3.bin"
     case distilSmallEn = "ggml-distil-small.en.bin"
@@ -41,6 +44,7 @@ enum WhisperModel: String, CaseIterable, Identifiable {
         case .largeV3Q5: return "Large V3 Q5"
         case .distilLargeV3: return "Distil Large V3"
         case .distilSmallEn: return "Distil Small (EN)"
+        case .ivritLargeTurbo: return "Hebrew Large V3 Turbo"
         }
     }
 
@@ -56,6 +60,7 @@ enum WhisperModel: String, CaseIterable, Identifiable {
         case .largeV3Q5: return "1.1 GB"
         case .distilLargeV3: return "756 MB"
         case .distilSmallEn: return "166 MB"
+        case .ivritLargeTurbo: return "1.5 GB"
         }
     }
 
@@ -71,6 +76,7 @@ enum WhisperModel: String, CaseIterable, Identifiable {
         case .largeV3Q5: return "Medium"
         case .distilLargeV3: return "Very Fast"
         case .distilSmallEn: return "Very Fast"
+        case .ivritLargeTurbo: return "Fast"
         }
     }
 
@@ -94,7 +100,7 @@ enum WhisperModel: String, CaseIterable, Identifiable {
 
     var isTurbo: Bool {
         switch self {
-        case .largeTurbo, .largeTurboQ5:
+        case .largeTurbo, .largeTurboQ5, .ivritLargeTurbo:
             return true
         default:
             return false
@@ -115,6 +121,7 @@ enum WhisperModel: String, CaseIterable, Identifiable {
         case .largeV3Q5:      return 750_000_000     // actual ~1.1 GB
         case .distilLargeV3:  return 500_000_000     // actual ~756 MB
         case .distilSmallEn:  return 110_000_000     // actual ~166 MB
+        case .ivritLargeTurbo: return 1_100_000_000  // actual ~1.5 GB
         }
     }
 
@@ -131,6 +138,7 @@ enum WhisperModel: String, CaseIterable, Identifiable {
         case .largeV3Q5:      return 2.0
         case .distilLargeV3:  return 1.5
         case .distilSmallEn:  return 0.4
+        case .ivritLargeTurbo: return 2.5
         }
     }
 
@@ -140,6 +148,8 @@ enum WhisperModel: String, CaseIterable, Identifiable {
             return "sparkles"
         case .largeTurbo, .largeV3Q5:
             return "bolt.fill"
+        case .ivritLargeTurbo:
+            return "star.of.david.fill"
         case .distilLargeV3, .distilSmallEn:
             return "wand.and.stars"
         default:
@@ -153,6 +163,8 @@ enum WhisperModel: String, CaseIterable, Identifiable {
             return Color(red: 0.357, green: 0.424, blue: 0.969) // accent
         case .largeTurbo, .largeV3Q5:
             return .orange
+        case .ivritLargeTurbo:
+            return .blue
         case .distilLargeV3, .distilSmallEn:
             return .red
         default:
@@ -164,7 +176,7 @@ enum WhisperModel: String, CaseIterable, Identifiable {
 
     /// Display order with recommended model first
     static let displayOrder: [WhisperModel] = [
-        .largeTurboQ5, .largeTurbo, .largeV3Q5,
+        .largeTurboQ5, .largeTurbo, .ivritLargeTurbo, .largeV3Q5,
         .distilLargeV3, .distilSmallEn,
         .tiny, .base, .small, .medium, .largeV3,
     ]
@@ -181,10 +193,22 @@ enum WhisperModel: String, CaseIterable, Identifiable {
             return "6x faster than large-v3, good accuracy"
         case .distilSmallEn:
             return "2x faster than small, English only"
+        case .ivritLargeTurbo:
+            return "Fine-tuned for Hebrew, best Hebrew accuracy"
         default:
             return ""
         }
     }
+
+    /// Language restriction for fine-tuned models. Nil means all languages supported.
+    var supportedLanguage: TranscriptionLanguage? {
+        switch self {
+        case .ivritLargeTurbo: return .hebrew
+        default: return nil
+        }
+    }
+
+    var isLanguageRestricted: Bool { supportedLanguage != nil }
 
     var downloadURL: URL {
         switch self {
@@ -194,6 +218,9 @@ enum WhisperModel: String, CaseIterable, Identifiable {
         case .distilSmallEn:
             // Hosted at dharmab's community repo
             return URL(string: "https://huggingface.co/dharmab/distill-whisper-ggml/resolve/main/ggml-distil-small.en.bin")!
+        case .ivritLargeTurbo:
+            // Hebrew fine-tuned model from ivrit-ai
+            return URL(string: "https://huggingface.co/ivrit-ai/whisper-large-v3-turbo-ggml/resolve/main/ggml-model.bin")!
         default:
             // Standard models from ggerganov/whisper.cpp
             return URL(string: "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/\(rawValue)")!
