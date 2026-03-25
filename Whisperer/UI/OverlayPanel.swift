@@ -59,6 +59,7 @@ extension EnvironmentValues {
 class OverlayPanel: NSPanel {
     private var stateObserver: NSObjectProtocol?
     private var settingsObserver: NSObjectProtocol?
+    private var screenObserver: NSObjectProtocol?
     private var generation: UInt64 = 0
 
     init() {
@@ -125,6 +126,15 @@ class OverlayPanel: NSPanel {
         // Observe overlay settings changes
         settingsObserver = NotificationCenter.default.addObserver(
             forName: .overlaySettingsChanged,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            self?.positionAtBottomCenter()
+        }
+
+        // Observe screen parameter changes (Dock resize, monitor connect/disconnect, resolution)
+        screenObserver = NotificationCenter.default.addObserver(
+            forName: NSApplication.didChangeScreenParametersNotification,
             object: nil,
             queue: .main
         ) { [weak self] _ in
@@ -216,6 +226,12 @@ class OverlayPanel: NSPanel {
 
     deinit {
         if let observer = stateObserver {
+            NotificationCenter.default.removeObserver(observer)
+        }
+        if let observer = settingsObserver {
+            NotificationCenter.default.removeObserver(observer)
+        }
+        if let observer = screenObserver {
             NotificationCenter.default.removeObserver(observer)
         }
     }
