@@ -33,10 +33,7 @@ class HistoryWindowManager {
 
         // Close any orphaned HistoryWindow instances (e.g. from macOS window restoration)
         // that aren't managed by us — they appear as stale, non-interactive zombie windows
-        for window in NSApp.windows where window is HistoryWindow && window !== historyWindow {
-            window.orderOut(nil)
-            window.close()
-        }
+        closeOrphanedWindows()
 
         // Create window lazily on first use (keep it alive for reuse)
         if historyWindow == nil {
@@ -74,7 +71,11 @@ class HistoryWindowManager {
         // Remove existing observer if any
         removeObserver()
 
+        // Ensure no orphaned instances exist before creating
+        closeOrphanedWindows()
+
         // Create new window
+        Logger.info("Creating new HistoryWindow", subsystem: .ui)
         historyWindow = HistoryWindow()
 
         // Restore window position if saved, enforcing minimum size
@@ -102,6 +103,24 @@ class HistoryWindowManager {
 
             // Don't nil out historyWindow - keep it for reuse
             // This avoids the crash in NSWindowTransformAnimation dealloc
+        }
+    }
+
+    private func closeOrphanedWindows() {
+        let orphans = NSApp.windows.filter { $0 is HistoryWindow && $0 !== historyWindow }
+        if !orphans.isEmpty {
+            Logger.warning(
+                "Closing \(orphans.count) orphaned HistoryWindow(s) — "
+                + "managed=\(historyWindow != nil), "
+                + "orphanFrames=\(orphans.map { NSStringFromRect($0.frame) }), "
+                + "orphanVisible=\(orphans.map { $0.isVisible }), "
+                + "orphanRestorable=\(orphans.map { $0.isRestorable })",
+                subsystem: .ui
+            )
+            for window in orphans {
+                window.orderOut(nil)
+                window.close()
+            }
         }
     }
 

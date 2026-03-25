@@ -41,6 +41,25 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         Logger.info("Application launched", subsystem: .app)
 
+        // Disable macOS "Resume" — prevents OS from restoring windows after restart/crash.
+        // Restored windows bypass HistoryWindowManager and appear as zombie duplicates.
+        UserDefaults.standard.set(false, forKey: "NSQuitAlwaysKeepsWindows")
+
+        // Close any HistoryWindow instances that macOS restored before we could prevent it
+        let restoredWindows = NSApp.windows.filter { $0 is HistoryWindow }
+        if !restoredWindows.isEmpty {
+            Logger.warning(
+                "macOS restored \(restoredWindows.count) HistoryWindow(s) at launch — closing zombies. "
+                + "frames=\(restoredWindows.map { NSStringFromRect($0.frame) }), "
+                + "visible=\(restoredWindows.map { $0.isVisible })",
+                subsystem: .app
+            )
+            for window in restoredWindows {
+                window.orderOut(nil)
+                window.close()
+            }
+        }
+
         // Setup right-click menu on the status bar icon
         setupStatusItemRightClickMenu()
 
