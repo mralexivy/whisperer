@@ -1826,7 +1826,7 @@ class AppState: ObservableObject {
         streamingTranscriber = nil
         liveTranscription = ""
         state = .idle
-        // No error message — silent reset. Next Fn press creates a fresh engine.
+        errorMessage = "Microphone not responding. Try recording again."
         if muteOtherAudioDuringRecording {
             audioMuter?.unmuteSystemAudio()
         }

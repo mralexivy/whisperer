@@ -66,6 +66,10 @@ class AudioRecorder: NSObject {
     private var audioFlowWatchdog: DispatchSourceTimer?
     private let audioFlowTimeout: TimeInterval = 3.0  // Trigger recovery if no data for 3s
 
+    // Recovery attempt tracking — prevents infinite recovery loops when audio subsystem is broken
+    private var recoveryAttemptCount: Int = 0
+    private let maxRecoveryAttempts: Int = 3
+
     // Target format for whisper: 16kHz mono
     private let targetSampleRate: Double = 16000.0
 
@@ -166,6 +170,8 @@ class AudioRecorder: NSObject {
     ///   2. Full teardown, system default
     ///   3. Full teardown + 300ms settle, system default
     func startRecording(route: ResolvedInputRoute) async throws -> URL {
+        recoveryAttemptCount = 0
+
         guard !isRecording else {
             Logger.warning("startRecording called but already recording", subsystem: .audio)
             throw RecordingError.alreadyRecording
@@ -290,6 +296,7 @@ class AudioRecorder: NSObject {
 
         // Force inputNode instantiation (creates the underlying AUHAL AudioUnit)
         let inputNode = audioEngine.inputNode
+        Logger.debug("Input node obtained (audioUnit: \(inputNode.audioUnit != nil))", subsystem: .audio)
 
         // Bind device based on route
         switch route {
@@ -423,6 +430,7 @@ class AudioRecorder: NSObject {
         lastAudioCallbackTime = Date()
         if isFirst {
             Logger.debug("First audio data received", subsystem: .audio)
+            recoveryAttemptCount = 0
         }
 
         let ratio = outputFormat.sampleRate / buffer.format.sampleRate
@@ -550,8 +558,20 @@ class AudioRecorder: NSObject {
     private func recoverAudioEngine() async {
         guard case .recording(let generation) = recorderState else { return }
 
+        recoveryAttemptCount += 1
+
+        if recoveryAttemptCount > maxRecoveryAttempts {
+            Logger.error("Audio recovery exhausted (\(maxRecoveryAttempts) attempts) — giving up", subsystem: .audio)
+            recorderState = .idle
+            isRecording = false
+            DispatchQueue.main.async { [weak self] in
+                self?.onAudioFlowTimeout?()
+            }
+            return
+        }
+
         recorderState = .recovering(generation: generation)
-        Logger.info("Mid-recording recovery: full teardown + rebuild on default route (gen: \(generation))", subsystem: .audio)
+        Logger.warning("Mid-recording recovery attempt \(recoveryAttemptCount)/\(maxRecoveryAttempts): full teardown + rebuild (gen: \(generation))", subsystem: .audio)
 
         // Full teardown
         cleanupEngineState()
