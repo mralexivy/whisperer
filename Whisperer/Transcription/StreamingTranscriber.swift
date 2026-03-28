@@ -81,7 +81,6 @@ class StreamingTranscriber {
 
     // Language for transcription
     private var language: TranscriptionLanguage
-    private var pinnedLanguage: TranscriptionLanguage?
 
     // Prompt words for whisper.cpp initial_prompt
     private var initialPrompt: String?
@@ -96,6 +95,26 @@ class StreamingTranscriber {
     // VAD scan interval
     private let vadScanInterval: UInt64 = 500_000_000  // 500ms
 
+    // MARK: - Language Routing
+
+    private var modelPool: ModelPool?
+    private var languageRouter: LanguageRouter?
+    private var modelRouter: ModelRouter?
+    private var routeDecision: ModelRouteDecision?
+    private var hasAttemptedDetection: Bool = false
+    private var scriptMismatchCount: Int = 0
+    private var lastSilenceStart: Date?
+    private var newUtteranceAfterSilence: Bool = false
+
+    // Promotion state — serialized via promotionQueue
+    private let promotionQueue = DispatchQueue(label: "streaming.promotion")
+    private var pendingPromotion: (backend: TranscriptionBackend, profile: ModelProfile)?
+
+    /// Effective language for transcription — driven by router or fallback to configured language
+    private var effectiveLanguage: TranscriptionLanguage {
+        routeDecision?.lang ?? language
+    }
+
     /// Initialize with a pre-loaded backend
     init(
         backend: TranscriptionBackend,
@@ -104,12 +123,18 @@ class StreamingTranscriber {
         initialPrompt: String? = nil,
         fillerWordRemovalEnabled: Bool = false,
         firstRetranscriptionDelay: UInt64 = 1_000_000_000,
-        retranscriptionInterval: UInt64 = 1_500_000_000
+        retranscriptionInterval: UInt64 = 1_500_000_000,
+        modelPool: ModelPool? = nil,
+        languageRouter: LanguageRouter? = nil,
+        modelRouter: ModelRouter? = nil
     ) {
         self.whisper = backend
         self.language = language
         self.initialPrompt = initialPrompt
         self.fillerWordRemovalEnabled = fillerWordRemovalEnabled
+        self.modelPool = modelPool
+        self.languageRouter = languageRouter
+        self.modelRouter = modelRouter
         self.vadSegmenter = VADSegmenter(vad: vad, targetChunkDuration: 20.0, silenceForFinalization: 0.8)
     }
 
@@ -129,7 +154,13 @@ class StreamingTranscriber {
         isProcessing = false
         isStopped = false
         memoryLimitReached = false
-        pinnedLanguage = nil
+        routeDecision = nil
+        hasAttemptedDetection = false
+        scriptMismatchCount = 0
+        lastSilenceStart = nil
+        newUtteranceAfterSilence = false
+        pendingPromotion = nil
+        languageRouter?.reset()
         lastVADScanIndex = 0
         lastTranscribedSampleIndex = 0
         lastClaimedSampleIndex = 0
@@ -194,6 +225,21 @@ class StreamingTranscriber {
 
         guard allSamples.count > Int(0.5 * sampleRate) else { return }
 
+        // Language detection — run once before first chunk when routing is enabled
+        if !hasAttemptedDetection,
+           let pool = modelPool, let langRouter = languageRouter, let mdlRouter = modelRouter {
+            let targetSamples = 32000  // 2s at 16kHz
+            if allSamples.count >= targetSamples {
+                hasAttemptedDetection = true
+                performLanguageDetection(
+                    samples: Array(allSamples.prefix(targetSamples)),
+                    pool: pool,
+                    langRouter: langRouter,
+                    mdlRouter: mdlRouter
+                )
+            }
+        }
+
         // Run VAD scan on new audio
         let result = vadSegmenter.scanAndEmitChunks(
             allSamples: allSamples,
@@ -218,6 +264,9 @@ class StreamingTranscriber {
     /// Transcribe the next pending chunk
     private func processNextChunk() {
         guard !isStopped, !isTranscribingChunk, !pendingChunks.isEmpty else { return }
+
+        // Check for deferred model promotion at chunk boundary
+        drainPromotionQueue()
 
         let chunk = pendingChunks.removeFirst()
         isTranscribingChunk = true
@@ -254,7 +303,6 @@ class StreamingTranscriber {
 
         let normalizedSamples = normalizeSamples(chunk.samples)
 
-        let effectiveLanguage = pinnedLanguage ?? language
         whisper.transcribeAsync(
             samples: normalizedSamples,
             initialPrompt: prompt,
@@ -271,13 +319,8 @@ class StreamingTranscriber {
             let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
 
             if !trimmed.isEmpty && !self.isHallucination(trimmed) {
-                // Pin language after first successful chunk when using auto-detect
-                if self.pinnedLanguage == nil && self.language == .auto,
-                   let detected = self.whisper.lastDetectedLanguage,
-                   let lang = TranscriptionLanguage(rawValue: detected) {
-                    self.pinnedLanguage = lang
-                    Logger.debug("Language pinned to \(lang.displayName) after first chunk", subsystem: .transcription)
-                }
+                // Post-chunk script stabilizer — check for language mismatches
+                self.checkScriptStability(chunkText: trimmed)
 
                 // Deduplicate overlap with previous chunk
                 let deduped: String
@@ -466,7 +509,6 @@ class StreamingTranscriber {
 
         // Synchronous transcription for the tail
         let normalizedSamples = normalizeSamples(tailChunk.samples)
-        let effectiveLanguage = pinnedLanguage ?? language
         let text = whisper.transcribe(
             samples: normalizedSamples,
             initialPrompt: prompt,
@@ -683,6 +725,147 @@ class StreamingTranscriber {
         } catch {
             Logger.error("Failed to save recording: \(error.localizedDescription)", subsystem: .transcription)
             return false
+        }
+    }
+
+    // MARK: - Language Routing
+
+    /// Perform initial language detection and model routing
+    private func performLanguageDetection(
+        samples: [Float],
+        pool: ModelPool,
+        langRouter: LanguageRouter,
+        mdlRouter: ModelRouter
+    ) {
+        // Detect language from audio
+        guard let allProbs = pool.detectLanguage(samples: samples) else {
+            Logger.warning("Language detection returned nil, using configured language", subsystem: .transcription)
+            return
+        }
+
+        // Route through language classifier (no transcript yet — initial routing)
+        guard let langDecision = langRouter.decide(allProbs: allProbs, transcriptText: "") else {
+            Logger.debug("Language router undecided, using configured language", subsystem: .transcription)
+            return
+        }
+
+        // Resolve to model profile
+        let modelDecision = mdlRouter.resolve(decision: langDecision, warmProfiles: pool.warmProfiles)
+        routeDecision = modelDecision
+
+        // Apply routing decision
+        let activation = pool.routeTarget(for: modelDecision.profile)
+        switch activation {
+        case .warm(let backend):
+            self.whisper = backend
+            Logger.info("Routed to \(modelDecision.profile.model.displayName) for \(modelDecision.lang.displayName) (warm)", subsystem: .transcription)
+
+        case .fallback(let fallbackBackend, let loadingTask):
+            self.whisper = fallbackBackend
+            Logger.info("Using fallback, loading \(modelDecision.profile.model.displayName) for \(modelDecision.lang.displayName)", subsystem: .transcription)
+
+            // Deliver promotion result via serial promotionQueue
+            Task.detached(priority: .userInitiated) { [weak self] in
+                guard let self else { return }
+                do {
+                    let backend = try await loadingTask.value
+                    self.promotionQueue.sync {
+                        self.pendingPromotion = (backend, modelDecision.profile)
+                    }
+                } catch {
+                    Logger.error("Failed to load target model: \(error)", subsystem: .transcription)
+                }
+            }
+        }
+    }
+
+    /// Drain promotion queue and swap backend if promotion is ready
+    private func drainPromotionQueue() {
+        var promotion: (backend: TranscriptionBackend, profile: ModelProfile)?
+        promotionQueue.sync { [self] in
+            promotion = pendingPromotion
+            pendingPromotion = nil
+        }
+        guard let promotion else { return }
+
+        self.whisper = promotion.backend
+        if var decision = routeDecision {
+            // Update decision to reflect non-fallback status
+            routeDecision = ModelRouteDecision(
+                lang: decision.lang,
+                profile: promotion.profile,
+                confidence: decision.confidence,
+                isFallback: false
+            )
+        }
+        Logger.info("Promoted to \(promotion.profile.model.displayName) at chunk boundary", subsystem: .transcription)
+    }
+
+    /// Post-chunk script stabilizer — check if transcript script matches locked language
+    private func checkScriptStability(chunkText: String) {
+        guard let langRouter = languageRouter,
+              let pool = modelPool,
+              let mdlRouter = modelRouter,
+              case .locked(let lockedLang) = langRouter.state else { return }
+
+        let scriptHints = ScriptAnalyzer.dominantScript(in: chunkText)
+        guard !scriptHints.isEmpty else { return }
+
+        // Check if dominant script disagrees with locked language
+        let topScript = scriptHints.max(by: { $0.value < $1.value })
+        if let top = topScript, top.key != lockedLang, top.value > 0.5 {
+            scriptMismatchCount += 1
+            Logger.debug("Script mismatch \(scriptMismatchCount): \(top.key.displayName) script vs locked \(lockedLang.displayName)", subsystem: .transcription)
+        } else {
+            // Reset on match
+            scriptMismatchCount = 0
+        }
+
+        // Check if re-detection should be triggered
+        if langRouter.shouldRedetect(scriptMismatches: scriptMismatchCount, newUtteranceAfterSilence: newUtteranceAfterSilence) {
+            newUtteranceAfterSilence = false  // Consume the signal
+            scriptMismatchCount = 0
+
+            // Get latest audio for re-detection
+            var latestSamples: [Float] = []
+            do {
+                try allSamplesLock.withLock {
+                    let targetSamples = 32000
+                    if allRecordedSamples.count >= targetSamples {
+                        latestSamples = Array(allRecordedSamples.suffix(targetSamples))
+                    }
+                }
+            } catch { return }
+
+            guard !latestSamples.isEmpty,
+                  let allProbs = pool.detectLanguage(samples: latestSamples) else { return }
+
+            let accumulatedText = completedChunkTexts.joined(separator: " ")
+            if let newDecision = langRouter.decide(allProbs: allProbs, transcriptText: accumulatedText) {
+                let modelDecision = mdlRouter.resolve(decision: newDecision, warmProfiles: pool.warmProfiles)
+
+                // If language changed, schedule model swap
+                if modelDecision.lang != routeDecision?.lang || modelDecision.profile != routeDecision?.profile {
+                    routeDecision = modelDecision
+                    let activation = pool.routeTarget(for: modelDecision.profile)
+                    switch activation {
+                    case .warm(let backend):
+                        // Will swap at next chunk boundary via drainPromotionQueue
+                        promotionQueue.sync { [self] in
+                            pendingPromotion = (backend, modelDecision.profile)
+                        }
+                    case .fallback(_, let loadingTask):
+                        Task.detached(priority: .userInitiated) { [weak self] in
+                            guard let self else { return }
+                            if let backend = try? await loadingTask.value {
+                                self.promotionQueue.sync {
+                                    self.pendingPromotion = (backend, modelDecision.profile)
+                                }
+                            }
+                        }
+                    }
+                }
+            }
         }
     }
 }

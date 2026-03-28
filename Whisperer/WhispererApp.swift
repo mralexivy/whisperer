@@ -1246,6 +1246,43 @@ struct ModelsTabView: View {
             }
 
             LanguagePickerView()
+
+            // Language routing status
+            if appState.routingConfig.isRoutingEnabled {
+                Divider()
+                    .background(MBColors.border)
+
+                VStack(alignment: .leading, spacing: 6) {
+                    HStack(spacing: 6) {
+                        Image(systemName: "arrow.triangle.branch")
+                            .font(.system(size: 10))
+                            .foregroundColor(MBColors.accent)
+                        Text("Auto-routing active")
+                            .font(.system(size: 11, weight: .medium))
+                            .foregroundColor(MBColors.accent)
+                    }
+
+                    HStack(spacing: 4) {
+                        ForEach(appState.routingConfig.allowedLanguages, id: \.self) { lang in
+                            Text(lang.displayName)
+                                .font(.system(size: 10, weight: .medium))
+                                .foregroundColor(lang == appState.routingConfig.primaryLanguage ? MBColors.textPrimary : MBColors.textSecondary)
+                                .padding(.horizontal, 6)
+                                .padding(.vertical, 2)
+                                .background(
+                                    Capsule()
+                                        .fill(lang == appState.routingConfig.primaryLanguage ? MBColors.accent.opacity(0.2) : MBColors.pill)
+                                )
+                        }
+                    }
+
+                    if let routeInfo = appState.activeRouteInfo {
+                        Text(routeInfo)
+                            .font(.system(size: 10.5))
+                            .foregroundColor(MBColors.textSecondary)
+                    }
+                }
+            }
         }
         .padding(14)
         .background(

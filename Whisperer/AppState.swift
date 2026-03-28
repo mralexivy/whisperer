@@ -378,6 +378,26 @@ class AppState: ObservableObject {
     // Streaming transcription
     private var streamingTranscriber: StreamingTranscriber?
 
+    // Language routing
+    private var modelPool: ModelPool?
+    @Published var routingConfig: LanguageRoutingConfig = .load() {
+        didSet {
+            // Re-initialize routing infrastructure when config changes
+            if routingConfig.isRoutingEnabled != oldValue.isRoutingEnabled ||
+               routingConfig.allowedLanguages != oldValue.allowedLanguages {
+                if routingConfig.isRoutingEnabled {
+                    Logger.info("Routing config changed, re-initializing language routing", subsystem: .model)
+                    preloadLanguageRouting()
+                } else {
+                    Logger.info("Routing disabled, releasing model pool", subsystem: .model)
+                    modelPool?.releaseAll()
+                    modelPool = nil
+                }
+            }
+        }
+    }
+    @Published var activeRouteInfo: String?
+
     private var currentAudioURL: URL?
     private var lastTargetAppName: String?
     @Published var targetAppIcon: NSImage?
@@ -823,6 +843,7 @@ class AppState: ObservableObject {
                     self.loadedBackendType = .whisperCpp
                     self.isLoadingWhisper = false
                     self.preloadVAD()
+                    self.preloadLanguageRouting()
 
                     Logger.info("Whisper model loaded. Process memory: \(String(format: "%.0f", BenchmarkUtilities.currentMemoryMB()))MB", subsystem: .model)
                 }
@@ -1406,6 +1427,134 @@ class AppState: ObservableObject {
         }
     }
 
+    // MARK: - Language Routing
+
+    /// Pre-load the language routing infrastructure (detector + model pool)
+    func preloadLanguageRouting() {
+        guard routingConfig.isRoutingEnabled else {
+            Logger.debug("Language routing disabled (single language)", subsystem: .model)
+            return
+        }
+
+        Task.detached(priority: .userInitiated) { [weak self] in
+            guard let self else { return }
+
+            do {
+                // Validate multilingual fallback availability
+                let fallbackModel = await MainActor.run { self.buildFallbackModel() }
+                if !ModelDownloader.shared.isModelDownloaded(fallbackModel) {
+                    Logger.warning("Multilingual fallback model \(fallbackModel.displayName) not downloaded, attempting download", subsystem: .model)
+                    do {
+                        try await ModelDownloader.shared.downloadModel(fallbackModel, progressCallback: { _ in })
+                    } catch {
+                        Logger.warning("Failed to download fallback model, disabling routing: \(error)", subsystem: .model)
+                        return
+                    }
+                }
+
+                // Download detector model
+                try await ModelDownloader.shared.ensureDetectorModelDownloaded()
+
+                // Create ModelPool and load detector
+                let pool = ModelPool()
+                let detectorPath = ModelDownloader.shared.modelPath(for: .tiny)
+                try pool.loadDetector(modelPath: detectorPath)
+
+                // Register the current whisperBridge as fallback
+                await MainActor.run { [weak self] in
+                    guard let self else { return }
+                    let fallbackProfile = self.buildFallbackProfile()
+
+                    if let bridge = self.whisperBridge {
+                        try? pool.loadFallback(profile: fallbackProfile, backend: bridge)
+                    }
+
+                    self.modelPool = pool
+                    Logger.info("Language routing initialized (\(self.routingConfig.allowedLanguages.count) languages)", subsystem: .model)
+
+                    // Optionally preload standby for primary language
+                    if let primary = self.routingConfig.primaryLanguage {
+                        let downloaded = ModelDownloader.shared.downloadedModelSet()
+                        if let specializedModel = WhisperModel.recommendedModel(for: primary, downloaded: downloaded),
+                           specializedModel != self.selectedModel {
+                            let standbyProfile = ModelProfile(
+                                model: specializedModel,
+                                backend: .whisperCpp,
+                                language: primary,
+                                isSpecialized: true
+                            )
+                            pool.preloadStandby(profile: standbyProfile)
+                        }
+                    }
+                }
+            } catch {
+                Logger.warning("Failed to initialize language routing: \(error)", subsystem: .model)
+            }
+        }
+    }
+
+    /// Build the fallback model — must be multilingual
+    private func buildFallbackModel() -> WhisperModel {
+        if selectedModel.isMultilingual {
+            return selectedModel
+        }
+        // English-only model selected — upgrade to largeTurboQ5
+        Logger.info("Fallback upgraded from \(selectedModel.displayName) to \(WhisperModel.largeTurboQ5.displayName) (multilingual required)", subsystem: .model)
+        return .largeTurboQ5
+    }
+
+    /// Build fallback ModelProfile from current state
+    private func buildFallbackProfile() -> ModelProfile {
+        let model = buildFallbackModel()
+        return ModelProfile(
+            model: model,
+            backend: .whisperCpp,
+            language: .auto,
+            isSpecialized: false
+        )
+    }
+
+    /// Build language → model mapping from downloaded models and config
+    private func buildLanguageModelMap() -> [TranscriptionLanguage: ModelProfile] {
+        let downloaded = ModelDownloader.shared.downloadedModelSet()
+        var map: [TranscriptionLanguage: ModelProfile] = [:]
+
+        for lang in routingConfig.allowedLanguages {
+            // Check user overrides first
+            if let overrideRaw = routingConfig.languageModelOverrides[lang.rawValue],
+               let overrideModel = WhisperModel(filename: overrideRaw),
+               downloaded.contains(overrideModel) {
+                map[lang] = ModelProfile(
+                    model: overrideModel,
+                    backend: .whisperCpp,
+                    language: lang,
+                    isSpecialized: true
+                )
+                continue
+            }
+
+            // Use recommended model if available
+            if let recommended = WhisperModel.recommendedModel(for: lang, downloaded: downloaded) {
+                map[lang] = ModelProfile(
+                    model: recommended,
+                    backend: .whisperCpp,
+                    language: lang,
+                    isSpecialized: true
+                )
+            } else {
+                // Use the selected model (multilingual)
+                map[lang] = ModelProfile(
+                    model: selectedModel.isMultilingual ? selectedModel : .largeTurboQ5,
+                    backend: .whisperCpp,
+                    language: lang,
+                    isSpecialized: false
+                )
+            }
+        }
+
+        return map
+    }
+
     // MARK: - Vocabulary Boosting
 
     /// Configure CTC vocabulary boosting on a FluidAudioBridge's final-pass manager
@@ -1558,7 +1707,7 @@ class AppState: ObservableObject {
 
         Task {
             do {
-                streamingTranscriber = StreamingTranscriber(backend: bridge, vad: sileroVAD, language: selectedLanguage, initialPrompt: promptWordsString, fillerWordRemovalEnabled: fillerWordRemovalEnabled)
+                streamingTranscriber = StreamingTranscriber(backend: bridge, vad: sileroVAD, language: selectedLanguage, initialPrompt: promptWordsString, fillerWordRemovalEnabled: fillerWordRemovalEnabled, modelPool: modelPool, languageRouter: routingConfig.isRoutingEnabled ? LanguageRouter(allowed: routingConfig.allowedLanguages, primary: routingConfig.primaryLanguage) : nil, modelRouter: routingConfig.isRoutingEnabled ? ModelRouter(languageModelMap: buildLanguageModelMap(), fallbackProfile: buildFallbackProfile()) : nil)
 
                 // Start EOU live preview engine if available
                 if liveTranscriptionEnabled, let engine = livePreviewEngine, engine.isModelLoaded {
@@ -1730,7 +1879,7 @@ class AppState: ObservableObject {
         Task {
             do {
                 // Create streaming transcriber with pre-loaded bridge, optional VAD, and language
-                streamingTranscriber = StreamingTranscriber(backend: bridge, vad: sileroVAD, language: selectedLanguage, initialPrompt: promptWordsString, fillerWordRemovalEnabled: fillerWordRemovalEnabled)
+                streamingTranscriber = StreamingTranscriber(backend: bridge, vad: sileroVAD, language: selectedLanguage, initialPrompt: promptWordsString, fillerWordRemovalEnabled: fillerWordRemovalEnabled, modelPool: modelPool, languageRouter: routingConfig.isRoutingEnabled ? LanguageRouter(allowed: routingConfig.allowedLanguages, primary: routingConfig.primaryLanguage) : nil, modelRouter: routingConfig.isRoutingEnabled ? ModelRouter(languageModelMap: buildLanguageModelMap(), fallbackProfile: buildFallbackProfile()) : nil)
 
                 // Start EOU live preview engine if available
                 if liveTranscriptionEnabled, let engine = livePreviewEngine, engine.isModelLoaded {
@@ -2248,6 +2397,10 @@ class AppState: ObservableObject {
         livePreviewEngine?.unloadModel()
         livePreviewEngine = nil
         isEouModelLoaded = false
+
+        // Release language routing model pool (detector + standby backends)
+        modelPool?.releaseAll()
+        modelPool = nil
 
         // Free VAD context first (smaller, faster)
         if sileroVAD != nil {

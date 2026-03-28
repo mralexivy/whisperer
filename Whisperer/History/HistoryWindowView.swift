@@ -1108,6 +1108,8 @@ struct HistorySettingsView: View {
     @AppStorage("autoDeleteAfterDays") private var autoDeleteAfterDays = 0
     @AppStorage("timeFormat") private var timeFormat: String = TimeFormatSetting.twelveHour.rawValue
     @State private var showDeleteConfirmation = false
+    @State private var selectedLanguages: Set<TranscriptionLanguage> = [.english]
+    @State private var selectedPrimary: TranscriptionLanguage = .english
 
     private var selectedTimeFormat: Binding<TimeFormatSetting> {
         Binding(
@@ -1131,6 +1133,7 @@ struct HistorySettingsView: View {
                     rewriteSection
                     #endif
                     dictionarySection
+                    languageRoutingSection
                     storageSection
                     dataManagementSection
                     dangerZoneSection
@@ -1710,6 +1713,416 @@ struct HistorySettingsView: View {
                     .lineSpacing(3)
             }
         }
+    }
+
+    // MARK: - Language Routing Section
+
+    private static let commonLanguages: [TranscriptionLanguage] = [
+        .english, .spanish, .french, .german, .italian, .portuguese,
+        .russian, .chinese, .japanese, .korean, .arabic, .hebrew,
+        .hindi, .turkish, .polish, .dutch, .swedish, .norwegian,
+        .danish, .finnish, .czech, .greek, .romanian, .hungarian,
+        .thai, .vietnamese, .indonesian, .ukrainian
+    ]
+
+    @State private var langSearchText = ""
+    @State private var isLangFieldFocused = false
+
+    private var autocompleteSuggestions: [TranscriptionLanguage] {
+        let unselected = Self.commonLanguages.filter { !selectedLanguages.contains($0) }
+        guard !langSearchText.isEmpty else { return [] }
+        return unselected.filter { $0.displayName.localizedCaseInsensitiveContains(langSearchText) }
+    }
+
+    private var languageRoutingSection: some View {
+        SettingsCard(colorScheme: colorScheme) {
+            VStack(alignment: .leading, spacing: 20) {
+                // Header with routing badge
+                HStack(alignment: .center) {
+                    SettingsSectionHeader(
+                        icon: "globe",
+                        title: "Languages",
+                        colorScheme: colorScheme,
+                        color: .green
+                    )
+
+                    Spacer()
+
+                    if selectedLanguages.count > 1 {
+                        HStack(spacing: 6) {
+                            Circle()
+                                .fill(.green)
+                                .frame(width: 6, height: 6)
+                                .shadow(color: .green.opacity(0.5), radius: 3)
+                            Text("Auto-routing")
+                                .font(.system(size: 10, weight: .semibold))
+                                .foregroundColor(.green)
+                        }
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 5)
+                        .background(
+                            Capsule()
+                                .fill(.green.opacity(0.1))
+                                .overlay(Capsule().stroke(.green.opacity(0.2), lineWidth: 1))
+                        )
+                    }
+                }
+
+                // Tag input with autocomplete
+                SettingsRow(colorScheme: colorScheme) {
+                    HStack(alignment: .top, spacing: 14) {
+                        ZStack {
+                            RoundedRectangle(cornerRadius: 8)
+                                .fill(
+                                    LinearGradient(
+                                        colors: [Color.green.opacity(0.18), Color.green.opacity(0.10)],
+                                        startPoint: .topLeading,
+                                        endPoint: .bottomTrailing
+                                    )
+                                )
+                                .frame(width: 36, height: 36)
+
+                            Image(systemName: "globe")
+                                .font(.system(size: 14, weight: .semibold))
+                                .foregroundColor(.green)
+                        }
+
+                    VStack(alignment: .leading, spacing: 10) {
+                        Text("Active Languages")
+                            .font(.system(size: 13, weight: .medium))
+                            .foregroundColor(WhispererColors.primaryText(colorScheme))
+                            .frame(maxWidth: .infinity, alignment: .leading)
+
+                        // Tags + inline text field
+                        FlowLayout(spacing: 6, lineSpacing: 6) {
+                            // Selected language pills — primary first, then alphabetical
+                            ForEach(sortedSelectedLanguages, id: \.self) { lang in
+                                selectedLanguagePill(lang)
+                            }
+
+                            // Inline autocomplete field
+                            HStack(spacing: 6) {
+                                Image(systemName: "plus")
+                                    .font(.system(size: 9, weight: .bold))
+                                    .foregroundColor(
+                                        langSearchText.isEmpty
+                                            ? WhispererColors.accentBlue.opacity(0.5)
+                                            : WhispererColors.accentBlue
+                                    )
+
+                                TextField("Type to add...", text: $langSearchText)
+                                    .textFieldStyle(.plain)
+                                    .font(.system(size: 12, weight: .medium))
+                                    .foregroundColor(WhispererColors.primaryText(colorScheme))
+                                    .frame(minWidth: 100)
+                                    .onSubmit {
+                                        if let first = autocompleteSuggestions.first {
+                                            addLanguage(first)
+                                        }
+                                    }
+                            }
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 7)
+                            .background(
+                                RoundedRectangle(cornerRadius: 20)
+                                    .fill(
+                                        langSearchText.isEmpty
+                                            ? WhispererColors.accentBlue.opacity(0.06)
+                                            : WhispererColors.accentBlue.opacity(0.12)
+                                    )
+                            )
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 20)
+                                    .stroke(
+                                        langSearchText.isEmpty
+                                            ? WhispererColors.accentBlue.opacity(0.15)
+                                            : WhispererColors.accentBlue.opacity(0.4),
+                                        lineWidth: 1
+                                    )
+                            )
+                            .animation(.easeInOut(duration: 0.15), value: langSearchText.isEmpty)
+                        }
+
+                        // Autocomplete dropdown
+                        if !langSearchText.isEmpty {
+                            autocompleteDropdown
+                        }
+                    }
+                    }
+                }
+
+                // Primary language + info
+                if selectedLanguages.count > 1 {
+                    SettingsRow(colorScheme: colorScheme) {
+                        HStack(spacing: 14) {
+                            ZStack {
+                                RoundedRectangle(cornerRadius: 8)
+                                    .fill(
+                                        LinearGradient(
+                                            colors: [Color.orange.opacity(0.18), Color.orange.opacity(0.10)],
+                                            startPoint: .topLeading,
+                                            endPoint: .bottomTrailing
+                                        )
+                                    )
+                                    .frame(width: 36, height: 36)
+
+                                Image(systemName: "star.fill")
+                                    .font(.system(size: 14, weight: .semibold))
+                                    .foregroundColor(.orange)
+                            }
+
+                            VStack(alignment: .leading, spacing: 3) {
+                                Text("Primary Language")
+                                    .font(.system(size: 13, weight: .medium))
+                                    .foregroundColor(WhispererColors.primaryText(colorScheme))
+
+                                Text("Default when detection is uncertain")
+                                    .font(.system(size: 11))
+                                    .foregroundColor(WhispererColors.secondaryText(colorScheme))
+                            }
+
+                            Spacer()
+
+                            Picker("", selection: $selectedPrimary) {
+                                ForEach(Array(selectedLanguages).sorted(by: { $0.displayName < $1.displayName }), id: \.self) { lang in
+                                    Text(lang.displayName).tag(lang)
+                                }
+                            }
+                            .pickerStyle(.menu)
+                            .frame(width: 140)
+                            .tint(WhispererColors.accent)
+                        }
+                    }
+                } else {
+                    HStack(spacing: 10) {
+                        Image(systemName: "lightbulb.fill")
+                            .font(.system(size: 11))
+                            .foregroundColor(.orange.opacity(0.7))
+
+                        Text("Add more languages to enable automatic detection and model routing")
+                            .font(.system(size: 11))
+                            .foregroundColor(WhispererColors.tertiaryText(colorScheme))
+                            .lineSpacing(2)
+                    }
+                    .padding(.horizontal, 4)
+                }
+            }
+        }
+        .onAppear {
+            let config = AppState.shared.routingConfig
+            selectedLanguages = Set(config.allowedLanguages)
+            selectedPrimary = config.primaryLanguage ?? .english
+        }
+        .onChange(of: selectedLanguages) { _ in
+            saveLanguageRoutingConfig()
+        }
+        .onChange(of: selectedPrimary) { _ in
+            saveLanguageRoutingConfig()
+        }
+    }
+
+    /// Selected languages sorted with primary first, then alphabetical
+    private var sortedSelectedLanguages: [TranscriptionLanguage] {
+        Array(selectedLanguages).sorted { a, b in
+            if a == selectedPrimary { return true }
+            if b == selectedPrimary { return false }
+            return a.displayName < b.displayName
+        }
+    }
+
+    private func addLanguage(_ lang: TranscriptionLanguage) {
+        withAnimation(.spring(response: 0.25, dampingFraction: 0.8)) {
+            _ = selectedLanguages.insert(lang)
+            langSearchText = ""
+        }
+    }
+
+    private func selectedLanguagePill(_ lang: TranscriptionLanguage) -> some View {
+        let isPrimary = lang == selectedPrimary
+        return HStack(spacing: 6) {
+            if isPrimary {
+                Image(systemName: "star.fill")
+                    .font(.system(size: 8))
+                    .foregroundColor(.orange)
+            }
+
+            Text(lang.displayName)
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundColor(.white)
+
+            // Remove button (only if more than 1 selected)
+            if selectedLanguages.count > 1 {
+                Button(action: {
+                    withAnimation(.spring(response: 0.25, dampingFraction: 0.8)) {
+                        selectedLanguages.remove(lang)
+                        if selectedPrimary == lang {
+                            selectedPrimary = selectedLanguages.first ?? .english
+                        }
+                    }
+                }) {
+                    Image(systemName: "xmark")
+                        .font(.system(size: 7, weight: .bold))
+                        .foregroundColor(.white.opacity(0.5))
+                        .frame(width: 16, height: 16)
+                        .background(Circle().fill(.white.opacity(0.12)))
+                }
+                .buttonStyle(.plain)
+            }
+        }
+        .padding(.leading, 10)
+        .padding(.trailing, selectedLanguages.count > 1 ? 5 : 10)
+        .padding(.vertical, 6)
+        .background(
+            Capsule()
+                .fill(
+                    LinearGradient(
+                        colors: [WhispererColors.accentBlue.opacity(0.3), WhispererColors.accentPurple.opacity(0.2)],
+                        startPoint: .leading,
+                        endPoint: .trailing
+                    )
+                )
+        )
+        .overlay(
+            Capsule()
+                .stroke(
+                    LinearGradient(
+                        colors: [WhispererColors.accentBlue.opacity(0.5), WhispererColors.accentPurple.opacity(0.3)],
+                        startPoint: .leading,
+                        endPoint: .trailing
+                    ),
+                    lineWidth: 1
+                )
+        )
+    }
+
+    @ViewBuilder
+    private var autocompleteDropdown: some View {
+        let suggestions = autocompleteSuggestions
+        if suggestions.isEmpty {
+            HStack(spacing: 6) {
+                Image(systemName: "magnifyingglass")
+                    .font(.system(size: 10))
+                    .foregroundColor(WhispererColors.tertiaryText(colorScheme))
+                Text("No matching languages")
+                    .font(.system(size: 11))
+                    .foregroundColor(WhispererColors.tertiaryText(colorScheme))
+            }
+            .padding(.vertical, 8)
+            .padding(.horizontal, 4)
+        } else {
+            VStack(alignment: .leading, spacing: 2) {
+                ForEach(suggestions.prefix(5), id: \.self) { lang in
+                    autocompleteSuggestionRow(lang)
+                }
+            }
+            .padding(4)
+            .background(
+                RoundedRectangle(cornerRadius: 10)
+                    .fill(WhispererColors.elevatedBackground(colorScheme))
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 10)
+                    .stroke(WhispererColors.border(colorScheme), lineWidth: 1)
+            )
+            .shadow(color: .black.opacity(0.15), radius: 8, y: 4)
+            .transition(.opacity.combined(with: .scale(scale: 0.98, anchor: .top)))
+        }
+    }
+
+    private func autocompleteSuggestionRow(_ lang: TranscriptionLanguage) -> some View {
+        Button(action: { addLanguage(lang) }) {
+            HStack(spacing: 10) {
+                ZStack {
+                    RoundedRectangle(cornerRadius: 5)
+                        .fill(WhispererColors.accentBlue.opacity(0.1))
+                        .frame(width: 24, height: 24)
+                    Text(languageFlag(lang))
+                        .font(.system(size: 12))
+                }
+
+                Text(lang.displayName)
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundColor(WhispererColors.primaryText(colorScheme))
+
+                Spacer()
+
+                Image(systemName: "return")
+                    .font(.system(size: 9, weight: .semibold))
+                    .foregroundColor(WhispererColors.tertiaryText(colorScheme))
+                    .padding(.horizontal, 5)
+                    .padding(.vertical, 3)
+                    .background(
+                        RoundedRectangle(cornerRadius: 4)
+                            .fill(WhispererColors.background(colorScheme))
+                    )
+            }
+            .padding(.horizontal, 8)
+            .padding(.vertical, 6)
+            .background(
+                RoundedRectangle(cornerRadius: 8)
+                    .fill(Color.clear)
+            )
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(AutocompleteSuggestionButtonStyle(colorScheme: colorScheme))
+    }
+
+    private func languageFlag(_ lang: TranscriptionLanguage) -> String {
+        switch lang {
+        case .english: return "🇺🇸"
+        case .spanish: return "🇪🇸"
+        case .french: return "🇫🇷"
+        case .german: return "🇩🇪"
+        case .italian: return "🇮🇹"
+        case .portuguese: return "🇵🇹"
+        case .russian: return "🇷🇺"
+        case .chinese: return "🇨🇳"
+        case .japanese: return "🇯🇵"
+        case .korean: return "🇰🇷"
+        case .arabic: return "🇸🇦"
+        case .hebrew: return "🇮🇱"
+        case .hindi: return "🇮🇳"
+        case .turkish: return "🇹🇷"
+        case .polish: return "🇵🇱"
+        case .dutch: return "🇳🇱"
+        case .swedish: return "🇸🇪"
+        case .norwegian: return "🇳🇴"
+        case .danish: return "🇩🇰"
+        case .finnish: return "🇫🇮"
+        case .czech: return "🇨🇿"
+        case .greek: return "🇬🇷"
+        case .romanian: return "🇷🇴"
+        case .hungarian: return "🇭🇺"
+        case .thai: return "🇹🇭"
+        case .vietnamese: return "🇻🇳"
+        case .indonesian: return "🇮🇩"
+        case .ukrainian: return "🇺🇦"
+        default: return "🌐"
+        }
+    }
+
+    struct AutocompleteSuggestionButtonStyle: ButtonStyle {
+        let colorScheme: ColorScheme
+        @State private var isHovered = false
+
+        func makeBody(configuration: Configuration) -> some View {
+            configuration.label
+                .background(
+                    RoundedRectangle(cornerRadius: 8)
+                        .fill(isHovered ? WhispererColors.accentBlue.opacity(0.1) : Color.clear)
+                )
+                .onHover { hovering in
+                    withAnimation(.easeInOut(duration: 0.12)) { isHovered = hovering }
+                }
+        }
+    }
+
+    private func saveLanguageRoutingConfig() {
+        var config = AppState.shared.routingConfig
+        config.allowedLanguages = Array(selectedLanguages)
+        config.primaryLanguage = selectedPrimary
+        AppState.shared.routingConfig = config
+        config.save()
     }
 
     // MARK: - Storage Section

@@ -42,9 +42,9 @@ struct OnboardingView: View {
     var onComplete: (() -> Void)?
 
     #if APP_STORE
-    private let totalPages = 5
-    #else
     private let totalPages = 6
+    #else
+    private let totalPages = 7
     #endif
 
     var body: some View {
@@ -113,10 +113,12 @@ struct OnboardingView: View {
         case 2: microphoneContent
         case 3: dictationContent
         #if APP_STORE
-        case 4: modelDownloadContent
+        case 4: languageShortlistContent
+        case 5: modelDownloadContent
         #else
         case 4: accessibilityContent
-        case 5: modelDownloadContent
+        case 5: languageShortlistContent
+        case 6: modelDownloadContent
         #endif
         default: EmptyView()
         }
@@ -145,10 +147,12 @@ struct OnboardingView: View {
         case 2: rightPanelMicrophone
         case 3: rightPanelDictation
         #if APP_STORE
-        case 4: rightPanelModelDownload
+        case 4: rightPanelLanguages
+        case 5: rightPanelModelDownload
         #else
         case 4: rightPanelAccessibility
-        case 5: rightPanelModelDownload
+        case 5: rightPanelLanguages
+        case 6: rightPanelModelDownload
         #endif
         default: EmptyView()
         }
@@ -188,8 +192,13 @@ struct OnboardingView: View {
                     .buttonStyle(.plain).pointerOnHover()
                 }
 
-                // Only show Continue on page 1 (features) — pages 2-4 have their own action buttons
-                if currentPage == 1 {
+                // Show Continue on features page and language shortlist page
+                #if APP_STORE
+                let languagePage = 4
+                #else
+                let languagePage = 5
+                #endif
+                if currentPage == 1 || currentPage == languagePage {
                     Button(action: {
                         withAnimation(.easeInOut(duration: 0.3)) { currentPage += 1 }
                     }) {
@@ -705,6 +714,186 @@ struct OnboardingView: View {
                     decorativeIcon("keyboard.fill", size: 22, color: OnboardingColors.accentBlue)
                     decorativeIcon("waveform", size: 22, color: .red)
                     decorativeIcon("text.cursor", size: 22, color: .green)
+                }
+            }
+        }
+    }
+
+    // MARK: - Language Shortlist Page
+
+    /// Common languages shown in the onboarding shortlist
+    private static let commonLanguages: [TranscriptionLanguage] = [
+        .english, .spanish, .french, .german, .italian, .portuguese,
+        .russian, .chinese, .japanese, .korean, .arabic, .hebrew,
+        .hindi, .turkish, .polish, .dutch, .swedish, .norwegian,
+        .danish, .finnish, .czech, .greek, .romanian, .hungarian,
+        .thai, .vietnamese, .indonesian, .ukrainian
+    ]
+
+    @State private var selectedLanguages: Set<TranscriptionLanguage> = [.english]
+    @State private var selectedPrimary: TranscriptionLanguage = .english
+
+    private var languageShortlistContent: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            Spacer()
+
+            VStack(alignment: .leading, spacing: 16) {
+                Text("Your Languages")
+                    .font(.system(size: 24, weight: .bold, design: .rounded))
+                    .foregroundColor(OnboardingColors.textPrimary)
+
+                Text("Select the languages you speak. Whisperer will automatically detect which one you're using and route to the best model.")
+                    .font(.system(size: 14, weight: .regular))
+                    .foregroundColor(OnboardingColors.textSecondary)
+                    .lineSpacing(4)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                // Language grid
+                ScrollView {
+                    LazyVGrid(columns: [
+                        GridItem(.flexible(), spacing: 8),
+                        GridItem(.flexible(), spacing: 8),
+                        GridItem(.flexible(), spacing: 8)
+                    ], spacing: 8) {
+                        ForEach(Self.commonLanguages, id: \.self) { lang in
+                            languageChip(lang)
+                        }
+                    }
+                }
+                .frame(height: 240)
+
+                // Primary language selector
+                if selectedLanguages.count > 1 {
+                    HStack(spacing: 8) {
+                        Image(systemName: "star.fill")
+                            .font(.system(size: 11))
+                            .foregroundColor(.orange)
+                        Text("Primary:")
+                            .font(.system(size: 12, weight: .medium))
+                            .foregroundColor(OnboardingColors.textSecondary)
+
+                        Picker("", selection: $selectedPrimary) {
+                            ForEach(Array(selectedLanguages).sorted(by: { $0.displayName < $1.displayName }), id: \.self) { lang in
+                                Text(lang.displayName).tag(lang)
+                            }
+                        }
+                        .labelsHidden()
+                        .frame(width: 140)
+                    }
+                    .padding(.top, 4)
+                }
+            }
+            .padding(.horizontal, 28)
+
+            Spacer()
+        }
+        .onAppear {
+            // Pre-select English + system locale
+            selectedLanguages = [.english]
+            if let localeCode = Locale.current.language.languageCode?.identifier,
+               let lang = TranscriptionLanguage(rawValue: localeCode),
+               lang != .english {
+                selectedLanguages.insert(lang)
+            }
+            selectedPrimary = .english
+
+            // Load existing config if available
+            let config = appState.routingConfig
+            if config.allowedLanguages.count > 1 {
+                selectedLanguages = Set(config.allowedLanguages)
+                selectedPrimary = config.primaryLanguage ?? .english
+            }
+        }
+        .onChange(of: selectedLanguages) { newValue in
+            saveLanguageConfig()
+        }
+        .onChange(of: selectedPrimary) { _ in
+            saveLanguageConfig()
+        }
+    }
+
+    private func languageChip(_ lang: TranscriptionLanguage) -> some View {
+        let isSelected = selectedLanguages.contains(lang)
+        return Button(action: {
+            if isSelected && selectedLanguages.count > 1 {
+                selectedLanguages.remove(lang)
+                if selectedPrimary == lang {
+                    selectedPrimary = selectedLanguages.first ?? .english
+                }
+            } else {
+                selectedLanguages.insert(lang)
+            }
+        }) {
+            HStack(spacing: 6) {
+                if isSelected {
+                    Image(systemName: "checkmark")
+                        .font(.system(size: 9, weight: .bold))
+                        .foregroundColor(.white)
+                }
+                Text(lang.displayName)
+                    .font(.system(size: 12, weight: isSelected ? .semibold : .medium))
+                    .foregroundColor(isSelected ? .white : OnboardingColors.textSecondary)
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 8)
+            .frame(maxWidth: .infinity)
+            .background(
+                RoundedRectangle(cornerRadius: 8)
+                    .fill(isSelected ? OnboardingColors.accentBlue.opacity(0.25) : OnboardingColors.cardSurface)
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 8)
+                    .stroke(isSelected ? OnboardingColors.accentBlue : OnboardingColors.cardBorder, lineWidth: 1)
+            )
+        }
+        .buttonStyle(.plain)
+    }
+
+    private func saveLanguageConfig() {
+        var config = appState.routingConfig
+        config.allowedLanguages = Array(selectedLanguages)
+        config.primaryLanguage = selectedPrimary
+        appState.routingConfig = config
+        config.save()
+    }
+
+    private var rightPanelLanguages: some View {
+        ZStack {
+            Circle()
+                .fill(
+                    RadialGradient(
+                        colors: [Color.green.opacity(0.25), .clear],
+                        center: .center,
+                        startRadius: 20,
+                        endRadius: 140
+                    )
+                )
+                .frame(width: 280, height: 280)
+
+            VStack(spacing: 24) {
+                ZStack {
+                    Circle()
+                        .stroke(Color.green.opacity(0.15), lineWidth: 1.5)
+                        .frame(width: 140, height: 140)
+                    Circle()
+                        .stroke(OnboardingColors.accentBlue.opacity(0.3), lineWidth: 2)
+                        .frame(width: 100, height: 100)
+
+                    Image(systemName: "globe")
+                        .font(.system(size: 48, weight: .thin))
+                        .foregroundStyle(
+                            LinearGradient(
+                                colors: [.green, OnboardingColors.accentBlue],
+                                startPoint: .top,
+                                endPoint: .bottom
+                            )
+                        )
+                }
+
+                HStack(spacing: 12) {
+                    decorativeIcon("globe", size: 22, color: .green)
+                    decorativeIcon("arrow.triangle.branch", size: 22, color: OnboardingColors.accentBlue)
+                    decorativeIcon("cpu", size: 22, color: .orange)
                 }
             }
         }

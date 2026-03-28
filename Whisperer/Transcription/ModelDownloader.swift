@@ -98,6 +98,19 @@ class ModelDownloader {
         return WhisperModel.allCases.filter { isModelDownloaded($0) }
     }
 
+    /// Get set of downloaded models (for routing queries)
+    func downloadedModelSet() -> Set<WhisperModel> {
+        Set(downloadedModels())
+    }
+
+    /// Ensure the detector model (ggml-tiny.bin) is downloaded
+    func ensureDetectorModelDownloaded() async throws {
+        let model = WhisperModel.detectorModel
+        guard !isModelDownloaded(model) else { return }
+        Logger.info("Downloading detector model: \(model.displayName)", subsystem: .model)
+        try await downloadModel(model, progressCallback: { _ in })
+    }
+
     /// Download a specific model with retry logic and file validation
     func downloadModel(
         _ model: WhisperModel,

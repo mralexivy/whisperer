@@ -210,6 +210,37 @@ enum WhisperModel: String, CaseIterable, Identifiable {
 
     var isLanguageRestricted: Bool { supportedLanguage != nil }
 
+    /// Whether this is an English-only model variant
+    var isEnglishOnly: Bool {
+        switch self {
+        case .distilSmallEn: return true
+        default: return false
+        }
+    }
+
+    /// Whether this model supports multilingual transcription
+    var isMultilingual: Bool { !isEnglishOnly }
+
+    /// The model used for language detection (must be multilingual)
+    static let detectorModel: WhisperModel = .tiny
+
+    /// Best model for a specific language from available downloaded models
+    static func recommendedModel(
+        for language: TranscriptionLanguage,
+        downloaded: Set<WhisperModel>
+    ) -> WhisperModel? {
+        switch language {
+        case .english:
+            if downloaded.contains(.distilSmallEn) { return .distilSmallEn }
+            return nil
+        case .hebrew:
+            if downloaded.contains(.ivritLargeTurbo) { return .ivritLargeTurbo }
+            return nil
+        default:
+            return nil  // use default multilingual
+        }
+    }
+
     var downloadURL: URL {
         switch self {
         case .distilLargeV3:
