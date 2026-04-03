@@ -1621,7 +1621,18 @@ class AppState: ObservableObject {
         isOutputAudioMuted = muteOtherAudioDuringRecording  // Initialize runtime toggle from setting
         startStateWatchdog()  // 4s startup watchdog — cancelled when audio starts
 
+        // Play feedback sound first (user hears it)
         soundPlayer?.playStartSound()
+
+        // Mute AFTER sound starts playing (~100ms for Tink sound)
+        if muteOtherAudioDuringRecording {
+            Task {
+                try? await Task.sleep(nanoseconds: 100_000_000)  // 100ms for sound to play
+                await MainActor.run {
+                    audioMuter?.muteSystemAudio()
+                }
+            }
+        }
 
         Task {
             do {
@@ -1656,11 +1667,6 @@ class AppState: ObservableObject {
                 cancelStateWatchdog()  // Startup succeeded, audio is flowing
                 startRecordingWatchdog()  // Long-running watchdog for stuck .recording state
 
-                // Mute AFTER engine is running and audio HAL has stabilized
-                if muteOtherAudioDuringRecording {
-                    try? await Task.sleep(nanoseconds: 300_000_000)  // 300ms post-engine stabilization
-                    audioMuter?.muteSystemAudio()
-                }
             } catch {
                 cancelStateWatchdog()
                 errorMessage = "Failed to start recording: \(error.localizedDescription)"
@@ -1780,8 +1786,18 @@ class AppState: ObservableObject {
         isOutputAudioMuted = muteOtherAudioDuringRecording  // Initialize runtime toggle from setting
         startStateWatchdog()  // 4s startup watchdog — cancelled when audio starts
 
-        // Play sound immediately (non-blocking)
+        // Play feedback sound first (user hears it)
         soundPlayer?.playStartSound()
+
+        // Mute AFTER sound starts playing (~100ms for Tink sound)
+        if muteOtherAudioDuringRecording {
+            Task {
+                try? await Task.sleep(nanoseconds: 100_000_000)  // 100ms for sound to play
+                await MainActor.run {
+                    audioMuter?.muteSystemAudio()
+                }
+            }
+        }
 
         // Start recording immediately
         Task {
@@ -1838,13 +1854,6 @@ class AppState: ObservableObject {
                     return
                 }
 
-                // Mute AFTER engine is running and audio HAL has stabilized.
-                // Muting before engine.start() gets undone by HAL reconfiguration,
-                // causing audio to unmute ~1s into recording (especially with headphones).
-                if muteOtherAudioDuringRecording {
-                    try? await Task.sleep(nanoseconds: 300_000_000)  // 300ms post-engine stabilization
-                    audioMuter?.muteSystemAudio()
-                }
             } catch {
                 // Only handle the error if THIS recording is still the active one.
                 // A stale Task (from a timed-out queryInputNodeFormat) can arrive after
