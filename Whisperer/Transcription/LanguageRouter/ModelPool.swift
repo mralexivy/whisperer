@@ -2,7 +2,7 @@
 //  ModelPool.swift
 //  Whisperer
 //
-//  Single owner of all whisper_context instances — detector, active, fallback, and standby backends
+//  Single owner of all whisper_context instances — preview/detector, active, fallback, and standby backends
 //
 
 import Foundation
@@ -44,8 +44,8 @@ enum ModelPoolError: Error, LocalizedError {
 // MARK: - ModelPool
 
 final class ModelPool {
-    // MARK: - Detector (always loaded)
-    private var detector: WhisperLangDetector?
+    // MARK: - Shared tiny bridge (CPU-only) — preview + language detection
+    private(set) var previewBridge: WhisperBridge?
 
     // MARK: - Warm backends, keyed by ModelProfile
     private var warmBackends: [ModelProfile: TranscriptionBackend] = [:]
@@ -67,20 +67,25 @@ final class ModelPool {
 
     init() {}
 
-    // MARK: - Detector
+    // MARK: - Preview / Detection Bridge
 
-    /// Load detector model. Called at app startup.
-    func loadDetector(modelPath: URL) throws {
+    /// Load CPU-only tiny model for live preview and language detection.
+    /// CPU-only = zero GPU contention with main model and UI rendering.
+    /// ANE handles the CoreML encoder automatically when .mlmodelc is present.
+    func loadPreviewBridge(modelPath: URL) throws {
         let startTime = CACurrentMediaTime()
-        detector = try WhisperLangDetector(modelPath: modelPath)
+        let bridge = try WhisperBridge(modelPath: modelPath, useGPU: false)
+        // Warm up
+        _ = bridge.transcribe(samples: [Float](repeating: 0, count: 16000))
+        previewBridge = bridge
         let elapsed = (CACurrentMediaTime() - startTime) * 1000
-        Logger.info("Detector loaded in \(String(format: "%.0f", elapsed))ms", subsystem: .model)
+        Logger.info("Preview/detector bridge loaded (CPU) in \(String(format: "%.0f", elapsed))ms", subsystem: .model)
     }
 
-    /// Run language detection on audio samples.
-    /// Serializes access to detector context.
+    /// Run language detection on audio samples via shared preview bridge.
+    /// Serialized with preview transcription via ctxLock.
     func detectLanguage(samples: [Float]) -> [String: Float]? {
-        detector?.detect(samples: samples)
+        previewBridge?.detectLanguage(samples: samples)
     }
 
     // MARK: - Backend Lifecycle
@@ -105,12 +110,19 @@ final class ModelPool {
     /// Route a target profile. Returns warm backend or fallback + async loading task.
     /// Deduplicates in-flight loads for the same profile.
     func routeTarget(for profile: ModelProfile) -> RouteActivation {
-        // Check if target is already warm
+        // Check if target is already warm (exact profile match)
         if let backend = warmBackends[profile] {
             return .warm(backend)
         }
 
-        // Target is cold — get fallback backend
+        // Check if the same model binary is warm under a different profile
+        // (e.g., same model with language: .auto vs language: .english)
+        if let match = warmBackends.first(where: { $0.key.model == profile.model && $0.key.backend == profile.backend }) {
+            Logger.debug("Reusing warm backend for \(profile.model.displayName) (different language profile)", subsystem: .model)
+            return .warm(match.value)
+        }
+
+        // Target is truly cold (different model binary) — get fallback backend
         guard let fbProfile = fallbackProfile, let fbBackend = warmBackends[fbProfile] else {
             // This should never happen if preloadLanguageRouting() ran correctly
             Logger.error("Fallback backend not available during routing", subsystem: .model)
@@ -229,9 +241,9 @@ final class ModelPool {
         warmBackends.removeAll()
         fallbackProfile = nil
 
-        // Shutdown detector
-        detector?.prepareForShutdown()
-        detector = nil
+        // Shutdown preview/detector bridge
+        previewBridge?.prepareForShutdown()
+        previewBridge = nil
 
         Logger.info("ModelPool released all resources", subsystem: .model)
     }

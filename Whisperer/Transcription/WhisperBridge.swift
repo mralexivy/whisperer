@@ -218,6 +218,16 @@ enum TranscriptionLanguage: String, CaseIterable, Codable {
         }
     }
 
+    /// Whether this language uses right-to-left script
+    var isRTL: Bool {
+        switch self {
+        case .arabic, .hebrew, .persian, .urdu, .pashto, .sindhi, .yiddish:
+            return true
+        default:
+            return false
+        }
+    }
+
     /// Convert to Locale for SpeechAnalyzer. Returns nil for .auto (use Locale.current).
     var locale: Locale? {
         guard self != .auto else { return nil }
@@ -604,6 +614,60 @@ class WhisperBridge: TranscriptionBackend {
             let text = self.transcribe(samples: samples, initialPrompt: initialPrompt, language: language, singleSegment: singleSegment, maxTokens: maxTokens)
             // Call completion directly on background queue to avoid blocking main thread
             completion(text)
+        }
+    }
+
+    /// Detect language from audio samples. Returns probabilities for all languages, or nil on failure.
+    /// Serialized with transcription via ctxLock — safe to call from any thread.
+    func detectLanguage(samples: [Float]) -> [String: Float]? {
+        guard !isShuttingDown, isInitialized else { return nil }
+        guard !samples.isEmpty else { return nil }
+
+        do {
+            return try ctxLock.withLock(timeout: lockTimeout) { [self] in
+                guard let ctx = ctx else { return nil }
+
+                let melResult = samples.withUnsafeBufferPointer { ptr -> Int32 in
+                    whisper_pcm_to_mel(ctx, ptr.baseAddress, Int32(ptr.count), 2)
+                }
+                guard melResult == 0 else {
+                    Logger.error("whisper_pcm_to_mel failed with code \(melResult)", subsystem: .transcription)
+                    return nil
+                }
+
+                let maxId = Int(whisper_lang_max_id())
+                var probs = [Float](repeating: 0, count: maxId + 1)
+
+                let topId = probs.withUnsafeMutableBufferPointer { p -> Int32 in
+                    whisper_lang_auto_detect(ctx, 0, 2, p.baseAddress)
+                }
+                guard topId >= 0 else {
+                    Logger.error("whisper_lang_auto_detect failed with code \(topId)", subsystem: .transcription)
+                    return nil
+                }
+
+                var result: [String: Float] = [:]
+                for i in 0...maxId {
+                    if let langStr = whisper_lang_str(Int32(i)) {
+                        let prob = probs[i]
+                        if prob > 0.001 {
+                            result[String(cString: langStr)] = prob
+                        }
+                    }
+                }
+
+                if let topLang = whisper_lang_str(topId) {
+                    Logger.debug("Detection: top=\(String(cString: topLang)) (p=\(String(format: "%.3f", probs[Int(topId)])))", subsystem: .transcription)
+                }
+
+                return result.isEmpty ? nil : result
+            }
+        } catch SafeLockError.timeout {
+            Logger.error("detectLanguage lock timeout", subsystem: .transcription)
+            return nil
+        } catch {
+            Logger.error("detectLanguage lock error: \(error.localizedDescription)", subsystem: .transcription)
+            return nil
         }
     }
 

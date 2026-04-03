@@ -210,6 +210,30 @@ enum WhisperModel: String, CaseIterable, Identifiable {
 
     var isLanguageRestricted: Bool { supportedLanguage != nil }
 
+    /// Core ML encoder directory name that whisper.cpp looks for next to the .bin file.
+    /// whisper.cpp strips quantization suffix (e.g., "-q5_0") automatically.
+    var coreMLEncoderDirectoryName: String? {
+        switch self {
+        case .tiny: return "ggml-tiny-encoder.mlmodelc"
+        case .base: return "ggml-base-encoder.mlmodelc"
+        case .small: return "ggml-small-encoder.mlmodelc"
+        case .medium: return "ggml-medium-encoder.mlmodelc"
+        case .largeV3: return "ggml-large-v3-encoder.mlmodelc"
+        case .largeTurbo, .largeTurboQ5: return "ggml-large-v3-turbo-encoder.mlmodelc"
+        case .largeV3Q5: return "ggml-large-v3-encoder.mlmodelc"
+        case .distilLargeV3: return nil  // No Core ML encoder available
+        case .distilSmallEn: return nil
+        case .ivritLargeTurbo: return nil
+        }
+    }
+
+    /// Download URL for the Core ML encoder zip
+    var coreMLEncoderDownloadURL: URL? {
+        guard let dirName = coreMLEncoderDirectoryName else { return nil }
+        let zipName = dirName.replacingOccurrences(of: ".mlmodelc", with: ".mlmodelc.zip")
+        return URL(string: "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/\(zipName)")
+    }
+
     /// Whether this is an English-only model variant
     var isEnglishOnly: Bool {
         switch self {

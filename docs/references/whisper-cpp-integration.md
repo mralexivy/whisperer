@@ -113,6 +113,8 @@ if language != .auto {
 }
 ```
 
+For language detection using `whisper_pcm_to_mel()` + `whisper_lang_auto_detect()` with shortlist filtering, see [language-routing.md](language-routing.md).
+
 ## Thread Count
 
 On Apple Silicon, thread count targets performance cores only (excludes efficiency cores):

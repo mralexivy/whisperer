@@ -50,6 +50,25 @@ enum ModelDownloadError: Error, LocalizedError {
 class ModelDownloader {
     static let shared = ModelDownloader()
 
+    /// Current download task (for cancellation support)
+    private var currentDownloadTask: URLSessionDownloadTask?
+    private var currentDownloadSession: URLSession?
+    private let downloadLock = NSLock()
+
+    /// Cancel the current download if any
+    func cancelCurrentDownload() {
+        downloadLock.lock()
+        defer { downloadLock.unlock() }
+
+        if let task = currentDownloadTask {
+            task.cancel()
+            Logger.info("Download task cancelled", subsystem: .model)
+        }
+        currentDownloadTask = nil
+        currentDownloadSession?.invalidateAndCancel()
+        currentDownloadSession = nil
+    }
+
     private var appSupportDir: URL {
         let fileManager = FileManager.default
         let appSupport = fileManager.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
@@ -111,6 +130,58 @@ class ModelDownloader {
         try await downloadModel(model, progressCallback: { _ in })
     }
 
+    // MARK: - Core ML Encoder Management
+
+    /// Path for Core ML encoder directory (next to the model .bin file)
+    func coreMLEncoderPath(for model: WhisperModel) -> URL? {
+        guard let dirName = model.coreMLEncoderDirectoryName else { return nil }
+        return appSupportDir.appendingPathComponent(dirName)
+    }
+
+    /// Check if Core ML encoder is downloaded for a model
+    func isCoreMLEncoderDownloaded(_ model: WhisperModel) -> Bool {
+        guard let path = coreMLEncoderPath(for: model) else { return false }
+        var isDir: ObjCBool = false
+        return FileManager.default.fileExists(atPath: path.path, isDirectory: &isDir) && isDir.boolValue
+    }
+
+    /// Download and unzip Core ML encoder for ANE acceleration
+    func ensureCoreMLEncoder(for model: WhisperModel) async throws {
+        guard !isCoreMLEncoderDownloaded(model) else { return }
+        guard let downloadURL = model.coreMLEncoderDownloadURL,
+              let dirName = model.coreMLEncoderDirectoryName else { return }
+
+        let zipPath = appSupportDir.appendingPathComponent("\(dirName).zip")
+        Logger.info("Downloading Core ML encoder for \(model.displayName)...", subsystem: .model)
+
+        // Download zip
+        let (tempURL, _) = try await URLSession.shared.download(from: downloadURL)
+        try FileManager.default.moveItem(at: tempURL, to: zipPath)
+
+        // Unzip
+        let destinationDir = appSupportDir
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/unzip")
+        process.arguments = ["-o", zipPath.path, "-d", destinationDir.path]
+        process.standardOutput = nil
+        process.standardError = nil
+        try process.run()
+        process.waitUntilExit()
+
+        guard process.terminationStatus == 0 else {
+            throw ModelDownloadError.invalidFileSize  // Reuse existing error
+        }
+
+        // Clean up zip
+        try? FileManager.default.removeItem(at: zipPath)
+
+        // Clean up __MACOSX directory if created by unzip
+        let macosxDir = destinationDir.appendingPathComponent("__MACOSX")
+        try? FileManager.default.removeItem(at: macosxDir)
+
+        Logger.info("Core ML encoder installed for \(model.displayName)", subsystem: .model)
+    }
+
     /// Download a specific model with retry logic and file validation
     func downloadModel(
         _ model: WhisperModel,
@@ -168,7 +239,16 @@ class ModelDownloader {
                 lastError = error
                 Logger.warning("Download attempt \(attempt)/\(maxAttempts) failed: \(error.localizedDescription)", subsystem: .model)
 
+                // Don't retry on cancellation (Swift CancellationError or URLSession -999)
                 if error is CancellationError { throw error }
+                if let urlError = error as? URLError, urlError.code == .cancelled {
+                    Logger.info("Download cancelled by user, not retrying", subsystem: .model)
+                    throw error
+                }
+                if (error as NSError).code == NSURLErrorCancelled {
+                    Logger.info("Download cancelled by user, not retrying", subsystem: .model)
+                    throw error
+                }
             }
         }
 
@@ -247,11 +327,17 @@ class ModelDownloader {
     // MARK: - Private
 
     private func performDownload(url: URL, destination: URL, progressCallback: @escaping (Double) -> Void) async throws {
-        return try await withCheckedThrowingContinuation { continuation in
+        return try await withCheckedThrowingContinuation { [weak self] continuation in
             let delegate = DownloadDelegate(
                 destination: destination,
                 progressCallback: progressCallback,
-                onComplete: { result in
+                onComplete: { [weak self] result in
+                    // Clear the stored task/session on completion
+                    self?.downloadLock.lock()
+                    self?.currentDownloadTask = nil
+                    self?.currentDownloadSession = nil
+                    self?.downloadLock.unlock()
+
                     switch result {
                     case .success:
                         continuation.resume()
@@ -271,6 +357,12 @@ class ModelDownloader {
             // Create session with delegate
             let session = URLSession(configuration: config, delegate: delegate, delegateQueue: nil)
             let task = session.downloadTask(with: url)
+
+            // Store for cancellation support
+            self?.downloadLock.lock()
+            self?.currentDownloadTask = task
+            self?.currentDownloadSession = session
+            self?.downloadLock.unlock()
 
             // Keep session and delegate alive
             objc_setAssociatedObject(task, "session", session, .OBJC_ASSOCIATION_RETAIN)

@@ -36,6 +36,14 @@ enum RoutingThresholds {
     static let redetectCooldown: TimeInterval = 8.0
     static let silenceForRedetect: TimeInterval = 3.0
 
+    // Detection window — VAD filtering provides denser signal, enabling shorter windows
+    static let targetDetectionSamples = 48000  // 3s at 16kHz (reduced from 4s with VAD filtering)
+    static let minDetectionSamples = 24000     // 1.5s minimum
+    static let maxDetectionAttempts = 3
+    static let retryGrowth = 16000             // 1s more audio per retry
+    static let minVoicedDetectionSamples = 24000  // 1.5s of voiced audio required for detection
+    static let fastPathMargin: Float = 0.30    // Top must beat runner-up by this for early lock (empirical)
+
     // Scoring weights — initial routing (no transcript yet)
     static let initialProbWeight: Float = 0.875
     static let initialPriorWeight: Float = 0.125
@@ -72,7 +80,8 @@ final class LanguageRouter {
 
     /// Core decision method.
     /// transcriptText may be empty (initial routing) — script hint is zero in that case.
-    func decide(allProbs: [String: Float], transcriptText: String) -> RouteDecision? {
+    /// shortWindow: true when voiced audio was below targetDetectionSamples — requires wider margin for early lock.
+    func decide(allProbs: [String: Float], transcriptText: String, shortWindow: Bool = false) -> RouteDecision? {
         // 1. Filter to allowed languages only
         var filtered: [(TranscriptionLanguage, Float)] = []
         for lang in allowedLanguages {
@@ -88,7 +97,7 @@ final class LanguageRouter {
         let normalized = filtered.map { ($0.0, $0.1 / sum) }
 
         // 3. Compute script hints (zero if no transcript)
-        let scriptHints = ScriptAnalyzer.dominantScript(in: transcriptText)
+        let scriptHints = ScriptAnalyzer.dominantScript(in: transcriptText, allowedLanguages: allowedLanguages)
         let hasScriptSignal = !scriptHints.isEmpty
 
         // 4. Compute composite scores
@@ -121,6 +130,15 @@ final class LanguageRouter {
         switch state {
         case .undecided:
             if top.1 >= RoutingThresholds.routeThreshold {
+                // Short window fast-path gate: require wider margin over runner-up
+                if shortWindow {
+                    let runnerUp = scores.count > 1 ? scores[1].1 : 0
+                    let margin = top.1 - runnerUp
+                    if margin < RoutingThresholds.fastPathMargin {
+                        Logger.debug("Fast-path rejected: margin \(String(format: "%.3f", margin)) < \(RoutingThresholds.fastPathMargin), buffering more audio", subsystem: .transcription)
+                        return nil
+                    }
+                }
                 state = .locked(top.0)
                 saveLastSessionLanguage(top.0)
                 Logger.info("Language routed to \(top.0.displayName) (conf=\(String(format: "%.3f", top.1)))", subsystem: .transcription)

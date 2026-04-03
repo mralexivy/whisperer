@@ -28,8 +28,9 @@ class VADSegmenter {
     let silenceForFinalization: Double     // silence gap to finalize a chunk
     let overlapDuration: Double = 0.3     // overlap between chunks for context
 
-    // Force-split threshold: never exceed this even in continuous speech
-    let maxChunkDuration: Double = 30.0
+    // Force-split threshold: never exceed this even in continuous speech.
+    // 10s keeps chunks short for dictation-like live text via onNewSegment.
+    let maxChunkDuration: Double = 10.0
 
     init(
         vad: SileroVAD?,

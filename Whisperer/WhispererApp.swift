@@ -1628,41 +1628,7 @@ struct SettingsTabView: View {
                                 .labelsHidden()
                         }
 
-                        if appState.liveTranscriptionEnabled {
-                            if appState.isDownloadingEou {
-                                VStack(alignment: .leading, spacing: 4) {
-                                    HStack(spacing: 6) {
-                                        ProgressView()
-                                            .scaleEffect(0.5)
-                                            .frame(width: 12, height: 12)
-                                        Text(appState.eouDownloadStatus)
-                                            .font(.system(size: 11, weight: .medium))
-                                            .foregroundColor(MBColors.textSecondary)
-                                    }
-                                    ProgressView(value: appState.eouDownloadProgress)
-                                        .progressViewStyle(.linear)
-                                        .tint(MBColors.accent)
-                                }
-                            } else if appState.isEouModelLoaded {
-                                HStack(spacing: 6) {
-                                    Image(systemName: "checkmark.circle.fill")
-                                        .font(.system(size: 12))
-                                        .foregroundColor(.green)
-                                    Text("Live transcription model ready")
-                                        .font(.system(size: 11, weight: .medium))
-                                        .foregroundColor(MBColors.textSecondary)
-                                }
-                            } else if appState.isEouModelCached() {
-                                HStack(spacing: 6) {
-                                    ProgressView()
-                                        .scaleEffect(0.5)
-                                        .frame(width: 12, height: 12)
-                                    Text("Loading model...")
-                                        .font(.system(size: 11, weight: .medium))
-                                        .foregroundColor(MBColors.textSecondary)
-                                }
-                            }
-                        }
+                        // Live preview powered by main model streaming — no separate model status needed
                     }
                 }
                 .id(SettingsScrollTarget.livePreview)

@@ -27,6 +27,85 @@ Microphone → AudioRecorder → StreamingTranscriber → WhisperBridge → Corr
 - **WhisperBridge** — Swift wrapper around whisper.cpp C library. Manages `whisper_context` lifecycle, Metal GPU acceleration. Thread-safe with SafeLock. Uses deterministic greedy decoding (temperature=0, no fallback ladder) and performance-core-aware thread count.
 - **SileroVAD** — Optional Silero voice activity detection (~2MB model, CPU-only to avoid GPU contention). Provides both full segment detection and lightweight `hasSpeech()` probability check.
 
+## Language Routing Pipeline
+
+When multiple languages are configured, audio goes through a detection pipeline before transcription:
+
+```
+Audio → VAD filter → WhisperBridge.detectLanguage (shared tiny model, CPU)
+                         ↓ probabilities
+                    LanguageRouter (shortlist filter + state machine)
+                         ↓ language decision
+                    ModelRouter → ModelPool (warm/cold backend selection)
+                         ↓ TranscriptionBackend
+                    StreamingTranscriber (transcribe with fixed language)
+```
+
+- **Language detection** — Shared `previewBridge` (tiny model, CPU-only) in ModelPool. Uses `whisper_pcm_to_mel()` → `whisper_lang_auto_detect()` via `WhisperBridge.detectLanguage()`. Same context handles both live preview and detection, serialized via `ctxLock`. whisper.cpp has no built-in shortlist — filtering happens in LanguageRouter.
+- **LanguageRouter** — State machine (undecided → locked → suspectedSwitch). Filters probabilities to allowed languages, applies composite scoring (probability + script hints + priors), requires confidence threshold to lock. Confidence-gated fast path for short detection windows.
+- **ScriptAnalyzer** — Unicode script-family detection (Latin, Cyrillic, Hebrew, Arabic, CJK, etc.) from transcript text. Maps scripts to candidate languages filtered by the allowed shortlist. Heuristic support only — script ≠ language.
+- **ModelPool** — Manages preview/detector bridge, fallback, and target whisper_context instances. Warm backends serve instantly; cold targets use fallback while loading async.
+
+For full details, see [docs/references/language-routing.md](docs/references/language-routing.md).
+
+## Live Transcription
+
+Live text appears during recording via two sources:
+
+1. **Preview pass** (tiny model, separate context) — runs every 1s, transcribes newest audio since last pass, appends to `previewAccumulatedText`. Provides text before VAD chunks finalize.
+2. **Chunk `onNewSegment`** (main model) — fires word-by-word during VAD chunk transcription. Provides fine-grained live text when chunks are being processed.
+
+### Preview Architecture (append-only)
+- **`previewBridge`** — Shared `WhisperBridge` instance (tiny model, CPU-only) in `ModelPool`. Also handles language detection. Runs on its own serial queue. CPU-only = zero GPU contention with main model and UI rendering.
+- **Append-only** — Each preview pass transcribes only NEW audio (with 0.5s overlap for boundary quality). Deduplicates overlap words, then appends. Text never shrinks. `SmoothTextUpdater.hasPrefix` always succeeds → smooth word-by-word animation.
+- **`previewPassID`** — Monotonic ordering prevents out-of-order callbacks from corrupting accumulated text.
+- **Detection-gated** — Preview waits for `routeDecision != nil` (or 5s timeout) before starting. Prevents wrong-language preview.
+- **Chunk handoff** — When VAD chunk finalizes, `previewAccumulatedText` is cleared and `lastPreviewedSampleIndex` resets. Main model's high-quality text replaces preview.
+
+### Display
+- `completedChunkTexts.joined(" ") + " " + previewAccumulatedText` — stable chunks + live tail
+- `SmoothTextUpdater` animates words 60ms apart (LTR) or shows immediately (RTL)
+- `TranscriptionTextView` (NSTextField via NSViewRepresentable) renders text for guaranteed RTL paragraph direction
+- `.id(recordingSessionID)` on LiveTranscriptionCard forces full SwiftUI state reset between recordings (including expand/collapse state)
+
+## RTL Support
+
+### Why NSTextField, not SwiftUI Text
+SwiftUI `Text` does NOT expose paragraph base writing direction control. Six approaches were tested and failed:
+1. `environment(\.layoutDirection, .rightToLeft)` — controls view layout mirroring, not text paragraph direction
+2. `multilineTextAlignment(.trailing)` — aligns lines within container, doesn't change where new lines START from
+3. `environment(\.locale, Locale("he"))` — doesn't affect paragraph style
+4. Unicode RLI/PDI isolates (`\u{2067}`/`\u{2069}`) — SwiftUI Text doesn't pass them to Core Text
+5. `frame(maxWidth: .infinity, alignment: .trailing)` — view alignment, not paragraph direction
+6. HStack + conditional Spacer — unreliable inside ScrollView
+
+### Working solution: NSViewRepresentable
+`TranscriptionTextView` wraps `NSTextField` and sets `NSParagraphStyle.baseWritingDirection = .rightToLeft` directly. AppKit's Core Text rendering respects this unconditionally.
+
+### RTL Detection
+- **Language-level**: `TranscriptionLanguage.isRTL` — true for Arabic, Hebrew, Persian, Urdu, Pashto, Sindhi, Yiddish
+- **Content-level**: `LiveTranscriptionCard.detectRTL(in:)` — scans first 50 chars for Hebrew/Arabic Unicode ranges. Triggers immediately when RTL text appears, before language detection.
+- **Scrollbar**: Appears on left edge for RTL, right edge for LTR
+
+### RTL Animation Policy
+Word-by-word typewriter animation is skipped for RTL (shows text immediately). The animation reveals words left-to-right visually, which is wrong for RTL scripts.
+
+## Core ML ANE Acceleration
+
+### Build Configuration
+whisper.cpp is compiled with `WHISPER_USE_COREML=ON` and `WHISPER_COREML_ALLOW_FALLBACK=ON` (baked into `libwhisper.a` and `libwhisper.coreml.a`). All 3 Xcode configs (Debug, Release, AppStore) have `WHISPER_USE_COREML=1` preprocessor definition and link `-lwhisper.coreml -framework CoreML`.
+
+### How it works
+whisper.cpp automatically looks for `{model-name}-encoder.mlmodelc` next to the `.bin` file. If found, the encoder runs on Apple Neural Engine (ANE). If not found, falls back to Metal GPU silently (`WHISPER_COREML_ALLOW_FALLBACK=ON`).
+
+### Encoder downloads
+`ModelDownloader.ensureCoreMLEncoder(for:)` downloads pre-converted encoder zips from HuggingFace and unzips next to the model binary. `WhisperModel.coreMLEncoderDownloadURL` maps models to their encoder URLs.
+
+### Performance impact (M2 Pro, measured)
+- Main model (large-v3-turbo-q5) with Core ML encoder: **588ms** alone (vs 731ms GPU-only = 19% faster)
+- Both models on ANE: total memory **990MB** (vs 1023MB GPU-only)
+- Tiny detector on ANE: **31ms** detection (acceptable)
+
 ## Key Design Decisions
 
 ### 1. SafeLock over Swift Actors
@@ -59,7 +138,7 @@ Microphone → AudioRecorder → StreamingTranscriber → WhisperBridge → Corr
 ### 6. Non-Activating Overlay Panel
 **Decision**: `NSPanel` with `[.borderless, .nonactivatingPanel]`, `hasShadow = false`.
 **Why**: The recording overlay must NOT steal focus from the app where text will be inserted. `nonactivatingPanel` keeps the previous app as key window.
-**Pitfall**: Use `.orderFront()`, NEVER `.makeKey()` or `.makeKeyAndOrderFront()`. The panel shows whenever `state != .idle` via NotificationCenter observer. A 5-second safety timeout in `stopRecording()` prevents the HUD from getting permanently stuck if audio device errors cause `audioRecorder.stopRecording()` to hang.
+**Pitfall**: Use `.orderFront()`, NEVER `.makeKey()` or `.makeKeyAndOrderFront()`. The panel shows whenever `state != .idle` via NotificationCenter observer. A 5-second safety timeout in `stopRecording()` prevents the HUD from getting permanently stuck if audio device errors cause `audioRecorder.stopRecording()` to hang. The panel dynamically resizes via `adjustFrameForContent()` when the live transcription card expands/collapses — grows upward for bottom positions, downward for top position.
 
 ### 7. Context Carrying for Transcription
 **Decision**: Last 100 characters of previous transcription passed as `initial_prompt` to next chunk.
@@ -114,6 +193,12 @@ WhispererApp
               ├── WhisperBridge (private, pre-loaded)
               ├── SileroVAD (private, optional)
               ├── StreamingTranscriber (private, created per recording)
+              │     ├── VADSegmenter (owned, uses SileroVAD)
+              │     ├── LanguageRouter (optional, when routing enabled)
+              │     └── ModelRouter (optional, when routing enabled)
+              ├── ModelPool (private, optional — when routing enabled)
+              │     ├── WhisperBridge (shared preview/detector, CPU-only tiny model)
+              │     └── warm backends (fallback + standby)
               ├── TextInjector (owned, optional)
               ├── AudioMuter (owned, optional)
               ├── SoundPlayer (owned, optional)
@@ -172,6 +257,12 @@ Infrastructure (Logger, SafeLock, CrashHandler)
 11. **stopRecording() safety timeout** — A parallel Task sleeps 5 seconds, then checks if state is still `.stopping`. If so, it forces `.idle` (clearing `streamingTranscriber` and `liveTranscription`). The main stop Task checks `guard case .stopping = state` after `audioRecorder?.stopRecording()` returns — if the timeout already fired, it bails out. This prevents the overlay HUD from getting permanently stuck when `AVAudioEngine.stop()` hangs on a bad audio device.
 
 12. **stopAsync() over stop()** — Always use `await transcriber.stopAsync()` in AppState, never `transcriber.stop()`. The synchronous `stop()` reads `lastProcessedSampleIndex` before in-flight chunk completion handlers update it, causing overlapping tail transcription and duplicated text output.
+
+13. **Language detection retry budget** — `detectionAttempts` only increments after sufficient voiced audio is confirmed. If VAD filtering skips detection (too much silence), the attempt is not counted. This prevents exhausting the 3-retry budget on silence-heavy recordings.
+
+14. **whisper_full_lang_id() is weak evidence** — It reflects decoder state, not an independent language classifier. Treat per-chunk language mismatches as weak votes (half-weight vs script mismatches). Never use as a hard mismatch trigger.
+
+15. **Script ≠ language** — ScriptAnalyzer detects script families (Cyrillic, Latin, etc.), not languages. Cyrillic could be Russian, Ukrainian, or Bulgarian. Always intersect with the user's allowed language shortlist before scoring.
 
 ## Deep Reference
 

@@ -10,6 +10,8 @@
 6. `[weak self]` in all `Task.detached` closures and stored callbacks
 7. Audio pipeline: Microphone → AudioRecorder → StreamingTranscriber → WhisperBridge → CorrectionEngine → TextInjector
 8. **NEVER** use `CGEventTap`, `IOHIDManager`, or global `keyDown`/`keyUp` monitors — App Store rejection (Guideline 2.4.5)
+9. Language routing: `WhisperBridge.detectLanguage()` (shared preview bridge, CPU-only) → shortlist filter in LanguageRouter → fixed-language transcription. whisper.cpp has NO built-in shortlist — constraint lives in app logic. Preview and detection share one tiny model context — never create separate contexts.
+10. `whisper_full_lang_id()` is decoder state, NOT an independent language classifier — treat as weak evidence only
 
 ## Naming Patterns
 
@@ -20,6 +22,9 @@
 - **Windows**: `HistoryWindow`, `OverlayPanel`, `OnboardingWindow` (purpose + Window/Panel)
 - **Color Structs**: `WhispererColors` (workspace), `MBColors` (menu bar, private enum), `OnboardingColors` (onboarding, private enum)
 - **Errors**: `WhisperError`, `RecordingError`, `SafeLockError` (domain + Error, enums with `LocalizedError`)
+- **Routing**: `LanguageRouter`, `ModelRouter`, `ModelPool` (purpose + Router/Pool)
+- **Detection**: `ScriptAnalyzer`, `VADSegmenter` (purpose + technique)
+- **Decisions**: `RouteDecision`, `ModelRouteDecision`, `ModelProfile` (result structs, not classes)
 
 ### Properties
 - **Bool flags**: `isRecording`, `isModelLoaded`, `isShuttingDown`, `memoryLimitReached`

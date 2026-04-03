@@ -1277,27 +1277,7 @@ struct HistorySettingsView: View {
                             .labelsHidden()
                     }
 
-                    if AppState.shared.liveTranscriptionEnabled {
-                        if AppState.shared.isDownloadingEou {
-                            HStack(spacing: 6) {
-                                ProgressView()
-                                    .scaleEffect(0.5)
-                                    .frame(width: 12, height: 12)
-                                Text(AppState.shared.eouDownloadStatus)
-                                    .font(.system(size: 11, weight: .medium))
-                                    .foregroundColor(WhispererColors.secondaryText(colorScheme))
-                            }
-                        } else if AppState.shared.isEouModelLoaded {
-                            HStack(spacing: 6) {
-                                Image(systemName: "checkmark.circle.fill")
-                                    .font(.system(size: 12))
-                                    .foregroundColor(.green)
-                                Text("Live transcription model ready")
-                                    .font(.system(size: 11, weight: .medium))
-                                    .foregroundColor(WhispererColors.secondaryText(colorScheme))
-                            }
-                        }
-                    }
+                    // Live preview powered by main model's streaming segments — no separate model needed
                 }
             }
         }

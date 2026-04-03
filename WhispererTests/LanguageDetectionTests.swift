@@ -11,7 +11,7 @@ import AVFoundation
 
 final class LanguageDetectionTests: XCTestCase {
 
-    private static var _detector: WhisperLangDetector?
+    private static var _detector: WhisperBridge?
     private static var _detectorModelName: String?
 
     override class func tearDown() {
@@ -20,8 +20,8 @@ final class LanguageDetectionTests: XCTestCase {
         super.tearDown()
     }
 
-    /// Load WhisperLangDetector with the best available multilingual model
-    private func loadDetector() throws -> WhisperLangDetector {
+    /// Load WhisperBridge with the best available multilingual model for detection
+    private func loadDetector() throws -> WhisperBridge {
         if let detector = Self._detector { return detector }
 
         // Try models in order of preference for detection
@@ -45,7 +45,7 @@ final class LanguageDetectionTests: XCTestCase {
             throw XCTSkip("No multilingual whisper model downloaded")
         }
 
-        let detector = try WhisperLangDetector(modelPath: path)
+        let detector = try WhisperBridge(modelPath: path, useGPU: false)
         Self._detector = detector
         Self._detectorModelName = model.displayName
         return detector
@@ -116,7 +116,7 @@ final class LanguageDetectionTests: XCTestCase {
         let allSamples = try loadAudio(from: hebrewSampleURL())
 
         let window = Array(allSamples.prefix(32000))  // 2s
-        guard let probs = detector.detect(samples: window) else {
+        guard let probs = detector.detectLanguage(samples: window) else {
             XCTFail("Detection returned nil")
             return
         }
@@ -152,7 +152,7 @@ final class LanguageDetectionTests: XCTestCase {
         guard window.count >= 48000 else {
             throw XCTSkip("Audio too short for 4s window")
         }
-        guard let probs = detector.detect(samples: window) else {
+        guard let probs = detector.detectLanguage(samples: window) else {
             XCTFail("Detection returned nil")
             return
         }
@@ -185,7 +185,7 @@ final class LanguageDetectionTests: XCTestCase {
         let detector = try loadDetector()
         let allSamples = try loadAudio(from: hebrewSampleURL())
 
-        guard let probs = detector.detect(samples: allSamples) else {
+        guard let probs = detector.detectLanguage(samples: allSamples) else {
             XCTFail("Detection returned nil")
             return
         }
@@ -232,7 +232,7 @@ final class LanguageDetectionTests: XCTestCase {
             let window = Array(allSamples.prefix(size))
 
             let start = CFAbsoluteTimeGetCurrent()
-            let probs = detector.detect(samples: window)
+            let probs = detector.detectLanguage(samples: window)
             let ms = (CFAbsoluteTimeGetCurrent() - start) * 1000
 
             let top = probs?.max(by: { $0.value < $1.value })
@@ -422,7 +422,7 @@ final class LanguageDetectionTests: XCTestCase {
         group.enter()
         DispatchQueue.global(qos: .userInteractive).async {
             let start = CFAbsoluteTimeGetCurrent()
-            detectResult = detector.detect(samples: Array(allSamples.prefix(64000)))
+            detectResult = detector.detectLanguage(samples: Array(allSamples.prefix(64000)))
             concurrentDetectMs = (CFAbsoluteTimeGetCurrent() - start) * 1000
             group.leave()
         }
@@ -474,7 +474,7 @@ final class LanguageDetectionTests: XCTestCase {
         print("   After tiny model added: \(String(format: "%.0f", afterTiny)) MB (+\(String(format: "%.0f", afterTiny - afterMain)) MB for tiny)")
 
         let detector = try loadDetector()
-        _ = detector.detect(samples: [Float](repeating: 0, count: 16000))
+        _ = detector.detectLanguage(samples: [Float](repeating: 0, count: 16000))
         let afterDetector = BenchmarkUtilities.currentMemoryMB()
         print("   After detector added: \(String(format: "%.0f", afterDetector)) MB (+\(String(format: "%.0f", afterDetector - afterTiny)) MB for detector)")
         print("   Total: \(String(format: "%.0f", afterDetector)) MB")
@@ -503,7 +503,7 @@ final class LanguageDetectionTests: XCTestCase {
 
             // Tiny detector
             let tinyStart = CFAbsoluteTimeGetCurrent()
-            let tinyProbs = detector.detect(samples: window)
+            let tinyProbs = detector.detectLanguage(samples: window)
             let tinyMs = (CFAbsoluteTimeGetCurrent() - tinyStart) * 1000
             let tinyTop = tinyProbs?.max(by: { $0.value < $1.value })
             let tinyHe = tinyProbs?["he"] ?? 0

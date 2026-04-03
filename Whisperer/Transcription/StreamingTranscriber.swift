@@ -16,6 +16,11 @@ class StreamingTranscriber {
 
     private let sampleRate: Double = 16000.0
 
+    // Feedback sound window — skip initial samples containing start sound
+    // Sound plays at T=0, lasts ~100ms. Use 150ms margin for safety.
+    private let feedbackSoundDuration: Double = 0.15  // 150ms
+    private var feedbackSoundSamples: Int { Int(feedbackSoundDuration * sampleRate) }  // 2400 samples
+
     // Memory bounds - maximum recording duration
     private let maxRecordingDuration: Double = 5.0 * 60.0  // 5 minutes
     private var maxRecordingSamples: Int { Int(maxRecordingDuration * sampleRate) }
@@ -26,6 +31,7 @@ class StreamingTranscriber {
     private let allSamplesLock = SafeLock()
 
     // VAD-chunked pipeline state
+    private let vad: SileroVAD?  // Separate ref for language detection filtering
     private var vadSegmenter: VADSegmenter
     private var lastVADScanIndex: Int = 0
     private var lastTranscribedSampleIndex: Int = 0
@@ -57,6 +63,7 @@ class StreamingTranscriber {
     }
 
     private var onTranscription: ((String) -> Void)?
+    var onLanguageDetected: ((TranscriptionLanguage) -> Void)?
 
     // Thread-safe transcription state
     private let transcriptionLock = SafeLock()
@@ -87,7 +94,11 @@ class StreamingTranscriber {
 
     // VAD scan task
     private var vadScanTask: Task<Void, Never>?
+    private var previewTask: Task<Void, Never>?
     private var isStopped: Bool = false
+    private var lastPreviewedSampleIndex: Int = 0
+    private var previewAccumulatedText: String = ""
+    private var previewPassID: Int = 0
 
     // Filler word removal (applied in final pass)
     private var fillerWordRemovalEnabled: Bool
@@ -100,9 +111,12 @@ class StreamingTranscriber {
     private var modelPool: ModelPool?
     private var languageRouter: LanguageRouter?
     private var modelRouter: ModelRouter?
+    private var previewBridge: WhisperBridge?  // CPU-only tiny model for live preview
     private var routeDecision: ModelRouteDecision?
-    private var hasAttemptedDetection: Bool = false
+    private var detectionAttempts: Int = 0
+    private var lastDetectionSampleCount: Int = 0
     private var scriptMismatchCount: Int = 0
+    private var chunkLangMismatchCount: Int = 0  // Weak signal from whisper_full_lang_id
     private var lastSilenceStart: Date?
     private var newUtteranceAfterSilence: Bool = false
 
@@ -126,16 +140,19 @@ class StreamingTranscriber {
         retranscriptionInterval: UInt64 = 1_500_000_000,
         modelPool: ModelPool? = nil,
         languageRouter: LanguageRouter? = nil,
-        modelRouter: ModelRouter? = nil
+        modelRouter: ModelRouter? = nil,
+        previewBridge: WhisperBridge? = nil
     ) {
         self.whisper = backend
+        self.vad = vad
         self.language = language
         self.initialPrompt = initialPrompt
         self.fillerWordRemovalEnabled = fillerWordRemovalEnabled
         self.modelPool = modelPool
         self.languageRouter = languageRouter
+        self.previewBridge = previewBridge
         self.modelRouter = modelRouter
-        self.vadSegmenter = VADSegmenter(vad: vad, targetChunkDuration: 20.0, silenceForFinalization: 0.8)
+        self.vadSegmenter = VADSegmenter(vad: vad, targetChunkDuration: 6.0, silenceForFinalization: 0.5)
     }
 
     /// Start streaming transcription with VAD-chunked pipeline
@@ -155,19 +172,25 @@ class StreamingTranscriber {
         isStopped = false
         memoryLimitReached = false
         routeDecision = nil
-        hasAttemptedDetection = false
+        detectionAttempts = 0
+        lastDetectionSampleCount = 0
         scriptMismatchCount = 0
+        chunkLangMismatchCount = 0
         lastSilenceStart = nil
         newUtteranceAfterSilence = false
         pendingPromotion = nil
         languageRouter?.reset()
-        lastVADScanIndex = 0
-        lastTranscribedSampleIndex = 0
-        lastClaimedSampleIndex = 0
+        // Start indices after feedback sound window to skip start sound capture
+        lastVADScanIndex = feedbackSoundSamples
+        lastTranscribedSampleIndex = feedbackSoundSamples
+        lastClaimedSampleIndex = feedbackSoundSamples
         completedChunkTexts = []
         currentChunkLiveText = ""
         pendingChunks = []
         isTranscribingChunk = false
+        lastPreviewedSampleIndex = feedbackSoundSamples  // Skip feedback sound window
+        previewAccumulatedText = ""
+        previewPassID = 0
 
         // Start VAD scan task
         vadScanTask = Task.detached(priority: .userInitiated) { [weak self] in
@@ -181,7 +204,24 @@ class StreamingTranscriber {
             }
         }
 
-        Logger.debug("StreamingTranscriber started (VAD-chunked pipeline)", subsystem: .transcription)
+        // Start preview after language detection resolves (state-machine gate)
+        previewTask = Task.detached(priority: .userInitiated) { [weak self] in
+            // Wait for language detection or 5s timeout
+            for _ in 0..<50 {
+                try? await Task.sleep(nanoseconds: 100_000_000)  // 100ms poll
+                guard let self, !self.isStopped else { return }
+                if self.routeDecision != nil || self.modelPool == nil { break }
+            }
+
+            // Preview loop — every 1s
+            while !Task.isCancelled {
+                guard let self, !self.isStopped else { break }
+                self.runLivePreviewPass()
+                try? await Task.sleep(nanoseconds: 1_000_000_000)
+            }
+        }
+
+        Logger.debug("StreamingTranscriber started (VAD-chunked pipeline + live preview)", subsystem: .transcription)
     }
 
     /// Add audio samples from microphone
@@ -225,18 +265,31 @@ class StreamingTranscriber {
 
         guard allSamples.count > Int(0.5 * sampleRate) else { return }
 
-        // Language detection — run once before first chunk when routing is enabled
-        if !hasAttemptedDetection,
+        // Language detection — detect before first chunk, retry if undecided
+        if routeDecision == nil,
+           detectionAttempts < RoutingThresholds.maxDetectionAttempts,
            let pool = modelPool, let langRouter = languageRouter, let mdlRouter = modelRouter {
-            let targetSamples = 32000  // 2s at 16kHz
-            if allSamples.count >= targetSamples {
-                hasAttemptedDetection = true
-                performLanguageDetection(
-                    samples: Array(allSamples.prefix(targetSamples)),
+            // First attempt at 4s, retries at +2s intervals
+            let targetSamples = RoutingThresholds.targetDetectionSamples
+                + (detectionAttempts * RoutingThresholds.retryGrowth)
+            if allSamples.count >= targetSamples, allSamples.count > lastDetectionSampleCount {
+                lastDetectionSampleCount = allSamples.count
+                // Use latest audio (suffix) — has more speech signal than beginning
+                let windowSize = min(allSamples.count, RoutingThresholds.targetDetectionSamples)
+                let wasAttempted = performLanguageDetection(
+                    samples: Array(allSamples.suffix(windowSize)),
                     pool: pool,
                     langRouter: langRouter,
                     mdlRouter: mdlRouter
                 )
+                // Only consume retry budget when detection was actually attempted
+                // (not skipped due to insufficient voiced audio)
+                if wasAttempted {
+                    detectionAttempts += 1
+                }
+                if routeDecision == nil {
+                    Logger.debug("Detection attempt \(detectionAttempts)/\(RoutingThresholds.maxDetectionAttempts) undecided, will retry with more audio", subsystem: .transcription)
+                }
             }
         }
 
@@ -322,6 +375,19 @@ class StreamingTranscriber {
                 // Post-chunk script stabilizer — check for language mismatches
                 self.checkScriptStability(chunkText: trimmed)
 
+                // Weak reinforcement from whisper_full_lang_id (decoder state, not independent detection)
+                if let bridge = self.whisper as? WhisperBridge,
+                   let detectedCode = bridge.lastDetectedLanguage,
+                   let detectedLang = TranscriptionLanguage(rawValue: detectedCode),
+                   let langRouter = self.languageRouter,
+                   case .locked(let lockedLang) = langRouter.state {
+                    if detectedLang != lockedLang {
+                        self.chunkLangMismatchCount += 1
+                    } else {
+                        self.chunkLangMismatchCount = max(0, self.chunkLangMismatchCount - 1)
+                    }
+                }
+
                 // Deduplicate overlap with previous chunk
                 let deduped: String
                 if let prevText = self.completedChunkTexts.last, !prevText.isEmpty {
@@ -340,6 +406,9 @@ class StreamingTranscriber {
             // the index on an aborted (empty) chunk, the tail pass can't re-transcribe it.
             if !trimmed.isEmpty || !self.isStopped {
                 self.lastTranscribedSampleIndex = chunk.endSample
+                // Clear preview accumulated text — chunk covers this audio now
+                self.previewAccumulatedText = ""
+                self.lastPreviewedSampleIndex = chunk.endSample
             }
             self.currentChunkLiveText = ""
             self.isTranscribingChunk = false
@@ -367,6 +436,126 @@ class StreamingTranscriber {
         DispatchQueue.main.async { [weak self] in
             self?.onTranscription?(text)
         }
+    }
+
+    // MARK: - Live Preview Pass
+
+    /// Append-only live preview using tiny model.
+    /// Transcribes only NEW audio since last pass with ~0.5s overlap for boundary quality.
+    /// Text only grows (monotonic) — `SmoothTextUpdater.hasPrefix` always succeeds.
+    private func runLivePreviewPass() {
+        guard let preview = previewBridge, !isTranscribingChunk else { return }
+
+        var allSamples: [Float] = []
+        do {
+            try allSamplesLock.withLock {
+                allSamples = allRecordedSamples
+            }
+        } catch { return }
+
+        // Compute start with 0.5s overlap for boundary quality
+        let overlapSamples = Int(0.5 * sampleRate)
+        let tailStart = max(lastTranscribedSampleIndex,
+                           lastPreviewedSampleIndex > overlapSamples ? lastPreviewedSampleIndex - overlapSamples : 0)
+
+        // Need at least 1s of new audio
+        guard allSamples.count > tailStart + Int(1.0 * sampleRate) else { return }
+
+        // Extract window (max 3s to keep it fast)
+        let maxWindowSamples = Int(3.0 * sampleRate)
+        let endIndex = min(allSamples.count, tailStart + maxWindowSamples)
+        let windowSamples = Array(allSamples[tailStart..<endIndex])
+        let candidateEndIndex = endIndex
+
+        // VAD check: skip preview pass if no speech detected
+        if let vad = vad, !vad.hasSpeech(samples: windowSamples) {
+            return
+        }
+
+        let normalizedSamples = normalizeSamples(windowSamples)
+        let lang = effectiveLanguage
+
+        // Context prompt from accumulated preview text
+        let prompt: String?
+        if !previewAccumulatedText.isEmpty {
+            var combined = ""
+            if let ip = initialPrompt, !ip.isEmpty { combined = ip + " " }
+            combined += String(previewAccumulatedText.suffix(50))
+            prompt = combined
+        } else if let prev = completedChunkTexts.last, !prev.isEmpty {
+            var combined = ""
+            if let ip = initialPrompt, !ip.isEmpty { combined = ip + " " }
+            combined += String(prev.suffix(50))
+            prompt = combined
+        } else {
+            prompt = initialPrompt
+        }
+
+        // Assign pass ID for ordering
+        previewPassID += 1
+        let currentPassID = previewPassID
+
+        preview.transcribeAsync(
+            samples: normalizedSamples,
+            initialPrompt: prompt,
+            language: lang,
+            singleSegment: true,
+            maxTokens: 0
+        ) { [weak self] text in
+            guard let self, !self.isStopped else { return }
+
+            // Discard out-of-order callbacks
+            guard currentPassID == self.previewPassID else { return }
+
+            let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !trimmed.isEmpty, !self.isHallucination(trimmed) else { return }
+
+            // Dedup overlap between accumulated tail and new text
+            let deduped = self.deduplicateOverlap(existing: self.previewAccumulatedText, new: trimmed)
+
+            // Append (never replace)
+            if !deduped.isEmpty {
+                if self.previewAccumulatedText.isEmpty {
+                    self.previewAccumulatedText = deduped
+                } else {
+                    self.previewAccumulatedText += " " + deduped
+                }
+            }
+
+            // Advance sample index on success
+            self.lastPreviewedSampleIndex = candidateEndIndex
+
+            // Build display: completed chunks + accumulated preview
+            var display = self.completedChunkTexts.joined(separator: " ")
+            if !display.isEmpty && !self.previewAccumulatedText.isEmpty {
+                display += " "
+            }
+            display += self.previewAccumulatedText
+
+            self.fullTranscription = display
+
+            DispatchQueue.main.async { [weak self] in
+                self?.onTranscription?(display)
+            }
+
+            Logger.debug("LivePreview: +\(deduped.split(separator: " ").count) words (total \(display.count) chars)", subsystem: .transcription)
+        }
+    }
+
+    /// Dedup overlap words between existing accumulated text and new preview text
+    private func deduplicateOverlap(existing: String, new: String) -> String {
+        let existingWords = existing.split(separator: " ")
+        let newWords = new.split(separator: " ")
+        guard !existingWords.isEmpty, !newWords.isEmpty else { return new }
+
+        let maxOverlap = min(5, min(existingWords.count, newWords.count))
+        for len in stride(from: maxOverlap, through: 1, by: -1) {
+            if existingWords.suffix(len).elementsEqual(newWords.prefix(len)) {
+                let remaining = newWords.dropFirst(len).joined(separator: " ")
+                return remaining
+            }
+        }
+        return new
     }
 
     // MARK: - Hallucination Detection
@@ -431,6 +620,8 @@ class StreamingTranscriber {
         isStopped = true
         vadScanTask?.cancel()
         vadScanTask = nil
+        previewTask?.cancel()
+        previewTask = nil
 
         // Abort any in-flight transcription
         if let bridge = whisper as? WhisperBridge {
@@ -542,6 +733,8 @@ class StreamingTranscriber {
         isStopped = true
         vadScanTask?.cancel()
         vadScanTask = nil
+        previewTask?.cancel()
+        previewTask = nil
 
         // Abort in-flight chunk transcription
         if let bridge = whisper as? WhisperBridge {
@@ -676,6 +869,42 @@ class StreamingTranscriber {
         }
     }
 
+    /// Trim non-speech prefix from audio samples (removes feedback sound capture)
+    /// Uses VAD to find first speech onset and trims everything before it
+    private func trimLeadingNonSpeech(_ samples: [Float]) -> [Float] {
+        guard let vad = vad else { return samples }  // No VAD = no trim
+
+        // Only analyze first 300ms (4800 samples at 16kHz)
+        let analysisWindow = min(samples.count, Int(0.3 * sampleRate))
+        guard analysisWindow > Int(0.1 * sampleRate) else { return samples }  // Too short to trim
+
+        let windowSamples = Array(samples.prefix(analysisWindow))
+        let segments = vad.detectSpeechSegments(samples: windowSamples)
+
+        guard let firstSegment = segments.first else {
+            // No speech in first 300ms — trim the feedback sound window
+            if samples.count > feedbackSoundSamples {
+                Logger.debug("No speech in first 300ms, trimming \(feedbackSoundSamples) samples", subsystem: .transcription)
+                return Array(samples.dropFirst(feedbackSoundSamples))
+            }
+            return samples
+        }
+
+        // Find first speech onset sample
+        let speechStartSample = firstSegment.startSample
+
+        // Apply 50ms lookback for natural speech attack
+        let lookbackSamples = Int(0.05 * sampleRate)  // 800 samples
+        let trimPoint = max(0, speechStartSample - lookbackSamples)
+
+        if trimPoint > 0 {
+            Logger.debug("Trimming \(trimPoint) samples (\(Int(Double(trimPoint) / sampleRate * 1000))ms) of leading non-speech", subsystem: .transcription)
+            return Array(samples.dropFirst(trimPoint))
+        }
+
+        return samples
+    }
+
     /// Save recorded audio to WAV file
     func saveRecording(to url: URL) -> Bool {
         var samples: [Float] = []
@@ -692,6 +921,9 @@ class StreamingTranscriber {
             Logger.warning("No audio samples to save", subsystem: .transcription)
             return false
         }
+
+        // Trim leading non-speech (feedback sound) from saved audio
+        samples = trimLeadingNonSpeech(samples)
 
         guard let format = AVAudioFormat(
             commonFormat: .pcmFormatFloat32,
@@ -730,28 +962,62 @@ class StreamingTranscriber {
 
     // MARK: - Language Routing
 
-    /// Perform initial language detection and model routing
+    /// Perform initial language detection and model routing.
+    /// Returns true if detection was actually attempted (voiced audio sufficient).
+    @discardableResult
     private func performLanguageDetection(
         samples: [Float],
         pool: ModelPool,
         langRouter: LanguageRouter,
         mdlRouter: ModelRouter
-    ) {
+    ) -> Bool {
+        // VAD-filter detection audio — extract voiced segments only (single allocation)
+        var detectionSamples = samples
+        let isShortWindow: Bool
+        if let vad = vad {
+            let segments = vad.detectSpeechSegments(samples: samples)
+            let totalVoiced = segments.reduce(0) { acc, seg in
+                acc + min(seg.endSample, samples.count) - min(seg.startSample, samples.count)
+            }
+            let minVoiced = RoutingThresholds.minVoicedDetectionSamples
+            guard totalVoiced >= minVoiced else {
+                Logger.debug("Detection skipped: \(totalVoiced) voiced samples < \(minVoiced) required", subsystem: .transcription)
+                return false
+            }
+            var voiced = [Float]()
+            voiced.reserveCapacity(totalVoiced)
+            for seg in segments {
+                let start = min(seg.startSample, samples.count)
+                let end = min(seg.endSample, samples.count)
+                voiced.append(contentsOf: samples[start..<end])
+            }
+            detectionSamples = voiced
+            isShortWindow = totalVoiced < RoutingThresholds.targetDetectionSamples
+        } else {
+            isShortWindow = samples.count < RoutingThresholds.targetDetectionSamples
+        }
+
         // Detect language from audio
-        guard let allProbs = pool.detectLanguage(samples: samples) else {
+        guard let allProbs = pool.detectLanguage(samples: detectionSamples) else {
             Logger.warning("Language detection returned nil, using configured language", subsystem: .transcription)
-            return
+            return true  // Detection was attempted but failed
         }
 
         // Route through language classifier (no transcript yet — initial routing)
-        guard let langDecision = langRouter.decide(allProbs: allProbs, transcriptText: "") else {
+        guard let langDecision = langRouter.decide(allProbs: allProbs, transcriptText: "", shortWindow: isShortWindow) else {
             Logger.debug("Language router undecided, using configured language", subsystem: .transcription)
-            return
+            return true  // Detection was attempted
         }
 
         // Resolve to model profile
         let modelDecision = mdlRouter.resolve(decision: langDecision, warmProfiles: pool.warmProfiles)
         routeDecision = modelDecision
+
+        // Notify live preview of detected language
+        let detectedLang = langDecision.lang
+        DispatchQueue.main.async { [weak self] in
+            self?.onLanguageDetected?(detectedLang)
+        }
 
         // Apply routing decision
         let activation = pool.routeTarget(for: modelDecision.profile)
@@ -777,6 +1043,7 @@ class StreamingTranscriber {
                 }
             }
         }
+        return true
     }
 
     /// Drain promotion queue and swap backend if promotion is ready
@@ -808,7 +1075,7 @@ class StreamingTranscriber {
               let mdlRouter = modelRouter,
               case .locked(let lockedLang) = langRouter.state else { return }
 
-        let scriptHints = ScriptAnalyzer.dominantScript(in: chunkText)
+        let scriptHints = ScriptAnalyzer.dominantScript(in: chunkText, allowedLanguages: langRouter.allowedLanguages)
         guard !scriptHints.isEmpty else { return }
 
         // Check if dominant script disagrees with locked language
@@ -821,10 +1088,12 @@ class StreamingTranscriber {
             scriptMismatchCount = 0
         }
 
-        // Check if re-detection should be triggered
-        if langRouter.shouldRedetect(scriptMismatches: scriptMismatchCount, newUtteranceAfterSilence: newUtteranceAfterSilence) {
+        // Combine script + chunk-lang evidence (chunk-lang is weak — needs 5+ to trigger alone)
+        let combinedMismatches = scriptMismatchCount + (chunkLangMismatchCount / 2)
+        if langRouter.shouldRedetect(scriptMismatches: combinedMismatches, newUtteranceAfterSilence: newUtteranceAfterSilence) {
             newUtteranceAfterSilence = false  // Consume the signal
             scriptMismatchCount = 0
+            chunkLangMismatchCount = 0
 
             // Get latest audio for re-detection
             var latestSamples: [Float] = []

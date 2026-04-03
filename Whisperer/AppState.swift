@@ -65,6 +65,7 @@ class AppState: ObservableObject {
                 isHandsFreeRecording = false
                 showHandsFreeToast = false
                 isMicMuted = false
+                isPaused = false
             }
         }
     }
@@ -72,6 +73,7 @@ class AppState: ObservableObject {
     @Published var errorMessage: String?
     @Published var saveRecordings: Bool = true  // Save recordings by default
     @Published var liveTranscription: String = ""  // Live transcription during recording
+    @Published var recordingSessionID: UUID = UUID()  // Forces SwiftUI state reset between recordings
 
     // Latest committed transcript for macOS Services provider
     private(set) var lastTranscribedText: String = ""
@@ -84,13 +86,6 @@ class AppState: ObservableObject {
     @Published var liveTranscriptionEnabled: Bool = true {  // Show live transcription preview during recording
         didSet {
             UserDefaults.standard.set(liveTranscriptionEnabled, forKey: "liveTranscriptionEnabled")
-            if liveTranscriptionEnabled {
-                if isEouModelCached() {
-                    preloadEouModel()
-                } else {
-                    downloadEouModel()
-                }
-            }
         }
     }
 
@@ -262,6 +257,8 @@ class AppState: ObservableObject {
     }
     @Published var isHandsFreeRecording: Bool = false
     @Published var isMicMuted: Bool = false
+    @Published var isPaused: Bool = false  // Pause recording (soft pause — engine runs, samples discarded)
+    @Published var isOutputAudioMuted: Bool = true  // Runtime toggle for system audio mute during recording
     @Published var showHandsFreeToast: Bool = false {
         didSet {
             NotificationCenter.default.post(name: NSNotification.Name("AppStateChanged"), object: nil)
@@ -284,8 +281,7 @@ class AppState: ObservableObject {
     @Published var isDownloadingEou: Bool = false
     @Published var eouDownloadProgress: Double = 0
     @Published var eouDownloadStatus: String = ""
-    @Published var isEouModelLoaded: Bool = false
-    private var livePreviewEngine: LivePreviewEngine?
+    // LivePreviewEngine removed — StreamingTranscriber.onTranscription provides live preview directly
 
     // SpeechAnalyzer (macOS 26+) load state
     @Published var isLoadingSpeechAnalyzer: Bool = false
@@ -397,6 +393,7 @@ class AppState: ObservableObject {
         }
     }
     @Published var activeRouteInfo: String?
+    @Published var isLiveTranscriptionRTL: Bool = false
 
     private var currentAudioURL: URL?
     private var lastTargetAppName: String?
@@ -752,13 +749,43 @@ class AppState: ObservableObject {
             }
             selectModel(model)
         } catch {
-            Logger.error("Failed to download \(model.displayName): \(error)", subsystem: .model)
-            errorMessage = "Failed to download \(model.displayName): \(error.localizedDescription)"
+            // Check if this was a user cancellation (downloadingModel already cleared by cancelModelDownload)
+            let wasCancelled = downloadingModel == nil ||
+                (error as? URLError)?.code == .cancelled ||
+                (error as NSError).code == NSURLErrorCancelled
+
+            if wasCancelled {
+                Logger.info("Download was cancelled, not showing error", subsystem: .model)
+            } else {
+                Logger.error("Failed to download \(model.displayName): \(error)", subsystem: .model)
+                errorMessage = "Failed to download \(model.displayName): \(error.localizedDescription)"
+            }
+
             downloadingModel = nil
             downloadProgress = 0
             downloadRetryInfo = nil
             state = .idle
         }
+    }
+
+    /// Cancel the current model download and return to idle state
+    func cancelModelDownload() {
+        guard downloadingModel != nil else { return }
+        Logger.info("Model download cancelled by user", subsystem: .model)
+
+        // Actually cancel the URLSession download task
+        ModelDownloader.shared.cancelCurrentDownload()
+
+        // Clean up partial file if exists
+        if let model = downloadingModel {
+            let partialPath = ModelDownloader.shared.modelPath(for: model)
+            try? FileManager.default.removeItem(at: partialPath)
+        }
+
+        downloadingModel = nil
+        downloadProgress = 0
+        downloadRetryInfo = nil
+        state = .idle
     }
 
     // MARK: - Model Loading
@@ -809,6 +836,15 @@ class AppState: ObservableObject {
         Logger.info("Pre-loading \(modelDisplayName)...", subsystem: .model)
         isLoadingWhisper = true
         let startTime = Date()
+
+        // Download Core ML encoder in background (for ANE acceleration)
+        Task.detached(priority: .utility) {
+            do {
+                try await ModelDownloader.shared.ensureCoreMLEncoder(for: model)
+            } catch {
+                Logger.debug("Core ML encoder not available for \(modelDisplayName): \(error)", subsystem: .model)
+            }
+        }
 
         whisperLoadTask = Task.detached(priority: .userInitiated) { [weak self] in
             do {
@@ -942,126 +978,7 @@ class AppState: ObservableObject {
         return count
     }
 
-    // MARK: - Parakeet EOU (Streaming Live Preview)
-
-    /// Directory where EOU 320ms models are cached
-    static var eouModelDirectory: URL {
-        let appSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
-        return appSupport
-            .appendingPathComponent("FluidAudio", isDirectory: true)
-            .appendingPathComponent("Models", isDirectory: true)
-            .appendingPathComponent("parakeet-eou-streaming/320ms", isDirectory: true)
-    }
-
-    /// Check if EOU 320ms models are already downloaded
-    func isEouModelCached() -> Bool {
-        let dir = Self.eouModelDirectory
-        let required = ["streaming_encoder.mlmodelc", "decoder.mlmodelc", "joint_decision.mlmodelc", "vocab.json"]
-        return required.allSatisfy { FileManager.default.fileExists(atPath: dir.appendingPathComponent($0).path) }
-    }
-
-    /// Download Parakeet EOU 320ms streaming model from HuggingFace
-    func downloadEouModel() {
-        guard !isDownloadingEou else { return }
-
-        isDownloadingEou = true
-        eouDownloadStatus = "Downloading EOU 320ms..."
-        eouDownloadProgress = 0
-
-        let cacheDir = Self.eouModelDirectory
-        let progressTask = Task.detached(priority: .utility) { [weak self] in
-            let expectedFileCount = 15
-            while !Task.isCancelled {
-                try? await Task.sleep(nanoseconds: 500_000_000)
-                let fileCount = Self.countFilesRecursively(at: cacheDir)
-                let progress = min(Double(fileCount) / Double(expectedFileCount), 0.95)
-                await MainActor.run { [weak self] in
-                    guard let self, self.isDownloadingEou else { return }
-                    self.eouDownloadProgress = progress
-                }
-            }
-        }
-
-        Task.detached(priority: .userInitiated) { [weak self] in
-            do {
-                let modelsParent = cacheDir.deletingLastPathComponent().deletingLastPathComponent()
-                try FileManager.default.createDirectory(at: modelsParent, withIntermediateDirectories: true)
-                try await DownloadUtils.downloadRepo(.parakeetEou320, to: modelsParent)
-                progressTask.cancel()
-                Logger.info("Parakeet EOU 320ms downloaded", subsystem: .model)
-
-                await MainActor.run { [weak self] in
-                    guard let self = self else { return }
-                    self.isDownloadingEou = false
-                    self.eouDownloadStatus = ""
-                    self.eouDownloadProgress = 0
-                    self.preloadEouModel()
-                }
-            } catch {
-                progressTask.cancel()
-                Logger.error("Failed to download Parakeet EOU: \(error)", subsystem: .model)
-                await MainActor.run { [weak self] in
-                    guard let self = self else { return }
-                    self.isDownloadingEou = false
-                    self.eouDownloadStatus = ""
-                    self.eouDownloadProgress = 0
-                    self.errorMessage = "Failed to download live transcription model: \(error.localizedDescription)"
-                }
-            }
-        }
-    }
-
-    /// Preload EOU model for live preview (if toggle enabled and model cached)
-    func preloadEouModel() {
-        guard liveTranscriptionEnabled else { return }
-        guard isEouModelCached() else { return }
-
-        // Already loaded and running — skip
-        if livePreviewEngine != nil && isEouModelLoaded { return }
-
-        // Unload old engine if it exists (e.g. partial load failure)
-        if let oldEngine = livePreviewEngine {
-            oldEngine.unloadModel()
-            livePreviewEngine = nil
-            isEouModelLoaded = false
-            Logger.debug("Released old LivePreviewEngine before preload", subsystem: .model)
-        }
-
-        let engine = LivePreviewEngine()
-        self.livePreviewEngine = engine
-
-        Task.detached(priority: .utility) { [weak self] in
-            do {
-                try await engine.loadModel(modelDir: AppState.eouModelDirectory)
-                await MainActor.run { [weak self] in
-                    guard let self else { return }
-                    self.isEouModelLoaded = true
-                    Logger.info("EOU model preloaded for live preview", subsystem: .model)
-
-                    // If recording is already active, start the engine now.
-                    // Audio is already flowing via onStreamingSamples → feedAudio,
-                    // which is gated by isRunning (set by start()).
-                    if case .recording = self.state, self.liveTranscriptionEnabled {
-                        Task {
-                            await engine.start { [weak self] text in
-                                let cbTime = CACurrentMediaTime()
-                                Task { @MainActor in
-                                    Logger.debug("LivePreview: UI update (\(text.count) chars) t=\(String(format: "%.3f", cbTime))", subsystem: .transcription)
-                                    self?.liveTranscription = text
-                                }
-                            }
-                        }
-                    }
-                }
-            } catch {
-                Logger.error("Failed to preload EOU model: \(error)", subsystem: .model)
-                await MainActor.run { [weak self] in
-                    self?.livePreviewEngine = nil
-                    self?.isEouModelLoaded = false
-                }
-            }
-        }
-    }
+    // LivePreviewEngine + Parakeet EOU removed — live preview comes from StreamingTranscriber.onTranscription
 
     private func preloadParakeetModel() {
         let variant = selectedParakeetModel
@@ -1414,14 +1331,12 @@ class AppState: ObservableObject {
                     guard let self = self else { return }
                     self.sileroVAD = vad
                     self.isVADLoaded = true
-                    self.preloadEouModel()
                 }
             } catch {
                 Logger.warning("Failed to load Silero VAD: \(error.localizedDescription) — app will work without speech detection", subsystem: .model)
                 // VAD is completely optional, continue without it
                 await MainActor.run { [weak self] in
                     self?.isVADLoaded = false
-                    self?.preloadEouModel()
                 }
             }
         }
@@ -1452,13 +1367,13 @@ class AppState: ObservableObject {
                     }
                 }
 
-                // Download detector model
+                // Download tiny model for preview/detection
                 try await ModelDownloader.shared.ensureDetectorModelDownloaded()
 
-                // Create ModelPool and load detector
+                // Create ModelPool and load shared preview/detector bridge (CPU-only)
                 let pool = ModelPool()
-                let detectorPath = ModelDownloader.shared.modelPath(for: .tiny)
-                try pool.loadDetector(modelPath: detectorPath)
+                let tinyModelPath = ModelDownloader.shared.modelPath(for: .tiny)
+                try pool.loadPreviewBridge(modelPath: tinyModelPath)
 
                 // Register the current whisperBridge as fallback
                 await MainActor.run { [weak self] in
@@ -1701,38 +1616,35 @@ class AppState: ObservableObject {
         // Set state immediately so UI updates
         state = .recording(startTime: Date())
         liveTranscription = ""
+        recordingSessionID = UUID()  // Force SwiftUI state reset
+        isLiveTranscriptionRTL = selectedLanguage.isRTL
+        isOutputAudioMuted = muteOtherAudioDuringRecording  // Initialize runtime toggle from setting
         startStateWatchdog()  // 4s startup watchdog — cancelled when audio starts
 
         soundPlayer?.playStartSound()
 
         Task {
             do {
-                streamingTranscriber = StreamingTranscriber(backend: bridge, vad: sileroVAD, language: selectedLanguage, initialPrompt: promptWordsString, fillerWordRemovalEnabled: fillerWordRemovalEnabled, modelPool: modelPool, languageRouter: routingConfig.isRoutingEnabled ? LanguageRouter(allowed: routingConfig.allowedLanguages, primary: routingConfig.primaryLanguage) : nil, modelRouter: routingConfig.isRoutingEnabled ? ModelRouter(languageModelMap: buildLanguageModelMap(), fallbackProfile: buildFallbackProfile()) : nil)
+                streamingTranscriber = StreamingTranscriber(backend: bridge, vad: sileroVAD, language: selectedLanguage, initialPrompt: promptWordsString, fillerWordRemovalEnabled: fillerWordRemovalEnabled, modelPool: modelPool, languageRouter: routingConfig.isRoutingEnabled ? LanguageRouter(allowed: routingConfig.allowedLanguages, primary: routingConfig.primaryLanguage) : nil, modelRouter: routingConfig.isRoutingEnabled ? ModelRouter(languageModelMap: buildLanguageModelMap(), fallbackProfile: buildFallbackProfile()) : nil, previewBridge: modelPool?.previewBridge)
 
-                // Start EOU live preview engine if available
-                if liveTranscriptionEnabled, let engine = livePreviewEngine, engine.isModelLoaded {
-                    await engine.start { [weak self] text in
-                        let cbTime = CACurrentMediaTime()
-                        Task { @MainActor in
-                            Logger.debug("LivePreview: UI update (\(text.count) chars) t=\(String(format: "%.3f", cbTime))", subsystem: .transcription)
-                            self?.liveTranscription = text
-                        }
-                    }
+                // Wire language detection → UI update
+                streamingTranscriber?.onLanguageDetected = { [weak self] lang in
+                    self?.activeRouteInfo = "Detected: \(lang.displayName)"
+                    self?.isLiveTranscriptionRTL = lang.isRTL
                 }
 
+                // StreamingTranscriber provides live preview via onNewSegment + onTranscription
                 streamingTranscriber?.start { [weak self] text in
                     Task { @MainActor in
-                        // Only use StreamingTranscriber for live preview when EOU is not active
-                        if self?.liveTranscriptionEnabled == true && !(self?.livePreviewEngine?.isModelLoaded == true) {
+                        if self?.liveTranscriptionEnabled == true {
                             self?.liveTranscription = text
                         }
                     }
                 }
 
                 audioRecorder?.onStreamingSamples = { [weak self] samples in
-                    guard let self = self, !self.isMicMuted else { return }
+                    guard let self = self, !self.isMicMuted, !self.isPaused else { return }
                     self.streamingTranscriber?.addSamples(samples)
-                    self.livePreviewEngine?.feedAudio(samples)
                 }
 
                 // Resolve input route fresh at recording time
@@ -1776,12 +1688,6 @@ class AppState: ObservableObject {
 
         Task {
             await audioRecorder?.stopRecording()
-
-            if let engine = livePreviewEngine {
-                await withTimeoutResult(seconds: 3.0) {
-                    await engine.stop()
-                }
-            }
 
             if muteOtherAudioDuringRecording {
                 audioMuter?.unmuteSystemAudio()
@@ -1870,6 +1776,8 @@ class AppState: ObservableObject {
         let recordingStart = Date()
         state = .recording(startTime: recordingStart)
         liveTranscription = ""
+        recordingSessionID = UUID()
+        isOutputAudioMuted = muteOtherAudioDuringRecording  // Initialize runtime toggle from setting
         startStateWatchdog()  // 4s startup watchdog — cancelled when audio starts
 
         // Play sound immediately (non-blocking)
@@ -1879,34 +1787,26 @@ class AppState: ObservableObject {
         Task {
             do {
                 // Create streaming transcriber with pre-loaded bridge, optional VAD, and language
-                streamingTranscriber = StreamingTranscriber(backend: bridge, vad: sileroVAD, language: selectedLanguage, initialPrompt: promptWordsString, fillerWordRemovalEnabled: fillerWordRemovalEnabled, modelPool: modelPool, languageRouter: routingConfig.isRoutingEnabled ? LanguageRouter(allowed: routingConfig.allowedLanguages, primary: routingConfig.primaryLanguage) : nil, modelRouter: routingConfig.isRoutingEnabled ? ModelRouter(languageModelMap: buildLanguageModelMap(), fallbackProfile: buildFallbackProfile()) : nil)
+                streamingTranscriber = StreamingTranscriber(backend: bridge, vad: sileroVAD, language: selectedLanguage, initialPrompt: promptWordsString, fillerWordRemovalEnabled: fillerWordRemovalEnabled, modelPool: modelPool, languageRouter: routingConfig.isRoutingEnabled ? LanguageRouter(allowed: routingConfig.allowedLanguages, primary: routingConfig.primaryLanguage) : nil, modelRouter: routingConfig.isRoutingEnabled ? ModelRouter(languageModelMap: buildLanguageModelMap(), fallbackProfile: buildFallbackProfile()) : nil, previewBridge: modelPool?.previewBridge)
 
-                // Start EOU live preview engine if available
-                if liveTranscriptionEnabled, let engine = livePreviewEngine, engine.isModelLoaded {
-                    await engine.start { [weak self] text in
-                        let cbTime = CACurrentMediaTime()
-                        Task { @MainActor in
-                            Logger.debug("LivePreview: UI update (\(text.count) chars) t=\(String(format: "%.3f", cbTime))", subsystem: .transcription)
-                            self?.liveTranscription = text
-                        }
-                    }
+                // Wire language detection → UI update
+                streamingTranscriber?.onLanguageDetected = { [weak self] lang in
+                    self?.activeRouteInfo = "Detected: \(lang.displayName)"
+                    self?.isLiveTranscriptionRTL = lang.isRTL
                 }
 
                 streamingTranscriber?.start { [weak self] text in
                     Task { @MainActor in
-                        // Only use StreamingTranscriber for live preview when EOU is not active
-                        if self?.liveTranscriptionEnabled == true && !(self?.livePreviewEngine?.isModelLoaded == true) {
+                        if self?.liveTranscriptionEnabled == true {
                             self?.liveTranscription = text
                         }
                     }
                 }
                 Logger.info("Streaming transcriber initialized (VAD: \(sileroVAD != nil ? "enabled" : "disabled"))", subsystem: .transcription)
 
-                // Connect audio samples to streaming transcriber and live preview engine
                 audioRecorder?.onStreamingSamples = { [weak self] samples in
-                    guard let self = self, !self.isMicMuted else { return }
+                    guard let self = self, !self.isMicMuted, !self.isPaused else { return }
                     self.streamingTranscriber?.addSamples(samples)
-                    self.livePreviewEngine?.feedAudio(samples)
                 }
 
                 // Guard: if stopRecording() was called before we got here, bail out
@@ -1994,13 +1894,7 @@ class AppState: ObservableObject {
         Task {
             await audioRecorder?.stopRecording()
 
-            // Timeout the live preview engine stop — FluidAudio's finish()/reset()
-            // can hang if the ANE is busy or the model is in a bad state.
-            if let engine = livePreviewEngine {
-                await withTimeoutResult(seconds: 3.0) {
-                    await engine.stop()
-                }
-            }
+            // No separate live preview engine to stop — StreamingTranscriber handles everything
 
             // Unmute other audio sources now that recording is done
             if muteOtherAudioDuringRecording {
@@ -2359,10 +2253,38 @@ class AppState: ObservableObject {
         }
     }
 
+    // MARK: - Pause/Resume Recording
+
+    /// Toggle pause state during recording (soft pause — engine keeps running, samples discarded)
+    func togglePause() {
+        guard state.isRecording else { return }
+        isPaused.toggle()
+
+        if isPaused {
+            Logger.info("Recording paused", subsystem: .app)
+        } else {
+            Logger.info("Recording resumed", subsystem: .app)
+        }
+    }
+
+    /// Toggle system output audio mute during recording
+    func toggleOutputAudioMute() {
+        guard state.isRecording else { return }
+        isOutputAudioMuted.toggle()
+
+        if isOutputAudioMuted {
+            audioMuter?.muteSystemAudio()
+            Logger.info("Output audio muted", subsystem: .audio)
+        } else {
+            audioMuter?.unmuteSystemAudio()
+            Logger.info("Output audio unmuted (meeting capture mode)", subsystem: .audio)
+        }
+    }
+
     func updateWaveform(amplitude: Float) {
-        // Show flat waveform when mic is muted
+        // Show flat waveform when mic is muted or recording is paused
         waveformAmplitudes.removeFirst()
-        waveformAmplitudes.append(isMicMuted ? 0 : amplitude)
+        waveformAmplitudes.append((isMicMuted || isPaused) ? 0 : amplitude)
     }
 
     func clearError() {
@@ -2392,11 +2314,6 @@ class AppState: ObservableObject {
 
         // Stop any streaming transcription
         streamingTranscriber = nil
-
-        // Free live preview engine
-        livePreviewEngine?.unloadModel()
-        livePreviewEngine = nil
-        isEouModelLoaded = false
 
         // Release language routing model pool (detector + standby backends)
         modelPool?.releaseAll()

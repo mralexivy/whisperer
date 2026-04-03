@@ -60,6 +60,7 @@ class OverlayPanel: NSPanel {
     private var stateObserver: NSObjectProtocol?
     private var settingsObserver: NSObjectProtocol?
     private var screenObserver: NSObjectProtocol?
+    private var contentHeightObserver: NSObjectProtocol?
     private var generation: UInt64 = 0
 
     init() {
@@ -141,6 +142,15 @@ class OverlayPanel: NSPanel {
             self?.positionAtBottomCenter()
         }
 
+        // Observe content height changes (expand/collapse of live transcription card)
+        contentHeightObserver = NotificationCenter.default.addObserver(
+            forName: .overlayContentHeightChanged,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            self?.adjustFrameForContent()
+        }
+
         // Check initial state
         updateVisibility()
     }
@@ -190,6 +200,47 @@ class OverlayPanel: NSPanel {
         )
     }
 
+    private func adjustFrameForContent() {
+        guard let hostingView = contentView?.subviews.first else { return }
+        let fittingSize = hostingView.fittingSize
+        let sizePref = OverlaySize.current
+        let dims = sizePref.dimensions
+
+        let neededHeight = max(dims.height, fittingSize.height)
+        let currentFrame = self.frame
+
+        // Skip if height hasn't meaningfully changed
+        guard abs(neededHeight - currentFrame.height) > 1 else { return }
+
+        let positionPref = UserDefaults.standard.string(forKey: "overlayPosition")
+            .flatMap { OverlayPosition(rawValue: $0) } ?? .bottomCenter
+
+        let newFrame: NSRect
+        if positionPref == .topCenter {
+            // Keep top edge fixed, grow downward
+            newFrame = NSRect(
+                x: currentFrame.origin.x,
+                y: currentFrame.origin.y + currentFrame.height - neededHeight,
+                width: dims.width,
+                height: neededHeight
+            )
+        } else {
+            // Keep bottom edge fixed, grow upward
+            newFrame = NSRect(
+                x: currentFrame.origin.x,
+                y: currentFrame.origin.y,
+                width: dims.width,
+                height: neededHeight
+            )
+        }
+
+        NSAnimationContext.runAnimationGroup { context in
+            context.duration = 0.25
+            context.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+            self.animator().setFrame(newFrame, display: true)
+        }
+    }
+
     private func updateVisibility() {
         generation &+= 1
         let capturedGen = generation
@@ -232,6 +283,9 @@ class OverlayPanel: NSPanel {
             NotificationCenter.default.removeObserver(observer)
         }
         if let observer = screenObserver {
+            NotificationCenter.default.removeObserver(observer)
+        }
+        if let observer = contentHeightObserver {
             NotificationCenter.default.removeObserver(observer)
         }
     }

@@ -284,7 +284,7 @@ Whisperer uses **explicit font sizes** with `.system(size:weight:design:)` in wo
 
 - `NSPanel` borderless, non-activating, no shadow, `canJoinAllSpaces`
 - Navy capsule background (`#14142B`) with blue accent elements and `white.opacity(0.06)` border
-- Panel: 420x220, bottom-center with 10pt bottom margin
+- Panel: 420x300 (medium), bottom-center with 10pt bottom margin. Dynamically resizes when live transcription card expands.
 - Recording indicator: Blue circle (44x44) with pulsing dot (10x10)
 - Mic button: Blue circle (36x36) with accent opacity 0.15 background
 - Transcribing state: 3 animated dots in blue circle (36x36)
@@ -345,7 +345,8 @@ Speech bubble card shown during streaming transcription:
 - Width: 380pt, card surface background (`#14142B`), border `accentPurple.opacity(0.15)` 1px
 - Header: "LIVE TRANSCRIPTION" — 11pt bold rounded, tracking 1.2, gradient text (blue → purple)
 - Pulsing gradient dot (8x8) with glow ring (16x16)
-- Text: 16pt regular rounded, white.opacity(0.9), lineSpacing 5, 72pt frame height
+- Expand/collapse button: rightmost header element (after badges), 22x22pt circle hit target, `chevron.up.2`/`chevron.down.2` icon (9pt semibold blueAccent), hover glow + 1.12x scale. Dimmed (0.3 opacity) when content fits, normal (0.7) when overflow, full (1.0) on hover.
+- Text: 16pt regular rounded, white.opacity(0.9), lineSpacing 5, 72pt minimized / up to 340pt expanded
 - Divider: gradient `[accentBlue.opacity(0.3), accentPurple.opacity(0.3), clear]`, 0.5pt
 - Speech bubble arrow: Triangle pointing down, 20x10
 
@@ -370,8 +371,8 @@ Gradient card in sidebar showing recording stats:
 | `OnboardingView.swift` | OnboardingColors, four onboarding pages, feature grid |
 | `OnboardingWindow.swift` | Borderless floating NSWindow for onboarding |
 | `OverlayView.swift` | HUD overlay, RecordingIndicator, MicButton, processing states |
-| `OverlayPanel.swift` | NSPanel subclass, positioning, visibility |
-| `LiveTranscriptionCard.swift` | Live transcription bubble, TypewriterAnimator, speech bubble |
+| `OverlayPanel.swift` | NSPanel subclass, positioning, visibility, dynamic height for expanded card |
+| `LiveTranscriptionCard.swift` | Live transcription bubble, expand/collapse toggle, TypewriterAnimator, speech bubble |
 | `WaveformView.swift` | Waveform visualization bars (blue, 20 bars) |
 | `ShortcutRecorderView.swift` | Shortcut recorder, key caps, mode buttons |
 | `PurchaseView.swift` | Pro Pack purchase UI, gradient CTA, feature list |

@@ -79,8 +79,23 @@ final class ModelRouter {
             )
         }
 
-        // Check if target is warm
-        if warmProfiles.contains(targetProfile) {
+        // If target uses the same model binary as fallback (or any warm profile),
+        // it's already loaded — just use it with the routed language.
+        // Language is passed at transcription time, not model load time.
+        if targetProfile.model == fallbackProfile.model && targetProfile.backend == fallbackProfile.backend {
+            Logger.debug("Route: \(decision.lang.displayName) → \(targetProfile.model.displayName) (same model as fallback, warm)", subsystem: .transcription)
+            return ModelRouteDecision(
+                lang: decision.lang,
+                profile: targetProfile,
+                confidence: decision.confidence,
+                isFallback: false
+            )
+        }
+
+        // Check if target profile (or same model binary) is warm
+        let isWarm = warmProfiles.contains(targetProfile) ||
+                     warmProfiles.contains(where: { $0.model == targetProfile.model && $0.backend == targetProfile.backend })
+        if isWarm {
             Logger.debug("Route: \(decision.lang.displayName) → \(targetProfile.model.displayName) (warm)", subsystem: .transcription)
             return ModelRouteDecision(
                 lang: decision.lang,
@@ -90,7 +105,7 @@ final class ModelRouter {
             )
         }
 
-        // Target is cold — use fallback
+        // Target is truly cold (different model binary) — use fallback
         Logger.debug("Route: \(decision.lang.displayName) → fallback (\(fallbackProfile.model.displayName)), target \(targetProfile.model.displayName) cold", subsystem: .transcription)
         return ModelRouteDecision(
             lang: decision.lang,
