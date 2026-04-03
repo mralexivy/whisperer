@@ -172,6 +172,7 @@ struct LiveTranscriptionCard: View {
                         withAnimation(.easeOut(duration: 0.15)) {
                             isExpandHovered = hovering
                         }
+                        if hovering { NSCursor.pointingHand.push() } else { NSCursor.pop() }
                     }
                 }
                 .padding(.horizontal, 20 * scale)

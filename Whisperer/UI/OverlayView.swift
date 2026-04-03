@@ -354,6 +354,7 @@ struct PauseResumeButton: View {
             withAnimation(.easeOut(duration: 0.15)) {
                 isHovered = hovering
             }
+            if hovering { NSCursor.pointingHand.push() } else { NSCursor.pop() }
         }
         .onChange(of: isRecording) { recording in
             dotPulsing = recording && !isPaused
@@ -420,6 +421,7 @@ struct OutputAudioButton: View {
             withAnimation(.easeOut(duration: 0.15)) {
                 isHovered = hovering
             }
+            if hovering { NSCursor.pointingHand.push() } else { NSCursor.pop() }
         }
         .hoverTooltip(isOutputMuted ? "Capture output audio" : "Mute output audio", position: .above, isVisible: $isHovered, scale: scale)
         .accessibilityLabel(isOutputMuted ? "Unmute system audio" : "Mute system audio")
@@ -474,7 +476,15 @@ struct CancelDownloadButton: View {
                     .foregroundColor(isHovered ? .red.opacity(1) : .red.opacity(0.7))
             }
             .frame(width: buttonSize * scale, height: buttonSize * scale)
+            .background(
+                // Outer glow ring on hover
+                Circle()
+                    .stroke(Color.red.opacity(isHovered ? 0.3 : 0), lineWidth: 1.5 * scale)
+                    .frame(width: 42 * scale, height: 42 * scale)
+                    .blur(radius: 2)
+            )
             .scaleEffect(isHovered ? 1.08 : 1.0)
+            .shadow(color: isHovered ? Color.red.opacity(0.2) : .clear, radius: 6, y: 2)
             .animation(.spring(response: 0.3, dampingFraction: 0.7), value: isHovered)
         }
         .buttonStyle(.plain)
@@ -482,6 +492,7 @@ struct CancelDownloadButton: View {
             withAnimation(.easeOut(duration: 0.15)) {
                 isHovered = hovering
             }
+            if hovering { NSCursor.pointingHand.push() } else { NSCursor.pop() }
         }
         .hoverTooltip("Cancel download", position: .above, isVisible: $isHovered, scale: scale)
         .accessibilityLabel("Cancel model download")
@@ -509,7 +520,15 @@ struct CloseButton: View {
                     .foregroundColor(isHovered ? .red.opacity(1) : .red.opacity(0.7))
             }
             .frame(width: buttonSize * scale, height: buttonSize * scale)
+            .background(
+                // Outer glow ring on hover
+                Circle()
+                    .stroke(Color.red.opacity(isHovered ? 0.3 : 0), lineWidth: 1.5 * scale)
+                    .frame(width: 42 * scale, height: 42 * scale)
+                    .blur(radius: 2)
+            )
             .scaleEffect(isHovered ? 1.08 : 1.0)
+            .shadow(color: isHovered ? Color.red.opacity(0.2) : .clear, radius: 6, y: 2)
             .animation(.spring(response: 0.3, dampingFraction: 0.7), value: isHovered)
         }
         .buttonStyle(.plain)
@@ -517,6 +536,7 @@ struct CloseButton: View {
             withAnimation(.easeOut(duration: 0.15)) {
                 isHovered = hovering
             }
+            if hovering { NSCursor.pointingHand.push() } else { NSCursor.pop() }
         }
         .hoverTooltip("Stop recording", position: .above, isVisible: $isHovered, scale: scale)
         .accessibilityLabel("Stop recording and close")
