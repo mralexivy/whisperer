@@ -259,7 +259,7 @@ class AudioRecorder: NSObject {
         let audioURL = tempDir.appendingPathComponent(fileName)
         currentURL = audioURL
 
-        // Setup audio engine — fresh instance every time
+        // Create fresh engine for each recording
         audioEngine = AVAudioEngine()
         guard let audioEngine = audioEngine else {
             Logger.error("Failed to create AVAudioEngine", subsystem: .audio)
@@ -291,8 +291,6 @@ class AudioRecorder: NSObject {
                 }
             }
         }
-
-        Logger.debug("Voice processing disabled for instant startup", subsystem: .audio)
 
         // Force inputNode instantiation (creates the underlying AUHAL AudioUnit)
         let inputNode = audioEngine.inputNode
