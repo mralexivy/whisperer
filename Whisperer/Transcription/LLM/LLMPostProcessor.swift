@@ -117,13 +117,31 @@ class LLMPostProcessor: ObservableObject {
             instructions += " Translate to \(lang)."
         }
 
+        // Qwen3.5 recommended params for non-thinking (instruct) mode:
+        // temperature=0.7, top_p=0.8, top_k=20, presence_penalty=1.5
+        // maxTokens caps output to 2x input length to prevent runaway generation
+        let maxTokens = max(256, text.count * 2)
         let session = ChatSession(
             container,
             instructions: instructions,
-            generateParameters: GenerateParameters(temperature: temperature, topP: topP)
+            generateParameters: GenerateParameters(
+                maxTokens: maxTokens,
+                temperature: temperature,
+                topP: topP,
+                topK: 20,
+                repetitionPenalty: 1.2,
+                presencePenalty: 1.5
+            ),
+            additionalContext: ["enable_thinking": false]
         )
 
-        let result = try await session.respond(to: text)
+        var result = try await session.respond(to: text)
+
+        // Strip <think>...</think> tags from Qwen3 models
+        if let thinkRange = result.range(of: "<think>[\\s\\S]*?</think>", options: .regularExpression) {
+            result.removeSubrange(thinkRange)
+        }
+
         return result.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 }
