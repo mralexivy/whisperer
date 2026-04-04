@@ -793,6 +793,12 @@ class AppState: ObservableObject {
     /// Pre-load the Whisper model into memory for instant recording start
     /// Call this once after model download completes
     func preloadModel() {
+        // Skip heavy model loading during unit tests
+        if ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil {
+            Logger.info("Skipping Whisper preload in test environment", subsystem: .model)
+            return
+        }
+
         switch selectedBackendType {
         case .whisperCpp:
             preloadWhisperCppModel()
@@ -1166,6 +1172,10 @@ class AppState: ObservableObject {
 
     /// Pre-load the LLM model if enabled
     func preloadLLM() {
+        // Skip in test environment - tests load LLM directly
+        if ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil {
+            return
+        }
         guard llmEnabled else { return }
 
         let processor = llmPostProcessor ?? LLMPostProcessor()
@@ -1203,20 +1213,21 @@ class AppState: ObservableObject {
             return text
         }
 
-        let mode = AIModeManager.shared.activeMode
-        guard !mode.systemPrompt.isEmpty else { return text }
+        let mode = AIModeManager.shared.postProcessMode
+        guard !mode.prompt.isEmpty else { return text }
 
         activeAIModeName = mode.name
         defer { activeAIModeName = nil }
 
         do {
+            let systemPrompt = mode.prompt.replacingOccurrences(of: "{transcript}", with: "")
             Logger.debug("LLM processing with mode '\(mode.name)' (temp=\(mode.temperature), topP=\(mode.topP))", subsystem: .transcription)
-            Logger.debug("LLM system prompt: \(mode.systemPrompt.prefix(100))", subsystem: .transcription)
+            Logger.debug("LLM system prompt: \(systemPrompt.prefix(100))", subsystem: .transcription)
             Logger.debug("LLM input: \(text)", subsystem: .transcription)
 
             let processed = try await processor.process(
                 text: text,
-                systemPrompt: mode.systemPrompt,
+                systemPrompt: systemPrompt,
                 targetLanguage: mode.targetLanguage,
                 temperature: mode.temperature,
                 topP: mode.topP
@@ -1242,8 +1253,8 @@ class AppState: ObservableObject {
             return transcription
         }
 
-        let mode = AIModeManager.shared.activeMode
-        let rewritePrompt = mode.rewritePrompt.isEmpty ? nil : mode.rewritePrompt
+        let mode = AIModeManager.shared.rewriteMode
+        let rewritePrompt = mode.prompt.isEmpty ? nil : mode.prompt.replacingOccurrences(of: "{transcript}", with: "")
         do {
             let result = try await service.process(
                 instruction: transcription,
@@ -1271,7 +1282,7 @@ class AppState: ObservableObject {
         if listFormattingAIEnabled, result == text,
            let processor = llmPostProcessor, processor.isModelLoaded {
             do {
-                let listFormatPrompt = AIMode.builtInModes.first { $0.name == "List Format" }?.systemPrompt ?? ""
+                let listFormatPrompt = AIMode.builtInModes.first { $0.name == "List Format" }?.prompt.replacingOccurrences(of: "{transcript}", with: "") ?? ""
                 let llmResult = try await processor.process(text: text, systemPrompt: listFormatPrompt)
                 Logger.info("LLM list formatting: \(text.prefix(30))... → \(llmResult.prefix(30))...", subsystem: .transcription)
                 return llmResult
@@ -1291,6 +1302,10 @@ class AppState: ObservableObject {
     /// Pre-load the Silero VAD model for voice activity detection
     /// VAD is completely optional - the app works fine without it
     func preloadVAD() {
+        // Skip in test environment
+        if ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil {
+            return
+        }
         guard sileroVAD == nil else {
             Logger.debug("Silero VAD already loaded", subsystem: .model)
             isVADLoaded = true
@@ -1346,6 +1361,10 @@ class AppState: ObservableObject {
 
     /// Pre-load the language routing infrastructure (detector + model pool)
     func preloadLanguageRouting() {
+        // Skip in test environment
+        if ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil {
+            return
+        }
         guard routingConfig.isRoutingEnabled else {
             Logger.debug("Language routing disabled (single language)", subsystem: .model)
             return
@@ -1725,7 +1744,7 @@ class AppState: ObservableObject {
 
                 // Save AI enhancement if text was modified by post-processing
                 if processedText != finalText, let recordId = savedRecordId {
-                    let modeName = llmEnabled ? AIModeManager.shared.activeMode.name : "List Format"
+                    let modeName = llmEnabled ? AIModeManager.shared.postProcessMode.name : "List Format"
                     Task {
                         try? await HistoryManager.shared.updateAIEnhancementById(recordId, aiText: processedText, modeName: modeName)
                     }
@@ -1963,7 +1982,7 @@ class AppState: ObservableObject {
 
                 // Save AI enhancement if text was modified by post-processing
                 if processedText != finalText, let recordId = savedRecordId {
-                    let modeName = llmEnabled ? AIModeManager.shared.activeMode.name : "List Format"
+                    let modeName = llmEnabled ? AIModeManager.shared.postProcessMode.name : "List Format"
                     Task {
                         try? await HistoryManager.shared.updateAIEnhancementById(recordId, aiText: processedText, modeName: modeName)
                     }
@@ -2140,7 +2159,7 @@ class AppState: ObservableObject {
         }
         let selectedText = clipboardText
 
-        let mode = AIModeManager.shared.activeMode
+        let mode = AIModeManager.shared.rewriteMode
         activeMode = .rewrite
         activeAIModeName = mode.name
         state = .rewriting
@@ -2148,9 +2167,10 @@ class AppState: ObservableObject {
         Logger.info("Rewriting \(selectedText.count) chars with \(mode.name) mode", subsystem: .app)
 
         do {
+            let systemPrompt = mode.prompt.replacingOccurrences(of: "{transcript}", with: "")
             let result = try await processor.process(
                 text: selectedText,
-                systemPrompt: mode.systemPrompt,
+                systemPrompt: systemPrompt,
                 targetLanguage: mode.targetLanguage
             )
             Logger.info("Rewrite (\(mode.name)): \(selectedText.prefix(30))... → \(result.prefix(30))...", subsystem: .app)
