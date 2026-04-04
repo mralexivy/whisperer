@@ -2,7 +2,7 @@
 //  AIModesView.swift
 //  Whisperer
 //
-//  Workspace view for managing AI mode presets and customizing prompts
+//  Workspace view for managing AI mode presets with function-based assignment
 //
 
 import SwiftUI
@@ -10,257 +10,311 @@ import SwiftUI
 struct AIModesView: View {
     @Environment(\.colorScheme) var colorScheme
     @ObservedObject var modeManager = AIModeManager.shared
-    @State private var editingMode: AIMode?
-    @State private var showDropdown = false
+    @State private var selectedModeId: UUID?
+    @State private var editedPrompt: String = ""
+    @State private var editedTemperature: Float = 0.3
+    @State private var editedTopP: Float = 0.9
+    @State private var editedName: String = ""
+    @State private var editedTargetLanguage: String = ""
+    @State private var hasChanges = false
+    @State private var showAddModeSheet = false
 
-    private var builtInModes: [AIMode] {
-        modeManager.modes.filter(\.isBuiltIn).sorted { $0.sortOrder < $1.sortOrder }
-    }
-
-    private var customModes: [AIMode] {
-        modeManager.modes.filter { !$0.isBuiltIn }.sorted { $0.sortOrder < $1.sortOrder }
+    private var selectedMode: AIMode? {
+        modeManager.modes.first { $0.id == selectedModeId }
     }
 
     var body: some View {
-        ZStack(alignment: .topLeading) {
-            ScrollView {
-                VStack(alignment: .leading, spacing: 24) {
-                    // Header
-                    HStack(spacing: 10) {
-                        ZStack {
-                            RoundedRectangle(cornerRadius: 8)
-                                .fill(Color(hex: "8B5CF6").opacity(0.15))
-                                .frame(width: 36, height: 36)
-                            Image(systemName: "wand.and.sparkles")
-                                .foregroundColor(Color(hex: "8B5CF6"))
-                                .font(.system(size: 16, weight: .medium))
-                        }
+        ScrollView {
+            VStack(alignment: .leading, spacing: 24) {
+                // Header
+                header
 
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text("AI Modes")
-                                .font(.system(size: 20, weight: .bold, design: .rounded))
-                                .foregroundColor(.white)
-                            Text("Customize prompts and parameters for post-processing and rewrite")
-                                .font(.system(size: 12, weight: .regular))
-                                .foregroundColor(.white.opacity(0.4))
-                        }
+                // Function Assignments Card
+                functionAssignmentsCard
 
-                        Spacer()
+                // Modes Section
+                modesSection
 
-                        Button(action: addNewMode) {
-                            HStack(spacing: 5) {
-                                Image(systemName: "plus")
-                                    .font(.system(size: 11, weight: .semibold))
-                                Text("New Mode")
-                                    .font(.system(size: 12, weight: .semibold))
-                            }
-                            .foregroundColor(.white)
-                            .padding(.horizontal, 14)
-                            .padding(.vertical, 7)
-                            .background(
-                                Capsule()
-                                    .fill(
-                                        LinearGradient(colors: [WhispererColors.accentBlue, Color(hex: "8B5CF6")], startPoint: .leading, endPoint: .trailing)
-                                    )
-                            )
-                        }
-                        .buttonStyle(.plain)
-                    }
-
-                    // Mode selector dropdown trigger
-                    modeDropdownTrigger
-
-                    // Mode editor card
-                    if let mode = editingMode {
-                        modeEditor(mode: mode)
-                    }
+                // Mode Editor (when mode selected)
+                if selectedMode != nil {
+                    modeEditorCard
                 }
-                .padding(28)
             }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .background(WhispererColors.background(colorScheme))
-
-            // Premium dropdown overlay
-            if showDropdown {
-                AIModeDropdownOverlay(
-                    editingMode: $editingMode,
-                    showDropdown: $showDropdown,
-                    builtInModes: builtInModes,
-                    customModes: customModes,
-                    activeModeId: modeManager.activeModeId,
-                    colorScheme: colorScheme
-                )
-                .padding(.leading, 28)
-                .padding(.top, 120)
-            }
+            .padding(28)
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(WhispererColors.background(colorScheme))
         .onAppear {
-            if editingMode == nil {
-                editingMode = modeManager.modes.first { $0.id == modeManager.activeModeId }
+            if selectedModeId == nil {
+                selectedModeId = modeManager.postProcessModeId
             }
+            loadModeValues()
+        }
+        .onChange(of: selectedModeId) { _ in
+            loadModeValues()
         }
     }
 
-    // MARK: - Dropdown Trigger
+    // MARK: - Header
 
-    private var modeDropdownTrigger: some View {
-        HStack(spacing: 12) {
-            Button(action: { withAnimation(.easeOut(duration: 0.15)) { showDropdown.toggle() } }) {
-                HStack(spacing: 10) {
-                    // Icon — gradient fill with micro-shadow
-                    if let mode = editingMode {
-                        ZStack {
-                            Circle()
-                                .fill(
-                                    LinearGradient(
-                                        colors: [
-                                            Color(hex: mode.color).opacity(0.18),
-                                            Color(hex: mode.color).opacity(0.08)
-                                        ],
-                                        startPoint: .topLeading,
-                                        endPoint: .bottomTrailing
-                                    )
-                                )
-                                .frame(width: 32, height: 32)
-                                .shadow(color: Color(hex: mode.color).opacity(0.08), radius: 3, y: 1)
-
-                            Image(systemName: mode.icon)
-                                .font(.system(size: 14, weight: .semibold))
-                                .foregroundColor(Color(hex: mode.color))
-                        }
-
-                        VStack(alignment: .leading, spacing: 1) {
-                            Text(mode.name)
-                                .font(.system(size: 13, weight: .semibold))
-                                .foregroundColor(.white)
-
-                            Text(mode.isBuiltIn ? "Built-in" : "Custom")
-                                .font(.system(size: 11))
-                                .foregroundColor(.white.opacity(0.5))
-                        }
-                    }
-
-                    Spacer()
-
-                    // Active badge
-                    if let mode = editingMode, modeManager.activeModeId == mode.id {
-                        HStack(spacing: 4) {
-                            Circle()
-                                .fill(WhispererColors.accentBlue)
-                                .frame(width: 5, height: 5)
-                            Text("ACTIVE")
-                                .font(.system(size: 9, weight: .bold, design: .rounded))
-                                .tracking(0.8)
-                                .foregroundColor(WhispererColors.accentBlue)
-                        }
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 3)
-                        .background(Capsule().fill(WhispererColors.accentBlue.opacity(0.12)))
-                    }
-
-                    // Chevron
-                    Image(systemName: showDropdown ? "chevron.up" : "chevron.down")
-                        .font(.system(size: 11, weight: .semibold))
-                        .foregroundColor(.white.opacity(0.4))
-                }
-                .padding(.horizontal, 14)
-                .padding(.vertical, 10)
-                .background(
-                    RoundedRectangle(cornerRadius: 12)
-                        .fill(showDropdown ? WhispererColors.accentBlue.opacity(0.08) : WhispererColors.cardBackground(colorScheme))
-                )
-                .overlay(
-                    RoundedRectangle(cornerRadius: 12)
-                        .stroke(showDropdown ? WhispererColors.accentBlue.opacity(0.3) : WhispererColors.border(colorScheme), lineWidth: 1)
-                )
-                .shadow(
-                    color: showDropdown
-                        ? WhispererColors.accentBlue.opacity(0.08)
-                        : Color.black.opacity(0.06),
-                    radius: showDropdown ? 6 : 3,
-                    y: 1
-                )
+    private var header: some View {
+        HStack(spacing: 10) {
+            ZStack {
+                RoundedRectangle(cornerRadius: 8)
+                    .fill(Color(hex: "8B5CF6").opacity(0.15))
+                    .frame(width: 36, height: 36)
+                Image(systemName: "wand.and.sparkles")
+                    .foregroundColor(Color(hex: "8B5CF6"))
+                    .font(.system(size: 16, weight: .medium))
             }
-            .buttonStyle(.plain).pointerOnHover()
-            .frame(maxWidth: 320)
 
-            // Set Active button
-            if let mode = editingMode, modeManager.activeModeId != mode.id {
-                Button(action: { modeManager.setActive(mode.id) }) {
-                    Text("Set Active")
-                        .font(.system(size: 12, weight: .semibold))
-                        .foregroundColor(.white)
-                        .padding(.horizontal, 16)
-                        .padding(.vertical, 10)
-                        .background(
-                            Capsule()
-                                .fill(
-                                    LinearGradient(colors: [WhispererColors.accentBlue, Color(hex: "8B5CF6")], startPoint: .leading, endPoint: .trailing)
-                                )
-                        )
-                }
-                .buttonStyle(.plain)
+            VStack(alignment: .leading, spacing: 2) {
+                Text("AI Modes")
+                    .font(.system(size: 20, weight: .bold, design: .rounded))
+                    .foregroundColor(.white)
+                Text("Assign modes to functions and customize prompts")
+                    .font(.system(size: 12, weight: .regular))
+                    .foregroundColor(.white.opacity(0.4))
             }
 
             Spacer()
         }
     }
 
-    // MARK: - Mode Editor
+    // MARK: - Function Assignments Card
 
-    private func modeEditor(mode: AIMode) -> some View {
-        VStack(alignment: .leading, spacing: 20) {
-            // Name field for custom modes
-            if !mode.isBuiltIn {
-                VStack(alignment: .leading, spacing: 6) {
-                    Text("MODE NAME")
-                        .font(.system(size: 11, weight: .bold, design: .rounded))
-                        .tracking(0.8)
-                        .foregroundColor(.white.opacity(0.35))
+    private var functionAssignmentsCard: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            // Section header
+            HStack(spacing: 10) {
+                ZStack {
+                    RoundedRectangle(cornerRadius: 6)
+                        .fill(Color.blue.opacity(0.15))
+                        .frame(width: 26, height: 26)
+                    Image(systemName: "arrow.triangle.swap")
+                        .foregroundColor(.blue)
+                        .font(.system(size: 12, weight: .medium))
+                }
+                Text("FUNCTION ASSIGNMENTS")
+                    .font(.system(size: 11, weight: .bold, design: .rounded))
+                    .tracking(0.8)
+                    .foregroundColor(.white.opacity(0.5))
+            }
 
-                    TextField("Mode name", text: bindingForField(\.name))
-                        .textFieldStyle(.plain)
-                        .font(.system(size: 14, weight: .medium))
-                        .foregroundColor(.white)
-                        .padding(12)
+            // Post-Process function row
+            FunctionAssignmentRow(
+                icon: "waveform.and.mic",
+                iconColor: .green,
+                label: "Post-Process",
+                description: "Applied to transcribed speech",
+                selectedModeId: Binding(
+                    get: { modeManager.postProcessModeId },
+                    set: { modeManager.setPostProcessMode($0) }
+                ),
+                modes: modeManager.modes,
+                colorScheme: colorScheme
+            )
+
+            #if !APP_STORE
+            // Rewrite function row
+            FunctionAssignmentRow(
+                icon: "pencil.line",
+                iconColor: .orange,
+                label: "Rewrite",
+                description: "Applied to selected text with voice command",
+                selectedModeId: Binding(
+                    get: { modeManager.rewriteModeId },
+                    set: { modeManager.setRewriteMode($0) }
+                ),
+                modes: modeManager.modes,
+                colorScheme: colorScheme
+            )
+            #endif
+        }
+        .padding(20)
+        .background(
+            RoundedRectangle(cornerRadius: 12)
+                .fill(WhispererColors.cardBackground(colorScheme))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 12)
+                        .strokeBorder(
+                            LinearGradient(
+                                colors: [WhispererColors.accentBlue.opacity(0.2), Color(hex: "8B5CF6").opacity(0.1)],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            ),
+                            lineWidth: 1
+                        )
+                )
+        )
+    }
+
+    // MARK: - Modes Section
+
+    private var modesSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("MODES")
+                .font(.system(size: 11, weight: .bold, design: .rounded))
+                .tracking(0.8)
+                .foregroundColor(.white.opacity(0.5))
+
+            // Horizontal scrolling mode chips
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 10) {
+                    ForEach(modeManager.modes.sorted { $0.sortOrder < $1.sortOrder }) { mode in
+                        ModeChip(
+                            mode: mode,
+                            isSelected: selectedModeId == mode.id,
+                            isPostProcess: modeManager.postProcessModeId == mode.id,
+                            isRewrite: modeManager.rewriteModeId == mode.id,
+                            colorScheme: colorScheme
+                        ) {
+                            selectedModeId = mode.id
+                        }
+                    }
+
+                    // Add button
+                    Button(action: addNewMode) {
+                        HStack(spacing: 6) {
+                            Image(systemName: "plus")
+                                .font(.system(size: 11, weight: .semibold))
+                            Text("Add")
+                                .font(.system(size: 12, weight: .medium))
+                        }
+                        .foregroundColor(WhispererColors.accentBlue)
+                        .padding(.horizontal, 14)
+                        .padding(.vertical, 8)
                         .background(
-                            RoundedRectangle(cornerRadius: 8)
-                                .fill(WhispererColors.elevatedBackground(colorScheme))
+                            Capsule()
+                                .strokeBorder(WhispererColors.accentBlue.opacity(0.3), lineWidth: 1)
                         )
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 8)
-                                .stroke(WhispererColors.border(colorScheme), lineWidth: 1)
-                        )
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+        }
+    }
+
+    // MARK: - Mode Editor Card
+
+    private var modeEditorCard: some View {
+        VStack(alignment: .leading, spacing: 20) {
+            // Mode header
+            if let mode = selectedMode {
+                HStack(spacing: 14) {
+                    ZStack {
+                        RoundedRectangle(cornerRadius: 10)
+                            .fill(Color(hex: mode.color).opacity(0.15))
+                            .frame(width: 44, height: 44)
+                        Image(systemName: mode.icon)
+                            .foregroundColor(Color(hex: mode.color))
+                            .font(.system(size: 18, weight: .medium))
+                    }
+
+                    VStack(alignment: .leading, spacing: 2) {
+                        if mode.isBuiltIn {
+                            Text(mode.name)
+                                .font(.system(size: 18, weight: .bold, design: .rounded))
+                                .foregroundColor(.white)
+                        } else {
+                            TextField("Mode name", text: $editedName)
+                                .font(.system(size: 18, weight: .bold, design: .rounded))
+                                .foregroundColor(.white)
+                                .textFieldStyle(.plain)
+                                .onChange(of: editedName) { _ in hasChanges = true }
+                        }
+
+                        HStack(spacing: 8) {
+                            if mode.isBuiltIn {
+                                Text("Built-in mode")
+                                    .font(.system(size: 11, weight: .medium))
+                                    .foregroundColor(.white.opacity(0.4))
+                            }
+
+                            if modeManager.postProcessModeId == mode.id {
+                                functionBadge("Post-Process", color: .green)
+                            }
+                            if modeManager.rewriteModeId == mode.id {
+                                functionBadge("Rewrite", color: .orange)
+                            }
+                        }
+                    }
+
+                    Spacer()
+
+                    // Actions menu
+                    Menu {
+                        Button(action: { duplicateMode(mode) }) {
+                            Label("Duplicate", systemImage: "doc.on.doc")
+                        }
+                        if mode.isBuiltIn {
+                            Button(action: { resetMode(mode) }) {
+                                Label("Reset to Default", systemImage: "arrow.counterclockwise")
+                            }
+                        }
+                        if !mode.isBuiltIn {
+                            Divider()
+                            Button(role: .destructive, action: { deleteMode(mode) }) {
+                                Label("Delete", systemImage: "trash")
+                            }
+                        }
+                    } label: {
+                        Image(systemName: "ellipsis.circle")
+                            .font(.system(size: 18))
+                            .foregroundColor(.white.opacity(0.5))
+                    }
+                    .menuStyle(.borderlessButton)
                 }
             }
 
-            // System Prompt
-            promptSection(
-                title: "SYSTEM PROMPT",
-                subtitle: "Applied when post-processing dictation output",
-                text: bindingForField(\.systemPrompt),
-                placeholder: "Enter system prompt for post-processing..."
-            )
+            // Prompt editor
+            VStack(alignment: .leading, spacing: 8) {
+                Text("PROMPT")
+                    .font(.system(size: 10, weight: .bold))
+                    .tracking(1.0)
+                    .foregroundColor(.white.opacity(0.4))
 
-            // Rewrite Prompt
-            #if !APP_STORE
-            promptSection(
-                title: "REWRITE PROMPT",
-                subtitle: "Applied when using rewrite shortcut on selected text",
-                text: bindingForField(\.rewritePrompt),
-                placeholder: "Enter prompt for rewrite mode..."
-            )
-            #endif
+                Text("Use {transcript} where the input text should go")
+                    .font(.system(size: 11, weight: .regular))
+                    .foregroundColor(.white.opacity(0.35))
 
-            // Target Language
-            if mode.name == "Translate" || mode.targetLanguage != nil {
+                ZStack(alignment: .topLeading) {
+                    TextEditor(text: $editedPrompt)
+                        .font(.system(size: 13, weight: .regular, design: .monospaced))
+                        .foregroundColor(.white.opacity(0.9))
+                        .scrollContentBackground(.hidden)
+                        .padding(14)
+                        .frame(minHeight: 180)
+                        .onChange(of: editedPrompt) { _ in hasChanges = true }
+
+                    if editedPrompt.isEmpty {
+                        Text("Enter your prompt... use {transcript} for the input text")
+                            .font(.system(size: 13, design: .monospaced))
+                            .foregroundColor(.white.opacity(0.2))
+                            .padding(.top, 22)
+                            .padding(.leading, 18)
+                            .allowsHitTesting(false)
+                    }
+                }
+                .background(
+                    RoundedRectangle(cornerRadius: 10)
+                        .fill(WhispererColors.elevatedBackground(colorScheme))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 10)
+                                .strokeBorder(Color.white.opacity(0.06), lineWidth: 1)
+                        )
+                )
+            }
+
+            // Target Language (for Translate mode)
+            if selectedMode?.name == "Translate" || selectedMode?.targetLanguage != nil {
                 VStack(alignment: .leading, spacing: 6) {
                     Text("TARGET LANGUAGE")
-                        .font(.system(size: 11, weight: .bold, design: .rounded))
-                        .tracking(0.8)
-                        .foregroundColor(.white.opacity(0.35))
+                        .font(.system(size: 10, weight: .bold))
+                        .tracking(1.0)
+                        .foregroundColor(.white.opacity(0.4))
 
-                    TextField("English", text: bindingForOptionalField(\.targetLanguage))
+                    TextField("English", text: $editedTargetLanguage)
                         .textFieldStyle(.plain)
                         .font(.system(size: 13, weight: .regular))
                         .foregroundColor(.white)
@@ -271,190 +325,102 @@ struct AIModesView: View {
                         )
                         .overlay(
                             RoundedRectangle(cornerRadius: 8)
-                                .stroke(WhispererColors.border(colorScheme), lineWidth: 1)
+                                .stroke(Color.white.opacity(0.06), lineWidth: 1)
                         )
+                        .onChange(of: editedTargetLanguage) { _ in hasChanges = true }
                 }
             }
 
-            // Parameters
-            VStack(alignment: .leading, spacing: 10) {
-                Text("PARAMETERS")
-                    .font(.system(size: 11, weight: .bold, design: .rounded))
-                    .tracking(0.8)
-                    .foregroundColor(.white.opacity(0.35))
+            // Parameters row
+            HStack(spacing: 24) {
+                ParameterSlider(
+                    label: "Temperature",
+                    value: $editedTemperature,
+                    range: 0...1,
+                    colorScheme: colorScheme
+                )
+                .onChange(of: editedTemperature) { _ in hasChanges = true }
 
-                HStack(spacing: 20) {
-                    parameterField(title: "Temperature", value: bindingForField(\.temperature), range: 0...1)
-                    parameterField(title: "Top P", value: bindingForField(\.topP), range: 0...1)
-                }
+                ParameterSlider(
+                    label: "Top P",
+                    value: $editedTopP,
+                    range: 0...1,
+                    colorScheme: colorScheme
+                )
+                .onChange(of: editedTopP) { _ in hasChanges = true }
             }
 
-            // Action buttons
-            HStack(spacing: 10) {
-                Button(action: saveMode) {
-                    Text("Save")
-                        .font(.system(size: 12, weight: .semibold))
-                        .foregroundColor(.white)
-                        .padding(.horizontal, 20)
-                        .padding(.vertical, 8)
-                        .background(
-                            Capsule()
-                                .fill(
-                                    LinearGradient(colors: [WhispererColors.accentBlue, Color(hex: "8B5CF6")], startPoint: .leading, endPoint: .trailing)
-                                )
+            // Save button
+            Button(action: saveMode) {
+                Text("Save Changes")
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundColor(.white)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 12)
+                    .background(
+                        LinearGradient(
+                            colors: [WhispererColors.accentBlue, Color(hex: "8B5CF6")],
+                            startPoint: .leading,
+                            endPoint: .trailing
                         )
-                }
-                .buttonStyle(.plain)
-
-                if mode.isBuiltIn {
-                    Button(action: {
-                        modeManager.resetToDefault(mode.id)
-                        editingMode = modeManager.modes.first { $0.id == mode.id }
-                    }) {
-                        Text("Reset to Default")
-                            .font(.system(size: 12, weight: .medium))
-                            .foregroundColor(.white.opacity(0.5))
-                            .padding(.horizontal, 16)
-                            .padding(.vertical, 8)
-                            .background(
-                                Capsule()
-                                    .stroke(WhispererColors.border(colorScheme), lineWidth: 1)
-                            )
-                    }
-                    .buttonStyle(.plain)
-                }
-
-                if !mode.isBuiltIn {
-                    Button(action: {
-                        if let newMode = modeManager.duplicateMode(mode.id) {
-                            editingMode = newMode
-                        }
-                    }) {
-                        Text("Duplicate")
-                            .font(.system(size: 12, weight: .medium))
-                            .foregroundColor(.white.opacity(0.5))
-                            .padding(.horizontal, 16)
-                            .padding(.vertical, 8)
-                            .background(
-                                Capsule()
-                                    .stroke(WhispererColors.border(colorScheme), lineWidth: 1)
-                            )
-                    }
-                    .buttonStyle(.plain)
-
-                    Spacer()
-
-                    Button(action: { deleteMode(mode) }) {
-                        Text("Delete")
-                            .font(.system(size: 12, weight: .medium))
-                            .foregroundColor(.red.opacity(0.8))
-                            .padding(.horizontal, 16)
-                            .padding(.vertical, 8)
-                            .background(
-                                Capsule()
-                                    .stroke(.red.opacity(0.3), lineWidth: 1)
-                            )
-                    }
-                    .buttonStyle(.plain)
-                }
+                    )
+                    .cornerRadius(10)
             }
+            .buttonStyle(.plain)
+            .opacity(hasChanges ? 1 : 0.5)
+            .disabled(!hasChanges)
         }
-        .padding(24)
+        .padding(20)
         .background(
             RoundedRectangle(cornerRadius: 12)
                 .fill(WhispererColors.cardBackground(colorScheme))
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 12)
-                .stroke(WhispererColors.border(colorScheme), lineWidth: 1)
-        )
-        .shadow(color: Color.black.opacity(0.06), radius: 3, y: 1)
-    }
-
-    // MARK: - Components
-
-    private func promptSection(title: String, subtitle: String, text: Binding<String>, placeholder: String) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
-            VStack(alignment: .leading, spacing: 2) {
-                Text(title)
-                    .font(.system(size: 11, weight: .bold, design: .rounded))
-                    .tracking(0.8)
-                    .foregroundColor(.white.opacity(0.35))
-                Text(subtitle)
-                    .font(.system(size: 10, weight: .regular))
-                    .foregroundColor(.white.opacity(0.25))
-            }
-
-            TextEditor(text: text)
-                .font(.system(size: 13, weight: .regular))
-                .foregroundColor(.white)
-                .scrollContentBackground(.hidden)
-                .frame(minHeight: 100, maxHeight: 180)
-                .padding(10)
-                .background(
-                    RoundedRectangle(cornerRadius: 8)
-                        .fill(WhispererColors.elevatedBackground(colorScheme))
-                )
                 .overlay(
-                    RoundedRectangle(cornerRadius: 8)
-                        .stroke(WhispererColors.border(colorScheme), lineWidth: 1)
+                    RoundedRectangle(cornerRadius: 12)
+                        .strokeBorder(Color.white.opacity(0.06), lineWidth: 1)
                 )
-                .overlay(alignment: .topLeading, content: {
-                    if text.wrappedValue.isEmpty {
-                        Text(placeholder)
-                            .font(.system(size: 13))
-                            .foregroundColor(.white.opacity(0.2))
-                            .padding(.top, 18)
-                            .padding(.leading, 15)
-                            .allowsHitTesting(false)
-                    }
-                })
-        }
-    }
-
-    private func parameterField(title: String, value: Binding<Float>, range: ClosedRange<Float>) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text(title)
-                .font(.system(size: 11, weight: .medium))
-                .foregroundColor(.white.opacity(0.5))
-
-            HStack(spacing: 8) {
-                Slider(value: value, in: range, step: 0.05)
-                    .tint(WhispererColors.accentBlue)
-
-                Text(String(format: "%.2f", value.wrappedValue))
-                    .font(.system(size: 11, weight: .medium, design: .monospaced))
-                    .foregroundColor(.white.opacity(0.7))
-                    .frame(width: 36)
-            }
-        }
-    }
-
-    // MARK: - Bindings
-
-    private func bindingForField<T>(_ keyPath: WritableKeyPath<AIMode, T>) -> Binding<T> {
-        Binding(
-            get: { editingMode?[keyPath: keyPath] ?? AIMode.defaultMode()[keyPath: keyPath] },
-            set: { newValue in
-                editingMode?[keyPath: keyPath] = newValue
-            }
         )
     }
 
-    private func bindingForOptionalField(_ keyPath: WritableKeyPath<AIMode, String?>) -> Binding<String> {
-        Binding(
-            get: { editingMode?[keyPath: keyPath] ?? "" },
-            set: { newValue in
-                editingMode?[keyPath: keyPath] = newValue.isEmpty ? nil : newValue
-            }
-        )
+    // MARK: - Helper Views
+
+    private func functionBadge(_ text: String, color: Color) -> some View {
+        HStack(spacing: 4) {
+            Circle()
+                .fill(color)
+                .frame(width: 5, height: 5)
+            Text(text)
+                .font(.system(size: 9, weight: .bold, design: .rounded))
+                .tracking(0.5)
+                .foregroundColor(color)
+        }
+        .padding(.horizontal, 8)
+        .padding(.vertical, 3)
+        .background(Capsule().fill(color.opacity(0.12)))
     }
 
     // MARK: - Actions
 
+    private func loadModeValues() {
+        guard let mode = selectedMode else { return }
+        editedPrompt = mode.prompt
+        editedTemperature = mode.temperature
+        editedTopP = mode.topP
+        editedName = mode.name
+        editedTargetLanguage = mode.targetLanguage ?? ""
+        hasChanges = false
+    }
+
     private func saveMode() {
-        guard let mode = editingMode else { return }
+        guard var mode = selectedMode else { return }
+        mode.prompt = editedPrompt
+        mode.temperature = editedTemperature
+        mode.topP = editedTopP
+        if !mode.isBuiltIn {
+            mode.name = editedName
+        }
+        mode.targetLanguage = editedTargetLanguage.isEmpty ? nil : editedTargetLanguage
         modeManager.updateMode(mode)
+        hasChanges = false
     }
 
     private func addNewMode() {
@@ -463,140 +429,126 @@ struct AIModesView: View {
             name: "New Mode",
             icon: "sparkle",
             color: "A855F7",
-            systemPrompt: "",
-            rewritePrompt: "",
+            prompt: "Process this text:\n{transcript}",
             temperature: 0.3,
             topP: 0.9,
             isBuiltIn: false,
             sortOrder: (modeManager.modes.map(\.sortOrder).max() ?? 0) + 1
         )
         modeManager.addMode(newMode)
-        editingMode = newMode
+        selectedModeId = newMode.id
+    }
+
+    private func duplicateMode(_ mode: AIMode) {
+        if let newMode = modeManager.duplicateMode(mode.id) {
+            selectedModeId = newMode.id
+        }
+    }
+
+    private func resetMode(_ mode: AIMode) {
+        modeManager.resetToDefault(mode.id)
+        loadModeValues()
     }
 
     private func deleteMode(_ mode: AIMode) {
         guard !mode.isBuiltIn else { return }
+        let nextId = modeManager.modes.first { $0.id != mode.id }?.id
         modeManager.deleteMode(mode.id)
-        editingMode = modeManager.modes.first { $0.id == modeManager.activeModeId }
+        selectedModeId = nextId
     }
 }
 
-// MARK: - Premium Dropdown Overlay
+// MARK: - Function Assignment Row
 
-private struct AIModeDropdownOverlay: View {
-    @Binding var editingMode: AIMode?
-    @Binding var showDropdown: Bool
-    let builtInModes: [AIMode]
-    let customModes: [AIMode]
-    let activeModeId: UUID
+private struct FunctionAssignmentRow: View {
+    let icon: String
+    let iconColor: Color
+    let label: String
+    let description: String
+    @Binding var selectedModeId: UUID
+    let modes: [AIMode]
     let colorScheme: ColorScheme
 
-    private func dismiss() {
-        withAnimation(.easeOut(duration: 0.15)) { showDropdown = false }
+    private var selectedMode: AIMode? {
+        modes.first { $0.id == selectedModeId }
     }
 
     var body: some View {
-        ZStack(alignment: .topLeading) {
-            // Backdrop
-            Color.black.opacity(0.001)
-                .ignoresSafeArea()
-                .onTapGesture { dismiss() }
+        HStack(spacing: 14) {
+            // Icon container
+            ZStack {
+                RoundedRectangle(cornerRadius: 8)
+                    .fill(iconColor.opacity(0.15))
+                    .frame(width: 34, height: 34)
+                Image(systemName: icon)
+                    .foregroundColor(iconColor)
+                    .font(.system(size: 14, weight: .medium))
+            }
 
-            // Premium dropdown card
-            VStack(alignment: .leading, spacing: 0) {
-                // Scrollable mode list
-                ScrollView {
-                    VStack(alignment: .leading, spacing: 0) {
-                        // Built-in section
-                        sectionHeader("BUILT-IN")
+            // Label + description
+            VStack(alignment: .leading, spacing: 2) {
+                Text(label)
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundColor(.white)
+                Text(description)
+                    .font(.system(size: 11, weight: .regular))
+                    .foregroundColor(.white.opacity(0.4))
+            }
 
-                        ForEach(builtInModes) { mode in
-                            AIModeDropdownItem(
-                                mode: mode,
-                                isSelected: editingMode?.id == mode.id,
-                                isActive: activeModeId == mode.id,
-                                colorScheme: colorScheme
-                            ) {
-                                editingMode = mode
-                                dismiss()
-                            }
-                        }
+            Spacer()
 
-                        // Custom section
-                        if !customModes.isEmpty {
-                            sectionHeader("CUSTOM")
-
-                            ForEach(customModes) { mode in
-                                AIModeDropdownItem(
-                                    mode: mode,
-                                    isSelected: editingMode?.id == mode.id,
-                                    isActive: activeModeId == mode.id,
-                                    colorScheme: colorScheme
-                                ) {
-                                    editingMode = mode
-                                    dismiss()
-                                }
+            // Dropdown picker
+            Menu {
+                ForEach(modes.sorted { $0.sortOrder < $1.sortOrder }) { mode in
+                    Button {
+                        selectedModeId = mode.id
+                    } label: {
+                        HStack {
+                            Image(systemName: mode.icon)
+                            Text(mode.name)
+                            if mode.id == selectedModeId {
+                                Image(systemName: "checkmark")
                             }
                         }
                     }
-                    .padding(.vertical, 4)
                 }
-                .frame(maxHeight: 380)
-
-                Divider()
-
-                // Bottom bar
-                HStack {
-                    Text("\(builtInModes.count + customModes.count) modes")
-                        .font(.system(size: 11, weight: .medium))
-                        .foregroundColor(.white.opacity(0.5))
-
-                    Spacer()
-
-                    if let active = builtInModes.first(where: { $0.id == activeModeId }) ?? customModes.first(where: { $0.id == activeModeId }) {
-                        HStack(spacing: 4) {
-                            Circle()
-                                .fill(WhispererColors.accentBlue)
-                                .frame(width: 5, height: 5)
-                            Text(active.name)
-                                .font(.system(size: 11, weight: .semibold))
-                                .foregroundColor(WhispererColors.accentBlue)
-                        }
+            } label: {
+                HStack(spacing: 8) {
+                    if let mode = selectedMode {
+                        Image(systemName: mode.icon)
+                            .foregroundColor(Color(hex: mode.color))
+                            .font(.system(size: 11, weight: .medium))
+                        Text(mode.name)
+                            .font(.system(size: 13, weight: .medium))
+                            .foregroundColor(.white)
                     }
+                    Image(systemName: "chevron.down")
+                        .font(.system(size: 9, weight: .semibold))
+                        .foregroundColor(.white.opacity(0.4))
                 }
                 .padding(.horizontal, 12)
-                .padding(.vertical, 10)
-                .background(WhispererColors.elevatedBackground(colorScheme).opacity(0.3))
+                .padding(.vertical, 8)
+                .background(
+                    RoundedRectangle(cornerRadius: 8)
+                        .fill(WhispererColors.elevatedBackground(colorScheme))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 8)
+                                .strokeBorder(Color.white.opacity(0.08), lineWidth: 1)
+                        )
+                )
             }
-            .frame(width: 300)
-            .background(
-                RoundedRectangle(cornerRadius: 16)
-                    .fill(WhispererColors.cardBackground(colorScheme))
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: 16)
-                    .stroke(WhispererColors.border(colorScheme).opacity(0.5), lineWidth: 1)
-            )
-            .shadow(color: Color.black.opacity(0.35), radius: 20, x: 0, y: 8)
+            .menuStyle(.borderlessButton)
         }
-    }
-
-    private func sectionHeader(_ title: String) -> some View {
-        Text(title)
-            .font(.system(size: 10, weight: .bold, design: .rounded))
-            .foregroundColor(.white.opacity(0.3))
-            .padding(.horizontal, 14)
-            .padding(.top, 12)
-            .padding(.bottom, 4)
     }
 }
 
-// MARK: - Mode Dropdown Item
+// MARK: - Mode Chip
 
-private struct AIModeDropdownItem: View {
+private struct ModeChip: View {
     let mode: AIMode
     let isSelected: Bool
-    let isActive: Bool
+    let isPostProcess: Bool
+    let isRewrite: Bool
     let colorScheme: ColorScheme
     let onSelect: () -> Void
 
@@ -604,59 +556,73 @@ private struct AIModeDropdownItem: View {
 
     var body: some View {
         Button(action: onSelect) {
-            HStack(spacing: 10) {
-                // Selection checkmark
-                ZStack {
-                    if isSelected {
-                        Image(systemName: "checkmark")
-                            .font(.system(size: 10, weight: .bold))
-                            .foregroundColor(WhispererColors.accentBlue)
+            HStack(spacing: 8) {
+                Image(systemName: mode.icon)
+                    .foregroundColor(Color(hex: mode.color))
+                    .font(.system(size: 11, weight: .medium))
+                Text(mode.name)
+                    .font(.system(size: 12, weight: isSelected ? .semibold : .medium))
+                    .foregroundColor(isSelected ? .white : .white.opacity(0.7))
+
+                // Function indicators
+                if isPostProcess || isRewrite {
+                    HStack(spacing: 3) {
+                        if isPostProcess {
+                            Circle().fill(Color.green).frame(width: 5, height: 5)
+                        }
+                        if isRewrite {
+                            Circle().fill(Color.orange).frame(width: 5, height: 5)
+                        }
                     }
                 }
-                .frame(width: 16)
-
-                // Mode icon
-                Image(systemName: mode.icon)
-                    .font(.system(size: 12, weight: .medium))
-                    .foregroundColor(Color(hex: mode.color))
-                    .frame(width: 18)
-
-                // Mode name
-                Text(mode.name)
-                    .font(.system(size: 12, weight: isSelected ? .semibold : .regular))
-                    .foregroundColor(.white)
-                    .lineLimit(1)
-
-                Spacer()
-
-                // Active indicator
-                if isActive {
-                    Text("ACTIVE")
-                        .font(.system(size: 9, weight: .bold, design: .rounded))
-                        .tracking(0.5)
-                        .foregroundColor(WhispererColors.accentBlue)
-                        .padding(.horizontal, 6)
-                        .padding(.vertical, 2)
-                        .background(
-                            Capsule()
-                                .fill(WhispererColors.accentBlue.opacity(0.12))
-                        )
-                }
             }
-            .padding(.horizontal, 10)
+            .padding(.horizontal, 14)
             .padding(.vertical, 8)
             .background(
-                RoundedRectangle(cornerRadius: 8)
-                    .fill(isSelected ? WhispererColors.accentBlue.opacity(0.1) : (isHovered ? WhispererColors.elevatedBackground(colorScheme) : Color.clear))
+                Capsule()
+                    .fill(isSelected ? Color(hex: mode.color).opacity(0.2) : WhispererColors.cardBackground(colorScheme))
+                    .overlay(
+                        Capsule()
+                            .strokeBorder(
+                                isSelected ? Color(hex: mode.color).opacity(0.5) : Color.white.opacity(0.08),
+                                lineWidth: 1
+                            )
+                    )
             )
-            .scaleEffect(isHovered ? 1.006 : 1.0)
-            .padding(.horizontal, 4)
+            .shadow(color: isSelected ? Color(hex: mode.color).opacity(0.25) : .clear, radius: 8, y: 2)
+            .scaleEffect(isHovered ? 1.02 : 1.0)
         }
-        .buttonStyle(.plain).pointerOnHover()
+        .buttonStyle(.plain)
         .onHover { hovering in
             withAnimation(.easeInOut(duration: 0.12)) {
                 isHovered = hovering
             }
+        }
+    }
+}
+
+// MARK: - Parameter Slider
+
+private struct ParameterSlider: View {
+    let label: String
+    @Binding var value: Float
+    let range: ClosedRange<Float>
+    let colorScheme: ColorScheme
+
+    var body: some View {
+        HStack(spacing: 10) {
+            Text(label)
+                .font(.system(size: 12, weight: .medium))
+                .foregroundColor(.white.opacity(0.6))
+
+            Slider(value: $value, in: range, step: 0.05)
+                .tint(WhispererColors.accentBlue)
+                .frame(width: 100)
+
+            Text(String(format: "%.2f", value))
+                .font(.system(size: 12, weight: .semibold, design: .monospaced))
+                .foregroundColor(.white)
+                .frame(width: 40)
         }
     }
 }

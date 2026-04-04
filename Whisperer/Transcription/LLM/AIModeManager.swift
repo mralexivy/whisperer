@@ -2,7 +2,7 @@
 //  AIModeManager.swift
 //  Whisperer
 //
-//  Manages AI mode presets with persistence and migration from legacy systems
+//  Manages AI mode presets with persistence, function assignment, and migration
 //
 
 import Foundation
@@ -14,23 +14,41 @@ class AIModeManager: ObservableObject {
 
     @Published var modes: [AIMode] = []
     @Published var activeModeId: UUID
+    @Published var postProcessModeId: UUID
+    @Published var rewriteModeId: UUID
 
     private let storageKey = "aiModes"
     private let activeKey = "activeModeId"
+    private let postProcessKey = "postProcessModeId"
+    private let rewriteKey = "rewriteModeId"
     private let migrationKey = "aiModesMigrated"
     private let promptVersionKey = "aiModesPromptVersion"
 
     /// Increment this when built-in prompts change to push updates to existing users.
     /// Only updates prompts that haven't been customized by the user.
-    private static let currentPromptVersion = 3
+    private static let currentPromptVersion = 6
 
     var activeMode: AIMode {
         modes.first { $0.id == activeModeId } ?? AIMode.defaultMode()
     }
 
+    /// Mode used for post-processing transcribed speech
+    var postProcessMode: AIMode {
+        modes.first { $0.id == postProcessModeId } ?? AIMode.defaultMode()
+    }
+
+    /// Mode used for rewriting selected text with voice commands
+    var rewriteMode: AIMode {
+        modes.first { $0.id == rewriteModeId } ?? AIMode.builtInModes[1]
+    }
+
     private init() {
-        let defaultId = AIMode.builtInModes[0].id
-        activeModeId = defaultId
+        let correctModeId = AIMode.builtInModes[0].id
+        let rewriteDefaultId = AIMode.builtInModes[1].id
+
+        activeModeId = correctModeId
+        postProcessModeId = correctModeId
+        rewriteModeId = rewriteDefaultId
 
         if UserDefaults.standard.bool(forKey: migrationKey),
            let data = UserDefaults.standard.data(forKey: storageKey),
@@ -49,6 +67,19 @@ class AIModeManager: ObservableObject {
             activeModeId = uuid
         }
 
+        // Load function assignments
+        if let savedPostProcess = UserDefaults.standard.string(forKey: postProcessKey),
+           let uuid = UUID(uuidString: savedPostProcess),
+           modes.contains(where: { $0.id == uuid }) {
+            postProcessModeId = uuid
+        }
+
+        if let savedRewrite = UserDefaults.standard.string(forKey: rewriteKey),
+           let uuid = UUID(uuidString: savedRewrite),
+           modes.contains(where: { $0.id == uuid }) {
+            rewriteModeId = uuid
+        }
+
         refreshBuiltInPrompts()
     }
 
@@ -58,6 +89,18 @@ class AIModeManager: ObservableObject {
         guard modes.contains(where: { $0.id == id }) else { return }
         activeModeId = id
         UserDefaults.standard.set(id.uuidString, forKey: activeKey)
+    }
+
+    func setPostProcessMode(_ id: UUID) {
+        guard modes.contains(where: { $0.id == id }) else { return }
+        postProcessModeId = id
+        UserDefaults.standard.set(id.uuidString, forKey: postProcessKey)
+    }
+
+    func setRewriteMode(_ id: UUID) {
+        guard modes.contains(where: { $0.id == id }) else { return }
+        rewriteModeId = id
+        UserDefaults.standard.set(id.uuidString, forKey: rewriteKey)
     }
 
     func addMode(_ mode: AIMode) {
@@ -80,6 +123,14 @@ class AIModeManager: ObservableObject {
             activeModeId = modes.first?.id ?? AIMode.builtInModes[0].id
             UserDefaults.standard.set(activeModeId.uuidString, forKey: activeKey)
         }
+        if postProcessModeId == id {
+            postProcessModeId = AIMode.builtInModes[0].id
+            UserDefaults.standard.set(postProcessModeId.uuidString, forKey: postProcessKey)
+        }
+        if rewriteModeId == id {
+            rewriteModeId = AIMode.builtInModes[1].id
+            UserDefaults.standard.set(rewriteModeId.uuidString, forKey: rewriteKey)
+        }
         persist()
     }
 
@@ -97,8 +148,7 @@ class AIModeManager: ObservableObject {
             name: "\(source.name) Copy",
             icon: source.icon,
             color: source.color,
-            systemPrompt: source.systemPrompt,
-            rewritePrompt: source.rewritePrompt,
+            prompt: source.prompt,
             temperature: source.temperature,
             topP: source.topP,
             isBuiltIn: false,
@@ -113,21 +163,35 @@ class AIModeManager: ObservableObject {
     // MARK: - Built-in Prompt Refresh
 
     /// Updates built-in mode prompts when the code defaults change.
-    /// Only updates prompts that match the previous default (user hasn't customized them).
+    /// Inserts new built-in modes and updates existing prompts.
     private func refreshBuiltInPrompts() {
         let savedVersion = UserDefaults.standard.integer(forKey: promptVersionKey)
         guard savedVersion < Self.currentPromptVersion else { return }
 
         var updated = false
+
+        // Insert any missing built-in modes
+        for builtIn in AIMode.builtInModes {
+            if !modes.contains(where: { $0.id == builtIn.id }) {
+                modes.insert(builtIn, at: builtIn.sortOrder)
+                updated = true
+                Logger.info("Inserted new built-in AI mode: \(builtIn.name)", subsystem: .app)
+
+                // Set the new Correct mode as default for existing users
+                if builtIn.name == "Correct" {
+                    activeModeId = builtIn.id
+                    postProcessModeId = builtIn.id
+                    UserDefaults.standard.set(builtIn.id.uuidString, forKey: activeKey)
+                    UserDefaults.standard.set(builtIn.id.uuidString, forKey: postProcessKey)
+                }
+            }
+        }
+
+        // Update existing built-in modes with latest prompts
         for builtIn in AIMode.builtInModes {
             guard let index = modes.firstIndex(where: { $0.id == builtIn.id }) else { continue }
-            // Update system prompt and rewrite prompt to latest defaults
-            if modes[index].systemPrompt != builtIn.systemPrompt {
-                modes[index].systemPrompt = builtIn.systemPrompt
-                updated = true
-            }
-            if modes[index].rewritePrompt != builtIn.rewritePrompt {
-                modes[index].rewritePrompt = builtIn.rewritePrompt
+            if modes[index].prompt != builtIn.prompt {
+                modes[index].prompt = builtIn.prompt
                 updated = true
             }
         }
@@ -153,13 +217,13 @@ class AIModeManager: ObservableObject {
         // Migrate active task selection from old LLMTask system
         if let savedTask = UserDefaults.standard.string(forKey: "selectedLLMTask") {
             let taskToModeMap: [String: UUID] = [
-                "Rewrite": AIMode.builtInModes[0].id,
-                "Translate": AIMode.builtInModes[1].id,
-                "Format": AIMode.builtInModes[2].id,
-                "Summarize": AIMode.builtInModes[3].id,
-                "Grammar": AIMode.builtInModes[4].id,
-                "List Format": AIMode.builtInModes[5].id,
-                "Custom": AIMode.builtInModes[9].id,
+                "Rewrite": AIMode.builtInModes[1].id,
+                "Translate": AIMode.builtInModes[2].id,
+                "Format": AIMode.builtInModes[3].id,
+                "Summarize": AIMode.builtInModes[4].id,
+                "Grammar": AIMode.builtInModes[5].id,
+                "List Format": AIMode.builtInModes[6].id,
+                "Custom": AIMode.builtInModes[10].id,
             ]
             if let modeId = taskToModeMap[savedTask] {
                 activeModeId = modeId
@@ -170,7 +234,7 @@ class AIModeManager: ObservableObject {
         // Migrate custom prompt from old Custom task
         if let customPrompt = UserDefaults.standard.string(forKey: "llmCustomPrompt"), !customPrompt.isEmpty {
             if let customIndex = modes.firstIndex(where: { $0.name == "Custom" && $0.isBuiltIn }) {
-                modes[customIndex].systemPrompt = customPrompt
+                modes[customIndex].prompt = customPrompt
             }
         }
 
@@ -185,9 +249,7 @@ class AIModeManager: ObservableObject {
         if let data = UserDefaults.standard.data(forKey: "promptProfiles"),
            let profiles = try? JSONDecoder().decode([LegacyPromptProfile].self, from: data) {
             for profile in profiles where !profile.isDefault {
-                // Skip if a built-in mode already has this name
                 guard !modes.contains(where: { $0.name == profile.name && $0.isBuiltIn }) else { continue }
-                // Skip if already migrated
                 guard !modes.contains(where: { $0.name == profile.name && !$0.isBuiltIn }) else { continue }
 
                 let mode = AIMode(
@@ -195,8 +257,7 @@ class AIModeManager: ObservableObject {
                     name: profile.name,
                     icon: "sparkle",
                     color: "A855F7",
-                    systemPrompt: profile.dictationPrompt ?? "",
-                    rewritePrompt: profile.rewritePrompt ?? "",
+                    prompt: profile.dictationPrompt ?? "",
                     temperature: 0.3,
                     topP: 0.9,
                     isBuiltIn: false,
