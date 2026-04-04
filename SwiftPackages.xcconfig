@@ -1,0 +1,2 @@
+// Force Swift 5 language mode for all targets including packages
+SWIFT_VERSION = 5.0
