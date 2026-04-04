@@ -424,6 +424,7 @@ struct AIModesView: View {
     }
 
     private func addNewMode() {
+        // sortOrder is assigned by AIModeManager.addMode() — pass 0 as placeholder
         let newMode = AIMode(
             id: UUID(),
             name: "New Mode",
@@ -433,7 +434,7 @@ struct AIModesView: View {
             temperature: 0.3,
             topP: 0.9,
             isBuiltIn: false,
-            sortOrder: (modeManager.modes.map(\.sortOrder).max() ?? 0) + 1
+            sortOrder: 0
         )
         modeManager.addMode(newMode)
         selectedModeId = newMode.id

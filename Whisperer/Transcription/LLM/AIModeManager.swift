@@ -39,16 +39,13 @@ class AIModeManager: ObservableObject {
 
     /// Mode used for rewriting selected text with voice commands
     var rewriteMode: AIMode {
-        modes.first { $0.id == rewriteModeId } ?? AIMode.builtInModes[1]
+        modes.first { $0.id == rewriteModeId } ?? AIMode.builtInDefault(for: AIMode.rewriteModeId) ?? AIMode.defaultMode()
     }
 
     private init() {
-        let correctModeId = AIMode.builtInModes[0].id
-        let rewriteDefaultId = AIMode.builtInModes[1].id
-
-        activeModeId = correctModeId
-        postProcessModeId = correctModeId
-        rewriteModeId = rewriteDefaultId
+        activeModeId = AIMode.correctModeId
+        postProcessModeId = AIMode.correctModeId
+        rewriteModeId = AIMode.rewriteModeId
 
         if UserDefaults.standard.bool(forKey: migrationKey),
            let data = UserDefaults.standard.data(forKey: storageKey),
@@ -120,15 +117,15 @@ class AIModeManager: ObservableObject {
         guard let mode = modes.first(where: { $0.id == id }), !mode.isBuiltIn else { return }
         modes.removeAll { $0.id == id }
         if activeModeId == id {
-            activeModeId = modes.first?.id ?? AIMode.builtInModes[0].id
+            activeModeId = modes.first?.id ?? AIMode.correctModeId
             UserDefaults.standard.set(activeModeId.uuidString, forKey: activeKey)
         }
         if postProcessModeId == id {
-            postProcessModeId = AIMode.builtInModes[0].id
+            postProcessModeId = AIMode.correctModeId
             UserDefaults.standard.set(postProcessModeId.uuidString, forKey: postProcessKey)
         }
         if rewriteModeId == id {
-            rewriteModeId = AIMode.builtInModes[1].id
+            rewriteModeId = AIMode.rewriteModeId
             UserDefaults.standard.set(rewriteModeId.uuidString, forKey: rewriteKey)
         }
         persist()
@@ -163,22 +160,23 @@ class AIModeManager: ObservableObject {
     // MARK: - Built-in Prompt Refresh
 
     /// Updates built-in mode prompts when the code defaults change.
-    /// Inserts new built-in modes and updates existing prompts.
+    /// Inserts new built-in modes and updates existing prompts (only if not user-customized).
     private func refreshBuiltInPrompts() {
         let savedVersion = UserDefaults.standard.integer(forKey: promptVersionKey)
         guard savedVersion < Self.currentPromptVersion else { return }
 
         var updated = false
 
-        // Insert any missing built-in modes
+        // Insert any missing built-in modes (clamp index to avoid out-of-bounds crash)
         for builtIn in AIMode.builtInModes {
             if !modes.contains(where: { $0.id == builtIn.id }) {
-                modes.insert(builtIn, at: builtIn.sortOrder)
+                let insertIndex = min(builtIn.sortOrder, modes.count)
+                modes.insert(builtIn, at: insertIndex)
                 updated = true
                 Logger.info("Inserted new built-in AI mode: \(builtIn.name)", subsystem: .app)
 
                 // Set the new Correct mode as default for existing users
-                if builtIn.name == "Correct" {
+                if builtIn.id == AIMode.correctModeId {
                     activeModeId = builtIn.id
                     postProcessModeId = builtIn.id
                     UserDefaults.standard.set(builtIn.id.uuidString, forKey: activeKey)
@@ -206,8 +204,11 @@ class AIModeManager: ObservableObject {
     // MARK: - Persistence
 
     private func persist() {
-        if let data = try? JSONEncoder().encode(modes) {
+        do {
+            let data = try JSONEncoder().encode(modes)
             UserDefaults.standard.set(data, forKey: storageKey)
+        } catch {
+            Logger.error("Failed to persist AI modes: \(error.localizedDescription)", subsystem: .app)
         }
     }
 
@@ -217,13 +218,13 @@ class AIModeManager: ObservableObject {
         // Migrate active task selection from old LLMTask system
         if let savedTask = UserDefaults.standard.string(forKey: "selectedLLMTask") {
             let taskToModeMap: [String: UUID] = [
-                "Rewrite": AIMode.builtInModes[1].id,
-                "Translate": AIMode.builtInModes[2].id,
-                "Format": AIMode.builtInModes[3].id,
-                "Summarize": AIMode.builtInModes[4].id,
-                "Grammar": AIMode.builtInModes[5].id,
-                "List Format": AIMode.builtInModes[6].id,
-                "Custom": AIMode.builtInModes[10].id,
+                "Rewrite": AIMode.rewriteModeId,
+                "Translate": AIMode.translateModeId,
+                "Format": AIMode.formatModeId,
+                "Summarize": AIMode.summarizeModeId,
+                "Grammar": AIMode.grammarModeId,
+                "List Format": AIMode.listFormatModeId,
+                "Custom": AIMode.customModeId,
             ]
             if let modeId = taskToModeMap[savedTask] {
                 activeModeId = modeId

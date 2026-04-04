@@ -56,13 +56,34 @@ nonisolated class FluidAudioBridge: TranscriptionBackend {
     private let queue = DispatchQueue(label: "fluidaudio.transcribe", qos: .userInteractive)
     private let ctxLock = SafeLock(defaultTimeout: 30.0)
     private let lockTimeout: TimeInterval = 30.0
+
+    // Write-once flag — only transitions false→true, never back.
+    // Accessed from multiple threads (caller thread, queue, deinit) so guarded by modeLock.
     private var _isShuttingDown = false
 
     /// Model variant (v2=English-only, v3=multilingual)
     private let variant: ParakeetModelVariant
 
-    /// Prevents repeated language mismatch warnings (log once per session)
+    /// Prevents repeated language mismatch warnings (log once per session).
+    /// Write-once flag, guarded by modeLock for thread safety.
     private var _didLogLanguageWarning = false
+
+    /// Thread-safe read of shutdown flag
+    private var isShuttingDown: Bool {
+        do { return try modeLock.withLock { _isShuttingDown } }
+        catch { return true }
+    }
+
+    /// Thread-safe check-and-set for language warning dedup
+    private func shouldLogLanguageWarning() -> Bool {
+        do {
+            return try modeLock.withLock {
+                guard !_didLogLanguageWarning else { return false }
+                _didLogLanguageWarning = true
+                return true
+            }
+        } catch { return false }
+    }
 
     private init(streamingManager: AsrManager, finalManager: AsrManager, variant: ParakeetModelVariant) {
         self.streamingManager = streamingManager
@@ -229,12 +250,11 @@ nonisolated class FluidAudioBridge: TranscriptionBackend {
         singleSegment: Bool,
         maxTokens: Int32
     ) -> String {
-        guard !_isShuttingDown else { return "" }
+        guard !isShuttingDown else { return "" }
         guard !samples.isEmpty else { return "" }
 
         // Parakeet handles language internally — warn once when user's selection doesn't match
-        if language != .auto && language != .english && variant == .v2 && !_didLogLanguageWarning {
-            _didLogLanguageWarning = true
+        if language != .auto && language != .english && variant == .v2 && shouldLogLanguageWarning() {
             Logger.warning("Parakeet v2 is English-only, ignoring language '\(language.displayName)'", subsystem: .transcription)
         }
 
@@ -268,7 +288,7 @@ nonisolated class FluidAudioBridge: TranscriptionBackend {
         maxTokens: Int32,
         completion: @escaping (String) -> Void
     ) {
-        guard !_isShuttingDown else {
+        guard !isShuttingDown else {
             completion("")
             return
         }
@@ -277,7 +297,8 @@ nonisolated class FluidAudioBridge: TranscriptionBackend {
             return
         }
 
-        if language != .auto && language != .english && variant == .v2 {
+        // Log language mismatch warning once per session (same dedup as synchronous transcribe)
+        if language != .auto && language != .english && variant == .v2 && shouldLogLanguageWarning() {
             Logger.warning("Parakeet v2 is English-only, ignoring language '\(language.displayName)'", subsystem: .transcription)
         }
 
@@ -292,11 +313,12 @@ nonisolated class FluidAudioBridge: TranscriptionBackend {
     }
 
     func isContextHealthy() -> Bool {
-        !_isShuttingDown && streamingManager != nil
+        !isShuttingDown && streamingManager != nil
     }
 
     func prepareForShutdown() {
-        _isShuttingDown = true
+        do { try modeLock.withLock { _isShuttingDown = true } }
+        catch { _isShuttingDown = true }
         queue.sync { }
         // cleanup() is actor-isolated — fire-and-forget async cleanup
         let streaming = streamingManager
@@ -315,6 +337,7 @@ nonisolated class FluidAudioBridge: TranscriptionBackend {
     }
 
     deinit {
+        // No lock needed in deinit — sole owner at this point
         _isShuttingDown = true
         // Don't call cleanup() — it's actor-isolated and can't be called from deinit
         // prepareForShutdown() should have been called, or ARC handles dealloc

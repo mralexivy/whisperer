@@ -19,6 +19,20 @@ struct AIMode: Codable, Identifiable, Equatable {
     var targetLanguage: String?     // For Translate mode
     var sortOrder: Int
 
+    // MARK: - Built-in Mode IDs (stable, never change)
+
+    static let correctModeId = UUID(uuidString: "A0000000-0000-0000-0000-000000000000")!
+    static let rewriteModeId = UUID(uuidString: "A0000000-0000-0000-0000-000000000001")!
+    static let translateModeId = UUID(uuidString: "A0000000-0000-0000-0000-000000000002")!
+    static let formatModeId = UUID(uuidString: "A0000000-0000-0000-0000-000000000003")!
+    static let summarizeModeId = UUID(uuidString: "A0000000-0000-0000-0000-000000000004")!
+    static let grammarModeId = UUID(uuidString: "A0000000-0000-0000-0000-000000000005")!
+    static let listFormatModeId = UUID(uuidString: "A0000000-0000-0000-0000-000000000006")!
+    static let codingModeId = UUID(uuidString: "A0000000-0000-0000-0000-000000000007")!
+    static let emailModeId = UUID(uuidString: "A0000000-0000-0000-0000-000000000008")!
+    static let creativeModeId = UUID(uuidString: "A0000000-0000-0000-0000-000000000009")!
+    static let customModeId = UUID(uuidString: "A0000000-0000-0000-0000-00000000000A")!
+
     // MARK: - Built-in Modes
 
     static let builtInModes: [AIMode] = [

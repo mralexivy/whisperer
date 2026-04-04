@@ -305,6 +305,12 @@ class AppState: ObservableObject {
             if llmEnabled {
                 preloadLLM()
             } else {
+                // Cancel any in-flight load before unloading
+                llmLoadTask?.cancel()
+                llmLoadTask = nil
+                llmModelSwitchTask?.cancel()
+                llmModelSwitchTask = nil
+
                 let memBefore = BenchmarkUtilities.currentMemoryMB()
                 llmPostProcessor?.unloadModel()
                 llmPostProcessor = nil
@@ -317,6 +323,11 @@ class AppState: ObservableObject {
         didSet {
             UserDefaults.standard.set(selectedLLMModel.rawValue, forKey: "selectedLLMModel")
             if llmEnabled {
+                // Cancel any in-flight LLM load and pending model switch to prevent duplicates
+                llmLoadTask?.cancel()
+                llmLoadTask = nil
+                llmModelSwitchTask?.cancel()
+
                 // Unload old model — delay before loading new one to let ARC release GPU buffers
                 let memBefore = BenchmarkUtilities.currentMemoryMB()
                 Logger.info("Switching LLM: unloading old model (\(String(format: "%.0f", memBefore))MB)", subsystem: .model)
@@ -324,9 +335,9 @@ class AppState: ObservableObject {
                 llmPostProcessor = nil
                 rewriteModeService = nil
 
-                Task { @MainActor [weak self] in
+                llmModelSwitchTask = Task { @MainActor [weak self] in
                     try? await Task.sleep(nanoseconds: 500_000_000) // 500ms for ARC to release GPU buffers
-                    guard let self, self.llmEnabled else { return }
+                    guard let self, self.llmEnabled, !Task.isCancelled else { return }
                     let memAfter = BenchmarkUtilities.currentMemoryMB()
                     Logger.info("LLM unload freed \(String(format: "%.0f", memBefore - memAfter))MB, loading new model", subsystem: .model)
                     self.preloadLLM()
@@ -336,6 +347,8 @@ class AppState: ObservableObject {
     }
     @Published var llmPostProcessor: LLMPostProcessor?
     @Published var activeAIModeName: String?
+    private var llmLoadTask: Task<Void, Never>?
+    private var llmModelSwitchTask: Task<Void, Never>?
 
     // Filler word removal (strips "um", "uh", "er" from final output)
     @Published var fillerWordRemovalEnabled: Bool = false {
@@ -1178,6 +1191,9 @@ class AppState: ObservableObject {
         }
         guard llmEnabled else { return }
 
+        // Cancel any in-flight load to prevent duplicate model instances
+        llmLoadTask?.cancel()
+
         let processor = llmPostProcessor ?? LLMPostProcessor()
         llmPostProcessor = processor
 
@@ -1187,7 +1203,7 @@ class AppState: ObservableObject {
         let variant = selectedLLMModel
 
         let memBefore = BenchmarkUtilities.currentMemoryMB()
-        Task {
+        llmLoadTask = Task { [weak self] in
             do {
                 try await processor.loadModel(variant)
                 let memAfter = BenchmarkUtilities.currentMemoryMB()
@@ -1195,9 +1211,10 @@ class AppState: ObservableObject {
             } catch {
                 Logger.error("Failed to pre-load LLM \(variant.displayName): \(error)", subsystem: .model)
                 let msg = "Failed to load model"
-                processor.errorMessage = msg
-                processor.loadPhase = .error(msg)
-                processor.isLoading = false
+                // Write error state to the current processor, not a potentially stale capture
+                self?.llmPostProcessor?.errorMessage = msg
+                self?.llmPostProcessor?.loadPhase = .error(msg)
+                self?.llmPostProcessor?.isLoading = false
             }
         }
     }
@@ -1232,7 +1249,7 @@ class AppState: ObservableObject {
                 temperature: mode.temperature,
                 topP: mode.topP
             )
-            Logger.info("LLM post-processed (\(mode.name)): \(text.prefix(60))... → \(processed.prefix(60))...", subsystem: .transcription)
+            Logger.debug("LLM post-processed (\(mode.name)): \(text.prefix(60))... → \(processed.prefix(60))...", subsystem: .transcription)
             Logger.debug("LLM output: \(processed)", subsystem: .transcription)
             return processed
         } catch {
@@ -1261,7 +1278,7 @@ class AppState: ObservableObject {
                 selectedText: capturedSelectedText,
                 rewritePrompt: rewritePrompt
             )
-            Logger.info("Rewrite mode (\(mode.name)) processed: \(transcription.prefix(30))... → \(result.prefix(30))...", subsystem: .transcription)
+            Logger.debug("Rewrite mode (\(mode.name)) processed: \(transcription.prefix(30))... → \(result.prefix(30))...", subsystem: .transcription)
             return result
         } catch {
             Logger.error("Rewrite mode failed: \(error)", subsystem: .transcription)
@@ -1282,9 +1299,9 @@ class AppState: ObservableObject {
         if listFormattingAIEnabled, result == text,
            let processor = llmPostProcessor, processor.isModelLoaded {
             do {
-                let listFormatPrompt = AIMode.builtInModes.first { $0.name == "List Format" }?.prompt.replacingOccurrences(of: "{transcript}", with: "") ?? ""
+                let listFormatPrompt = AIMode.builtInDefault(for: AIMode.listFormatModeId)?.prompt.replacingOccurrences(of: "{transcript}", with: "") ?? ""
                 let llmResult = try await processor.process(text: text, systemPrompt: listFormatPrompt)
-                Logger.info("LLM list formatting: \(text.prefix(30))... → \(llmResult.prefix(30))...", subsystem: .transcription)
+                Logger.debug("LLM list formatting: \(text.prefix(30))... → \(llmResult.prefix(30))...", subsystem: .transcription)
                 return llmResult
             } catch {
                 Logger.error("LLM list formatting failed: \(error)", subsystem: .transcription)
@@ -1293,7 +1310,7 @@ class AppState: ObservableObject {
         }
 
         if result != text {
-            Logger.info("List formatted: \(text.prefix(30))... → \(result.prefix(30))...", subsystem: .transcription)
+            Logger.debug("List formatted: \(text.prefix(30))... → \(result.prefix(30))...", subsystem: .transcription)
         }
 
         return result
@@ -2173,7 +2190,7 @@ class AppState: ObservableObject {
                 systemPrompt: systemPrompt,
                 targetLanguage: mode.targetLanguage
             )
-            Logger.info("Rewrite (\(mode.name)): \(selectedText.prefix(30))... → \(result.prefix(30))...", subsystem: .app)
+            Logger.debug("Rewrite (\(mode.name)): \(selectedText.prefix(30))... → \(result.prefix(30))...", subsystem: .app)
             state = .idle
             await insertText(result)
         } catch {

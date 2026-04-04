@@ -54,13 +54,14 @@ class LLMPostProcessor: ObservableObject {
         errorMessage = nil
         loadPhase = .loading
 
+        // Track download progress on MainActor to avoid data race with background progress callbacks
         var didReceiveProgress = false
 
         let configuration = ModelConfiguration(id: variant.huggingFaceId)
         let container = try await LLMModelFactory.shared.loadContainer(
             configuration: configuration,
             progressHandler: { [weak self] progress in
-                Task { @MainActor in
+                Task { @MainActor [weak self] in
                     let fraction = progress.fractionCompleted
                     if fraction > 0 {
                         didReceiveProgress = true
@@ -70,10 +71,21 @@ class LLMPostProcessor: ObservableObject {
             }
         )
 
-        // Download done (if it happened) — now loading into memory
+        // Download done (if it happened) — now loading into memory.
+        // didReceiveProgress is safe to read here: loadContainer awaits completion of all
+        // progress callbacks before returning, and we're back on @MainActor.
         if didReceiveProgress {
             loadPhase = .loading
             Logger.info("LLM \(variant.displayName) downloaded, loading into memory...", subsystem: .model)
+        }
+
+        // Check cancellation after the long await — if the user switched models or disabled LLM
+        // while we were loading, discard the container to free GPU buffers immediately
+        guard !Task.isCancelled else {
+            isLoading = false
+            loadPhase = .idle
+            Logger.info("LLM load cancelled for \(variant.displayName)", subsystem: .model)
+            return
         }
 
         modelContainer = container
@@ -103,12 +115,12 @@ class LLMPostProcessor: ObservableObject {
             return text
         }
 
-        isProcessing = true
-        defer { isProcessing = false }
-
         guard !systemPrompt.isEmpty else {
             return text
         }
+
+        isProcessing = true
+        defer { isProcessing = false }
 
         // Fresh session per call — proper system/user message separation,
         // no cross-call context leaking from previous transcriptions
