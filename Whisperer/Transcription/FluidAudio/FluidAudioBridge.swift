@@ -7,6 +7,7 @@
 //  and final manager (accurate, with CTC vocabulary boosting).
 //
 
+#if canImport(FluidAudio)
 import Foundation
 import FluidAudio
 import AVFoundation
@@ -20,6 +21,11 @@ nonisolated class FluidAudioBridge: TranscriptionBackend {
     /// Final manager: separate instance with CTC vocab boosting — used for final pass on stop.
     /// Shares underlying MLModel objects (reference types), so memory overhead is ~100KB decoder state.
     private var finalManager: AsrManager?
+
+    // Vocabulary boosting state (configured via configureVocabularyBoosting, applied as post-processing)
+    private var customVocabulary: CustomVocabularyContext?
+    private var ctcSpotter: CtcKeywordSpotter?
+    private var vocabularyRescorer: VocabularyRescorer?
 
     /// Controls which AsrManager handles transcription calls
     enum TranscriptionMode {
@@ -91,10 +97,10 @@ nonisolated class FluidAudioBridge: TranscriptionBackend {
         let models = try await AsrModels.loadFromCache(version: version)
 
         let streamingMgr = AsrManager(config: .default)
-        try await streamingMgr.initialize(models: models)
+        try await streamingMgr.loadModels(models)
 
         let finalMgr = AsrManager(config: .default)
-        try await finalMgr.initialize(models: models)
+        try await finalMgr.loadModels(models)
 
         Logger.info("FluidAudio Parakeet \(variant.displayName) loaded from cache (dual manager)", subsystem: .model)
         return FluidAudioBridge(streamingManager: streamingMgr, finalManager: finalMgr, variant: variant)
@@ -106,10 +112,10 @@ nonisolated class FluidAudioBridge: TranscriptionBackend {
         let models = try await AsrModels.downloadAndLoad(version: version)
 
         let streamingMgr = AsrManager(config: .default)
-        try await streamingMgr.initialize(models: models)
+        try await streamingMgr.loadModels(models)
 
         let finalMgr = AsrManager(config: .default)
-        try await finalMgr.initialize(models: models)
+        try await finalMgr.loadModels(models)
 
         Logger.info("FluidAudio Parakeet \(variant.displayName) loaded (dual manager)", subsystem: .model)
         return FluidAudioBridge(streamingManager: streamingMgr, finalManager: finalMgr, variant: variant)
@@ -117,16 +123,21 @@ nonisolated class FluidAudioBridge: TranscriptionBackend {
 
     // MARK: - Vocabulary Boosting
 
-    /// Configure CTC vocabulary boosting on the final-pass manager.
-    /// Only the final manager gets vocab boosting to avoid ANE contention during streaming.
+    /// Configure CTC vocabulary boosting for post-processing on final pass.
+    /// Components are stored locally and applied as a post-processing step after transcription.
     func configureVocabularyBoosting(
         vocabulary: CustomVocabularyContext,
         ctcModels: CtcModels
     ) async throws {
-        guard let finalMgr = finalManager else { return }
-        try await finalMgr.configureVocabularyBoosting(
+        self.customVocabulary = vocabulary
+        let blankId = ctcModels.vocabulary.count
+        self.ctcSpotter = CtcKeywordSpotter(models: ctcModels, blankId: blankId)
+        let ctcModelDir = CtcModels.defaultCacheDirectory(for: ctcModels.variant)
+        self.vocabularyRescorer = try await VocabularyRescorer.create(
+            spotter: ctcSpotter!,
             vocabulary: vocabulary,
-            ctcModels: ctcModels
+            config: .default,
+            ctcModelDirectory: ctcModelDir
         )
         Logger.info("Vocabulary boosting configured with \(vocabulary.terms.count) terms (final pass only)", subsystem: .transcription)
     }
@@ -140,8 +151,14 @@ nonisolated class FluidAudioBridge: TranscriptionBackend {
             return try ctxLock.withLock(timeout: lockTimeout) { [weak self] in
                 guard let self = self else { return "" }
 
+                // Capture vocabulary boosting state for use inside Task
+                let isFinalPass = self.currentMode == .finalPass
+                let rescorer = self.vocabularyRescorer
+                let spotter = self.ctcSpotter
+                let vocabulary = self.customVocabulary
+
                 // Select manager based on current mode
-                guard let manager = (self.currentMode == .finalPass ? self.finalManager : self.streamingManager) else { return "" }
+                guard let manager = (isFinalPass ? self.finalManager : self.streamingManager) else { return "" }
 
                 // FluidAudio's transcribe is async — semaphore bridges to sync.
                 // Safe here because we're on a GCD thread, not a cooperative thread.
@@ -151,14 +168,46 @@ nonisolated class FluidAudioBridge: TranscriptionBackend {
                 Task {
                     do {
                         let asrResult = try await manager.transcribe(samples, source: .microphone)
-                        result = asrResult.text
+                        var text = asrResult.text
+
+                        // Apply vocabulary boosting as post-processing for final pass only
+                        if isFinalPass,
+                           let rescorer = rescorer,
+                           let spotter = spotter,
+                           let vocabulary = vocabulary,
+                           let tokenTimings = asrResult.tokenTimings,
+                           !tokenTimings.isEmpty {
+                            do {
+                                // Run CTC inference for log probabilities
+                                let spotResult = try await spotter.spotKeywordsWithLogProbs(
+                                    audioSamples: samples,
+                                    customVocabulary: vocabulary
+                                )
+
+                                // Rescore transcript if we have valid log probs
+                                if !spotResult.logProbs.isEmpty {
+                                    let rescored = rescorer.ctcTokenRescore(
+                                        transcript: text,
+                                        tokenTimings: tokenTimings,
+                                        logProbs: spotResult.logProbs,
+                                        frameDuration: spotResult.frameDuration
+                                    )
+                                    text = rescored.text
+                                }
+                            } catch {
+                                Logger.warning("Vocabulary rescoring failed: \(error.localizedDescription)", subsystem: .transcription)
+                                // Continue with original text
+                            }
+                        }
+
+                        result = text
                     } catch {
                         Logger.error("FluidAudio transcription failed: \(error)", subsystem: .transcription)
                     }
                     semaphore.signal()
                 }
 
-                if semaphore.wait(timeout: .now() + 3.0) == .timedOut {
+                if semaphore.wait(timeout: .now() + 5.0) == .timedOut {
                     Logger.error("FluidAudio transcription hung — bailing out", subsystem: .transcription)
                     return ""
                 }
@@ -249,22 +298,29 @@ nonisolated class FluidAudioBridge: TranscriptionBackend {
     func prepareForShutdown() {
         _isShuttingDown = true
         queue.sync { }
-        // cleanup() nils individual MLModel properties but NOT the asrModels struct
-        // which also holds strong refs to the same models. Nilling the managers
-        // ensures the asrModels struct is deallocated too, freeing all MLModel objects.
-        streamingManager?.cleanup()
-        finalManager?.cleanup()
+        // cleanup() is actor-isolated — fire-and-forget async cleanup
+        let streaming = streamingManager
+        let final = finalManager
+        Task {
+            await streaming?.cleanup()
+            await final?.cleanup()
+        }
+        // Nil references immediately so ARC can deallocate when Task completes
         streamingManager = nil
         finalManager = nil
+        // Clear vocabulary boosting state
+        customVocabulary = nil
+        ctcSpotter = nil
+        vocabularyRescorer = nil
     }
 
     deinit {
         _isShuttingDown = true
-        // Safety net: ensure MLModels are released even if prepareForShutdown wasn't called
-        streamingManager?.cleanup()
-        finalManager?.cleanup()
+        // Don't call cleanup() — it's actor-isolated and can't be called from deinit
+        // prepareForShutdown() should have been called, or ARC handles dealloc
         streamingManager = nil
         finalManager = nil
         Logger.debug("FluidAudioBridge deallocated", subsystem: .model)
     }
 }
+#endif
