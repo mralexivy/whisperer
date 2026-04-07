@@ -120,13 +120,20 @@ class AudioRecorder: NSObject {
     private var monitoredDeviceID: AudioDeviceID?
     private var deviceAliveListenerBlock: AudioObjectPropertyListenerBlock?
 
+    // System-level default input device change monitoring
+    // Detects when macOS reassigns device IDs (e.g., external monitor connect/disconnect)
+    private var defaultInputDeviceListenerBlock: AudioObjectPropertyListenerBlock?
+    private var isMonitoringDefaultInputDevice = false
+
     override init() {
         super.init()
+        startMonitoringDefaultInputDevice()
     }
 
     deinit {
         stopAudioFlowWatchdog()
         stopMonitoringDevice()
+        stopMonitoringDefaultInputDevice()
         if let observer = configChangeObserver {
             NotificationCenter.default.removeObserver(observer)
             configChangeObserver = nil
@@ -306,7 +313,11 @@ class AudioRecorder: NSObject {
                 throw RecordingError.audioUnitFailed
             }
         case .systemDefault:
-            Logger.debug("Using system default input device", subsystem: .audio)
+            if let defaultDeviceID = getSystemDefaultInputDeviceID() {
+                Logger.debug("Using system default input device: id=\(defaultDeviceID) (\(deviceName(for: defaultDeviceID) ?? "unknown"))", subsystem: .audio)
+            } else {
+                Logger.debug("Using system default input device (could not resolve ID)", subsystem: .audio)
+            }
         }
 
         guard !Task.isCancelled, self.audioEngine != nil, isGenerationCurrent(generation) else {
@@ -428,7 +439,6 @@ class AudioRecorder: NSObject {
         lastAudioCallbackTime = Date()
         if isFirst {
             Logger.debug("First audio data received", subsystem: .audio)
-            recoveryAttemptCount = 0
         }
 
         let ratio = outputFormat.sampleRate / buffer.format.sampleRate
@@ -489,6 +499,11 @@ class AudioRecorder: NSObject {
             }
         } else {
             consecutiveSilentCallbacks = 0
+            // Audio is genuinely non-silent — recovery (if any) succeeded
+            if recoveryAttemptCount > 0 {
+                Logger.debug("Non-silent audio confirmed, resetting recovery counter (was \(recoveryAttemptCount))", subsystem: .audio)
+                recoveryAttemptCount = 0
+            }
         }
 
         // Send samples to streaming transcriber
@@ -611,6 +626,20 @@ class AudioRecorder: NSObject {
 
     // MARK: - Device-Alive Monitoring
 
+    private func getSystemDefaultInputDeviceID() -> AudioDeviceID? {
+        var deviceID: AudioDeviceID = 0
+        var size = UInt32(MemoryLayout<AudioDeviceID>.size)
+        var addr = AudioObjectPropertyAddress(
+            mSelector: kAudioHardwarePropertyDefaultInputDevice,
+            mScope: kAudioObjectPropertyScopeGlobal,
+            mElement: kAudioObjectPropertyElementMain
+        )
+        let status = AudioObjectGetPropertyData(
+            AudioObjectID(kAudioObjectSystemObject), &addr, 0, nil, &size, &deviceID
+        )
+        return status == noErr ? deviceID : nil
+    }
+
     private func getEngineDeviceID() -> AudioDeviceID? {
         guard let au = audioEngine?.inputNode.audioUnit else { return nil }
         var deviceID: AudioDeviceID = 0
@@ -653,7 +682,7 @@ class AudioRecorder: NSObject {
             monitoredDeviceID = nil
             deviceAliveListenerBlock = nil
         } else {
-            Logger.debug("Monitoring device \(deviceID) alive status", subsystem: .audio)
+            Logger.debug("Monitoring device \(deviceID) (\(deviceName(for: deviceID) ?? "unknown")) alive status", subsystem: .audio)
         }
     }
 
@@ -695,6 +724,112 @@ class AudioRecorder: NSObject {
                 }
             }
         }
+    }
+
+    // MARK: - System Default Input Device Monitoring
+
+    /// Monitors kAudioHardwarePropertyDefaultInputDevice at the system level.
+    /// When macOS reassigns device IDs (e.g., external monitor connect/disconnect),
+    /// the engine may be bound to a stale device ID. This listener detects the change
+    /// and proactively triggers recovery during recording.
+    private func startMonitoringDefaultInputDevice() {
+        guard !isMonitoringDefaultInputDevice else { return }
+
+        defaultInputDeviceListenerBlock = { [weak self] (_, _) in
+            self?.handleDefaultInputDeviceChanged()
+        }
+
+        var propertyAddress = AudioObjectPropertyAddress(
+            mSelector: kAudioHardwarePropertyDefaultInputDevice,
+            mScope: kAudioObjectPropertyScopeGlobal,
+            mElement: kAudioObjectPropertyElementMain
+        )
+
+        let status = AudioObjectAddPropertyListenerBlock(
+            AudioObjectID(kAudioObjectSystemObject),
+            &propertyAddress,
+            DispatchQueue.main,
+            defaultInputDeviceListenerBlock!
+        )
+
+        if status == noErr {
+            isMonitoringDefaultInputDevice = true
+            Logger.debug("Monitoring system default input device changes", subsystem: .audio)
+        } else {
+            Logger.warning("Failed to monitor default input device changes: \(status)", subsystem: .audio)
+            defaultInputDeviceListenerBlock = nil
+        }
+    }
+
+    private func stopMonitoringDefaultInputDevice() {
+        guard isMonitoringDefaultInputDevice, let listenerBlock = defaultInputDeviceListenerBlock else { return }
+
+        var propertyAddress = AudioObjectPropertyAddress(
+            mSelector: kAudioHardwarePropertyDefaultInputDevice,
+            mScope: kAudioObjectPropertyScopeGlobal,
+            mElement: kAudioObjectPropertyElementMain
+        )
+
+        AudioObjectRemovePropertyListenerBlock(
+            AudioObjectID(kAudioObjectSystemObject),
+            &propertyAddress,
+            DispatchQueue.main,
+            listenerBlock
+        )
+
+        isMonitoringDefaultInputDevice = false
+        defaultInputDeviceListenerBlock = nil
+        Logger.debug("Stopped monitoring system default input device changes", subsystem: .audio)
+    }
+
+    private func handleDefaultInputDeviceChanged() {
+        let newDefaultID = getSystemDefaultInputDeviceID()
+        let engineDeviceID = getEngineDeviceID()
+
+        Logger.info("System default input device changed: new=\(newDefaultID.map(String.init) ?? "nil") (\(newDefaultID.flatMap { deviceName(for: $0) } ?? "unknown")), engine bound to=\(engineDeviceID.map(String.init) ?? "nil") (\(engineDeviceID.flatMap { deviceName(for: $0) } ?? "unknown"))", subsystem: .audio)
+
+        // Only act if we're actively recording and the engine's device differs from the new default
+        guard isRecording, case .recording = recorderState else {
+            Logger.debug("Default input device changed while not recording — no action needed", subsystem: .audio)
+            return
+        }
+
+        // Ignore during startup grace period (engine is still settling)
+        if let startTime = recordingStartTime {
+            let elapsed = Date().timeIntervalSince(startTime)
+            if elapsed < startupGracePeriod {
+                Logger.debug("Ignoring default device change during startup grace period (\(String(format: "%.2f", elapsed))s)", subsystem: .audio)
+                return
+            }
+        }
+
+        guard let engineID = engineDeviceID, let newID = newDefaultID else {
+            Logger.warning("Could not compare device IDs — triggering recovery as precaution", subsystem: .audio)
+            recoveryTask = Task { await recoverAudioEngine() }
+            return
+        }
+
+        if engineID != newID {
+            // Check if the engine's device still exists (device IDs may have been reassigned)
+            let engineDeviceAlive = isDeviceAlive(engineID)
+            Logger.warning("Engine device \(engineID) (\(deviceName(for: engineID) ?? "unknown")) differs from new default \(newID) (\(deviceName(for: newID) ?? "unknown")), engineAlive=\(engineDeviceAlive) — triggering recovery", subsystem: .audio)
+            stopMonitoringDevice()
+            recoveryTask = Task { await recoverAudioEngine() }
+        } else {
+            Logger.debug("Engine device matches new default (\(engineID)) — no recovery needed", subsystem: .audio)
+        }
+    }
+
+    private func isDeviceAlive(_ deviceID: AudioDeviceID) -> Bool {
+        var isAlive: UInt32 = 0
+        var size = UInt32(MemoryLayout<UInt32>.size)
+        var propertyAddress = AudioObjectPropertyAddress(
+            mSelector: kAudioDevicePropertyDeviceIsAlive,
+            mScope: kAudioObjectPropertyScopeGlobal,
+            mElement: kAudioObjectPropertyElementMain
+        )
+        let status = AudioObjectGetPropertyData(deviceID, &propertyAddress, 0, nil, &size, &isAlive)
+        return status == noErr && isAlive != 0
     }
 
     // MARK: - Continuous Audio Flow Watchdog

@@ -8,6 +8,7 @@
 //
 
 import Foundation
+import Accelerate
 
 class VADSegmenter {
 
@@ -76,18 +77,21 @@ class VADSegmenter {
         let segments = vad.detectSpeechSegments(samples: newAudio)
 
         guard !segments.isEmpty else {
-            // No speech found — check if there's enough silence to finalize pending audio
-            let silenceDuration = Double(totalSamples - lastTranscribedIndex) / sampleRate
+            // No speech found — check if there's enough accumulated audio to emit
             let audioSinceLastTranscribed = Double(totalSamples - lastTranscribedIndex) / sampleRate
 
-            // If we have untranscribed audio AND enough trailing silence, emit it
-            if audioSinceLastTranscribed > minChunkDuration && silenceDuration > silenceForFinalization {
-                let chunk = makeChunk(
-                    allSamples: allSamples,
-                    startSample: lastTranscribedIndex,
-                    endSample: totalSamples
-                )
-                return (chunks: [chunk], newScanIndex: totalSamples)
+            // Emit only if accumulated audio has actual energy (not pure silence).
+            // Pure silence produces Whisper hallucinations ("Thank you for watching", etc.)
+            if audioSinceLastTranscribed > minChunkDuration {
+                let pendingSamples = Array(allSamples[lastTranscribedIndex..<totalSamples])
+                if hasEnergy(pendingSamples) {
+                    let chunk = makeChunk(
+                        allSamples: allSamples,
+                        startSample: lastTranscribedIndex,
+                        endSample: totalSamples
+                    )
+                    return (chunks: [chunk], newScanIndex: totalSamples)
+                }
             }
 
             return (chunks: [], newScanIndex: totalSamples)
@@ -207,6 +211,14 @@ class VADSegmenter {
         }
 
         return merged
+    }
+
+    /// Check if audio samples have energy above the noise floor
+    private func hasEnergy(_ samples: [Float], threshold: Float = 0.003) -> Bool {
+        guard !samples.isEmpty else { return false }
+        var meanSquare: Float = 0
+        vDSP_measqv(samples, 1, &meanSquare, vDSP_Length(samples.count))
+        return sqrt(meanSquare) > threshold
     }
 
     /// Fallback: time-based chunking when VAD is unavailable
