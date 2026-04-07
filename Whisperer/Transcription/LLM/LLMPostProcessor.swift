@@ -109,7 +109,18 @@ class LLMPostProcessor: ObservableObject {
     }
 
     // MARK: - Processing
-    func process(text: String, systemPrompt: String, targetLanguage: String? = nil, temperature: Float = 0.3, topP: Float = 0.9) async throws -> String {
+
+    func process(
+        text: String,
+        systemPrompt: String,
+        userMessage: String,
+        targetLanguage: String? = nil,
+        temperature: Float = 0.0,
+        topP: Float = 1.0,
+        topK: Int = 0,
+        repetitionPenalty: Float = 1.05,
+        maxTokensCap: Int = 256
+    ) async throws -> String {
         guard let container = modelContainer else {
             Logger.warning("LLM not loaded, returning original text", subsystem: .transcription)
             return text
@@ -122,17 +133,18 @@ class LLMPostProcessor: ObservableObject {
         isProcessing = true
         defer { isProcessing = false }
 
-        // Fresh session per call — proper system/user message separation,
-        // no cross-call context leaking from previous transcriptions
         var instructions = systemPrompt
         if let lang = targetLanguage, !lang.isEmpty {
             instructions += " Translate to \(lang)."
         }
 
-        // Qwen3.5 recommended params for non-thinking (instruct) mode:
-        // temperature=0.7, top_p=0.8, top_k=20, presence_penalty=1.5
-        // maxTokens caps output to 2x input length to prevent runaway generation
-        let maxTokens = max(256, text.count * 2)
+        // maxTokens: tight cap based on input size + mode ceiling
+        let estimatedTokens = max(16, text.count / 4)
+        let maxTokens = max(32, min(maxTokensCap, Int(ceil(Float(estimatedTokens) * 1.15))))
+
+        Logger.debug("LLM gen: inputChars=\(text.count) estTokens=\(estimatedTokens) maxTokens=\(maxTokens) cap=\(maxTokensCap) temp=\(temperature) topP=\(topP) topK=\(topK) repPenalty=\(repetitionPenalty)", subsystem: .transcription)
+
+        // Fresh session per call — no cross-call context leaking
         let session = ChatSession(
             container,
             instructions: instructions,
@@ -140,14 +152,32 @@ class LLMPostProcessor: ObservableObject {
                 maxTokens: maxTokens,
                 temperature: temperature,
                 topP: topP,
-                topK: 20,
-                repetitionPenalty: 1.2,
-                presencePenalty: 1.5
+                topK: topK,
+                repetitionPenalty: repetitionPenalty
             ),
             additionalContext: ["enable_thinking": false]
         )
 
-        var result = try await session.respond(to: text)
+        // Stream to capture finish reason and real token counts
+        var result = ""
+        var completionInfo: GenerateCompletionInfo?
+        for try await generation in session.streamDetails(to: userMessage, images: [], videos: []) {
+            switch generation {
+            case .chunk(let chunk):
+                result += chunk
+            case .info(let info):
+                completionInfo = info
+            case .toolCall:
+                break
+            }
+        }
+
+        // Log generation diagnostics
+        if let info = completionInfo {
+            Logger.debug("LLM gen: promptTokens=\(info.promptTokenCount) genTokens=\(info.generationTokenCount) stopReason=\(info.stopReason) promptTime=\(String(format: "%.1f", info.promptTime * 1000))ms genTime=\(String(format: "%.1f", info.generateTime * 1000))ms", subsystem: .transcription)
+        } else {
+            Logger.warning("LLM gen: stream ended without completion info", subsystem: .transcription)
+        }
 
         // Strip <think>...</think> tags from Qwen3 models
         if let thinkRange = result.range(of: "<think>[\\s\\S]*?</think>", options: .regularExpression) {

@@ -77,6 +77,7 @@ final class LLMPostProcessorTests: XCTestCase {
             let result = try await processor.process(
                 text: testCase.input,
                 systemPrompt: systemPrompt,
+                userMessage: "[INPUT]\n\(testCase.input)\n[/INPUT]",
                 temperature: 0.1,
                 topP: 0.8
             )
@@ -108,9 +109,11 @@ final class LLMPostProcessorTests: XCTestCase {
         NSLog("Using systemPrompt: \(systemPrompt.prefix(100))...")
 
         let start = CFAbsoluteTimeGetCurrent()
+        let inputText = "hello world how are you doing today"
         let result = try await processor.process(
-            text: "hello world how are you doing today",
+            text: inputText,
             systemPrompt: systemPrompt,
+            userMessage: "[INPUT]\n\(inputText)\n[/INPUT]",
             temperature: 0.1,
             topP: 0.8
         )
@@ -130,7 +133,13 @@ final class LLMPostProcessorTests: XCTestCase {
         """
 
         let mode = AIMode.builtInModes.first { $0.name == "Correct" }!
-        let systemPrompt = mode.prompt.replacingOccurrences(of: "{transcript}", with: "")
+        let parts = mode.prompt.components(separatedBy: "{transcript}")
+        var systemPrompt = parts[0]
+        if let inputRange = systemPrompt.range(of: "[INPUT]", options: .backwards) {
+            systemPrompt = String(systemPrompt[..<inputRange.lowerBound])
+        }
+        systemPrompt = systemPrompt.trimmingCharacters(in: .whitespacesAndNewlines)
+        let userMessage = "[INPUT]\n\(realInput)\n[/INPUT]"
         NSLog("Testing real transcription cleanup with Correct mode...")
         NSLog("BEFORE: '\(realInput.trimmingCharacters(in: .whitespacesAndNewlines))'")
 
@@ -138,8 +147,12 @@ final class LLMPostProcessorTests: XCTestCase {
         let result = try await processor.process(
             text: realInput,
             systemPrompt: systemPrompt,
+            userMessage: userMessage,
             temperature: mode.temperature,
-            topP: mode.topP
+            topP: mode.topP,
+            topK: mode.topK,
+            repetitionPenalty: mode.repetitionPenalty,
+            maxTokensCap: mode.maxTokensCap
         )
         let elapsed = CFAbsoluteTimeGetCurrent() - start
 

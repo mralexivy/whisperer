@@ -30,11 +30,13 @@ class RewriteModeService {
         if let selected = selectedText, !selected.isEmpty {
             // Rewrite mode: apply instruction to selected text
             let prompt = buildRewritePrompt(instruction: instruction, selectedText: selected, systemPrompt: rewritePrompt)
-            return try await llmProcessor.process(text: selected, systemPrompt: prompt)
+            let userMessage = "[INPUT]\n\(selected)\n[/INPUT]"
+            return try await llmProcessor.process(text: selected, systemPrompt: prompt, userMessage: userMessage)
         } else {
             // Write mode: generate text from instruction alone
             let prompt = buildWritePrompt(instruction: instruction, systemPrompt: rewritePrompt)
-            return try await llmProcessor.process(text: instruction, systemPrompt: prompt)
+            let userMessage = "[INPUT]\n\(instruction)\n[/INPUT]"
+            return try await llmProcessor.process(text: instruction, systemPrompt: prompt, userMessage: userMessage)
         }
     }
 

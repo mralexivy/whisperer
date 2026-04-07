@@ -1219,6 +1219,19 @@ class AppState: ObservableObject {
         }
     }
 
+    /// Split an AIMode prompt on {transcript} into system prompt + user message wrapper
+    private func splitPrompt(_ prompt: String, text: String) -> (systemPrompt: String, userMessage: String) {
+        let parts = prompt.components(separatedBy: "{transcript}")
+        var systemPart = parts[0]
+        // Strip trailing [INPUT]\n from system prompt (it belongs in user message)
+        if let inputRange = systemPart.range(of: "[INPUT]", options: .backwards) {
+            systemPart = String(systemPart[..<inputRange.lowerBound])
+        }
+        systemPart = systemPart.trimmingCharacters(in: .whitespacesAndNewlines)
+        let userMessage = "[INPUT]\n\(text)\n[/INPUT]"
+        return (systemPart, userMessage)
+    }
+
     /// Apply LLM post-processing to transcribed text if enabled
     private func applyLLMPostProcessing(_ text: String) async -> String {
         guard llmEnabled, let processor = llmPostProcessor, processor.isModelLoaded else {
@@ -1237,20 +1250,43 @@ class AppState: ObservableObject {
         defer { activeAIModeName = nil }
 
         do {
-            let systemPrompt = mode.prompt.replacingOccurrences(of: "{transcript}", with: "")
-            Logger.debug("LLM processing with mode '\(mode.name)' (temp=\(mode.temperature), topP=\(mode.topP))", subsystem: .transcription)
-            Logger.debug("LLM system prompt: \(systemPrompt.prefix(100))", subsystem: .transcription)
-            Logger.debug("LLM input: \(text)", subsystem: .transcription)
+            // Pre-clean: normalize, dedup, protect tokens
+            let precleanResult = TranscriptPreCleaner.preclean(text)
 
-            let processed = try await processor.process(
-                text: text,
+            // Split prompt into system prompt + user message with [INPUT] envelope
+            let (systemPrompt, userMessage) = splitPrompt(mode.prompt, text: precleanResult.text)
+
+            Logger.debug("LLM processing with mode '\(mode.name)' (temp=\(mode.temperature), topP=\(mode.topP), topK=\(mode.topK), repPenalty=\(mode.repetitionPenalty))", subsystem: .transcription)
+            Logger.debug("LLM input: \(precleanResult.text)", subsystem: .transcription)
+
+            var processed = try await processor.process(
+                text: precleanResult.text,
                 systemPrompt: systemPrompt,
+                userMessage: userMessage,
                 targetLanguage: mode.targetLanguage,
                 temperature: mode.temperature,
-                topP: mode.topP
+                topP: mode.topP,
+                topK: mode.topK,
+                repetitionPenalty: mode.repetitionPenalty,
+                maxTokensCap: mode.maxTokensCap
             )
+
+            // Restore protected tokens
+            processed = TranscriptPreCleaner.restorePlaceholders(processed, precleanResult.placeholders)
+
+            // Post-validate output
+            let profile = TranscriptPostValidator.profileFor(modeId: mode.id)
+            let (valid, reason) = TranscriptPostValidator.validate(
+                original: precleanResult.text,
+                processed: processed,
+                profile: profile
+            )
+            if !valid {
+                Logger.warning("LLM output failed validation (\(reason ?? "unknown")), using pre-cleaned original", subsystem: .transcription)
+                return TranscriptPreCleaner.restorePlaceholders(precleanResult.text, precleanResult.placeholders)
+            }
+
             Logger.debug("LLM post-processed (\(mode.name)): \(text.prefix(60))... → \(processed.prefix(60))...", subsystem: .transcription)
-            Logger.debug("LLM output: \(processed)", subsystem: .transcription)
             return processed
         } catch {
             Logger.error("LLM post-processing failed: \(error)", subsystem: .transcription)
@@ -1299,8 +1335,18 @@ class AppState: ObservableObject {
         if listFormattingAIEnabled, result == text,
            let processor = llmPostProcessor, processor.isModelLoaded {
             do {
-                let listFormatPrompt = AIMode.builtInDefault(for: AIMode.listFormatModeId)?.prompt.replacingOccurrences(of: "{transcript}", with: "") ?? ""
-                let llmResult = try await processor.process(text: text, systemPrompt: listFormatPrompt)
+                let listMode = AIMode.builtInDefault(for: AIMode.listFormatModeId) ?? AIMode.defaultMode()
+                let (listSystemPrompt, listUserMessage) = splitPrompt(listMode.prompt, text: text)
+                let llmResult = try await processor.process(
+                    text: text,
+                    systemPrompt: listSystemPrompt,
+                    userMessage: listUserMessage,
+                    temperature: listMode.temperature,
+                    topP: listMode.topP,
+                    topK: listMode.topK,
+                    repetitionPenalty: listMode.repetitionPenalty,
+                    maxTokensCap: listMode.maxTokensCap
+                )
                 Logger.debug("LLM list formatting: \(text.prefix(30))... → \(llmResult.prefix(30))...", subsystem: .transcription)
                 return llmResult
             } catch {
@@ -2184,11 +2230,17 @@ class AppState: ObservableObject {
         Logger.info("Rewriting \(selectedText.count) chars with \(mode.name) mode", subsystem: .app)
 
         do {
-            let systemPrompt = mode.prompt.replacingOccurrences(of: "{transcript}", with: "")
+            let (systemPrompt, userMessage) = splitPrompt(mode.prompt, text: selectedText)
             let result = try await processor.process(
                 text: selectedText,
                 systemPrompt: systemPrompt,
-                targetLanguage: mode.targetLanguage
+                userMessage: userMessage,
+                targetLanguage: mode.targetLanguage,
+                temperature: mode.temperature,
+                topP: mode.topP,
+                topK: mode.topK,
+                repetitionPenalty: mode.repetitionPenalty,
+                maxTokensCap: mode.maxTokensCap
             )
             Logger.debug("Rewrite (\(mode.name)): \(selectedText.prefix(30))... → \(result.prefix(30))...", subsystem: .app)
             state = .idle

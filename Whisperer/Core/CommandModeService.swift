@@ -79,7 +79,9 @@ class CommandModeService: ObservableObject {
                     : context
                 let response = try await llmProcessor.process(
                     text: userMessage,
-                    systemPrompt: systemPrompt
+                    systemPrompt: systemPrompt,
+                    userMessage: userMessage,
+                    maxTokensCap: 512
                 )
 
                 // Parse response for command blocks

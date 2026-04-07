@@ -26,7 +26,7 @@ class AIModeManager: ObservableObject {
 
     /// Increment this when built-in prompts change to push updates to existing users.
     /// Only updates prompts that haven't been customized by the user.
-    private static let currentPromptVersion = 6
+    private static let currentPromptVersion = 7
 
     var activeMode: AIMode {
         modes.first { $0.id == activeModeId } ?? AIMode.defaultMode()
@@ -185,11 +185,32 @@ class AIModeManager: ObservableObject {
             }
         }
 
-        // Update existing built-in modes with latest prompts
+        // Update existing built-in modes with latest prompts and generation parameters
         for builtIn in AIMode.builtInModes {
             guard let index = modes.firstIndex(where: { $0.id == builtIn.id }) else { continue }
+            guard modes[index].isBuiltIn else { continue }
             if modes[index].prompt != builtIn.prompt {
                 modes[index].prompt = builtIn.prompt
+                updated = true
+            }
+            if modes[index].temperature != builtIn.temperature {
+                modes[index].temperature = builtIn.temperature
+                updated = true
+            }
+            if modes[index].topP != builtIn.topP {
+                modes[index].topP = builtIn.topP
+                updated = true
+            }
+            if modes[index].topK != builtIn.topK {
+                modes[index].topK = builtIn.topK
+                updated = true
+            }
+            if modes[index].repetitionPenalty != builtIn.repetitionPenalty {
+                modes[index].repetitionPenalty = builtIn.repetitionPenalty
+                updated = true
+            }
+            if modes[index].maxTokensCap != builtIn.maxTokensCap {
+                modes[index].maxTokensCap = builtIn.maxTokensCap
                 updated = true
             }
         }
