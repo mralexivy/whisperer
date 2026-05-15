@@ -1208,6 +1208,16 @@ class AppState: ObservableObject {
                 try await processor.loadModel(variant)
                 let memAfter = BenchmarkUtilities.currentMemoryMB()
                 Logger.info("LLM \(variant.displayName) pre-loaded. Process memory: \(String(format: "%.0f", memBefore))MB → \(String(format: "%.0f", memAfter))MB (+\(String(format: "%.0f", memAfter - memBefore))MB)", subsystem: .model)
+                // Warm up the system prompt KV cache now — absorbs the cold-start prefill penalty
+                // (897ms–24s) into the model load phase rather than the first user transcription.
+                if let self = self {
+                    let mode = AIModeManager.shared.postProcessMode
+                    var (sysPrompt, _) = self.splitPrompt(mode.prompt, text: ".")
+                    if let lang = mode.targetLanguage, !lang.isEmpty {
+                        sysPrompt += " Translate to \(lang)."
+                    }
+                    await processor.warmupPrompt(sysPrompt)
+                }
             } catch {
                 Logger.error("Failed to pre-load LLM \(variant.displayName): \(error)", subsystem: .model)
                 let msg = "Failed to load model"
@@ -1245,6 +1255,19 @@ class AppState: ObservableObject {
 
         let mode = AIModeManager.shared.postProcessMode
         guard !mode.prompt.isEmpty else { return text }
+
+        // Fast-path: skip LLM for very short, already-clean text in strict correction modes.
+        // Pre-cleaner handles filler removal and dedup; LLM adds no value for "OK." or "Yes."
+        if text.count <= 15 {
+            let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+            let firstUpper = trimmed.first?.isUppercase ?? false
+            let endsPunct = ".!?".contains(trimmed.last ?? Character(" "))
+            let isStrict = (mode.id == AIMode.correctModeId || mode.id == AIMode.grammarModeId)
+            if firstUpper && endsPunct && isStrict {
+                Logger.debug("LLM skip: short clean text (\(trimmed.count) chars)", subsystem: .transcription)
+                return text
+            }
+        }
 
         activeAIModeName = mode.name
         defer { activeAIModeName = nil }
