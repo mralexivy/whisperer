@@ -348,7 +348,7 @@ class LLMPostProcessor: ObservableObject {
             completionInfo = info
         } catch {
             timeoutTask.cancel()
-            Logger.warning("LLM gen timed out or cancelled after \(Int(timeoutSeconds))s (\(charCount) chars), returning original", subsystem: .transcription)
+            Logger.warning("LLM gen failed (\(type(of: error)): \(error)) after \(Int(timeoutSeconds))s timeout (\(charCount) chars), returning original", subsystem: .transcription)
             return text
         }
 
