@@ -10,6 +10,8 @@ import Combine
 import MLX
 import MLXLLM
 import MLXLMCommon
+import Hub
+import Tokenizers
 
 enum LLMLoadPhase: Equatable {
     case idle
@@ -35,6 +37,7 @@ class LLMPostProcessor: ObservableObject {
     }
 
     private var modelContainer: ModelContainer?
+    private var draftModelContainer: ModelContainer?
     private var loadedVariant: LLMModelVariant?
 
     // KV cache of the system prompt — built once during warmup, reused per call
@@ -64,7 +67,9 @@ class LLMPostProcessor: ObservableObject {
         var didReceiveProgress = false
 
         let configuration = ModelConfiguration(id: variant.huggingFaceId)
-        let container = try await LLMModelFactory.shared.loadContainer(
+        let container = try await loadModelContainer(
+            from: HFDownloader(),
+            using: HFTokenizerLoader(),
             configuration: configuration,
             progressHandler: { [weak self] progress in
                 Task { @MainActor [weak self] in
@@ -97,14 +102,42 @@ class LLMPostProcessor: ObservableObject {
         loadPhase = .ready
         errorMessage = nil
 
-        // Cap the MLX Metal buffer pool. Model weights are "active memory" and unaffected;
+        // oMLX: generous Metal buffer pool prevents constant buffer eviction/reallocation
+        // during matmul and attention. Model weights are "active memory" and unaffected;
         // only intermediate/KV-cache buffers from inference are constrained.
-        Memory.cacheLimit = 20 * 1024 * 1024
-        Logger.info("LLM \(variant.displayName) loaded (MLX cache limit: 20 MB, active: \(Memory.activeMemory / (1024 * 1024)) MB)", subsystem: .model)
+        // 20 MB was catastrophically small for a 4B model — every op evicted and reallocated buffers.
+        Memory.cacheLimit = 256 * 1024 * 1024
+        Logger.info("LLM \(variant.displayName) loaded (MLX cache limit: 256 MB, active: \(Memory.activeMemory / (1024 * 1024)) MB)", subsystem: .model)
+
+        // Load draft model in background so speculative decoding activates without blocking first use.
+        // process() checks draftModelContainer at call time — nil = normal generation until draft is ready.
+        if let draftVariant = variant.draftVariant {
+            draftModelContainer = nil
+            Task { [weak self] in
+                await self?.loadDraftModel(draftVariant)
+            }
+        }
+    }
+
+    private func loadDraftModel(_ variant: LLMModelVariant) async {
+        Logger.info("Loading draft model \(variant.displayName) for speculative decoding...", subsystem: .model)
+        do {
+            let draft = try await loadModelContainer(
+                from: HFDownloader(),
+                using: HFTokenizerLoader(),
+                configuration: ModelConfiguration(id: variant.huggingFaceId),
+                progressHandler: { _ in }
+            )
+            draftModelContainer = draft
+            Logger.info("Draft model \(variant.displayName) ready — speculative decoding active (active: \(Memory.activeMemory / (1024 * 1024)) MB)", subsystem: .model)
+        } catch {
+            Logger.warning("Draft model load failed: \(error.localizedDescription) — using standard generation", subsystem: .model)
+        }
     }
 
     func unloadModel() {
         modelContainer = nil
+        draftModelContainer = nil
         loadedVariant = nil
         isModelLoaded = false
         isLoading = false
@@ -112,6 +145,8 @@ class LLMPostProcessor: ObservableObject {
         errorMessage = nil
         cachedPromptKV = nil
         cachedPromptText = nil
+        // oMLX: synchronize GPU before clearing to avoid releasing buffers still in flight
+        Stream.gpu.synchronize()
         Memory.clearCache()
         Logger.info("LLM unloaded", subsystem: .model)
     }
@@ -140,7 +175,8 @@ class LLMPostProcessor: ObservableObject {
                 temperature: 0.0,
                 topP: 1.0,
                 topK: 0,
-                repetitionPenalty: 1.0
+                repetitionPenalty: 1.0,
+                prefillStepSize: 512  // oMLX chunked prefill: eval() called between each 512-token chunk
             ),
             additionalContext: ["enable_thinking": false]
         )
@@ -149,6 +185,8 @@ class LLMPostProcessor: ObservableObject {
         // Force prefill: encode system prompt + one user turn + generate 1 token.
         // This absorbs Metal JIT compilation and fills the KV cache.
         _ = try? await warmupSession.respond(to: ".", images: [], videos: [])
+        // oMLX: force materialization of all lazy KV computations before cache extraction
+        Stream.gpu.synchronize()
         Logger.debug("LLM warmup: prefill took \(Int(-t0.timeIntervalSinceNow * 1000))ms", subsystem: .model)
 
         // Persist KV state to temp file, then load back as [KVCache] for in-memory reuse.
@@ -215,11 +253,22 @@ class LLMPostProcessor: ObservableObject {
 
         let genParams = GenerateParameters(
             maxTokens: maxTokens,
+            // oMLX TurboQuant: 8-bit KV cache quantization — 2x memory reduction, faster attention.
+            // KVCacheSimple is converted to QuantizedKVCache on first generation step via maybeQuantizeKVCache().
+            kvBits: 8,
+            kvGroupSize: 64,
             temperature: temperature,
             topP: topP,
             topK: topK,
-            repetitionPenalty: repetitionPenalty
+            repetitionPenalty: repetitionPenalty,
+            prefillStepSize: 512  // oMLX chunked prefill: eval() between each 512-token chunk
         )
+
+        // Speculative decoding: draft model proposes tokens, main model verifies in one forward pass.
+        // numDraftTokens=4 balances acceptance rate vs overhead for short correction outputs.
+        let speculativeConfig: SpeculativeDecodingConfig? = draftModelContainer.map {
+            SpeculativeDecodingConfig(draftModel: $0, numDraftTokens: 4)
+        }
 
         // Use cached prompt KV if available for this exact instructions string.
         // copy() creates an independent deep copy of each KV layer — fast GPU memory copy.
@@ -231,14 +280,16 @@ class LLMPostProcessor: ObservableObject {
                 container,
                 instructions: nil,  // Already encoded in the pre-built cache
                 cache: freshCache,
+                speculativeDecoding: speculativeConfig,
                 generateParameters: genParams,
                 additionalContext: ["enable_thinking": false]
             )
-            Logger.debug("LLM gen: cache hit (\(freshCache.count) KV layers)", subsystem: .transcription)
+            Logger.debug("LLM gen: cache hit (\(freshCache.count) KV layers) speculative=\(speculativeConfig != nil)", subsystem: .transcription)
         } else {
             session = ChatSession(
                 container,
                 instructions: instructions,
+                speculativeDecoding: speculativeConfig,
                 generateParameters: genParams,
                 additionalContext: ["enable_thinking": false]
             )
@@ -308,10 +359,11 @@ class LLMPostProcessor: ObservableObject {
             Logger.warning("LLM gen: stream ended without completion info", subsystem: .transcription)
         }
 
-        // Release KV-cache Metal buffers. Only force-clear when the pool exceeds the 25 MB
-        // threshold — cacheLimit (20 MB) already evicts on allocation, so unconditional
-        // clearCache would force unnecessary buffer reallocation on the very next call.
-        if Memory.cacheMemory > 25 * 1024 * 1024 {
+        // oMLX: synchronize GPU before checking cache memory, then defer clear until pool is large.
+        // cacheLimit (256 MB) already evicts on allocation; unconditional clearCache would force
+        // unnecessary buffer reallocation on the very next call.
+        Stream.gpu.synchronize()
+        if Memory.cacheMemory > 256 * 1024 * 1024 {
             Memory.clearCache()
         }
         Logger.debug("MLX memory: active=\(Memory.activeMemory / (1024 * 1024)) MB cache=\(Memory.cacheMemory / (1024 * 1024)) MB", subsystem: .model)
@@ -322,5 +374,67 @@ class LLMPostProcessor: ObservableObject {
         }
 
         return result.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+}
+
+// MARK: - HuggingFace Hub bridge types (Downloader + TokenizerLoader for mlx-swift-lm main)
+
+private struct HFDownloader: Downloader {
+    private let hubApi = HubApi()
+
+    func download(
+        id: String,
+        revision: String?,
+        matching patterns: [String],
+        useLatest: Bool,
+        progressHandler: @Sendable @escaping (Progress) -> Void
+    ) async throws -> URL {
+        try await hubApi.snapshot(
+            from: id,
+            revision: revision ?? "main",
+            matching: patterns,
+            progressHandler: progressHandler
+        )
+    }
+}
+
+private struct HFTokenizerLoader: TokenizerLoader {
+    func load(from directory: URL) async throws -> any MLXLMCommon.Tokenizer {
+        let upstream = try await AutoTokenizer.from(modelFolder: directory)
+        return HFTokenizerBridge(upstream)
+    }
+}
+
+private struct HFTokenizerBridge: MLXLMCommon.Tokenizer {
+    private let upstream: any Tokenizers.Tokenizer
+
+    init(_ upstream: any Tokenizers.Tokenizer) { self.upstream = upstream }
+
+    func encode(text: String, addSpecialTokens: Bool) -> [Int] {
+        upstream.encode(text: text, addSpecialTokens: addSpecialTokens)
+    }
+
+    func decode(tokenIds: [Int], skipSpecialTokens: Bool) -> String {
+        upstream.decode(tokens: tokenIds, skipSpecialTokens: skipSpecialTokens)
+    }
+
+    func convertTokenToId(_ token: String) -> Int? { upstream.convertTokenToId(token) }
+    func convertIdToToken(_ id: Int) -> String? { upstream.convertIdToToken(id) }
+
+    var bosToken: String? { upstream.bosToken }
+    var eosToken: String? { upstream.eosToken }
+    var unknownToken: String? { upstream.unknownToken }
+
+    func applyChatTemplate(
+        messages: [[String: any Sendable]],
+        tools: [[String: any Sendable]]?,
+        additionalContext: [String: any Sendable]?
+    ) throws -> [Int] {
+        do {
+            return try upstream.applyChatTemplate(
+                messages: messages, tools: tools, additionalContext: additionalContext)
+        } catch Tokenizers.TokenizerError.missingChatTemplate {
+            throw MLXLMCommon.TokenizerError.missingChatTemplate
+        }
     }
 }

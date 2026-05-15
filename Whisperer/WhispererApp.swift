@@ -3317,8 +3317,8 @@ private struct LLMModelPickerView: View {
             if let processor = processor {
                 LLMModelListView(selectedModel: $selectedModel, processor: processor, onRetry: onRetry)
             } else {
-                // Processor not yet created — show static list
-                ForEach(LLMModelVariant.allCases) { variant in
+                // Processor not yet created — show static list (excludes internal draft model)
+                ForEach(LLMModelVariant.userSelectableVariants) { variant in
                     LLMModelRowStatic(variant: variant, isSelected: selectedModel == variant)
                 }
             }
@@ -3336,7 +3336,7 @@ private struct LLMModelListView: View {
     }
 
     var body: some View {
-        ForEach(LLMModelVariant.allCases) { variant in
+        ForEach(LLMModelVariant.userSelectableVariants) { variant in
             let isSelected = selectedModel == variant
 
             Button(action: {
