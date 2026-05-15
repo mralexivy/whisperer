@@ -2300,12 +2300,13 @@ class AppState: ObservableObject {
             // Save to history database
             Task {
                 do {
-                    // Use detected language when auto-detect is active, otherwise use user selection
+                    // Use the language the transcriber actually used (routing detection or configured)
+                    let effectiveLang = transcriber.effectiveLanguage
                     let recordedLanguage: String
-                    if self.selectedLanguage == .auto, let detected = self.whisperBridge?.lastDetectedLanguage {
+                    if effectiveLang == .auto, let detected = self.whisperBridge?.lastDetectedLanguage {
                         recordedLanguage = detected
                     } else {
-                        recordedLanguage = self.selectedLanguage.rawValue
+                        recordedLanguage = effectiveLang.rawValue
                     }
 
                     let record = TranscriptionRecord(

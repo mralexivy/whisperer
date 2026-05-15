@@ -125,7 +125,7 @@ class StreamingTranscriber {
     private var pendingPromotion: (backend: TranscriptionBackend, profile: ModelProfile)?
 
     /// Effective language for transcription — driven by router or fallback to configured language
-    private var effectiveLanguage: TranscriptionLanguage {
+    var effectiveLanguage: TranscriptionLanguage {
         routeDecision?.lang ?? language
     }
 
