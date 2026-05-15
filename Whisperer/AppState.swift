@@ -1729,16 +1729,6 @@ class AppState: ObservableObject {
         // Play feedback sound first (user hears it)
         soundPlayer?.playStartSound()
 
-        // Mute AFTER sound starts playing (~100ms for Tink sound)
-        if muteOtherAudioDuringRecording {
-            Task {
-                try? await Task.sleep(nanoseconds: 100_000_000)  // 100ms for sound to play
-                await MainActor.run {
-                    audioMuter?.muteSystemAudio()
-                }
-            }
-        }
-
         Task {
             do {
                 streamingTranscriber = StreamingTranscriber(backend: bridge, vad: sileroVAD, language: selectedLanguage, initialPrompt: promptWordsString, fillerWordRemovalEnabled: fillerWordRemovalEnabled, modelPool: modelPool, languageRouter: routingConfig.isRoutingEnabled ? LanguageRouter(allowed: routingConfig.allowedLanguages, primary: routingConfig.primaryLanguage) : nil, modelRouter: routingConfig.isRoutingEnabled ? ModelRouter(languageModelMap: buildLanguageModelMap(), fallbackProfile: buildFallbackProfile()) : nil, previewBridge: modelPool?.previewBridge)
@@ -1771,6 +1761,13 @@ class AppState: ObservableObject {
                 currentAudioURL = audioURL
                 cancelStateWatchdog()  // Startup succeeded, audio is flowing
                 startRecordingWatchdog()  // Long-running watchdog for stuck .recording state
+
+                // Mute AFTER engine is running and aggregate device is stable.
+                // Muting during engine startup can break the AUHAL bus connection (kAudioUnitErr_NoConnection
+                // / -10877), causing the engine to produce zero-filled buffers silently.
+                if muteOtherAudioDuringRecording {
+                    audioMuter?.muteSystemAudio()
+                }
 
             } catch {
                 cancelStateWatchdog()
@@ -1894,16 +1891,6 @@ class AppState: ObservableObject {
         // Play feedback sound first (user hears it)
         soundPlayer?.playStartSound()
 
-        // Mute AFTER sound starts playing (~100ms for Tink sound)
-        if muteOtherAudioDuringRecording {
-            Task {
-                try? await Task.sleep(nanoseconds: 100_000_000)  // 100ms for sound to play
-                await MainActor.run {
-                    audioMuter?.muteSystemAudio()
-                }
-            }
-        }
-
         // Start recording immediately
         Task {
             do {
@@ -1946,6 +1933,13 @@ class AppState: ObservableObject {
                 currentAudioURL = audioURL
                 cancelStateWatchdog()  // Startup succeeded, audio is flowing
                 startRecordingWatchdog()  // Long-running watchdog for stuck .recording state
+
+                // Mute AFTER engine is running and aggregate device is stable.
+                // Muting during engine startup can break the AUHAL bus connection (kAudioUnitErr_NoConnection
+                // / -10877), causing the engine to produce zero-filled buffers silently.
+                if muteOtherAudioDuringRecording {
+                    audioMuter?.muteSystemAudio()
+                }
 
                 // Guard: if stopRecording() was called while audio was starting, stop the recorder
                 guard case .recording = state else {

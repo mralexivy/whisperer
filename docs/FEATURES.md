@@ -122,7 +122,7 @@ Two-tier system:
 ### Audio Feedback
 - **Start/stop sounds** — configurable sound effects (Tink/Pop default) with preview on change
 - **System audio muting** — optionally mutes other audio during recording to prevent feedback loops
-- Muting happens 300ms AFTER engine start to let the audio HAL stabilize (muting before causes HAL reconfiguration that unmutes ~1s into recording)
+- Muting happens AFTER `startRecording()` returns (engine fully running, aggregate device stable). Muting concurrently with engine startup can break the AUHAL bus connection.
 
 ### Voice Activity Detection (VAD)
 - **Silero VAD** — neural network speech detection (~2MB ONNX model)
