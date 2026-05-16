@@ -4,6 +4,11 @@
 //
 //  Local LLM post-processor using MLXLLM (Qwen3) for transcription refinement
 //
+//  Note: Speculative decoding is incompatible with all current Qwen variants.
+//  Qwen3.5 is a hybrid attention + Mamba architecture. MambaCache is not trimmable,
+//  so SpeculativeTokenIterator throws "Speculative decoding requires trimmable KV caches."
+//  Do not re-enable until a Mamba-aware spec-decode implementation is available upstream.
+//
 
 import Foundation
 import Combine
@@ -29,21 +34,21 @@ class LLMPostProcessor: ObservableObject {
     @Published var loadPhase: LLMLoadPhase = .idle
     @Published var errorMessage: String?
 
-    // Legacy — kept for backward compat with any code reading loadProgress
-    var loadProgress: Double {
-        if case .downloading(let p) = loadPhase { return p }
-        if case .ready = loadPhase { return 1.0 }
-        return 0
-    }
-
     private var modelContainer: ModelContainer?
-    private var draftModelContainer: ModelContainer?
     private var loadedVariant: LLMModelVariant?
 
-    // KV cache of the system prompt — built once during warmup, reused per call
-    // This eliminates 897ms-24s of prompt prefill on every inference call.
-    private var cachedPromptKV: [any KVCache]?
-    private var cachedPromptText: String?
+    // Per-instructions KV caches — keyed on the full instructions string (system prompt + language).
+    // Capped at 4 entries with FIFO eviction. Each value is a warmed prompt prefix ready to copy().
+    private var cachedPrompts: [String: [any KVCache]] = [:]
+    private var cachedPromptOrder: [String] = []
+    private static let maxCachedPrompts = 4
+
+    // Deduplicates concurrent warmup requests. Tracks which instructions are currently warming.
+    private var warmupTask: Task<Void, Never>?
+    private var warmingUpInstructions: String?
+
+    // Download progress — promoted from local var to avoid @Sendable capture hazard.
+    private var didReceiveDownloadProgress = false
 
     // MARK: - Model Management
 
@@ -62,9 +67,7 @@ class LLMPostProcessor: ObservableObject {
         isLoading = true
         errorMessage = nil
         loadPhase = .loading
-
-        // Track download progress on MainActor to avoid data race with background progress callbacks
-        var didReceiveProgress = false
+        didReceiveDownloadProgress = false
 
         let configuration = ModelConfiguration(id: variant.huggingFaceId)
         let container = try await loadModelContainer(
@@ -75,7 +78,7 @@ class LLMPostProcessor: ObservableObject {
                 Task { @MainActor [weak self] in
                     let fraction = progress.fractionCompleted
                     if fraction > 0 {
-                        didReceiveProgress = true
+                        self?.didReceiveDownloadProgress = true
                         self?.loadPhase = .downloading(progress: fraction)
                     }
                 }
@@ -83,16 +86,9 @@ class LLMPostProcessor: ObservableObject {
         )
 
         // Download done (if it happened) — now loading into memory.
-        if didReceiveProgress {
+        if didReceiveDownloadProgress {
             loadPhase = .loading
             Logger.info("LLM \(variant.displayName) downloaded, loading into memory...", subsystem: .model)
-        }
-
-        guard !Task.isCancelled else {
-            isLoading = false
-            loadPhase = .idle
-            Logger.info("LLM load cancelled for \(variant.displayName)", subsystem: .model)
-            return
         }
 
         modelContainer = container
@@ -102,51 +98,39 @@ class LLMPostProcessor: ObservableObject {
         loadPhase = .ready
         errorMessage = nil
 
-        // oMLX: generous Metal buffer pool prevents constant buffer eviction/reallocation
-        // during matmul and attention. Model weights are "active memory" and unaffected;
+        // Scale buffer pool cap by model size. Model weights are "active memory" and unaffected;
         // only intermediate/KV-cache buffers from inference are constrained.
-        // 20 MB was catastrophically small for a 4B model — every op evicted and reallocated buffers.
-        Memory.cacheLimit = 256 * 1024 * 1024
-        Logger.info("LLM \(variant.displayName) loaded (MLX cache limit: 256 MB, active: \(Memory.activeMemory / (1024 * 1024)) MB)", subsystem: .model)
-
-        // Load draft model in background so speculative decoding activates without blocking first use.
-        // process() checks draftModelContainer at call time — nil = normal generation until draft is ready.
-        if let draftVariant = variant.draftVariant {
-            draftModelContainer = nil
-            Task { [weak self] in
-                await self?.loadDraftModel(draftVariant)
-            }
+        let cacheMB: Int = switch variant {
+            case .qwen3_0_6B, .qwen3_5_0_8B: 128
+            case .qwen3_5_2B: 256
+            case .qwen3_5_4B: 256
+            case .qwen3_5_9B: 512
         }
+        Memory.cacheLimit = cacheMB * 1024 * 1024
+        Logger.info("LLM \(variant.displayName) loaded (MLX cache limit: \(cacheMB) MB, active: \(Memory.activeMemory / (1024 * 1024)) MB)", subsystem: .model)
     }
 
-    private func loadDraftModel(_ variant: LLMModelVariant) async {
-        Logger.info("Loading draft model \(variant.displayName) for speculative decoding...", subsystem: .model)
-        do {
-            let draft = try await loadModelContainer(
-                from: HFDownloader(),
-                using: HFTokenizerLoader(),
-                configuration: ModelConfiguration(id: variant.huggingFaceId),
-                progressHandler: { _ in }
-            )
-            draftModelContainer = draft
-            Logger.info("Draft model \(variant.displayName) ready — speculative decoding active (active: \(Memory.activeMemory / (1024 * 1024)) MB)", subsystem: .model)
-        } catch {
-            Logger.warning("Draft model load failed: \(error.localizedDescription) — using standard generation", subsystem: .model)
-        }
-    }
-
-    func unloadModel() {
+    func unloadModel() async {
+        // 1. Stop new work — process() guards on modelContainer.
         modelContainer = nil
-        draftModelContainer = nil
         loadedVariant = nil
         isModelLoaded = false
         isLoading = false
         loadPhase = .idle
         errorMessage = nil
-        cachedPromptKV = nil
-        cachedPromptText = nil
-        // oMLX: synchronize GPU before clearing to avoid releasing buffers still in flight
-        Stream.gpu.synchronize()
+        warmupTask?.cancel()
+        warmupTask = nil
+        warmingUpInstructions = nil
+        cachedPrompts.removeAll()
+        cachedPromptOrder.removeAll()
+
+        // 2. Drain in-flight generation before touching GPU buffers.
+        while isProcessing {
+            try? await Task.sleep(nanoseconds: 20_000_000)
+        }
+
+        // 3. Fence GPU and free pool. Safe now — no MLX ops are in flight.
+        await Task.detached { Stream.gpu.synchronize() }.value
         Memory.clearCache()
         Logger.info("LLM unloaded", subsystem: .model)
     }
@@ -159,48 +143,89 @@ class LLMPostProcessor: ObservableObject {
     func warmupPrompt(_ instructions: String) async {
         guard let container = modelContainer else { return }
         guard !instructions.isEmpty else { return }
-        // Already cached for this prompt
-        if cachedPromptText == instructions && cachedPromptKV != nil { return }
+        if cachedPrompts[instructions] != nil { return }
 
+        // Dedup: if already warming up for this exact prompt, join the in-flight task.
+        if warmingUpInstructions == instructions {
+            await warmupTask?.value
+            return
+        }
+
+        // Different instructions — cancel existing warmup and start fresh.
+        warmupTask?.cancel()
+        warmingUpInstructions = instructions
+
+        let task = Task { [weak self] in
+            guard let self else { return }
+            await self.runWarmup(container: container, instructions: instructions)
+        }
+        warmupTask = task
+        await task.value
+
+        // Clear on completion (success or cancellation) so next call can restart if needed.
+        if warmingUpInstructions == instructions {
+            warmingUpInstructions = nil
+        }
+    }
+
+    private func runWarmup(container: ModelContainer, instructions: String) async {
+        guard !Task.isCancelled else { return }
         Logger.debug("LLM warmup: pre-filling system prompt KV cache (\(instructions.count) chars)...", subsystem: .model)
-        // Invalidate while rebuilding so a concurrent process() call falls back to fresh session
-        cachedPromptKV = nil
-        cachedPromptText = nil
 
         let warmupSession = ChatSession(
             container,
             instructions: instructions,
             generateParameters: GenerateParameters(
                 maxTokens: 1,
+                // Match inference quantization so the round-tripped cache is QuantizedKVCache.
+                // process() then copies QuantizedKVCache layers consistently on the hot path.
+                kvBits: 8,
+                kvGroupSize: 64,
                 temperature: 0.0,
                 topP: 1.0,
                 topK: 0,
                 repetitionPenalty: 1.0,
-                prefillStepSize: 512  // oMLX chunked prefill: eval() called between each 512-token chunk
+                prefillStepSize: 512
             ),
             additionalContext: ["enable_thinking": false]
         )
 
         let t0 = Date()
-        // Force prefill: encode system prompt + one user turn + generate 1 token.
-        // This absorbs Metal JIT compilation and fills the KV cache.
         _ = try? await warmupSession.respond(to: ".", images: [], videos: [])
-        // oMLX: force materialization of all lazy KV computations before cache extraction
-        Stream.gpu.synchronize()
+        // GPU barrier off main thread — ensures KV state is committed before saveCache.
+        await Task.detached { Stream.gpu.synchronize() }.value
         Logger.debug("LLM warmup: prefill took \(Int(-t0.timeIntervalSinceNow * 1000))ms", subsystem: .model)
 
-        // Persist KV state to temp file, then load back as [KVCache] for in-memory reuse.
-        // Disk I/O (~15-20 MB) happens once here, not on every inference call.
+        guard !Task.isCancelled else { return }
+
+        // UUID-keyed tmpURL: avoids file collision if warmup is ever restarted mid-flight.
         let tmpURL = FileManager.default.temporaryDirectory
-            .appendingPathComponent("whisperer_kvcache_\(ProcessInfo.processInfo.processIdentifier).safetensors")
+            .appendingPathComponent("whisperer_kvcache_\(UUID().uuidString).safetensors")
         defer { try? FileManager.default.removeItem(at: tmpURL) }
 
         do {
             try await warmupSession.saveCache(to: tmpURL)
-            // loadPromptCache is synchronous — brief main-thread work acceptable during warmup init
-            let (caches, _) = try loadPromptCache(url: tmpURL)
-            cachedPromptKV = caches
-            cachedPromptText = instructions
+            guard !Task.isCancelled else { return }
+
+            // ~15-20 MB safetensors read + parse — off main thread to avoid UI stall.
+            let caches: [any KVCache] = try await Task.detached {
+                let (loaded, _) = try loadPromptCache(url: tmpURL)
+                return loaded
+            }.value
+
+            guard !Task.isCancelled else { return }
+
+            // Assign into dict atomically — never nil mid-build, so a concurrent process()
+            // sees either the previous (valid) cache or the new one, never nil.
+            cachedPrompts[instructions] = caches
+            cachedPromptOrder.append(instructions)
+
+            // FIFO eviction: cap to maxCachedPrompts entries.
+            while cachedPromptOrder.count > Self.maxCachedPrompts {
+                let oldest = cachedPromptOrder.removeFirst()
+                cachedPrompts.removeValue(forKey: oldest)
+            }
+
             Logger.info("LLM warmup complete: \(caches.count) KV layers cached (active: \(Memory.activeMemory / (1024 * 1024)) MB)", subsystem: .model)
         } catch {
             Logger.warning("LLM warmup failed (fresh sessions will be used): \(error.localizedDescription)", subsystem: .model)
@@ -237,9 +262,12 @@ class LLMPostProcessor: ObservableObject {
             instructions += " Translate to \(lang)."
         }
 
-        // Tiered max token cap: short text gets tight bound, long text gets proportional headroom
+        // Script-aware token estimation. English heuristic (charCount/4) underestimates
+        // for Hebrew/Arabic (~2 chars/token) and CJK (~1 char/token), causing truncated output.
         let charCount = text.count
-        let estimatedTokens = max(4, charCount / 4)
+        let isNonLatin = containsNonLatinScript(text)
+        let charsPerToken: Int = isNonLatin ? 2 : 4
+        let estimatedTokens = max(4, charCount / charsPerToken)
         let maxTokens: Int
         if charCount < 30 {
             maxTokens = min(maxTokensCap, estimatedTokens + 8)
@@ -249,52 +277,45 @@ class LLMPostProcessor: ObservableObject {
             maxTokens = min(maxTokensCap, Int(ceil(Float(estimatedTokens) * 1.15)))
         }
 
-        Logger.debug("LLM gen: inputChars=\(charCount) estTokens=\(estimatedTokens) maxTokens=\(maxTokens) cap=\(maxTokensCap) temp=\(temperature) topP=\(topP) topK=\(topK) repPenalty=\(repetitionPenalty)", subsystem: .transcription)
+        Logger.debug("LLM gen: inputChars=\(charCount) nonLatin=\(isNonLatin) estTokens=\(estimatedTokens) maxTokens=\(maxTokens) cap=\(maxTokensCap) temp=\(temperature) topP=\(topP) topK=\(topK) repPenalty=\(repetitionPenalty)", subsystem: .transcription)
 
         let genParams = GenerateParameters(
             maxTokens: maxTokens,
-            // oMLX TurboQuant: 8-bit KV cache quantization — 2x memory reduction, faster attention.
-            // KVCacheSimple is converted to QuantizedKVCache on first generation step via maybeQuantizeKVCache().
+            // oMLX TurboQuant: 8-bit KV cache — 2x memory reduction, faster attention.
+            // Matches kvBits used in warmupPrompt so cached prefix dtype is consistent.
             kvBits: 8,
             kvGroupSize: 64,
             temperature: temperature,
             topP: topP,
             topK: topK,
             repetitionPenalty: repetitionPenalty,
-            prefillStepSize: 512  // oMLX chunked prefill: eval() between each 512-token chunk
+            prefillStepSize: 512
         )
-
-        // Speculative decoding: draft model proposes tokens, main model verifies in one forward pass.
-        // numDraftTokens=4 balances acceptance rate vs overhead for short correction outputs.
-        let speculativeConfig: SpeculativeDecodingConfig? = draftModelContainer.map {
-            SpeculativeDecodingConfig(draftModel: $0, numDraftTokens: 4)
-        }
 
         // Use cached prompt KV if available for this exact instructions string.
         // copy() creates an independent deep copy of each KV layer — fast GPU memory copy.
-        let usingCache = cachedPromptKV != nil && cachedPromptText == instructions
+        let cachedKV = cachedPrompts[instructions]
+        let usingCache = cachedKV != nil
         let session: ChatSession
-        if usingCache, let cachedKV = cachedPromptKV {
+        if let cachedKV {
             let freshCache = cachedKV.map { $0.copy() }
             session = ChatSession(
                 container,
                 instructions: nil,  // Already encoded in the pre-built cache
                 cache: freshCache,
-                speculativeDecoding: speculativeConfig,
                 generateParameters: genParams,
                 additionalContext: ["enable_thinking": false]
             )
-            Logger.debug("LLM gen: cache hit (\(freshCache.count) KV layers) speculative=\(speculativeConfig != nil)", subsystem: .transcription)
+            Logger.debug("LLM gen: cache hit (\(freshCache.count) KV layers)", subsystem: .transcription)
         } else {
             session = ChatSession(
                 container,
                 instructions: instructions,
-                speculativeDecoding: speculativeConfig,
                 generateParameters: genParams,
                 additionalContext: ["enable_thinking": false]
             )
-            // Trigger background warmup for next call if not already building
-            if cachedPromptText != instructions {
+            // Trigger background warmup for next call if not already building.
+            if cachedPrompts[instructions] == nil {
                 Task { [weak self] in
                     await self?.warmupPrompt(instructions)
                 }
@@ -302,15 +323,13 @@ class LLMPostProcessor: ObservableObject {
         }
 
         // Output length guard: stop generation when output chars exceed expected length.
-        // Applies to strict correction modes (maxTokensCap <= 256).
-        let outputCharLimit: Int? = maxTokensCap <= 256
+        // Disabled for translation (char counts diverge across scripts) and non-Latin input.
+        let outputCharLimit: Int? = (maxTokensCap <= 256 && targetLanguage == nil && !isNonLatin)
             ? Int(Float(charCount) * 1.5) + 20
             : nil
 
-        // Timeout scaled by input size: short text should never need more than 5s with warm cache
         let timeoutSeconds: Double = charCount < 30 ? 5 : charCount < 200 ? 10 : 15
 
-        // Run generation, racing against timeout
         var result = ""
         var completionInfo: GenerateCompletionInfo?
 
@@ -352,28 +371,47 @@ class LLMPostProcessor: ObservableObject {
             return text
         }
 
-        // Log generation diagnostics
         if let info = completionInfo {
             Logger.debug("LLM gen: promptTokens=\(info.promptTokenCount) genTokens=\(info.generationTokenCount) stopReason=\(info.stopReason) cacheHit=\(usingCache) promptTime=\(String(format: "%.1f", info.promptTime * 1000))ms genTime=\(String(format: "%.1f", info.generateTime * 1000))ms", subsystem: .transcription)
         } else {
             Logger.warning("LLM gen: stream ended without completion info", subsystem: .transcription)
         }
 
-        // oMLX: synchronize GPU before checking cache memory, then defer clear until pool is large.
-        // cacheLimit (256 MB) already evicts on allocation; unconditional clearCache would force
-        // unnecessary buffer reallocation on the very next call.
-        Stream.gpu.synchronize()
-        if Memory.cacheMemory > 256 * 1024 * 1024 {
+        // Conditional cache clear — cacheLimit already evicts on allocation; unconditional
+        // clearCache would force unnecessary buffer reallocation on the next call.
+        if Memory.cacheMemory > Memory.cacheLimit {
             Memory.clearCache()
         }
         Logger.debug("MLX memory: active=\(Memory.activeMemory / (1024 * 1024)) MB cache=\(Memory.cacheMemory / (1024 * 1024)) MB", subsystem: .model)
 
-        // Strip <think>...</think> tags from Qwen3 models
-        if let thinkRange = result.range(of: "<think>[\\s\\S]*?</think>", options: .regularExpression) {
-            result.removeSubrange(thinkRange)
+        // Strip <think>...</think> tags from Qwen3 models.
+        var strResult = result
+        if let thinkRange = strResult.range(of: Self.thinkTagPattern, options: .regularExpression) {
+            strResult.removeSubrange(thinkRange)
         }
 
-        return result.trimmingCharacters(in: .whitespacesAndNewlines)
+        return strResult.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    // MARK: - Helpers
+
+    // Compiled once — avoids per-call NSRegularExpression construction.
+    private static let thinkTagPattern = "<think>[\\s\\S]*?</think>"
+
+    /// Returns true if text contains Hebrew, Arabic, or CJK script characters.
+    /// Used to select a tighter chars-per-token ratio for token budget estimation.
+    private func containsNonLatinScript(_ text: String) -> Bool {
+        for scalar in text.unicodeScalars {
+            let v = scalar.value
+            if v >= 0x0590 && v <= 0x05FF { return true }  // Hebrew
+            if v >= 0x0600 && v <= 0x06FF { return true }  // Arabic
+            if v >= 0x0750 && v <= 0x077F { return true }  // Arabic Supplement
+            if v >= 0x3040 && v <= 0x30FF { return true }  // Hiragana + Katakana
+            if v >= 0x3400 && v <= 0x4DBF { return true }  // CJK Extension A
+            if v >= 0x4E00 && v <= 0x9FFF { return true }  // CJK Unified Ideographs
+            if v >= 0xAC00 && v <= 0xD7AF { return true }  // Hangul
+        }
+        return false
     }
 }
 

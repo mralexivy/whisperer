@@ -312,10 +312,11 @@ class AppState: ObservableObject {
                 llmModelSwitchTask = nil
 
                 let memBefore = BenchmarkUtilities.currentMemoryMB()
-                llmPostProcessor?.unloadModel()
+                let processorToUnload = llmPostProcessor
                 llmPostProcessor = nil
                 rewriteModeService = nil
                 Logger.info("LLM disabled, unloaded (process memory: \(String(format: "%.0f", memBefore))MB)", subsystem: .model)
+                Task { await processorToUnload?.unloadModel() }
             }
         }
     }
@@ -331,9 +332,10 @@ class AppState: ObservableObject {
                 // Unload old model — delay before loading new one to let ARC release GPU buffers
                 let memBefore = BenchmarkUtilities.currentMemoryMB()
                 Logger.info("Switching LLM: unloading old model (\(String(format: "%.0f", memBefore))MB)", subsystem: .model)
-                llmPostProcessor?.unloadModel()
+                let processorToSwitch = llmPostProcessor
                 llmPostProcessor = nil
                 rewriteModeService = nil
+                Task { await processorToSwitch?.unloadModel() }
 
                 llmModelSwitchTask = Task { @MainActor [weak self] in
                     try? await Task.sleep(nanoseconds: 500_000_000) // 500ms for ARC to release GPU buffers
@@ -2464,8 +2466,9 @@ class AppState: ObservableObject {
         // Free LLM resources
         if llmPostProcessor != nil {
             Logger.debug("Freeing LLM resources", subsystem: .transcription)
-            llmPostProcessor?.unloadModel()
+            let processorToFree = llmPostProcessor
             llmPostProcessor = nil
+            Task { await processorToFree?.unloadModel() }
         }
 
         // Free cached CTC models
