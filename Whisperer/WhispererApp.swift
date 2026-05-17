@@ -134,10 +134,14 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
         // Setup audio callback for waveform. Also bumps the audio-progress watchdog
         // so AppState can detect stuck-recording independently of AudioRecorder internals.
-        appState.audioRecorder?.onAmplitudeUpdate = { [weak self] amplitude in
-            Task { @MainActor in
-                self?.appState.noteAudioActivity()
-                self?.appState.updateWaveform(amplitude: amplitude)
+        appState.audioRecorder?.onAmplitudeUpdate = { [weak appState] amplitude in
+            DispatchQueue.main.async {
+                appState?.noteAudioActivity()
+                appState?.waveformState.update(
+                    amplitude: amplitude,
+                    isMuted: appState?.isMicMuted ?? false,
+                    isPaused: appState?.isPaused ?? false
+                )
             }
         }
 
@@ -660,6 +664,24 @@ struct MenuBarView: View {
 
 // MARK: - Status Tab
 
+/// Isolated waveform for the menu bar status tab — observes WaveformState directly
+/// so amplitude updates (~8Hz) only invalidate this view, not StatusTabView.
+private struct MBWaveformView: View {
+    @ObservedObject var waveformState: WaveformState
+
+    var body: some View {
+        HStack(spacing: 2) {
+            ForEach(0..<waveformState.amplitudes.count, id: \.self) { i in
+                RoundedRectangle(cornerRadius: 1.5)
+                    .fill(Color.red)
+                    .frame(width: 3, height: max(3, CGFloat(waveformState.amplitudes[i]) * 30))
+            }
+        }
+        .frame(height: 30)
+        .animation(.easeOut(duration: 0.1), value: waveformState.amplitudes)
+    }
+}
+
 struct StatusTabView: View {
     @Binding var selectedTab: MenuTab
     @Binding var settingsScrollTarget: SettingsScrollTarget?
@@ -779,16 +801,8 @@ struct StatusTabView: View {
             if appState.isInAppMode && appState.state.isRecording {
                 // Live transcription during recording
                 VStack(spacing: 8) {
-                    // Waveform
-                    HStack(spacing: 2) {
-                        ForEach(0..<appState.waveformAmplitudes.count, id: \.self) { i in
-                            RoundedRectangle(cornerRadius: 1.5)
-                                .fill(Color.red)
-                                .frame(width: 3, height: max(3, CGFloat(appState.waveformAmplitudes[i]) * 30))
-                        }
-                    }
-                    .frame(height: 30)
-                    .animation(.easeOut(duration: 0.1), value: appState.waveformAmplitudes)
+                    // Waveform — MBWaveformView observes WaveformState directly
+                    MBWaveformView(waveformState: appState.waveformState)
 
                     if !appState.liveTranscription.isEmpty {
                         Text(appState.liveTranscription)

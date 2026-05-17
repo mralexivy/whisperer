@@ -235,7 +235,7 @@ struct OverlayView: View {
                                 .clipShape(RoundedRectangle(cornerRadius: 4 * scale))
                         }
 
-                        WaveformView(amplitudes: appState.waveformAmplitudes)
+                        WaveformView(waveformState: appState.waveformState)
                             .frame(width: waveformWidth, height: waveformHeight)
 
                         if case .transcribing = appState.state {

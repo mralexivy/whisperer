@@ -66,10 +66,11 @@ class AppState: ObservableObject {
                 showHandsFreeToast = false
                 isMicMuted = false
                 isPaused = false
+                PermissionManager.shared.resumePolling()
             }
         }
     }
-    @Published var waveformAmplitudes: [Float] = Array(repeating: 0, count: 20)
+    let waveformState = WaveformState()
     @Published var errorMessage: String?
     @Published var saveRecordings: Bool = true  // Save recordings by default
     @Published var liveTranscription: String = ""  // Live transcription during recording
@@ -1904,6 +1905,7 @@ class AppState: ObservableObject {
         // INSTANT: Set state immediately so overlay appears right away
         let recordingStart = Date()
         state = .recording(startTime: recordingStart)
+        PermissionManager.shared.pausePolling()  // Permissions don't change mid-recording
         liveTranscription = ""
         recordingSessionID = UUID()
         isOutputAudioMuted = muteOtherAudioDuringRecording  // Initialize runtime toggle from setting
@@ -2453,12 +2455,6 @@ class AppState: ObservableObject {
             audioMuter?.unmuteSystemAudio()
             Logger.info("Output audio unmuted (meeting capture mode)", subsystem: .audio)
         }
-    }
-
-    func updateWaveform(amplitude: Float) {
-        // Show flat waveform when mic is muted or recording is paused
-        waveformAmplitudes.removeFirst()
-        waveformAmplitudes.append((isMicMuted || isPaused) ? 0 : amplitude)
     }
 
     func clearError() {

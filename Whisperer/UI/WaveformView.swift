@@ -8,7 +8,7 @@
 import SwiftUI
 
 struct WaveformView: View {
-    let amplitudes: [Float]
+    @ObservedObject var waveformState: WaveformState
     private let barCount = 20
     private let barSpacing: CGFloat = 2
 
@@ -16,7 +16,7 @@ struct WaveformView: View {
         GeometryReader { geometry in
             HStack(spacing: barSpacing) {
                 ForEach(0..<barCount, id: \.self) { index in
-                    let amplitude = index < amplitudes.count ? amplitudes[index] : 0
+                    let amplitude = index < waveformState.amplitudes.count ? waveformState.amplitudes[index] : 0
                     RoundedRectangle(cornerRadius: 1.5)
                         .fill(Color(red: 0.357, green: 0.424, blue: 0.969)) // #5B6CF7 blue accent
                         .frame(
@@ -52,8 +52,13 @@ struct WaveformView: View {
 }
 
 #Preview {
-    WaveformView(amplitudes: [0.2, 0.5, 0.8, 0.6, 0.3, 0.7, 0.9, 0.4, 0.5, 0.6])
-        .frame(width: 100, height: 30)
-        .padding()
-        .background(Color(red: 0.078, green: 0.078, blue: 0.169))
+    WaveformView(waveformState: {
+        let s = WaveformState()
+        s.amplitudes = [0.2, 0.5, 0.8, 0.6, 0.3, 0.7, 0.9, 0.4, 0.5, 0.6,
+                        0.2, 0.5, 0.8, 0.6, 0.3, 0.7, 0.9, 0.4, 0.5, 0.6]
+        return s
+    }())
+    .frame(width: 100, height: 30)
+    .padding()
+    .background(Color(red: 0.078, green: 0.078, blue: 0.169))
 }
