@@ -30,7 +30,7 @@ class WhisperRunner {
         }
 
         Logger.info("Transcribing audio file", subsystem: .transcription)
-        Logger.debug("Using model: %{private}@", subsystem: .transcription, modelPath.lastPathComponent)
+        Logger.debug("Using model: \(modelPath.lastPathComponent)", subsystem: .transcription)
 
         let process = Process()
         process.executableURL = whisperCLI
@@ -64,9 +64,9 @@ class WhisperRunner {
                     let output = String(data: outputData, encoding: .utf8) ?? ""
                     let errorOutput = String(data: errorData, encoding: .utf8) ?? ""
 
-                    Logger.debug("whisper-cli stdout: %{private}@", subsystem: .transcription, output)
+                    Logger.debug("whisper-cli stdout: \(output)", subsystem: .transcription)
                     if !errorOutput.isEmpty {
-                        Logger.debug("whisper-cli stderr: %{private}@", subsystem: .transcription, errorOutput)
+                        Logger.debug("whisper-cli stderr: \(errorOutput)", subsystem: .transcription)
                     }
                     Logger.debug("whisper-cli exit code: \(process.terminationStatus)", subsystem: .transcription)
 

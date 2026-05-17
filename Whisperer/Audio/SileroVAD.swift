@@ -63,7 +63,7 @@ class SileroVAD {
 
         // Verify model file exists before attempting to load
         guard FileManager.default.fileExists(atPath: modelPath.path) else {
-            Logger.error("VAD model file does not exist at: %{private}@", subsystem: .audio, modelPath.path)
+            Logger.error("VAD model file does not exist at: \(modelPath.path)", subsystem: .audio)
             throw VADError.modelLoadFailed
         }
 
@@ -83,7 +83,7 @@ class SileroVAD {
     static var backendsLoaded = false
 
     private func loadModel() throws {
-        Logger.info("Loading Silero VAD from: %{private}@", subsystem: .audio, modelPath.lastPathComponent)
+        Logger.info("Loading Silero VAD from: \(modelPath.lastPathComponent)", subsystem: .audio)
 
         // Load GGML backends (required before loading any models)
         // This is thread-safe and idempotent
