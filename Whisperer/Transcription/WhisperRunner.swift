@@ -29,8 +29,8 @@ class WhisperRunner {
             throw TranscriptionError.modelNotFound
         }
 
-        print("Transcribing audio file: \(audioFile.path)")
-        print("Using model: \(modelPath.path)")
+        Logger.info("Transcribing audio file", subsystem: .transcription)
+        Logger.debug("Using model: %{private}@", subsystem: .transcription, modelPath.lastPathComponent)
 
         let process = Process()
         process.executableURL = whisperCLI
@@ -51,8 +51,7 @@ class WhisperRunner {
         process.standardOutput = outputPipe
         process.standardError = errorPipe
 
-        print("Running whisper.cpp with \(threadCount) threads")
-        print("Command: \(whisperCLI.path) -m \(modelPath.path) -f \(audioFile.path)")
+        Logger.debug("Running whisper.cpp with \(threadCount) threads", subsystem: .transcription)
 
         return try await withCheckedThrowingContinuation { continuation in
             do {
@@ -65,27 +64,26 @@ class WhisperRunner {
                     let output = String(data: outputData, encoding: .utf8) ?? ""
                     let errorOutput = String(data: errorData, encoding: .utf8) ?? ""
 
-                    print("=== WHISPER OUTPUT ===")
-                    print(output)
-                    print("=== WHISPER ERRORS ===")
-                    print(errorOutput)
-                    print("=== EXIT CODE: \(process.terminationStatus) ===")
+                    Logger.debug("whisper-cli stdout: %{private}@", subsystem: .transcription, output)
+                    if !errorOutput.isEmpty {
+                        Logger.debug("whisper-cli stderr: %{private}@", subsystem: .transcription, errorOutput)
+                    }
+                    Logger.debug("whisper-cli exit code: \(process.terminationStatus)", subsystem: .transcription)
 
                     if process.terminationStatus != 0 {
-                        print("Whisper process failed with exit code \(process.terminationStatus)")
+                        Logger.error("Whisper process failed with exit code \(process.terminationStatus)", subsystem: .transcription)
                         continuation.resume(throwing: TranscriptionError.processFailed(errorOutput))
                         return
                     }
 
                     // Parse output
                     let transcription = self.parseWhisperOutput(output)
-                    print("Parsed transcription: '\(transcription)'")
 
                     if transcription.isEmpty {
-                        print("No transcription found in output")
+                        Logger.warning("No transcription found in whisper-cli output", subsystem: .transcription)
                         continuation.resume(throwing: TranscriptionError.noSpeechDetected)
                     } else {
-                        print("Transcription successful: \(transcription)")
+                        Logger.info("Transcription successful (\(transcription.count) chars)", subsystem: .transcription)
                         continuation.resume(returning: transcription)
                     }
                 }
