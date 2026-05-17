@@ -2708,7 +2708,7 @@
 		};
 		AACC00022F40000100000002 /* XCRemoteSwiftPackageReference "mlx-swift-lm-fork" */ = {
 			isa = XCRemoteSwiftPackageReference;
-			repositoryURL = "file:///Users/alexanderi/Downloads/mlx-swift-lm-fork";
+			repositoryURL = "file:///Users/alexanderi/Downloads/mlx-swift-lm-fresh";
 			requirement = {
 				branch = "whisperer-spec-decode";
 				kind = branch;
