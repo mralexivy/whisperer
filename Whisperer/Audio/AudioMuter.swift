@@ -263,3 +263,14 @@ class AudioMuter {
         return status == noErr
     }
 }
+
+#if DEBUG
+extension AudioMuter {
+    func debugSnapshot() -> [String: String] {
+        return [
+            "isMutedByUs": "\(isMutedByUs)",
+            "savedVolumes.count": "\(savedVolumes.count)"
+        ]
+    }
+}
+#endif

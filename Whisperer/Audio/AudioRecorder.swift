@@ -970,3 +970,46 @@ enum RecordingError: Error {
     case audioUnitFailed
     case engineCleanedUp
 }
+
+#if DEBUG
+extension AudioRecorder {
+    /// Read-only snapshot of internal state for stuck-state diagnostics.
+    func debugSnapshot() -> [String: String] {
+        var snap: [String: String] = [:]
+        snap["isRecording"] = "\(isRecording)"
+        snap["recorderState"] = "\(recorderState)"
+        snap["currentGeneration"] = "\(currentGeneration)"
+        snap["recoveryAttemptCount"] = "\(recoveryAttemptCount)"
+        snap["consecutiveSilentCallbacks"] = "\(consecutiveSilentCallbacks)"
+        if let last = lastAudioCallbackTime {
+            snap["lastAudioCallback"] = "\(last) (Δ \(String(format: "%.2f", Date().timeIntervalSince(last)))s ago)"
+        } else {
+            snap["lastAudioCallback"] = "nil (no audio callback ever)"
+        }
+        if let start = recordingStartTime {
+            snap["recordingStartTime"] = "\(start) (Δ \(String(format: "%.2f", Date().timeIntervalSince(start)))s ago)"
+        } else {
+            snap["recordingStartTime"] = "nil"
+        }
+        if let engine = audioEngine {
+            snap["audioEngine.isRunning"] = "\(engine.isRunning)"
+            snap["audioEngine.inputNode.audioUnit != nil"] = "\(engine.inputNode.audioUnit != nil)"
+            let fmt = engine.inputNode.outputFormat(forBus: 0)
+            snap["audioEngine.inputFormat"] = "sampleRate=\(fmt.sampleRate) channels=\(fmt.channelCount)"
+        } else {
+            snap["audioEngine"] = "nil"
+        }
+        if let deviceID = getEngineDeviceID() {
+            snap["engineDeviceID"] = "\(deviceID)" + (deviceName(for: deviceID).map { " (\($0))" } ?? "")
+        } else {
+            snap["engineDeviceID"] = "nil"
+        }
+        snap["audioFlowWatchdog"] = audioFlowWatchdog == nil ? "nil" : "active"
+        snap["recoveryTask"] = recoveryTask == nil ? "nil" : "active"
+        snap["onAudioFlowTimeout"] = onAudioFlowTimeout == nil ? "nil" : "wired"
+        snap["onStreamingSamples"] = onStreamingSamples == nil ? "nil" : "wired"
+        snap["onAmplitudeUpdate"] = onAmplitudeUpdate == nil ? "nil" : "wired"
+        return snap
+    }
+}
+#endif

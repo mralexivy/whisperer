@@ -132,9 +132,11 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         // Device selection is resolved fresh at recording time via
         // audioDeviceManager.resolveInputRouteForRecording() — no cached device IDs.
 
-        // Setup audio callback for waveform
+        // Setup audio callback for waveform. Also bumps the audio-progress watchdog
+        // so AppState can detect stuck-recording independently of AudioRecorder internals.
         appState.audioRecorder?.onAmplitudeUpdate = { [weak self] amplitude in
             Task { @MainActor in
+                self?.appState.noteAudioActivity()
                 self?.appState.updateWaveform(amplitude: amplitude)
             }
         }

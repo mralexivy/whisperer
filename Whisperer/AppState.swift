@@ -197,6 +197,24 @@ class AppState: ObservableObject {
     private var lastStopActivityTime: Date?
     private var stopWatchdogStartTime: Date?
 
+    // Audio-progress watchdog: independent of AudioRecorder's internal state machine.
+    // Bumped by every onAmplitudeUpdate callback. If 15s elapses with no bump while
+    // state == .recording, we know the recording is stuck — dump state (DEBUG) and force idle.
+    private var lastAmplitudeUpdateTime: Date?
+    private let audioProgressStallTimeout: TimeInterval = 15.0
+
+    /// Called from the onAmplitudeUpdate callback chain. Cheap; runs ~100x/sec.
+    func noteAudioActivity() {
+        lastAmplitudeUpdateTime = Date()
+    }
+
+    #if DEBUG
+    /// Read-only accessor for StuckStateDumper.
+    var lastAmplitudeUpdateTimeForDebug: Date? { lastAmplitudeUpdateTime }
+    /// Read-only accessor for StuckStateDumper (streamingTranscriber is private).
+    var streamingTranscriberIsNil: Bool { streamingTranscriber == nil }
+    #endif
+
     // Pre-loaded transcription backend - keeps model in memory for instant recording start
     private var whisperBridge: TranscriptionBackend?
 
@@ -1726,6 +1744,7 @@ class AppState: ObservableObject {
         recordingSessionID = UUID()  // Force SwiftUI state reset
         isLiveTranscriptionRTL = selectedLanguage.isRTL
         isOutputAudioMuted = muteOtherAudioDuringRecording  // Initialize runtime toggle from setting
+        lastAmplitudeUpdateTime = nil  // Reset audio-progress watchdog
         startStateWatchdog()  // 4s startup watchdog — cancelled when audio starts
 
         // Play feedback sound first (user hears it)
@@ -1888,6 +1907,7 @@ class AppState: ObservableObject {
         liveTranscription = ""
         recordingSessionID = UUID()
         isOutputAudioMuted = muteOtherAudioDuringRecording  // Initialize runtime toggle from setting
+        lastAmplitudeUpdateTime = nil  // Reset audio-progress watchdog
         startStateWatchdog()  // 4s startup watchdog — cancelled when audio starts
 
         // Play feedback sound first (user hears it)
@@ -2139,8 +2159,8 @@ class AppState: ObservableObject {
         // Don't replace an existing stop watchdog — only install if no watchdog is active
         guard stateWatchdog == nil else { return }
         let timer = DispatchSource.makeTimerSource(queue: .main)
-        // Check every 10s — recording can legitimately last up to 5 minutes
-        timer.schedule(deadline: .now() + 10, repeating: 10.0)
+        // Tick every 3s for progress checks; 5.5-min absolute cap also evaluated here.
+        timer.schedule(deadline: .now() + 3, repeating: 3.0)
         timer.setEventHandler { [weak self] in
             guard let self else { return }
             guard case .recording(let startTime) = self.state else {
@@ -2150,15 +2170,51 @@ class AppState: ObservableObject {
                 return
             }
 
-            let elapsed = Date().timeIntervalSince(startTime)
-            // 5.5 minutes = 5 min recording limit + 30s margin
-            if elapsed > 330 {
-                Logger.error("Recording watchdog: stuck in .recording for \(String(format: "%.0f", elapsed))s, forcing idle", subsystem: .app)
-                self.forceIdleFromWatchdog()
+            let now = Date()
+            let elapsedSinceStart = now.timeIntervalSince(startTime)
+
+            // Absolute cap: 5.5 minutes = 5 min recording limit + 30s margin
+            if elapsedSinceStart > 330 {
+                Logger.error("Recording watchdog: stuck in .recording for \(String(format: "%.0f", elapsedSinceStart))s, forcing idle", subsystem: .app)
+                self.handleStuckRecording(reason: "5.5min absolute cap exceeded")
+                return
+            }
+
+            // Audio-progress check: no audio buffer in audioProgressStallTimeout seconds = stuck.
+            // Skip during the first audioProgressStallTimeout seconds to give startup grace.
+            guard elapsedSinceStart >= self.audioProgressStallTimeout else { return }
+
+            let stalled: Bool
+            if let last = self.lastAmplitudeUpdateTime {
+                stalled = now.timeIntervalSince(last) > self.audioProgressStallTimeout
+            } else {
+                // No amplitude callback ever received — engine never produced data
+                stalled = true
+            }
+
+            if stalled {
+                let detail: String
+                if let last = self.lastAmplitudeUpdateTime {
+                    detail = "no audio for \(String(format: "%.1f", now.timeIntervalSince(last)))s"
+                } else {
+                    detail = "no audio buffer ever received in \(String(format: "%.1f", elapsedSinceStart))s"
+                }
+                Logger.error("Recording stalled — \(detail), forcing idle", subsystem: .app)
+                self.handleStuckRecording(reason: detail)
             }
         }
         timer.resume()
         stateWatchdog = timer
+    }
+
+    /// Common handler for stuck-recording detection. Captures a state dump in DEBUG
+    /// builds, then forces .idle and surfaces a user-visible error.
+    private func handleStuckRecording(reason: String) {
+        #if DEBUG
+        StuckStateDumper.dump(reason: reason)
+        #endif
+        forceIdleFromWatchdog()
+        errorMessage = "Microphone stopped responding. Try recording again."
     }
 
     /// Activity-aware watchdog for the stop phase. Repeats every 2s and checks
