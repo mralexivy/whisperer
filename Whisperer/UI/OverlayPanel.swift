@@ -61,6 +61,7 @@ class OverlayPanel: NSPanel {
     private var settingsObserver: NSObjectProtocol?
     private var screenObserver: NSObjectProtocol?
     private var contentHeightObserver: NSObjectProtocol?
+    private var resizeWorkItem: DispatchWorkItem?
     private var generation: UInt64 = 0
 
     init() {
@@ -142,13 +143,15 @@ class OverlayPanel: NSPanel {
             self?.positionAtBottomCenter()
         }
 
-        // Observe content height changes (expand/collapse of live transcription card)
+        // Observe content height changes (expand/collapse of live transcription card).
+        // Debounced 100ms — during word animation height changes fire on every word,
+        // but a layout pass is only needed when text wraps to a new line.
         contentHeightObserver = NotificationCenter.default.addObserver(
             forName: .overlayContentHeightChanged,
             object: nil,
             queue: .main
         ) { [weak self] _ in
-            self?.adjustFrameForContent()
+            self?.scheduleResize()
         }
 
         // Check initial state
@@ -198,6 +201,13 @@ class OverlayPanel: NSPanel {
             NSRect(x: xPos, y: yPos, width: panelWidth, height: panelHeight),
             display: true
         )
+    }
+
+    private func scheduleResize() {
+        resizeWorkItem?.cancel()
+        let item = DispatchWorkItem { [weak self] in self?.adjustFrameForContent() }
+        resizeWorkItem = item
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1, execute: item)
     }
 
     private func adjustFrameForContent() {
