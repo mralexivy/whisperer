@@ -21,13 +21,15 @@ enum LLMModelVariant: String, CaseIterable, Identifiable {
         [.qwen3_0_6B, .qwen3_5_4B, .qwen3_5_2B, .qwen3_5_9B]
     }
 
-    // Draft model for speculative decoding. nil = no speculative decoding.
-    // Qwen3.5 is a hybrid attention + Mamba architecture. Mamba layers use MambaCache
-    // which is not trimmable, so SpeculativeTokenIterator rejects the cache with
-    // "Speculative decoding requires trimmable KV caches." Speculative decoding is
-    // incompatible with all current Qwen variants until a Mamba-aware spec-decode
-    // implementation is available upstream.
-    var draftVariant: LLMModelVariant? { nil }
+    // Draft model for speculative decoding. nil = no spec-decode.
+    // Qwen3.5 hybrid Mamba/attention models use checkpoint/restore+replay instead of
+    // trimming — see SpeculativeTokenIterator.usesReplay in the mlx-swift-lm fork.
+    var draftVariant: LLMModelVariant? {
+        switch self {
+        case .qwen3_5_4B, .qwen3_5_9B: return .qwen3_5_0_8B
+        default: return nil
+        }
+    }
 
     var huggingFaceId: String {
         switch self {

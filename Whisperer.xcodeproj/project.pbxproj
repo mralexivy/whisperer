@@ -2066,7 +2066,7 @@
 			minimizedProjectReferenceProxies = 1;
 			packageReferences = (
 				AACC00012F40000100000001 /* XCRemoteSwiftPackageReference "FluidAudio" */,
-				AACC00022F40000100000002 /* XCRemoteSwiftPackageReference "mlx-swift-lm" */,
+				AACC00022F40000100000002 /* XCRemoteSwiftPackageReference "mlx-swift-lm-fork" */,
 				AACC000B2F40000100000006 /* XCRemoteSwiftPackageReference "swift-transformers" */,
 			);
 			preferredProjectObjectVersion = 77;
@@ -2706,11 +2706,11 @@
 				kind = branch;
 			};
 		};
-		AACC00022F40000100000002 /* XCRemoteSwiftPackageReference "mlx-swift-lm" */ = {
+		AACC00022F40000100000002 /* XCRemoteSwiftPackageReference "mlx-swift-lm-fork" */ = {
 			isa = XCRemoteSwiftPackageReference;
-			repositoryURL = "https://github.com/ml-explore/mlx-swift-lm.git";
+			repositoryURL = "file:///Users/alexanderi/Downloads/mlx-swift-lm-fork";
 			requirement = {
-				branch = main;
+				branch = "whisperer-spec-decode";
 				kind = branch;
 			};
 		};
@@ -2732,12 +2732,12 @@
 		};
 		AACC00042F40000100000002 /* MLXLLM */ = {
 			isa = XCSwiftPackageProductDependency;
-			package = AACC00022F40000100000002 /* XCRemoteSwiftPackageReference "mlx-swift-lm" */;
+			package = AACC00022F40000100000002 /* XCRemoteSwiftPackageReference "mlx-swift-lm-fork" */;
 			productName = MLXLLM;
 		};
 		AACC00052F40000100000003 /* MLXLMCommon */ = {
 			isa = XCSwiftPackageProductDependency;
-			package = AACC00022F40000100000002 /* XCRemoteSwiftPackageReference "mlx-swift-lm" */;
+			package = AACC00022F40000100000002 /* XCRemoteSwiftPackageReference "mlx-swift-lm-fork" */;
 			productName = MLXLMCommon;
 		};
 		AACC000C2F40000100000007 /* Hub */ = {

@@ -3213,6 +3213,7 @@ struct AboutView: View {
 struct LLMSettingsView: View {
     @ObservedObject var appState = AppState.shared
     @ObservedObject var modeManager = AIModeManager.shared
+    @StateObject private var benchmark = LLMBenchmark()
 
     private var rewriteConfig: RewriteShortcutConfig {
         appState.keyListener?.rewriteShortcutConfig ?? .defaultConfig
@@ -3296,6 +3297,38 @@ struct LLMSettingsView: View {
 
                 if rewriteConfig.isEnabled {
                     RewriteShortcutRecorderView()
+                }
+
+                Rectangle()
+                    .fill(MBColors.border)
+                    .frame(height: 1)
+                    .padding(.vertical, 2)
+
+                // Spec-decode benchmark (hidden debug tool)
+                VStack(alignment: .leading, spacing: 4) {
+                    Button(action: {
+                        guard let processor = appState.llmPostProcessor else { return }
+                        Task { await benchmark.run(processor: processor) }
+                    }) {
+                        HStack(spacing: 6) {
+                            if benchmark.isRunning {
+                                ProgressView().controlSize(.mini).tint(MBColors.accent)
+                            }
+                            Text(benchmark.isRunning ? "Benchmarking…" : "Run spec-decode benchmark")
+                                .font(.system(size: 11, weight: .medium))
+                                .foregroundColor(MBColors.accent)
+                        }
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(benchmark.isRunning || appState.llmPostProcessor?.isModelLoaded != true)
+                    .pointerOnHover()
+
+                    if let summary = benchmark.lastSummary {
+                        Text(summary)
+                            .font(.system(size: 10))
+                            .foregroundColor(MBColors.textSecondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
                 }
                 #endif
             }
