@@ -14,10 +14,35 @@ class AudioMuter {
     private var isMutedByUs: Bool = false
     private var mutedDeviceID: AudioDeviceID = 0
 
+    // Serial queue serializes all CoreAudio property access; unmute dispatches async so callers don't block.
+    private let operationQueue = DispatchQueue(label: "audio.muter", qos: .userInitiated)
+
     // MARK: - Public API
 
-    /// Mute system audio output, saving previous state
+    /// Mute system audio output, saving previous state.
+    /// Blocks caller until mute completes (intentional — recording must not start until muted).
     func muteSystemAudio() {
+        operationQueue.sync { self._muteSystemAudio() }
+    }
+
+    /// Restore system audio to previous state.
+    /// Returns immediately — restoration runs on a background queue.
+    func unmuteSystemAudio() {
+        operationQueue.async { self._unmuteSystemAudio() }
+    }
+
+    /// Force restore (emergency unmute). Returns immediately.
+    func forceRestore() {
+        Logger.warning("forceRestore() called", subsystem: .audio)
+        operationQueue.async {
+            self.isMutedByUs = true  // force guard to pass
+            self._unmuteSystemAudio()
+        }
+    }
+
+    // MARK: - Internal Implementation (must run on operationQueue)
+
+    private func _muteSystemAudio() {
         Logger.debug("muteSystemAudio() called", subsystem: .audio)
 
         guard !isMutedByUs else {
@@ -76,8 +101,7 @@ class AudioMuter {
         }
     }
 
-    /// Restore system audio to previous state
-    func unmuteSystemAudio() {
+    private func _unmuteSystemAudio() {
         Logger.debug("unmuteSystemAudio() called (isMutedByUs: \(isMutedByUs), savedVolumes: \(savedVolumes.count) channels)", subsystem: .audio)
 
         guard isMutedByUs else {
@@ -148,7 +172,6 @@ class AudioMuter {
         // Clear mute flag but KEEP savedVolumes for next cycle
         isMutedByUs = false
         // Don't clear savedVolumes - we need them for the next mute
-        // savedVolumes.removeAll()
         mutedDeviceID = 0
 
         if restoredCount > 0 {
@@ -156,13 +179,6 @@ class AudioMuter {
         } else {
             Logger.error("Failed to restore any channels", subsystem: .audio)
         }
-    }
-
-    /// Force restore (emergency unmute)
-    func forceRestore() {
-        Logger.warning("forceRestore() called", subsystem: .audio)
-        isMutedByUs = true  // Force the guard to pass
-        unmuteSystemAudio()
     }
 
     // MARK: - CoreAudio Helpers
