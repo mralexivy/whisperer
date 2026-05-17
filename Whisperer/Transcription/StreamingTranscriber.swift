@@ -759,7 +759,21 @@ class StreamingTranscriber {
             return await stopWithSpeechAnalyzer(speechBridge)
         }
 
-        return stop()
+        // Dispatch stop() — which runs synchronous whisper.cpp tail inference — off the main actor.
+        // By this point all in-flight chunks are done, so completedChunkTexts/allSamplesLock are stable.
+        return await withCheckedContinuation { [weak self] continuation in
+            guard let self else {
+                continuation.resume(returning: "")
+                return
+            }
+            Task.detached(priority: .userInitiated) { [weak self] in
+                guard let self else {
+                    continuation.resume(returning: "")
+                    return
+                }
+                continuation.resume(returning: self.stop())
+            }
+        }
     }
 
     /// SpeechAnalyzer-specific async final pass
