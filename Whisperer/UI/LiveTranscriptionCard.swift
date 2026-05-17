@@ -371,6 +371,8 @@ struct TranscriptionTextView: NSViewRepresentable {
     let isRTL: Bool
     let scale: CGFloat
 
+    func makeCoordinator() -> Coordinator { Coordinator() }
+
     func makeNSView(context: Context) -> NSTextField {
         let field = NSTextField(wrappingLabelWithString: "")
         field.isEditable = false
@@ -384,34 +386,52 @@ struct TranscriptionTextView: NSViewRepresentable {
     }
 
     func updateNSView(_ field: NSTextField, context: Context) {
-        let fontSize = 16 * scale
-        let font: NSFont
-        if let roundedDesc = NSFont.systemFont(ofSize: fontSize, weight: .regular)
-            .fontDescriptor.withDesign(.rounded),
-           let roundedFont = NSFont(descriptor: roundedDesc, size: fontSize) {
-            font = roundedFont
-        } else {
-            font = NSFont.systemFont(ofSize: fontSize, weight: .regular)
-        }
+        let c = context.coordinator
+        // Bail early when nothing changed — this runs 20+/sec during animation
+        guard text != c.lastText || isRTL != c.lastIsRTL || scale != c.lastScale else { return }
+        c.lastText = text
+        c.lastIsRTL = isRTL
+        c.lastScale = scale
 
-        let style = NSMutableParagraphStyle()
-        style.lineSpacing = 5 * scale
-        if isRTL {
-            style.baseWritingDirection = .rightToLeft
-            style.alignment = .right
-        } else {
-            style.baseWritingDirection = .leftToRight
-            style.alignment = .left
+        // Rebuild font + paragraph style only when layout inputs change (rare)
+        if c.cachedFont == nil || isRTL != c.cachedIsRTL || scale != c.cachedScale {
+            let fontSize = 16 * scale
+            let resolvedFont: NSFont
+            if let desc = NSFont.systemFont(ofSize: fontSize, weight: .regular).fontDescriptor.withDesign(.rounded),
+               let rounded = NSFont(descriptor: desc, size: fontSize) {
+                resolvedFont = rounded
+            } else {
+                resolvedFont = NSFont.systemFont(ofSize: fontSize, weight: .regular)
+            }
+            let style = NSMutableParagraphStyle()
+            style.lineSpacing = 5 * scale
+            style.baseWritingDirection = isRTL ? .rightToLeft : .leftToRight
+            style.alignment = isRTL ? .right : .left
+            c.cachedFont = resolvedFont
+            c.cachedStyle = style
+            c.cachedIsRTL = isRTL
+            c.cachedScale = scale
         }
 
         field.attributedStringValue = NSAttributedString(
             string: text,
             attributes: [
-                .font: font,
+                .font: c.cachedFont!,
                 .foregroundColor: NSColor.white.withAlphaComponent(0.9),
-                .paragraphStyle: style
+                .paragraphStyle: c.cachedStyle!
             ]
         )
+    }
+
+    // Caches expensive objects across updateNSView calls
+    final class Coordinator {
+        var lastText: String = ""
+        var lastIsRTL: Bool = false
+        var lastScale: CGFloat = -1  // -1 forces first rebuild
+        var cachedFont: NSFont?
+        var cachedStyle: NSMutableParagraphStyle?
+        var cachedIsRTL: Bool = false
+        var cachedScale: CGFloat = -1
     }
 }
 
