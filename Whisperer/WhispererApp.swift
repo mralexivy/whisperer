@@ -134,15 +134,15 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
         // Setup audio callback for waveform. Also bumps the audio-progress watchdog
         // so AppState can detect stuck-recording independently of AudioRecorder internals.
+        // AudioRecorder already dispatches onAmplitudeUpdate on the main thread —
+        // no additional dispatch needed here.
         appState.audioRecorder?.onAmplitudeUpdate = { [weak appState] amplitude in
-            DispatchQueue.main.async {
-                appState?.noteAudioActivity()
-                appState?.waveformState.update(
-                    amplitude: amplitude,
-                    isMuted: appState?.isMicMuted ?? false,
-                    isPaused: appState?.isPaused ?? false
-                )
-            }
+            appState?.noteAudioActivity()
+            appState?.waveformState.update(
+                amplitude: amplitude,
+                isMuted: appState?.isMicMuted ?? false,
+                isPaused: appState?.isPaused ?? false
+            )
         }
 
         // Audio recovery is silent — no user-facing messages.

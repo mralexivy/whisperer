@@ -15,8 +15,9 @@ final class WaveformState: ObservableObject {
     @Published var amplitudes: [Float] = Array(repeating: 0, count: 20)
 
     private var lastUpdateTime: Double = 0
-    // 8Hz is perceptually smooth for waveform animation while halving update cost vs 16Hz
-    private let updateInterval: Double = 1.0 / 8.0
+    // 16Hz — smooth scrolling waveform without over-rendering; WaveformState isolation
+    // already limits re-renders to WaveformView only, so we don't need aggressive throttling.
+    private let updateInterval: Double = 1.0 / 16.0
 
     func update(amplitude: Float, isMuted: Bool, isPaused: Bool) {
         let now = CACurrentMediaTime()
