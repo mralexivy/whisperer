@@ -3319,7 +3319,7 @@ private struct LLMModelPickerView: View {
             if let processor = processor {
                 LLMModelListView(selectedModel: $selectedModel, processor: processor, onRetry: onRetry)
             } else {
-                // Processor not yet created — show static list (excludes internal draft model)
+                // Processor not yet created — show static list
                 ForEach(LLMModelVariant.allCases) { variant in
                     LLMModelRowStatic(variant: variant, isSelected: selectedModel == variant)
                 }
