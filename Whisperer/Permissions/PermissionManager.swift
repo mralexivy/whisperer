@@ -83,6 +83,7 @@ class PermissionManager: ObservableObject {
     #endif
 
     private var checkTimer: Timer?
+    private var isPollingPaused = false
     #if !APP_STORE
     private var isAccessibilityTrackingEnabled = false
     #endif
@@ -239,14 +240,19 @@ class PermissionManager: ObservableObject {
 
     // MARK: - Periodic Check
 
+    /// Suspend permission polling during recording — permissions don't change mid-session.
+    func pausePolling() { isPollingPaused = true }
+    func resumePolling() { isPollingPaused = false }
+
     private func startPeriodicCheck() {
         checkTimer = Timer.scheduledTimer(withTimeInterval: 2.0, repeats: true) { [weak self] _ in
             guard self != nil else { return }
             Task { @MainActor [weak self] in
-                self?.checkMicrophonePermission()
+                guard let self, !self.isPollingPaused else { return }
+                self.checkMicrophonePermission()
                 #if !APP_STORE
                 // Check accessibility if tracking is active (user may grant in System Settings)
-                self?.recheckAccessibilityIfNeeded()
+                self.recheckAccessibilityIfNeeded()
                 #endif
             }
         }
