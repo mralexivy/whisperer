@@ -63,17 +63,17 @@ class SileroVAD {
 
         // Verify model file exists before attempting to load
         guard FileManager.default.fileExists(atPath: modelPath.path) else {
-            print("❌ VAD model file does not exist at: \(modelPath.path)")
+            Logger.error("VAD model file does not exist at: %{private}@", subsystem: .audio, modelPath.path)
             throw VADError.modelLoadFailed
         }
 
         // Check file size to ensure it's not corrupted
         if let attributes = try? FileManager.default.attributesOfItem(atPath: modelPath.path),
            let fileSize = attributes[.size] as? Int64 {
-            print("📦 VAD model file size: \(String(format: "%.2f", Double(fileSize) / 1024.0 / 1024.0)) MB")
+            Logger.debug("VAD model file size: \(String(format: "%.2f", Double(fileSize) / 1024.0 / 1024.0)) MB", subsystem: .audio)
             // Silero VAD is ~0.88MB, so anything under 500KB is suspicious
             if fileSize < 500_000 {
-                print("⚠️ VAD model file seems too small, might be corrupted")
+                Logger.warning("VAD model file seems too small, might be corrupted", subsystem: .audio)
             }
         }
 
@@ -83,15 +83,15 @@ class SileroVAD {
     static var backendsLoaded = false
 
     private func loadModel() throws {
-        print("🔄 Loading Silero VAD from: \(modelPath.path)")
+        Logger.info("Loading Silero VAD from: %{private}@", subsystem: .audio, modelPath.lastPathComponent)
 
         // Load GGML backends (required before loading any models)
         // This is thread-safe and idempotent
         if !SileroVAD.backendsLoaded {
-            print("🔧 Loading GGML backends...")
+            Logger.debug("Loading GGML backends", subsystem: .audio)
             ggml_backend_load_all()
             SileroVAD.backendsLoaded = true
-            print("✅ GGML backends loaded")
+            Logger.debug("GGML backends loaded", subsystem: .audio)
         }
 
         var params = whisper_vad_default_context_params()
@@ -107,15 +107,11 @@ class SileroVAD {
         )
 
         guard vadCtx != nil else {
-            print("❌ whisper_vad_init_from_file_with_params returned NULL")
-            print("   This likely means:")
-            print("   1. VAD support not compiled in whisper.cpp")
-            print("   2. Model file is corrupted")
-            print("   3. Model format is incompatible")
+            Logger.error("whisper_vad_init_from_file_with_params returned NULL — VAD support may not be compiled in, or model file is corrupted/incompatible", subsystem: .audio)
             throw VADError.modelLoadFailed
         }
 
-        print("✅ Silero VAD model loaded: \(modelPath.lastPathComponent)")
+        Logger.info("Silero VAD model loaded: \(modelPath.lastPathComponent)", subsystem: .audio)
     }
 
     /// Detect speech segments in audio samples
@@ -126,7 +122,7 @@ class SileroVAD {
         defer { ctxLock.unlock() }
 
         guard let vadCtx = vadCtx else {
-            print("VAD context is nil, cannot detect speech")
+            Logger.warning("VAD context is nil, cannot detect speech", subsystem: .audio)
             return []
         }
 
@@ -138,7 +134,7 @@ class SileroVAD {
         }
 
         guard success else {
-            print("Failed to detect speech in audio")
+            Logger.warning("Failed to detect speech in audio", subsystem: .audio)
             return []
         }
 
@@ -152,7 +148,7 @@ class SileroVAD {
         vadParams.samples_overlap = samplesOverlap
 
         guard let segments = whisper_vad_segments_from_probs(vadCtx, vadParams) else {
-            print("Failed to get VAD segments")
+            Logger.warning("Failed to get VAD segments", subsystem: .audio)
             return []
         }
         defer { whisper_vad_free_segments(segments) }
@@ -239,7 +235,7 @@ class SileroVAD {
 
         if let vadCtx = vadCtx {
             whisper_vad_free(vadCtx)
-            print("Silero VAD context freed")
+            Logger.debug("Silero VAD context freed", subsystem: .audio)
         }
     }
 }
