@@ -1,5 +1,5 @@
 {
-  "originHash" : "ac24ae59f94ffb3aec8bc84b06aae8d2d9075af891549dc939fbaebfc3645222",
+  "originHash" : "a7b84633c5f4e86f2199103c06a9e8d88e8b6d22334c5b2057f78a050467790a",
   "pins" : [
     {
       "identity" : "eventsource",
@@ -29,12 +29,12 @@
       }
     },
     {
-      "identity" : "mlx-swift-lm-fresh",
-      "kind" : "localSourceControl",
-      "location" : "/Users/alexanderi/Downloads/mlx-swift-lm-fresh",
+      "identity" : "mlx-swift-lm",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/ml-explore/mlx-swift-lm.git",
       "state" : {
-        "branch" : "whisperer-spec-decode",
-        "revision" : "5d6d149974e079fbb0ffd5f90a8c39e656ac186c"
+        "revision" : "25b00d4e22e61ec9c41efda47990cd2084ec87ff",
+        "version" : "2.31.3"
       }
     },
     {
@@ -107,15 +107,6 @@
       "state" : {
         "revision" : "0c0290ff6b24942dadb83a929ffaaa1481df04a2",
         "version" : "1.1.1"
-      }
-    },
-    {
-      "identity" : "swift-syntax",
-      "kind" : "remoteSourceControl",
-      "location" : "https://github.com/swiftlang/swift-syntax.git",
-      "state" : {
-        "revision" : "9de99a78f099e59caf2b2beec65a4c45d54b2081",
-        "version" : "603.0.1"
       }
     },
     {

@@ -4,11 +4,6 @@
 //
 //  Local LLM post-processor using MLXLLM (Qwen3) for transcription refinement
 //
-//  Note: Speculative decoding is incompatible with all current Qwen variants.
-//  Qwen3.5 is a hybrid attention + Mamba architecture. MambaCache is not trimmable,
-//  so SpeculativeTokenIterator throws "Speculative decoding requires trimmable KV caches."
-//  Do not re-enable until a Mamba-aware spec-decode implementation is available upstream.
-//
 
 import Foundation
 import Combine
@@ -16,7 +11,7 @@ import MLX
 import MLXLLM
 import MLXLMCommon
 import Hub
-import Tokenizers
+// Tokenizers imported transitively via Hub
 
 enum LLMLoadPhase: Equatable {
     case idle
@@ -36,10 +31,6 @@ class LLMPostProcessor: ObservableObject {
 
     private var modelContainer: ModelContainer?
     private var loadedVariant: LLMModelVariant?
-    private var draftModelContainer: ModelContainer?
-    private var draftLoadTask: Task<Void, Never>?
-
-    var hasDraftModel: Bool { draftModelContainer != nil }
 
     // Per-instructions KV caches — keyed on the full instructions string (system prompt + language).
     // Capped at 4 entries with FIFO eviction. Each value is a warmed prompt prefix ready to copy().
@@ -75,8 +66,7 @@ class LLMPostProcessor: ObservableObject {
 
         let configuration = ModelConfiguration(id: variant.huggingFaceId)
         let container = try await loadModelContainer(
-            from: HFDownloader(),
-            using: HFTokenizerLoader(),
+            hub: HubApi(),
             configuration: configuration,
             progressHandler: { [weak self] progress in
                 Task { @MainActor [weak self] in
@@ -105,51 +95,18 @@ class LLMPostProcessor: ObservableObject {
         // Scale buffer pool cap by model size. Model weights are "active memory" and unaffected;
         // only intermediate/KV-cache buffers from inference are constrained.
         let cacheMB: Int = switch variant {
-            case .qwen3_0_6B, .qwen3_5_0_8B: 128
+            case .qwen3_0_6B: 128
             case .qwen3_5_2B: 256
             case .qwen3_5_4B: 256
             case .qwen3_5_9B: 512
         }
         Memory.cacheLimit = cacheMB * 1024 * 1024
         Logger.info("LLM \(variant.displayName) loaded (MLX cache limit: \(cacheMB) MB, active: \(Memory.activeMemory / (1024 * 1024)) MB)", subsystem: .model)
-
-        // Load draft model in background if this variant supports speculative decoding.
-        if let draftVariant = variant.draftVariant {
-            draftLoadTask?.cancel()
-            draftLoadTask = Task { [weak self] in
-                await self?.loadDraftModel(draftVariant)
-            }
-        }
-    }
-
-    private func loadDraftModel(_ variant: LLMModelVariant) async {
-        guard !Task.isCancelled else { return }
-        Logger.info("LLM spec-decode: loading draft model \(variant.displayName)...", subsystem: .model)
-        do {
-            let configuration = ModelConfiguration(id: variant.huggingFaceId)
-            let container = try await loadModelContainer(
-                from: HFDownloader(),
-                using: HFTokenizerLoader(),
-                configuration: configuration,
-                progressHandler: { progress in
-                    // Download progress for draft model (no UI update — background load)
-                    let _ = progress.fractionCompleted
-                }
-            )
-            guard !Task.isCancelled else { return }
-            draftModelContainer = container
-            Logger.info("LLM spec-decode: draft model \(variant.displayName) ready", subsystem: .model)
-        } catch {
-            Logger.warning("LLM spec-decode: draft model load failed (\(error.localizedDescription)) — spec-decode disabled", subsystem: .model)
-        }
     }
 
     func unloadModel() async {
         // 1. Stop new work — process() guards on modelContainer.
         modelContainer = nil
-        draftModelContainer = nil
-        draftLoadTask?.cancel()
-        draftLoadTask = nil
         loadedVariant = nil
         isModelLoaded = false
         isLoading = false
@@ -280,8 +237,7 @@ class LLMPostProcessor: ObservableObject {
         topP: Float = 1.0,
         topK: Int = 0,
         repetitionPenalty: Float = 1.05,
-        maxTokensCap: Int = 256,
-        useSpecDecoding: Bool = true
+        maxTokensCap: Int = 256
     ) async throws -> String {
         guard let container = modelContainer else {
             Logger.warning("LLM not loaded, returning original text", subsystem: .transcription)
@@ -335,16 +291,6 @@ class LLMPostProcessor: ObservableObject {
         let cachedKV = cachedPrompts[instructions]
         let usingCache = cachedKV != nil
 
-        // Spec-decode config: attach draft model when available. KV cache warmup snapshots
-        // the main model's cache only — the draft model always starts fresh per-call.
-        // useSpecDecoding=false disables spec-decode for benchmarking baseline runs.
-        let specDecodeConfig: SpeculativeDecodingConfig? = (useSpecDecoding ? draftModelContainer : nil).map {
-            SpeculativeDecodingConfig(draftModel: $0, numDraftTokens: 3)
-        }
-        if specDecodeConfig != nil {
-            Logger.debug("LLM gen: spec-decode enabled (numDraftTokens=3)", subsystem: .transcription)
-        }
-
         let session: ChatSession
         if let cachedKV {
             let freshCache = cachedKV.map { $0.copy() }
@@ -352,7 +298,6 @@ class LLMPostProcessor: ObservableObject {
                 container,
                 instructions: nil,  // Already encoded in the pre-built cache
                 cache: freshCache,
-                speculativeDecoding: specDecodeConfig,
                 generateParameters: genParams,
                 additionalContext: ["enable_thinking": false]
             )
@@ -361,7 +306,6 @@ class LLMPostProcessor: ObservableObject {
             session = ChatSession(
                 container,
                 instructions: instructions,
-                speculativeDecoding: specDecodeConfig,
                 generateParameters: genParams,
                 additionalContext: ["enable_thinking": false]
             )
@@ -466,64 +410,3 @@ class LLMPostProcessor: ObservableObject {
     }
 }
 
-// MARK: - HuggingFace Hub bridge types (Downloader + TokenizerLoader for mlx-swift-lm main)
-
-private struct HFDownloader: Downloader {
-    private let hubApi = HubApi()
-
-    func download(
-        id: String,
-        revision: String?,
-        matching patterns: [String],
-        useLatest: Bool,
-        progressHandler: @Sendable @escaping (Progress) -> Void
-    ) async throws -> URL {
-        try await hubApi.snapshot(
-            from: id,
-            revision: revision ?? "main",
-            matching: patterns,
-            progressHandler: progressHandler
-        )
-    }
-}
-
-private struct HFTokenizerLoader: TokenizerLoader {
-    func load(from directory: URL) async throws -> any MLXLMCommon.Tokenizer {
-        let upstream = try await AutoTokenizer.from(modelFolder: directory)
-        return HFTokenizerBridge(upstream)
-    }
-}
-
-private struct HFTokenizerBridge: MLXLMCommon.Tokenizer {
-    private let upstream: any Tokenizers.Tokenizer
-
-    init(_ upstream: any Tokenizers.Tokenizer) { self.upstream = upstream }
-
-    func encode(text: String, addSpecialTokens: Bool) -> [Int] {
-        upstream.encode(text: text, addSpecialTokens: addSpecialTokens)
-    }
-
-    func decode(tokenIds: [Int], skipSpecialTokens: Bool) -> String {
-        upstream.decode(tokens: tokenIds, skipSpecialTokens: skipSpecialTokens)
-    }
-
-    func convertTokenToId(_ token: String) -> Int? { upstream.convertTokenToId(token) }
-    func convertIdToToken(_ id: Int) -> String? { upstream.convertIdToToken(id) }
-
-    var bosToken: String? { upstream.bosToken }
-    var eosToken: String? { upstream.eosToken }
-    var unknownToken: String? { upstream.unknownToken }
-
-    func applyChatTemplate(
-        messages: [[String: any Sendable]],
-        tools: [[String: any Sendable]]?,
-        additionalContext: [String: any Sendable]?
-    ) throws -> [Int] {
-        do {
-            return try upstream.applyChatTemplate(
-                messages: messages, tools: tools, additionalContext: additionalContext)
-        } catch Tokenizers.TokenizerError.missingChatTemplate {
-            throw MLXLMCommon.TokenizerError.missingChatTemplate
-        }
-    }
-}
