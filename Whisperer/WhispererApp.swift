@@ -137,7 +137,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         // AudioRecorder already dispatches onAmplitudeUpdate on the main thread —
         // no additional dispatch needed here.
         appState.audioRecorder?.onAmplitudeUpdate = { [weak appState] amplitude in
-            appState?.noteAudioActivity()
+            appState?.noteAudioActivity(amplitude: amplitude)
             appState?.waveformState.update(
                 amplitude: amplitude,
                 isMuted: appState?.isMicMuted ?? false,
@@ -2556,6 +2556,7 @@ struct PermissionsView: View {
 struct DiagnosticsView: View {
     @State private var logFileSize: String = "..."
     @State private var verboseLogging: Bool = Logger.isVerbose
+    @State private var showDumpConfirmation: Bool = false
 
     private let diagnosticSubsystems: [LogSubsystem] = [.audio, .transcription, .textInjection, .model]
 
@@ -2586,10 +2587,10 @@ struct DiagnosticsView: View {
             Divider()
                 .opacity(0.3)
 
-            // Log file info
+            // Diagnostics folder — logs + dumps in one place
             HStack {
                 VStack(alignment: .leading, spacing: 2) {
-                    Text("Today's log")
+                    Text("Diagnostics")
                         .font(.system(size: 12, weight: .medium))
                         .foregroundColor(MBColors.textPrimary)
                     Text(logFileSize)
@@ -2599,22 +2600,50 @@ struct DiagnosticsView: View {
 
                 Spacer()
 
-                Button(action: {
-                    Logger.openLogInFinder()
-                }) {
-                    HStack(spacing: 4) {
-                        Image(systemName: "folder.badge.gearshape")
-                            .font(.system(size: 11))
-                        Text("Open Logs Folder")
-                            .font(.system(size: 11, weight: .medium))
+                HStack(spacing: 6) {
+                    #if DEBUG
+                    Button(action: {
+                        Task { @MainActor in
+                            StuckStateDumper.dump(reason: "Manual dump from Diagnostics settings")
+                            withAnimation(.easeInOut(duration: 0.2)) { showDumpConfirmation = true }
+                            try? await Task.sleep(for: .seconds(2))
+                            withAnimation(.easeInOut(duration: 0.2)) { showDumpConfirmation = false }
+                        }
+                    }) {
+                        HStack(spacing: 4) {
+                            Image(systemName: showDumpConfirmation ? "checkmark" : "ladybug.fill")
+                                .font(.system(size: 11))
+                            Text(showDumpConfirmation ? "Dumped" : "Dump Now")
+                                .font(.system(size: 11, weight: .medium))
+                                .lineLimit(1)
+                        }
+                        .foregroundColor(showDumpConfirmation ? .green : .gray)
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 5)
+                        .background(MBColors.pill)
+                        .cornerRadius(6)
                     }
-                    .foregroundColor(MBColors.textSecondary)
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 5)
-                    .background(MBColors.pill)
-                    .cornerRadius(6)
+                    .buttonStyle(.plain).pointerOnHover()
+                    #endif
+
+                    Button(action: {
+                        Logger.openLogInFinder()
+                    }) {
+                        HStack(spacing: 4) {
+                            Image(systemName: "folder.badge.gearshape")
+                                .font(.system(size: 11))
+                            Text("Open Folder")
+                                .font(.system(size: 11, weight: .medium))
+                                .lineLimit(1)
+                        }
+                        .foregroundColor(MBColors.textSecondary)
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 5)
+                        .background(MBColors.pill)
+                        .cornerRadius(6)
+                    }
+                    .buttonStyle(.plain).pointerOnHover()
                 }
-                .buttonStyle(.plain).pointerOnHover()
             }
 
             // Crash log indicator

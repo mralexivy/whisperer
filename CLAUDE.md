@@ -45,7 +45,7 @@ IMPORTANT — these prevent real bugs and App Store rejections:
 
 When the user reports the HUD is stuck (e.g., "Listening… forever", "HUD won't dismiss", "recording stuck", "can't stop recording", same issue again):
 
-1. **First check `~/Library/Logs/Whisperer/stuck-dumps/`**. Debug builds auto-dump full state when the audio-progress watchdog trips (no audio buffers for 15s while `state == .recording`). Each file is a self-contained snapshot: AppState, AudioRecorder, audio engine, all NSWindows, thread sample, recent log tail.
+1. **First check `~/Library/Logs/Whisperer/` for `stuck-*.dump` files**. Debug builds auto-dump full state when the audio-progress watchdog trips (no audio buffers for 15s while `state == .recording`). Each file is a self-contained snapshot: AppState, AudioRecorder, audio engine, all NSWindows, thread sample, recent log tail.
 2. **Use the `stuck-dump-analyze` skill** (`.claude/skills/stuck-dump-analyze/`) to parse the latest dump and produce a root-cause report.
 3. **Do not propose fixes from logs alone** — read the dump first. The dump definitively tells you whether `AppState.state`, `AudioRecorder.recorderState`, and `audioEngine.isRunning` agree, which thread (if any) is blocked, and what preceded the freeze.
 4. The watchdog lives in `AppState.startRecordingWatchdog()` and dumps via `StuckStateDumper.dump(reason:)`. Trigger artificially with `sudo killall coreaudiod` while recording — within ~15s a dump is written and the HUD recovers to `.idle`.

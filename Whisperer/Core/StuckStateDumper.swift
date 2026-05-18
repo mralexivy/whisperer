@@ -11,7 +11,9 @@
 
 import AppKit
 import AVFoundation
+import CoreAudio
 import Foundation
+import MachO
 
 enum StuckStateDumper {
 
@@ -24,15 +26,17 @@ enum StuckStateDumper {
             .replacingOccurrences(of: ":", with: "-")
 
         let logsDir = FileManager.default.homeDirectoryForCurrentUser
-            .appendingPathComponent("Library/Logs/Whisperer/stuck-dumps")
+            .appendingPathComponent("Library/Logs/Whisperer")
         try? FileManager.default.createDirectory(at: logsDir, withIntermediateDirectories: true)
 
-        let dumpURL = logsDir.appendingPathComponent("stuck-\(timestamp).txt")
+        let dumpURL = logsDir.appendingPathComponent("stuck-\(timestamp).dump")
 
         var output = ""
         output += renderHeader(reason: reason, now: now)
         output += renderAppState()
         output += renderAudioRecorder()
+        output += renderAudioDevices()
+        output += renderMemoryUsage()
         output += renderAudioMuter()
         output += renderWindows()
         output += renderThreadSample()
@@ -85,6 +89,12 @@ enum StuckStateDumper {
         } else {
             lines.append("- lastAmplitudeUpdateTime: nil (no audio buffer ever received)")
         }
+        if let lastNonSilent = s.lastNonSilentAmplitudeTimeForDebug {
+            lines.append("- lastNonSilentAmplitudeTime: \(lastNonSilent) (Δ \(String(format: "%.2f", Date().timeIntervalSince(lastNonSilent)))s ago)")
+        } else {
+            lines.append("- lastNonSilentAmplitudeTime: nil (never received non-silent audio — zero-filled buffers)")
+        }
+        lines.append("- hasTriggeredSilentAudioDump: \(s.hasTriggeredSilentAudioDumpForDebug)")
         return lines.joined(separator: "\n") + "\n"
     }
 
@@ -122,6 +132,229 @@ enum StuckStateDumper {
             lines.append("- `\(window.className)` visible=\(window.isVisible) alpha=\(window.alphaValue) level=\(window.level.rawValue) frame=(\(Int(frame.minX)),\(Int(frame.minY)),\(Int(frame.width))x\(Int(frame.height)))")
         }
         return lines.joined(separator: "\n") + "\n"
+    }
+
+    private static func renderAudioDevices() -> String {
+        var lines: [String] = ["\n## Audio Devices\n"]
+
+        // System default input device
+        var defaultID: AudioDeviceID = 0
+        var defaultSize = UInt32(MemoryLayout<AudioDeviceID>.size)
+        var defaultAddr = AudioObjectPropertyAddress(
+            mSelector: kAudioHardwarePropertyDefaultInputDevice,
+            mScope: kAudioObjectPropertyScopeGlobal,
+            mElement: kAudioObjectPropertyElementMain
+        )
+        let defaultStatus = AudioObjectGetPropertyData(
+            AudioObjectID(kAudioObjectSystemObject), &defaultAddr, 0, nil, &defaultSize, &defaultID
+        )
+        if defaultStatus == noErr {
+            lines.append("- systemDefaultInputDevice: id=\(defaultID) name=\(audioDeviceName(defaultID) ?? "unknown") uid=\(audioDeviceUID(defaultID) ?? "unknown")")
+        } else {
+            lines.append("- systemDefaultInputDevice: error \(defaultStatus)")
+        }
+
+        // Enumerate all devices
+        var allSize: UInt32 = 0
+        var allAddr = AudioObjectPropertyAddress(
+            mSelector: kAudioHardwarePropertyDevices,
+            mScope: kAudioObjectPropertyScopeGlobal,
+            mElement: kAudioObjectPropertyElementMain
+        )
+        AudioObjectGetPropertyDataSize(AudioObjectID(kAudioObjectSystemObject), &allAddr, 0, nil, &allSize)
+        let deviceCount = Int(allSize) / MemoryLayout<AudioDeviceID>.size
+        var deviceIDs = [AudioDeviceID](repeating: 0, count: deviceCount)
+        AudioObjectGetPropertyData(AudioObjectID(kAudioObjectSystemObject), &allAddr, 0, nil, &allSize, &deviceIDs)
+
+        lines.append("- allDevices (\(deviceCount) total):")
+        for deviceID in deviceIDs {
+            // Check if this device has input streams
+            var streamsSize: UInt32 = 0
+            var streamsAddr = AudioObjectPropertyAddress(
+                mSelector: kAudioDevicePropertyStreams,
+                mScope: kAudioDevicePropertyScopeInput,
+                mElement: kAudioObjectPropertyElementMain
+            )
+            let hasInput = AudioObjectGetPropertyDataSize(deviceID, &streamsAddr, 0, nil, &streamsSize) == noErr && streamsSize > 0
+
+            // Transport type
+            var transport: UInt32 = 0
+            var transportSize = UInt32(MemoryLayout<UInt32>.size)
+            var transportAddr = AudioObjectPropertyAddress(
+                mSelector: kAudioDevicePropertyTransportType,
+                mScope: kAudioObjectPropertyScopeGlobal,
+                mElement: kAudioObjectPropertyElementMain
+            )
+            AudioObjectGetPropertyData(deviceID, &transportAddr, 0, nil, &transportSize, &transport)
+            let transportStr: String
+            switch transport {
+            case kAudioDeviceTransportTypeBuiltIn:     transportStr = "Built-in"
+            case kAudioDeviceTransportTypeUSB:         transportStr = "USB"
+            case kAudioDeviceTransportTypeBluetooth:   transportStr = "Bluetooth"
+            case kAudioDeviceTransportTypeBluetoothLE: transportStr = "BLE"
+            case kAudioDeviceTransportTypeHDMI:        transportStr = "HDMI"
+            case kAudioDeviceTransportTypeDisplayPort: transportStr = "DisplayPort"
+            case kAudioDeviceTransportTypeAVB:         transportStr = "AVB"
+            case kAudioDeviceTransportTypeThunderbolt: transportStr = "Thunderbolt"
+            case kAudioDeviceTransportTypeVirtual:     transportStr = "Virtual"
+            case kAudioDeviceTransportTypeAggregate:   transportStr = "Aggregate"
+            default:                                   transportStr = "0x\(String(transport, radix: 16))"
+            }
+
+            // Alive status
+            var isAlive: UInt32 = 0
+            var aliveSize = UInt32(MemoryLayout<UInt32>.size)
+            var aliveAddr = AudioObjectPropertyAddress(
+                mSelector: kAudioDevicePropertyDeviceIsAlive,
+                mScope: kAudioObjectPropertyScopeGlobal,
+                mElement: kAudioObjectPropertyElementMain
+            )
+            AudioObjectGetPropertyData(deviceID, &aliveAddr, 0, nil, &aliveSize, &isAlive)
+
+            let name = audioDeviceName(deviceID) ?? "unknown"
+            let uid = audioDeviceUID(deviceID) ?? "unknown"
+            let inputTag = hasInput ? " [INPUT]" : ""
+            let defaultTag = deviceID == defaultID ? " ← default" : ""
+            lines.append("  - id=\(deviceID) \(name)\(inputTag) transport=\(transportStr) alive=\(isAlive != 0) uid=\(uid)\(defaultTag)")
+        }
+
+        return lines.joined(separator: "\n") + "\n"
+    }
+
+    private static func audioDeviceName(_ deviceID: AudioDeviceID) -> String? {
+        var nameRef: CFString = "" as CFString
+        var size = UInt32(MemoryLayout<CFString>.size)
+        var addr = AudioObjectPropertyAddress(
+            mSelector: kAudioDevicePropertyDeviceNameCFString,
+            mScope: kAudioObjectPropertyScopeGlobal,
+            mElement: kAudioObjectPropertyElementMain
+        )
+        let status = withUnsafeMutablePointer(to: &nameRef) { ptr in
+            AudioObjectGetPropertyData(deviceID, &addr, 0, nil, &size, ptr)
+        }
+        return status == noErr ? (nameRef as String) : nil
+    }
+
+    private static func audioDeviceUID(_ deviceID: AudioDeviceID) -> String? {
+        var uidRef: CFString = "" as CFString
+        var size = UInt32(MemoryLayout<CFString>.size)
+        var addr = AudioObjectPropertyAddress(
+            mSelector: kAudioDevicePropertyDeviceUID,
+            mScope: kAudioObjectPropertyScopeGlobal,
+            mElement: kAudioObjectPropertyElementMain
+        )
+        let status = withUnsafeMutablePointer(to: &uidRef) { ptr in
+            AudioObjectGetPropertyData(deviceID, &addr, 0, nil, &size, ptr)
+        }
+        return status == noErr ? (uidRef as String) : nil
+    }
+
+    @MainActor
+    private static func renderMemoryUsage() -> String {
+        var lines: [String] = ["\n## Memory Usage\n"]
+
+        // Process RSS via mach task_vm_info (no entitlement required in Debug)
+        var info = task_vm_info_data_t()
+        var count = mach_msg_type_number_t(MemoryLayout<task_vm_info_data_t>.size / MemoryLayout<natural_t>.size)
+        let kr = withUnsafeMutablePointer(to: &info) {
+            $0.withMemoryRebound(to: integer_t.self, capacity: Int(count)) {
+                task_info(mach_task_self_, task_flavor_t(TASK_VM_INFO), $0, &count)
+            }
+        }
+        if kr == KERN_SUCCESS {
+            let rssBytes = info.phys_footprint
+            lines.append("- process.physFootprint: \(formatBytes(rssBytes))")
+            let rssFull = info.resident_size
+            lines.append("- process.residentSize: \(formatBytes(rssFull))")
+        } else {
+            lines.append("- process.rss: error \(kr)")
+        }
+
+        // Whisper model file sizes on disk
+        let s = AppState.shared
+        let modelDir = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first?
+            .appendingPathComponent("Whisperer") ?? URL(fileURLWithPath: "/tmp")
+
+        if let loadedModel = s.loadedModelForDebug {
+            let modelURL = modelDir.appendingPathComponent(loadedModel.rawValue)
+            let fileSize = (try? FileManager.default.attributesOfItem(atPath: modelURL.path)[.size] as? Int64) ?? -1
+            let coreMLDir = modelDir.appendingPathComponent(loadedModel.coreMLEncoderDirectoryName ?? "")
+            let hasCoreML = FileManager.default.fileExists(atPath: coreMLDir.path)
+            lines.append("- whisper.mainModel: \(loadedModel.rawValue) fileSize=\(formatBytes(UInt64(max(0, fileSize)))) coreMLEncoder=\(hasCoreML ? "present" : "absent")")
+        } else {
+            lines.append("- whisper.mainModel: not loaded")
+        }
+
+        // Tiny preview/detector model
+        let tinyURL = modelDir.appendingPathComponent(WhisperModel.tiny.rawValue)
+        let tinyExists = FileManager.default.fileExists(atPath: tinyURL.path)
+        if tinyExists {
+            let tinySize = (try? FileManager.default.attributesOfItem(atPath: tinyURL.path)[.size] as? Int64) ?? -1
+            let tinyCoreMLDir = modelDir.appendingPathComponent(WhisperModel.tiny.coreMLEncoderDirectoryName ?? "")
+            let tinyHasCoreML = FileManager.default.fileExists(atPath: tinyCoreMLDir.path)
+            lines.append("- whisper.tinyBridge: \(WhisperModel.tiny.rawValue) fileSize=\(formatBytes(UInt64(max(0, tinySize)))) coreMLEncoder=\(tinyHasCoreML ? "present" : "absent") loaded=\(s.modelPoolForDebug?.previewBridge != nil)")
+        } else {
+            lines.append("- whisper.tinyBridge: not downloaded")
+        }
+
+        // ModelPool backend count
+        if let pool = s.modelPoolForDebug {
+            lines.append("- modelPool.previewBridge: \(pool.previewBridge != nil ? "alive" : "nil")")
+            lines.append("- modelPool.fallbackProfile: \(pool.fallbackProfile.map { $0.model.rawValue } ?? "nil")")
+        } else {
+            lines.append("- modelPool: nil")
+        }
+
+        // SileroVAD
+        lines.append("- sileroVAD: \(s.sileroVADIsNilForDebug ? "nil" : "loaded")")
+
+        // LLM post-processor
+        lines.append("- llmEnabled: \(s.llmEnabledForDebug)")
+        if s.llmEnabledForDebug {
+            let llmVariant = s.selectedLLMModelForDebug
+            if let llmProc = s.llmPostProcessorForDebug {
+                lines.append("- llm.model: \(llmVariant.displayName) loaded=\(llmProc.isModelLoaded) loading=\(llmProc.isLoading)")
+                // Try to find directory size on disk (MLX models live in ~/.cache/huggingface/hub)
+                let hfCacheBase = FileManager.default.homeDirectoryForCurrentUser
+                    .appendingPathComponent(".cache/huggingface/hub")
+                let modelDirName = "models--" + llmVariant.huggingFaceId.replacingOccurrences(of: "/", with: "--")
+                let llmDir = hfCacheBase.appendingPathComponent(modelDirName)
+                if let dirSize = directorySize(llmDir) {
+                    lines.append("- llm.diskSize: \(formatBytes(dirSize)) (\(llmDir.path))")
+                } else {
+                    lines.append("- llm.diskSize: not found at \(llmDir.path)")
+                }
+            } else {
+                lines.append("- llm.model: \(llmVariant.displayName) processor=nil")
+            }
+        }
+
+        return lines.joined(separator: "\n") + "\n"
+    }
+
+    private static func formatBytes(_ bytes: UInt64) -> String {
+        if bytes >= 1_073_741_824 {
+            return String(format: "%.2f GB", Double(bytes) / 1_073_741_824)
+        } else if bytes >= 1_048_576 {
+            return String(format: "%.1f MB", Double(bytes) / 1_048_576)
+        } else {
+            return "\(bytes) B"
+        }
+    }
+
+    private static func directorySize(_ url: URL) -> UInt64? {
+        guard FileManager.default.fileExists(atPath: url.path) else { return nil }
+        guard let enumerator = FileManager.default.enumerator(
+            at: url,
+            includingPropertiesForKeys: [.fileSizeKey],
+            options: [.skipsHiddenFiles]
+        ) else { return nil }
+        var total: UInt64 = 0
+        for case let fileURL as URL in enumerator {
+            let size = (try? fileURL.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0
+            total += UInt64(size)
+        }
+        return total
     }
 
     private static func renderThreadSample() -> String {
