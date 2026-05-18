@@ -125,6 +125,11 @@ class AudioRecorder: NSObject {
     private var defaultInputDeviceListenerBlock: AudioObjectPropertyListenerBlock?
     private var isMonitoringDefaultInputDevice = false
 
+    // Last error from startRecordingInternal — retained for dump diagnostics
+    #if DEBUG
+    private(set) var lastEngineStartError: Error?
+    #endif
+
     override init() {
         super.init()
         startMonitoringDefaultInputDevice()
@@ -429,6 +434,9 @@ class AudioRecorder: NSObject {
             return audioURL
         } catch {
             Logger.error("Failed to start audio engine: \(error.localizedDescription)", subsystem: .audio)
+            #if DEBUG
+            lastEngineStartError = error
+            #endif
             throw error
         }
     }
@@ -973,6 +981,8 @@ enum RecordingError: Error {
 
 #if DEBUG
 extension AudioRecorder {
+    var debugRecoveryAttemptCount: Int { recoveryAttemptCount }
+
     /// Read-only snapshot of internal state for stuck-state diagnostics.
     func debugSnapshot() -> [String: String] {
         var snap: [String: String] = [:]
@@ -1009,6 +1019,7 @@ extension AudioRecorder {
         snap["onAudioFlowTimeout"] = onAudioFlowTimeout == nil ? "nil" : "wired"
         snap["onStreamingSamples"] = onStreamingSamples == nil ? "nil" : "wired"
         snap["onAmplitudeUpdate"] = onAmplitudeUpdate == nil ? "nil" : "wired"
+        snap["lastEngineStartError"] = lastEngineStartError.map { "\($0)" } ?? "nil (no failure recorded)"
         return snap
     }
 }

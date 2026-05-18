@@ -204,16 +204,32 @@ class AppState: ObservableObject {
     private var lastAmplitudeUpdateTime: Date?
     private let audioProgressStallTimeout: TimeInterval = 15.0
 
+    // Audio quality watchdog: tracks when non-silent audio was last observed.
+    // Distinct from lastAmplitudeUpdateTime — callbacks can arrive with rms=0 (broken pipeline).
+    // When callbacks flow but amplitude is always zero for 5s+, dump state (DEBUG).
+    private var lastNonSilentAmplitudeTime: Date?
+    private var hasTriggeredSilentAudioDump: Bool = false
+
     /// Called from the onAmplitudeUpdate callback chain. Cheap; runs ~100x/sec.
-    func noteAudioActivity() {
+    func noteAudioActivity(amplitude: Float) {
         lastAmplitudeUpdateTime = Date()
+        if amplitude >= 0.001 {
+            lastNonSilentAmplitudeTime = Date()
+        }
     }
 
     #if DEBUG
-    /// Read-only accessor for StuckStateDumper.
+    /// Read-only accessors for StuckStateDumper.
     var lastAmplitudeUpdateTimeForDebug: Date? { lastAmplitudeUpdateTime }
-    /// Read-only accessor for StuckStateDumper (streamingTranscriber is private).
+    var lastNonSilentAmplitudeTimeForDebug: Date? { lastNonSilentAmplitudeTime }
+    var hasTriggeredSilentAudioDumpForDebug: Bool { hasTriggeredSilentAudioDump }
     var streamingTranscriberIsNil: Bool { streamingTranscriber == nil }
+    var loadedModelForDebug: WhisperModel? { loadedModel }
+    var sileroVADIsNilForDebug: Bool { sileroVAD == nil }
+    var modelPoolForDebug: ModelPool? { modelPool }
+    var llmEnabledForDebug: Bool { llmEnabled }
+    var selectedLLMModelForDebug: LLMModelVariant { selectedLLMModel }
+    var llmPostProcessorForDebug: LLMPostProcessor? { llmPostProcessor }
     #endif
 
     // Pre-loaded transcription backend - keeps model in memory for instant recording start
@@ -1746,6 +1762,8 @@ class AppState: ObservableObject {
         isLiveTranscriptionRTL = selectedLanguage.isRTL
         isOutputAudioMuted = muteOtherAudioDuringRecording  // Initialize runtime toggle from setting
         lastAmplitudeUpdateTime = nil  // Reset audio-progress watchdog
+        lastNonSilentAmplitudeTime = nil
+        hasTriggeredSilentAudioDump = false
         startStateWatchdog()  // 4s startup watchdog — cancelled when audio starts
 
         // Play feedback sound first (user hears it)
@@ -1910,6 +1928,8 @@ class AppState: ObservableObject {
         recordingSessionID = UUID()
         isOutputAudioMuted = muteOtherAudioDuringRecording  // Initialize runtime toggle from setting
         lastAmplitudeUpdateTime = nil  // Reset audio-progress watchdog
+        lastNonSilentAmplitudeTime = nil
+        hasTriggeredSilentAudioDump = false
         startStateWatchdog()  // 4s startup watchdog — cancelled when audio starts
 
         // Play feedback sound first (user hears it)
@@ -2001,6 +2021,9 @@ class AppState: ObservableObject {
     /// Called when audio engine exhausts all recovery attempts.
     /// Silently resets to idle so the next Fn press starts a clean recording.
     func handleAudioFlowTimeout() {
+        #if DEBUG
+        StuckStateDumper.dump(reason: "Audio recovery exhausted — engine rebuilt \(audioRecorder?.debugRecoveryAttemptCount ?? 0) times, all produced silent/no audio")
+        #endif
         Logger.error("Audio flow timeout — all recovery attempts exhausted, resetting to idle", subsystem: .audio)
         guard case .recording = state else { return }
         cancelStateWatchdog()
@@ -2203,7 +2226,29 @@ class AppState: ObservableObject {
                 }
                 Logger.error("Recording stalled — \(detail), forcing idle", subsystem: .app)
                 self.handleStuckRecording(reason: detail)
+                return
             }
+
+            // Audio quality check: callbacks flowing but all zero (broken pipeline, e.g. -10877).
+            // Only fires once per recording session; does NOT force idle — recovery is AudioRecorder's job.
+            #if DEBUG
+            if !self.hasTriggeredSilentAudioDump,
+               elapsedSinceStart > 5.0,
+               let lastUpdate = self.lastAmplitudeUpdateTime,
+               now.timeIntervalSince(lastUpdate) < 3.0 {
+                let silentDuration: TimeInterval
+                if let lastNonSilent = self.lastNonSilentAmplitudeTime {
+                    silentDuration = now.timeIntervalSince(lastNonSilent)
+                } else {
+                    silentDuration = elapsedSinceStart
+                }
+                if silentDuration > 5.0 {
+                    self.hasTriggeredSilentAudioDump = true
+                    Logger.warning("Audio quality watchdog: silent for \(String(format: "%.1f", silentDuration))s — dumping state", subsystem: .app)
+                    StuckStateDumper.dump(reason: "Audio quality watchdog: callbacks flowing but all silent for \(String(format: "%.1f", silentDuration))s — likely broken audio pipeline (-10877)")
+                }
+            }
+            #endif
         }
         timer.resume()
         stateWatchdog = timer
