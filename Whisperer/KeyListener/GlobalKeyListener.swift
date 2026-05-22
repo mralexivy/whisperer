@@ -664,6 +664,9 @@ class GlobalKeyListener {
     // MARK: - Picker Hot Key (Option+V for transcription picker)
 
     private func registerPickerHotKey() {
+        // Idempotency guard — prevents double-registration when start() is called twice
+        guard pickerHotKeyRef == nil else { return }
+
         // Skip if user's recording shortcut is also Option+V
         let config = shortcutConfig
         let recordingUsesOptionV = config.keyCode == 9 &&
@@ -736,7 +739,10 @@ class GlobalKeyListener {
             guard eventKind == UInt32(kEventHotKeyPressed) else { return }
 
             // Don't open picker during recording
-            guard !self.recordingInProgress else { return }
+            guard !self.recordingInProgress else {
+                Logger.info("Picker blocked — recordingInProgress=true", subsystem: .keyListener)
+                return
+            }
 
             if !self.pickerVisible {
                 // First press: show picker
@@ -747,7 +753,7 @@ class GlobalKeyListener {
                 }
             } else {
                 // Subsequent presses: cycle to next item
-                Logger.debug("Picker cycled (Option+V)", subsystem: .keyListener)
+                Logger.info("Picker cycled (Option+V) — pickerVisible=true", subsystem: .keyListener)
                 DispatchQueue.main.async { [weak self] in
                     self?.onPickerCycled?()
                 }
@@ -880,6 +886,14 @@ class GlobalKeyListener {
         isShortcutActive = false
         isHandsFreeMode = false
         recordingInProgress = false
+    }
+
+    /// Reset picker visibility flag (call when TranscriptionPickerState is dismissed externally).
+    /// Prevents pickerVisible from getting stuck true if picker is closed without Option release.
+    func resetPickerVisible() {
+        stateQueue.async { [weak self] in
+            self?.pickerVisible = false
+        }
     }
 
     deinit {

@@ -28,6 +28,9 @@ public class TranscriptionEntity: NSManagedObject {
     @NSManaged public var targetAppName: String?
     @NSManaged public var aiEnhancedText: String?
     @NSManaged public var aiModeName: String?
+    @NSManaged public var isInProgress: Bool
+    @NSManaged public var sessionAudioURL: String?
+    @NSManaged public var chunkTextsJSON: String?
 
     // Computed properties
     var displayText: String {

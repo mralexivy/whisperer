@@ -24,6 +24,9 @@ class TranscriptionPickerState: ObservableObject {
     @Published var items: [PickerItem] = []
     @Published var showCopiedFeedback: Bool = false
 
+    /// Called when the picker is dismissed — use to sync external state (e.g. GlobalKeyListener.pickerVisible).
+    var onDismiss: (() -> Void)?
+
     private init() {}
 
     // MARK: - Public Methods
@@ -78,5 +81,6 @@ class TranscriptionPickerState: ObservableObject {
         showCopiedFeedback = false
         items = []
         selectedIndex = 0
+        onDismiss?()
     }
 }

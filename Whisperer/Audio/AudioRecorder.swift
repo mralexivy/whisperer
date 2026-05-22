@@ -130,6 +130,15 @@ class AudioRecorder: NSObject {
     private(set) var lastEngineStartError: Error?
     #endif
 
+    // Session disk backing — Int16 16 kHz mono CAF, written in parallel with Float32 callback
+    private var sessionAudioFile: AVAudioFile?
+    private(set) var sessionAudioURL: URL?
+    private let int16Format: AVAudioFormat = AVAudioFormat(
+        commonFormat: .pcmFormatInt16, sampleRate: 16000, channels: 1, interleaved: true)!
+    private var int16Converter: AVAudioConverter?
+    // Serial queue for CAF disk writes — keeps blocking I/O off the Core Audio real-time thread
+    private let sessionWriteQueue = DispatchQueue(label: "whisperer.sessionWrite", qos: .utility)
+
     override init() {
         super.init()
         startMonitoringDefaultInputDevice()
@@ -374,6 +383,19 @@ class AudioRecorder: NSObject {
         newConverter.channelMap = [0]
         Logger.debug("Converter: \(inputFormat.channelCount) channels → 1 channel, channel map: \(newConverter.channelMap)", subsystem: .audio)
 
+        // Open session CAF file for parallel disk write (Int16 16 kHz mono, ~32 KB/s)
+        let sessionURL = SessionStorage.makeSessionAudioURL()
+        sessionAudioURL = sessionURL
+        if let file = try? AVAudioFile(forWriting: sessionURL, settings: int16Format.settings) {
+            sessionAudioFile = file
+            int16Converter = AVAudioConverter(from: newOutputFormat, to: int16Format)
+            Logger.debug("Session audio file opened: \(sessionURL.lastPathComponent)", subsystem: .audio)
+        } else {
+            Logger.warning("Failed to open session audio file — disk write disabled", subsystem: .audio)
+            sessionAudioFile = nil
+            int16Converter = nil
+        }
+
         // Install tap on input node
         let bufferSize: AVAudioFrameCount = 4096
         Logger.debug("Installing tap on input node (buffer size: \(bufferSize))", subsystem: .audio)
@@ -517,6 +539,18 @@ class AudioRecorder: NSObject {
         // Send samples to streaming transcriber
         autoreleasepool {
             onStreamingSamples?(samples)
+        }
+
+        // Parallel disk write — session CAF backing.
+        // AVAudioFile.processingFormat is always Float32 regardless of on-disk encoding,
+        // so we pass the outputBuffer (Float32) directly and let AVAudioFile encode to Int16.
+        // Dispatch the blocking write off the Core Audio real-time thread to avoid CAVerboseAbort.
+        if sessionAudioFile != nil {
+            let buf = outputBuffer  // fresh allocation per callback — safe to capture
+            sessionWriteQueue.async { [weak self] in
+                guard let self, let sessionFile = self.sessionAudioFile else { return }
+                try? sessionFile.write(from: buf)
+            }
         }
     }
 
@@ -875,6 +909,11 @@ class AudioRecorder: NSObject {
 
     /// Fully tear down the audio engine and all associated state.
     private func cleanupEngineState() {
+        // Nil the converter first so the callback skips conversion immediately.
+        // Then drain pending writes before closing the file so no partial frames are lost.
+        int16Converter = nil
+        sessionWriteQueue.sync { }  // wait for all enqueued writes to complete
+        sessionAudioFile = nil
         stopAudioFlowWatchdog()
         stopMonitoringDevice()
         if let observer = configChangeObserver {

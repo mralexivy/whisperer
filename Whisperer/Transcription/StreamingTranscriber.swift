@@ -21,13 +21,35 @@ class StreamingTranscriber {
     private let feedbackSoundDuration: Double = 0.15  // 150ms
     private var feedbackSoundSamples: Int { Int(feedbackSoundDuration * sampleRate) }  // 2400 samples
 
-    // Memory bounds - maximum recording duration
-    private let maxRecordingDuration: Double = 5.0 * 60.0  // 5 minutes
-    private var maxRecordingSamples: Int { Int(maxRecordingDuration * sampleRate) }
-    private var memoryLimitReached = false
+    // Total samples ever received (monotonic counter — survives ring pruning)
+    private var totalSamplesReceived: Int = 0
 
-    // Full recording — single source of truth
-    private var allRecordedSamples: [Float] = []
+    // Ring buffer — holds recent audio only; pruned after each chunk to bound memory.
+    // baseSampleIndex tracks absolute offset so all other indices remain absolute/monotonic.
+    private struct RingBuffer {
+        private var storage: [Float] = []
+        private(set) var baseSampleIndex: Int = 0
+
+        mutating func reset() { storage.removeAll(keepingCapacity: true); baseSampleIndex = 0 }
+        mutating func append(_ s: [Float]) { storage.append(contentsOf: s) }
+        mutating func dropFront(toAbsoluteIndex idx: Int) {
+            let drop = max(0, idx - baseSampleIndex)
+            guard drop > 0, drop <= storage.count else { return }
+            storage.removeFirst(drop)
+            baseSampleIndex += drop
+        }
+        func slice(fromAbsolute start: Int, toAbsolute end: Int) -> [Float] {
+            let s = max(0, start - baseSampleIndex)
+            let e = min(storage.count, end - baseSampleIndex)
+            guard s < e else { return [] }
+            return Array(storage[s..<e])
+        }
+        func toArray() -> [Float] { storage }
+        var endAbsoluteIndex: Int { baseSampleIndex + storage.count }
+        var inMemoryCount: Int { storage.count }
+    }
+
+    private var ring = RingBuffer()
     private let allSamplesLock = SafeLock()
 
     // VAD-chunked pipeline state
@@ -124,6 +146,13 @@ class StreamingTranscriber {
     private let promotionQueue = DispatchQueue(label: "streaming.promotion")
     private var pendingPromotion: (backend: TranscriptionBackend, profile: ModelProfile)?
 
+    // Session audio file on disk (set by AppState after creation, used for saveRecording and tail)
+    var sessionAudioURL: URL?
+
+    /// Fired after each committed chunk (and tail). Parameters: (chunkText, totalRecordedDuration).
+    /// Used by AppState to incrementally persist text to CoreData for crash recovery.
+    var onChunkCompleted: ((String, Double) -> Void)?
+
     /// Effective language for transcription — driven by router or fallback to configured language
     var effectiveLanguage: TranscriptionLanguage {
         routeDecision?.lang ?? language
@@ -161,16 +190,16 @@ class StreamingTranscriber {
 
         do {
             try allSamplesLock.withLock {
-                allRecordedSamples.removeAll()
+                ring.reset()
             }
         } catch {
             Logger.error("Failed to acquire lock in start(): \(error.localizedDescription)", subsystem: .transcription)
         }
 
+        totalSamplesReceived = 0
         fullTranscription = ""
         isProcessing = false
         isStopped = false
-        memoryLimitReached = false
         routeDecision = nil
         detectionAttempts = 0
         lastDetectionSampleCount = 0
@@ -226,22 +255,12 @@ class StreamingTranscriber {
 
     /// Add audio samples from microphone
     func addSamples(_ samples: [Float]) {
-        guard !samples.isEmpty else { return }
-        guard !isStopped else { return }
-        if memoryLimitReached { return }
+        guard !samples.isEmpty, !isStopped else { return }
 
         do {
             try allSamplesLock.withLock {
-                if allRecordedSamples.count + samples.count > maxRecordingSamples {
-                    Logger.warning("Memory limit reached (\(String(format: "%.1f", maxRecordingDuration/60))min), stopping sample collection", subsystem: .transcription)
-                    memoryLimitReached = true
-                    let remainingCapacity = maxRecordingSamples - allRecordedSamples.count
-                    if remainingCapacity > 0 {
-                        allRecordedSamples.append(contentsOf: samples.prefix(remainingCapacity))
-                    }
-                } else {
-                    allRecordedSamples.append(contentsOf: samples)
-                }
+                ring.append(samples)
+                totalSamplesReceived += samples.count
             }
         } catch {
             Logger.error("Failed to acquire allSamplesLock: \(error.localizedDescription)", subsystem: .transcription)
@@ -252,29 +271,36 @@ class StreamingTranscriber {
 
     /// Scan new audio with VAD, emit chunks, transcribe them
     private func scanAndProcessChunks() {
-        // Snapshot audio
-        var allSamples: [Float] = []
+        // Snapshot ring content + base for index mapping
+        var ringContent: [Float] = []
+        var ringBase: Int = 0
         do {
             try allSamplesLock.withLock {
-                allSamples = allRecordedSamples
+                ringContent = ring.toArray()
+                ringBase = ring.baseSampleIndex
             }
         } catch {
             Logger.error("Failed to acquire allSamplesLock in scanAndProcessChunks", subsystem: .transcription)
             return
         }
 
+        // Map absolute indices to ring-relative for VADSegmenter (indexes into ringContent)
+        let allSamples = ringContent
         guard allSamples.count > Int(0.5 * sampleRate) else { return }
+
+        let fromRel = max(0, lastVADScanIndex - ringBase)
+        let claimedRel = max(0, lastClaimedSampleIndex - ringBase)
 
         // Language detection — detect before first chunk, retry if undecided
         if routeDecision == nil,
            detectionAttempts < RoutingThresholds.maxDetectionAttempts,
            let pool = modelPool, let langRouter = languageRouter, let mdlRouter = modelRouter {
-            // First attempt at 4s, retries at +2s intervals
             let targetSamples = RoutingThresholds.targetDetectionSamples
                 + (detectionAttempts * RoutingThresholds.retryGrowth)
-            if allSamples.count >= targetSamples, allSamples.count > lastDetectionSampleCount {
-                lastDetectionSampleCount = allSamples.count
-                // Use latest audio (suffix) — has more speech signal than beginning
+            // Compare against total received so detection window grows monotonically
+            let totalInRing = ringBase + allSamples.count
+            if totalInRing >= targetSamples, totalInRing > lastDetectionSampleCount {
+                lastDetectionSampleCount = totalInRing
                 let windowSize = min(allSamples.count, RoutingThresholds.targetDetectionSamples)
                 let wasAttempted = performLanguageDetection(
                     samples: Array(allSamples.suffix(windowSize)),
@@ -282,29 +308,34 @@ class StreamingTranscriber {
                     langRouter: langRouter,
                     mdlRouter: mdlRouter
                 )
-                // Only consume retry budget when detection was actually attempted
-                // (not skipped due to insufficient voiced audio)
-                if wasAttempted {
-                    detectionAttempts += 1
-                }
+                if wasAttempted { detectionAttempts += 1 }
                 if routeDecision == nil {
-                    Logger.debug("Detection attempt \(detectionAttempts)/\(RoutingThresholds.maxDetectionAttempts) undecided, will retry with more audio", subsystem: .transcription)
+                    Logger.debug("Detection attempt \(detectionAttempts)/\(RoutingThresholds.maxDetectionAttempts) undecided", subsystem: .transcription)
                 }
             }
         }
 
-        // Run VAD scan on new audio
+        // Run VAD scan with ring-relative indices
         let result = vadSegmenter.scanAndEmitChunks(
             allSamples: allSamples,
-            fromIndex: lastVADScanIndex,
-            lastTranscribedIndex: lastClaimedSampleIndex
+            fromIndex: fromRel,
+            lastTranscribedIndex: claimedRel
         )
-        lastVADScanIndex = result.newScanIndex
+        // Rebase newScanIndex back to absolute
+        lastVADScanIndex = ringBase + result.newScanIndex
 
-        // Queue new chunks and advance claimed index
+        // Rebase chunk indices to absolute and queue
         if !result.chunks.isEmpty {
-            pendingChunks.append(contentsOf: result.chunks)
-            if let lastChunk = result.chunks.last {
+            let absoluteChunks = result.chunks.map { chunk in
+                VADSegmenter.AudioChunk(
+                    startSample: chunk.startSample + ringBase,
+                    endSample: chunk.endSample + ringBase,
+                    samples: chunk.samples,
+                    overlapPrefixSamples: chunk.overlapPrefixSamples
+                )
+            }
+            pendingChunks.append(contentsOf: absoluteChunks)
+            if let lastChunk = absoluteChunks.last {
                 lastClaimedSampleIndex = max(lastClaimedSampleIndex, lastChunk.endSample)
             }
             Logger.debug("VAD emitted \(result.chunks.count) chunk(s), \(pendingChunks.count) pending, claimed up to \(lastClaimedSampleIndex)", subsystem: .transcription)
@@ -398,6 +429,7 @@ class StreamingTranscriber {
 
                 if !deduped.isEmpty {
                     self.completedChunkTexts.append(deduped)
+                    self.onChunkCompleted?(deduped, self.recordedDuration)
                 }
             }
 
@@ -413,6 +445,21 @@ class StreamingTranscriber {
             self.currentChunkLiveText = ""
             self.isTranscribingChunk = false
             self.isProcessing = false
+
+            // Trim ring: drop samples safely before both transcribed and previewed positions.
+            // Keep 1s overlap for chunk boundary quality on next chunk.
+            let overlapSamples = Int(1.0 * self.sampleRate)
+            let safeDrop = min(self.lastTranscribedSampleIndex, self.lastPreviewedSampleIndex) - overlapSamples
+            if safeDrop > 0 {
+                do {
+                    try self.allSamplesLock.withLock {
+                        self.ring.dropFront(toAbsoluteIndex: safeDrop)
+                    }
+                    Logger.debug("Ring trimmed to absolute \(safeDrop), in-memory: \(self.ring.inMemoryCount) samples (\(String(format: "%.1f", Double(self.ring.inMemoryCount) / self.sampleRate))s)", subsystem: .transcription)
+                } catch {
+                    Logger.error("Failed to trim ring: \(error.localizedDescription)", subsystem: .transcription)
+                }
+            }
 
             // Update live preview with completed chunks
             self.updateLivePreview()
@@ -446,26 +493,35 @@ class StreamingTranscriber {
     private func runLivePreviewPass() {
         guard let preview = previewBridge, !isTranscribingChunk else { return }
 
-        var allSamples: [Float] = []
+        // Skip preview if main pipeline has a large backlog (>10s) — drop preview before dropping chunks
+        let chunkBacklogSamples = lastClaimedSampleIndex - lastTranscribedSampleIndex
+        guard chunkBacklogSamples <= Int(10.0 * sampleRate) else { return }
+
+        var ringContent: [Float] = []
+        var ringBase: Int = 0
         do {
             try allSamplesLock.withLock {
-                allSamples = allRecordedSamples
+                ringContent = ring.toArray()
+                ringBase = ring.baseSampleIndex
             }
         } catch { return }
 
-        // Compute start with 0.5s overlap for boundary quality
+        let ringEnd = ringBase + ringContent.count
+
+        // Compute start with 0.5s overlap for boundary quality (absolute)
         let overlapSamples = Int(0.5 * sampleRate)
-        let tailStart = max(lastTranscribedSampleIndex,
-                           lastPreviewedSampleIndex > overlapSamples ? lastPreviewedSampleIndex - overlapSamples : 0)
+        let tailStartAbs = max(lastTranscribedSampleIndex,
+                               lastPreviewedSampleIndex > overlapSamples ? lastPreviewedSampleIndex - overlapSamples : 0)
 
-        // Need at least 1s of new audio
-        guard allSamples.count > tailStart + Int(1.0 * sampleRate) else { return }
+        // Need at least 1s of new audio past tail start
+        guard ringEnd > tailStartAbs + Int(1.0 * sampleRate) else { return }
 
-        // Extract window (max 3s to keep it fast)
+        // Extract window (max 3s to keep it fast) using ring slice
         let maxWindowSamples = Int(3.0 * sampleRate)
-        let endIndex = min(allSamples.count, tailStart + maxWindowSamples)
-        let windowSamples = Array(allSamples[tailStart..<endIndex])
-        let candidateEndIndex = endIndex
+        let endAbsIndex = min(ringEnd, tailStartAbs + maxWindowSamples)
+        let windowSamples = ring.slice(fromAbsolute: tailStartAbs, toAbsolute: endAbsIndex)
+        guard !windowSamples.isEmpty else { return }
+        let candidateEndIndex = endAbsIndex
 
         // VAD check: skip preview pass if no speech detected
         if let vad = vad, !vad.hasSpeech(samples: windowSamples) {
@@ -653,19 +709,24 @@ class StreamingTranscriber {
 
     /// Transcribe remaining audio after the last completed chunk
     private func transcribeTail() {
-        var allSamples: [Float] = []
+        var ringContent: [Float] = []
+        var ringBase: Int = 0
         do {
             try allSamplesLock.withLock {
-                allSamples = allRecordedSamples
+                ringContent = ring.toArray()
+                ringBase = ring.baseSampleIndex
             }
         } catch {
             Logger.error("Failed to acquire lock for tail transcription", subsystem: .transcription)
             return
         }
 
+        // Map absolute lastTranscribedSampleIndex to ring-relative
+        let tailRelIndex = max(0, lastTranscribedSampleIndex - ringBase)
+
         guard let tailChunk = vadSegmenter.finalizeTail(
-            allSamples: allSamples,
-            lastTranscribedIndex: lastTranscribedSampleIndex
+            allSamples: ringContent,
+            lastTranscribedIndex: tailRelIndex
         ) else {
             Logger.debug("No tail audio to transcribe", subsystem: .transcription)
             return
@@ -717,6 +778,7 @@ class StreamingTranscriber {
             }
             if !deduped.isEmpty {
                 completedChunkTexts.append(deduped)
+                onChunkCompleted?(deduped, recordedDuration)
             }
         }
     }
@@ -781,13 +843,29 @@ class StreamingTranscriber {
     private func stopWithSpeechAnalyzer(_ speechBridge: SpeechAnalyzerBridge) async -> String {
         isProcessing = false
 
+        // If samples were pruned (long recording), the ring only holds the recent tail.
+        // SpeechAnalyzer can't re-transcribe the full session — fall through to chunk-based text.
+        var wasPruned: Bool = false
         var allSamples: [Float] = []
         do {
             try allSamplesLock.withLock {
-                allSamples = allRecordedSamples
+                wasPruned = totalSamplesReceived > ring.inMemoryCount
+                allSamples = ring.toArray()
             }
         } catch {
             Logger.error("Failed to acquire allSamplesLock in stopWithSpeechAnalyzer", subsystem: .transcription)
+        }
+
+        if wasPruned {
+            Logger.info("SpeechAnalyzer skipped — audio was pruned during long recording; using chunk-based text", subsystem: .transcription)
+            transcribeTail()
+            let rawText = fullTranscription
+            guard !rawText.isEmpty else { return clearAndReturn("") }
+            var result = DictionaryManager.shared.correctText(rawText)
+            if fillerWordRemovalEnabled {
+                result = FillerWordFilter.removeFillers(from: result)
+            }
+            return clearAndReturn(result)
         }
 
         let totalDuration = Double(allSamples.count) / sampleRate
@@ -873,14 +951,9 @@ class StreamingTranscriber {
     }
 
     var recordedDuration: Double {
-        do {
-            return try allSamplesLock.withLock {
-                return Double(allRecordedSamples.count) / sampleRate
-            }
-        } catch {
-            Logger.error("Failed to get recordedDuration: \(error.localizedDescription)", subsystem: .transcription)
-            return 0
-        }
+        // totalSamplesReceived is written only in addSamples under allSamplesLock,
+        // but reading a single Int is safe without locking here.
+        return Double(totalSamplesReceived) / sampleRate
     }
 
     /// Trim non-speech prefix from audio samples (removes feedback sound capture)
@@ -919,12 +992,69 @@ class StreamingTranscriber {
         return samples
     }
 
-    /// Save recorded audio to WAV file
+    /// Save recorded audio to a CAF or WAV file.
+    /// Prefers copying the on-disk session CAF (complete, disk-backed). Falls back to
+    /// writing the in-memory ring buffer for very short recordings that were never pruned.
     func saveRecording(to url: URL) -> Bool {
+        // Prefer the complete disk-backed session file
+        if let srcURL = sessionAudioURL, FileManager.default.fileExists(atPath: srcURL.path) {
+            do {
+                // If destination is CAF, just copy. AudioPlayerView accepts CAF.
+                if url.pathExtension.lowercased() == "caf" {
+                    try FileManager.default.copyItem(at: srcURL, to: url)
+                    Logger.debug("Recording copied (CAF) to: \(url.lastPathComponent)", subsystem: .transcription)
+                    return true
+                }
+                // Destination is WAV/other — transcode via AVAudioConverter
+                let srcFile = try AVAudioFile(forReading: srcURL)
+                let frameCount = AVAudioFrameCount(srcFile.length)
+                guard frameCount > 0,
+                      let srcBuffer = AVAudioPCMBuffer(pcmFormat: srcFile.processingFormat, frameCapacity: frameCount) else {
+                    Logger.warning("Session CAF is empty", subsystem: .transcription)
+                    return false
+                }
+                try srcFile.read(into: srcBuffer, frameCount: frameCount)
+                guard srcBuffer.frameLength > 0 else {
+                    Logger.warning("Session CAF read 0 frames", subsystem: .transcription)
+                    return false
+                }
+                guard let dstFormat = AVAudioFormat(
+                    commonFormat: .pcmFormatFloat32,
+                    sampleRate: sampleRate,
+                    channels: 1,
+                    interleaved: false
+                ),
+                      let dstBuffer = AVAudioPCMBuffer(pcmFormat: dstFormat, frameCapacity: srcBuffer.frameLength),
+                      let converter = AVAudioConverter(from: srcFile.processingFormat, to: dstFormat) else {
+                    Logger.error("Failed to create converter for saveRecording transcode", subsystem: .transcription)
+                    return false
+                }
+                var returned = false
+                let status = converter.convert(to: dstBuffer, error: nil) { _, outStatus in
+                    if returned { outStatus.pointee = .noDataNow; return nil }
+                    returned = true
+                    outStatus.pointee = .haveData
+                    return srcBuffer
+                }
+                guard status == .haveData || status == .endOfStream, dstBuffer.frameLength > 0 else {
+                    Logger.error("CAF→WAV conversion failed (status=\(status.rawValue))", subsystem: .transcription)
+                    return false
+                }
+                let dstFile = try AVAudioFile(forWriting: url, settings: dstFormat.settings)
+                try dstFile.write(from: dstBuffer)
+                Logger.debug("Recording transcoded to: \(url.lastPathComponent)", subsystem: .transcription)
+                return true
+            } catch {
+                Logger.error("Failed to save recording from disk: \(error.localizedDescription)", subsystem: .transcription)
+                return false
+            }
+        }
+
+        // Fallback: write ring buffer (short recordings not yet pruned)
         var samples: [Float] = []
         do {
             try allSamplesLock.withLock {
-                samples = allRecordedSamples
+                samples = ring.toArray()
             }
         } catch {
             Logger.error("Failed to acquire lock for saveRecording: \(error.localizedDescription)", subsystem: .transcription)
@@ -936,7 +1066,6 @@ class StreamingTranscriber {
             return false
         }
 
-        // Trim leading non-speech (feedback sound) from saved audio
         samples = trimLeadingNonSpeech(samples)
 
         guard let format = AVAudioFormat(
@@ -966,7 +1095,7 @@ class StreamingTranscriber {
         do {
             let file = try AVAudioFile(forWriting: url, settings: format.settings)
             try file.write(from: buffer)
-            Logger.debug("Recording saved to: \(url.lastPathComponent)", subsystem: .transcription)
+            Logger.debug("Recording saved (ring buffer) to: \(url.lastPathComponent)", subsystem: .transcription)
             return true
         } catch {
             Logger.error("Failed to save recording: \(error.localizedDescription)", subsystem: .transcription)
@@ -1109,13 +1238,15 @@ class StreamingTranscriber {
             scriptMismatchCount = 0
             chunkLangMismatchCount = 0
 
-            // Get latest audio for re-detection
+            // Get latest audio for re-detection (2s window from ring)
             var latestSamples: [Float] = []
             do {
                 try allSamplesLock.withLock {
                     let targetSamples = 32000
-                    if allRecordedSamples.count >= targetSamples {
-                        latestSamples = Array(allRecordedSamples.suffix(targetSamples))
+                    let endIdx = ring.endAbsoluteIndex
+                    let startIdx = max(ring.baseSampleIndex, endIdx - targetSamples)
+                    if endIdx - startIdx >= targetSamples {
+                        latestSamples = ring.slice(fromAbsolute: startIdx, toAbsolute: endIdx)
                     }
                 }
             } catch { return }

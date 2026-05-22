@@ -115,6 +115,25 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
             await self.checkPermissions()
         }
+
+        // Recover any recordings that were interrupted by a crash or force-quit.
+        Task {
+            let orphans = await HistoryManager.shared.loadInProgressSessions()
+            guard !orphans.isEmpty else { return }
+            Logger.info("Crash recovery: finalizing \(orphans.count) interrupted session(s)", subsystem: .app)
+            for record in orphans {
+                let text = record.transcription.isEmpty ? "(recording interrupted — no transcription saved)" : record.transcription
+                try? await HistoryManager.shared.finalizeSession(
+                    sessionID: record.id,
+                    finalText: text,
+                    duration: record.duration,
+                    audioFileURL: record.audioFileURL
+                )
+            }
+        }
+
+        // Clean up orphaned session audio files older than 7 days
+        SessionStorage.deleteOrphanedSessions()
     }
 
     private func setupComponents() {

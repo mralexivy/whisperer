@@ -37,6 +37,124 @@ class HistoryManager: ObservableObject {
         }
     }
 
+    // MARK: - In-Progress Session (crash-resumable long recordings)
+
+    /// Create an in-progress CoreData entity at recording start. Returns the session UUID.
+    func beginSession(audioFileURL: URL, language: String, modelUsed: String) async -> UUID {
+        let sessionID = UUID()
+        let context = database.newBackgroundContext()
+        await context.perform {
+            let entity = TranscriptionEntity(context: context)
+            let now = Date()
+            entity.id = sessionID
+            entity.timestamp = now
+            entity.createdAt = now
+            entity.lastModifiedAt = now
+            entity.transcription = ""
+            entity.language = language
+            entity.modelUsed = modelUsed
+            entity.duration = 0
+            entity.wordCount = 0
+            entity.isPinned = false
+            entity.isFlagged = false
+            entity.isInProgress = true
+            entity.sessionAudioURL = audioFileURL.path
+            entity.chunkTextsJSON = "[]"
+            do { try context.save() } catch {
+                Logger.error("beginSession save failed: \(error)", subsystem: .app)
+            }
+        }
+        return sessionID
+    }
+
+    /// Append a completed chunk text to the in-progress session. Idempotent — safe to call repeatedly.
+    func appendChunk(sessionID: UUID, chunkText: String, totalDuration: Double) async {
+        guard !chunkText.isEmpty else { return }
+        let context = database.newBackgroundContext()
+        await context.perform {
+            let req: NSFetchRequest<TranscriptionEntity> = TranscriptionEntity.fetchRequest()
+            req.predicate = NSPredicate(format: "id == %@", sessionID as CVarArg)
+            req.fetchLimit = 1
+            guard let entity = try? context.fetch(req).first else { return }
+
+            // Decode current array, append new chunk
+            var chunks: [String] = []
+            if let json = entity.chunkTextsJSON,
+               let data = json.data(using: .utf8),
+               let decoded = try? JSONDecoder().decode([String].self, from: data) {
+                chunks = decoded
+            }
+            chunks.append(chunkText)
+            if let encoded = try? JSONEncoder().encode(chunks),
+               let json = String(data: encoded, encoding: .utf8) {
+                entity.chunkTextsJSON = json
+            }
+            entity.transcription = chunks.joined(separator: " ")
+            entity.wordCount = Int32(entity.transcription.components(separatedBy: .whitespacesAndNewlines).filter { !$0.isEmpty }.count)
+            entity.duration = totalDuration
+            entity.lastModifiedAt = Date()
+            do { try context.save() } catch {
+                Logger.error("appendChunk save failed: \(error)", subsystem: .app)
+            }
+        }
+    }
+
+    /// Finalize a session — marks isInProgress = false, sets final text/duration, optionally promotes session file to permanent recording.
+    func finalizeSession(sessionID: UUID, finalText: String, duration: Double, audioFileURL: String? = nil) async throws {
+        let context = database.newBackgroundContext()
+        await context.perform {
+            let req: NSFetchRequest<TranscriptionEntity> = TranscriptionEntity.fetchRequest()
+            req.predicate = NSPredicate(format: "id == %@", sessionID as CVarArg)
+            req.fetchLimit = 1
+            guard let entity = try? context.fetch(req).first else { return }
+
+            entity.isInProgress = false
+            if !finalText.isEmpty {
+                entity.transcription = finalText
+                entity.wordCount = Int32(finalText.components(separatedBy: .whitespacesAndNewlines).filter { !$0.isEmpty }.count)
+            }
+            entity.duration = duration
+            if let url = audioFileURL {
+                entity.audioFileURL = url
+            }
+            entity.lastModifiedAt = Date()
+            do { try context.save() } catch {
+                Logger.error("finalizeSession save failed: \(error)", subsystem: .app)
+            }
+        }
+        await loadTranscriptions(filter: currentFilter, searchQuery: currentSearchQuery, dateRange: currentDateRange)
+        await updateStatistics()
+        NotificationCenter.default.post(name: NSNotification.Name("TranscriptionSaved"), object: nil)
+    }
+
+    /// Discard an in-progress session (crash recovery cancelled or recording too short).
+    func discardSession(sessionID: UUID) async {
+        let context = database.newBackgroundContext()
+        await context.perform {
+            let req: NSFetchRequest<TranscriptionEntity> = TranscriptionEntity.fetchRequest()
+            req.predicate = NSPredicate(format: "id == %@", sessionID as CVarArg)
+            req.fetchLimit = 1
+            guard let entity = try? context.fetch(req).first else { return }
+            context.delete(entity)
+            do { try context.save() } catch {
+                Logger.error("discardSession save failed: \(error)", subsystem: .app)
+            }
+        }
+    }
+
+    /// Load all in-progress sessions — used on launch for crash recovery.
+    func loadInProgressSessions() async -> [TranscriptionRecord] {
+        let req: NSFetchRequest<TranscriptionEntity> = TranscriptionEntity.fetchRequest()
+        req.predicate = NSPredicate(format: "isInProgress == YES")
+        do {
+            let entities = try context.fetch(req)
+            return entities.map { TranscriptionRecord(from: $0) }
+        } catch {
+            Logger.error("loadInProgressSessions failed: \(error)", subsystem: .app)
+            return []
+        }
+    }
+
     // MARK: - Create
 
     func saveTranscription(_ record: TranscriptionRecord) async throws {

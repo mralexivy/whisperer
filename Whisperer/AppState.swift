@@ -9,6 +9,7 @@ import AppKit
 import Combine
 import FluidAudio
 import Foundation
+import IOKit.pwr_mgt
 
 enum ActiveMode: Equatable {
     case dictation
@@ -423,6 +424,10 @@ class AppState: ObservableObject {
 
     // Streaming transcription
     private var streamingTranscriber: StreamingTranscriber?
+
+    // Long-record session state
+    private var currentSessionID: UUID?
+    private var idleSleepAssertion: IOPMAssertionID = 0
 
     // Language routing
     private var modelPool: ModelPool?
@@ -1717,7 +1722,10 @@ class AppState: ObservableObject {
         // Transcription picker callbacks (Option+V)
         listener.onPickerActivated = { [weak self] in
             Task { @MainActor in
-                guard self?.state == .idle else { return }
+                guard self?.state == .idle else {
+                    Logger.info("Picker show blocked — state not idle: \(self?.state.displayText ?? "nil")", subsystem: .app)
+                    return
+                }
                 TranscriptionPickerState.shared.show()
             }
         }
@@ -1730,6 +1738,12 @@ class AppState: ObservableObject {
             Task { @MainActor in
                 TranscriptionPickerState.shared.confirmSelection()
             }
+        }
+
+        // Reset pickerVisible when the picker is dismissed without Option release
+        // (e.g., user clicks away or presses Escape)
+        TranscriptionPickerState.shared.onDismiss = { [weak listener] in
+            listener?.resetPickerVisible()
         }
     }
 
@@ -1779,6 +1793,12 @@ class AppState: ObservableObject {
                     self?.isLiveTranscriptionRTL = lang.isRTL
                 }
 
+                // Wire incremental CoreData persistence for crash recovery
+                streamingTranscriber?.onChunkCompleted = { [weak self] chunkText, duration in
+                    guard let self, let id = self.currentSessionID else { return }
+                    Task { await HistoryManager.shared.appendChunk(sessionID: id, chunkText: chunkText, totalDuration: duration) }
+                }
+
                 // StreamingTranscriber provides live preview via onNewSegment + onTranscription
                 streamingTranscriber?.start { [weak self] text in
                     Task { @MainActor in
@@ -1801,6 +1821,11 @@ class AppState: ObservableObject {
                 currentAudioURL = audioURL
                 cancelStateWatchdog()  // Startup succeeded, audio is flowing
                 startRecordingWatchdog()  // Long-running watchdog for stuck .recording state
+
+                // Begin crash-recoverable CoreData session and prevent Mac sleep
+                acquireIdleSleepAssertion()
+                streamingTranscriber?.sessionAudioURL = audioRecorder?.sessionAudioURL
+                beginRecordingSession(language: selectedLanguage.rawValue, modelUsed: selectedModel.rawValue)
 
                 // Mute AFTER engine is running and aggregate device is stable.
                 // Muting during engine startup can break the AUHAL bus connection (kAudioUnitErr_NoConnection
@@ -1854,6 +1879,8 @@ class AppState: ObservableObject {
                     savedRecordId = saveRecordingFromTranscriber(transcriber, transcription: finalText)
                 }
             }
+            // Discard the in-progress CoreData session — saveRecordingFromTranscriber wrote the clean final record
+            discardCurrentSession()
             streamingTranscriber = nil
 
             // Bail out if watchdog already forced idle
@@ -1947,6 +1974,12 @@ class AppState: ObservableObject {
                     self?.isLiveTranscriptionRTL = lang.isRTL
                 }
 
+                // Wire incremental CoreData persistence for crash recovery
+                streamingTranscriber?.onChunkCompleted = { [weak self] chunkText, duration in
+                    guard let self, let id = self.currentSessionID else { return }
+                    Task { await HistoryManager.shared.appendChunk(sessionID: id, chunkText: chunkText, totalDuration: duration) }
+                }
+
                 streamingTranscriber?.start { [weak self] text in
                     Task { @MainActor in
                         if self?.liveTranscriptionEnabled == true {
@@ -1977,6 +2010,11 @@ class AppState: ObservableObject {
                 currentAudioURL = audioURL
                 cancelStateWatchdog()  // Startup succeeded, audio is flowing
                 startRecordingWatchdog()  // Long-running watchdog for stuck .recording state
+
+                // Begin crash-recoverable CoreData session and prevent Mac sleep
+                acquireIdleSleepAssertion()
+                streamingTranscriber?.sessionAudioURL = audioRecorder?.sessionAudioURL
+                beginRecordingSession(language: selectedLanguage.rawValue, modelUsed: selectedModel.rawValue)
 
                 // Mute AFTER engine is running and aggregate device is stable.
                 // Muting during engine startup can break the AUHAL bus connection (kAudioUnitErr_NoConnection
@@ -2090,6 +2128,8 @@ class AppState: ObservableObject {
                     Logger.debug("Final transcription: '\(finalText)'", subsystem: .transcription)
                 }
             }
+            // Discard the in-progress CoreData session — saveRecordingFromTranscriber writes the clean final record
+            discardCurrentSession()
             streamingTranscriber = nil
 
             // Bail out if watchdog already forced idle while we were transcribing
@@ -2198,13 +2238,6 @@ class AppState: ObservableObject {
             let now = Date()
             let elapsedSinceStart = now.timeIntervalSince(startTime)
 
-            // Absolute cap: 5.5 minutes = 5 min recording limit + 30s margin
-            if elapsedSinceStart > 330 {
-                Logger.error("Recording watchdog: stuck in .recording for \(String(format: "%.0f", elapsedSinceStart))s, forcing idle", subsystem: .app)
-                self.handleStuckRecording(reason: "5.5min absolute cap exceeded")
-                return
-            }
-
             // Audio-progress check: no audio buffer in audioProgressStallTimeout seconds = stuck.
             // Skip during the first audioProgressStallTimeout seconds to give startup grace.
             guard elapsedSinceStart >= self.audioProgressStallTimeout else { return }
@@ -2261,7 +2294,7 @@ class AppState: ObservableObject {
         StuckStateDumper.dump(reason: reason)
         #endif
         forceIdleFromWatchdog()
-        errorMessage = "Microphone stopped responding. Try recording again."
+        errorMessage = "Recording stopped — no audio detected. Try recording again."
     }
 
     /// Activity-aware watchdog for the stop phase. Repeats every 2s and checks
@@ -2315,6 +2348,18 @@ class AppState: ObservableObject {
     private func forceIdleFromWatchdog() {
         stateWatchdog?.cancel()
         stateWatchdog = nil
+
+        // Preserve any accumulated transcription text before destroying the transcriber.
+        // If we have a live session, finalize it so the user's words aren't lost.
+        let accumulatedText = streamingTranscriber?.currentTranscription ?? ""
+        let duration = streamingTranscriber?.recordedDuration ?? 0
+        if !accumulatedText.isEmpty, currentSessionID != nil {
+            Logger.info("Watchdog: finalizing session with \(accumulatedText.count) chars preserved", subsystem: .app)
+            finalizeCurrentSession(text: accumulatedText, duration: duration, audioFileURL: audioRecorder?.sessionAudioURL?.lastPathComponent)
+        } else {
+            discardCurrentSession()
+        }
+
         streamingTranscriber = nil
         liveTranscription = ""
         state = .idle
@@ -2389,12 +2434,60 @@ class AppState: ObservableObject {
                 audioMuter?.unmuteSystemAudio()
             }
 
-            // Clear streaming transcriber without doing final pass
+            // Clear streaming transcriber without doing final pass — discard incremental session (user cancelled)
+            discardCurrentSession()
             streamingTranscriber = nil
 
             // Reset state
             state = .idle
             liveTranscription = ""
+        }
+    }
+
+    // MARK: - Long-Record Session Helpers
+
+    private func acquireIdleSleepAssertion() {
+        guard idleSleepAssertion == 0 else { return }
+        IOPMAssertionCreateWithName(
+            kIOPMAssertionTypePreventUserIdleSystemSleep as CFString,
+            IOPMAssertionLevel(kIOPMAssertionLevelOn),
+            "Whisperer long-record session" as CFString,
+            &idleSleepAssertion
+        )
+    }
+
+    private func releaseIdleSleepAssertion() {
+        guard idleSleepAssertion != 0 else { return }
+        IOPMAssertionRelease(idleSleepAssertion)
+        idleSleepAssertion = 0
+    }
+
+    private func beginRecordingSession(language: String, modelUsed: String) {
+        guard let sessionURL = audioRecorder?.sessionAudioURL else { return }
+        Task {
+            let id = await HistoryManager.shared.beginSession(audioFileURL: sessionURL, language: language, modelUsed: modelUsed)
+            await MainActor.run { self.currentSessionID = id }
+        }
+    }
+
+    private func discardCurrentSession() {
+        releaseIdleSleepAssertion()
+        guard let id = currentSessionID else { return }
+        currentSessionID = nil
+        Task { await HistoryManager.shared.discardSession(sessionID: id) }
+    }
+
+    private func finalizeCurrentSession(text: String, duration: Double, audioFileURL: String?) {
+        releaseIdleSleepAssertion()
+        guard let id = currentSessionID else { return }
+        currentSessionID = nil
+        Task {
+            try? await HistoryManager.shared.finalizeSession(
+                sessionID: id,
+                finalText: text,
+                duration: duration,
+                audioFileURL: audioFileURL
+            )
         }
     }
 
