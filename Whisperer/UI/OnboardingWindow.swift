@@ -11,7 +11,7 @@ import SwiftUI
 
 class OnboardingWindow: NSWindow {
 
-    init() {
+    init(initialPage: Int = 0) {
         super.init(
             contentRect: NSRect(x: 0, y: 0, width: 860, height: 540),
             styleMask: [.borderless],
@@ -28,7 +28,7 @@ class OnboardingWindow: NSWindow {
         self.collectionBehavior = [.managed]
         self.isMovableByWindowBackground = true
 
-        let onboardingView = OnboardingView(onComplete: { [weak self] in
+        let onboardingView = OnboardingView(initialPage: initialPage, onComplete: { [weak self] in
             self?.close()
         })
         let hostingView = NSHostingView(rootView: onboardingView)
@@ -58,9 +58,9 @@ class OnboardingWindowManager {
         }
     }
 
-    func show() {
+    func show(startingAtPage page: Int = 0) {
         if window == nil {
-            window = OnboardingWindow()
+            window = OnboardingWindow(initialPage: page)
         }
         window?.center()
         window?.makeKeyAndOrderFront(nil)

@@ -41,6 +41,11 @@ struct OnboardingView: View {
 
     var onComplete: (() -> Void)?
 
+    init(initialPage: Int = 0, onComplete: (() -> Void)? = nil) {
+        _currentPage = State(initialValue: initialPage)
+        self.onComplete = onComplete
+    }
+
     #if APP_STORE
     private let totalPages = 6
     #else
@@ -969,7 +974,7 @@ struct OnboardingView: View {
                                 Text("Waiting for Accessibility permission…")
                                     .font(.system(size: 14, weight: .medium))
                                     .foregroundColor(.orange)
-                                Text("System Settings should have opened.\nClick + → navigate to Whisperer → toggle ON")
+                                Text("System Settings opened — enable Whisperer in the Accessibility list, then return here.")
                                     .font(.system(size: 11))
                                     .foregroundColor(OnboardingColors.textTertiary)
                                     .lineSpacing(2)
@@ -977,7 +982,7 @@ struct OnboardingView: View {
                         }
 
                         Button(action: {
-                            PermissionManager.shared.openSystemSettings(for: .accessibility)
+                            PermissionManager.shared.requestAccessibilityPermission()
                         }) {
                             Text("Open System Settings again")
                                 .font(.system(size: 12, weight: .medium))
@@ -989,6 +994,11 @@ struct OnboardingView: View {
                     .padding(.horizontal, 20)
                     .background(Color.orange.opacity(0.1))
                     .clipShape(RoundedRectangle(cornerRadius: 12))
+                    .onAppear {
+                        // Call AXIsProcessTrustedWithOptions so the app is added to
+                        // the Accessibility list automatically (not just opening Settings).
+                        PermissionManager.shared.requestAccessibilityPermission()
+                    }
                     .onReceive(Timer.publish(every: 1.0, on: .main, in: .common).autoconnect()) { _ in
                         // Poll for accessibility grant while user is in System Settings
                         permissionManager.recheckAccessibilityIfNeeded()

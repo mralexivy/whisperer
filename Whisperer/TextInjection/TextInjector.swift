@@ -4,7 +4,7 @@
 //
 //  Text entry for dictation.
 //  APP_STORE build: clipboard-only (no Accessibility, no CGEvent.post).
-//  Non-App Store build: CGEvent unicode or clipboard paste with simulated Cmd+V.
+//  Non-App Store build: AX insertion (primary) → CGEvent unicode → clipboard + Cmd+V.
 //
 
 import Cocoa
@@ -58,8 +58,9 @@ class TextInjector {
         Logger.info("Clipboard mode — copying transcript to clipboard", subsystem: .textInjection)
         copyToClipboard(text)
         #else
-        guard AppState.shared.autoPasteEnabled && Self.hasAccessibilityPermission() else {
-            Logger.info("Auto-paste disabled or accessibility not granted, copying to clipboard", subsystem: .textInjection)
+        let axTrusted = Self.hasAccessibilityPermission()
+        guard AppState.shared.autoPasteEnabled && axTrusted else {
+            Logger.info("insertText: autoPaste=\(AppState.shared.autoPasteEnabled) AXTrusted=\(axTrusted) → clipboard only", subsystem: .textInjection)
             copyToClipboard(text)
             return
         }
@@ -67,17 +68,71 @@ class TextInjector {
         // Wait for target app activation
         try await Task.sleep(nanoseconds: 50_000_000) // 50ms
 
-        // Primary: CGEvent unicode insertion (no clipboard disruption).
-        // Splits long text into chunks to stay within per-event UTF-16 limit.
+        // Primary: AX insertion via kAXSelectedTextAttribute.
+        // Works in native macOS text fields. No clipboard disruption.
+        if enterViaAXInsertion(text) {
+            return
+        }
+        Logger.warning("AX insertion failed, trying CGEvent unicode", subsystem: .textInjection)
+
+        // Secondary: CGEvent unicode keyboard events.
+        // Works in VS Code, Terminal, most text inputs that don't expose AX.
         if enterViaCGEventUnicode(text) {
             return
         }
         Logger.warning("CGEvent unicode failed, falling back to clipboard paste", subsystem: .textInjection)
 
-        // Fallback: clipboard + Cmd+V paste (CGEvent failure)
+        // Final: clipboard + simulated Cmd+V. Works in Electron apps, browsers, everything.
         try await enterViaClipboardPaste(text)
         #endif
     }
+
+    // MARK: - AX Insertion
+
+    #if !APP_STORE
+    /// Inserts text into the target app's focused element via kAXSelectedTextAttribute.
+    /// Queries the stored targetAppPID directly — avoids system-wide query which fails
+    /// with -25212 when the overlay panel is still frontmost during injection.
+    private func enterViaAXInsertion(_ text: String) -> Bool {
+        guard let pid = targetAppPID else {
+            Logger.warning("AX insertion: no target app PID", subsystem: .textInjection)
+            return false
+        }
+
+        let appElement = AXUIElementCreateApplication(pid)
+        AXUIElementSetMessagingTimeout(appElement, 0.1)
+
+        var focusedRef: AnyObject?
+        let fetchResult = AXUIElementCopyAttributeValue(
+            appElement,
+            kAXFocusedUIElementAttribute as CFString,
+            &focusedRef
+        )
+
+        guard fetchResult == .success, let focusedRef else {
+            Logger.warning("AX insertion: no focused element in target app (AXError \(fetchResult.rawValue))", subsystem: .textInjection)
+            return false
+        }
+
+        // swiftlint:disable:next force_cast
+        let focused = focusedRef as! AXUIElement
+        AXUIElementSetMessagingTimeout(focused, 0.1)
+
+        let result = AXUIElementSetAttributeValue(
+            focused,
+            kAXSelectedTextAttribute as CFString,
+            text as CFTypeRef
+        )
+
+        if result == .success {
+            Logger.debug("AX insertion: succeeded via kAXSelectedTextAttribute", subsystem: .textInjection)
+            return true
+        }
+
+        Logger.warning("AX insertion: kAXSelectedTextAttribute failed (AXError \(result.rawValue))", subsystem: .textInjection)
+        return false
+    }
+    #endif
 
     // MARK: - CGEvent Unicode Insertion
 

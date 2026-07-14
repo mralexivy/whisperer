@@ -514,6 +514,40 @@ class AppState: ObservableObject {
         // Enable accessibility tracking if auto-paste was previously enabled
         if autoPasteEnabled {
             PermissionManager.shared.enableAccessibilityTracking()
+            if !AXIsProcessTrusted() {
+                let recoveryKey = "accessibilityAutoRecoveryAttempted"
+                if !UserDefaults.standard.bool(forKey: recoveryKey) {
+                    // First time we detect a lost/stale permission: do a one-shot
+                    // auto-recovery. Mark immediately so repeated crashes don't loop.
+                    UserDefaults.standard.set(true, forKey: recoveryKey)
+                    let bundleID = Bundle.main.bundleIdentifier ?? "com.ivy.whisperer"
+                    DispatchQueue.global(qos: .userInitiated).async {
+                        // Best-effort: remove our own stale TCC entry before re-requesting.
+                        // tccutil can reset an app's own accessibility entry without sudo.
+                        // If it fails (permission denied or unavailable), we proceed anyway —
+                        // the onboarding requestAccessibilityPermission call still works.
+                        let task = Process()
+                        task.launchPath = "/usr/bin/tccutil"
+                        task.arguments = ["reset", "Accessibility", bundleID]
+                        do {
+                            try task.run()
+                            task.waitUntilExit()
+                            Logger.debug("tccutil reset Accessibility exited \(task.terminationStatus)", subsystem: .permissions)
+                        } catch {
+                            Logger.debug("tccutil reset skipped: \(error.localizedDescription)", subsystem: .permissions)
+                        }
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                            OnboardingWindowManager.shared.show(startingAtPage: 4)
+                        }
+                    }
+                }
+                // If recovery was already attempted, the main UI warning is shown;
+                // don't re-open onboarding on every launch.
+            } else {
+                // Permission valid — clear recovery flag so future permission-loss
+                // events (e.g. next macOS upgrade) get the same seamless auto-recovery.
+                UserDefaults.standard.removeObject(forKey: "accessibilityAutoRecoveryAttempted")
+            }
         }
         #endif
 
