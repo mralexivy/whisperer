@@ -179,6 +179,8 @@ struct OverlayView: View {
         VStack(spacing: 8 * scale) {
             if appState.showClipboardToast {
                 ClipboardToastIndicator(scale: scale)
+            } else if appState.showFileTranscribingToast {
+                FileTranscribingIndicator(scale: scale)
             } else if appState.showModelLoadingToast {
                 ModelLoadingIndicator(scale: scale)
             } else if appState.state != .idle {
@@ -704,6 +706,17 @@ struct ModelLoadingIndicator: View {
 
     var body: some View {
         AnimatedStatusCapsule(text: "Loading model...", borderColor: accentPurple, scale: scale)
+    }
+}
+
+// MARK: - File Transcribing Indicator
+
+struct FileTranscribingIndicator: View {
+    var scale: CGFloat = 1.0
+    private let accentBlue = Color(red: 0.357, green: 0.424, blue: 0.969)  // #5B6CF7
+
+    var body: some View {
+        AnimatedStatusCapsule(text: "File transcription in progress", borderColor: accentBlue, scale: scale)
     }
 }
 

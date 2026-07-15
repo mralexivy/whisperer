@@ -10,7 +10,7 @@ import UniformTypeIdentifiers
 
 struct FileTranscriptionView: View {
     @Environment(\.colorScheme) var colorScheme
-    @StateObject private var manager = FileTranscriptionManager()
+    @ObservedObject private var manager = AppState.shared.fileTranscriptionManager
     @ObservedObject private var appState = AppState.shared
     @State private var selectedLanguage: TranscriptionLanguage = .english
     @State private var isDragOver = false
@@ -884,29 +884,19 @@ struct FileTranscriptionView: View {
             .menuStyle(.borderlessButton)
             .pointerOnHover()
 
-            // Save button
-            Button(action: {
-                Task { await manager.saveToHistory() }
-            }) {
-                HStack(spacing: 5) {
-                    Image(systemName: manager.savedToHistory ? "checkmark.circle.fill" : "square.and.arrow.down")
-                        .font(.system(size: 11, weight: .medium))
-                    Text(manager.savedToHistory ? "Saved" : "Save")
-                        .font(.system(size: 12, weight: .semibold))
-                }
-                .foregroundColor(.white)
-                .padding(.horizontal, 12)
-                .padding(.vertical, 6)
-                .background(
-                    Capsule()
-                        .fill(manager.savedToHistory
-                              ? AnyShapeStyle(Color(hex: "22C55E"))
-                              : AnyShapeStyle(WhispererColors.accentGradient))
-                )
-                .shadow(color: (manager.savedToHistory ? Color(hex: "22C55E") : WhispererColors.accentBlue).opacity(0.2), radius: 4, y: 1)
+            // Saved-to-history indicator (auto-save fires on completion — no user action needed)
+            HStack(spacing: 5) {
+                Image(systemName: manager.savedToHistory ? "checkmark.circle.fill" : "arrow.down.circle")
+                    .font(.system(size: 11, weight: .medium))
+                Text(manager.savedToHistory ? "Saved to History" : "Saving...")
+                    .font(.system(size: 12, weight: .semibold))
             }
-            .buttonStyle(.plain).pointerOnHover()
-            .disabled(manager.savedToHistory)
+            .foregroundColor(manager.savedToHistory ? Color(hex: "22C55E") : WhispererColors.secondaryText(colorScheme))
+            .padding(.horizontal, 12)
+            .padding(.vertical, 6)
+            .background(Capsule().fill(manager.savedToHistory ? Color(hex: "22C55E").opacity(0.10) : WhispererColors.elevatedBackground(colorScheme)))
+            .overlay(Capsule().stroke(manager.savedToHistory ? Color(hex: "22C55E").opacity(0.20) : WhispererColors.border(colorScheme), lineWidth: 1))
+            .animation(.easeInOut(duration: 0.3), value: manager.savedToHistory)
         }
     }
 

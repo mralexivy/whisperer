@@ -65,6 +65,13 @@ class FileTranscriptionManager: ObservableObject {
         return fileDuration / processingDuration
     }
 
+    /// True while the model is being used — used to block Fn key recording
+    var isTranscribing: Bool {
+        if case .transcribing = state { return true }
+        if case .loading = state { return true }
+        return false
+    }
+
     private var isCancelled = false
     private var transcriptionStartTime: Date?
     private var transcriptionTask: Task<Void, Never>?
@@ -251,6 +258,9 @@ class FileTranscriptionManager: ObservableObject {
                 }
 
                 Logger.info("File transcription complete: \(finalText.components(separatedBy: .whitespacesAndNewlines).filter { !$0.isEmpty }.count) words from \(chunks) chunks", subsystem: .transcription)
+
+                // Auto-save to history (mirrors mic recording behavior — no user action required)
+                await self.saveToHistory()
 
             } catch {
                 Logger.error("File transcription failed: \(error.localizedDescription)", subsystem: .transcription)

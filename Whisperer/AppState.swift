@@ -239,6 +239,16 @@ class AppState: ObservableObject {
     /// Read-only access to the pre-loaded backend for file transcription
     var fileTranscriptionBridge: TranscriptionBackend? { whisperBridge }
 
+    /// Singleton manager for file-based transcription — owned here so state survives tab navigation
+    let fileTranscriptionManager = FileTranscriptionManager()
+
+    /// Shown when Fn/hotkey is pressed while file transcription is occupying the model
+    @Published var showFileTranscribingToast: Bool = false {
+        didSet {
+            NotificationCenter.default.post(name: NSNotification.Name("AppStateChanged"), object: nil)
+        }
+    }
+
     /// Selected transcription backend engine
     @Published var selectedBackendType: BackendType = .whisperCpp
     @Published var selectedParakeetModel: ParakeetModelVariant = .v3
@@ -1799,6 +1809,16 @@ class AppState: ObservableObject {
             return
         }
 
+        // Block mic recording while file transcription is using the shared model
+        guard !fileTranscriptionManager.isTranscribing else {
+            showFileTranscribingToast = true
+            DispatchQueue.main.asyncAfter(deadline: .now() + 3.0) { [weak self] in
+                self?.showFileTranscribingToast = false
+            }
+            Logger.info("Recording blocked — file transcription in progress", subsystem: .app)
+            return
+        }
+
         guard state == .idle else { return }
 
         let bridge = whisperBridge!
@@ -1956,6 +1976,16 @@ class AppState: ObservableObject {
                 self?.showModelLoadingToast = false
             }
             Logger.warning("Cannot start recording - model not pre-loaded", subsystem: .app)
+            return
+        }
+
+        // Block mic recording while file transcription is using the shared model
+        guard !fileTranscriptionManager.isTranscribing else {
+            showFileTranscribingToast = true
+            DispatchQueue.main.asyncAfter(deadline: .now() + 3.0) { [weak self] in
+                self?.showFileTranscribingToast = false
+            }
+            Logger.info("Recording blocked — file transcription in progress", subsystem: .app)
             return
         }
 
