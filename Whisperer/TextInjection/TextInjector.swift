@@ -4,31 +4,90 @@
 //
 //  Text entry for dictation.
 //  APP_STORE build: clipboard-only (no Accessibility, no CGEvent.post).
-//  Non-App Store build: AX insertion (primary) → CGEvent unicode → clipboard + Cmd+V.
+//  Non-App Store build: Clipboard+Cmd+V (primary) → CGEvent unicode fallback.
 //
+//  Architecture: Clipboard+Cmd+V is the universal default. Direct AX mutation
+//  is NOT used as an insertion path — Chromium and other renderer-backed inputs
+//  return AXSuccess but silently discard the write, causing silent failures.
 
 import Cocoa
 import ApplicationServices
 
+// MARK: - ClipboardSnapshot
+
+/// Full capture of NSPasteboard contents — all items, all types.
+/// Plain-string-only restoration loses images, files, rich text, etc.
+struct ClipboardSnapshot {
+    struct StoredItem {
+        let representations: [NSPasteboard.PasteboardType: Data]
+    }
+    private let items: [StoredItem]
+
+    static func capture(from pasteboard: NSPasteboard) -> ClipboardSnapshot {
+        let stored = (pasteboard.pasteboardItems ?? []).map { item in
+            var reps: [NSPasteboard.PasteboardType: Data] = [:]
+            for type in item.types {
+                if let data = item.data(forType: type) {
+                    reps[type] = data
+                }
+            }
+            return StoredItem(representations: reps)
+        }
+        return ClipboardSnapshot(items: stored)
+    }
+
+    func restore(to pasteboard: NSPasteboard) {
+        let rebuilt: [NSPasteboardItem] = items.map { stored in
+            let item = NSPasteboardItem()
+            for (type, data) in stored.representations {
+                item.setData(data, forType: type)
+            }
+            return item
+        }
+        pasteboard.clearContents()
+        if !rebuilt.isEmpty {
+            pasteboard.writeObjects(rebuilt)
+        }
+    }
+}
+
+// MARK: - TextInjector
+
 class TextInjector {
 
-    // The PID of the app that was frontmost when recording started.
-    // Must be captured BEFORE recording begins (before overlay steals focus).
+    // The PID and bundle ID of the app that was frontmost when recording started.
+    // Must be captured BEFORE recording begins (before overlay shows).
     private var targetAppPID: pid_t?
+    private var targetBundleID: String?
 
     #if !APP_STORE
     // CGEvent keyboardSetUnicodeString has a practical limit on UTF-16 units per event.
-    // Beyond this, fall back to clipboard paste.
     private static let cgEventUnicodeLimit = 200
+
+    // Per-app clipboard restore delay. Conservative default covers most apps.
+    // Too short = pasting restored clipboard content instead of transcription.
+    private static let defaultRestoreDelay: UInt64 = 300_000_000 // 300ms
+    private static let restoreDelayByBundle: [String: UInt64] = [
+        "com.google.Chrome":                   150_000_000,
+        "org.mozilla.firefox":                 150_000_000,
+        "com.apple.Safari":                    150_000_000,
+        "com.microsoft.VSCode":                120_000_000,
+        "com.todesktop.230313mzl4w4u92":       120_000_000, // Cursor
+        "com.microsoft.Word":                  500_000_000,
+        "com.microsoft.Excel":                 500_000_000,
+        "com.apple.TextEdit":                  120_000_000,
+    ]
     #endif
 
-    /// Call this before recording starts to capture which app should receive the text
+    /// Call this before recording starts to freeze which app receives the text.
     func captureTargetApp() {
         if let frontApp = NSWorkspace.shared.frontmostApplication,
            frontApp.bundleIdentifier != Bundle.main.bundleIdentifier {
             targetAppPID = frontApp.processIdentifier
+            targetBundleID = frontApp.bundleIdentifier
         } else {
             targetAppPID = nil
+            targetBundleID = nil
         }
     }
 
@@ -47,14 +106,8 @@ class TextInjector {
             throw InjectionError.emptyText
         }
 
-        // Activate the target app
-        if let pid = targetAppPID,
-           let app = NSRunningApplication(processIdentifier: pid) {
-            app.activate()
-        }
-
         #if APP_STORE
-        // App Store build: clipboard-only, no Accessibility
+        // App Store build: clipboard-only, no Accessibility or CGEvent.post.
         Logger.info("Clipboard mode — copying transcript to clipboard", subsystem: .textInjection)
         copyToClipboard(text)
         #else
@@ -65,86 +118,120 @@ class TextInjector {
             return
         }
 
-        // Wait for target app activation
-        try await Task.sleep(nanoseconds: 50_000_000) // 50ms
+        // Restore target app focus before insertion.
+        if let pid = targetAppPID {
+            try await activateApp(pid: pid)
+        }
 
-        // Primary: AX insertion via kAXSelectedTextAttribute.
-        // Works in native macOS text fields. No clipboard disruption.
-        if enterViaAXInsertion(text) {
+        // Tier 1: Clipboard + Cmd+V — the universal default.
+        // Works with Chrome web inputs, Electron apps, Safari, AppKit, VS Code,
+        // Slack, Notion, terminals, and every other destination. The target app
+        // performs its own insertion (selection replacement, undo, DOM events).
+        let pasted = try await enterViaClipboardPaste(text)
+        if pasted {
             return
         }
-        Logger.warning("AX insertion failed, trying CGEvent unicode", subsystem: .textInjection)
+        Logger.warning("Clipboard paste attempt ended without confirmed success, trying unicode", subsystem: .textInjection)
 
-        // Secondary: CGEvent unicode keyboard events.
-        // Works in VS Code, Terminal, most text inputs that don't expose AX.
+        // Tier 2: CGEvent unicode keyboard events.
+        // Fallback for apps that intercept or block paste (e.g., secure fields,
+        // some terminals configured to ignore Cmd+V).
         if enterViaCGEventUnicode(text) {
             return
         }
-        Logger.warning("CGEvent unicode failed, falling back to clipboard paste", subsystem: .textInjection)
-
-        // Final: clipboard + simulated Cmd+V. Works in Electron apps, browsers, everything.
-        try await enterViaClipboardPaste(text)
+        Logger.warning("CGEvent unicode also failed — text may be lost", subsystem: .textInjection)
         #endif
     }
 
-    // MARK: - AX Insertion
+    // MARK: - Activation
 
     #if !APP_STORE
-    /// Inserts text into the target app's focused element via kAXSelectedTextAttribute.
-    /// Queries the stored targetAppPID directly — avoids system-wide query which fails
-    /// with -25212 when the overlay panel is still frontmost during injection.
-    private func enterViaAXInsertion(_ text: String) -> Bool {
-        guard let pid = targetAppPID else {
-            Logger.warning("AX insertion: no target app PID", subsystem: .textInjection)
-            return false
+    /// Activates the target app and polls until it is frontmost, up to 200ms.
+    private func activateApp(pid: pid_t) async throws {
+        guard let app = NSRunningApplication(processIdentifier: pid) else { return }
+        app.activate(options: [.activateIgnoringOtherApps])
+        for _ in 0..<10 {
+            if NSWorkspace.shared.frontmostApplication?.processIdentifier == pid {
+                return
+            }
+            try await Task.sleep(nanoseconds: 20_000_000) // 20ms per poll
         }
-
-        let appElement = AXUIElementCreateApplication(pid)
-        AXUIElementSetMessagingTimeout(appElement, 0.1)
-
-        var focusedRef: AnyObject?
-        let fetchResult = AXUIElementCopyAttributeValue(
-            appElement,
-            kAXFocusedUIElementAttribute as CFString,
-            &focusedRef
-        )
-
-        guard fetchResult == .success, let focusedRef else {
-            Logger.warning("AX insertion: no focused element in target app (AXError \(fetchResult.rawValue))", subsystem: .textInjection)
-            return false
-        }
-
-        // swiftlint:disable:next force_cast
-        let focused = focusedRef as! AXUIElement
-        AXUIElementSetMessagingTimeout(focused, 0.1)
-
-        let result = AXUIElementSetAttributeValue(
-            focused,
-            kAXSelectedTextAttribute as CFString,
-            text as CFTypeRef
-        )
-
-        if result == .success {
-            Logger.debug("AX insertion: succeeded via kAXSelectedTextAttribute", subsystem: .textInjection)
-            return true
-        }
-
-        Logger.warning("AX insertion: kAXSelectedTextAttribute failed (AXError \(result.rawValue))", subsystem: .textInjection)
-        return false
+        // Best effort — proceed even if PID not confirmed frontmost.
     }
     #endif
 
-    // MARK: - CGEvent Unicode Insertion
+    // MARK: - Clipboard + Paste (Tier 1)
+
+    #if !APP_STORE
+    /// Copies text to the clipboard, posts Cmd+V, waits for the target to consume it,
+    /// then restores the previous clipboard — all types preserved.
+    ///
+    /// Returns true always (paste is best-effort; we rely on it working rather than
+    /// doing AX-read verification which is unreliable for renderer-backed inputs).
+    @discardableResult
+    private func enterViaClipboardPaste(_ text: String) async throws -> Bool {
+        let pasteboard = NSPasteboard.general
+        let snapshot = ClipboardSnapshot.capture(from: pasteboard)
+
+        pasteboard.clearContents()
+        guard pasteboard.setString(text, forType: .string) else {
+            Logger.error("Failed to write transcript to pasteboard", subsystem: .textInjection)
+            return false
+        }
+
+        simulatePaste()
+        let changeCountAfterWrite = pasteboard.changeCount
+
+        // Wait for the target app to consume the paste. Delay is per-app tuned
+        // because some apps (Word, slow Electron) read the clipboard asynchronously.
+        let delay = Self.restoreDelayByBundle[targetBundleID ?? ""] ?? Self.defaultRestoreDelay
+        try await Task.sleep(nanoseconds: delay)
+
+        // Only restore if nobody changed the clipboard since our write.
+        // If the user copied something during dictation, don't clobber it.
+        if pasteboard.changeCount == changeCountAfterWrite {
+            snapshot.restore(to: pasteboard)
+            Logger.debug("Clipboard restored after paste", subsystem: .textInjection)
+        } else {
+            Logger.debug("Clipboard changed during paste window — skipping restore", subsystem: .textInjection)
+        }
+
+        Logger.debug("Dictated text entered via clipboard paste", subsystem: .textInjection)
+        return true
+    }
+
+    private func simulatePaste() {
+        // combinedSessionState reflects the current graphical session state,
+        // which is appropriate when targeting the active session's focused app.
+        guard let source = CGEventSource(stateID: .combinedSessionState) else {
+            Logger.error("Failed to create event source for paste", subsystem: .textInjection)
+            return
+        }
+
+        // V key code = 0x09
+        guard let keyDown = CGEvent(keyboardEventSource: source, virtualKey: 0x09, keyDown: true),
+              let keyUp = CGEvent(keyboardEventSource: source, virtualKey: 0x09, keyDown: false) else {
+            Logger.error("Failed to create paste key events", subsystem: .textInjection)
+            return
+        }
+
+        keyDown.flags = .maskCommand
+        keyUp.flags = .maskCommand
+
+        keyDown.post(tap: .cgAnnotatedSessionEventTap)
+        keyUp.post(tap: .cgAnnotatedSessionEventTap)
+    }
+    #endif
+
+    // MARK: - CGEvent Unicode Fallback (Tier 2)
 
     #if !APP_STORE
     /// Inserts text by posting CGEvent keyboard events with unicode string data.
-    /// Splits long text into chunks of cgEventUnicodeLimit UTF-16 units each.
-    /// No clipboard involvement — instant, zero side effects.
+    /// No clipboard involvement. Less reliable for long text and complex editors.
     private func enterViaCGEventUnicode(_ text: String) -> Bool {
         let utf16Array = Array(text.utf16)
         guard !utf16Array.isEmpty else { return false }
 
-        // Split into chunks and post each as a separate key event
         let chunks = stride(from: 0, to: utf16Array.count, by: Self.cgEventUnicodeLimit).map {
             Array(utf16Array[$0..<min($0 + Self.cgEventUnicodeLimit, utf16Array.count)])
         }
@@ -163,7 +250,6 @@ class TextInjector {
             usleep(1000) // 1ms between keyDown/keyUp
             keyUp.post(tap: .cgAnnotatedSessionEventTap)
 
-            // Small delay between chunks to let the target app process each event
             if i < chunks.count - 1 {
                 usleep(2000) // 2ms between chunks
             }
@@ -174,61 +260,9 @@ class TextInjector {
     }
     #endif
 
-    // MARK: - Clipboard + Paste
-
-    #if !APP_STORE
-    private func enterViaClipboardPaste(_ text: String) async throws {
-        // Activation delay already applied in insertText
-
-        let pasteboard = NSPasteboard.general
-
-        // Save current clipboard content
-        let previousString = pasteboard.string(forType: .string)
-
-        // Set transcribed text
-        pasteboard.clearContents()
-        pasteboard.setString(text, forType: .string)
-
-        // Simulate Cmd+V to paste
-        simulatePaste()
-
-        // Wait for paste to complete
-        try await Task.sleep(nanoseconds: 100_000_000) // 100ms
-
-        // Restore previous clipboard content
-        if let previousString = previousString {
-            pasteboard.clearContents()
-            pasteboard.setString(previousString, forType: .string)
-        }
-
-        Logger.debug("Dictated text entered via clipboard paste", subsystem: .textInjection)
-    }
-
-    private func simulatePaste() {
-        guard let source = CGEventSource(stateID: .hidSystemState) else {
-            Logger.error("Failed to create event source for paste", subsystem: .textInjection)
-            return
-        }
-
-        // Create Cmd+V key events (V key code = 0x09)
-        guard let keyDown = CGEvent(keyboardEventSource: source, virtualKey: 0x09, keyDown: true),
-              let keyUp = CGEvent(keyboardEventSource: source, virtualKey: 0x09, keyDown: false) else {
-            Logger.error("Failed to create paste key events", subsystem: .textInjection)
-            return
-        }
-
-        keyDown.flags = .maskCommand
-        keyUp.flags = .maskCommand
-
-        keyDown.post(tap: .cgAnnotatedSessionEventTap)
-        keyUp.post(tap: .cgAnnotatedSessionEventTap)
-    }
-    #endif
-
-    // MARK: - Clipboard Only (no Accessibility)
+    // MARK: - Clipboard Only (APP_STORE + autoPaste disabled)
 
     private func copyToClipboard(_ text: String) {
-        // Re-activate the target app
         if let pid = targetAppPID,
            let app = NSRunningApplication(processIdentifier: pid) {
             app.activate()
@@ -238,7 +272,6 @@ class TextInjector {
         pasteboard.clearContents()
         pasteboard.setString(text, forType: .string)
 
-        // Notify that text was copied to clipboard
         NotificationCenter.default.post(
             name: NSNotification.Name("TextCopiedToClipboard"),
             object: nil,
@@ -246,6 +279,8 @@ class TextInjector {
         )
     }
 }
+
+// MARK: - InjectionError
 
 enum InjectionError: Error, LocalizedError {
     case emptyText

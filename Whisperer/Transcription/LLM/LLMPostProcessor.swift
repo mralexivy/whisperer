@@ -385,6 +385,15 @@ class LLMPostProcessor: ObservableObject {
             strResult.removeSubrange(thinkRange)
         }
 
+        // Strip [INPUT]...[/INPUT] wrapper — model sometimes echoes the prompt delimiter.
+        strResult = strResult.trimmingCharacters(in: .whitespacesAndNewlines)
+        if strResult.hasPrefix("[INPUT]") {
+            strResult = String(strResult.dropFirst("[INPUT]".count))
+        }
+        if strResult.hasSuffix("[/INPUT]") {
+            strResult = String(strResult.dropLast("[/INPUT]".count))
+        }
+
         return strResult.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 

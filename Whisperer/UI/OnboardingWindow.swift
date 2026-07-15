@@ -59,9 +59,9 @@ class OnboardingWindowManager {
     }
 
     func show(startingAtPage page: Int = 0) {
-        if window == nil {
-            window = OnboardingWindow(initialPage: page)
-        }
+        // Always create a fresh window so the correct initialPage is applied.
+        // Reusing a closed window ignores the page parameter and shows stale state.
+        window = OnboardingWindow(initialPage: page)
         window?.center()
         window?.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
@@ -69,5 +69,6 @@ class OnboardingWindowManager {
 
     func dismiss() {
         window?.close()
+        window = nil
     }
 }

@@ -697,14 +697,14 @@ struct OnboardingView: View {
             VStack(spacing: 24) {
                 ZStack {
                     Circle()
-                        .stroke(OnboardingColors.accentPurple.opacity(0.15), lineWidth: 1.5)
+                        .stroke(OnboardingColors.accentPurple.opacity(0.35), lineWidth: 1.5)
                         .frame(width: 140, height: 140)
                     Circle()
-                        .stroke(OnboardingColors.accentBlue.opacity(0.3), lineWidth: 2)
+                        .stroke(OnboardingColors.accentBlue.opacity(0.5), lineWidth: 2)
                         .frame(width: 100, height: 100)
 
                     Image(systemName: "globe")
-                        .font(.system(size: 48, weight: .thin))
+                        .font(.system(size: 48, weight: .light))
                         .foregroundStyle(
                             LinearGradient(
                                 colors: [OnboardingColors.accentBlue, OnboardingColors.accentPurple],
@@ -712,6 +712,7 @@ struct OnboardingView: View {
                                 endPoint: .bottom
                             )
                         )
+                        .opacity(0.85)
                 }
 
                 // Mini dictation icon row — matches other panels
@@ -878,14 +879,14 @@ struct OnboardingView: View {
             VStack(spacing: 24) {
                 ZStack {
                     Circle()
-                        .stroke(Color.green.opacity(0.15), lineWidth: 1.5)
+                        .stroke(Color.green.opacity(0.35), lineWidth: 1.5)
                         .frame(width: 140, height: 140)
                     Circle()
-                        .stroke(OnboardingColors.accentBlue.opacity(0.3), lineWidth: 2)
+                        .stroke(OnboardingColors.accentBlue.opacity(0.5), lineWidth: 2)
                         .frame(width: 100, height: 100)
 
                     Image(systemName: "globe")
-                        .font(.system(size: 48, weight: .thin))
+                        .font(.system(size: 48, weight: .light))
                         .foregroundStyle(
                             LinearGradient(
                                 colors: [.green, OnboardingColors.accentBlue],
@@ -893,6 +894,7 @@ struct OnboardingView: View {
                                 endPoint: .bottom
                             )
                         )
+                        .opacity(0.85)
                 }
 
                 HStack(spacing: 12) {

@@ -537,6 +537,9 @@ class AppState: ObservableObject {
                             Logger.debug("tccutil reset skipped: \(error.localizedDescription)", subsystem: .permissions)
                         }
                         DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                            // Only re-open onboarding if user hasn't completed it.
+                            // For completed users, the menu bar permission badge handles recovery UX.
+                            guard !UserDefaults.standard.bool(forKey: "hasCompletedOnboarding") else { return }
                             OnboardingWindowManager.shared.show(startingAtPage: 4)
                         }
                     }
