@@ -518,10 +518,22 @@ class LLMPostProcessor: ObservableObject {
                     return true
                 }
             )
+            let mtpIters = stats.acceptedCount + stats.rollbackCount
+            let backboneCalls = max(1, 2 * mtpIters - stats.prefetchCount)
+            let tps = stats.generateTime > 0
+                ? String(format: "%.1f", Double(stats.tokenCount - 1) / stats.generateTime)
+                : "–"
+            let eff = String(format: "%.2f", Double(max(1, stats.tokenCount - 1)) / Double(backboneCalls))
+            let avgDft = mtpIters > 0
+                ? String(format: "%.1f", stats.draftTime * 1000 / Double(mtpIters))
+                : "–"
+            let totalMs = Int((stats.prefillTime + stats.generateTime) * 1000)
             Logger.debug(
-                "MTP gen: tokens=\(stats.tokenCount) accepted=\(stats.acceptedCount) rollbacks=\(stats.rollbackCount) " +
+                "MTP gen: tokens=\(stats.tokenCount) accept=\(stats.acceptedCount) " +
+                "rollback=\(stats.rollbackCount) prefetch=\(stats.prefetchCount) " +
                 "acceptRate=\(String(format: "%.0f", stats.acceptanceRate * 100))% " +
-                "prefill=\(Int(stats.prefillTime * 1000))ms gen=\(Int(stats.generateTime * 1000))ms",
+                "tokPerSec=\(tps) effTokPerCall=\(eff) avgDraftMs=\(avgDft)ms " +
+                "prefill=\(Int(stats.prefillTime * 1000))ms gen=\(Int(stats.generateTime * 1000))ms total=\(totalMs)ms",
                 subsystem: .transcription
             )
         }
