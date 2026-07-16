@@ -11,7 +11,7 @@ import MLX
 import MLXLLM
 import MLXLMCommon
 import Hub
-// Tokenizers imported transitively via Hub
+import Tokenizers
 
 enum LLMLoadPhase: Equatable {
     case idle
@@ -95,10 +95,11 @@ class LLMPostProcessor: ObservableObject {
         // Scale buffer pool cap by model size. Model weights are "active memory" and unaffected;
         // only intermediate/KV-cache buffers from inference are constrained.
         let cacheMB: Int = switch variant {
-            case .qwen3_0_6B: 128
-            case .qwen3_5_2B: 256
-            case .qwen3_5_4B: 256
-            case .qwen3_5_9B: 512
+            case .qwen3_0_6B:     128
+            case .qwen3_5_2B:     256
+            case .qwen3_5_4B:     256
+            case .qwen3_5_4B_mtp: 256
+            case .qwen3_5_9B:     512
         }
         Memory.cacheLimit = cacheMB * 1024 * 1024
         Logger.info("LLM \(variant.displayName) loaded (MLX cache limit: \(cacheMB) MB, active: \(Memory.activeMemory / (1024 * 1024)) MB)", subsystem: .model)
@@ -273,6 +274,22 @@ class LLMPostProcessor: ObservableObject {
 
         Logger.debug("LLM gen: inputChars=\(charCount) nonLatin=\(isNonLatin) estTokens=\(estimatedTokens) maxTokens=\(maxTokens) cap=\(maxTokensCap) temp=\(temperature) topP=\(topP) topK=\(topK) repPenalty=\(repetitionPenalty)", subsystem: .transcription)
 
+        // MTP fast path — bypasses ChatSession entirely, uses generateMTPTokens() directly.
+        if loadedVariant?.isMTPCapable == true {
+            let mtpResult = try await processMTP(
+                container: container,
+                instructions: instructions,
+                userMessage: userMessage,
+                maxTokens: maxTokens,
+                charCount: charCount,
+                isNonLatin: isNonLatin,
+                maxTokensCap: maxTokensCap,
+                targetLanguage: targetLanguage,
+                originalText: text
+            )
+            return mtpResult
+        }
+
         let genParams = GenerateParameters(
             maxTokens: maxTokens,
             // oMLX TurboQuant: 8-bit KV cache — 2x memory reduction, faster attention.
@@ -395,6 +412,124 @@ class LLMPostProcessor: ObservableObject {
         }
 
         return strResult.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    // MARK: - MTP Processing
+
+    /// Mutable accumulator shared between the generateMTPTokens onToken callback and the timeout task.
+    /// @unchecked Sendable: accessed from a single serial queue (container.perform) + one flag write from timeout.
+    private final class MTPOutput: @unchecked Sendable {
+        var text: String = ""
+        var stop: Bool = false
+    }
+
+    private func processMTP(
+        container: ModelContainer,
+        instructions: String,
+        userMessage: String,
+        maxTokens: Int,
+        charCount: Int,
+        isNonLatin: Bool,
+        maxTokensCap: Int,
+        targetLanguage: String?,
+        originalText: String
+    ) async throws -> String {
+        let timeoutSeconds: Double = charCount < 30 ? 5 : charCount < 200 ? 10 : 15
+        let mtpOutput = MTPOutput()
+
+        // Timeout: sets stop flag so onToken returns false, ending generation early.
+        let timeoutTask = Task { [mtpOutput] in
+            try? await Task.sleep(nanoseconds: UInt64(timeoutSeconds * 1_000_000_000))
+            if !mtpOutput.stop {
+                Logger.warning("MTP gen: timeout after \(Int(timeoutSeconds))s, stopping", subsystem: .transcription)
+                mtpOutput.stop = true
+            }
+        }
+        defer { timeoutTask.cancel() }
+
+        // Build full prompt tokens + run MTP inside the container's serial lock.
+        try await container.perform { [mtpOutput] context in
+            let tokenizer = context.tokenizer
+            let messages: [Message] = [
+                ["role": "system", "content": instructions],
+                ["role": "user",   "content": userMessage]
+            ]
+            let promptTokens = try tokenizer.applyChatTemplate(
+                messages: messages,
+                tools: nil,
+                additionalContext: ["enable_thinking": false]
+            )
+
+            // Build complete EOS set: generation_config eos_token_id array + tokenizer EOS
+            // + extra string tokens (e.g. <|im_end|> for Qwen). Mirrors buildStopTokenIDs in Evaluate.swift.
+            var eosIds = context.configuration.eosTokenIds          // from generation_config.json
+            if let eos = tokenizer.eosTokenId { eosIds.insert(eos) }
+            for token in context.configuration.extraEOSTokens {
+                if let id = tokenizer.convertTokenToId(token) { eosIds.insert(id) }
+            }
+            // Safety net: add im_end / endoftext by name in case generation_config is absent.
+            for name in ["<|im_end|>", "<|endoftext|>"] {
+                if let id = tokenizer.convertTokenToId(name) { eosIds.insert(id) }
+            }
+            Logger.debug("MTP eosIds=\(eosIds) promptLen=\(promptTokens.count) firstTokens=\(Array(promptTokens.prefix(5)))", subsystem: .transcription)
+
+            guard let mtpModel = context.model as? any MTPCapableModel else {
+                Logger.warning("MTP: model does not conform to MTPCapableModel", subsystem: .transcription)
+                return
+            }
+
+            let cache = mtpModel.newCache(parameters: nil)
+
+            // Output char limit mirrors the ChatSession path.
+            let outputCharLimit: Int? = (maxTokensCap <= 256 && targetLanguage == nil && !isNonLatin)
+                ? Int(Float(charCount) * 1.5) + 20
+                : nil
+
+            let stats = generateMTPTokens(
+                model: mtpModel,
+                tokenizer: tokenizer,
+                cache: cache,
+                promptTokens: promptTokens,
+                maxTokens: maxTokens,
+                eosTokenIds: eosIds,
+                onToken: { tokenId in
+                    if mtpOutput.stop { return false }
+                    let piece = tokenizer.decode(tokens: [tokenId])
+                    mtpOutput.text += piece
+                    if let limit = outputCharLimit, mtpOutput.text.count > limit { return false }
+                    return true
+                }
+            )
+            Logger.debug(
+                "MTP gen: tokens=\(stats.tokenCount) accepted=\(stats.acceptedCount) rollbacks=\(stats.rollbackCount) " +
+                "acceptRate=\(String(format: "%.0f", stats.acceptanceRate * 100))% " +
+                "prefill=\(Int(stats.prefillTime * 1000))ms gen=\(Int(stats.generateTime * 1000))ms",
+                subsystem: .transcription
+            )
+        }
+
+        // Stop flag in case timeout fires after perform returns (no-op if already done).
+        mtpOutput.stop = true
+
+        if Memory.cacheMemory > Memory.cacheLimit { Memory.clearCache() }
+
+        var result = mtpOutput.text
+        Logger.debug("MTP raw output (\(result.count) chars): \(result.prefix(200))", subsystem: .transcription)
+        // Strip <think>...</think> (Qwen3 chain-of-thought tokens).
+        if let thinkRange = result.range(of: Self.thinkTagPattern, options: .regularExpression) {
+            result.removeSubrange(thinkRange)
+        }
+        result = result.trimmingCharacters(in: .whitespacesAndNewlines)
+        if result.hasPrefix("[INPUT]") { result = String(result.dropFirst("[INPUT]".count)) }
+        if result.hasSuffix("[/INPUT]") { result = String(result.dropLast("[/INPUT]".count)) }
+        result = result.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        // Fall back to original if MTP produced nothing (model refused, EOS on first token, etc.)
+        guard !result.isEmpty else {
+            Logger.warning("MTP gen: empty output, returning original text", subsystem: .transcription)
+            return originalText
+        }
+        return result
     }
 
     // MARK: - Helpers

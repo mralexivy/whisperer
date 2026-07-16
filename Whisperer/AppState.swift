@@ -366,7 +366,7 @@ class AppState: ObservableObject {
             }
         }
     }
-    @Published var selectedLLMModel: LLMModelVariant = .qwen3_5_4B {
+    @Published var selectedLLMModel: LLMModelVariant = .qwen3_5_4B_mtp {
         didSet {
             UserDefaults.standard.set(selectedLLMModel.rawValue, forKey: "selectedLLMModel")
             if llmEnabled {
@@ -589,7 +589,9 @@ class AppState: ObservableObject {
         }
         if let savedLLMModel = UserDefaults.standard.string(forKey: "selectedLLMModel"),
            let llmModel = LLMModelVariant(rawValue: savedLLMModel) {
-            _selectedLLMModel = Published(wrappedValue: llmModel)
+            // Migrate old default 4B to the faster MTP variant
+            let migrated: LLMModelVariant = llmModel == .qwen3_5_4B ? .qwen3_5_4B_mtp : llmModel
+            _selectedLLMModel = Published(wrappedValue: migrated)
         }
         // Initialize AIModeManager (triggers migration from legacy LLMTask/PromptProfile)
         _ = AIModeManager.shared
