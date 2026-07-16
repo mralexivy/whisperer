@@ -64,20 +64,38 @@ class LLMPostProcessor: ObservableObject {
         loadPhase = .loading
         didReceiveDownloadProgress = false
 
-        let configuration = ModelConfiguration(id: variant.huggingFaceId)
-        let container = try await loadModelContainer(
-            hub: HubApi(),
-            configuration: configuration,
-            progressHandler: { [weak self] progress in
-                Task { @MainActor [weak self] in
-                    let fraction = progress.fractionCompleted
-                    if fraction > 0 {
-                        self?.didReceiveDownloadProgress = true
-                        self?.loadPhase = .downloading(progress: fraction)
-                    }
+        // If the model already exists locally, use ModelConfiguration(directory:) to bypass
+        // HubApi network checks (which time out when offline or on restricted networks).
+        let hub = HubApi()
+        let idConfig = ModelConfiguration(id: variant.huggingFaceId)
+        let localDir = idConfig.modelDirectory(hub: hub)
+        let configuration: ModelConfiguration
+        if FileManager.default.fileExists(atPath: localDir.appendingPathComponent("config.json").path) {
+            configuration = ModelConfiguration(directory: localDir)
+        } else {
+            configuration = idConfig
+        }
+
+        let progressBlock: @Sendable (Progress) -> Void = { [weak self] progress in
+            Task { @MainActor [weak self] in
+                let fraction = progress.fractionCompleted
+                if fraction > 0 {
+                    self?.didReceiveDownloadProgress = true
+                    self?.loadPhase = .downloading(progress: fraction)
                 }
             }
-        )
+        }
+        // MTP-capable models use qwen3_5 model_type. VLMModelFactory intercepts this first
+        // (registry order) and strips mtp.* weights. Force LLMModelFactory directly so the
+        // LLM Qwen35Model is used — it keeps mtp.* weights and builds the MTP head.
+        let container: ModelContainer
+        if variant.isMTPCapable {
+            container = try await LLMModelFactory.shared.loadContainer(
+                hub: hub, configuration: configuration, progressHandler: progressBlock)
+        } else {
+            container = try await loadModelContainer(
+                hub: hub, configuration: configuration, progressHandler: progressBlock)
+        }
 
         // Download done (if it happened) — now loading into memory.
         if didReceiveDownloadProgress {
