@@ -38,6 +38,13 @@ class LLMPostProcessor: ObservableObject {
     private var cachedPromptOrder: [String] = []
     private static let maxCachedPrompts = 4
 
+    // MTP system-prefix KV cache — pre-filled once per instructions string.
+    // Copied on each processMTP call so only user-suffix tokens need prefilling (~25 vs ~150 tokens).
+    private var mtpWarmCache: [any KVCache]? = nil
+    private var mtpWarmPrefixLength: Int = 0
+    private var mtpWarmInstructions: String = ""
+    private var isMTPWarming = false
+
     // Deduplicates concurrent warmup requests. Tracks which instructions are currently warming.
     private var warmupTask: Task<Void, Never>?
     private var warmingUpInstructions: String?
@@ -136,6 +143,10 @@ class LLMPostProcessor: ObservableObject {
         warmingUpInstructions = nil
         cachedPrompts.removeAll()
         cachedPromptOrder.removeAll()
+        mtpWarmCache = nil
+        mtpWarmPrefixLength = 0
+        mtpWarmInstructions = ""
+        isMTPWarming = false
 
         // 2. Drain in-flight generation before touching GPU buffers.
         while isProcessing {
@@ -242,6 +253,64 @@ class LLMPostProcessor: ObservableObject {
             Logger.info("LLM warmup complete: \(caches.count) KV layers cached (active: \(Memory.activeMemory / (1024 * 1024)) MB)", subsystem: .model)
         } catch {
             Logger.warning("LLM warmup failed (fresh sessions will be used): \(error.localizedDescription)", subsystem: .model)
+        }
+    }
+
+    // MARK: - MTP KV Cache Warmup
+
+    /// Sendable box for passing pre-copied MTP warm KV state into @Sendable container.perform closures.
+    private final class MTPWarmBox: @unchecked Sendable {
+        var cache: [any KVCache]? = nil
+        var prefixLength: Int = 0
+    }
+
+    /// Pre-fills the system-prompt prefix of the chat template into a KV cache so subsequent
+    /// processMTP calls only need to prefill ~25 user tokens instead of ~150 total tokens.
+    /// Expected savings: ~420ms per call (540ms → ~120ms prefill).
+    private func runMTPWarmup(container: ModelContainer, instructions: String) async {
+        guard mtpWarmCache == nil || instructions != mtpWarmInstructions else { return }
+        guard !isMTPWarming else { return }
+        isMTPWarming = true
+        defer { isMTPWarming = false }
+
+        let box = MTPWarmBox()
+        let t0 = Date()
+        try? await container.perform { context in
+            guard let mtpModel = context.model as? any MTPCapableModel else { return }
+            let tokenizer = context.tokenizer
+
+            // Find the system-prefix boundary: longest common token prefix when user content differs.
+            // The common prefix = all template tokens before the user message content starts.
+            guard
+                let tok1 = try? tokenizer.applyChatTemplate(
+                    messages: [["role": "system", "content": instructions],
+                               ["role": "user",   "content": "."]],
+                    tools: nil, additionalContext: ["enable_thinking": false]),
+                let tok2 = try? tokenizer.applyChatTemplate(
+                    messages: [["role": "system", "content": instructions],
+                               ["role": "user",   "content": "X"]],
+                    tools: nil, additionalContext: ["enable_thinking": false])
+            else { return }
+
+            var prefixLen = 0
+            while prefixLen < tok1.count && prefixLen < tok2.count
+                  && tok1[prefixLen] == tok2[prefixLen] { prefixLen += 1 }
+            guard prefixLen > 0 else { return }
+
+            let warmCache = mtpModel.newCache(parameters: nil)
+            let prefixArr = MLXArray(tok1[..<prefixLen].map { Int32($0) })[.newAxis]
+            let (logits, _) = mtpModel.forwardWithHiddenState(prefixArr, cache: warmCache)
+            eval(logits)
+
+            box.cache = warmCache.map { $0.copy() }
+            box.prefixLength = prefixLen
+        }
+
+        if let cache = box.cache {
+            mtpWarmCache = cache
+            mtpWarmPrefixLength = box.prefixLength
+            mtpWarmInstructions = instructions
+            Logger.debug("MTP KV warmup: \(box.prefixLength) system-prefix tokens cached in \(Int(-t0.timeIntervalSinceNow * 1000))ms", subsystem: .model)
         }
     }
 
@@ -465,8 +534,20 @@ class LLMPostProcessor: ObservableObject {
         }
         defer { timeoutTask.cancel() }
 
+        // Capture warm-cache state on the main actor before entering the @Sendable container closure.
+        // On cache miss, kick off background warmup so next call is fast.
+        let warmBox = MTPWarmBox()
+        if mtpWarmCache != nil && instructions == mtpWarmInstructions {
+            warmBox.cache = mtpWarmCache!.map { $0.copy() }
+            warmBox.prefixLength = mtpWarmPrefixLength
+        } else {
+            Task { [weak self, container, instructions] in
+                await self?.runMTPWarmup(container: container, instructions: instructions)
+            }
+        }
+
         // Build full prompt tokens + run MTP inside the container's serial lock.
-        try await container.perform { [mtpOutput] context in
+        try await container.perform { [mtpOutput, warmBox] context in
             let tokenizer = context.tokenizer
             let messages: [Message] = [
                 ["role": "system", "content": instructions],
@@ -496,7 +577,16 @@ class LLMPostProcessor: ObservableObject {
                 return
             }
 
-            let cache = mtpModel.newCache(parameters: nil)
+            // Use pre-filled system-prefix cache when available — only user-suffix tokens prefilled.
+            let cache: [any KVCache]
+            let tokensToFill: [Int]
+            if let warm = warmBox.cache, warmBox.prefixLength < promptTokens.count {
+                cache = warm
+                tokensToFill = Array(promptTokens[warmBox.prefixLength...])
+            } else {
+                cache = mtpModel.newCache(parameters: nil)
+                tokensToFill = promptTokens
+            }
 
             // Output char limit mirrors the ChatSession path.
             let outputCharLimit: Int? = (maxTokensCap <= 256 && targetLanguage == nil && !isNonLatin)
@@ -507,7 +597,7 @@ class LLMPostProcessor: ObservableObject {
                 model: mtpModel,
                 tokenizer: tokenizer,
                 cache: cache,
-                promptTokens: promptTokens,
+                promptTokens: tokensToFill,
                 maxTokens: maxTokens,
                 eosTokenIds: eosIds,
                 onToken: { tokenId in
@@ -533,7 +623,8 @@ class LLMPostProcessor: ObservableObject {
                 "rollback=\(stats.rollbackCount) prefetch=\(stats.prefetchCount) " +
                 "acceptRate=\(String(format: "%.0f", stats.acceptanceRate * 100))% " +
                 "tokPerSec=\(tps) effTokPerCall=\(eff) avgDraftMs=\(avgDft)ms " +
-                "prefill=\(Int(stats.prefillTime * 1000))ms gen=\(Int(stats.generateTime * 1000))ms total=\(totalMs)ms",
+                "prefill=\(Int(stats.prefillTime * 1000))ms gen=\(Int(stats.generateTime * 1000))ms total=\(totalMs)ms " +
+                "cacheHit=\(warmBox.cache != nil)",
                 subsystem: .transcription
             )
         }
