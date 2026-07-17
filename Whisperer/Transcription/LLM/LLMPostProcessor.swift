@@ -120,7 +120,7 @@ class LLMPostProcessor: ObservableObject {
         // Scale buffer pool cap by model size. Model weights are "active memory" and unaffected;
         // only intermediate/KV-cache buffers from inference are constrained.
         let cacheMB: Int = switch variant {
-            case .qwen3_0_6B:     128
+            case .whispererV3:    128
             case .qwen3_5_2B:     256
             case .qwen3_5_4B:     256
             case .qwen3_5_4B_mtp: 256

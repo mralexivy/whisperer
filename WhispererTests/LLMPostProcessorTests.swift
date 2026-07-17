@@ -210,6 +210,41 @@ final class LLMPostProcessorTests: XCTestCase {
         XCTAssertGreaterThan(speedup, 0.80, "MTP is significantly slower than baseline — speedup regression (speedup=\(String(format: "%.2f", speedup))x)")
     }
 
+    // MARK: MTP throughput benchmark
+
+    func testMTPBenchmark() async throws {
+        let p = try await mtpProcessor()
+        let mode = correctMode()
+        let input = "The user interface needs to be redesigned to improve the overall user experience and make it more intuitive for new users who are unfamiliar with the system."
+        let (sys, user) = splitPrompt(mode, text: input)
+        let call: () async throws -> Void = {
+            _ = try await p.process(
+                text: input, systemPrompt: sys, userMessage: user,
+                temperature: mode.temperature, topP: mode.topP, topK: mode.topK,
+                repetitionPenalty: mode.repetitionPenalty, maxTokensCap: mode.maxTokensCap
+            )
+        }
+        // Warmup — not measured
+        try await call()
+        // 8 measured rounds
+        var times: [Double] = []
+        for _ in 0..<8 {
+            let t0 = CFAbsoluteTimeGetCurrent()
+            try await call()
+            times.append((CFAbsoluteTimeGetCurrent() - t0) * 1000)
+        }
+        let mean = times.reduce(0, +) / Double(times.count)
+        let variance = times.map { ($0 - mean) * ($0 - mean) }.reduce(0, +) / Double(times.count)
+        let stddev = sqrt(variance)
+        Logger.debug(
+            "BENCHMARK: mean=\(Int(mean))ms stddev=\(Int(stddev))ms " +
+            "min=\(Int(times.min()!))ms max=\(Int(times.max()!))ms",
+            subsystem: .transcription
+        )
+        print(String(format: "\n=== BENCHMARK: mean=%.0fms stddev=%.0fms min=%.0fms max=%.0fms ===",
+                     mean, stddev, times.min()!, times.max()!))
+    }
+
     // MARK: MTP short-input smoke
 
     func testMTPShortInput() async throws {

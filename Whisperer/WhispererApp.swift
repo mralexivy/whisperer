@@ -3407,9 +3407,8 @@ private struct LLMModelListView: View {
                 selectedModel = variant
             }) {
                 VStack(alignment: .leading, spacing: 0) {
-                    // Model row
+                    // Top row: radio + name + recommended badge
                     HStack(spacing: 8) {
-                        // Radio button
                         ZStack {
                             Circle()
                                 .stroke(isSelected ? MBColors.accent : MBColors.textTertiary, lineWidth: 2)
@@ -3424,6 +3423,7 @@ private struct LLMModelListView: View {
                         Text(variant.displayName)
                             .font(.system(size: 11, weight: isSelected ? .semibold : .regular))
                             .foregroundColor(isSelected ? MBColors.textPrimary : MBColors.textSecondary)
+                            .lineLimit(1)
 
                         Spacer()
 
@@ -3434,16 +3434,25 @@ private struct LLMModelListView: View {
                                 .padding(.horizontal, 6)
                                 .padding(.vertical, 2)
                                 .background(Capsule().fill(MBColors.accent.opacity(0.12)))
+                                .lineLimit(1)
+                                .fixedSize(horizontal: true, vertical: false)
                         }
+                    }
 
+                    // Subtitle: size · speed
+                    HStack(spacing: 4) {
                         Text(variant.sizeDescription)
                             .font(.caption2)
                             .foregroundColor(MBColors.textTertiary)
-
+                        Text("·")
+                            .font(.caption2)
+                            .foregroundColor(MBColors.textTertiary)
                         Text(variant.speedDescription)
                             .font(.caption2)
                             .foregroundColor(MBColors.accent.opacity(0.8))
                     }
+                    .padding(.leading, 22)
+                    .padding(.top, 2)
 
                     // Phase-based status under the selected model
                     if isSelected {
@@ -3533,40 +3542,51 @@ private struct LLMModelRowStatic: View {
     let isSelected: Bool
 
     var body: some View {
-        HStack(spacing: 8) {
-            ZStack {
-                Circle()
-                    .stroke(isSelected ? MBColors.accent : MBColors.textTertiary, lineWidth: 2)
-                    .frame(width: 14, height: 14)
-                if isSelected {
+        VStack(alignment: .leading, spacing: 0) {
+            HStack(spacing: 8) {
+                ZStack {
                     Circle()
-                        .fill(MBColors.accent)
-                        .frame(width: 8, height: 8)
+                        .stroke(isSelected ? MBColors.accent : MBColors.textTertiary, lineWidth: 2)
+                        .frame(width: 14, height: 14)
+                    if isSelected {
+                        Circle()
+                            .fill(MBColors.accent)
+                            .frame(width: 8, height: 8)
+                    }
+                }
+
+                Text(variant.displayName)
+                    .font(.system(size: 11, weight: isSelected ? .semibold : .regular))
+                    .foregroundColor(isSelected ? MBColors.textPrimary : MBColors.textSecondary)
+                    .lineLimit(1)
+
+                Spacer()
+
+                if variant.isRecommended {
+                    Text("Recommended")
+                        .font(.system(size: 9, weight: .bold, design: .rounded))
+                        .foregroundColor(MBColors.accent)
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 2)
+                        .background(Capsule().fill(MBColors.accent.opacity(0.12)))
+                        .lineLimit(1)
+                        .fixedSize(horizontal: true, vertical: false)
                 }
             }
 
-            Text(variant.displayName)
-                .font(.system(size: 11, weight: isSelected ? .semibold : .regular))
-                .foregroundColor(isSelected ? MBColors.textPrimary : MBColors.textSecondary)
-
-            Spacer()
-
-            if variant.isRecommended {
-                Text("Recommended")
-                    .font(.system(size: 9, weight: .bold, design: .rounded))
-                    .foregroundColor(MBColors.accent)
-                    .padding(.horizontal, 6)
-                    .padding(.vertical, 2)
-                    .background(Capsule().fill(MBColors.accent.opacity(0.12)))
+            HStack(spacing: 4) {
+                Text(variant.sizeDescription)
+                    .font(.caption2)
+                    .foregroundColor(MBColors.textTertiary)
+                Text("·")
+                    .font(.caption2)
+                    .foregroundColor(MBColors.textTertiary)
+                Text(variant.speedDescription)
+                    .font(.caption2)
+                    .foregroundColor(MBColors.accent.opacity(0.8))
             }
-
-            Text(variant.sizeDescription)
-                .font(.caption2)
-                .foregroundColor(MBColors.textTertiary)
-
-            Text(variant.speedDescription)
-                .font(.caption2)
-                .foregroundColor(MBColors.accent.opacity(0.8))
+            .padding(.leading, 22)
+            .padding(.top, 2)
         }
     }
 }

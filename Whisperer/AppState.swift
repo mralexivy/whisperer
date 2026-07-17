@@ -366,7 +366,7 @@ class AppState: ObservableObject {
             }
         }
     }
-    @Published var selectedLLMModel: LLMModelVariant = .qwen3_5_4B_mtp {
+    @Published var selectedLLMModel: LLMModelVariant = .whispererV3 {
         didSet {
             UserDefaults.standard.set(selectedLLMModel.rawValue, forKey: "selectedLLMModel")
             if llmEnabled {
