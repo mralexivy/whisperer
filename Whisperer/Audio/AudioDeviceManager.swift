@@ -15,7 +15,7 @@ import AppKit
 
 /// Represents the resolved audio input route at recording start time.
 /// Device identity is resolved fresh from CoreAudio — never cached.
-enum ResolvedInputRoute: Sendable, CustomStringConvertible {
+enum ResolvedInputRoute: Sendable, Equatable, CustomStringConvertible {
     case systemDefault
     case explicit(uid: String, deviceID: AudioDeviceID)
 
