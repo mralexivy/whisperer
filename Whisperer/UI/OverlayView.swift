@@ -208,26 +208,16 @@ struct OverlayView: View {
                     )
                 }
 
-                // Download indicator (shown during model download)
-                if case .downloadingModel = appState.state {
-                    DownloadingIndicator(scale: scale)
-                }
-
                 // Main control bar — crossfades to hands-free toast when activated
                 ZStack {
                     // Normal recording controls
                     HStack(spacing: spacing) {
-                        // Left indicator: Download indicator OR Pause/Resume button
-                        if case .downloadingModel = appState.state {
-                            DownloadingLeftIndicator(scale: scale)
-                        } else {
-                            PauseResumeButton(
-                                isPaused: $appState.isPaused,
-                                isRecording: appState.state.isRecording,
-                                scale: scale
-                            ) {
-                                appState.togglePause()
-                            }
+                        PauseResumeButton(
+                            isPaused: $appState.isPaused,
+                            isRecording: appState.state.isRecording,
+                            scale: scale
+                        ) {
+                            appState.togglePause()
                         }
 
                         if let icon = appState.targetAppIcon {
@@ -244,8 +234,6 @@ struct OverlayView: View {
                             TranscribingIndicator(scale: scale)
                         } else if case .rewriting = appState.state {
                             TranscribingIndicator(scale: scale)
-                        } else if case .downloadingModel(let progress) = appState.state {
-                            DownloadIndicator(progress: progress, scale: scale)
                         } else {
                             OutputAudioButton(
                                 isOutputMuted: $appState.isOutputAudioMuted,
@@ -255,15 +243,8 @@ struct OverlayView: View {
                             }
                         }
 
-                        // Right button: Cancel download OR Stop recording
-                        if case .downloadingModel = appState.state {
-                            CancelDownloadButton(scale: scale) {
-                                appState.cancelModelDownload()
-                            }
-                        } else {
-                            CloseButton(scale: scale, isHovered: $isCloseHovered) {
-                                appState.stopRecording()
-                            }
+                        CloseButton(scale: scale, isHovered: $isCloseHovered) {
+                            appState.stopRecording()
                         }
                     }
                     .opacity(appState.showHandsFreeToast ? 0 : 1)
@@ -430,77 +411,6 @@ struct OutputAudioButton: View {
     }
 }
 
-// MARK: - Downloading Left Indicator (non-interactive)
-
-struct DownloadingLeftIndicator: View {
-    var scale: CGFloat = 1.0
-    @State private var isAnimating = false
-
-    private let blueAccent = Color(red: 0.357, green: 0.424, blue: 0.969)  // #5B6CF7
-
-    var body: some View {
-        ZStack {
-            Circle()
-                .fill(blueAccent.opacity(0.15))
-                .frame(width: 44 * scale, height: 44 * scale)
-
-            Image(systemName: "arrow.down.circle.fill")
-                .font(.system(size: 20 * scale, weight: .medium))
-                .foregroundColor(blueAccent)
-                .scaleEffect(isAnimating ? 1.1 : 0.95)
-                .animation(.easeInOut(duration: 0.8).repeatForever(autoreverses: true), value: isAnimating)
-        }
-        .frame(width: 44 * scale, height: 44 * scale)
-        .onAppear {
-            isAnimating = true
-        }
-    }
-}
-
-// MARK: - Cancel Download Button
-
-struct CancelDownloadButton: View {
-    var scale: CGFloat = 1.0
-    var onTap: () -> Void
-    @State private var isHovered = false
-
-    private let buttonSize: CGFloat = 36
-
-    var body: some View {
-        Button(action: onTap) {
-            ZStack {
-                Circle()
-                    .fill(Color.red.opacity(isHovered ? 0.25 : 0.1))
-                    .frame(width: buttonSize * scale, height: buttonSize * scale)
-
-                Image(systemName: "xmark")
-                    .font(.system(size: 14 * scale, weight: .bold))
-                    .foregroundColor(isHovered ? .red.opacity(1) : .red.opacity(0.7))
-            }
-            .frame(width: buttonSize * scale, height: buttonSize * scale)
-            .background(
-                // Outer glow ring on hover
-                Circle()
-                    .stroke(Color.red.opacity(isHovered ? 0.3 : 0), lineWidth: 1.5 * scale)
-                    .frame(width: 42 * scale, height: 42 * scale)
-                    .blur(radius: 2)
-            )
-            .scaleEffect(isHovered ? 1.08 : 1.0)
-            .shadow(color: isHovered ? Color.red.opacity(0.2) : .clear, radius: 6, y: 2)
-            .animation(.spring(response: 0.3, dampingFraction: 0.7), value: isHovered)
-        }
-        .buttonStyle(.plain)
-        .onHover { hovering in
-            withAnimation(.easeOut(duration: 0.15)) {
-                isHovered = hovering
-            }
-            if hovering { NSCursor.pointingHand.push() } else { NSCursor.pop() }
-        }
-        .hoverTooltip("Cancel download", position: .above, isVisible: $isHovered, scale: scale)
-        .accessibilityLabel("Cancel model download")
-    }
-}
-
 // MARK: - Close Button (Stop Recording)
 
 struct CloseButton: View {
@@ -655,46 +565,6 @@ struct ProcessingIndicator: View {
 
     var body: some View {
         AnimatedStatusCapsule(text: "Processing", borderColor: accentPurple, scale: scale)
-    }
-}
-
-// MARK: - Download Indicator (top bar — animated like ProcessingIndicator)
-
-struct DownloadingIndicator: View {
-    var scale: CGFloat = 1.0
-    private let accentBlue = Color(red: 0.357, green: 0.424, blue: 0.969)
-
-    var body: some View {
-        AnimatedStatusCapsule(text: "Downloading...", borderColor: accentBlue, scale: scale)
-    }
-}
-
-// MARK: - Download Indicator (inline, for HUD bar)
-
-struct DownloadIndicator: View {
-    let progress: Double
-    var scale: CGFloat = 1.0
-
-    private let blueAccent = Color(red: 0.357, green: 0.424, blue: 0.969)  // #5B6CF7
-
-    var body: some View {
-        ZStack {
-            Circle()
-                .stroke(Color.white.opacity(0.1), lineWidth: 3 * scale)
-                .frame(width: 36 * scale, height: 36 * scale)
-
-            Circle()
-                .trim(from: 0, to: progress)
-                .stroke(blueAccent, style: StrokeStyle(lineWidth: 3 * scale, lineCap: .round))
-                .frame(width: 36 * scale, height: 36 * scale)
-                .rotationEffect(.degrees(-90))
-                .animation(.linear(duration: 0.3), value: progress)
-
-            Text("\(Int(progress * 100))")
-                .font(.system(size: 10 * scale, weight: .bold))
-                .foregroundColor(.white)
-                .monospacedDigit()
-        }
     }
 }
 

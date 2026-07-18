@@ -1879,6 +1879,7 @@ struct ModelMenuItem: View {
     var isSelected: Bool { appState.selectedModel == model }
     var isDownloaded: Bool { appState.isModelDownloaded(model) }
     var isDownloading: Bool { appState.downloadingModel == model }
+    var isReadyToActivate: Bool { appState.readyToActivateModel == model }
 
     var body: some View {
         Button(action: { handleTap() }) {
@@ -1941,20 +1942,30 @@ struct ModelMenuItem: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain).pointerOnHover()
-        .disabled(appState.isModelBusy)
+        // Allow tap-through when this row is downloading (cancel button) or ready to activate
+        .disabled(!isDownloading && !isReadyToActivate && appState.isModelBusy)
     }
 
     var isLoading: Bool { appState.isLoadingWhisper && appState.selectedModel == model && appState.selectedBackendType == .whisperCpp }
 
     @ViewBuilder var statusBadge: some View {
         if isDownloading {
-            VStack(spacing: 2) {
-                HStack(spacing: 4) {
-                    ProgressView()
-                        .scaleEffect(0.5)
+            VStack(alignment: .trailing, spacing: 4) {
+                HStack(spacing: 6) {
+                    ProgressView(value: appState.downloadProgress)
+                        .progressViewStyle(.linear)
+                        .frame(width: 70)
+                        .tint(MBColors.accent)
                     Text("\(Int(appState.downloadProgress * 100))%")
                         .font(.caption2)
                         .foregroundColor(MBColors.accent)
+                        .monospacedDigit()
+                    Button(action: { appState.cancelModelDownload() }) {
+                        Image(systemName: "xmark.circle.fill")
+                            .foregroundColor(.red.opacity(0.8))
+                            .font(.system(size: 14))
+                    }
+                    .buttonStyle(.plain)
                 }
                 if let retryInfo = appState.downloadRetryInfo {
                     Text(retryInfo)
@@ -1962,6 +1973,17 @@ struct ModelMenuItem: View {
                         .foregroundColor(.orange)
                 }
             }
+        } else if isReadyToActivate {
+            Button(action: { appState.activateReadyModel() }) {
+                Text("Activate")
+                    .font(.system(size: 10, weight: .semibold))
+                    .foregroundColor(.white)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 3)
+                    .background(Capsule().fill(MBColors.accent))
+            }
+            .buttonStyle(.plain)
+            .disabled(appState.state != .idle)
         } else if isLoading {
             HStack(spacing: 4) {
                 ProgressView()
@@ -1993,9 +2015,11 @@ struct ModelMenuItem: View {
     }
 
     func handleTap() {
-        if isDownloaded {
+        if isReadyToActivate {
+            appState.activateReadyModel()
+        } else if isDownloaded {
             appState.selectModel(model)
-        } else {
+        } else if !isDownloading {
             Task {
                 await appState.downloadModel(model)
             }

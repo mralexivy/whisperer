@@ -181,6 +181,9 @@ class AppState: ObservableObject {
     @Published var downloadingModel: WhisperModel? = nil
     @Published var downloadProgress: Double = 0
     @Published var downloadRetryInfo: String?
+    /// Set when a Whisper model finishes downloading but hasn't been activated yet.
+    /// Allows the user to keep recording on the current model and activate when ready.
+    @Published var readyToActivateModel: WhisperModel? = nil
 
     // Component references
     var audioRecorder: AudioRecorder?
@@ -826,13 +829,12 @@ class AppState: ObservableObject {
         downloadingModel = model
         downloadProgress = 0
         downloadRetryInfo = nil
-        state = .downloadingModel(progress: 0)
+        // Do NOT set state = .downloadingModel — recording must remain available while downloading
 
         do {
             try await ModelDownloader.shared.downloadModel(model, progressCallback: { [weak self] progress in
                 Task { @MainActor in
                     self?.downloadProgress = progress
-                    self?.state = .downloadingModel(progress: progress)
                 }
             }, retryStatusCallback: { [weak self] attempt, maxAttempts in
                 Task { @MainActor in
@@ -844,14 +846,18 @@ class AppState: ObservableObject {
             downloadingModel = nil
             downloadProgress = 0
             downloadRetryInfo = nil
-            state = .idle
 
-            // Auto-select the newly downloaded model (only if still on Whisper backend)
+            // Don't auto-activate — let the user decide when to switch.
+            // If no model is currently loaded (e.g. first download), activate immediately.
             guard selectedBackendType == .whisperCpp else {
-                Logger.info("Backend switched during download, skipping auto-select of \(model.displayName)", subsystem: .model)
+                Logger.info("Backend switched during download, skipping activation of \(model.displayName)", subsystem: .model)
                 return
             }
-            selectModel(model)
+            if isModelLoaded {
+                readyToActivateModel = model
+            } else {
+                selectModel(model)
+            }
         } catch {
             // Check if this was a user cancellation (downloadingModel already cleared by cancelModelDownload)
             let wasCancelled = downloadingModel == nil ||
@@ -889,7 +895,14 @@ class AppState: ObservableObject {
         downloadingModel = nil
         downloadProgress = 0
         downloadRetryInfo = nil
-        state = .idle
+    }
+
+    /// Activate a model that finished downloading. No-op while recording is in progress.
+    func activateReadyModel() {
+        guard state == .idle, let model = readyToActivateModel else { return }
+        Logger.info("Activating ready model: \(model.displayName)", subsystem: .model)
+        readyToActivateModel = nil
+        selectModel(model)
     }
 
     // MARK: - Model Loading
