@@ -374,6 +374,9 @@ class StreamingTranscriber {
             prompt = initialPrompt
         }
 
+        // Reset abort flag on all backends before each chunk
+        whisper.resetAbort()
+
         // Set up live text callback on WhisperBridge if available
         if let bridge = whisper as? WhisperBridge {
             currentChunkLiveText = ""
@@ -382,7 +385,6 @@ class StreamingTranscriber {
                 self.currentChunkLiveText += (self.currentChunkLiveText.isEmpty ? "" : " ") + segmentText
                 self.updateLivePreview()
             }
-            bridge.resetAbort()
         }
 
         let normalizedSamples = normalizeSamples(chunk.samples)
@@ -433,10 +435,12 @@ class StreamingTranscriber {
                 }
             }
 
-            // Only advance past this chunk if transcription produced text or we're still
-            // recording. During stop, requestAbort() kills in-flight chunks — if we advance
-            // the index on an aborted (empty) chunk, the tail pass can't re-transcribe it.
-            if !trimmed.isEmpty || !self.isStopped {
+            // Only advance past this chunk when transcription produced text.
+            // Empty results (abort or timeout) must NOT advance the index — the tail pass
+            // will re-transcribe that audio. This is safe for all backends: Whisper's
+            // abort fires with isStopped=true (tail covers it); Parakeet timeouts during
+            // recording previously advanced the index incorrectly, losing audio.
+            if !trimmed.isEmpty {
                 self.lastTranscribedSampleIndex = chunk.endSample
                 // Clear preview accumulated text — chunk covers this audio now
                 self.previewAccumulatedText = ""
@@ -679,9 +683,9 @@ class StreamingTranscriber {
         previewTask?.cancel()
         previewTask = nil
 
-        // Abort any in-flight transcription
+        // Abort any in-flight transcription on all backends
+        whisper.requestAbort()
         if let bridge = whisper as? WhisperBridge {
-            bridge.requestAbort()
             bridge.onNewSegment = nil
         }
 
@@ -798,10 +802,8 @@ class StreamingTranscriber {
         previewTask?.cancel()
         previewTask = nil
 
-        // Abort in-flight chunk transcription
-        if let bridge = whisper as? WhisperBridge {
-            bridge.requestAbort()
-        }
+        // Abort in-flight chunk transcription on all backends
+        whisper.requestAbort()
 
         // Wait for in-flight chunk to complete (abort fires within ms)
         var waitCount = 0

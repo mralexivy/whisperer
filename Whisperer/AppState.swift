@@ -1930,7 +1930,7 @@ class AppState: ObservableObject {
             var finalText = ""
             var savedRecordId: UUID?
             if let transcriber = streamingTranscriber {
-                finalText = await withTimeoutResult(seconds: 3.0) {
+                finalText = await withTimeoutResult(seconds: 10.0) {
                     await transcriber.stopAsync()
                 } ?? ""
 
@@ -2172,12 +2172,13 @@ class AppState: ObservableObject {
                 return
             }
 
-            // Get final transcription — tail transcription has a 4s timeout
-            // in FluidAudioBridge, so 5s here is plenty of margin.
+            // Get final transcription.
+            // stopAsync() worst case: 2s abort wait + 4s tail timeout in FluidAudioBridge = 6s.
+            // 10s gives comfortable margin for all backends.
             var finalText = ""
             let transcriber = streamingTranscriber
             if let transcriber {
-                finalText = await withTimeoutResult(seconds: 5.0) {
+                finalText = await withTimeoutResult(seconds: 10.0) {
                     await transcriber.stopAsync()
                 } ?? ""
 

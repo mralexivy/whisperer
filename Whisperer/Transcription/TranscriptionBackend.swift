@@ -83,12 +83,23 @@ protocol TranscriptionBackend: AnyObject {
 
     /// Prepare for app shutdown (drain queues, prevent new work)
     func prepareForShutdown()
+
+    /// Signal the backend to abort any in-flight transcription immediately.
+    /// Called by StreamingTranscriber.stopAsync() on all backends.
+    func requestAbort()
+
+    /// Reset abort flag before starting a new chunk transcription.
+    /// Called by StreamingTranscriber.processNextChunk() on all backends.
+    func resetAbort()
 }
 
 // MARK: - Default Parameter Values
 
 extension TranscriptionBackend {
     var lastDetectedLanguage: String? { nil }
+
+    func requestAbort() { }
+    func resetAbort() { }
 
     func transcribe(
         samples: [Float],

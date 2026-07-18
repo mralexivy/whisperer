@@ -61,6 +61,10 @@ nonisolated class FluidAudioBridge: TranscriptionBackend {
     // Accessed from multiple threads (caller thread, queue, deinit) so guarded by modeLock.
     private var _isShuttingDown = false
 
+    // Abort flag — set by requestAbort(), cleared by resetAbort() before each chunk.
+    // Mirrors WhisperBridge.shouldAbort. Protected by modeLock.
+    private var _shouldAbort = false
+
     /// Model variant (v2=English-only, v3=multilingual)
     private let variant: ParakeetModelVariant
 
@@ -72,6 +76,12 @@ nonisolated class FluidAudioBridge: TranscriptionBackend {
     private var isShuttingDown: Bool {
         do { return try modeLock.withLock { _isShuttingDown } }
         catch { return true }
+    }
+
+    /// Thread-safe read of abort flag
+    private var shouldAbort: Bool {
+        do { return try modeLock.withLock { _shouldAbort } }
+        catch { return false }
     }
 
     /// Thread-safe check-and-set for language warning dedup
@@ -163,6 +173,19 @@ nonisolated class FluidAudioBridge: TranscriptionBackend {
         Logger.info("Vocabulary boosting configured with \(vocabulary.terms.count) terms (final pass only)", subsystem: .transcription)
     }
 
+    // MARK: - Abort (mirrors WhisperBridge.requestAbort / resetAbort)
+
+    func requestAbort() {
+        do { try modeLock.withLock { _shouldAbort = true } }
+        catch { }
+        Logger.debug("FluidAudioBridge abort requested", subsystem: .transcription)
+    }
+
+    func resetAbort() {
+        do { try modeLock.withLock { _shouldAbort = false } }
+        catch { }
+    }
+
     // MARK: - TranscriptionBackend
 
     /// Runs transcription on the GCD queue with lock + semaphore bridge.
@@ -171,6 +194,9 @@ nonisolated class FluidAudioBridge: TranscriptionBackend {
         do {
             return try ctxLock.withLock(timeout: lockTimeout) { [weak self] in
                 guard let self = self else { return "" }
+
+                // Abort early — same fast-exit as WhisperBridge.shouldAbort check
+                if self.shouldAbort { return "" }
 
                 // Capture vocabulary boosting state for use inside Task
                 let isFinalPass = self.currentMode == .finalPass
@@ -228,10 +254,15 @@ nonisolated class FluidAudioBridge: TranscriptionBackend {
                     semaphore.signal()
                 }
 
-                if semaphore.wait(timeout: .now() + 5.0) == .timedOut {
+                // 15s timeout — ANE inference is <1s in practice; this only fires on catastrophic hang
+                if semaphore.wait(timeout: .now() + 15.0) == .timedOut {
                     Logger.error("FluidAudio transcription hung — bailing out", subsystem: .transcription)
                     return ""
                 }
+
+                // Discard result if abort was requested during inference
+                if self.shouldAbort { return "" }
+
                 return result.trimmingCharacters(in: .whitespacesAndNewlines)
             }
         } catch SafeLockError.timeout {
@@ -289,6 +320,10 @@ nonisolated class FluidAudioBridge: TranscriptionBackend {
         completion: @escaping (String) -> Void
     ) {
         guard !isShuttingDown else {
+            completion("")
+            return
+        }
+        guard !shouldAbort else {
             completion("")
             return
         }
