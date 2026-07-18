@@ -280,7 +280,6 @@ class AudioMuter {
     }
 }
 
-#if DEBUG
 extension AudioMuter {
     func debugSnapshot() -> [String: String] {
         return [
@@ -289,4 +288,3 @@ extension AudioMuter {
         ]
     }
 }
-#endif

@@ -129,9 +129,7 @@ class AudioRecorder: NSObject {
     private var isMonitoringDefaultInputDevice = false
 
     // Last error from startRecordingInternal — retained for dump diagnostics
-    #if DEBUG
     private(set) var lastEngineStartError: Error?
-    #endif
 
     // Session disk backing — Int16 16 kHz mono CAF, written in parallel with Float32 callback
     private var sessionAudioFile: AVAudioFile?
@@ -468,9 +466,7 @@ class AudioRecorder: NSObject {
             return audioURL
         } catch {
             Logger.error("Failed to start audio engine: \(error.localizedDescription)", subsystem: .audio)
-            #if DEBUG
             lastEngineStartError = error
-            #endif
             throw error
         }
     }
@@ -1089,7 +1085,6 @@ extension AudioRecorder: HealthReportable {
     }
 }
 
-#if DEBUG
 extension AudioRecorder {
     var debugRecoveryAttemptCount: Int { recoveryAttemptCount }
 
@@ -1133,4 +1128,3 @@ extension AudioRecorder {
         return snap
     }
 }
-#endif

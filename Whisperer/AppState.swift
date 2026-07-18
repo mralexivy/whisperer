@@ -222,7 +222,6 @@ class AppState: ObservableObject {
         }
     }
 
-    #if DEBUG
     /// Read-only accessors for StuckStateDumper.
     var lastAmplitudeUpdateTimeForDebug: Date? { lastAmplitudeUpdateTime }
     var lastNonSilentAmplitudeTimeForDebug: Date? { lastNonSilentAmplitudeTime }
@@ -234,7 +233,6 @@ class AppState: ObservableObject {
     var llmEnabledForDebug: Bool { llmEnabled }
     var selectedLLMModelForDebug: LLMModelVariant { selectedLLMModel }
     var llmPostProcessorForDebug: LLMPostProcessor? { llmPostProcessor }
-    #endif
 
     // Pre-loaded transcription backend - keeps model in memory for instant recording start
     private var whisperBridge: TranscriptionBackend?
