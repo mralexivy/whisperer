@@ -60,6 +60,9 @@ class TextInjector {
     private var targetAppPID: pid_t?
     private var targetBundleID: String?
 
+    private(set) var injectorProgressCounter: UInt64 = 0
+    private var injectorIsInserting: Bool = false
+
     #if !APP_STORE
     // CGEvent keyboardSetUnicodeString has a practical limit on UTF-16 units per event.
     private static let cgEventUnicodeLimit = 200
@@ -104,6 +107,12 @@ class TextInjector {
     func insertText(_ text: String) async throws {
         guard !text.isEmpty else {
             throw InjectionError.emptyText
+        }
+
+        injectorIsInserting = true
+        defer {
+            injectorIsInserting = false
+            injectorProgressCounter &+= 1
         }
 
         #if APP_STORE
@@ -277,6 +286,22 @@ class TextInjector {
             object: nil,
             userInfo: ["text": text]
         )
+    }
+}
+
+// MARK: - HealthReportable
+
+extension TextInjector: HealthReportable {
+    var componentName: String { "TextInjector" }
+
+    var healthState: ComponentHealth {
+        let seq = injectorProgressCounter
+        let now = ContinuousClock.now
+        var h = ComponentHealth()
+        h.status = injectorIsInserting ? .busy : .healthy
+        h.progress = ProgressInfo(sequence: seq, completedWork: injectorIsInserting ? 0.5 : 1.0, lastUpdate: now)
+        h.metadata = ["targetBundle": .string(targetBundleID ?? "none")]
+        return h
     }
 }
 

@@ -2697,6 +2697,13 @@
 		};
 /* End XCConfigurationList section */
 
+/* Begin XCLocalSwiftPackageReference section */
+		AACC00022F40000100000002 /* XCLocalSwiftPackageReference "Vendor/mlx-swift-lm" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = "Vendor/mlx-swift-lm";
+		};
+/* End XCLocalSwiftPackageReference section */
+
 /* Begin XCRemoteSwiftPackageReference section */
 		AACC00012F40000100000001 /* XCRemoteSwiftPackageReference "FluidAudio" */ = {
 			isa = XCRemoteSwiftPackageReference;
@@ -2705,10 +2712,6 @@
 				branch = main;
 				kind = branch;
 			};
-		};
-		AACC00022F40000100000002 /* XCLocalSwiftPackageReference "Vendor/mlx-swift-lm" */ = {
-			isa = XCLocalSwiftPackageReference;
-			relativePath = Vendor/mlx-swift-lm;
 		};
 		AACC000B2F40000100000006 /* XCRemoteSwiftPackageReference "swift-transformers" */ = {
 			isa = XCRemoteSwiftPackageReference;

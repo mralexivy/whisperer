@@ -91,8 +91,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         // Install crash handlers first thing
         CrashHandler.shared.install()
 
-        // Start queue health monitoring
-        QueueHealthMonitor.shared.startMonitoring()
+        // Start health monitoring
+        HealthManager.shared.startMonitoring()
 
         // Hide dock icon
         NSApp.setActivationPolicy(.accessory)
@@ -146,6 +146,10 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         #if !APP_STORE
         appState.textSelectionService = TextSelectionService()
         #endif
+
+        // Register long-lived components with HealthManager
+        if let recorder = appState.audioRecorder { HealthManager.shared.register(recorder) }
+        if let injector = appState.textInjector { HealthManager.shared.register(injector) }
 
 
         // Device selection is resolved fresh at recording time via
@@ -277,9 +281,9 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         Logger.debug("Waiting for Metal operations to complete...", subsystem: .app)
         try? await Task.sleep(nanoseconds: 200_000_000)  // 200ms
 
-        // 6. Stop queue health monitoring
-        Logger.debug("Stopping queue health monitoring...", subsystem: .app)
-        QueueHealthMonitor.shared.stopMonitoring()
+        // 6. Stop health monitoring
+        Logger.debug("Stopping health monitoring...", subsystem: .app)
+        HealthManager.shared.stopMonitoring()
 
         // 7. Remove crash marker (clean exit)
         CrashHandler.shared.uninstall()

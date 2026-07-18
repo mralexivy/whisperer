@@ -2,12 +2,11 @@
 //  StuckStateDumper.swift
 //  Whisperer
 //
-//  DEBUG-only state dumper triggered when the audio-progress watchdog detects
-//  a stuck recording. Writes a self-contained snapshot to disk so the bug can
-//  be analyzed post-mortem instead of guessed at from log fragments.
+//  Progress-based stall dumper — runs in Release and Debug builds.
+//  Triggered by HealthManager when a component exceeds its critical threshold.
+//  Writes stall-latest.dump (always overwritten) and history/stall-<ts>.dump
+//  (capped at 10 files).
 //
-
-#if DEBUG
 
 import AppKit
 import AVFoundation
@@ -27,12 +26,16 @@ enum StuckStateDumper {
 
         let logsDir = FileManager.default.homeDirectoryForCurrentUser
             .appendingPathComponent("Library/Logs/Whisperer")
+        let historyDir = logsDir.appendingPathComponent("history")
         try? FileManager.default.createDirectory(at: logsDir, withIntermediateDirectories: true)
-
-        let dumpURL = logsDir.appendingPathComponent("stuck-\(timestamp).dump")
+        try? FileManager.default.createDirectory(at: historyDir, withIntermediateDirectories: true)
 
         var output = ""
-        output += renderHeader(reason: reason, now: now)
+        output += renderHeader(reason: reason, now: now, timestamp: timestamp)
+        output += renderSystemSnapshot()
+        output += renderComponentHealth()
+        output += renderHealthTimeline()
+        output += renderRingBuffer()
         output += renderAppState()
         output += renderAudioRecorder()
         output += renderAudioDevices()
@@ -42,29 +45,141 @@ enum StuckStateDumper {
         output += renderThreadSample()
         output += renderRecentLogs()
 
-        try? output.write(to: dumpURL, atomically: true, encoding: .utf8)
+        // Always overwrite stall-latest.dump
+        let latestURL = logsDir.appendingPathComponent("stall-latest.dump")
+        try? output.write(to: latestURL, atomically: true, encoding: .utf8)
 
-        Logger.error("Stuck state dump written: \(dumpURL.path)", subsystem: .app)
+        // Also write to history/ and cap at 10 files
+        let historyURL = historyDir.appendingPathComponent("stall-\(timestamp).dump")
+        try? output.write(to: historyURL, atomically: true, encoding: .utf8)
+        pruneHistory(historyDir: historyDir, maxFiles: 10)
+
+        Logger.error("Stall dump written: \(latestURL.path)", subsystem: .app)
+    }
+
+    // MARK: - History pruning
+
+    private static func pruneHistory(historyDir: URL, maxFiles: Int) {
+        guard let contents = try? FileManager.default.contentsOfDirectory(
+            at: historyDir,
+            includingPropertiesForKeys: [.creationDateKey],
+            options: .skipsHiddenFiles
+        ) else { return }
+
+        let dumps = contents.filter { $0.pathExtension == "dump" }
+            .sorted { $0.lastPathComponent < $1.lastPathComponent }  // lexicographic = chronological
+
+        if dumps.count > maxFiles {
+            for url in dumps.prefix(dumps.count - maxFiles) {
+                try? FileManager.default.removeItem(at: url)
+            }
+        }
     }
 
     // MARK: - Sections
 
-    private static func renderHeader(reason: String, now: Date) -> String {
+    private static func renderHeader(reason: String, now: Date, timestamp: String) -> String {
         let pid = ProcessInfo.processInfo.processIdentifier
         let uptime = ProcessInfo.processInfo.systemUptime
         let version = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "unknown"
         let build = Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "unknown"
+        let osVersion = ProcessInfo.processInfo.operatingSystemVersionString
+        #if DEBUG
+        let buildConfig = "Debug"
+        #elseif APP_STORE
+        let buildConfig = "AppStore"
+        #else
+        let buildConfig = "Release"
+        #endif
         return """
-        # Whisperer Stuck-State Dump
-
-        - **Reason:** \(reason)
-        - **Timestamp (UTC):** \(now)
-        - **PID:** \(pid)
-        - **System uptime:** \(String(format: "%.0f", uptime))s
-        - **App version:** \(version) (\(build))
-        - **Build config:** DEBUG
+        ## Whisperer Health Dump
+        Format:       v2
+        HealthManager: 1.0
+        App:          \(version) (build \(build))
+        macOS:        \(osVersion)
+        Build:        \(buildConfig)
+        PID:          \(pid)
+        Uptime:       \(String(format: "%.0f", uptime))s
+        Timestamp:    \(timestamp)
+        Reason:       \(reason)
 
         """
+    }
+
+    @MainActor
+    private static func renderSystemSnapshot() -> String {
+        let s = AppState.shared
+        var lines: [String] = ["\n## System Snapshot\n"]
+
+        // CPU (app process) — via host_processor_info for user+sys ticks
+        var info = task_vm_info_data_t()
+        var count = mach_msg_type_number_t(MemoryLayout<task_vm_info_data_t>.size / MemoryLayout<natural_t>.size)
+        let kr = withUnsafeMutablePointer(to: &info) {
+            $0.withMemoryRebound(to: integer_t.self, capacity: Int(count)) {
+                task_info(mach_task_self_, task_flavor_t(TASK_VM_INFO), $0, &count)
+            }
+        }
+        if kr == KERN_SUCCESS {
+            lines.append("Memory:          \(formatBytes(info.phys_footprint)) physFootprint")
+        }
+
+        // Focused app
+        if let frontApp = NSWorkspace.shared.frontmostApplication {
+            lines.append("Focused app:     \(frontApp.bundleIdentifier ?? "unknown") (\(frontApp.localizedName ?? "?"))")
+        }
+
+        #if !APP_STORE
+        // AX permission
+        let axGranted = AXIsProcessTrusted()
+        lines.append("AX permission:   \(axGranted ? "granted" : "denied")")
+        #endif
+
+        // Recording duration
+        if case .recording(let start) = s.state {
+            lines.append("Recording:       \(String(format: "%.1f", Date().timeIntervalSince(start)))s elapsed")
+        } else {
+            lines.append("Recording:       not active (state=\(s.state))")
+        }
+
+        // Audio device
+        if let recorder = s.audioRecorder {
+            let snap = recorder.debugSnapshot()
+            let deviceName = snap["selectedDevice"] ?? "unknown"
+            lines.append("Audio device:    \(deviceName)")
+        }
+
+        // Model
+        if let loadedModel = s.loadedModelForDebug {
+            let modelDir = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first?
+                .appendingPathComponent("Whisperer") ?? URL(fileURLWithPath: "/tmp")
+            let coreMLDir = modelDir.appendingPathComponent(loadedModel.coreMLEncoderDirectoryName ?? "")
+            let hasCoreML = FileManager.default.fileExists(atPath: coreMLDir.path)
+            lines.append("Model:           \(loadedModel.rawValue) + CoreML encoder (\(hasCoreML ? "present" : "absent"))")
+        } else {
+            lines.append("Model:           not loaded")
+        }
+
+        // Tiny bridge
+        lines.append("Tiny bridge:     \(s.modelPoolForDebug?.previewBridge != nil ? "loaded (CPU-only)" : "nil")")
+        lines.append("VAD:             \(s.sileroVADIsNilForDebug ? "nil" : "loaded")")
+        lines.append("LLM:             \(s.llmEnabledForDebug ? "enabled" : "disabled")")
+
+        return lines.joined(separator: "\n") + "\n"
+    }
+
+    private static func renderComponentHealth() -> String {
+        let snap = HealthManager.shared.snapshot()
+        return "\n## Component Health\n\n\(snap)\n"
+    }
+
+    private static func renderHealthTimeline() -> String {
+        let timeline = HealthManager.shared.formattedTimeline()
+        return "\n## Health Timeline (status transitions)\n\n\(timeline)\n"
+    }
+
+    private static func renderRingBuffer() -> String {
+        let events = EventRingBuffer.shared.formattedSnapshot(last: 200)
+        return "\n## Ring Buffer Events (last 200)\n\n\(events)\n"
     }
 
     @MainActor
@@ -137,7 +252,6 @@ enum StuckStateDumper {
     private static func renderAudioDevices() -> String {
         var lines: [String] = ["\n## Audio Devices\n"]
 
-        // System default input device
         var defaultID: AudioDeviceID = 0
         var defaultSize = UInt32(MemoryLayout<AudioDeviceID>.size)
         var defaultAddr = AudioObjectPropertyAddress(
@@ -154,7 +268,6 @@ enum StuckStateDumper {
             lines.append("- systemDefaultInputDevice: error \(defaultStatus)")
         }
 
-        // Enumerate all devices
         var allSize: UInt32 = 0
         var allAddr = AudioObjectPropertyAddress(
             mSelector: kAudioHardwarePropertyDevices,
@@ -168,7 +281,6 @@ enum StuckStateDumper {
 
         lines.append("- allDevices (\(deviceCount) total):")
         for deviceID in deviceIDs {
-            // Check if this device has input streams
             var streamsSize: UInt32 = 0
             var streamsAddr = AudioObjectPropertyAddress(
                 mSelector: kAudioDevicePropertyStreams,
@@ -177,7 +289,6 @@ enum StuckStateDumper {
             )
             let hasInput = AudioObjectGetPropertyDataSize(deviceID, &streamsAddr, 0, nil, &streamsSize) == noErr && streamsSize > 0
 
-            // Transport type
             var transport: UInt32 = 0
             var transportSize = UInt32(MemoryLayout<UInt32>.size)
             var transportAddr = AudioObjectPropertyAddress(
@@ -201,7 +312,6 @@ enum StuckStateDumper {
             default:                                   transportStr = "0x\(String(transport, radix: 16))"
             }
 
-            // Alive status
             var isAlive: UInt32 = 0
             var aliveSize = UInt32(MemoryLayout<UInt32>.size)
             var aliveAddr = AudioObjectPropertyAddress(
@@ -253,7 +363,6 @@ enum StuckStateDumper {
     private static func renderMemoryUsage() -> String {
         var lines: [String] = ["\n## Memory Usage\n"]
 
-        // Process RSS via mach task_vm_info (no entitlement required in Debug)
         var info = task_vm_info_data_t()
         var count = mach_msg_type_number_t(MemoryLayout<task_vm_info_data_t>.size / MemoryLayout<natural_t>.size)
         let kr = withUnsafeMutablePointer(to: &info) {
@@ -270,7 +379,6 @@ enum StuckStateDumper {
             lines.append("- process.rss: error \(kr)")
         }
 
-        // Whisper model file sizes on disk
         let s = AppState.shared
         let modelDir = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first?
             .appendingPathComponent("Whisperer") ?? URL(fileURLWithPath: "/tmp")
@@ -285,7 +393,6 @@ enum StuckStateDumper {
             lines.append("- whisper.mainModel: not loaded")
         }
 
-        // Tiny preview/detector model
         let tinyURL = modelDir.appendingPathComponent(WhisperModel.tiny.rawValue)
         let tinyExists = FileManager.default.fileExists(atPath: tinyURL.path)
         if tinyExists {
@@ -297,7 +404,6 @@ enum StuckStateDumper {
             lines.append("- whisper.tinyBridge: not downloaded")
         }
 
-        // ModelPool backend count
         if let pool = s.modelPoolForDebug {
             lines.append("- modelPool.previewBridge: \(pool.previewBridge != nil ? "alive" : "nil")")
             lines.append("- modelPool.fallbackProfile: \(pool.fallbackProfile.map { $0.model.rawValue } ?? "nil")")
@@ -305,16 +411,12 @@ enum StuckStateDumper {
             lines.append("- modelPool: nil")
         }
 
-        // SileroVAD
         lines.append("- sileroVAD: \(s.sileroVADIsNilForDebug ? "nil" : "loaded")")
-
-        // LLM post-processor
         lines.append("- llmEnabled: \(s.llmEnabledForDebug)")
         if s.llmEnabledForDebug {
             let llmVariant = s.selectedLLMModelForDebug
             if let llmProc = s.llmPostProcessorForDebug {
                 lines.append("- llm.model: \(llmVariant.displayName) loaded=\(llmProc.isModelLoaded) loading=\(llmProc.isLoading)")
-                // Try to find directory size on disk (MLX models live in ~/.cache/huggingface/hub)
                 let hfCacheBase = FileManager.default.homeDirectoryForCurrentUser
                     .appendingPathComponent(".cache/huggingface/hub")
                 let modelDirName = "models--" + llmVariant.huggingFaceId.replacingOccurrences(of: "/", with: "--")
@@ -358,8 +460,9 @@ enum StuckStateDumper {
     }
 
     private static func renderThreadSample() -> String {
+        #if DEBUG
         let pid = ProcessInfo.processInfo.processIdentifier
-        let sampleURL = URL(fileURLWithPath: "/tmp/whisperer-stuck-sample.txt")
+        let sampleURL = URL(fileURLWithPath: "/tmp/whisperer-stall-sample.txt")
         try? FileManager.default.removeItem(at: sampleURL)
 
         let task = Process()
@@ -376,6 +479,9 @@ enum StuckStateDumper {
 
         let body = (try? String(contentsOf: sampleURL, encoding: .utf8)) ?? "_no output_"
         return "\n## Thread Sample\n\n```\n\(body)\n```\n"
+        #else
+        return "\n## Thread Sample\n\n_not available in Release/AppStore builds_\n"
+        #endif
     }
 
     private static func renderRecentLogs() -> String {
@@ -389,5 +495,3 @@ enum StuckStateDumper {
         return "\n## Recent Logs (last 200 lines from \(url.lastPathComponent))\n\n```\n\(tail)\n```\n"
     }
 }
-
-#endif

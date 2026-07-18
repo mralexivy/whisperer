@@ -279,6 +279,15 @@ class WhisperBridge: TranscriptionBackend {
     // Language detected during the last transcription (from whisper_full_lang_id)
     private(set) var lastDetectedLanguage: String?
 
+    // HealthReportable
+    private(set) var whisperProgressCounter: UInt64 = 0
+    private var whisperOperationID: UInt64 = 0
+    private var whisperOperationStart: ContinuousClock.Instant = .now
+    private var whisperOperationDeadline: ContinuousClock.Instant = .now
+    private var whisperCurrentOp: String? = nil
+    private var whisperSegmentCount: Int = 0
+    private var expectedSegmentCount: Int = 1
+
     // Threshold for filtering segments based on no_speech probability.
     // Segments with no_speech_prob above this are considered non-speech hallucinations.
     // Set high (0.9) because without the logprob conjunction that whisper.cpp uses
@@ -341,8 +350,7 @@ class WhisperBridge: TranscriptionBackend {
         try loadModel()
         isInitialized = true
 
-        // Register queue for health monitoring
-        QueueHealthMonitor.shared.monitor(queue: queue, name: "whisper.transcribe")
+        // HealthManager registration is done by AppState after construction
 
         Logger.info("WhisperBridge initialized", subsystem: .transcription)
     }
@@ -437,6 +445,23 @@ class WhisperBridge: TranscriptionBackend {
         }
         guard !samples.isEmpty else { return "" }
 
+        // Track operation for HealthManager
+        let opID = whisperOperationID &+ 1
+        let duration = Double(samples.count) / 16000.0
+        let estimatedMs = duration * 1000.0 * (WhisperBridge.isAppleSilicon ? 0.15 : 0.5)
+        whisperOperationID = opID
+        whisperOperationStart = .now
+        whisperOperationDeadline = .now + .milliseconds(Int(estimatedMs * 2))
+        whisperCurrentOp = "transcribing"
+        whisperSegmentCount = 0
+        expectedSegmentCount = max(1, Int(duration / 2.0))
+        EventRingBuffer.shared.record(
+            component: "WhisperBridge",
+            operation: "transcribeStarted",
+            kind: .progress,
+            metadata: ["op": .int(Int(opID)), "durationSec": .double(duration)]
+        )
+
         var wparams = whisper_full_default_params(WHISPER_SAMPLING_GREEDY)
         wparams.print_progress = false
         wparams.print_special = false
@@ -475,6 +500,10 @@ class WhisperBridge: TranscriptionBackend {
                 guard let userData = userData, let ctx = ctx else { return }
                 let bridge = Unmanaged<WhisperBridge>.fromOpaque(userData).takeUnretainedValue()
                 bridge.lastSegmentTime = Date()
+                bridge.whisperProgressCounter &+= 1
+                bridge.whisperSegmentCount += 1
+                // Extend deadline as progress arrives
+                bridge.whisperOperationDeadline = .now + .seconds(4)
 
                 // Read the latest segments
                 let totalSegments = whisper_full_n_segments(ctx)
@@ -576,6 +605,7 @@ class WhisperBridge: TranscriptionBackend {
 
         // Reset failure counter on success
         consecutiveFailures = 0
+        whisperCurrentOp = nil
 
         // Extract detected language (useful when auto-detect is enabled)
         let langId = whisper_full_lang_id(ctx)
@@ -589,7 +619,12 @@ class WhisperBridge: TranscriptionBackend {
             let noSpeechProb = whisper_full_get_segment_no_speech_prob(ctx, i)
             if noSpeechProb > noSpeechProbThreshold {
                 if let segmentText = whisper_full_get_segment_text(ctx, i) {
-                    Logger.debug("Skipping non-speech segment (prob=\(String(format: "%.3f", noSpeechProb))): '\(String(cString: segmentText))'", subsystem: .transcription)
+                    EventRingBuffer.shared.record(
+                        component: "WhisperBridge",
+                        operation: "skipNonSpeech",
+                        kind: .state,
+                        metadata: ["prob": .double(Double(noSpeechProb))]
+                    )
                 }
                 continue
             }
@@ -759,5 +794,62 @@ class WhisperBridge: TranscriptionBackend {
                 Logger.warning("Forced whisper context cleanup without lock", subsystem: .transcription)
             }
         }
+    }
+}
+
+// MARK: - HealthReportable
+
+extension WhisperBridge: HealthReportable {
+
+    var componentName: String { "WhisperBridge" }
+
+    var healthState: ComponentHealth {
+        let seq = whisperProgressCounter
+        let now = ContinuousClock.now
+
+        guard let opName = whisperCurrentOp else {
+            // Idle
+            var h = ComponentHealth()
+            h.progress = ProgressInfo(sequence: seq, completedWork: 1.0, lastUpdate: now)
+            return h
+        }
+
+        let elapsed = now - whisperOperationStart
+        let deadline = whisperOperationDeadline
+        let pct = expectedSegmentCount > 0
+            ? min(1.0, Double(whisperSegmentCount) / Double(expectedSegmentCount))
+            : 0.0
+
+        let status: ComponentStatus
+        if now < deadline {
+            status = .healthy
+        } else if whisperSegmentCount > 0 && now < deadline + .seconds(4) {
+            status = .busy  // making progress but past initial estimate
+        } else if consecutiveFailures > 0 {
+            status = .stalled
+        } else if elapsed > .seconds(8) && whisperSegmentCount == 0 {
+            status = .stalled
+        } else {
+            status = .busy
+        }
+
+        let op = OperationInfo(
+            id: whisperOperationID,
+            name: opName,
+            started: whisperOperationStart,
+            deadline: deadline,
+            queueBacklog: 0
+        )
+
+        var h = ComponentHealth()
+        h.status = status
+        h.operation = op
+        h.progress = ProgressInfo(sequence: seq, completedWork: pct, lastUpdate: now)
+        h.dependencies = []
+        h.metadata = [
+            "segments": .int(whisperSegmentCount),
+            "failures": .int(consecutiveFailures)
+        ]
+        return h
     }
 }

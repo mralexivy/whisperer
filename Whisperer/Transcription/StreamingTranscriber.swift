@@ -24,6 +24,13 @@ class StreamingTranscriber {
     // Total samples ever received (monotonic counter — survives ring pruning)
     private var totalSamplesReceived: Int = 0
 
+    // HealthReportable progress counter
+    private(set) var transcriptionProgressCounter: UInt64 = 0
+    private var stCurrentOp: String? = nil
+    private var stOpStart: ContinuousClock.Instant = .now
+    private var stOpDeadline: ContinuousClock.Instant = .now
+    private var stOpID: UInt64 = 0
+
     // Ring buffer — holds recent audio only; pruned after each chunk to bound memory.
     // baseSampleIndex tracks absolute offset so all other indices remain absolute/monotonic.
     private struct RingBuffer {
@@ -310,7 +317,12 @@ class StreamingTranscriber {
                 )
                 if wasAttempted { detectionAttempts += 1 }
                 if routeDecision == nil {
-                    Logger.debug("Detection attempt \(detectionAttempts)/\(RoutingThresholds.maxDetectionAttempts) undecided", subsystem: .transcription)
+                    EventRingBuffer.shared.record(
+                        component: "StreamingTranscriber",
+                        operation: "detectionUndecided",
+                        kind: .state,
+                        metadata: ["attempt": .int(detectionAttempts), "max": .int(RoutingThresholds.maxDetectionAttempts)]
+                    )
                 }
             }
         }
@@ -338,7 +350,12 @@ class StreamingTranscriber {
             if let lastChunk = absoluteChunks.last {
                 lastClaimedSampleIndex = max(lastClaimedSampleIndex, lastChunk.endSample)
             }
-            Logger.debug("VAD emitted \(result.chunks.count) chunk(s), \(pendingChunks.count) pending, claimed up to \(lastClaimedSampleIndex)", subsystem: .transcription)
+            EventRingBuffer.shared.record(
+                component: "StreamingTranscriber",
+                operation: "vadEmitted",
+                kind: .progress,
+                metadata: ["chunks": .int(result.chunks.count), "pending": .int(pendingChunks.count)]
+            )
         }
 
         // Process next pending chunk if not busy
@@ -357,7 +374,16 @@ class StreamingTranscriber {
         isProcessing = true
 
         let chunkDuration = Double(chunk.endSample - chunk.startSample) / sampleRate
-        Logger.debug("Transcribing chunk: \(String(format: "%.1f", chunkDuration))s (\(chunk.samples.count) samples)", subsystem: .transcription)
+        stOpID &+= 1
+        stOpStart = .now
+        stOpDeadline = .now + .milliseconds(Int(chunkDuration * 1000.0 * 2))
+        stCurrentOp = "processingChunk"
+        EventRingBuffer.shared.record(
+            component: "StreamingTranscriber",
+            operation: "chunkQueued",
+            kind: .progress,
+            metadata: ["durationSec": .double(chunkDuration), "samples": .int(chunk.samples.count), "backlog": .int(pendingChunks.count)]
+        )
 
         // Context from previous chunk
         let prevText = completedChunkTexts.last
@@ -449,6 +475,8 @@ class StreamingTranscriber {
             self.currentChunkLiveText = ""
             self.isTranscribingChunk = false
             self.isProcessing = false
+            self.stCurrentOp = nil
+            self.transcriptionProgressCounter &+= 1
 
             // Trim ring: drop samples safely before both transcribed and previewed positions.
             // Keep 1s overlap for chunk boundary quality on next chunk.
@@ -459,7 +487,12 @@ class StreamingTranscriber {
                     try self.allSamplesLock.withLock {
                         self.ring.dropFront(toAbsoluteIndex: safeDrop)
                     }
-                    Logger.debug("Ring trimmed to absolute \(safeDrop), in-memory: \(self.ring.inMemoryCount) samples (\(String(format: "%.1f", Double(self.ring.inMemoryCount) / self.sampleRate))s)", subsystem: .transcription)
+                    EventRingBuffer.shared.record(
+                        component: "StreamingTranscriber",
+                        operation: "ringTrimmed",
+                        kind: .state,
+                        metadata: ["inMemory": .int(self.ring.inMemoryCount)]
+                    )
                 } catch {
                     Logger.error("Failed to trim ring: \(error.localizedDescription)", subsystem: .transcription)
                 }
@@ -598,7 +631,13 @@ class StreamingTranscriber {
                 self?.onTranscription?(display)
             }
 
-            Logger.debug("LivePreview: +\(deduped.split(separator: " ").count) words (total \(display.count) chars)", subsystem: .transcription)
+            EventRingBuffer.shared.record(
+                component: "StreamingTranscriber",
+                operation: "previewWords",
+                kind: .progress,
+                metadata: ["words": .int(deduped.split(separator: " ").count), "totalChars": .int(display.count)]
+            )
+            transcriptionProgressCounter &+= 1
         }
     }
 
@@ -1283,5 +1322,50 @@ class StreamingTranscriber {
                 }
             }
         }
+    }
+}
+
+// MARK: - HealthReportable
+
+extension StreamingTranscriber: HealthReportable {
+
+    var componentName: String { "StreamingTranscriber" }
+
+    var healthState: ComponentHealth {
+        let seq = transcriptionProgressCounter
+        let now = ContinuousClock.now
+
+        guard let opName = stCurrentOp else {
+            var h = ComponentHealth()
+            h.progress = ProgressInfo(sequence: seq, completedWork: 1.0, lastUpdate: now)
+            return h
+        }
+
+        let deadline = stOpDeadline
+        let status: ComponentStatus
+        if now < deadline {
+            status = .healthy
+        } else if isTranscribingChunk {
+            status = .busy  // waiting on WhisperBridge
+        } else {
+            status = .stalled
+        }
+
+        var op = OperationInfo(
+            id: stOpID,
+            name: opName,
+            started: stOpStart,
+            deadline: deadline,
+            queueBacklog: pendingChunks.count
+        )
+        op.deadline = deadline
+
+        var h = ComponentHealth()
+        h.status = status
+        h.operation = op
+        h.progress = ProgressInfo(sequence: seq, completedWork: isTranscribingChunk ? 0.5 : 1.0, lastUpdate: now)
+        h.dependencies = isTranscribingChunk ? ["WhisperBridge"] : []
+        h.metadata = ["backlog": .int(pendingChunks.count), "isStopped": .bool(isStopped)]
+        return h
     }
 }

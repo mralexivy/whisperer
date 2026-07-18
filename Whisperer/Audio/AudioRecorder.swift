@@ -62,6 +62,9 @@ class AudioRecorder: NSObject {
     // Tracks when the most recent audio callback fired (for continuous flow monitoring)
     private var lastAudioCallbackTime: Date?
 
+    // HealthReportable progress counter — incremented on every audio buffer
+    private(set) var audioProgressCounter: UInt64 = 0
+
     // Continuous audio flow watchdog — detects when audio stops flowing mid-recording
     private var audioFlowWatchdog: DispatchSourceTimer?
     private let audioFlowTimeout: TimeInterval = 3.0  // Trigger recovery if no data for 3s
@@ -329,6 +332,15 @@ class AudioRecorder: NSObject {
         case .systemDefault:
             if let defaultDeviceID = getSystemDefaultInputDeviceID() {
                 Logger.debug("Using system default input device: id=\(defaultDeviceID) (\(deviceName(for: defaultDeviceID) ?? "unknown"))", subsystem: .audio)
+                // Explicitly bind the AUHAL to the hardware device before prepare().
+                // AVAudioEngine implicitly routes through CADefaultDeviceAggregate, which can
+                // become broken (producing zero-filled buffers) when OS device events occur —
+                // and the aggregate persists across engine rebuilds within the same process.
+                // Binding directly to the hardware bypasses the broken aggregate path.
+                // Non-fatal: if setInputDevice fails, the engine falls back to implicit routing.
+                if !setInputDevice(defaultDeviceID, on: inputNode) {
+                    Logger.warning("Could not explicitly bind system default device (id=\(defaultDeviceID)); falling back to implicit AVAudioEngine routing", subsystem: .audio)
+                }
             } else {
                 Logger.debug("Using system default input device (could not resolve ID)", subsystem: .audio)
             }
@@ -467,6 +479,7 @@ class AudioRecorder: NSObject {
         // Track audio data arrival
         let isFirst = lastAudioCallbackTime == nil
         lastAudioCallbackTime = Date()
+        audioProgressCounter &+= 1
         if isFirst {
             Logger.debug("First audio data received", subsystem: .audio)
         }
@@ -1016,6 +1029,64 @@ enum RecordingError: Error {
     case microphonePermissionDenied
     case audioUnitFailed
     case engineCleanedUp
+}
+
+// MARK: - HealthReportable
+
+extension AudioRecorder: HealthReportable {
+
+    var componentName: String { "AudioRecorder" }
+
+    var healthState: ComponentHealth {
+        let seq = audioProgressCounter
+        let opName: String
+        let status: ComponentStatus
+        switch recorderState {
+        case .idle:
+            return ComponentHealth()
+        case .starting:
+            opName = "starting"
+            status = .healthy
+        case .recording:
+            opName = "recording"
+            status = .healthy
+        case .recovering:
+            opName = "recovering"
+            status = .busy
+        case .stopping:
+            opName = "stopping"
+            status = .healthy
+        }
+
+        let now = ContinuousClock.now
+        let opStart = recordingStartTime.map { start in
+            now - .seconds(Date().timeIntervalSince(start))
+        } ?? now
+
+        var op = OperationInfo(
+            id: UInt64(currentGeneration),
+            name: opName,
+            started: opStart,
+            deadline: opStart + .seconds(120),  // audio has no SLA — always progressing if healthy
+            queueBacklog: 0
+        )
+        op.deadline = opStart + .seconds(120)
+
+        var meta: [String: MetadataValue] = [
+            "recoveryAttempts": .int(recoveryAttemptCount),
+            "silentCallbacks": .int(consecutiveSilentCallbacks)
+        ]
+        if let devID = getEngineDeviceID() {
+            meta["deviceID"] = .int(Int(devID))
+        }
+
+        var health = ComponentHealth()
+        health.status = status
+        health.operation = op
+        health.progress = ProgressInfo(sequence: seq, completedWork: 1.0, lastUpdate: now)
+        health.metadata = meta
+        return health
+    }
 }
 
 #if DEBUG
