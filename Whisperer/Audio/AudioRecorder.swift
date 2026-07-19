@@ -205,6 +205,21 @@ class AudioRecorder: NSObject {
         recorderState = .starting(generation: generation)
         let attemptStart = Date()
 
+        // Safety net: if configure() hangs in buildGraph (e.g. engine.inputNode blocks waiting
+        // for CoreAudio), the continuation never resumes and all three attempts stay stuck.
+        // After 15s, force-idle so the user can try again. The hung Task will clean up when
+        // buildGraph eventually unblocks and sees the generation mismatch.
+        let timeoutGen = generation
+        let timeoutTask = Task { [weak self] in
+            guard let self else { return }
+            try? await Task.sleep(nanoseconds: 15_000_000_000)
+            guard case .starting(let g) = self.recorderState, g == timeoutGen else { return }
+            Logger.error("startRecording timed out after 15s (gen \(timeoutGen)) — forcing idle", subsystem: .audio)
+            self.currentGeneration += 1
+            self.recorderState = .idle
+        }
+        defer { timeoutTask.cancel() }
+
         // Attempt 1: use the provided route
         do {
             return try await startRecordingInternal(route: route, generation: generation)

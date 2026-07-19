@@ -106,7 +106,13 @@ actor AudioEngineLifecycle {
         generation += 1
         let gen = generation
         let e = AVAudioEngine()
-        let q = lifecycleQueue
+
+        // Replace the queue so this buildGraph is never blocked by a previous hung buildGraph.
+        // Same pattern as replaceDeadEngine() — old queue and any queued work are abandoned.
+        let newQ = DispatchQueue(label: "audio.engine.lifecycle.\(generation)", qos: .userInitiated, autoreleaseFrequency: .workItem)
+        lifecycleQueue = newQ
+        let q = newQ
+
         var boundDeviceID: AudioDeviceID? = nil
 
         try await withCheckedThrowingContinuation { cont in
