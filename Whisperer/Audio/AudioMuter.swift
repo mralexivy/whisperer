@@ -58,36 +58,14 @@ class AudioMuter {
         Logger.debug("Muting output device: \(deviceID)", subsystem: .audio)
         mutedDeviceID = deviceID
 
-        // Save current volumes for all channels and set to 0
-        // Don't clear savedVolumes - keep previous values if current is 0
+        // Save and mute only non-zero channels. Channels already at 0 are skipped —
+        // they need no muting and we have no valid restore target for them.
         var newlySaved: [UInt32: Float32] = [:]
-
-        // Try channels 0, 1, 2 (master, left, right)
         for element: UInt32 in [0, 1, 2] {
-            if let volume = getVolume(device: deviceID, element: element) {
-                // Only save non-zero volumes to avoid saving our own muted state
-                if volume > 0.001 {  // Use small threshold to avoid floating point issues
-                    newlySaved[element] = volume
-                    Logger.debug("Saved volume for element \(element): \(volume)", subsystem: .audio)
-                } else if let previousVolume = savedVolumes[element] {
-                    // Volume is 0, but we have a previous value - keep it
-                    newlySaved[element] = previousVolume
-                    Logger.debug("Keeping previous volume for element \(element): \(previousVolume) (current is 0)", subsystem: .audio)
-                } else {
-                    // Volume is 0 and we have no previous value - try master volume
-                    if let masterVolume = getMasterVolume(device: deviceID), masterVolume > 0.001 {
-                        newlySaved[element] = masterVolume
-                        Logger.debug("Using master volume for element \(element): \(masterVolume) (current is 0)", subsystem: .audio)
-                    } else {
-                        // Last resort: use 100% so user doesn't lose their audio
-                        newlySaved[element] = 1.0
-                        Logger.warning("Using 100% default for element \(element) (current is 0, no master found)", subsystem: .audio)
-                    }
-                }
-
-                if setVolume(device: deviceID, element: element, volume: 0.0) {
-                    Logger.debug("Set element \(element) volume to 0", subsystem: .audio)
-                }
+            guard let volume = getVolume(device: deviceID, element: element), volume > 0.001 else { continue }
+            newlySaved[element] = volume
+            if setVolume(device: deviceID, element: element, volume: 0.0) {
+                Logger.debug("Muted element \(element) from \(volume)", subsystem: .audio)
             }
         }
 
@@ -169,9 +147,8 @@ class AudioMuter {
             }
         }
 
-        // Clear mute flag but KEEP savedVolumes for next cycle
         isMutedByUs = false
-        // Don't clear savedVolumes - we need them for the next mute
+        savedVolumes = [:]
         mutedDeviceID = 0
 
         if restoredCount > 0 {
@@ -239,12 +216,6 @@ class AudioMuter {
         }
 
         return volume
-    }
-
-    /// Try to get the master/main volume as a fallback when element volume is 0
-    private func getMasterVolume(device: AudioDeviceID) -> Float32? {
-        // Try master element (0) specifically
-        return getVolume(device: device, element: kAudioObjectPropertyElementMain)
     }
 
     private func setVolume(device: AudioDeviceID, element: UInt32, volume: Float32) -> Bool {

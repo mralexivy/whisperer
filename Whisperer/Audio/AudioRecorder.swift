@@ -82,7 +82,7 @@ class AudioRecorder: NSObject {
     // MARK: - Recovery
 
     private var recoveryAttemptCount: Int = 0
-    private let maxRecoveryAttempts: Int = 3
+    private let maxRecoveryAttempts: Int = 5
 
     // MARK: - Silence detection
 
@@ -498,8 +498,9 @@ class AudioRecorder: NSObject {
         await engineLifecycle.replaceDeadEngine()
         cachedEngineDeviceID = nil
 
-        // Settle delay
-        try? await Task.sleep(nanoseconds: 300_000_000)
+        // Settle delay — gives CoreAudio time to stabilize after device churn
+        let settleMs: UInt64 = recoveryAttemptCount <= 2 ? 500_000_000 : 1_000_000_000
+        try? await Task.sleep(nanoseconds: settleMs)
 
         guard isRecording, isGenerationCurrent(generation) else {
             Logger.debug("Recovery cancelled (recording stopped)", subsystem: .audio)
