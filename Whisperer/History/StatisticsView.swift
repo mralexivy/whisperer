@@ -415,6 +415,13 @@ struct StatisticsView: View {
                     .offset(y: chartHeight + 2)
                 }
                 .frame(width: barAreaWidth)
+                .onHover { hovering in
+                    if !hovering {
+                        withAnimation(.easeInOut(duration: 0.12)) {
+                            hoveredBarIndex = nil
+                        }
+                    }
+                }
             }
         }
     }
