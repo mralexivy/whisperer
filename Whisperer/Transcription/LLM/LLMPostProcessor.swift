@@ -49,6 +49,10 @@ class LLMPostProcessor: ObservableObject {
     private var warmupTask: Task<Void, Never>?
     private var warmingUpInstructions: String?
 
+    // One-shot flag: after the first successful warmup, a background inference primes the
+    // Metal compute graph for user-message prefill, cutting first-recording latency from ~3400ms to ~415ms.
+    private var hasRunPostWarmupDryRun = false
+
     // Download progress — promoted from local var to avoid @Sendable capture hazard.
     private var didReceiveDownloadProgress = false
 
@@ -251,9 +255,44 @@ class LLMPostProcessor: ObservableObject {
             }
 
             Logger.info("LLM warmup complete: \(caches.count) KV layers cached (active: \(Memory.activeMemory / (1024 * 1024)) MB)", subsystem: .model)
+
+            // Prime Metal JIT for user-message prefill. warmup only processes the system prompt + "."
+            // (short token sequence). The first real user message triggers Metal graph recompilation
+            // for a longer sequence, causing a ~3400ms spike. One dry-run inference with a representative
+            // input after warmup eliminates this spike. Guarded so it only runs once per app session.
+            await primeDryRun(container: container, instructions: instructions, caches: caches)
         } catch {
             Logger.warning("LLM warmup failed (fresh sessions will be used): \(error.localizedDescription)", subsystem: .model)
         }
+    }
+
+    private func primeDryRun(container: ModelContainer, instructions: String, caches: [any KVCache]) async {
+        guard !hasRunPostWarmupDryRun else { return }
+        guard !Task.isCancelled else { return }
+        hasRunPostWarmupDryRun = true
+
+        let freshCache = caches.map { $0.copy() }
+        let dryRunSession = ChatSession(
+            container,
+            instructions: nil,
+            cache: freshCache,
+            generateParameters: GenerateParameters(
+                maxTokens: 1,
+                kvBits: 8,
+                kvGroupSize: 64,
+                temperature: 0.0,
+                topP: 1.0,
+                topK: 0,
+                repetitionPenalty: 1.0,
+                prefillStepSize: 512
+            ),
+            additionalContext: ["enable_thinking": false]
+        )
+        let t0 = Date()
+        // Use a representative-length user message so the Metal graph compiles for real inputs,
+        // not just the 1-token "." from warmup. maxTokens=1 keeps generation instant.
+        _ = try? await dryRunSession.respond(to: "[INPUT]\nThis is a dry run to prime the Metal compute graph for user-message prefill.\n[/INPUT]", images: [], videos: [])
+        Logger.debug("LLM post-warmup dry-run complete in \(Int(-t0.timeIntervalSinceNow * 1000))ms — Metal graph primed", subsystem: .model)
     }
 
     // MARK: - MTP KV Cache Warmup

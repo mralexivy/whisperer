@@ -1943,8 +1943,9 @@ class AppState: ObservableObject {
             var finalText = ""
             var savedRecordId: UUID?
             if let transcriber = streamingTranscriber {
+                let skipCorrections = llmEnabled
                 finalText = await withTimeoutResult(seconds: 10.0) {
-                    await transcriber.stopAsync()
+                    await transcriber.stopAsync(skipCorrections: skipCorrections)
                 } ?? ""
 
                 if saveRecordings && !finalText.isEmpty {
@@ -2194,8 +2195,9 @@ class AppState: ObservableObject {
             var finalText = ""
             let transcriber = streamingTranscriber
             if let transcriber {
+                let skipCorrections = llmEnabled
                 finalText = await withTimeoutResult(seconds: 10.0) {
-                    await transcriber.stopAsync()
+                    await transcriber.stopAsync(skipCorrections: skipCorrections)
                 } ?? ""
 
                 // Fallback: if final pass timed out, use the live streaming result.

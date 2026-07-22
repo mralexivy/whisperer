@@ -713,7 +713,7 @@ class StreamingTranscriber {
     // MARK: - Stop & Final Pass
 
     /// Stop streaming and return the best transcription.
-    func stop() -> String {
+    func stop(skipCorrections: Bool = false) -> String {
         Logger.debug("Stopping StreamingTranscriber...", subsystem: .transcription)
 
         isStopped = true
@@ -742,7 +742,10 @@ class StreamingTranscriber {
             return clearAndReturn("")
         }
 
-        var finalResult = DictionaryManager.shared.correctText(rawText)
+        // Skip dictionary correction when LLM post-processing is active — LLM handles
+        // corrections, and CorrectionEngine can make wrong substitutions (e.g. "and it" → "audit")
+        // that corrupt the text before the LLM sees it.
+        var finalResult = skipCorrections ? rawText : DictionaryManager.shared.correctText(rawText)
         if fillerWordRemovalEnabled {
             finalResult = FillerWordFilter.removeFillers(from: finalResult)
         }
@@ -832,7 +835,7 @@ class StreamingTranscriber {
     }
 
     /// Stop asynchronously with proper cleanup
-    func stopAsync() async -> String {
+    func stopAsync(skipCorrections: Bool = false) async -> String {
         Logger.debug("Stopping StreamingTranscriber (async)...", subsystem: .transcription)
 
         isStopped = true
@@ -859,7 +862,7 @@ class StreamingTranscriber {
 
         // SpeechAnalyzer: use direct async path
         if #available(macOS 26.0, *), let speechBridge = whisper as? SpeechAnalyzerBridge {
-            return await stopWithSpeechAnalyzer(speechBridge)
+            return await stopWithSpeechAnalyzer(speechBridge, skipCorrections: skipCorrections)
         }
 
         // Dispatch stop() — which runs synchronous whisper.cpp tail inference — off the main actor.
@@ -874,14 +877,14 @@ class StreamingTranscriber {
                     continuation.resume(returning: "")
                     return
                 }
-                continuation.resume(returning: self.stop())
+                continuation.resume(returning: self.stop(skipCorrections: skipCorrections))
             }
         }
     }
 
     /// SpeechAnalyzer-specific async final pass
     @available(macOS 26.0, *)
-    private func stopWithSpeechAnalyzer(_ speechBridge: SpeechAnalyzerBridge) async -> String {
+    private func stopWithSpeechAnalyzer(_ speechBridge: SpeechAnalyzerBridge, skipCorrections: Bool = false) async -> String {
         isProcessing = false
 
         // If samples were pruned (long recording), the ring only holds the recent tail.
@@ -902,7 +905,7 @@ class StreamingTranscriber {
             transcribeTail()
             let rawText = fullTranscription
             guard !rawText.isEmpty else { return clearAndReturn("") }
-            var result = DictionaryManager.shared.correctText(rawText)
+            var result = skipCorrections ? rawText : DictionaryManager.shared.correctText(rawText)
             if fillerWordRemovalEnabled {
                 result = FillerWordFilter.removeFillers(from: result)
             }
@@ -935,7 +938,7 @@ class StreamingTranscriber {
 
         var finalResult: String
         if !rawText.isEmpty {
-            finalResult = DictionaryManager.shared.correctText(rawText)
+            finalResult = skipCorrections ? rawText : DictionaryManager.shared.correctText(rawText)
             if fillerWordRemovalEnabled {
                 finalResult = FillerWordFilter.removeFillers(from: finalResult)
             }
