@@ -112,6 +112,8 @@ struct TranscriptionRow: View {
                         }
                         if transcription.targetAppName == "File Import" {
                             metadataPill(icon: "doc.text", text: "File", color: .purple)
+                        } else {
+                            metadataPill(icon: "mic.fill", text: "Live", color: .green)
                         }
                         metadataPill(icon: "speedometer", text: "\(transcription.wordsPerMinute) wpm", color: .orange)
                         metadataPill(icon: "text.word.spacing", text: "\(transcription.wordCount) words", color: WhispererColors.accentBlue)

@@ -230,17 +230,24 @@ class UsageStatisticsManager: ObservableObject {
         // Fetch all entities (for streak and monthly totals)
         let allEntities = fetchEntities(in: context, from: nil, to: nil)
 
-        computeSummary(current: currentEntities, previous: previousEntities)
-        computeDailyActivity(entities: currentEntities, period: period)
+        // File imports are excluded from all aggregate stats — they reflect batch processing,
+        // not live voice sessions, so they skew WPM, word totals, streaks, and records.
+        // AppUsage retains all entries since it's an explicit per-source breakdown.
+        let currentLive = currentEntities.filter { $0.targetAppName != "File Import" }
+        let previousLive = previousEntities.filter { $0.targetAppName != "File Import" }
+        let allLive = allEntities.filter { $0.targetAppName != "File Import" }
+
+        computeSummary(current: currentLive, previous: previousLive)
+        computeDailyActivity(entities: currentLive, period: period)
         computeAppUsage(entities: currentEntities)
-        computePeakHours(entities: currentEntities)
-        computeLanguages(entities: currentEntities)
-        computeGrowth(current: currentEntities, previous: previousEntities)
-        computeStreak(allEntities: allEntities)
-        computeMonthlyTotals(allEntities: allEntities)
-        computeTimeSaved(allEntities: allEntities)
-        computeMilestones(allEntities: allEntities)
-        computePersonalRecords(allEntities: allEntities)
+        computePeakHours(entities: currentLive)
+        computeLanguages(entities: currentLive)
+        computeGrowth(current: currentLive, previous: previousLive)
+        computeStreak(allEntities: allLive)
+        computeMonthlyTotals(allEntities: allLive)
+        computeTimeSaved(allEntities: allLive)
+        computeMilestones(allEntities: allLive)
+        computePersonalRecords(allEntities: allLive)
 
         isLoading = false
     }

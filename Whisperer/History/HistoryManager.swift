@@ -492,12 +492,13 @@ class HistoryManager: ObservableObject {
 
         do {
             let allEntities = try context.fetch(fetchRequest)
+            let liveEntities = allEntities.filter { $0.targetAppName != "File Import" }
 
-            let totalRecordings = allEntities.count
-            let totalWords = allEntities.reduce(0) { $0 + Int($1.wordCount) }
-            let totalDuration = allEntities.reduce(0.0) { $0 + $1.duration }
+            let totalRecordings = liveEntities.count
+            let totalWords = liveEntities.reduce(0) { $0 + Int($1.wordCount) }
+            let totalDuration = liveEntities.reduce(0.0) { $0 + $1.duration }
 
-            let uniqueDays = Set(allEntities.map { Calendar.current.startOfDay(for: $0.timestamp) }).count
+            let uniqueDays = Set(liveEntities.map { Calendar.current.startOfDay(for: $0.timestamp) }).count
 
             let avgWPM = totalDuration > 0 ? Int(Double(totalWords) / (totalDuration / 60.0)) : 0
 
