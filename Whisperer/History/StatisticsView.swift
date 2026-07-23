@@ -37,24 +37,42 @@ struct StatisticsView: View {
                     summaryCardsGrid
                         .sectionFadeIn(index: 0, appeared: $appearedSections)
 
-                    HStack(alignment: .top, spacing: 12) {
-                        dailyActivityCard
-                        appUsageCard
+                    ViewThatFits(in: .horizontal) {
+                        HStack(alignment: .top, spacing: 12) {
+                            dailyActivityCard
+                            appUsageCard
+                        }
+                        VStack(spacing: 12) {
+                            dailyActivityCard
+                            appUsageCard
+                        }
                     }
                     .sectionFadeIn(index: 1, appeared: $appearedSections)
 
-                    HStack(alignment: .top, spacing: 12) {
-                        languagesCard
-                        peakHoursCard
+                    ViewThatFits(in: .horizontal) {
+                        HStack(alignment: .top, spacing: 12) {
+                            languagesCard
+                            peakHoursCard
+                        }
+                        VStack(spacing: 12) {
+                            languagesCard
+                            peakHoursCard
+                        }
                     }
                     .sectionFadeIn(index: 2, appeared: $appearedSections)
 
                     growthAndStreakColumn
                         .sectionFadeIn(index: 3, appeared: $appearedSections)
 
-                    HStack(alignment: .top, spacing: 12) {
-                        milestonesCard
-                        personalRecordsCard
+                    ViewThatFits(in: .horizontal) {
+                        HStack(alignment: .top, spacing: 12) {
+                            milestonesCard
+                            personalRecordsCard
+                        }
+                        VStack(spacing: 12) {
+                            milestonesCard
+                            personalRecordsCard
+                        }
                     }
                     .sectionFadeIn(index: 4, appeared: $appearedSections)
 
@@ -161,7 +179,7 @@ struct StatisticsView: View {
     // MARK: - Summary Cards
 
     private var summaryCardsGrid: some View {
-        HStack(spacing: 10) {
+        LazyVGrid(columns: [GridItem(.adaptive(minimum: 130, maximum: 320), spacing: 10)], spacing: 10) {
             StatsSummaryCard(
                 icon: "text.word.spacing",
                 label: "WORDS TRANSCRIBED",
@@ -332,6 +350,16 @@ struct StatisticsView: View {
             let chartHeight = geo.size.height - dayLabelHeight
             let barAreaWidth = geo.size.width - yAxisWidth - 4
 
+            // Adaptive label step: start from natural period step, double until
+            // label centres are at least 28pt apart so they never overlap
+            let barW = barAreaWidth / CGFloat(max(data.count, 1))
+            let labelStep: Int = {
+                let naturalStep = data.count <= 14 ? 1 : (data.count <= 31 ? 7 : 4)
+                var step = naturalStep
+                while CGFloat(step) * barW < 28 && step < data.count { step *= 2 }
+                return step
+            }()
+
             HStack(alignment: .top, spacing: 4) {
                 // Y-axis labels + gridlines
                 ZStack(alignment: .topTrailing) {
@@ -372,15 +400,20 @@ struct StatisticsView: View {
                                             : LinearGradient(colors: [WhispererColors.accentBlue.opacity(0.25), WhispererColors.accentBlue.opacity(0.15)], startPoint: .bottom, endPoint: .top)
                                     )
                                     .frame(
-                                        width: max(8, min(24, barAreaWidth / CGFloat(max(data.count, 1)) - 6)),
+                                        width: max(2, min(24, barW * 0.8)),
                                         height: bh
                                     )
-                                    .overlay(alignment: .top) {
+                                    .overlay(alignment: {
+                                        guard data.count > 1 else { return .top }
+                                        let rel = CGFloat(index) / CGFloat(data.count - 1)
+                                        if rel > 0.75 { return .topTrailing }
+                                        if rel < 0.25 { return .topLeading }
+                                        return .top
+                                    }()) {
                                         if hoveredBarIndex == index {
                                             barTooltip(for: day)
                                                 .fixedSize()
                                                 .offset(y: -28)
-                                                .zIndex(10)
                                         }
                                     }
                                     .animation(.spring(response: 0.5, dampingFraction: 0.7), value: activityMetric)
@@ -396,22 +429,26 @@ struct StatisticsView: View {
                     }
                     .frame(height: chartHeight)
 
-                    // Day labels row
-                    HStack(spacing: 0) {
+                    // Day labels — adaptive step keeps labels readable at any width
+                    ZStack(alignment: .topLeading) {
                         ForEach(Array(data.enumerated()), id: \.offset) { index, day in
-                            let showLabel = dayLabelVisible(index: index, total: data.count, day: day)
-                            Text(showLabel ? dayLabelText(for: day, total: data.count) : "")
-                                .font(.system(size: data.count > 14 ? 9 : 10, weight: .medium))
-                                .lineLimit(1)
-                                .fixedSize(horizontal: true, vertical: false)
-                                .foregroundColor(
-                                    hoveredBarIndex == index
-                                        ? WhispererColors.primaryText(colorScheme)
-                                        : WhispererColors.tertiaryText(colorScheme)
-                                )
-                                .frame(maxWidth: .infinity)
+                            if index % labelStep == 0 {
+                                let idealCX = (CGFloat(index) + 0.5) * barW
+                                let cx = max(5, min(barAreaWidth - 5, idealCX))
+                                Text(dayLabelText(for: day, total: data.count))
+                                    .font(.system(size: data.count > 14 ? 9 : 10, weight: .medium))
+                                    .lineLimit(1)
+                                    .fixedSize()
+                                    .foregroundColor(
+                                        hoveredBarIndex == index
+                                            ? WhispererColors.primaryText(colorScheme)
+                                            : WhispererColors.tertiaryText(colorScheme)
+                                    )
+                                    .position(x: cx, y: dayLabelHeight / 2)
+                            }
                         }
                     }
+                    .frame(width: barAreaWidth, height: dayLabelHeight)
                     .offset(y: chartHeight + 2)
                 }
                 .frame(width: barAreaWidth)
@@ -492,42 +529,44 @@ struct StatisticsView: View {
         let avgValue = data.isEmpty ? 0.0 : totalValue / Double(data.count)
         let avgUnit = isYearView ? "/ week" : "/ day"
 
-        return HStack(spacing: 6) {
-            if let peak = peakDay, peakValue > 0 {
-                let peakLabel = isYearView ? peak.shortDateLabel : peak.dayLabel
-                let peakText: String = {
-                    switch activityMetric {
-                    case .words: return "Peak \(peakLabel) · \(statsManager.formattedWords(peak.wordCount)) words"
-                    case .time: return "Peak \(peakLabel) · \(statsManager.formattedDuration(peak.duration))"
-                    case .sessions: return "Peak \(peakLabel) · \(peak.sessionCount) sessions"
-                    }
-                }()
-                statsPill(
-                    icon: "arrow.up",
-                    text: peakText,
-                    color: WhispererColors.accentBlue
-                )
-            }
-            if avgValue > 0 {
-                let avgText: String = {
-                    switch activityMetric {
-                    case .words: return "⌀ \(statsManager.formattedWords(Int(avgValue))) \(avgUnit)"
-                    case .time: return "⌀ \(statsManager.formattedDuration(avgValue)) \(avgUnit)"
-                    case .sessions: return "⌀ \(String(format: "%.1f", avgValue)) \(avgUnit)"
-                    }
-                }()
-                statsPill(
-                    icon: "divide",
-                    text: avgText,
-                    color: Color(hex: "F97316")
-                )
-            }
-            if statsManager.averageWPM > 0 {
-                statsPill(
-                    icon: "speedometer",
-                    text: "\(statsManager.averageWPM) wpm avg",
-                    color: WhispererColors.accentPurple
-                )
+        return ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 6) {
+                if let peak = peakDay, peakValue > 0 {
+                    let peakLabel = isYearView ? peak.shortDateLabel : peak.dayLabel
+                    let peakText: String = {
+                        switch activityMetric {
+                        case .words: return "Peak \(peakLabel) · \(statsManager.formattedWords(peak.wordCount)) words"
+                        case .time: return "Peak \(peakLabel) · \(statsManager.formattedDuration(peak.duration))"
+                        case .sessions: return "Peak \(peakLabel) · \(peak.sessionCount) sessions"
+                        }
+                    }()
+                    statsPill(
+                        icon: "arrow.up",
+                        text: peakText,
+                        color: WhispererColors.accentBlue
+                    )
+                }
+                if avgValue > 0 {
+                    let avgText: String = {
+                        switch activityMetric {
+                        case .words: return "⌀ \(statsManager.formattedWords(Int(avgValue))) \(avgUnit)"
+                        case .time: return "⌀ \(statsManager.formattedDuration(avgValue)) \(avgUnit)"
+                        case .sessions: return "⌀ \(String(format: "%.1f", avgValue)) \(avgUnit)"
+                        }
+                    }()
+                    statsPill(
+                        icon: "divide",
+                        text: avgText,
+                        color: Color(hex: "F97316")
+                    )
+                }
+                if statsManager.averageWPM > 0 {
+                    statsPill(
+                        icon: "speedometer",
+                        text: "\(statsManager.averageWPM) wpm avg",
+                        color: WhispererColors.accentPurple
+                    )
+                }
             }
         }
     }
