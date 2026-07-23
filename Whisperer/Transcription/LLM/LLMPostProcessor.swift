@@ -114,6 +114,11 @@ class LLMPostProcessor: ObservableObject {
             Logger.info("LLM \(variant.displayName) downloaded, loading into memory...", subsystem: .model)
         }
 
+        // Yield back to the run loop before writing published state. MLX's eval(model) inside
+        // loadContainer saturates the Metal command queue; yielding here gives Core Animation
+        // one scheduler tick to drain its pending GPU work before we resume on the main actor.
+        await Task.yield()
+
         modelContainer = container
         loadedVariant = variant
         isModelLoaded = true
@@ -219,7 +224,11 @@ class LLMPostProcessor: ObservableObject {
         )
 
         let t0 = Date()
-        _ = try? await warmupSession.respond(to: ".", images: [], videos: [])
+        // Detach inference off the main actor — ChatSession token encoding + KV prefill have
+        // synchronous CPU work before their first await, which blocks the main thread if run there.
+        _ = try? await Task.detached(priority: .userInitiated) {
+            try? await warmupSession.respond(to: ".", images: [], videos: [])
+        }.value
         // GPU barrier off main thread — ensures KV state is committed before saveCache.
         await Task.detached { Stream.gpu.synchronize() }.value
         Logger.debug("LLM warmup: prefill took \(Int(-t0.timeIntervalSinceNow * 1000))ms", subsystem: .model)
@@ -291,7 +300,10 @@ class LLMPostProcessor: ObservableObject {
         let t0 = Date()
         // Use a representative-length user message so the Metal graph compiles for real inputs,
         // not just the 1-token "." from warmup. maxTokens=1 keeps generation instant.
-        _ = try? await dryRunSession.respond(to: "[INPUT]\nThis is a dry run to prime the Metal compute graph for user-message prefill.\n[/INPUT]", images: [], videos: [])
+        // Detached so the synchronous token-encoding work doesn't run on the main actor.
+        _ = try? await Task.detached(priority: .userInitiated) {
+            try? await dryRunSession.respond(to: "[INPUT]\nThis is a dry run to prime the Metal compute graph for user-message prefill.\n[/INPUT]", images: [], videos: [])
+        }.value
         Logger.debug("LLM post-warmup dry-run complete in \(Int(-t0.timeIntervalSinceNow * 1000))ms — Metal graph primed", subsystem: .model)
     }
 

@@ -1306,7 +1306,11 @@ class AppState: ObservableObject {
         let variant = selectedLLMModel
 
         let memBefore = BenchmarkUtilities.currentMemoryMB()
-        llmLoadTask = Task { [weak self] in
+        // Detached so this task does not inherit @MainActor — the heavy MLX weight loading and
+        // ChatSession inference must not run on the main thread. @MainActor async methods
+        // (loadModel, warmupPrompt) auto-hop to the main actor when awaited; non-async @MainActor
+        // access (AIModeManager, splitPrompt) is wrapped in MainActor.run { }.
+        llmLoadTask = Task.detached(priority: .userInitiated) { [weak self] in
             do {
                 try await processor.loadModel(variant)
                 let memAfter = BenchmarkUtilities.currentMemoryMB()
@@ -1314,10 +1318,15 @@ class AppState: ObservableObject {
                 // Warm up the system prompt KV cache now — absorbs the cold-start prefill penalty
                 // (897ms–24s) into the model load phase rather than the first user transcription.
                 if let self = self {
-                    let mode = AIModeManager.shared.postProcessMode
-                    var (sysPrompt, _) = self.splitPrompt(mode.prompt, text: ".")
-                    if let lang = mode.targetLanguage, !lang.isEmpty {
-                        sysPrompt += " Translate to \(lang)."
+                    // Gather prompt on main actor (AIModeManager + splitPrompt are @MainActor
+                    // non-async, so they need an explicit MainActor.run hop).
+                    let sysPrompt: String = await MainActor.run {
+                        let mode = AIModeManager.shared.postProcessMode
+                        var (prompt, _) = self.splitPrompt(mode.prompt, text: ".")
+                        if let lang = mode.targetLanguage, !lang.isEmpty {
+                            prompt += " Translate to \(lang)."
+                        }
+                        return prompt
                     }
                     await processor.warmupPrompt(sysPrompt)
                 }
@@ -1325,9 +1334,11 @@ class AppState: ObservableObject {
                 Logger.error("Failed to pre-load LLM \(variant.displayName): \(error)", subsystem: .model)
                 let msg = "Failed to load model"
                 // Write error state to the current processor, not a potentially stale capture
-                self?.llmPostProcessor?.errorMessage = msg
-                self?.llmPostProcessor?.loadPhase = .error(msg)
-                self?.llmPostProcessor?.isLoading = false
+                await MainActor.run {
+                    self?.llmPostProcessor?.errorMessage = msg
+                    self?.llmPostProcessor?.loadPhase = .error(msg)
+                    self?.llmPostProcessor?.isLoading = false
+                }
             }
         }
     }

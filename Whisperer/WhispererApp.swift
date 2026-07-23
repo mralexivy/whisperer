@@ -40,6 +40,9 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         Logger.info("Application launched", subsystem: .app)
+        // Suppress false-positive stall alerts during model loading (Metal GPU queue pressure
+        // from MLX/whisper.cpp eval() is expected during startup, not an actual hang).
+        HealthManager.shared.suppressForStartup(seconds: 20)
 
         // Disable macOS "Resume" — prevents OS from restoring windows after restart/crash.
         // Restored windows bypass HistoryWindowManager and appear as zombie duplicates.

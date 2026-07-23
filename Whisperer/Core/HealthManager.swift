@@ -82,6 +82,12 @@ final class HealthManager {
     private var mainThreadPendingSince: ContinuousClock.Instant?
     private var lastMainThreadResponse: ContinuousClock.Instant = .now
     private var mainThreadAlertFired: Bool = false
+    // Startup suppression: model loading causes expected GPU-queue stalls that are not real hangs.
+    private var suppressStallUntil: ContinuousClock.Instant?
+
+    func suppressForStartup(seconds: Double) {
+        suppressStallUntil = .now + .seconds(seconds)
+    }
 
     // Lock protecting components dict and stall states
     private let lock = NSLock()
@@ -349,6 +355,7 @@ final class HealthManager {
         if let pending = mainThreadPendingSince {
             let elapsed = now - pending
             if elapsed > .milliseconds(500) && !mainThreadAlertFired {
+                if let suppress = suppressStallUntil, now < suppress { return }
                 mainThreadAlertFired = true
                 let elapsedStr = String(format: "%.1f", elapsedSeconds(elapsed))
                 Logger.error("Main thread unresponsive for \(elapsedStr)s — possible AppKit/AX hang", subsystem: .app)
