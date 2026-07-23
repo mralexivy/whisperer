@@ -396,9 +396,9 @@ class GlobalKeyListener {
             }
 
             // Check 2: L key pressed while Fn is held → "lock" hands-free mode
-            // (fallback for when Carbon hotkey registration failed)
+            // (fallback for when Carbon hotkey registration failed — 'l' may have reached the app)
             if !self.isHandsFreeMode && self.isHandsFreeKeyPressed() {
-                self.activateHandsFreeMode()
+                self.activateHandsFreeMode(keyWasIntercepted: false)
                 return
             }
 
@@ -522,7 +522,8 @@ class GlobalKeyListener {
         stateQueue.async { [weak self] in
             guard let self = self else { return }
             guard self.recordingInProgress, !self.isHandsFreeMode else { return }
-            self.activateHandsFreeMode()
+            // Carbon hotkey intercepted the L keystroke — it never reached the focused app.
+            self.activateHandsFreeMode(keyWasIntercepted: true)
         }
     }
 
@@ -539,15 +540,20 @@ class GlobalKeyListener {
 
     /// Shared hands-free activation logic used by both Carbon hotkey and polling fallback.
     /// Must be called on stateQueue.
-    private func activateHandsFreeMode() {
+    /// - Parameter keyWasIntercepted: true when the Carbon hotkey captured the L keystroke
+    ///   before it reached the focused app (no 'l' was typed). false when the polling fallback
+    ///   detected L after Carbon registration failed ('l' may have leaked through).
+    private func activateHandsFreeMode(keyWasIntercepted: Bool) {
         guard !isHandsFreeMode else { return }
         Logger.info("Fn+L detected — HANDS-FREE mode activated", subsystem: .keyListener)
         isHandsFreeMode = true
         unregisterHandsFreeHotKey()
-        // Post a Delete keystroke to remove the "l" that may have been inserted
-        // into the focused text field before the hotkey intercepted it.
+        // Only post the Delete keystroke when the Carbon hotkey did NOT intercept the key,
+        // meaning the 'l' may have reached the focused app via the polling fallback path.
         // CGEvent.post (posting events) is an approved API — distinct from CGEventTap (monitoring).
-        deleteLastCharacter()
+        if !keyWasIntercepted {
+            deleteLastCharacter()
+        }
         DispatchQueue.main.async { [weak self] in
             self?.onHandsFreeActivated?()
         }
