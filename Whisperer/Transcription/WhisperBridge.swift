@@ -5,6 +5,7 @@
 //  Swift wrapper for whisper.cpp C library
 //
 
+import CryptoKit
 import Foundation
 
 // MARK: - Transcription Language
@@ -240,6 +241,7 @@ enum TranscriptionLanguage: String, CaseIterable, Codable {
 enum WhisperError: Error, LocalizedError {
     case modelLoadFailed
     case transcriptionFailed
+    case modelCorrupted
 
     var errorDescription: String? {
         switch self {
@@ -247,6 +249,8 @@ enum WhisperError: Error, LocalizedError {
             return "Failed to load Whisper model"
         case .transcriptionFailed:
             return "Transcription failed"
+        case .modelCorrupted:
+            return "Model file corrupted — please re-download"
         }
     }
 }
@@ -347,12 +351,52 @@ class WhisperBridge: TranscriptionBackend {
         }
 
         Logger.info("Initializing WhisperBridge with model: \(modelPath.lastPathComponent) (GPU: \(useGPU))", subsystem: .transcription)
+        try WhisperBridge.verifyModelIntegrity(at: modelPath)
         try loadModel()
         isInitialized = true
 
         // HealthManager registration is done by AppState after construction
 
         Logger.info("WhisperBridge initialized", subsystem: .transcription)
+    }
+
+    /// Compute SHA-256 of a file by streaming 4 MB chunks.
+    /// Stores the hash on first encounter; on subsequent loads verifies against stored value.
+    /// Throws `WhisperError.modelCorrupted` when the hash no longer matches.
+    private static func verifyModelIntegrity(at url: URL) throws {
+        let filename = url.lastPathComponent
+        let userDefaultsKey = "modelSHA256_\(filename)"
+
+        var hasher = SHA256()
+        let chunkSize = 4 * 1024 * 1024  // 4 MB
+
+        guard let stream = InputStream(url: url) else {
+            Logger.warning("Integrity check: cannot open stream for \(filename) — skipping", subsystem: .model)
+            return
+        }
+        stream.open()
+        defer { stream.close() }
+
+        var buffer = [UInt8](repeating: 0, count: chunkSize)
+        while stream.hasBytesAvailable {
+            let n = stream.read(&buffer, maxLength: chunkSize)
+            guard n > 0 else { break }
+            hasher.update(data: Data(buffer[0..<n]))
+        }
+        let digest = hasher.finalize()
+        let currentHash = digest.map { String(format: "%02x", $0) }.joined()
+
+        let storedHash = UserDefaults.standard.string(forKey: userDefaultsKey)
+        if let stored = storedHash {
+            if stored != currentHash {
+                Logger.error("Model integrity FAIL: \(filename) hash mismatch (expected \(stored.prefix(8))…, got \(currentHash.prefix(8))…)", subsystem: .model)
+                throw WhisperError.modelCorrupted
+            }
+            Logger.debug("Model integrity OK: \(filename)", subsystem: .model)
+        } else {
+            UserDefaults.standard.set(currentHash, forKey: userDefaultsKey)
+            Logger.info("Model hash stored for \(filename): \(currentHash.prefix(16))…", subsystem: .model)
+        }
     }
 
     private func loadModel() throws {

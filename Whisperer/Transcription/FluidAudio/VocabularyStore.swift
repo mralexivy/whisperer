@@ -38,7 +38,8 @@ struct VocabularyStore {
         entries: [DictionaryEntry],
         promptWords: [String] = []
     ) async throws -> (vocabulary: CustomVocabularyContext, ctcModels: CtcModels)? {
-        var terms: [(text: String, isCustom: Bool)] = []
+        // boostWeight 0.0 = use default (8.0 for custom, nil for built-in)
+        var terms: [(text: String, weight: Float?)] = []
         var seen: Set<String> = []
 
         // Prompt words first (highest priority — Parakeet equivalent of whisper's initial_prompt)
@@ -46,7 +47,7 @@ struct VocabularyStore {
             let term = word.trimmingCharacters(in: .whitespacesAndNewlines)
             let key = term.lowercased()
             if term.count >= minTermLength && !seen.contains(key) {
-                terms.append((text: term, isCustom: true))
+                terms.append((text: term, weight: 8.0))
                 seen.insert(key)
             }
         }
@@ -56,7 +57,8 @@ struct VocabularyStore {
             let term = entry.correctForm.trimmingCharacters(in: .whitespacesAndNewlines)
             let key = term.lowercased()
             if term.count >= minTermLength && !seen.contains(key) {
-                terms.append((text: term, isCustom: true))
+                let w: Float = entry.boostWeight > 0 ? Float(entry.boostWeight) : 8.0
+                terms.append((text: term, weight: w))
                 seen.insert(key)
             }
         }
@@ -67,7 +69,7 @@ struct VocabularyStore {
             let term = entry.correctForm.trimmingCharacters(in: .whitespacesAndNewlines)
             let key = term.lowercased()
             if term.count >= minTermLength && !seen.contains(key) {
-                terms.append((text: term, isCustom: false))
+                terms.append((text: term, weight: nil))
                 seen.insert(key)
             }
         }
@@ -103,7 +105,7 @@ struct VocabularyStore {
             guard !tokens.isEmpty else { return nil }
             return CustomVocabularyTerm(
                 text: term.text,
-                weight: term.isCustom ? 8.0 : nil,
+                weight: term.weight,
                 aliases: nil,
                 tokenIds: nil,
                 ctcTokenIds: tokens
@@ -125,7 +127,7 @@ struct VocabularyStore {
         )
 
         let promptCount = min(promptWords.filter { $0.trimmingCharacters(in: .whitespacesAndNewlines).count >= minTermLength }.count, tokenizedTerms.count)
-        Logger.info("VocabularyStore: Built vocabulary with \(tokenizedTerms.count) terms (\(promptCount) prompt words, \(cappedTerms.filter { $0.isCustom }.count - promptCount) custom dictionary)", subsystem: .transcription)
+        Logger.info("VocabularyStore: Built vocabulary with \(tokenizedTerms.count) terms (\(promptCount) prompt words, \(cappedTerms.filter { $0.weight != nil }.count - promptCount) custom dictionary)", subsystem: .transcription)
         return (vocabulary, ctcModels)
     }
 

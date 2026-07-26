@@ -21,6 +21,10 @@ nonisolated class FluidAudioBridge: TranscriptionBackend {
     /// Final manager: separate instance with CTC vocab boosting — used for final pass on stop.
     /// Shares underlying MLModel objects (reference types), so memory overhead is ~100KB decoder state.
     private var finalManager: AsrManager?
+    /// Preview manager: dedicated instance for live preview, runs on previewQueue concurrently with main transcription.
+    /// Same TDT v3 model weights (reference types), separate decoder state only.
+    private var previewManager: AsrManager?
+    private let previewQueue = DispatchQueue(label: "fluidaudio.preview", qos: .userInitiated)
 
     // Vocabulary boosting state (configured via configureVocabularyBoosting, applied as post-processing)
     private var customVocabulary: CustomVocabularyContext?
@@ -95,9 +99,10 @@ nonisolated class FluidAudioBridge: TranscriptionBackend {
         } catch { return false }
     }
 
-    private init(streamingManager: AsrManager, finalManager: AsrManager, variant: ParakeetModelVariant) {
+    private init(streamingManager: AsrManager, finalManager: AsrManager, previewManager: AsrManager, variant: ParakeetModelVariant) {
         self.streamingManager = streamingManager
         self.finalManager = finalManager
+        self.previewManager = previewManager
         self.variant = variant
     }
 
@@ -133,8 +138,11 @@ nonisolated class FluidAudioBridge: TranscriptionBackend {
         let finalMgr = AsrManager(config: .default)
         try await finalMgr.loadModels(models)
 
-        Logger.info("FluidAudio Parakeet \(variant.displayName) loaded from cache (dual manager)", subsystem: .model)
-        return FluidAudioBridge(streamingManager: streamingMgr, finalManager: finalMgr, variant: variant)
+        let previewMgr = AsrManager(config: .default)
+        try await previewMgr.loadModels(models)
+
+        Logger.info("FluidAudio Parakeet \(variant.displayName) loaded from cache (triple manager)", subsystem: .model)
+        return FluidAudioBridge(streamingManager: streamingMgr, finalManager: finalMgr, previewManager: previewMgr, variant: variant)
     }
 
     /// Download (if needed) and load Parakeet models, then initialize dual ASR managers
@@ -148,8 +156,11 @@ nonisolated class FluidAudioBridge: TranscriptionBackend {
         let finalMgr = AsrManager(config: .default)
         try await finalMgr.loadModels(models)
 
-        Logger.info("FluidAudio Parakeet \(variant.displayName) loaded (dual manager)", subsystem: .model)
-        return FluidAudioBridge(streamingManager: streamingMgr, finalManager: finalMgr, variant: variant)
+        let previewMgr = AsrManager(config: .default)
+        try await previewMgr.loadModels(models)
+
+        Logger.info("FluidAudio Parakeet \(variant.displayName) loaded (triple manager)", subsystem: .model)
+        return FluidAudioBridge(streamingManager: streamingMgr, finalManager: finalMgr, previewManager: previewMgr, variant: variant)
     }
 
     // MARK: - Vocabulary Boosting
@@ -214,7 +225,8 @@ nonisolated class FluidAudioBridge: TranscriptionBackend {
 
                 Task {
                     do {
-                        let asrResult = try await manager.transcribe(samples, source: .microphone)
+                        var decoderState = TdtDecoderState.make()
+                        let asrResult = try await manager.transcribe(samples, decoderState: &decoderState)
                         var text = asrResult.text
 
                         // Apply vocabulary boosting as post-processing for final pass only
@@ -347,6 +359,46 @@ nonisolated class FluidAudioBridge: TranscriptionBackend {
         }
     }
 
+    /// Preview-specific transcription on a dedicated queue, concurrent with main transcription.
+    /// Uses a fresh TdtDecoderState per call — correct for overlapping sliding windows.
+    func transcribePreviewAsync(samples: [Float], completion: @escaping (String) -> Void) {
+        let shutting = isShuttingDown
+        let aborting = shouldAbort
+        guard !shutting, !aborting, !samples.isEmpty else {
+            Logger.debug("Preview skip: shutting=\(shutting) abort=\(aborting) empty=\(samples.isEmpty)", subsystem: .transcription)
+            completion("")
+            return
+        }
+        let secs = String(format: "%.2f", Double(samples.count) / 16000.0)
+        Logger.debug("Preview dispatch: \(samples.count) samples (\(secs)s)", subsystem: .transcription)
+        let start = DispatchTime.now()
+        previewQueue.async { [weak self] in
+            guard let self, let manager = self.previewManager, !self.isShuttingDown else {
+                Logger.debug("Preview guard failed after dispatch", subsystem: .transcription)
+                completion("")
+                return
+            }
+            let semaphore = DispatchSemaphore(value: 0)
+            var result = ""
+            Task {
+                do {
+                    var state = TdtDecoderState.make()
+                    let asrResult = try await manager.transcribe(samples, decoderState: &state)
+                    result = asrResult.text.trimmingCharacters(in: .whitespacesAndNewlines)
+                } catch {
+                    Logger.warning("Preview transcription failed: \(error.localizedDescription)", subsystem: .transcription)
+                }
+                semaphore.signal()
+            }
+            if semaphore.wait(timeout: .now() + 10.0) == .timedOut {
+                Logger.warning("Preview inference timed out (10s)", subsystem: .transcription)
+            }
+            let ms = Int(Double(DispatchTime.now().uptimeNanoseconds - start.uptimeNanoseconds) / 1_000_000)
+            Logger.debug("Preview result (\(ms)ms): '\(result.prefix(60))'", subsystem: .transcription)
+            completion(result)
+        }
+    }
+
     func isContextHealthy() -> Bool {
         !isShuttingDown && streamingManager != nil
     }
@@ -355,16 +407,20 @@ nonisolated class FluidAudioBridge: TranscriptionBackend {
         do { try modeLock.withLock { _isShuttingDown = true } }
         catch { _isShuttingDown = true }
         queue.sync { }
+        previewQueue.sync { }
         // cleanup() is actor-isolated — fire-and-forget async cleanup
         let streaming = streamingManager
         let final = finalManager
+        let preview = previewManager
         Task {
             await streaming?.cleanup()
             await final?.cleanup()
+            await preview?.cleanup()
         }
         // Nil references immediately so ARC can deallocate when Task completes
         streamingManager = nil
         finalManager = nil
+        previewManager = nil
         // Clear vocabulary boosting state
         customVocabulary = nil
         ctcSpotter = nil

@@ -18,6 +18,8 @@ struct DictionaryEntry: Identifiable, Codable {
     let createdAt: Date
     let lastModifiedAt: Date
     let useCount: Int
+    /// CTC boost weight for Parakeet vocabulary rescoring. 0 = use default (8.0 for custom, nil for built-in).
+    let boostWeight: Double
 
     init(
         id: UUID = UUID(),
@@ -29,7 +31,8 @@ struct DictionaryEntry: Identifiable, Codable {
         notes: String? = nil,
         createdAt: Date = Date(),
         lastModifiedAt: Date = Date(),
-        useCount: Int = 0
+        useCount: Int = 0,
+        boostWeight: Double = 0.0
     ) {
         self.id = id
         self.incorrectForm = incorrectForm.lowercased()
@@ -41,6 +44,7 @@ struct DictionaryEntry: Identifiable, Codable {
         self.createdAt = createdAt
         self.lastModifiedAt = lastModifiedAt
         self.useCount = useCount
+        self.boostWeight = boostWeight
     }
 
     init(from entity: DictionaryEntryEntity) {
@@ -54,6 +58,7 @@ struct DictionaryEntry: Identifiable, Codable {
         self.createdAt = entity.createdAt
         self.lastModifiedAt = entity.lastModifiedAt
         self.useCount = Int(entity.useCount)
+        self.boostWeight = entity.boostWeight
     }
 }
 

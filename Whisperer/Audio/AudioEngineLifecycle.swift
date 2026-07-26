@@ -13,6 +13,7 @@
 //
 
 import AVFoundation
+import Accelerate
 import CoreAudio
 import AudioToolbox
 
@@ -327,8 +328,31 @@ actor AudioEngineLifecycle {
         // Install tap — converter and outputFormat captured in closure for real-time callback
         let bufferSize: AVAudioFrameCount = 4096
         var tapErr: NSError?
+        var channelSelected = false  // RMS channel selection fires once on first buffer
         let tapOk = ObjCTry({
             inputNode.installTap(onBus: 0, bufferSize: bufferSize, format: inputFormat) { buffer, _ in
+                // RMS-based channel selection on first stereo/multi-channel buffer.
+                // Picks the channel with most energy; prevents silent-channel capture on
+                // right-dominant headsets and some USB mics.
+                if !channelSelected, buffer.format.channelCount > 1, let chanData = buffer.floatChannelData {
+                    let frames = vDSP_Length(buffer.frameLength)
+                    let nCh = Int(buffer.format.channelCount)
+                    var bestCh = 0; var bestEnergy: Float = 0; var ch0Energy: Float = 0
+                    for ch in 0..<nCh {
+                        var energy: Float = 0
+                        vDSP_measqv(chanData[ch], 1, &energy, frames)
+                        if ch == 0 { ch0Energy = energy }
+                        if energy > bestEnergy { bestEnergy = energy; bestCh = ch }
+                    }
+                    if bestCh != 0 && bestEnergy > ch0Energy * 1.5 {
+                        converter.channelMap = [NSNumber(value: bestCh)]
+                        Logger.info("RMS channel selection: ch\(bestCh) dominant (energy \(String(format: "%.5f", bestEnergy)) vs ch0 \(String(format: "%.5f", ch0Energy)))", subsystem: .audio)
+                    } else {
+                        Logger.debug("RMS channel selection: ch0 retained (ch0=\(String(format: "%.5f", ch0Energy)), best=ch\(bestCh) \(String(format: "%.5f", bestEnergy)))", subsystem: .audio)
+                    }
+                    channelSelected = true
+                }
+
                 let ratio = outputFormat.sampleRate / buffer.format.sampleRate
                 let capacity = AVAudioFrameCount(Double(buffer.frameLength) * ratio) + 1
                 guard let out = AVAudioPCMBuffer(pcmFormat: outputFormat, frameCapacity: capacity) else { return }

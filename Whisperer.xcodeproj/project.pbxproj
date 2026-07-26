@@ -2065,7 +2065,7 @@
 			mainGroup = 1038D4762F26382700490030;
 			minimizedProjectReferenceProxies = 1;
 			packageReferences = (
-				AACC00012F40000100000001 /* XCRemoteSwiftPackageReference "FluidAudio" */,
+				AAFF00012F40000100000001 /* XCLocalSwiftPackageReference "Vendor/FluidAudio" */,
 				AACC00022F40000100000002 /* XCLocalSwiftPackageReference "Vendor/mlx-swift-lm" */,
 				AACC000B2F40000100000006 /* XCRemoteSwiftPackageReference "swift-transformers" */,
 			);
@@ -2702,17 +2702,13 @@
 			isa = XCLocalSwiftPackageReference;
 			relativePath = "Vendor/mlx-swift-lm";
 		};
+		AAFF00012F40000100000001 /* XCLocalSwiftPackageReference "Vendor/FluidAudio" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = Vendor/FluidAudio;
+		};
 /* End XCLocalSwiftPackageReference section */
 
 /* Begin XCRemoteSwiftPackageReference section */
-		AACC00012F40000100000001 /* XCRemoteSwiftPackageReference "FluidAudio" */ = {
-			isa = XCRemoteSwiftPackageReference;
-			repositoryURL = "https://github.com/FluidInference/FluidAudio.git";
-			requirement = {
-				branch = main;
-				kind = branch;
-			};
-		};
 		AACC000B2F40000100000006 /* XCRemoteSwiftPackageReference "swift-transformers" */ = {
 			isa = XCRemoteSwiftPackageReference;
 			repositoryURL = "https://github.com/huggingface/swift-transformers";
@@ -2726,7 +2722,7 @@
 /* Begin XCSwiftPackageProductDependency section */
 		AACC00032F40000100000001 /* FluidAudio */ = {
 			isa = XCSwiftPackageProductDependency;
-			package = AACC00012F40000100000001 /* XCRemoteSwiftPackageReference "FluidAudio" */;
+			package = AAFF00012F40000100000001 /* XCLocalSwiftPackageReference "Vendor/FluidAudio" */;
 			productName = FluidAudio;
 		};
 		AACC00042F40000100000002 /* MLXLLM */ = {

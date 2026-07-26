@@ -76,6 +76,19 @@ struct AIMode: Codable, Identifiable, Equatable {
         self.sortOrder = sortOrder
     }
 
+    // MARK: - Chunk Processing
+
+    /// True when this mode corrects text locally without needing full-transcript context.
+    /// Corrective modes (Correct, Grammar, Translate, etc.) can run per-chunk during recording.
+    /// Transformative modes (Summarize, Rewrite, List Format, Format) need the whole text.
+    var supportsChunkProcessing: Bool {
+        let transformative: Set<UUID> = [
+            Self.rewriteModeId, Self.formatModeId,
+            Self.summarizeModeId, Self.listFormatModeId
+        ]
+        return !transformative.contains(id)
+    }
+
     // MARK: - Built-in Mode IDs (stable, never change)
 
     static let correctModeId = UUID(uuidString: "A0000000-0000-0000-0000-000000000000")!

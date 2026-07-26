@@ -1137,7 +1137,7 @@ final class ChunkSizeExperimentTests: XCTestCase {
                 if !FileManager.default.fileExists(atPath: encoderPath.path) {
                     let modelsParent = appSupport.appendingPathComponent("FluidAudio/Models")
                     try FileManager.default.createDirectory(at: modelsParent, withIntermediateDirectories: true)
-                    try await DownloadUtils.downloadRepo(.parakeetEou320, to: modelsParent)
+                    try await ModelHub.download(.parakeetEou320, to: modelsParent)
                 }
             } catch {
                 downloadError = error
@@ -1186,7 +1186,7 @@ final class ChunkSizeExperimentTests: XCTestCase {
                     eouDebounceMs: 1280
                 )
                 let loadStart = CFAbsoluteTimeGetCurrent()
-                try await manager.loadModels(modelDir: eouModelsDir)
+                try await manager.loadModels(from: eouModelsDir)
                 loadModelMs = (CFAbsoluteTimeGetCurrent() - loadStart) * 1000
                 eouManager = manager
             } catch {

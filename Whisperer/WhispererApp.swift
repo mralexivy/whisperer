@@ -273,16 +273,17 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         Logger.debug("Stopping key listener...", subsystem: .app)
         appState.keyListener?.stop()
 
-        // 4. Free whisper context BEFORE exit() runs C++ destructors
-        // This is the key fix - explicitly free the context while we control the timing
+        // 4. Give Metal backend time to finish any pending operations before freeing
+        // The ggml Metal residency keeper loop runs every 500ms; waiting here ensures
+        // no background Metal init is in flight when we call whisper_free.
+        Logger.debug("Waiting for Metal operations to complete...", subsystem: .app)
+        try? await Task.sleep(nanoseconds: 200_000_000)  // 200ms
+
+        // 5. Free whisper context BEFORE exit() runs C++ destructors
         Logger.debug("Freeing whisper context...", subsystem: .app)
         await MainActor.run {
             appState.releaseWhisperResources()
         }
-
-        // 5. Give Metal backend time to finish any pending operations
-        Logger.debug("Waiting for Metal operations to complete...", subsystem: .app)
-        try? await Task.sleep(nanoseconds: 200_000_000)  // 200ms
 
         // 6. Stop health monitoring
         Logger.debug("Stopping health monitoring...", subsystem: .app)
@@ -727,6 +728,7 @@ struct StatusTabView: View {
         switch appState.selectedBackendType {
         case .whisperCpp: return appState.selectedModel.displayName
         case .parakeet: return appState.selectedParakeetModel.displayName
+        case .nemotron: return "Nemotron Multilingual"
         case .speechAnalyzer: return "On-Device"
         }
     }
@@ -734,8 +736,7 @@ struct StatusTabView: View {
     private var activeModelDetail: String? {
         switch appState.selectedBackendType {
         case .whisperCpp: return appState.selectedModel.sizeDescription
-        case .parakeet: return nil
-        case .speechAnalyzer: return nil
+        case .parakeet, .nemotron, .speechAnalyzer: return nil
         }
     }
 
@@ -743,6 +744,7 @@ struct StatusTabView: View {
         switch appState.selectedBackendType {
         case .whisperCpp: return .blue
         case .parakeet: return .green
+        case .nemotron: return .purple
         case .speechAnalyzer: return .cyan
         }
     }
@@ -762,7 +764,7 @@ struct StatusTabView: View {
                 VStack(spacing: 12) {
                     infoCard(
                         icon: appState.selectedBackendType.iconName,
-                        title: appState.selectedBackendType.displayName,
+                        title: appState.selectedBackendType.friendlyName,
                         value: activeModelName,
                         detail: activeModelDetail,
                         color: activeModelColor,
@@ -1170,6 +1172,24 @@ struct ModelsTabView: View {
         }
     }
 
+    /// The backend best suited for the user's current language configuration.
+    /// Parakeet if all routing languages (or the selected single language) are in its 25-language set.
+    /// Whisper otherwise (broader coverage).
+    private var recommendedBackend: BackendType {
+        guard BackendType.parakeet.isAvailable else { return .whisperCpp }
+        let languages: [TranscriptionLanguage]
+        if appState.routingConfig.isRoutingEnabled {
+            languages = appState.routingConfig.allowedLanguages
+        } else if appState.selectedLanguage != .auto {
+            languages = [appState.selectedLanguage]
+        } else {
+            // Auto-detect, no routing — Parakeet handles most common languages
+            return .parakeet
+        }
+        let allSupported = languages.allSatisfy { BackendType.parakeet.supportsLanguage($0, parakeetVariant: .v3) }
+        return allSupported ? .parakeet : .whisperCpp
+    }
+
     private var engineSection: some View {
         VStack(alignment: .leading, spacing: 12) {
             // Engine header + segmented control
@@ -1191,30 +1211,46 @@ struct ModelsTabView: View {
             }
 
             HStack(spacing: 0) {
-                ForEach(Array(BackendType.allCases.enumerated()), id: \.element.id) { index, backend in
-                    let isSelected = appState.selectedBackendType == backend
+                ForEach(Array(BackendType.allCases.filter { $0 != .nemotron }.enumerated()), id: \.element.id) { index, backend in
+                    let isSelected = appState.selectedBackendType == backend || (backend == .parakeet && appState.selectedBackendType == .nemotron)
+                    let isUnavailable = !backend.isAvailable
+                    let isRecommended = backend == recommendedBackend && !isUnavailable
 
                     Button(action: {
                         appState.selectBackend(backend)
                     }) {
-                        HStack(spacing: 4) {
-                            Image(systemName: backend.iconName)
-                                .font(.system(size: 10, weight: .medium))
-                            Text(backend.displayName)
-                                .font(.system(size: 11, weight: isSelected ? .semibold : .medium))
-                                .lineLimit(1)
+                        VStack(spacing: 1) {
+                            HStack(spacing: 4) {
+                                Image(systemName: backend.iconName)
+                                    .font(.system(size: 9, weight: .medium))
+                                Text(backend.friendlyName)
+                                    .font(.system(size: 11, weight: isSelected ? .semibold : .medium))
+                                    .lineLimit(1)
+                            }
+                            if isRecommended && !isSelected {
+                                Text("Recommended")
+                                    .font(.system(size: 8, weight: .bold))
+                                    .lineLimit(1)
+                                    .opacity(0.9)
+                            } else {
+                                Text(backend.settingsSubtitle)
+                                    .font(.system(size: 9, weight: .medium))
+                                    .lineLimit(1)
+                                    .opacity(0.7)
+                            }
                         }
-                        .foregroundColor(isSelected ? .white : MBColors.textSecondary)
+                        .foregroundColor(isSelected ? .white : (isRecommended ? MBColors.accent : MBColors.textSecondary))
                         .frame(maxWidth: .infinity)
-                        .padding(.vertical, 7)
+                        .padding(.vertical, 6)
                         .background(
                             RoundedRectangle(cornerRadius: 6)
                                 .fill(isSelected ? MBColors.accent : Color.clear)
                         )
                         .contentShape(Rectangle())
+                        .opacity(isUnavailable ? 0.4 : 1.0)
                     }
                     .buttonStyle(.plain).pointerOnHover()
-                    .disabled(appState.isModelBusy)
+                    .disabled(appState.isModelBusy || isUnavailable)
                 }
             }
             .padding(2)
@@ -1253,7 +1289,7 @@ struct ModelsTabView: View {
                             ModelMenuItem(model: model)
                         }
                     }
-                } else if appState.selectedBackendType == .parakeet {
+                } else if appState.selectedBackendType == .parakeet || appState.selectedBackendType == .nemotron {
                     parakeetModelSection
                 } else if appState.selectedBackendType == .speechAnalyzer {
                     speechAnalyzerSection
@@ -1349,7 +1385,7 @@ struct ModelsTabView: View {
                         .font(.system(size: 12, weight: .medium))
                 }
 
-                Text("Parakeet Models")
+                Text("Fast Models")
                     .font(.system(size: 12, weight: .semibold))
                     .foregroundColor(MBColors.textPrimary)
 
@@ -1360,6 +1396,26 @@ struct ModelsTabView: View {
                 ForEach(ParakeetModelVariant.allCases) { model in
                     ParakeetModelRow(model: model)
                 }
+                #if canImport(FluidAudio)
+                NemotronModelRow()
+                #endif
+            }
+
+            // CTC vocabulary boost status — shows active custom dictionary terms
+            let ctcTermCount = DictionaryManager.shared.entries.filter {
+                $0.isEnabled && !$0.isBuiltIn && $0.correctForm.count >= 3
+            }.count
+            if ctcTermCount > 0 {
+                HStack(spacing: 5) {
+                    Image(systemName: "text.badge.checkmark")
+                        .font(.system(size: 10, weight: .medium))
+                        .foregroundColor(.green)
+                    Text("CTC boosting: \(ctcTermCount) \(ctcTermCount == 1 ? "term" : "terms") active")
+                        .font(.system(size: 10.5, weight: .medium))
+                        .foregroundColor(MBColors.textSecondary)
+                }
+                .padding(.horizontal, 8).padding(.vertical, 4)
+                .background(Capsule().fill(Color.green.opacity(0.1)))
             }
 
             if appState.isDownloadingParakeet || appState.isLoadingParakeet {
@@ -1374,7 +1430,6 @@ struct ModelsTabView: View {
                     }
 
                     if appState.isDownloadingParakeet {
-                        // Indeterminate progress bar
                         ProgressView()
                             .progressViewStyle(.linear)
                             .tint(MBColors.accent)
@@ -1383,6 +1438,27 @@ struct ModelsTabView: View {
                 .padding(.leading, 20)
             }
 
+            #if canImport(FluidAudio)
+            if appState.isDownloadingNemotron || appState.isLoadingNemotron {
+                VStack(alignment: .leading, spacing: 6) {
+                    HStack(spacing: 6) {
+                        ProgressView()
+                            .scaleEffect(0.5)
+                            .frame(width: 12, height: 12)
+                        Text(appState.nemotronDownloadStatus)
+                            .font(.system(size: 11, weight: .medium))
+                            .foregroundColor(MBColors.textSecondary)
+                    }
+
+                    if appState.isDownloadingNemotron {
+                        ProgressView()
+                            .progressViewStyle(.linear)
+                            .tint(MBColors.accent)
+                    }
+                }
+                .padding(.leading, 20)
+            }
+            #endif
         }
     }
 
@@ -1902,15 +1978,6 @@ struct ModelMenuItem: View {
                             .font(.system(size: 12, weight: isHighlighted ? .semibold : .regular))
                             .foregroundColor(isHighlighted ? MBColors.textPrimary : MBColors.textSecondary)
 
-                        if model.isRecommended {
-                            Text("Recommended")
-                                .font(.system(size: 9, weight: .semibold))
-                                .foregroundColor(MBColors.accent)
-                                .padding(.horizontal, 5)
-                                .padding(.vertical, 1)
-                                .background(Capsule().fill(MBColors.accent.opacity(0.15)))
-                        }
-
                         if let lang = model.supportedLanguage {
                             Text(lang.displayName)
                                 .font(.system(size: 9, weight: .semibold))
@@ -2118,6 +2185,91 @@ struct ParakeetModelRow: View {
         .disabled(appState.isModelBusy)
     }
 }
+
+// MARK: - Nemotron Model Row
+
+#if canImport(FluidAudio)
+struct NemotronModelRow: View {
+    @ObservedObject var appState = AppState.shared
+
+    var isActive: Bool { appState.isModelLoaded && appState.loadedBackendType == .nemotron }
+    var isLoading: Bool { appState.isDownloadingNemotron || appState.isLoadingNemotron }
+    var isHighlighted: Bool { isActive || isLoading }
+    var isCached: Bool { appState.isNemotronModelCached() }
+
+    var body: some View {
+        Button(action: {
+            if isCached {
+                appState.selectBackend(.nemotron)
+            } else {
+                appState.downloadNemotronModel()
+            }
+        }) {
+            HStack(spacing: 10) {
+                Image(systemName: "waveform.badge.mic")
+                    .foregroundColor(.purple)
+                    .font(.system(size: 10, weight: .medium))
+                    .frame(width: 16)
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Nemotron Multilingual")
+                        .font(.system(size: 12, weight: isHighlighted ? .semibold : .regular))
+                        .foregroundColor(isHighlighted ? MBColors.textPrimary : MBColors.textSecondary)
+
+                    Text("True streaming · 97 languages · 37ms/chunk")
+                        .font(.caption2)
+                        .foregroundColor(MBColors.textTertiary)
+                }
+
+                Spacer()
+
+                if isLoading {
+                    HStack(spacing: 4) {
+                        ProgressView()
+                            .scaleEffect(0.5)
+                            .frame(width: 12, height: 12)
+                        Text(isActive ? "Loading" : "Downloading")
+                            .font(.caption2)
+                            .foregroundColor(MBColors.accent)
+                    }
+                } else if isActive {
+                    Text("Active")
+                        .font(.system(size: 10, weight: .semibold))
+                        .foregroundColor(MBColors.accent)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 3)
+                        .background(Capsule().fill(MBColors.accent.opacity(0.15)))
+                } else if isCached {
+                    Image(systemName: "checkmark.circle.fill")
+                        .foregroundColor(MBColors.accent.opacity(0.5))
+                        .font(.system(size: 14))
+                } else {
+                    HStack(spacing: 4) {
+                        Image(systemName: "arrow.down.circle")
+                            .font(.system(size: 14))
+                        Text("1.5 GB")
+                            .font(.caption2)
+                    }
+                    .foregroundColor(MBColors.accent)
+                }
+            }
+            .padding(.vertical, 6)
+            .padding(.horizontal, 8)
+            .background(
+                RoundedRectangle(cornerRadius: 6)
+                    .fill(isHighlighted ? MBColors.accent.opacity(0.12) : Color.clear)
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 6)
+                    .stroke(isHighlighted ? MBColors.accent.opacity(0.3) : Color.clear, lineWidth: 1)
+            )
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain).pointerOnHover()
+        .disabled(appState.isModelBusy)
+    }
+}
+#endif
 
 // MARK: - Microphone Picker View
 

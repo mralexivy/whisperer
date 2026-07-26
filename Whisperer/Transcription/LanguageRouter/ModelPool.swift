@@ -233,8 +233,9 @@ final class ModelPool {
             Logger.warning("Failed to cancel in-flight loads during shutdown", subsystem: .model)
         }
 
-        // Shutdown all backends
+        // Shutdown all backends — skip fallback (AppState owns its lifecycle, not ModelPool)
         for (profile, backend) in warmBackends {
+            guard profile != fallbackProfile else { continue }
             backend.prepareForShutdown()
             Logger.debug("Released backend: \(profile.model.displayName)", subsystem: .model)
         }

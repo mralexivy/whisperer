@@ -7,20 +7,49 @@
 
 import SwiftUI
 
+/// CTC boost strength for Parakeet vocabulary rescoring.
+enum CtcBoostStrength: String, CaseIterable {
+    case mild = "Mild"
+    case balanced = "Balanced"
+    case strong = "Strong"
+
+    var weight: Double {
+        switch self {
+        case .mild: return 5.0
+        case .balanced: return 8.0
+        case .strong: return 13.0
+        }
+    }
+
+    var description: String {
+        switch self {
+        case .mild: return "Common words"
+        case .balanced: return "Proper nouns"
+        case .strong: return "Technical terms"
+        }
+    }
+}
+
 struct AddDictionaryEntryView: View {
     @Environment(\.dismiss) var dismiss
     @Environment(\.colorScheme) var colorScheme
     @ObservedObject var dictionaryManager = DictionaryManager.shared
+    @ObservedObject var appState = AppState.shared
 
     @State private var incorrectForm = ""
     @State private var correctForm = ""
     @State private var category = ""
     @State private var notes = ""
+    @State private var boostStrength: CtcBoostStrength = .balanced
     @State private var showValidationError = false
     @State private var errorMessage = ""
     @State private var isCloseHovered = false
     @State private var isCancelHovered = false
     @State private var isAddHovered = false
+
+    private var isParakeetActive: Bool {
+        appState.selectedBackendType == .parakeet
+    }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -258,6 +287,32 @@ struct AddDictionaryEntryView: View {
                             )
                     }
 
+                    // CTC Boost Strength (Parakeet only)
+                    if isParakeetActive {
+                        VStack(alignment: .leading, spacing: 10) {
+                            HStack(spacing: 6) {
+                                Image(systemName: "text.badge.checkmark")
+                                    .font(.system(size: 11, weight: .semibold))
+                                    .foregroundColor(.green)
+                                Text("CTC Boost Strength")
+                                    .font(.system(size: 13, weight: .medium))
+                                    .tracking(0.3)
+                                    .foregroundColor(WhispererColors.primaryText(colorScheme))
+                            }
+
+                            Picker("Boost Strength", selection: $boostStrength) {
+                                ForEach(CtcBoostStrength.allCases, id: \.self) { strength in
+                                    Text(strength.rawValue).tag(strength)
+                                }
+                            }
+                            .pickerStyle(.segmented)
+
+                            Text(boostStrength.description + " — weight \(String(format: "%.0f", boostStrength.weight))")
+                                .font(.system(size: 11))
+                                .foregroundColor(WhispererColors.secondaryText(colorScheme).opacity(0.7))
+                        }
+                    }
+
                     // Preview
                     if !incorrectForm.isEmpty && !correctForm.isEmpty {
                         VStack(alignment: .leading, spacing: 12) {
@@ -420,7 +475,8 @@ struct AddDictionaryEntryView: View {
             correctForm: correctForm.trimmingCharacters(in: .whitespaces),
             category: category.trimmingCharacters(in: .whitespaces).isEmpty ? nil : category.trimmingCharacters(in: .whitespaces),
             isBuiltIn: false,
-            notes: notes.trimmingCharacters(in: .whitespaces).isEmpty ? nil : notes.trimmingCharacters(in: .whitespaces)
+            notes: notes.trimmingCharacters(in: .whitespaces).isEmpty ? nil : notes.trimmingCharacters(in: .whitespaces),
+            boostWeight: isParakeetActive ? boostStrength.weight : 0.0
         )
 
         Task {

@@ -11,6 +11,42 @@ import Foundation
 import AVFoundation
 import Accelerate
 
+// MARK: - NemotronPartialCounter
+
+/// Thread-safe counter + deduplicator for Nemotron partial callbacks.
+/// FluidAudio sometimes fires the callback twice for the same chunk (same text, ~1ms apart).
+/// Uses a class so @Sendable closures can capture it without mutation warnings.
+final class NemotronPartialCounter: @unchecked Sendable {
+    private var _count = 0
+    private var _lastText = ""
+    private let lock = NSLock()
+
+    /// Returns the new count if text is genuinely new, or nil if it's a duplicate.
+    func incrementIfNew(_ text: String) -> Int? {
+        lock.lock(); defer { lock.unlock() }
+        guard text != _lastText else { return nil }
+        _count += 1
+        _lastText = text
+        return _count
+    }
+}
+
+// MARK: - NullTranscriptionBackend
+
+/// Placeholder backend for the Nemotron path. Nemotron bypasses all TranscriptionBackend
+/// calls — this struct satisfies the non-optional init requirement without doing any work.
+final class NullTranscriptionBackend: TranscriptionBackend {
+    func transcribe(samples: [Float], initialPrompt: String?, language: TranscriptionLanguage,
+                    singleSegment: Bool, maxTokens: Int32) -> String { "" }
+    func transcribeAsync(samples: [Float], initialPrompt: String?, language: TranscriptionLanguage,
+                         singleSegment: Bool, maxTokens: Int32,
+                         completion: @escaping (String) -> Void) { completion("") }
+    func isContextHealthy() -> Bool { false }
+    func prepareForShutdown() { }
+}
+
+// MARK: - StreamingTranscriber
+
 class StreamingTranscriber {
     private var whisper: TranscriptionBackend
 
@@ -140,7 +176,7 @@ class StreamingTranscriber {
     private var modelPool: ModelPool?
     private var languageRouter: LanguageRouter?
     private var modelRouter: ModelRouter?
-    private var previewBridge: WhisperBridge?  // CPU-only tiny model for live preview
+    private var previewBridge: TranscriptionBackend?  // CPU-only tiny model (WhisperBridge) or streaming backend (FluidAudioBridge) for live preview
     private var routeDecision: ModelRouteDecision?
     private var detectionAttempts: Int = 0
     private var lastDetectionSampleCount: Int = 0
@@ -152,6 +188,12 @@ class StreamingTranscriber {
     // Promotion state — serialized via promotionQueue
     private let promotionQueue = DispatchQueue(label: "streaming.promotion")
     private var pendingPromotion: (backend: TranscriptionBackend, profile: ModelProfile)?
+
+    // Nemotron bridge — when set, bypasses VAD chunking, ring buffer, and preview polling.
+    // Audio is fed directly; preview fires via push callback; final text via endSession().
+    #if canImport(FluidAudio)
+    private var nemotronBridge: NemotronBridge?
+    #endif
 
     // Session audio file on disk (set by AppState after creation, used for saveRecording and tail)
     var sessionAudioURL: URL?
@@ -177,7 +219,8 @@ class StreamingTranscriber {
         modelPool: ModelPool? = nil,
         languageRouter: LanguageRouter? = nil,
         modelRouter: ModelRouter? = nil,
-        previewBridge: WhisperBridge? = nil
+        previewBridge: TranscriptionBackend? = nil,
+        nemotronBridge: (any AnyObject)? = nil  // NemotronBridge — typed as AnyObject to avoid #if at call sites
     ) {
         self.whisper = backend
         self.vad = vad
@@ -189,6 +232,9 @@ class StreamingTranscriber {
         self.previewBridge = previewBridge
         self.modelRouter = modelRouter
         self.vadSegmenter = VADSegmenter(vad: vad, targetChunkDuration: 6.0, silenceForFinalization: 0.5)
+        #if canImport(FluidAudio)
+        self.nemotronBridge = nemotronBridge as? NemotronBridge
+        #endif
     }
 
     /// Start streaming transcription with VAD-chunked pipeline
@@ -228,6 +274,37 @@ class StreamingTranscriber {
         previewAccumulatedText = ""
         previewPassID = 0
 
+        // Nemotron path: preview is push-based; no VAD chunking needed.
+        #if canImport(FluidAudio)
+        if let nemotron = nemotronBridge {
+            Task { [weak self] in
+                guard let self else { return }
+                let lang = self.language
+                let partialCounter = NemotronPartialCounter()
+                let callback: @Sendable (String) -> Void = { [weak self] accumulatedText in
+                    // Guard: empty string means silence/no speech — never reset the live display.
+                    guard let self, !accumulatedText.isEmpty else { return }
+                    // Deduplicate: FluidAudio sometimes fires the callback twice for the
+                    // same chunk result (same text, ~1ms apart). Skip the duplicate.
+                    guard let n = partialCounter.incrementIfNew(accumulatedText) else {
+                        Logger.debug("[Nemotron] Partial — DUPLICATE skipped", subsystem: .transcription)
+                        return
+                    }
+                    let wordCount = accumulatedText.split(separator: " ").count
+                    Logger.debug("[Nemotron] Partial #\(n): \(wordCount) words — \"\(accumulatedText.prefix(60))\"", subsystem: .transcription)
+                    self.previewAccumulatedText = accumulatedText
+                    DispatchQueue.main.async { self.onTranscription?(accumulatedText) }
+                }
+                Logger.debug("[Nemotron] beginSession (language: \(lang.rawValue))", subsystem: .transcription)
+                await nemotron.beginSession(language: lang)
+                Logger.debug("[Nemotron] setPreviewCallback registered — ready for audio", subsystem: .transcription)
+                await nemotron.setPreviewCallback(callback)
+            }
+            Logger.debug("StreamingTranscriber started (Nemotron streaming path)", subsystem: .transcription)
+            return
+        }
+        #endif
+
         // Start VAD scan task
         vadScanTask = Task.detached(priority: .userInitiated) { [weak self] in
             // Wait for initial audio to accumulate
@@ -249,11 +326,11 @@ class StreamingTranscriber {
                 if self.routeDecision != nil || self.modelPool == nil { break }
             }
 
-            // Preview loop — every 1s
+            // Preview loop — every 500ms
             while !Task.isCancelled {
                 guard let self, !self.isStopped else { break }
                 self.runLivePreviewPass()
-                try? await Task.sleep(nanoseconds: 1_000_000_000)
+                try? await Task.sleep(nanoseconds: 500_000_000)
             }
         }
 
@@ -263,6 +340,20 @@ class StreamingTranscriber {
     /// Add audio samples from microphone
     func addSamples(_ samples: [Float]) {
         guard !samples.isEmpty, !isStopped else { return }
+
+        #if canImport(FluidAudio)
+        // Nemotron: feed directly, bypass ring buffer. Duration tracking still needs updating.
+        if let nemotron = nemotronBridge {
+            do {
+                try allSamplesLock.withLock { totalSamplesReceived += samples.count }
+            } catch {}
+            Task { [weak self] in
+                guard let self, !self.isStopped else { return }
+                await self.nemotronBridge?.feed(samples: samples)
+            }
+            return
+        }
+        #endif
 
         do {
             try allSamplesLock.withLock {
@@ -524,11 +615,19 @@ class StreamingTranscriber {
 
     // MARK: - Live Preview Pass
 
-    /// Append-only live preview using tiny model.
-    /// Transcribes only NEW audio since last pass with ~0.5s overlap for boundary quality.
-    /// Text only grows (monotonic) — `SmoothTextUpdater.hasPrefix` always succeeds.
+    /// Live preview pass. Two modes depending on backend:
+    /// - FluidAudio: fixed 2s tail window with replace semantics (runs even during chunk transcription — separate queue).
+    /// - Whisper: append-only from last previewed position with 0.5s overlap (blocks during chunk to avoid queue contention).
     private func runLivePreviewPass() {
-        guard let preview = previewBridge, !isTranscribingChunk else { return }
+        guard let preview = previewBridge else { return }
+        #if canImport(FluidAudio)
+        let isFluidAudio = preview is FluidAudioBridge
+        #else
+        let isFluidAudio = false
+        #endif
+        // Whisper shares the same queue as chunk transcription — block preview during chunks to avoid contention.
+        // FluidAudio has a dedicated preview queue and triple-manager, so it can run concurrently.
+        if !isFluidAudio, isTranscribingChunk { return }
 
         // Skip preview if main pipeline has a large backlog (>10s) — drop preview before dropping chunks
         let chunkBacklogSamples = lastClaimedSampleIndex - lastTranscribedSampleIndex
@@ -545,17 +644,28 @@ class StreamingTranscriber {
 
         let ringEnd = ringBase + ringContent.count
 
-        // Compute start with 0.5s overlap for boundary quality (absolute)
-        let overlapSamples = Int(0.5 * sampleRate)
-        let tailStartAbs = max(lastTranscribedSampleIndex,
+        // Window computation differs by backend:
+        // - FluidAudio: fixed 2s tail (always latest audio), replace semantics. Low minimum guard (0.3s).
+        //   Eliminates the "growing stale window" problem where empty passes cause the window to keep growing.
+        // - Whisper: append from lastPreviewedSampleIndex with 0.5s overlap. 1s minimum guard.
+        let tailStartAbs: Int
+        let endAbsIndex: Int
+        if isFluidAudio {
+            // Growing window from last committed chunk to now, capped at 8s.
+            // Replace semantics: each pass retranscribes the full tail so the model gets growing context
+            // and text accumulates naturally without append/dedup heuristics.
+            let maxGrowingSamples = Int(8.0 * sampleRate)
+            tailStartAbs = max(lastTranscribedSampleIndex, ringEnd - maxGrowingSamples)
+            guard ringEnd > tailStartAbs + Int(0.3 * sampleRate) else { return }
+            endAbsIndex = ringEnd
+        } else {
+            let overlapSamples = Int(0.5 * sampleRate)
+            tailStartAbs = max(lastTranscribedSampleIndex,
                                lastPreviewedSampleIndex > overlapSamples ? lastPreviewedSampleIndex - overlapSamples : 0)
-
-        // Need at least 1s of new audio past tail start
-        guard ringEnd > tailStartAbs + Int(1.0 * sampleRate) else { return }
-
-        // Extract window (max 3s to keep it fast) using ring slice
-        let maxWindowSamples = Int(3.0 * sampleRate)
-        let endAbsIndex = min(ringEnd, tailStartAbs + maxWindowSamples)
+            guard ringEnd > tailStartAbs + Int(1.0 * sampleRate) else { return }
+            let maxWindowSamples = Int(2.0 * sampleRate)
+            endAbsIndex = min(ringEnd, tailStartAbs + maxWindowSamples)
+        }
         let windowSamples = ring.slice(fromAbsolute: tailStartAbs, toAbsolute: endAbsIndex)
         guard !windowSamples.isEmpty else { return }
         let candidateEndIndex = endAbsIndex
@@ -588,25 +698,61 @@ class StreamingTranscriber {
         previewPassID += 1
         let currentPassID = previewPassID
 
-        preview.transcribeAsync(
-            samples: normalizedSamples,
-            initialPrompt: prompt,
-            language: lang,
-            singleSegment: true,
-            maxTokens: 0
-        ) { [weak self] text in
+        let windowSecs = String(format: "%.2f", Double(windowSamples.count) / sampleRate)
+        Logger.debug("Preview pass \(currentPassID): \(windowSamples.count) samples (\(windowSecs)s), isFluid=\(preview is AnyObject)", subsystem: .transcription)
+
+        let doPreviewTranscribe: (@escaping (String) -> Void) -> Void
+        #if canImport(FluidAudio)
+        if let fluidBridge = preview as? FluidAudioBridge {
+            doPreviewTranscribe = { cb in fluidBridge.transcribePreviewAsync(samples: normalizedSamples, completion: cb) }
+        } else {
+            doPreviewTranscribe = { cb in
+                preview.transcribeAsync(samples: normalizedSamples, initialPrompt: prompt,
+                    language: lang, singleSegment: true, maxTokens: 0, completion: cb)
+            }
+        }
+        #else
+        doPreviewTranscribe = { cb in
+            preview.transcribeAsync(samples: normalizedSamples, initialPrompt: prompt,
+                language: lang, singleSegment: true, maxTokens: 0, completion: cb)
+        }
+        #endif
+
+        doPreviewTranscribe { [weak self] text in
             guard let self, !self.isStopped else { return }
 
             // Discard out-of-order callbacks
-            guard currentPassID == self.previewPassID else { return }
+            guard currentPassID == self.previewPassID else {
+                Logger.debug("Preview \(currentPassID) discarded (stale, current=\(self.previewPassID))", subsystem: .transcription)
+                return
+            }
 
             let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
-            guard !trimmed.isEmpty, !self.isHallucination(trimmed) else { return }
+            let hallucination = !trimmed.isEmpty && self.isHallucination(trimmed)
+            Logger.debug("Preview \(currentPassID) cb: '\(trimmed.prefix(50))' hallucination=\(hallucination)", subsystem: .transcription)
+            guard !trimmed.isEmpty, !hallucination else { return }
 
-            // Dedup overlap between accumulated tail and new text
+            #if canImport(FluidAudio)
+            if isFluidAudio {
+                // Replace semantics: each pass shows the latest 2s window.
+                // Avoid accumulating overlapping fragments from a sliding tail window.
+                self.previewAccumulatedText = trimmed
+                // Don't advance lastPreviewedSampleIndex — fixed tail always reads from ringEnd-2s
+            } else {
+                // Whisper append-only: dedup overlap and grow monotonically
+                let deduped = self.deduplicateOverlap(existing: self.previewAccumulatedText, new: trimmed)
+                if !deduped.isEmpty {
+                    if self.previewAccumulatedText.isEmpty {
+                        self.previewAccumulatedText = deduped
+                    } else {
+                        self.previewAccumulatedText += " " + deduped
+                    }
+                }
+                self.lastPreviewedSampleIndex = candidateEndIndex
+            }
+            #else
+            // Whisper append-only
             let deduped = self.deduplicateOverlap(existing: self.previewAccumulatedText, new: trimmed)
-
-            // Append (never replace)
             if !deduped.isEmpty {
                 if self.previewAccumulatedText.isEmpty {
                     self.previewAccumulatedText = deduped
@@ -614,9 +760,8 @@ class StreamingTranscriber {
                     self.previewAccumulatedText += " " + deduped
                 }
             }
-
-            // Advance sample index on success
             self.lastPreviewedSampleIndex = candidateEndIndex
+            #endif
 
             // Build display: completed chunks + accumulated preview
             var display = self.completedChunkTexts.joined(separator: " ")
@@ -635,7 +780,7 @@ class StreamingTranscriber {
                 component: "StreamingTranscriber",
                 operation: "previewWords",
                 kind: .progress,
-                metadata: ["words": .int(deduped.split(separator: " ").count), "totalChars": .int(display.count)]
+                metadata: ["words": .int(trimmed.split(separator: " ").count), "totalChars": .int(display.count)]
             )
             transcriptionProgressCounter &+= 1
         }
@@ -800,10 +945,8 @@ class StreamingTranscriber {
             prompt = initialPrompt
         }
 
-        // Reset abort for tail transcription
-        if let bridge = whisper as? WhisperBridge {
-            bridge.resetAbort()
-        }
+        // Reset abort for tail transcription (unconditional — works for WhisperBridge and FluidAudioBridge)
+        whisper.resetAbort()
 
         // Synchronous transcription for the tail
         let normalizedSamples = normalizeSamples(tailChunk.samples)
@@ -850,7 +993,7 @@ class StreamingTranscriber {
         // Wait for in-flight chunk to complete (abort fires within ms)
         var waitCount = 0
         while isTranscribingChunk && waitCount < 40 {  // Max 2 seconds
-            try? await Task.sleep(nanoseconds: 50_000_000)
+            try? await Task.sleep(nanoseconds: 10_000_000)
             waitCount += 1
         }
 
@@ -859,6 +1002,30 @@ class StreamingTranscriber {
         } else if waitCount > 0 {
             Logger.debug("In-flight chunk completed after \(waitCount * 50)ms", subsystem: .transcription)
         }
+
+        // Nemotron: get complete transcript from finish(), skip tail transcription.
+        #if canImport(FluidAudio)
+        if let nemotron = nemotronBridge {
+            let durationSec = Double(totalSamplesReceived) / sampleRate
+            Logger.debug("[Nemotron] endSession — \(String(format: "%.1f", durationSec))s recorded, calling finish()", subsystem: .transcription)
+            var text = await nemotron.endSession()
+            Logger.debug("[Nemotron] finish() returned \(text.count) chars", subsystem: .transcription)
+            if text.isEmpty {
+                // finish() threw or returned nothing. Keep previewAccumulatedText so AppState's
+                // fallback (currentTranscription) can recover partial results from streaming.
+                Logger.warning("[Nemotron] finish() returned empty — partial text may be used as fallback", subsystem: .transcription)
+            } else {
+                previewAccumulatedText = ""
+                if !skipCorrections {
+                    text = DictionaryManager.shared.correctText(text)
+                    if fillerWordRemovalEnabled { text = FillerWordFilter.removeFillers(from: text) }
+                }
+                completedChunkTexts = [text]
+                onChunkCompleted?(text, durationSec)
+            }
+            return clearAndReturn(text)
+        }
+        #endif
 
         // SpeechAnalyzer: use direct async path
         if #available(macOS 26.0, *), let speechBridge = whisper as? SpeechAnalyzerBridge {

@@ -1,300 +1,246 @@
-# Final Review — Whisperer PR Review & Verification
+# Final Review — Whisperer Multi-Agent PR Review
 
-Eleven specialist agents in parallel, anchored to Whisperer's rules (`CLAUDE.md`, `AGENTS.md`, `ARCHITECTURE.md`, `DESIGN.md`, `docs/references/whisper-cpp-integration.md`, `docs/references/language-routing.md`, `docs/exec-plans/app-store-submission.md`). Optimized for **UX latency** and **Swift threading correctness** — generic macOS advice is suppressed when it conflicts with project rules.
+Twelve specialist agents run in parallel via the Agent tool, each writing findings to disk. Agents read their full instructions from `.claude/review-agents/agent-NN-*.md`, which embed every real historical bug as a specific check pattern. The system is self-improving: every fixed P0/P1 writes a new rule to `docs/knowledge/`, which future runs automatically check.
 
 **Constraint priority (every agent):** Correctness → UX latency → Throughput → Developer velocity.
 
 ---
 
-## Step 0 — Pre-flight (orchestrator runs inline, before any agent)
-
-Gather ground-truth artifacts so agents review **evidence**, not just code. Output one structured block reused verbatim in every agent prompt.
+## Step 0 — Preflight (orchestrator runs inline)
 
 ```bash
-BASE=$(git merge-base HEAD main)
-echo "## BRANCH BASE"; echo "$BASE"
+mkdir -p .claude/review-state/findings
 
-echo "## PASS DETECTION"
-git log --oneline "$BASE"..HEAD | grep -c "Co-Authored-By: Claude" || true
-# 0 → Review Pass #1. 1+ → follow-up pass; agents must read commit messages
-# before recommending reversals.
+# Write diff and changed files
+BASE=$(git merge-base HEAD main 2>/dev/null || git rev-parse HEAD~3)
+git diff "$BASE"..HEAD > .claude/review-state/diff.patch
+git diff "$BASE"..HEAD --name-only > .claude/review-state/changed-files.txt
 
-echo "## DIFF SCOPE"
-git diff --name-only "$BASE"..HEAD \
-  | awk -F/ '{print $1"/"$2}' | sort -u
-# Buckets: Audio/, Transcription/, TextInjection/, UI/, KeyListener/,
-# Permissions/, Store/, Licensing/, History/, Dictionary/, Core/, whisper.cpp/
+# Pass detection
+PASS=$(git log --oneline "$BASE"..HEAD | grep -c "final-review" || echo 0)
+echo "Pass #$((PASS + 1))"
 
-echo "## RECENT STUCK DUMPS (post-base)"
-find ~/Library/Logs/Whisperer/stuck-dumps -type f -newer \
-  <(git log -1 --format=%cI "$BASE" | xargs -I{} date -j -f "%Y-%m-%dT%H:%M:%S%z" {} +%Y%m%d%H%M.%S | xargs -I{} touch -t {} /tmp/__base_ts) \
-  2>/dev/null | head -5
+# Determine buckets
+cat .claude/review-state/changed-files.txt | awk -F/ '{print $1"/"$2}' | sort -u
 
-echo "## LOG TAIL FINDINGS"
+# Log tail scan
 tail -n 500 ~/Library/Logs/Whisperer/whisperer.log 2>/dev/null \
-  | grep -iE "lock timeout|Metal|audio engine retry|Stuck state dump|kAudioUnitErr|-10877" \
-  | tail -20
+  | grep -iE "lock timeout|Metal|audio engine retry|Stuck state dump|kAudioUnitErr|-10877" | tail -20
+
+# Load knowledge snapshot
+for domain in audio transcription concurrency memory ui app-store state; do
+  if [ -f "docs/knowledge/$domain/rules.md" ]; then
+    echo "=== $domain ===" >> .claude/review-state/knowledge-snapshot.md
+    cat "docs/knowledge/$domain/rules.md" >> .claude/review-state/knowledge-snapshot.md
+  fi
+done
 ```
 
-**Diff-scope gating:** skip an agent whose bucket has zero changed lines (pure UI change does not need the whisper.cpp/GPU agent; pure Store/IAP change does not need the audio agent).
+Write `context.json` with `{ pass_number, branch, buckets, changed_files }`.
 
-**Follow-up pass discipline:** if pass detection ≥1, every agent prompt must include: *"Read commit messages on this branch before recommending reversals. Focus on issues introduced by the previous pass, not re-litigating decisions already made."*
+**Diff-scope gating table:**
+
+| Bucket changed | Agents to run |
+|---|---|
+| `Whisperer/Audio/` | 1, 2, 6, 8, 10 |
+| `Whisperer/Transcription/` (non-LLM) | 1, 2, 3, 4, 6, 8, 9, 10 |
+| `Whisperer/Transcription/LLM/` | 2, 9, 12 |
+| `Whisperer/Transcription/FluidAudio/NemotronBridge.swift` | 2, 9, 12 |
+| `Whisperer/TextInjection/` | 5, 7, 10 |
+| `Whisperer/UI/` | 4, 5, 10 |
+| `WhispererApp.swift` or `AppState.swift` | 1, 2, 3, 6, 10 |
+| `Store/` or `Licensing/` | 7, 11 |
+| Always (regardless of diff) | 7, 11 |
 
 ---
 
-## Step 1 — Eleven specialists in one parallel batch
+## Step 1 — Launch All Selected Agents in One Parallel Batch
 
-Launch all selected agents in a **single message with multiple Task tool calls**. Each prompt opens with the Pre-flight block plus the **Whisperer Rules** preamble (lift verbatim from `CLAUDE.md` "Critical Rules" + `AGENTS.md` "Critical Rules"). Required output schema per finding:
+Send ALL selected agents as a **single message with multiple Agent tool calls** so they run concurrently. Do not send agents one at a time.
+
+Each agent prompt follows this template (fill in `NN` and `Name`):
 
 ```
-- file:line — [P0|P1|P2] <one-line title>
-  Rule violated: <CLAUDE.md / AGENTS.md / ARCHITECTURE.md citation>
-  Fix: <concrete change>
-  Verify: <command or smoke step>
+Read your full instructions from .claude/review-agents/agent-NN-<name>.md
+
+Context:
+- Diff: .claude/review-state/diff.patch
+- Changed files: .claude/review-state/changed-files.txt
+- Project rules snapshot: .claude/review-state/knowledge-snapshot.md (includes all docs/knowledge/ rules)
+- Finding schema: .claude/review-agents/_shared-format.md
+- Conflict rules: .claude/review-agents/_conflict-resolution.md
+
+[If pass >= 2]: This is pass #N. Read commit messages on this branch before recommending reversals.
+Focus on issues introduced since the previous pass, not decisions already committed.
+
+Write ALL findings to .claude/review-state/findings/agent-NN.md using the schema from _shared-format.md.
+Include the Learn: field on every P0 and P1 finding.
+
+After writing the file, return exactly one line:
+Agent N (Name): X P0, Y P1, Z P2
 ```
 
 ### Agent 1 — Memory & Lifecycle
+Full instructions: `.claude/review-agents/agent-01-memory-lifecycle.md`
+Learn domain: `memory`
 
-- `[weak self]` mandatory in `Task.detached { }`, stored callbacks (`onStreamingSamples`, `onTranscription`, `onAmplitudeUpdate`), Combine `.sink`, `NotificationCenter` closure observers. Block-form observers must be removed in `deinit`.
-- `autoreleasepool` around audio callbacks (`AGENTS.md`).
-- `NSPanel`/`NSWindow` retention via `WindowController`; verify `OverlayPanel` lifecycle.
-- `NSStatusItem` strong-stored; `NSMenuItem` target avoiding retain cycles.
-- Carbon hotkey: `Unmanaged.passUnretained(self)` pointer must remain valid; `UnregisterEventHotKey` + `RemoveEventHandler` in teardown (`ARCHITECTURE.md` §2).
-- ModelPool contexts: every `whisper_init_*` paired with `whisper_free` in `deinit`; SileroVAD context cleanup.
-- 5-min recording cap intact (4,800,000 samples ≈ 19MB).
-
-### Agent 2 — Concurrency & Thread Safety (Whisperer-specific)
-
-- **Hard fail:** any Swift `actor` wrapping whisper.cpp / blocking C code. Use `SafeLock.withLock(timeout:)` (`CLAUDE.md`).
-- `@MainActor` only on `AppState`, ViewModels, UI-bound services — never on data/audio/transcription services.
-- No `DispatchQueue.global()` for AX calls (multi-second contention; `AGENTS.md`).
-- No `DispatchQueue.main.sync` from main thread.
-- Audio render thread: zero allocations, zero locks, zero ObjC messaging, zero Swift `async`. Only lock-free ring buffers / atomics.
-- `Task` cancellation: `try Task.checkCancellation()` in long loops; `for await` on `AsyncStream` terminates on producer cancel.
-- Actor reentrancy: re-check invariants after every `await`.
-- `Sendable` conformance audited; any new `@unchecked Sendable` requires a justification comment.
+### Agent 2 — Concurrency & Thread Safety
+Full instructions: `.claude/review-agents/agent-02-concurrency-thread-safety.md`
+Learn domain: `concurrency`
 
 ### Agent 3 — Architecture & Dependency Direction
-
-- UI → AppState → Services. Services never import `SwiftUI`/`AppKit`. Services never reference `AppState`; callbacks only (`onStreamingSamples`, `onTranscription`).
-- Domain types stay framework-free.
-- Errors as typed enums with `LocalizedError` (`AGENTS.md`); no `String`-based errors.
-- `fatalError` / `preconditionFailure` only for programmer errors, never reachable from user input or external data.
-- Flags premature protocols (single conformer, no test mock) — codebase has no unit tests, so protocols-for-testability is not a valid justification.
+Full instructions: `.claude/review-agents/agent-03-architecture-deps.md`
+Learn domain: `transcription`
 
 ### Agent 4 — Codebase Consistency & DRY
-
-- Naming patterns from `AGENTS.md` (Services / Managers / Views / Windows / Errors / Routing).
-- Reuse existing helpers before adding: `ModelPool.previewBridge`, `WhispererColors`/`MBColors`/`OnboardingColors`, `Logger`, `SafeLock`, `HistoryManager`, `ScriptAnalyzer`, `AudioDeviceManager.shared`.
-- File placement aligned with `Whisperer/` folder layout (Audio/, Transcription/, TextInjection/, etc.).
-- Comment-WHY-not-WHAT (`AGENTS.md`).
-- No magic numbers — use the existing constants on `AudioRecorder`, `StreamingTranscriber`, `LanguageRouter`.
+Full instructions: `.claude/review-agents/agent-04-consistency-dry.md`
+Learn domain: `ui`
 
 ### Agent 5 — macOS Platform & Performance
-
-- `OverlayPanel` uses `.orderFront(nil)`, **never** `.makeKey*` (must not steal focus; `ARCHITECTURE.md` §6).
-- Every AX call preceded by `AXUIElementSetMessagingTimeout` 100ms (app element + focused element).
-- `state = .idle` set **before** `textInjector.insertText(...)` so HUD dismissal runs concurrent with injection.
-- Thread count: P-cores only via `sysctlbyname("hw.perflevel0.logicalcpu")` minus 2 reserved.
-- `os_signpost` / `OSSignposter` on startup phases, transcription path, text injection.
-- SwiftUI: no unnecessary `AnyView`; `@ObservedObject` granularity correct; `.id(recordingSessionID)` on `LiveTranscriptionCard`.
-- Avoid `DispatchQueue.global()` without explicit QoS.
+Full instructions: `.claude/review-agents/agent-05-platform-performance.md`
+Learn domain: `ui`
 
 ### Agent 6 — State & Reliability
-
-- `await transcriber.stopAsync()` everywhere — never `transcriber.stop()` (race causes text duplication; `CLAUDE.md`).
-- AudioRecorder one-shot retry with full engine teardown (`cleanupEngineState()`), default-device reset, 200ms wait, retry once.
-- `stopRecording()` 5-second safety Task that forces `.idle` if `AVAudioEngine.stop()` hangs; main stop path checks `guard case .stopping = state` after the engine call (`ARCHITECTURE.md` §11).
-- `startRecordingWatchdog()` present; `StuckStateDumper.dump(reason:)` reachable.
-- Persistence: CoreData writes via `performBackgroundTask`; UserDefaults `Codable` for complex values; no main-thread file writes that could block UI.
-- Graceful degradation: VAD optional (`vad != nil`), missing models surfaced as user-facing error, corrupted state triggers reset path not crash.
+Full instructions: `.claude/review-agents/agent-06-state-reliability.md`
+Learn domain: `state`
 
 ### Agent 7 — Security, Privacy & Logging
+Full instructions: `.claude/review-agents/agent-07-security-logging.md`
+Learn domain: `app-store`
+**Always runs.**
 
-- Hardened runtime on.
-- **Zero `print()`** in `Whisperer/` (CI grep below).
-- `Logger.{debug,info,warning,error}` with correct subsystem (`.app`, `.audio`, `.transcription`, `.ui`, `.keyListener`, `.textInjection`, `.permissions`, `.model`).
-- Sensitive data (user content, transcribed text, file paths) only at `.debug` with `%{private}@`.
-- `os_signpost` on transcription, model load, text injection paths.
-- Entitlements: every entry in `whisperer.entitlements` / `whisperer-nosandbox.entitlements` justified by code usage; no `com.apple.security.network.server`.
-- No plaintext credentials anywhere; receipt validation via `ReceiptValidator` only in Release.
+### Agent 8 — Audio Pipeline & Real-Time Safety
+Full instructions: `.claude/review-agents/agent-08-audio-realtime.md`
+Learn domain: `audio`
 
-### Agent 8 — Audio Pipeline & Real-Time
+### Agent 9 — whisper.cpp, GPU & ANE
+Full instructions: `.claude/review-agents/agent-09-whisper-gpu-ane.md`
+Learn domain: `transcription`
 
-- 16kHz mono Float32 via `AVAudioConverter` — flag any deviation.
-- `AVAudioEngineConfigurationChange`: 1.5s startup grace observed (`ARCHITECTURE.md` Common Pitfalls §3); changes during AudioMuter operation ignored.
-- AudioMuter restores prior volume on stop; no feedback loop on calls.
-- Audio tap callback (`installTap`): no `Task`, no locks, no allocations, `autoreleasepool` around the `onStreamingSamples` call.
-- 5-minute cap enforced; samples dropped past 4,800,000.
-- Device hot-swap: `AudioDeviceManager` recovery path covered; selected-device unavailable falls back to default with warning log.
-- VAD/SileroVAD: `useGPU: false` (CPU only — Metal contention rule). `hasSpeech()` probability used before chunk dispatch.
-- Reads `Audio/AudioRecorder.swift` end-to-end on any diff.
-
-### Agent 9 — whisper.cpp & GPU/ANE
-
-Anchor every finding to `docs/references/whisper-cpp-integration.md` or `docs/references/language-routing.md`.
-
-- `WhisperBridge.transcribe()` calls guarded by `ctxLock.withLock(timeout: lockTimeout)` (10s Apple Silicon, 60s Intel).
-- Mel-then-detect order: `whisper_pcm_to_mel` **before** `whisper_lang_auto_detect`.
-- `withCString` lifetime around `wparams.language`, `wparams.initial_prompt` — no dangling pointers.
-- Streaming chunks: `single_segment = true`, `no_timestamps = true`, `temperature = 0.0`, `temperature_inc = 0.0` (no fallback ladder; pinned `no_speech_thold/logprob_thold/entropy_thold`).
-- Fixed language → `detect_language = false`.
-- **P0:** `ModelPool` warm-check compares `model + backend`, **never** the full `ModelProfile` (which includes `language`). Same `.bin` with different language must hit the warm path — loading a duplicate model freezes GPU for 1.6s (`CLAUDE.md`).
-- **P0:** Preview bridge stays `useGPU: false`. CoreML encoder still loads unconditionally; this is correct.
-- **P0:** Never separate contexts for preview vs detection — `ModelPool.previewBridge` serves both via `ctxLock`.
-- `whisper_full_lang_id()` treated as weak evidence only (decoder state, not classifier).
-- Tail-only final pass on stop; thread count from `optimalThreadCount` (P-cores − 2).
-- Core ML: `WHISPER_USE_COREML=1` defined in all three configs; `.mlmodelc` next to `.bin` for ANE; silent Metal fallback otherwise.
-
-### Agent 10 — HUD/UX Latency
-
-User-visible budget is the spec. Receives the Pre-flight stuck-dump list — any dump post-`BASE` is treated as a **P0** regression introduced by this branch.
-
-- `state = .idle` **before** `textInjector.insertText` (HUD dismissal concurrent with injection).
-- `OverlayPanel.adjustFrameForContent` grows upward for bottom positions, downward for top.
-- `SmoothTextUpdater.hasPrefix` invariant: preview text monotonic / append-only. Any code path that shrinks `previewAccumulatedText` mid-recording is a P0.
-- RTL path: `TranscriptionTextView` (NSTextField via NSViewRepresentable). Forbid SwiftUI `Text` for transcription rendering — six approaches were proven broken (`DESIGN.md`, `ARCHITECTURE.md`).
-- `.id(recordingSessionID)` resets `LiveTranscriptionCard` between recordings.
-- Preview gated on `routeDecision != nil` or 5s timeout.
-- `startRecordingWatchdog()` registered for every recording; `StuckStateDumper` reachable.
-- Word-by-word animation skipped when `isRTL`.
-- Audio cues fire on start/stop; `SoundPlayer` not blocking.
-
-If a recent stuck dump is attached, agent must name which two of {`AppState.state`, `AudioRecorder.recorderState`, `audioEngine.isRunning`} disagreed and the most likely line responsible.
+### Agent 10 — HUD, UX & Injection Latency
+Full instructions: `.claude/review-agents/agent-10-hud-ux-latency.md`
+Learn domain: `ui`
 
 ### Agent 11 — App Store Binary Auditor
+Full instructions: `.claude/review-agents/agent-11-appstore-binary.md`
+Learn domain: `app-store`
+**Always runs.**
 
-Runs the **AppStore config** build and inspects the binary directly. Maps strictly to `docs/exec-plans/app-store-submission.md`.
+### Agent 12 — LLM Post-Processing & Nemotron (only when LLM/Nemotron files changed)
+Full instructions: `.claude/review-agents/agent-12-llm-nemotron.md`
+Learn domain: `transcription`
+
+---
+
+## Step 2 — Conflict Resolution
+
+Read `_conflict-resolution.md` and all `findings/agent-NN.md` files. Apply the precedence table:
+- P0 from any agent cannot be downgraded
+- Same file:line from multiple agents → highest severity wins; others note "covered by agent N"
+- SafeLock beats Swift actor for blocking C code
+- Memory `[weak self]` beats Concurrency `[unowned self]`
+- App Store concerns always win
+- Platform: inline AX beats background dispatch
+
+In pass 2+: read commit messages before recommending reversals. Do not re-litigate committed decisions.
+
+---
+
+## Step 3 — Apply Fixes
+
+Follow `phase-fix.md` instructions:
+- Sort P0 → P1 → P2
+- Apply all fixes in order; never defer P0/P1 with "requires manual review"
+- Specific fix patterns documented in `phase-fix.md`
+- Write `.claude/review-state/fix-report.md`
+
+---
+
+## Step 4 — Learning Protocol
+
+Follow `phase-learn.md` instructions:
+- For each fixed P0/P1, append a new `RULE-<date>-<slug>` entry to `docs/knowledge/<domain>/rules.md`
+- Update `docs/knowledge/INDEX.md` for new domains
+- Promote hypotheses confirmed 3+ times to rules
+
+---
+
+## Step 5 — Verification
+
+Follow `phase-verify.md` instructions. Run three-config parallel builds and four grep gates:
 
 ```bash
-xcodebuild build -project Whisperer.xcodeproj -scheme whisperer \
-  -configuration AppStore -destination "platform=macOS" \
-  ARCHS=arm64 CODE_SIGN_ENTITLEMENTS=Whisperer/whisperer.entitlements \
-  ENABLE_APP_SANDBOX=YES 2>&1 | tee tmp/build-appstore.log
-
-APP=$(find build -name whisperer.app -path "*AppStore*" | head -1)
-/usr/bin/strings "$APP/Contents/MacOS/whisperer" | grep -iE \
-  "AXIsProcessTrusted|AXUIElement|CGEventTap|IOHIDManager|Grant.*Access|Grant.*Permission|Set Up Later|auto.?paste|autoPaste|Enable Auto-Paste|assistive"
-# Required: zero matches
-```
-
-- Every AX / `CGEvent.post` reference wrapped in `#if !APP_STORE`.
-- `whisperer.entitlements` keys justified by code; no `com.apple.security.network.server`.
-- `Info.plist`: `ITSAppUsesNonExemptEncryption = NO`, no `NSAppleEventsUsageDescription`, no `NSServices`.
-- Directive permission language banned (Guideline 5.1.1(iv)): no "Grant *", no "Set Up Later".
-
----
-
-## Step 2 — Conflict resolution (deterministic table)
-
-| Conflict | Winner | Why |
-|---|---|---|
-| Concurrency: "use Swift actor" vs whisper.cpp/GPU: "SafeLock" | whisper.cpp/GPU | blocking C; `CLAUDE.md` |
-| Architecture: "extract protocol" vs Consistency: "single conformer" | Consistency | no unit tests → no testability justification |
-| Memory: `[weak self]` vs Concurrency: `[unowned self]` | Memory | safer default |
-| HUD/UX: "skip animation" vs Consistency: "keep typewriter" | HUD/UX, RTL only | language-conditional |
-| Platform: `os_log` formatter vs Security: `%{private}@` | Both — apply together | not a real conflict |
-| App Store Binary: "remove string" vs Consistency: "keep helper" | App Store Binary | ship-blocker |
-| State/Reliability: "add retry" vs Architecture: "keep simple" | State/Reliability for I/O | reliability over simplicity |
-| Concurrency: "dispatch AX to background" vs Platform: "inline on caller" | Platform | queue contention causes multi-second delays |
-
-**P0 (no skip allowed):** memory leaks, data races on shared mutable state, banned APIs (`CGEventTap`/`IOHIDManager`/global `keyDown`/`keyUp`/`IOHIDCheckAccess`/`IOHIDRequestAccess`), banned binary strings in AppStore config, plaintext credentials, missing `await stopAsync()`, ModelPool warm-check on full `ModelProfile`, preview bridge with `useGPU: true`, separate contexts for preview vs detection, AX call without 100ms timeout, `state = .idle` not before `insertText`.
-
----
-
-## Step 3 — Apply fixes
-
-- One commit per logical fix, never bundled.
-- Commit format: `[final-review] <fix> (agent N)`.
-- TodoWrite tracks each fix; mark completed as each lands.
-- On follow-up passes, only fix what changed since the previous pass — convergence is the goal.
-
----
-
-## Step 4 — Config-aware verification
-
-Three configs build in parallel (`CLAUDE.md` lists Debug/Release; `AppStore` is the third per memory):
-
-```bash
-mkdir -p tmp
-xcodebuild build -project Whisperer.xcodeproj -scheme whisperer -configuration Debug    -destination "platform=macOS" 2>&1 | tee tmp/build-debug.log    &
-xcodebuild build -project Whisperer.xcodeproj -scheme whisperer -configuration Release  -destination "platform=macOS" 2>&1 | tee tmp/build-release.log  &
-xcodebuild build -project Whisperer.xcodeproj -scheme whisperer -configuration AppStore -destination "platform=macOS" 2>&1 | tee tmp/build-appstore.log &
+# Build all three configs
+xcodebuild build -project Whisperer.xcodeproj -scheme whisperer -configuration Debug -destination "platform=macOS" ARCHS=arm64 2>&1 | tail -3 &
+xcodebuild build -project Whisperer.xcodeproj -scheme whisperer -configuration Release -destination "platform=macOS" ARCHS=arm64 2>&1 | tail -3 &
+xcodebuild build -project Whisperer.xcodeproj -scheme whisperer -configuration AppStore -destination "platform=macOS" ARCHS=arm64 CODE_SIGN_ENTITLEMENTS=Whisperer/whisperer.entitlements ENABLE_APP_SANDBOX=YES 2>&1 | tail -3 &
 wait
+
+# Gate 1: No print()
+grep -rn 'print(' Whisperer/ --include='*.swift' | grep -v 'Logger\|// debug' || echo "PASS"
+
+# Gate 2: No banned APIs
+grep -rn 'CGEventTap\|CGEvent\.tapCreate\|IOHIDManager\|IOKit\.hid\|addGlobalMonitorForEvents.*\.keyDown\|addGlobalMonitorForEvents.*\.keyUp\|IOHIDCheckAccess\|IOHIDRequestAccess' Whisperer/ --include='*.swift' || echo "PASS"
+
+# Gate 3: stopAsync() only
+grep -rn 'transcriber\.stop()\|streamingTranscriber?\.stop()' Whisperer/ --include='*.swift' | grep -v 'Async\|stopRecording\|stopAsync' || echo "PASS"
+
+# Gate 4: Binary strings (AppStore build)
+BINARY=$(find ~/Library/Developer/Xcode/DerivedData -name "whisperer" -type f 2>/dev/null | grep AppStore | head -1)
+[ -n "$BINARY" ] && /usr/bin/strings "$BINARY" | grep -iE 'AXIsProcessTrusted|AXUIElement|CGEventTap|IOHIDManager|Grant.*Access|Grant.*Permission|Set Up Later|auto.?paste|autoPaste|Enable Auto-Paste|assistive' || echo "PASS"
 ```
 
-Sequential gates (each must pass):
+**No unit tests exist.** Do not claim test coverage. State this plainly.
 
-```bash
-# Warnings — zero tolerated
-for f in tmp/build-*.log; do echo "$f: $(grep -c 'warning:' "$f")"; done
-
-# No print() in production Swift
-grep -rn 'print(' Whisperer/ --include='*.swift' | grep -v '// debug' || echo "OK: no print()"
-
-# Banned input-monitoring APIs (App Store 2.4.5)
-grep -rnE 'CGEventTap|IOHIDManager|addGlobalMonitorForEvents.*\.keyDown|addGlobalMonitorForEvents.*\.keyUp|IOHIDCheckAccess|IOHIDRequestAccess' Whisperer/ || echo "OK: no banned APIs"
-
-# Synchronous transcriber.stop() (race → text duplication)
-grep -rnE 'transcriber\.stop\(\)|streamingTranscriber\?\.stop\(\)' Whisperer/ \
-  | grep -v 'stopAsync' && echo "FAIL: use stopAsync()" || echo "OK: stopAsync only"
-
-# App Store binary scan
-APP=$(find build -name whisperer.app -path '*AppStore*' | head -1)
-[ -n "$APP" ] && /usr/bin/strings "$APP/Contents/MacOS/whisperer" \
-  | grep -iE 'AXIsProcessTrusted|AXUIElement|CGEventTap|IOHIDManager|Grant.*Access|Grant.*Permission|Set Up Later|auto.?paste|autoPaste|Enable Auto-Paste|assistive' \
-  && echo "FAIL: banned strings in binary" || echo "OK: binary clean"
-```
-
-**No unit tests exist (`CLAUDE.md`).** Do not invent test runs. State this plainly in the summary.
+Write `.claude/review-state/verification.md`.
 
 ---
 
-## Step 5 — UX/Perf smoke (per-PR, generated from diff scope)
+## Step 6 — UX/Perf Smoke (diff-scope aware)
 
-Orchestrator picks the relevant items below based on which buckets the diff touched. Run only what's relevant; mark unverified items honestly.
+Pick relevant items based on changed buckets:
 
-- Time-to-first-preview-word ≤ 2s after key-down (Transcription/, Audio/).
-- Time-to-text-injected ≤ 200ms after key-up, excluding tail (TextInjection/, Core/AppState).
-- HUD dismisses concurrent with text appearing (Core/AppState ordering).
-- HUD stuck recovery: `sudo killall coreaudiod` during recording → watchdog dumps within 15s, HUD returns to `.idle` (Audio/, Core/).
-- Live preview text never shrinks mid-recording (Transcription/).
-- RTL: dictate Hebrew → paragraph starts at right margin (UI/LiveTranscriptionCard, Transcription/).
-- Language switch: English then Russian (or any two warm models) → second recording uses warm fallback, no GPU stall (Transcription/LanguageRouter/, ModelPool).
-- Recording > 5 min cap behavior (Audio/AudioRecorder).
-- Onboarding first-launch flow if `OnboardingView`/`OnboardingWindow` changed.
+| Bucket | Smoke item |
+|---|---|
+| `Transcription/`, `Audio/` | Time-to-first-preview-word ≤ 2s after key-down |
+| `TextInjection/`, `AppState.swift` | Time-to-text-injected ≤ 200ms after key-up (excluding tail) |
+| `AppState.swift` | HUD dismisses concurrent with text appearing |
+| `Audio/` | `sudo killall coreaudiod` during recording → watchdog dumps ≤ 15s, HUD returns to `.idle` |
+| `Transcription/` | Live preview text never shrinks mid-recording |
+| `UI/`, `Transcription/` | RTL: Hebrew dictation → paragraph starts at right margin |
+| `Transcription/LanguageRouter/` | Two-language recording → second uses warm fallback, no GPU stall |
+| `Audio/AudioRecorder.swift` | Recording > 5 min cap behavior correct |
+| `UI/OnboardingView.swift` | Onboarding first-launch flow if changed |
+
+Mark unverified items honestly.
 
 ---
 
-## Step 6 — Commit, push, summarize
+## Step 7 — Commit, Push, Summary
+
+Follow `phase-commit.md`: one commit per logical fix, format `[final-review] <fix> (agent N)`.
+Final commit: `[final-review] Write new rules to docs/knowledge/ (phase-learn)`.
 
 ```bash
 git push -u origin HEAD
 ```
 
-### Summary template
+Follow `phase-summary.md`: produce convergence verdict table:
 
-**Review Pass:** #N (state previous-pass scope if follow-up)
+| Condition | Verdict |
+|---|---|
+| Any P0 NOT fixed AND build failing | **BLOCKED — do not merge** |
+| Any P0 fixed this pass | **ANOTHER PASS NEEDED** |
+| > 3 P1 fixes | **LIKELY NEEDS ANOTHER PASS** |
+| 1–3 P1 fixes, all builds pass | **LIKELY CONVERGED** |
+| 0 P1 fixes, P2 only | **CONVERGED** |
+| 0 fixes | **CONVERGED — no issues found** |
 
-**Diff scope:** which buckets changed; which agents ran; which skipped and why.
-
-**P0 fixes applied:** every memory/concurrency/security/banned-API fix, file:line cited.
-
-**P1/P2 fixes applied:** grouped by agent.
-
-**Skipped recommendations:** each with justification. P0 skips require extra written justification.
-
-**UX/Perf outcomes:**
-- Build warnings: `tmp/build-debug.log` / `tmp/build-release.log` / `tmp/build-appstore.log` deltas.
-- `print()` count: before/after.
-- Banned-API grep: clean / failed.
-- Binary scan: clean / failed (list strings).
-- Stuck dumps post-`BASE`: count + outcome.
-- Manual smoke items run vs skipped.
-
-**Unable to verify:** explicitly list (no unit tests; no automated Instruments; anything else).
-
-**Pass-convergence verdict:**
-- If any P0 was fixed → recommend another `/final-review` pass.
-- If only stylistic tweaks → recommend merge.
-- Be honest: "Fixed 2 retain cycles and a ModelPool warm-check regression — recommend one more pass" or "Naming nits only — ready to merge".
+Include in summary:
+- Findings by agent (P0/P1/P2 counts)
+- All fixes applied (file:line cited)
+- New rules written to `docs/knowledge/`
+- Build results and grep gate results
+- Stuck dumps found (if any)
+- UX smoke items run vs skipped
+- Convergence verdict

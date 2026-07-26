@@ -58,7 +58,11 @@ class AppState: ObservableObject {
         didSet {
             // Notify observers when state changes
             NotificationCenter.default.post(name: NSNotification.Name("AppStateChanged"), object: nil)
+            if case .recording = state {
+                waveformState.startDisplayLink()
+            }
             if state == .idle {
+                waveformState.stopDisplayLink()
                 targetAppIcon = nil
                 activeMode = .dictation
                 activeAIModeName = nil
@@ -68,6 +72,9 @@ class AppState: ObservableObject {
                 isMicMuted = false
                 isPaused = false
                 PermissionManager.shared.resumePolling()
+                // Reset key listener state so hands-free flags don't get stuck when
+                // recording ends naturally (time limit, watchdog) rather than via key press.
+                keyListener?.resetToggleState()
             }
         }
     }
@@ -267,7 +274,7 @@ class AppState: ObservableObject {
         ) else { return nil }
 
         switch selectedBackendType {
-        case .whisperCpp: return nil
+        case .whisperCpp, .nemotron: return nil
         case .parakeet:
             return selectedParakeetModel == .v2
                 ? "Parakeet v2 supports English only — language will be ignored"
@@ -282,6 +289,7 @@ class AppState: ObservableObject {
         switch loadedBackendType ?? selectedBackendType {
         case .whisperCpp: return selectedModel.displayName
         case .parakeet: return selectedParakeetModel.displayName
+        case .nemotron: return "Nemotron Multilingual"
         case .speechAnalyzer: return "Apple Speech"
         }
     }
@@ -324,6 +332,14 @@ class AppState: ObservableObject {
     @Published var parakeetDownloadStatus: String = ""
     private var parakeetLoadTask: Task<Void, Never>?
 
+    // Nemotron multilingual streaming model state
+    @Published var isDownloadingNemotron: Bool = false
+    @Published var isLoadingNemotron: Bool = false
+    @Published var nemotronDownloadStatus: String = ""
+    #if canImport(FluidAudio)
+    private var nemotronBridgeInstance: NemotronBridge?
+    #endif
+
     // Parakeet EOU (streaming live preview) download/load state
     @Published var isDownloadingEou: Bool = false
     @Published var eouDownloadProgress: Double = 0
@@ -341,6 +357,8 @@ class AppState: ObservableObject {
         isLoadingWhisper ||
         isDownloadingParakeet ||
         isLoadingParakeet ||
+        isDownloadingNemotron ||
+        isLoadingNemotron ||
         isDownloadingEou ||
         isLoadingSpeechAnalyzer
     }
@@ -436,6 +454,9 @@ class AppState: ObservableObject {
     // Streaming transcription
     private var streamingTranscriber: StreamingTranscriber?
 
+    // Per-chunk LLM correction coordinator
+    private let chunkLLMCoordinator = ChunkLLMCoordinator()
+
     // Long-record session state
     private var currentSessionID: UUID?
     private var idleSleepAssertion: IOPMAssertionID = 0
@@ -517,9 +538,12 @@ class AppState: ObservableObject {
         }
 
         #if !APP_STORE
-        // Load auto-paste preference (default OFF)
+        // Load auto-paste preference. Default ON for direct distribution — clipboard-only is App Store compliance, not the preferred UX.
         if UserDefaults.standard.object(forKey: "autoPasteEnabled") != nil {
             _autoPasteEnabled = Published(wrappedValue: UserDefaults.standard.bool(forKey: "autoPasteEnabled"))
+        } else {
+            _autoPasteEnabled = Published(wrappedValue: true)
+            UserDefaults.standard.set(true, forKey: "autoPasteEnabled")
         }
 
         // Enable accessibility tracking if auto-paste was previously enabled
@@ -578,6 +602,11 @@ class AppState: ObservableObject {
         } else if UserDefaults.standard.string(forKey: "selectedBackendType") == "MLX" {
             selectedBackendType = .parakeet
             UserDefaults.standard.set(BackendType.parakeet.rawValue, forKey: "selectedBackendType")
+        } else if UserDefaults.standard.object(forKey: "selectedBackendType") == nil,
+                  BackendType.parakeet.isAvailable,
+                  BackendType.parakeet.supportsLanguage(selectedLanguage, parakeetVariant: .v3) {
+            // First launch on Apple Silicon with a Parakeet-supported language → default to Parakeet TDT
+            selectedBackendType = .parakeet
         }
         if let savedParakeet = UserDefaults.standard.string(forKey: "selectedParakeetModel"),
            let parakeetModel = ParakeetModelVariant(rawValue: savedParakeet) {
@@ -654,6 +683,13 @@ class AppState: ObservableObject {
 
         // Start monitoring audio device changes (for UI device picker only)
         audioDeviceManager.startMonitoring()
+
+        // Wire per-chunk LLM corrector. Uses applyLLMPostProcessing which guards on
+        // llmEnabled, model loaded, and mode.supportsChunkProcessing before invoking the LLM.
+        chunkLLMCoordinator.corrector = { [weak self] text, contextTail in
+            guard let self else { return text }
+            return await self.applyLLMPostProcessing(text, contextTail: contextTail)
+        }
     }
 
     // MARK: - Prompt Words
@@ -759,6 +795,12 @@ class AppState: ObservableObject {
         UserDefaults.standard.set(backend.rawValue, forKey: "selectedBackendType")
         Logger.info("Switched backend to \(backend.displayName)", subsystem: .model)
 
+        // Parakeet/Nemotron don't use the WhisperCpp routing pipeline
+        if (backend == .parakeet || backend == .nemotron) && modelPool != nil {
+            modelPool?.releaseAll()
+            modelPool = nil
+        }
+
         preloadModel()
     }
 
@@ -773,6 +815,15 @@ class AppState: ObservableObject {
         parakeetLoadTask = nil
         speechAnalyzerLoadTask?.cancel()
         speechAnalyzerLoadTask = nil
+
+        // Release Nemotron bridge if loaded
+        #if canImport(FluidAudio)
+        if let nemotron = nemotronBridgeInstance {
+            Task { await nemotron.prepareForShutdown() }
+            nemotronBridgeInstance = nil
+            isLoadingNemotron = false
+        }
+        #endif
 
         // DON'T release LivePreviewEngine here — it's backend-agnostic and
         // reloading CoreML models on every backend switch leaks compiled model cache.
@@ -919,6 +970,8 @@ class AppState: ObservableObject {
             preloadWhisperCppModel()
         case .parakeet:
             preloadParakeetModel()
+        case .nemotron:
+            preloadNemotronModel()
         case .speechAnalyzer:
             preloadSpeechAnalyzer()
         }
@@ -984,6 +1037,7 @@ class AppState: ObservableObject {
 
                 await MainActor.run { [weak self] in
                     guard let self = self else { return }
+                    guard !Task.isCancelled else { return }
                     guard self.selectedModel == model else { return }
 
                     // Safety: release any existing bridge that might still be loaded
@@ -1004,6 +1058,18 @@ class AppState: ObservableObject {
                     self.preloadLanguageRouting()
 
                     Logger.info("Whisper model loaded. Process memory: \(String(format: "%.0f", BenchmarkUtilities.currentMemoryMB()))MB", subsystem: .model)
+                }
+            } catch WhisperError.modelCorrupted {
+                guard !Task.isCancelled else { return }
+                Logger.error("Model corrupted, deleting and re-queuing download: \(modelDisplayName)", subsystem: .model)
+                // Delete corrupted file and clear cached hash so next load stores a fresh one
+                try? FileManager.default.removeItem(at: path)
+                let hashKey = "modelSHA256_\(path.lastPathComponent)"
+                UserDefaults.standard.removeObject(forKey: hashKey)
+                await MainActor.run { [weak self] in
+                    guard let self else { return }
+                    self.isLoadingWhisper = false
+                    self.errorMessage = "\(modelDisplayName) was corrupted and has been removed. Please re-download it."
                 }
             } catch {
                 guard !Task.isCancelled else { return }
@@ -1213,6 +1279,92 @@ class AppState: ObservableObject {
         }
     }
 
+    // MARK: - Nemotron
+
+    #if canImport(FluidAudio)
+    func isNemotronModelCached() -> Bool { NemotronBridge.isModelCached() }
+
+    func downloadNemotronModel() {
+        guard !isDownloadingNemotron else { return }
+        isDownloadingNemotron = true
+        nemotronDownloadStatus = "Downloading Nemotron Multilingual..."
+        downloadProgress = 0
+        state = .downloadingModel(progress: 0)
+
+        Task.detached(priority: .userInitiated) { [weak self] in
+            do {
+                try await NemotronBridge.download { [weak self] downloadProgress in
+                    let fraction = downloadProgress.fractionCompleted
+                    Task { @MainActor [weak self] in
+                        guard let self, self.isDownloadingNemotron else { return }
+                        self.downloadProgress = fraction
+                        self.state = .downloadingModel(progress: fraction)
+                    }
+                }
+                Logger.info("Nemotron multilingual downloaded", subsystem: .model)
+                await MainActor.run { [weak self] in
+                    guard let self else { return }
+                    self.isDownloadingNemotron = false
+                    self.nemotronDownloadStatus = ""
+                    self.downloadProgress = 0
+                    self.state = .idle
+                    if self.selectedBackendType == .nemotron {
+                        self.preloadNemotronModel()
+                    }
+                }
+            } catch {
+                Logger.error("Failed to download Nemotron: \(error)", subsystem: .model)
+                await MainActor.run { [weak self] in
+                    guard let self else { return }
+                    self.isDownloadingNemotron = false
+                    self.nemotronDownloadStatus = ""
+                    self.downloadProgress = 0
+                    self.state = .idle
+                    self.errorMessage = "Failed to download Nemotron: \(error.localizedDescription)"
+                }
+            }
+        }
+    }
+
+    private func preloadNemotronModel() {
+        guard isNemotronModelCached() else {
+            Logger.info("Nemotron not cached — download first", subsystem: .model)
+            return
+        }
+
+        isLoadingNemotron = true
+        nemotronDownloadStatus = "Loading Nemotron..."
+
+        Task.detached(priority: .userInitiated) { [weak self] in
+            do {
+                let bridge = try await NemotronBridge.loadFromCache()
+                await MainActor.run { [weak self] in
+                    guard let self else { return }
+                    guard self.selectedBackendType == .nemotron else { return }
+                    self.nemotronBridgeInstance = bridge
+                    self.isModelLoaded = true
+                    self.loadedBackendType = .nemotron
+                    self.isLoadingNemotron = false
+                    self.nemotronDownloadStatus = ""
+                    Logger.info("Nemotron multilingual ready", subsystem: .model)
+                }
+            } catch {
+                Logger.error("Failed to load Nemotron: \(error)", subsystem: .model)
+                await MainActor.run { [weak self] in
+                    guard let self else { return }
+                    self.isLoadingNemotron = false
+                    self.nemotronDownloadStatus = ""
+                    self.errorMessage = "Failed to load Nemotron: \(error.localizedDescription)"
+                }
+            }
+        }
+    }
+    #else
+    func isNemotronModelCached() -> Bool { false }
+    func downloadNemotronModel() { }
+    private func preloadNemotronModel() { }
+    #endif
+
     private func preloadSpeechAnalyzer() {
         guard #available(macOS 26.0, *) else {
             Logger.warning("SpeechAnalyzer requires macOS 26+", subsystem: .model)
@@ -1343,6 +1495,21 @@ class AppState: ObservableObject {
         }
     }
 
+    /// Remove structural prompt tags that the LLM occasionally echoes in its output.
+    private static func stripStructuralTags(_ text: String) -> String {
+        var out = text
+        // Remove complete [CONTEXT=previous]...[/CONTEXT] blocks (including multiline)
+        if let regex = try? NSRegularExpression(pattern: #"\[CONTEXT=previous\][\s\S]*?\[/CONTEXT\]"#) {
+            let range = NSRange(out.startIndex..., in: out)
+            out = regex.stringByReplacingMatches(in: out, range: range, withTemplate: "")
+        }
+        // Remove any remaining bare structural tags
+        for tag in ["[CONTEXT=previous]", "[/CONTEXT]", "[INPUT]", "[/INPUT]"] {
+            out = out.replacingOccurrences(of: tag, with: "")
+        }
+        return out.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
     /// Split an AIMode prompt on {transcript} into system prompt + user message wrapper
     private func splitPrompt(_ prompt: String, text: String) -> (systemPrompt: String, userMessage: String) {
         let parts = prompt.components(separatedBy: "{transcript}")
@@ -1356,8 +1523,12 @@ class AppState: ObservableObject {
         return (systemPart, userMessage)
     }
 
-    /// Apply LLM post-processing to transcribed text if enabled
-    private func applyLLMPostProcessing(_ text: String) async -> String {
+    /// Apply LLM post-processing to transcribed text if enabled.
+    /// `contextTail`: non-nil signals this is a mid-stream chunk (fragment mode).
+    /// The value itself is NOT injected into the user message — doing so causes the model
+    /// to echo the context content into its output. Instead, a fragment-mode instruction
+    /// is added to the system prompt telling the model to preserve boundary capitalization.
+    private func applyLLMPostProcessing(_ text: String, contextTail: String? = nil) async -> String {
         guard llmEnabled, let processor = llmPostProcessor, processor.isModelLoaded else {
             return text
         }
@@ -1390,8 +1561,18 @@ class AppState: ObservableObject {
             // Pre-clean: normalize, dedup, protect tokens
             let precleanResult = TranscriptPreCleaner.preclean(text)
 
-            // Split prompt into system prompt + user message with [INPUT] envelope
-            let (systemPrompt, userMessage) = splitPrompt(mode.prompt, text: precleanResult.text)
+            // Split prompt into system prompt + user message with [INPUT] envelope.
+            // When correcting a chunk, prepend the previous chunk's tail so the LLM
+            // has sentence-boundary context and won't over-punctuate at the cut point.
+            var (systemPrompt, baseUserMessage) = splitPrompt(mode.prompt, text: precleanResult.text)
+            let userMessage: String
+            // contextTail non-nil signals "fragment mode" (mid-stream chunk, not full text).
+            // Inject only into the system prompt — never into the user message.
+            // Injecting context into the user message causes the model to echo its content.
+            if contextTail != nil {
+                systemPrompt += "\n\nThis is a speech fragment from a continuous dictation stream — it may begin or end mid-sentence. Do NOT capitalize the first word unless the source already capitalizes it or it is a proper noun/acronym. Do NOT add terminal punctuation (.!?) at the end unless the source already contains it."
+            }
+            userMessage = baseUserMessage
 
             Logger.debug("LLM processing with mode '\(mode.name)' (temp=\(mode.temperature), topP=\(mode.topP), topK=\(mode.topK), repPenalty=\(mode.repetitionPenalty))", subsystem: .transcription)
             Logger.debug("LLM input: \(precleanResult.text)", subsystem: .transcription)
@@ -1407,6 +1588,10 @@ class AppState: ObservableObject {
                 repetitionPenalty: mode.repetitionPenalty,
                 maxTokensCap: mode.maxTokensCap
             )
+
+            // Strip any leaked structural tags — the LLM must never reproduce them
+            // but occasionally does when context blocks are present.
+            processed = Self.stripStructuralTags(processed)
 
             // Restore protected tokens
             processed = TranscriptPreCleaner.restorePlaceholders(processed, precleanResult.placeholders)
@@ -1567,6 +1752,15 @@ class AppState: ObservableObject {
         }
         guard routingConfig.isRoutingEnabled else {
             Logger.debug("Language routing disabled (single language)", subsystem: .model)
+            return
+        }
+
+        // Parakeet/Nemotron detect language natively — skip WhisperBridge detection + ModelPool.
+        guard selectedBackendType != .parakeet && selectedBackendType != .nemotron else {
+            Logger.info("Language routing skipped — \(selectedBackendType.displayName) detects language natively", subsystem: .model)
+            // Release any stale pool left over from a previous WhisperCpp routing session
+            modelPool?.releaseAll()
+            modelPool = nil
             return
         }
 
@@ -1846,7 +2040,7 @@ class AppState: ObservableObject {
 
         guard state == .idle else { return }
 
-        let bridge = whisperBridge!
+        let bridge: TranscriptionBackend = whisperBridge ?? NullTranscriptionBackend()
 
         isInAppMode = true
         lastInAppTranscription = ""
@@ -1860,6 +2054,7 @@ class AppState: ObservableObject {
         lastAmplitudeUpdateTime = nil  // Reset audio-progress watchdog
         lastNonSilentAmplitudeTime = nil
         hasTriggeredSilentAudioDump = false
+        chunkLLMCoordinator.reset()  // Clear any leftover state from previous recording
         startStateWatchdog()  // 4s startup watchdog — cancelled when audio starts
 
         // Play feedback sound first (user hears it)
@@ -1867,7 +2062,12 @@ class AppState: ObservableObject {
 
         Task {
             do {
-                streamingTranscriber = StreamingTranscriber(backend: bridge, vad: sileroVAD, language: selectedLanguage, initialPrompt: promptWordsString, fillerWordRemovalEnabled: fillerWordRemovalEnabled, modelPool: modelPool, languageRouter: routingConfig.isRoutingEnabled ? LanguageRouter(allowed: routingConfig.allowedLanguages, primary: routingConfig.primaryLanguage) : nil, modelRouter: routingConfig.isRoutingEnabled ? ModelRouter(languageModelMap: buildLanguageModelMap(), fallbackProfile: buildFallbackProfile()) : nil, previewBridge: modelPool?.previewBridge)
+                #if canImport(FluidAudio)
+                let nemotronInApp = selectedBackendType == .nemotron ? nemotronBridgeInstance : nil
+                #else
+                let nemotronInApp: AnyObject? = nil
+                #endif
+                streamingTranscriber = StreamingTranscriber(backend: bridge, vad: sileroVAD, language: selectedLanguage, initialPrompt: promptWordsString, fillerWordRemovalEnabled: fillerWordRemovalEnabled, modelPool: modelPool, languageRouter: routingConfig.isRoutingEnabled ? LanguageRouter(allowed: routingConfig.allowedLanguages, primary: routingConfig.primaryLanguage) : nil, modelRouter: routingConfig.isRoutingEnabled ? ModelRouter(languageModelMap: buildLanguageModelMap(), fallbackProfile: buildFallbackProfile()) : nil, previewBridge: bridge is FluidAudioBridge ? bridge : modelPool?.previewBridge, nemotronBridge: nemotronInApp)
 
                 // Wire language detection → UI update
                 streamingTranscriber?.onLanguageDetected = { [weak self] lang in
@@ -1876,9 +2076,18 @@ class AppState: ObservableObject {
                 }
 
                 // Wire incremental CoreData persistence for crash recovery
+                // and per-chunk LLM correction (runs during audio collection windows).
                 streamingTranscriber?.onChunkCompleted = { [weak self] chunkText, duration in
                     guard let self, let id = self.currentSessionID else { return }
                     Task { await HistoryManager.shared.appendChunk(sessionID: id, chunkText: chunkText, totalDuration: duration) }
+                    Task { @MainActor [weak self] in
+                        guard let self, self.llmEnabled else { return }
+                        let mode = AIModeManager.shared.postProcessMode
+                        // Nemotron fires onChunkCompleted once with the full session text at stop time.
+                        // Per-chunk LLM is redundant — full-text path runs in stopRecording() instead.
+                        guard mode.supportsChunkProcessing, self.selectedBackendType != .nemotron else { return }
+                        self.chunkLLMCoordinator.enqueue(chunkText: chunkText)
+                    }
                 }
 
                 // StreamingTranscriber provides live preview via onNewSegment + onTranscription
@@ -1971,9 +2180,16 @@ class AppState: ObservableObject {
             guard case .stopping = state else { return }
 
             if !finalText.isEmpty {
-                // Apply list formatting then LLM post-processing
-                let listFormatted = await applyListFormatting(finalText)
-                let processedText = await applyLLMPostProcessing(listFormatted)
+                // Per-chunk path: drain coordinator (tail already queued via onChunkCompleted).
+                // Transformative modes or no chunks collected → existing full-text path.
+                let mode = AIModeManager.shared.postProcessMode
+                let processedText: String
+                if llmEnabled && mode.supportsChunkProcessing && !chunkLLMCoordinator.correctedChunks.isEmpty {
+                    processedText = await chunkLLMCoordinator.drain()
+                } else {
+                    let listFormatted = await applyListFormatting(finalText)
+                    processedText = await applyLLMPostProcessing(listFormatted)
+                }
                 lastInAppTranscription = processedText
 
                 // Save AI enhancement if text was modified by post-processing
@@ -1997,7 +2213,12 @@ class AppState: ObservableObject {
 
     func startRecording() {
         // Show loading indicator if model isn't ready (works even during download)
-        guard whisperBridge != nil else {
+        #if canImport(FluidAudio)
+        let nemotronReady = selectedBackendType == .nemotron && nemotronBridgeInstance != nil
+        #else
+        let nemotronReady = false
+        #endif
+        guard whisperBridge != nil || nemotronReady else {
             showModelLoadingToast = true
             // Safety timeout — dismiss if model never loads (e.g., no model downloaded)
             DispatchQueue.main.asyncAfter(deadline: .now() + 10.0) { [weak self] in
@@ -2029,7 +2250,7 @@ class AppState: ObservableObject {
             TranscriptionPickerState.shared.dismiss()
         }
 
-        let bridge = whisperBridge!
+        let bridge: TranscriptionBackend = whisperBridge ?? NullTranscriptionBackend()
 
         // Capture the frontmost app BEFORE our overlay steals focus
         textInjector?.captureTargetApp()
@@ -2047,6 +2268,7 @@ class AppState: ObservableObject {
         state = .recording(startTime: recordingStart)
         PermissionManager.shared.pausePolling()  // Permissions don't change mid-recording
         liveTranscription = ""
+        chunkLLMCoordinator.reset()  // Clear any leftover state from previous recording
         recordingSessionID = UUID()
         isOutputAudioMuted = muteOtherAudioDuringRecording  // Initialize runtime toggle from setting
         lastAmplitudeUpdateTime = nil  // Reset audio-progress watchdog
@@ -2060,8 +2282,14 @@ class AppState: ObservableObject {
         // Start recording immediately
         Task {
             do {
-                // Create streaming transcriber with pre-loaded bridge, optional VAD, and language
-                streamingTranscriber = StreamingTranscriber(backend: bridge, vad: sileroVAD, language: selectedLanguage, initialPrompt: promptWordsString, fillerWordRemovalEnabled: fillerWordRemovalEnabled, modelPool: modelPool, languageRouter: routingConfig.isRoutingEnabled ? LanguageRouter(allowed: routingConfig.allowedLanguages, primary: routingConfig.primaryLanguage) : nil, modelRouter: routingConfig.isRoutingEnabled ? ModelRouter(languageModelMap: buildLanguageModelMap(), fallbackProfile: buildFallbackProfile()) : nil, previewBridge: modelPool?.previewBridge)
+                // Create streaming transcriber with pre-loaded bridge, optional VAD, and language.
+                // Nemotron path: pass NullTranscriptionBackend + nemotronBridge (VAD chunking bypassed).
+                #if canImport(FluidAudio)
+                let nemotron = selectedBackendType == .nemotron ? nemotronBridgeInstance : nil
+                #else
+                let nemotron: AnyObject? = nil
+                #endif
+                streamingTranscriber = StreamingTranscriber(backend: bridge, vad: sileroVAD, language: selectedLanguage, initialPrompt: promptWordsString, fillerWordRemovalEnabled: fillerWordRemovalEnabled, modelPool: modelPool, languageRouter: routingConfig.isRoutingEnabled ? LanguageRouter(allowed: routingConfig.allowedLanguages, primary: routingConfig.primaryLanguage) : nil, modelRouter: routingConfig.isRoutingEnabled ? ModelRouter(languageModelMap: buildLanguageModelMap(), fallbackProfile: buildFallbackProfile()) : nil, previewBridge: bridge is FluidAudioBridge ? bridge : modelPool?.previewBridge, nemotronBridge: nemotron)
 
                 // Wire language detection → UI update
                 streamingTranscriber?.onLanguageDetected = { [weak self] lang in
@@ -2070,9 +2298,18 @@ class AppState: ObservableObject {
                 }
 
                 // Wire incremental CoreData persistence for crash recovery
+                // and per-chunk LLM correction (runs during audio collection windows).
                 streamingTranscriber?.onChunkCompleted = { [weak self] chunkText, duration in
                     guard let self, let id = self.currentSessionID else { return }
                     Task { await HistoryManager.shared.appendChunk(sessionID: id, chunkText: chunkText, totalDuration: duration) }
+                    Task { @MainActor [weak self] in
+                        guard let self, self.llmEnabled else { return }
+                        let mode = AIModeManager.shared.postProcessMode
+                        // Nemotron fires onChunkCompleted once with the full session text at stop time.
+                        // Per-chunk LLM is redundant — full-text path runs in stopRecording() instead.
+                        guard mode.supportsChunkProcessing, self.selectedBackendType != .nemotron else { return }
+                        self.chunkLLMCoordinator.enqueue(chunkText: chunkText)
+                    }
                 }
 
                 streamingTranscriber?.start { [weak self] text in
@@ -2241,9 +2478,16 @@ class AppState: ObservableObject {
                     savedRecordId = saveRecordingFromTranscriber(transcriber, transcription: finalText)
                 }
 
-                // Standard dictation post-processing
-                let listFormatted = await applyListFormatting(finalText)
-                let processedText = await applyLLMPostProcessing(listFormatted)
+                // Per-chunk path: drain coordinator (tail already queued via onChunkCompleted).
+                // Transformative modes or no chunks collected → existing full-text path.
+                let mode = AIModeManager.shared.postProcessMode
+                let processedText: String
+                if llmEnabled && mode.supportsChunkProcessing && !chunkLLMCoordinator.correctedChunks.isEmpty {
+                    processedText = await chunkLLMCoordinator.drain()
+                } else {
+                    let listFormatted = await applyListFormatting(finalText)
+                    processedText = await applyLLMPostProcessing(listFormatted)
+                }
                 let textToInsert = appendTrailingSpace ? processedText + " " : processedText
 
                 // Save AI enhancement if text was modified by post-processing
@@ -2377,6 +2621,7 @@ class AppState: ObservableObject {
         }
 
         streamingTranscriber = nil
+        chunkLLMCoordinator.reset()  // Discard in-flight per-chunk corrections on watchdog force-idle
         liveTranscription = ""
         state = .idle
         HealthManager.shared.recordingStopped()
@@ -2455,6 +2700,7 @@ class AppState: ObservableObject {
             // Clear streaming transcriber without doing final pass — discard incremental session (user cancelled)
             discardCurrentSession()
             streamingTranscriber = nil
+            chunkLLMCoordinator.reset()  // Discard any in-flight per-chunk corrections
 
             // Reset state
             state = .idle
@@ -2637,6 +2883,20 @@ class AppState: ObservableObject {
             NotificationCenter.default.removeObserver(observer)
             clipboardNotificationObserver = nil
         }
+
+        // Cancel in-flight load tasks to prevent them from setting whisperBridge after we nil it
+        whisperLoadTask?.cancel()
+        whisperLoadTask = nil
+        parakeetLoadTask?.cancel()
+        parakeetLoadTask = nil
+
+        // Shutdown Nemotron bridge
+        #if canImport(FluidAudio)
+        if let nemotron = nemotronBridgeInstance {
+            Task { await nemotron.prepareForShutdown() }
+            nemotronBridgeInstance = nil
+        }
+        #endif
 
         // Stop any streaming transcription
         streamingTranscriber = nil

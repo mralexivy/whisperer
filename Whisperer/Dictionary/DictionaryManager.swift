@@ -281,8 +281,9 @@ class DictionaryManager: ObservableObject {
     func addEntry(_ entry: DictionaryEntry, skipRebuild: Bool = false) async throws {
         let context = database.newBackgroundContext()
 
+        let entryBoostWeight = entry.boostWeight
         await context.perform {
-            _ = DictionaryEntryEntity.create(
+            let entity = DictionaryEntryEntity.create(
                 in: context,
                 incorrectForm: entry.incorrectForm,
                 correctForm: entry.correctForm,
@@ -290,6 +291,7 @@ class DictionaryManager: ObservableObject {
                 isBuiltIn: entry.isBuiltIn,
                 notes: entry.notes
             )
+            entity.boostWeight = entryBoostWeight
 
             do {
                 try context.save()
@@ -316,8 +318,7 @@ class DictionaryManager: ObservableObject {
         }
 
         // Add new entry
-        var newEntry = entry
-        newEntry = DictionaryEntry(
+        let newEntry = DictionaryEntry(
             id: entry.id,
             incorrectForm: entry.incorrectForm,
             correctForm: entry.correctForm,
@@ -327,7 +328,8 @@ class DictionaryManager: ObservableObject {
             notes: entry.notes,
             createdAt: entry.createdAt,
             lastModifiedAt: entry.lastModifiedAt,
-            useCount: entry.useCount
+            useCount: entry.useCount,
+            boostWeight: entry.boostWeight
         )
         try await addEntry(newEntry, skipRebuild: skipRebuild)
     }

@@ -12,6 +12,7 @@ import Foundation
 enum BackendType: String, CaseIterable, Identifiable {
     case whisperCpp = "whisper.cpp"
     case parakeet = "Parakeet"
+    case nemotron = "Nemotron"
     case speechAnalyzer = "Apple Speech"
 
     var id: String { rawValue }
@@ -20,6 +21,7 @@ enum BackendType: String, CaseIterable, Identifiable {
         switch self {
         case .whisperCpp: return "Whisper"
         case .parakeet: return "Parakeet"
+        case .nemotron: return "Nemotron"
         case .speechAnalyzer: return "Apple Speech"
         }
     }
@@ -28,15 +30,36 @@ enum BackendType: String, CaseIterable, Identifiable {
         switch self {
         case .whisperCpp: return "waveform"
         case .parakeet: return "bird.fill"
+        case .nemotron: return "waveform.badge.mic"
         case .speechAnalyzer: return "apple.logo"
+        }
+    }
+
+    /// Short user-facing label for settings pickers (vs. displayName which is used in logs/technical contexts)
+    var friendlyName: String {
+        switch self {
+        case .whisperCpp: return "Accurate"
+        case .parakeet: return "Fast"
+        case .nemotron: return "Streaming"
+        case .speechAnalyzer: return "System"
+        }
+    }
+
+    /// One-line benefit description shown under the picker option
+    var settingsSubtitle: String {
+        switch self {
+        case .whisperCpp: return "97 languages"
+        case .parakeet: return "ANE-accelerated"
+        case .nemotron: return "True streaming, 37ms/chunk"
+        case .speechAnalyzer: return "macOS 26+"
         }
     }
 
     var isAvailable: Bool {
         switch self {
         case .whisperCpp: return true
-        case .parakeet:
-            // Parakeet requires Apple Silicon (CoreML/ANE)
+        case .parakeet, .nemotron:
+            // Requires Apple Silicon (CoreML/ANE)
             var sysinfo = utsname()
             uname(&sysinfo)
             let arch = withUnsafePointer(to: &sysinfo.machine) {
@@ -140,7 +163,7 @@ extension BackendType {
     ) -> Bool {
         guard language != .auto else { return true }
         switch self {
-        case .whisperCpp: return true
+        case .whisperCpp, .nemotron: return true
         case .parakeet:
             let supported = (parakeetVariant == .v2) ? Self.parakeetV2Languages : Self.parakeetV3Languages
             return supported.contains(language.rawValue)

@@ -69,7 +69,7 @@ class TextInjector {
 
     // Per-app clipboard restore delay. Conservative default covers most apps.
     // Too short = pasting restored clipboard content instead of transcription.
-    private static let defaultRestoreDelay: UInt64 = 300_000_000 // 300ms
+    private static let defaultRestoreDelay: UInt64 = 150_000_000 // 150ms — matches per-app Chrome/Firefox tuning
     private static let restoreDelayByBundle: [String: UInt64] = [
         "com.google.Chrome":                   150_000_000,
         "org.mozilla.firefox":                 150_000_000,

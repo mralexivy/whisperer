@@ -20,6 +20,8 @@ public class DictionaryEntryEntity: NSManagedObject {
     @NSManaged public var createdAt: Date
     @NSManaged public var lastModifiedAt: Date
     @NSManaged public var useCount: Int32
+    /// CTC boost weight for Parakeet vocabulary rescoring. 0.0 = use default (8.0 for custom, nil for built-in).
+    @NSManaged public var boostWeight: Double
 }
 
 extension DictionaryEntryEntity: Identifiable {}
