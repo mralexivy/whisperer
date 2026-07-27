@@ -520,7 +520,14 @@ extension StreamingNemotronMultilingualAsrManager {
                 } else {
                     // Non-blank token - emit and update local state
                     newTokens.append(predToken)
-                    accumulatedTokenIds.append(predToken)
+                    // Guard against consecutive identical tokens caused by mel-cache overlap.
+                    // The encoder re-feeds ~90ms of the previous chunk's tail into the next
+                    // chunk; the RNNT decoder re-emits the boundary word from that overlap
+                    // audio. Skipping a token that matches the last accumulated token removes
+                    // this duplicate without affecting any legitimately distinct emission.
+                    if accumulatedTokenIds.last != predToken {
+                        accumulatedTokenIds.append(predToken)
+                    }
                     // Legacy per-frame loop: this token was emitted at frame t.
                     appendTokenTiming(predToken, frameInChunk: t, tokenizer: tokenizer)
                     currentToken = Int32(predToken)

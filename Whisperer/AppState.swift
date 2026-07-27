@@ -242,7 +242,7 @@ class AppState: ObservableObject {
     var llmPostProcessorForDebug: LLMPostProcessor? { llmPostProcessor }
 
     // Pre-loaded transcription backend - keeps model in memory for instant recording start
-    private var whisperBridge: TranscriptionBackend?
+    var whisperBridge: TranscriptionBackend?
 
     /// Read-only access to the pre-loaded backend for file transcription
     var fileTranscriptionBridge: TranscriptionBackend? { whisperBridge }
@@ -336,8 +336,9 @@ class AppState: ObservableObject {
     @Published var isDownloadingNemotron: Bool = false
     @Published var isLoadingNemotron: Bool = false
     @Published var nemotronDownloadStatus: String = ""
+    var nemotronLoadTask: Task<Void, Never>?
     #if canImport(FluidAudio)
-    private var nemotronBridgeInstance: NemotronBridge?
+    var nemotronBridgeInstance: NemotronBridge?
     #endif
 
     // Parakeet EOU (streaming live preview) download/load state
@@ -805,16 +806,18 @@ class AppState: ObservableObject {
     }
 
     /// Release the active transcription bridge and all satellite resources (EOU, VAD, CTC)
-    private func releaseCurrentBridge() {
+    func releaseCurrentBridge() {
         let memBefore = BenchmarkUtilities.currentMemoryMB()
 
-        // Cancel in-flight load tasks to prevent them from setting whisperBridge after we nil it
+        // Cancel in-flight load tasks to prevent them from setting the bridge after we nil it
         whisperLoadTask?.cancel()
         whisperLoadTask = nil
         parakeetLoadTask?.cancel()
         parakeetLoadTask = nil
         speechAnalyzerLoadTask?.cancel()
         speechAnalyzerLoadTask = nil
+        nemotronLoadTask?.cancel()
+        nemotronLoadTask = nil
 
         // Release Nemotron bridge if loaded
         #if canImport(FluidAudio)
@@ -1326,7 +1329,7 @@ class AppState: ObservableObject {
         }
     }
 
-    private func preloadNemotronModel() {
+    func preloadNemotronModel() {
         guard isNemotronModelCached() else {
             Logger.info("Nemotron not cached — download first", subsystem: .model)
             return
@@ -1335,7 +1338,7 @@ class AppState: ObservableObject {
         isLoadingNemotron = true
         nemotronDownloadStatus = "Loading Nemotron..."
 
-        Task.detached(priority: .userInitiated) { [weak self] in
+        nemotronLoadTask = Task.detached(priority: .userInitiated) { [weak self] in
             do {
                 let bridge = try await NemotronBridge.loadFromCache()
                 await MainActor.run { [weak self] in
@@ -1362,7 +1365,7 @@ class AppState: ObservableObject {
     #else
     func isNemotronModelCached() -> Bool { false }
     func downloadNemotronModel() { }
-    private func preloadNemotronModel() { }
+    func preloadNemotronModel() { }
     #endif
 
     private func preloadSpeechAnalyzer() {
@@ -2018,7 +2021,12 @@ class AppState: ObservableObject {
     /// Start recording in in-app mode (no text entry into other apps, no Accessibility required)
     func startInAppRecording() {
         // Show loading indicator if model isn't ready (works even during download)
-        guard whisperBridge != nil else {
+        #if canImport(FluidAudio)
+        let nemotronReadyInApp = selectedBackendType == .nemotron && nemotronBridgeInstance != nil
+        #else
+        let nemotronReadyInApp = false
+        #endif
+        guard whisperBridge != nil || nemotronReadyInApp else {
             showModelLoadingToast = true
             // Safety timeout — dismiss if model never loads (e.g., no model downloaded)
             DispatchQueue.main.asyncAfter(deadline: .now() + 10.0) { [weak self] in

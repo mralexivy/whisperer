@@ -161,6 +161,10 @@ class StreamingTranscriber {
     private var vadScanTask: Task<Void, Never>?
     private var previewTask: Task<Void, Never>?
     private var isStopped: Bool = false
+    // Set to true only after Nemotron beginSession + setPreviewCallback complete.
+    // Samples arriving before the session is open are dropped rather than sent to
+    // an uninitialised RNNT state machine.
+    private var isNemotronSessionReady: Bool = false
     private var lastPreviewedSampleIndex: Int = 0
     private var previewAccumulatedText: String = ""
     private var previewPassID: Int = 0
@@ -193,6 +197,9 @@ class StreamingTranscriber {
     // Audio is fed directly; preview fires via push callback; final text via endSession().
     #if canImport(FluidAudio)
     private var nemotronBridge: NemotronBridge?
+    // Serializes bridge.feed() calls. Each addSamples Task chains onto this, preventing
+    // concurrent process(samples:) on the same actor (Swift re-entrancy → heap corruption).
+    private var nemotronFeedTask: Task<Void, Never>?
     #endif
 
     // Session audio file on disk (set by AppState after creation, used for saveRecording and tail)
@@ -253,6 +260,10 @@ class StreamingTranscriber {
         fullTranscription = ""
         isProcessing = false
         isStopped = false
+        isNemotronSessionReady = false
+        #if canImport(FluidAudio)
+        nemotronFeedTask = nil
+        #endif
         routeDecision = nil
         detectionAttempts = 0
         lastDetectionSampleCount = 0
@@ -297,8 +308,9 @@ class StreamingTranscriber {
                 }
                 Logger.debug("[Nemotron] beginSession (language: \(lang.rawValue))", subsystem: .transcription)
                 await nemotron.beginSession(language: lang)
-                Logger.debug("[Nemotron] setPreviewCallback registered — ready for audio", subsystem: .transcription)
                 await nemotron.setPreviewCallback(callback)
+                self.isNemotronSessionReady = true
+                Logger.debug("[Nemotron] setPreviewCallback registered — ready for audio", subsystem: .transcription)
             }
             Logger.debug("StreamingTranscriber started (Nemotron streaming path)", subsystem: .transcription)
             return
@@ -347,9 +359,18 @@ class StreamingTranscriber {
             do {
                 try allSamplesLock.withLock { totalSamplesReceived += samples.count }
             } catch {}
-            Task { [weak self] in
+            // Drop samples until beginSession + setPreviewCallback have completed.
+            // beginSession typically takes 1-8ms while audio engine setup takes 80-200ms,
+            // so this guard only triggers if ANE is contended at session start.
+            guard isNemotronSessionReady else { return }
+            // Chain onto the previous feed task to serialize bridge.feed() calls.
+            // Spawning independent Tasks causes concurrent process(samples:) on the same
+            // actor (Swift re-entrancy via ANE encoder await) → shared-buffer heap corruption.
+            let capturedSamples = samples
+            nemotronFeedTask = Task { [weak self, prev = nemotronFeedTask] in
+                _ = await prev?.value  // wait for previous feed to finish
                 guard let self, !self.isStopped else { return }
-                await self.nemotronBridge?.feed(samples: samples)
+                await self.nemotronBridge?.feed(samples: capturedSamples)
             }
             return
         }
@@ -1006,6 +1027,10 @@ class StreamingTranscriber {
         // Nemotron: get complete transcript from finish(), skip tail transcription.
         #if canImport(FluidAudio)
         if let nemotron = nemotronBridge {
+            // Wait for all pending feed() calls to complete before ending the session.
+            // Without this, endSession() could race with in-flight feeds.
+            await nemotronFeedTask?.value
+            nemotronFeedTask = nil
             let durationSec = Double(totalSamplesReceived) / sampleRate
             Logger.debug("[Nemotron] endSession — \(String(format: "%.1f", durationSec))s recorded, calling finish()", subsystem: .transcription)
             var text = await nemotron.endSession()

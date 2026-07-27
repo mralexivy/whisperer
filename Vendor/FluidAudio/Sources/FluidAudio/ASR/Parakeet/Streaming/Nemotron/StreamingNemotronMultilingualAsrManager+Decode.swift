@@ -237,7 +237,9 @@ extension StreamingNemotronMultilingualAsrManager {
                 self.specWindowsHitNonBlank &+= 1
                 // Emit first non-blank from speculative scan.
                 newTokens.append(emittedToken)
-                accumulatedTokenIds.append(emittedToken)
+                if accumulatedTokenIds.last != emittedToken {
+                    accumulatedTokenIds.append(emittedToken)
+                }
                 // This token was found at encoder frame t + firstNonBlankAt.
                 appendTokenTiming(
                     emittedToken, frameInChunk: t + firstNonBlankAt, tokenizer: tokenizer)
@@ -408,7 +410,9 @@ extension StreamingNemotronMultilingualAsrManager {
                     if dBestIdx == blankIdx { break }
                     // Non-blank → emit + commit state
                     newTokens.append(dBestIdx)
-                    accumulatedTokenIds.append(dBestIdx)
+                    if accumulatedTokenIds.last != dBestIdx {
+                        accumulatedTokenIds.append(dBestIdx)
+                    }
                     // Multi-emission drain stays on the same frame: drainFrameT.
                     appendTokenTiming(dBestIdx, frameInChunk: drainFrameT, tokenizer: tokenizer)
                     currentToken = Int32(dBestIdx)
