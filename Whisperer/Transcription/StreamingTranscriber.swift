@@ -369,7 +369,9 @@ class StreamingTranscriber {
             let capturedSamples = samples
             nemotronFeedTask = Task { [weak self, prev = nemotronFeedTask] in
                 _ = await prev?.value  // wait for previous feed to finish
-                guard let self, !self.isStopped else { return }
+                // No isStopped check here — pending tasks must complete their feed()
+                // before endSession(). stopAsync() awaits this chain first.
+                guard let self else { return }
                 await self.nemotronBridge?.feed(samples: capturedSamples)
             }
             return

@@ -447,11 +447,12 @@ class AudioRecorder: NSObject {
             }
         }
 
-        isRecording = false  // stops deliverSamples — no new disk write dispatches
-
-        // Short drain to let in-flight callbacks deliver last buffers
+        // Keep audio flowing to Nemotron for 200ms after key release so the last
+        // word's samples reach addSamples/feed() before the session ends.
         try? await Task.sleep(nanoseconds: 200_000_000)
         Logger.debug("Drain period complete", subsystem: .audio)
+
+        isRecording = false  // stops deliverSamples — no new disk write dispatches
 
         // Drain pending disk writes before closing the file
         sessionWriteQueue.sync {}

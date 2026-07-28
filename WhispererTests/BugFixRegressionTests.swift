@@ -17,6 +17,12 @@
 //    ContinuousClock advances during sleep. mainThreadPendingSince set before sleep
 //    reported days of "stall" on wake. No sleep/wake reset existed.
 //
+//  Bug D — Last word cut when speaking fast (no pause before key release):
+//    isRecording=false was set before the 200ms drain → last audio samples never
+//    reached addSamples/Nemotron. Also: isStopped=true set before awaiting the
+//    nemotronFeedTask chain → pending tasks hit `guard !self.isStopped` and silently
+//    dropped audio. Fix: drain first, then gate; remove !self.isStopped from task body.
+//
 
 import XCTest
 import AppKit
@@ -260,5 +266,94 @@ final class HealthManagerSleepWakeTests: XCTestCase {
         HealthManager.shared.stopMonitoring()
 
         print("✅ Bug C — startMonitoring is idempotent")
+    }
+}
+
+// MARK: - Bug D: Last word cut when speaking fast
+
+final class NemotronLastWordCutoffTests: XCTestCase {
+
+    /// Regression: user said "Validate it, commit and push" quickly (no pause before
+    /// releasing Fn) — transcription produced "Validay it comment and", "push" missing.
+    /// Recording: 2026-07-28_09-54-45_Validay_it_comment_and.wav (1.9s).
+    ///
+    /// Bug D1 — AudioRecorder.stopRecording() set isRecording=false BEFORE the 200ms
+    ///   drain sleep. deliverSamples() gated on isRecording, so the last CoreAudio
+    ///   callbacks (carrying the tail of "push") were rejected before reaching
+    ///   addSamples/Nemotron. Fix: sleep first, then set isRecording=false.
+    ///
+    /// Bug D2 — StreamingTranscriber.stopAsync() set isStopped=true BEFORE awaiting
+    ///   nemotronFeedTask?.value. Chained feed tasks created just before stop hit
+    ///   `guard !self.isStopped else { return }` inside their body and dropped audio.
+    ///   Fix: removed !self.isStopped from the task-body guard; tasks always feed().
+    /// Core regression test: StreamingTranscriber must deliver ALL audio to NemotronBridge
+    /// before endSession(). Compares pipeline output against direct bridge output for the
+    /// same audio. If Bug D2 is present, the pipeline drops the last feed task(s) because
+    /// isStopped=true is set before pending tasks run their feed() calls.
+    ///
+    /// NOTE: The original bug-reproducing recording (2026-07-28_09-54-45) cannot be used
+    /// here — it was made with the OLD buggy code, so the last word was cut off BEFORE
+    /// being written to disk. Even direct NemotronBridge returns 'Valedet comment and'
+    /// (no "push") from that WAV. We use test-sentences-en.wav which has complete audio
+    /// and lets us compare pipeline vs direct-bridge word delivery.
+    func testLastWordNotCutWhenSpeakingFast() async throws {
+        #if canImport(FluidAudio)
+        try XCTSkipUnless(BackendType.nemotron.isAvailable, "Nemotron requires Apple Silicon")
+        try XCTSkipUnless(NemotronBridge.isModelCached(), "Nemotron model not downloaded — run app first")
+
+        let wavURL = URL(fileURLWithPath: "/Users/alexanderi/Downloads/whisperer/WhispererTests/TestData/test-sentences-en.wav")
+        guard FileManager.default.fileExists(atPath: wavURL.path) else {
+            throw XCTSkip("test-sentences-en.wav not found")
+        }
+        let allSamples = try loadAudioSamples(from: wavURL)
+        // Use last 6 seconds of the file — the most likely segment to be cut by a fast stop.
+        let tailStart = max(0, allSamples.count - 16000 * 6)
+        let samples = Array(allSamples[tailStart...])
+        print("Testing with \(samples.count) samples (\(String(format: "%.1f", Double(samples.count)/16000))s tail)")
+
+        // ── Baseline: direct NemotronBridge — no pipeline to drop samples ──
+        let directBridge = try await NemotronBridge.loadFromCache()
+        await directBridge.beginSession(language: .english)
+        let chunkLen = NemotronBridge.chunkMs * 16
+        for offset in stride(from: 0, to: samples.count, by: chunkLen) {
+            let end = min(offset + chunkLen, samples.count)
+            await directBridge.feed(samples: Array(samples[offset..<end]))
+        }
+        let directResult = await directBridge.endSession()
+        await directBridge.prepareForShutdown()
+        print("Direct bridge → '\(directResult)'")
+
+        // ── Pipeline: StreamingTranscriber with immediate stopAsync() ──
+        // Simulates fast key release: last audio chunks are fed, then stop fires while
+        // some feed tasks are still queued. Pre-fix: those tasks hit !isStopped → drop.
+        let bridge2 = try await NemotronBridge.loadFromCache()
+        let transcriber = StreamingTranscriber(
+            backend: NullTranscriptionBackend(),
+            vad: nil,
+            language: .english,
+            nemotronBridge: bridge2
+        )
+        transcriber.start { _ in }
+        try await Task.sleep(nanoseconds: 500_000_000)  // wait for session gate
+
+        feedAudioToTranscriber(transcriber, samples: samples)
+        // Stop immediately — no pause. This is where Bug D2 manifested.
+        let pipelineResult = await transcriber.stopAsync()
+        await bridge2.prepareForShutdown()
+        print("Pipeline result → '\(pipelineResult)'")
+
+        // The pipeline must deliver at least 85% of what the direct bridge hears.
+        // Pre-fix: last 1-2 feed tasks were dropped → pipelineResult missing final words.
+        let f1 = wordOverlapF1(directResult, pipelineResult)
+        print("Word overlap F1 (direct vs pipeline): \(String(format: "%.2f", f1))")
+
+        XCTAssertGreaterThan(f1, 0.80,
+            "Pipeline result missing words vs direct bridge (F1=\(String(format: "%.2f", f1))). " +
+            "Last-word cutoff regression (Bug D2): stopAsync() is not waiting for all feed tasks. " +
+            "Direct: '\(directResult)' | Pipeline: '\(pipelineResult)'"
+        )
+        #else
+        throw XCTSkip("FluidAudio not available")
+        #endif
     }
 }
