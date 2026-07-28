@@ -130,6 +130,10 @@ class HistoryManager: ObservableObject {
     /// Discard an in-progress session (crash recovery cancelled or recording too short).
     func discardSession(sessionID: UUID) async {
         let context = database.newBackgroundContext()
+        // appendChunk may have saved the entity (bumping store version) between when
+        // this context fetched it and when we try to delete. NSOverwriteMergePolicy
+        // lets our delete win without raising NSMergeConflict error 133020.
+        context.mergePolicy = NSOverwriteMergePolicy
         await context.perform {
             let req: NSFetchRequest<TranscriptionEntity> = TranscriptionEntity.fetchRequest()
             req.predicate = NSPredicate(format: "id == %@", sessionID as CVarArg)

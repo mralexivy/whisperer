@@ -131,6 +131,19 @@ final class HealthManager {
         t.resume()
         timer = t
 
+        // ContinuousClock advances during Mac sleep, so a pending main-thread check
+        // that spans sleep reports a huge stale elapsed time. Reset on wake.
+        NSWorkspace.shared.notificationCenter.addObserver(
+            forName: NSWorkspace.didWakeNotification,
+            object: nil,
+            queue: nil
+        ) { [weak self] _ in
+            self?.monitorQueue.async { [weak self] in
+                self?.mainThreadPendingSince = nil
+                self?.mainThreadAlertFired = false
+            }
+        }
+
         timelineStart = .now
     }
 

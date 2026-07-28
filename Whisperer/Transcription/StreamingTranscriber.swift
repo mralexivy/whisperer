@@ -1183,6 +1183,14 @@ class StreamingTranscriber {
     // MARK: - Public Properties
 
     var currentTranscription: String {
+        #if canImport(FluidAudio)
+        // For Nemotron, fullTranscription is only populated after finish() in stopAsync().
+        // previewAccumulatedText holds the last partial pushed by the callback — use it
+        // as fallback so AppState's empty-result path can recover streaming text.
+        if nemotronBridge != nil && !previewAccumulatedText.isEmpty {
+            return previewAccumulatedText
+        }
+        #endif
         return fullTranscription
     }
 
