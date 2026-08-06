@@ -274,7 +274,7 @@ class AppState: ObservableObject {
         ) else { return nil }
 
         switch selectedBackendType {
-        case .whisperCpp, .nemotron: return nil
+        case .whisperCpp, .nemotron, .nemotronHebrew: return nil
         case .parakeet:
             return selectedParakeetModel == .v2
                 ? "Parakeet v2 supports English only — language will be ignored"
@@ -290,6 +290,7 @@ class AppState: ObservableObject {
         case .whisperCpp: return selectedModel.displayName
         case .parakeet: return selectedParakeetModel.displayName
         case .nemotron: return "Nemotron Multilingual"
+        case .nemotronHebrew: return "Nemotron Hebrew"
         case .speechAnalyzer: return "Apple Speech"
         }
     }
@@ -341,6 +342,15 @@ class AppState: ObservableObject {
     var nemotronBridgeInstance: NemotronBridge?
     #endif
 
+    // Nemotron Hebrew streaming model state
+    @Published var isDownloadingNemotronHebrew: Bool = false
+    @Published var isLoadingNemotronHebrew: Bool = false
+    @Published var nemotronHebrewDownloadStatus: String = ""
+    var nemotronHebrewLoadTask: Task<Void, Never>?
+    #if canImport(FluidAudio)
+    var nemotronHebrewBridgeInstance: NemotronHebrewBridge?
+    #endif
+
     // Parakeet EOU (streaming live preview) download/load state
     @Published var isDownloadingEou: Bool = false
     @Published var eouDownloadProgress: Double = 0
@@ -360,6 +370,8 @@ class AppState: ObservableObject {
         isLoadingParakeet ||
         isDownloadingNemotron ||
         isLoadingNemotron ||
+        isDownloadingNemotronHebrew ||
+        isLoadingNemotronHebrew ||
         isDownloadingEou ||
         isLoadingSpeechAnalyzer
     }
@@ -797,7 +809,7 @@ class AppState: ObservableObject {
         Logger.info("Switched backend to \(backend.displayName)", subsystem: .model)
 
         // Parakeet/Nemotron don't use the WhisperCpp routing pipeline
-        if (backend == .parakeet || backend == .nemotron) && modelPool != nil {
+        if (backend == .parakeet || backend == .nemotron || backend == .nemotronHebrew) && modelPool != nil {
             modelPool?.releaseAll()
             modelPool = nil
         }
@@ -818,6 +830,8 @@ class AppState: ObservableObject {
         speechAnalyzerLoadTask = nil
         nemotronLoadTask?.cancel()
         nemotronLoadTask = nil
+        nemotronHebrewLoadTask?.cancel()
+        nemotronHebrewLoadTask = nil
 
         // Release Nemotron bridge if loaded
         #if canImport(FluidAudio)
@@ -825,6 +839,11 @@ class AppState: ObservableObject {
             Task { await nemotron.prepareForShutdown() }
             nemotronBridgeInstance = nil
             isLoadingNemotron = false
+        }
+        if let hebrew = nemotronHebrewBridgeInstance {
+            Task { await hebrew.prepareForShutdown() }
+            nemotronHebrewBridgeInstance = nil
+            isLoadingNemotronHebrew = false
         }
         #endif
 
@@ -975,6 +994,8 @@ class AppState: ObservableObject {
             preloadParakeetModel()
         case .nemotron:
             preloadNemotronModel()
+        case .nemotronHebrew:
+            preloadNemotronHebrewModel()
         case .speechAnalyzer:
             preloadSpeechAnalyzer()
         }
@@ -1362,10 +1383,92 @@ class AppState: ObservableObject {
             }
         }
     }
+    // MARK: - Nemotron Hebrew
+
+    func isNemotronHebrewModelCached() -> Bool { NemotronHebrewBridge.isModelCached() }
+
+    func downloadNemotronHebrewModel() {
+        guard !isDownloadingNemotronHebrew else { return }
+        isDownloadingNemotronHebrew = true
+        nemotronHebrewDownloadStatus = "Downloading Nemotron Hebrew..."
+        downloadProgress = 0
+        state = .downloadingModel(progress: 0)
+
+        Task.detached(priority: .userInitiated) { [weak self] in
+            do {
+                try await NemotronHebrewBridge.download { [weak self] downloadProgress in
+                    let fraction = downloadProgress.fractionCompleted
+                    Task { @MainActor [weak self] in
+                        guard let self, self.isDownloadingNemotronHebrew else { return }
+                        self.downloadProgress = fraction
+                        self.state = .downloadingModel(progress: fraction)
+                    }
+                }
+                Logger.info("Nemotron Hebrew downloaded", subsystem: .model)
+                await MainActor.run { [weak self] in
+                    guard let self else { return }
+                    self.isDownloadingNemotronHebrew = false
+                    self.nemotronHebrewDownloadStatus = ""
+                    self.downloadProgress = 0
+                    self.state = .idle
+                    if self.selectedBackendType == .nemotronHebrew {
+                        self.preloadNemotronHebrewModel()
+                    }
+                }
+            } catch {
+                Logger.error("Failed to download Nemotron Hebrew: \(error)", subsystem: .model)
+                await MainActor.run { [weak self] in
+                    guard let self else { return }
+                    self.isDownloadingNemotronHebrew = false
+                    self.nemotronHebrewDownloadStatus = ""
+                    self.downloadProgress = 0
+                    self.state = .idle
+                    self.errorMessage = "Failed to download Nemotron Hebrew: \(error.localizedDescription)"
+                }
+            }
+        }
+    }
+
+    func preloadNemotronHebrewModel() {
+        guard isNemotronHebrewModelCached() else {
+            Logger.info("Nemotron Hebrew not cached — download first", subsystem: .model)
+            return
+        }
+
+        isLoadingNemotronHebrew = true
+        nemotronHebrewDownloadStatus = "Loading Nemotron Hebrew..."
+
+        nemotronHebrewLoadTask = Task.detached(priority: .userInitiated) { [weak self] in
+            do {
+                let bridge = try await NemotronHebrewBridge.loadFromCache()
+                await MainActor.run { [weak self] in
+                    guard let self else { return }
+                    guard self.selectedBackendType == .nemotronHebrew else { return }
+                    self.nemotronHebrewBridgeInstance = bridge
+                    self.isModelLoaded = true
+                    self.loadedBackendType = .nemotronHebrew
+                    self.isLoadingNemotronHebrew = false
+                    self.nemotronHebrewDownloadStatus = ""
+                    Logger.info("Nemotron Hebrew ready", subsystem: .model)
+                }
+            } catch {
+                Logger.error("Failed to load Nemotron Hebrew: \(error)", subsystem: .model)
+                await MainActor.run { [weak self] in
+                    guard let self else { return }
+                    self.isLoadingNemotronHebrew = false
+                    self.nemotronHebrewDownloadStatus = ""
+                    self.errorMessage = "Failed to load Nemotron Hebrew: \(error.localizedDescription)"
+                }
+            }
+        }
+    }
     #else
     func isNemotronModelCached() -> Bool { false }
     func downloadNemotronModel() { }
     func preloadNemotronModel() { }
+    func isNemotronHebrewModelCached() -> Bool { false }
+    func downloadNemotronHebrewModel() { }
+    func preloadNemotronHebrewModel() { }
     #endif
 
     private func preloadSpeechAnalyzer() {
@@ -1506,8 +1609,8 @@ class AppState: ObservableObject {
             let range = NSRange(out.startIndex..., in: out)
             out = regex.stringByReplacingMatches(in: out, range: range, withTemplate: "")
         }
-        // Remove any remaining bare structural tags
-        for tag in ["[CONTEXT=previous]", "[/CONTEXT]", "[INPUT]", "[/INPUT]"] {
+        // Remove any remaining bare structural tags (including truncated [/INPUT without ])
+        for tag in ["[CONTEXT=previous]", "[/CONTEXT]", "[INPUT]", "[/INPUT]", "[/INPUT"] {
             out = out.replacingOccurrences(of: tag, with: "")
         }
         return out.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -1568,6 +1671,9 @@ class AppState: ObservableObject {
             // When correcting a chunk, prepend the previous chunk's tail so the LLM
             // has sentence-boundary context and won't over-punctuate at the cut point.
             var (systemPrompt, baseUserMessage) = splitPrompt(mode.prompt, text: precleanResult.text)
+            // Explicitly forbid echoing the user-message delimiters. Short streaming chunks are
+            // out-of-distribution for the fine-tuned model and occasionally trigger [/INPUT echoing.
+            systemPrompt += "\nDo not include [INPUT] or [/INPUT] in your response."
             let userMessage: String
             // contextTail non-nil signals "fragment mode" (mid-stream chunk, not full text).
             // Inject only into the system prompt — never into the user message.
@@ -1759,7 +1865,7 @@ class AppState: ObservableObject {
         }
 
         // Parakeet/Nemotron detect language natively — skip WhisperBridge detection + ModelPool.
-        guard selectedBackendType != .parakeet && selectedBackendType != .nemotron else {
+        guard selectedBackendType != .parakeet && selectedBackendType != .nemotron && selectedBackendType != .nemotronHebrew else {
             Logger.info("Language routing skipped — \(selectedBackendType.displayName) detects language natively", subsystem: .model)
             // Release any stale pool left over from a previous WhisperCpp routing session
             modelPool?.releaseAll()
@@ -2022,7 +2128,8 @@ class AppState: ObservableObject {
     func startInAppRecording() {
         // Show loading indicator if model isn't ready (works even during download)
         #if canImport(FluidAudio)
-        let nemotronReadyInApp = selectedBackendType == .nemotron && nemotronBridgeInstance != nil
+        let nemotronReadyInApp = (selectedBackendType == .nemotron && nemotronBridgeInstance != nil)
+            || (selectedBackendType == .nemotronHebrew && nemotronHebrewBridgeInstance != nil)
         #else
         let nemotronReadyInApp = false
         #endif
@@ -2071,11 +2178,13 @@ class AppState: ObservableObject {
         Task {
             do {
                 #if canImport(FluidAudio)
-                let nemotronInApp = selectedBackendType == .nemotron ? nemotronBridgeInstance : nil
+                let nemotronInApp: NemotronBridge? = selectedBackendType == .nemotron ? nemotronBridgeInstance : nil
+                let nemotronHebrewInApp: NemotronHebrewBridge? = selectedBackendType == .nemotronHebrew ? nemotronHebrewBridgeInstance : nil
+                let anyNemotronInApp: (any AnyObject)? = (nemotronInApp as AnyObject?) ?? (nemotronHebrewInApp as AnyObject?)
                 #else
-                let nemotronInApp: AnyObject? = nil
+                let anyNemotronInApp: AnyObject? = nil
                 #endif
-                streamingTranscriber = StreamingTranscriber(backend: bridge, vad: sileroVAD, language: selectedLanguage, initialPrompt: promptWordsString, fillerWordRemovalEnabled: fillerWordRemovalEnabled, modelPool: modelPool, languageRouter: routingConfig.isRoutingEnabled ? LanguageRouter(allowed: routingConfig.allowedLanguages, primary: routingConfig.primaryLanguage) : nil, modelRouter: routingConfig.isRoutingEnabled ? ModelRouter(languageModelMap: buildLanguageModelMap(), fallbackProfile: buildFallbackProfile()) : nil, previewBridge: bridge is FluidAudioBridge ? bridge : modelPool?.previewBridge, nemotronBridge: nemotronInApp)
+                streamingTranscriber = StreamingTranscriber(backend: bridge, vad: sileroVAD, language: selectedLanguage, initialPrompt: promptWordsString, fillerWordRemovalEnabled: fillerWordRemovalEnabled, modelPool: modelPool, languageRouter: routingConfig.isRoutingEnabled ? LanguageRouter(allowed: routingConfig.allowedLanguages, primary: routingConfig.primaryLanguage) : nil, modelRouter: routingConfig.isRoutingEnabled ? ModelRouter(languageModelMap: buildLanguageModelMap(), fallbackProfile: buildFallbackProfile()) : nil, previewBridge: bridge is FluidAudioBridge ? bridge : modelPool?.previewBridge, nemotronBridge: anyNemotronInApp)
 
                 // Wire language detection → UI update
                 streamingTranscriber?.onLanguageDetected = { [weak self] lang in
@@ -2093,7 +2202,7 @@ class AppState: ObservableObject {
                         let mode = AIModeManager.shared.postProcessMode
                         // Nemotron fires onChunkCompleted once with the full session text at stop time.
                         // Per-chunk LLM is redundant — full-text path runs in stopRecording() instead.
-                        guard mode.supportsChunkProcessing, self.selectedBackendType != .nemotron else { return }
+                        guard mode.supportsChunkProcessing, self.selectedBackendType != .nemotron, self.selectedBackendType != .nemotronHebrew else { return }
                         self.chunkLLMCoordinator.enqueue(chunkText: chunkText)
                     }
                 }
@@ -2222,7 +2331,8 @@ class AppState: ObservableObject {
     func startRecording() {
         // Show loading indicator if model isn't ready (works even during download)
         #if canImport(FluidAudio)
-        let nemotronReady = selectedBackendType == .nemotron && nemotronBridgeInstance != nil
+        let nemotronReady = (selectedBackendType == .nemotron && nemotronBridgeInstance != nil)
+            || (selectedBackendType == .nemotronHebrew && nemotronHebrewBridgeInstance != nil)
         #else
         let nemotronReady = false
         #endif
@@ -2293,7 +2403,8 @@ class AppState: ObservableObject {
                 // Create streaming transcriber with pre-loaded bridge, optional VAD, and language.
                 // Nemotron path: pass NullTranscriptionBackend + nemotronBridge (VAD chunking bypassed).
                 #if canImport(FluidAudio)
-                let nemotron = selectedBackendType == .nemotron ? nemotronBridgeInstance : nil
+                let nemotron: (any AnyObject)? = selectedBackendType == .nemotron ? nemotronBridgeInstance :
+                    selectedBackendType == .nemotronHebrew ? nemotronHebrewBridgeInstance : nil
                 #else
                 let nemotron: AnyObject? = nil
                 #endif
@@ -2315,7 +2426,7 @@ class AppState: ObservableObject {
                         let mode = AIModeManager.shared.postProcessMode
                         // Nemotron fires onChunkCompleted once with the full session text at stop time.
                         // Per-chunk LLM is redundant — full-text path runs in stopRecording() instead.
-                        guard mode.supportsChunkProcessing, self.selectedBackendType != .nemotron else { return }
+                        guard mode.supportsChunkProcessing, self.selectedBackendType != .nemotron, self.selectedBackendType != .nemotronHebrew else { return }
                         self.chunkLLMCoordinator.enqueue(chunkText: chunkText)
                     }
                 }
@@ -2898,11 +3009,19 @@ class AppState: ObservableObject {
         parakeetLoadTask?.cancel()
         parakeetLoadTask = nil
 
-        // Shutdown Nemotron bridge
+        // Shutdown Nemotron bridges
         #if canImport(FluidAudio)
+        nemotronLoadTask?.cancel()
+        nemotronLoadTask = nil
+        nemotronHebrewLoadTask?.cancel()
+        nemotronHebrewLoadTask = nil
         if let nemotron = nemotronBridgeInstance {
             Task { await nemotron.prepareForShutdown() }
             nemotronBridgeInstance = nil
+        }
+        if let nemotronHebrew = nemotronHebrewBridgeInstance {
+            Task { await nemotronHebrew.prepareForShutdown() }
+            nemotronHebrewBridgeInstance = nil
         }
         #endif
 

@@ -195,8 +195,9 @@ class StreamingTranscriber {
 
     // Nemotron bridge — when set, bypasses VAD chunking, ring buffer, and preview polling.
     // Audio is fed directly; preview fires via push callback; final text via endSession().
+    // Holds either NemotronBridge (multilingual) or NemotronHebrewBridge via NemotronBridging protocol.
     #if canImport(FluidAudio)
-    private var nemotronBridge: NemotronBridge?
+    private var nemotronBridge: (any NemotronBridging)?
     // Serializes bridge.feed() calls. Each addSamples Task chains onto this, preventing
     // concurrent process(samples:) on the same actor (Swift re-entrancy → heap corruption).
     private var nemotronFeedTask: Task<Void, Never>?
@@ -240,7 +241,7 @@ class StreamingTranscriber {
         self.modelRouter = modelRouter
         self.vadSegmenter = VADSegmenter(vad: vad, targetChunkDuration: 6.0, silenceForFinalization: 0.5)
         #if canImport(FluidAudio)
-        self.nemotronBridge = nemotronBridge as? NemotronBridge
+        self.nemotronBridge = (nemotronBridge as? NemotronBridge) ?? (nemotronBridge as? NemotronHebrewBridge)
         #endif
     }
 

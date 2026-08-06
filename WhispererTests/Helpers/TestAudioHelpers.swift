@@ -121,6 +121,34 @@ func wordOverlapF1(_ a: String, _ b: String) -> Double {
     return 2 * p * r / (p + r)
 }
 
+// MARK: - WER
+
+/// Word Error Rate = (S + D + I) / N  (Levenshtein on word sequences, case-folded).
+/// 0.0 = perfect. Can exceed 1.0 when hypothesis is much longer than reference.
+func wordErrorRate(_ hypothesis: String, reference: String) -> Double {
+    func tokenize(_ s: String) -> [String] {
+        s.lowercased()
+         .components(separatedBy: .whitespacesAndNewlines)
+         .map { $0.filter { $0.isLetter || $0.isNumber } }
+         .filter { !$0.isEmpty }
+    }
+    let hyp = tokenize(hypothesis)
+    let ref = tokenize(reference)
+    guard !ref.isEmpty else { return hyp.isEmpty ? 0.0 : 1.0 }
+    guard !hyp.isEmpty else { return 1.0 }
+    var dp = Array(0...ref.count)
+    for i in 1...hyp.count {
+        let prev = dp
+        dp[0] = i
+        for j in 1...ref.count {
+            dp[j] = hyp[i-1] == ref[j-1]
+                ? prev[j-1]
+                : 1 + min(prev[j], dp[j-1], prev[j-1])
+        }
+    }
+    return Double(dp[ref.count]) / Double(ref.count)
+}
+
 // MARK: - StreamingTranscriber feed helper
 
 /// Feeds samples into a running StreamingTranscriber in real-time-like chunks (85 ms / chunk).

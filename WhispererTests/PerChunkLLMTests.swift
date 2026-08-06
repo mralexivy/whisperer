@@ -40,11 +40,14 @@ private func buildUserMessage(text: String, contextTail: String? = nil) -> Strin
 }
 
 /// Split a mode prompt into (systemPrompt, userMessage) the same way AppState.splitPrompt does.
+/// Mirrors the production path including the no-echo instruction added to prevent [/INPUT echoing.
 private func splitPrompt(_ mode: AIMode, text: String, contextTail: String? = nil) -> (system: String, user: String) {
     let parts = mode.prompt.components(separatedBy: "{transcript}")
     var sys = parts[0]
     if let r = sys.range(of: "[INPUT]", options: .backwards) { sys = String(sys[..<r.lowerBound]) }
     sys = sys.trimmingCharacters(in: .whitespacesAndNewlines)
+    // Mirror AppState: explicitly tell the model not to echo user-message delimiters.
+    sys += "\nDo not include [INPUT] or [/INPUT] in your response."
     return (sys, buildUserMessage(text: text, contextTail: contextTail))
 }
 
@@ -408,7 +411,7 @@ final class PerChunkLLMTests: XCTestCase {
                 let range = NSRange(out.startIndex..., in: out)
                 out = regex.stringByReplacingMatches(in: out, range: range, withTemplate: "")
             }
-            for tag in ["[CONTEXT=previous]", "[/CONTEXT]", "[INPUT]", "[/INPUT]"] {
+            for tag in ["[CONTEXT=previous]", "[/CONTEXT]", "[INPUT]", "[/INPUT]", "[/INPUT"] {
                 out = out.replacingOccurrences(of: tag, with: "")
             }
             return out.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -422,8 +425,12 @@ final class PerChunkLLMTests: XCTestCase {
             "[INPUT]\nThis is the real output",
             // Bare [/CONTEXT] leftover
             "output text [/CONTEXT] more text",
+            // Truncated [/INPUT (no closing bracket) — generation cut by token cap mid-token
+            "cleaned text\n[/INPUT",
+            // Complete [/INPUT] appearing mid-string after real output
+            "cleaned text\n[/INPUT]\nextra model output here",
         ]
-        let forbidden = ["[CONTEXT=previous]", "[/CONTEXT]", "[INPUT]", "[/INPUT]"]
+        let forbidden = ["[CONTEXT=previous]", "[/CONTEXT]", "[INPUT]", "[/INPUT]", "[/INPUT"]
 
         for input in leakyInputs {
             let result = strip(input)
@@ -435,6 +442,40 @@ final class PerChunkLLMTests: XCTestCase {
         // Clean output must not be modified
         let clean = "Everything is fine here."
         XCTAssertEqual(strip(clean), clean, "Clean output must not be changed by stripping")
+    }
+
+    // MARK: 8 — LLMPostProcessor input tag stripping (no model needed)
+    // Guards the two gaps: mid-string tags and truncated [/INPUT (no closing bracket).
+
+    func testLLMPostProcessorStripsInputTagsMidString() {
+        // Inline the same logic as LLMPostProcessor.process() and processMTP() after the fix.
+        func postProcessorStrip(_ text: String) -> String {
+            var out = text.trimmingCharacters(in: .whitespacesAndNewlines)
+            for tag in ["[INPUT]", "[/INPUT]", "[/INPUT"] {
+                out = out.replacingOccurrences(of: tag, with: "")
+            }
+            return out.trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+
+        let cases: [(input: String, shouldNotContain: [String])] = [
+            // Mid-string [/INPUT] — the real screenshot bug
+            ("So this is a design remark [/INPUT\nbegan lower after fixing", ["[/INPUT"]),
+            // Full tag mid-string
+            ("output text [/INPUT] more words", ["[/INPUT]"]),
+            // Prefix [INPUT]
+            ("[INPUT]\nreal output here", ["[INPUT]"]),
+            // Suffix [/INPUT]
+            ("real output here\n[/INPUT]", ["[/INPUT]"]),
+            // Truncated only
+            ("good output [/INPUT", ["[/INPUT"]),
+        ]
+
+        for (input, forbidden) in cases {
+            let result = postProcessorStrip(input)
+            for tag in forbidden {
+                XCTAssertFalse(result.contains(tag), "Tag '\(tag)' survived LLMPostProcessor stripping in: \(result.prefix(80))")
+            }
+        }
     }
 
     // MARK: 9 — Per-chunk vs batch timing (real LLM — auto-skips if model not downloaded)
@@ -500,5 +541,42 @@ final class PerChunkLLMTests: XCTestCase {
         XCTAssertFalse(corrected.joined().isEmpty, "Per-chunk result must not be empty")
         XCTAssertFalse(batchResult.contains("<think>"), "Batch: think tags must not leak")
         XCTAssertFalse(corrected.joined().contains("<think>"), "Per-chunk: think tags must not leak")
+    }
+
+    // MARK: 10 — Real LLM: [/INPUT token must not appear in output on short streaming chunks
+    // Regression test for: small model hits token cap on very short input → truncated [/INPUT
+    // appears in output instead of (or after) the cleaned text.
+    // Auto-skips when the model is not downloaded.
+
+    @MainActor
+    func testNoInputTagEchoOnShortChunks() async throws {
+        let processor = try await makeProcessor(for: .qwen3_5_4B_mtp)
+        let mode = correctMode()
+
+        // Short chunks (< 30 chars) trigger the tight token-budget path (maxTokens = charCount/4 + 8).
+        // In the bug scenario, generation was cut mid-token at [/INPUT and the truncated tag leaked.
+        let shortChunks = ["yes", "ok got it", "hello world", "fix the bug", "let me check", "right"]
+
+        print("\n=== Input tag echo regression (short streaming chunks) ===")
+        for chunk in shortChunks {
+            let (sys, user) = splitPrompt(mode, text: chunk)
+            let result = try await processor.process(
+                text: chunk,
+                systemPrompt: sys,
+                userMessage: user,
+                temperature: mode.temperature,
+                topP: mode.topP,
+                topK: mode.topK,
+                repetitionPenalty: mode.repetitionPenalty,
+                maxTokensCap: mode.maxTokensCap
+            )
+            print("  [\(chunk)] → [\(result)]")
+            XCTAssertFalse(result.contains("[/INPUT"),
+                "Truncated [/INPUT echoed for input '\(chunk)': '\(result)'")
+            XCTAssertFalse(result.contains("[INPUT]"),
+                "[INPUT] delimiter echoed for input '\(chunk)': '\(result)'")
+            XCTAssertFalse(result.isEmpty,
+                "LLM returned empty string for input '\(chunk)'")
+        }
     }
 }

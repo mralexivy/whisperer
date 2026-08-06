@@ -40,6 +40,10 @@ enum HFClient {
         if let token = huggingFaceToken {
             request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         }
+        // QUIC (HTTP/3) packets exceed VPN MTU, causing "sendmsg [40: Message too long]"
+        // and stalling all CDN downloads. Force HTTP/2 which negotiates over TLS without
+        // MTU issues. Available since macOS 11.3.
+        request.assumesHTTP3Capable = false
         return request
     }
 

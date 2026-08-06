@@ -540,13 +540,11 @@ class LLMPostProcessor: ObservableObject {
             strResult.removeSubrange(thinkRange)
         }
 
-        // Strip [INPUT]...[/INPUT] wrapper — model sometimes echoes the prompt delimiter.
+        // Strip [INPUT]/[/INPUT] prompt delimiters — model sometimes echoes them mid-string or
+        // produces a truncated [/INPUT (no closing bracket) when generation hits the token cap.
         strResult = strResult.trimmingCharacters(in: .whitespacesAndNewlines)
-        if strResult.hasPrefix("[INPUT]") {
-            strResult = String(strResult.dropFirst("[INPUT]".count))
-        }
-        if strResult.hasSuffix("[/INPUT]") {
-            strResult = String(strResult.dropLast("[/INPUT]".count))
+        for tag in ["[INPUT]", "[/INPUT]", "[/INPUT"] {
+            strResult = strResult.replacingOccurrences(of: tag, with: "")
         }
 
         return strResult.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -692,8 +690,9 @@ class LLMPostProcessor: ObservableObject {
             result.removeSubrange(thinkRange)
         }
         result = result.trimmingCharacters(in: .whitespacesAndNewlines)
-        if result.hasPrefix("[INPUT]") { result = String(result.dropFirst("[INPUT]".count)) }
-        if result.hasSuffix("[/INPUT]") { result = String(result.dropLast("[/INPUT]".count)) }
+        for tag in ["[INPUT]", "[/INPUT]", "[/INPUT"] {
+            result = result.replacingOccurrences(of: tag, with: "")
+        }
         result = result.trimmingCharacters(in: .whitespacesAndNewlines)
 
         // Fall back to original if MTP produced nothing (model refused, EOS on first token, etc.)

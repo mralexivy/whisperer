@@ -35,6 +35,7 @@ public enum Repo: String, CaseIterable, Sendable {
     /// time (see `StreamingNemotronMultilingualAsrManager.downloadAndPreloadShared`),
     /// so this case carries no static subPath.
     case nemotronMultilingual = "FluidInference/Nemotron-3.5-ASR-Streaming-Multilingual-0.6b-CoreML"
+    case nemotronHebrew = "mralexivy/nemotron-3.5-asr-streaming-0.6b-hebrew"
     case diarizer = "FluidInference/speaker-diarization-coreml"
     /// Root of the kokoro HF repo. The mono Kokoro TTS backend was removed in
     /// favor of `kokoroAne`/`kokoroAneZh`, but this case is kept because the
@@ -71,6 +72,8 @@ public enum Repo: String, CaseIterable, Sendable {
         switch self {
         case .nemotronMultilingual:
             return "Nemotron-3.5-ASR-Streaming-Multilingual-0.6b-CoreML"
+        case .nemotronHebrew:
+            return "nemotron-3.5-asr-streaming-0.6b-hebrew"
         case .vad:
             return "silero-vad-coreml"
         case .parakeetV3:
@@ -151,6 +154,8 @@ public enum Repo: String, CaseIterable, Sendable {
             return "FluidInference/nemotron-speech-streaming-en-0.6b-coreml"
         case .nemotronMultilingual:
             return "FluidInference/Nemotron-3.5-ASR-Streaming-Multilingual-0.6b-CoreML"
+        case .nemotronHebrew:
+            return "mralexivy/nemotron-3.5-asr-streaming-0.6b-hebrew"
         case .sortformer:
             return "FluidInference/diar-streaming-sortformer-coreml"
         case .lseendAmi, .lseendCallHome, .lseendDihard2, .lseendDihard3:
@@ -181,6 +186,8 @@ public enum Repo: String, CaseIterable, Sendable {
             return "320ms"
         case .parakeetEou1280:
             return "1280ms"
+        case .nemotronHebrew:
+            return "coreml"
         case .nemotronStreaming2240:
             return "nemotron_coreml_2240ms"
         case .nemotronStreaming1120:
@@ -223,6 +230,8 @@ public enum Repo: String, CaseIterable, Sendable {
             return "parakeet-eou-streaming/1280ms"
         case .nemotronMultilingual:
             return "nemotron-multilingual"
+        case .nemotronHebrew:
+            return "nemotron-hebrew"
         case .nemotronStreaming2240:
             return "nemotron-streaming/2240ms"
         case .nemotronStreaming1120:
@@ -1283,6 +1292,15 @@ public enum ModelNames {
                 "decoder_joint.mlmodelc",
                 "decoder_joint_noencproj.mlmodelc",
                 "joint_noencproj_batched.mlmodelc",
+            ]
+        case .nemotronHebrew:
+            return [
+                NemotronMultilingualStreaming.encoderFile,
+                NemotronMultilingualStreaming.decoderFile,
+                NemotronMultilingualStreaming.jointFile,
+                "decoder_joint.mlmodelc",
+                NemotronMultilingualStreaming.tokenizer,
+                NemotronMultilingualStreaming.metadata,
             ]
         case .vad:
             return ModelNames.VAD.requiredModels

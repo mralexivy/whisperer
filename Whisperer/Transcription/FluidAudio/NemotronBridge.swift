@@ -161,6 +161,8 @@ actor NemotronBridge {
     }
 }
 
+extension NemotronBridge: NemotronBridging {}
+
 enum NemotronError: Error, LocalizedError {
     case modelNotCached
     var errorDescription: String? {

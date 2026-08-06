@@ -729,6 +729,7 @@ struct StatusTabView: View {
         case .whisperCpp: return appState.selectedModel.displayName
         case .parakeet: return appState.selectedParakeetModel.displayName
         case .nemotron: return "Nemotron Multilingual"
+        case .nemotronHebrew: return "Nemotron Hebrew"
         case .speechAnalyzer: return "On-Device"
         }
     }
@@ -736,7 +737,7 @@ struct StatusTabView: View {
     private var activeModelDetail: String? {
         switch appState.selectedBackendType {
         case .whisperCpp: return appState.selectedModel.sizeDescription
-        case .parakeet, .nemotron, .speechAnalyzer: return nil
+        case .parakeet, .nemotron, .nemotronHebrew, .speechAnalyzer: return nil
         }
     }
 
@@ -745,6 +746,7 @@ struct StatusTabView: View {
         case .whisperCpp: return .blue
         case .parakeet: return .green
         case .nemotron: return .purple
+        case .nemotronHebrew: return .orange
         case .speechAnalyzer: return .cyan
         }
     }
@@ -1211,8 +1213,8 @@ struct ModelsTabView: View {
             }
 
             HStack(spacing: 0) {
-                ForEach(Array(BackendType.allCases.filter { $0 != .nemotron }.enumerated()), id: \.element.id) { index, backend in
-                    let isSelected = appState.selectedBackendType == backend || (backend == .parakeet && appState.selectedBackendType == .nemotron)
+                ForEach(Array(BackendType.allCases.filter { $0 != .nemotron && $0 != .nemotronHebrew }.enumerated()), id: \.element.id) { index, backend in
+                    let isSelected = appState.selectedBackendType == backend || (backend == .parakeet && (appState.selectedBackendType == .nemotron || appState.selectedBackendType == .nemotronHebrew))
                     let isUnavailable = !backend.isAvailable
                     let isRecommended = backend == recommendedBackend && !isUnavailable
 
@@ -1289,7 +1291,7 @@ struct ModelsTabView: View {
                             ModelMenuItem(model: model)
                         }
                     }
-                } else if appState.selectedBackendType == .parakeet || appState.selectedBackendType == .nemotron {
+                } else if appState.selectedBackendType == .parakeet || appState.selectedBackendType == .nemotron || appState.selectedBackendType == .nemotronHebrew {
                     parakeetModelSection
                 } else if appState.selectedBackendType == .speechAnalyzer {
                     speechAnalyzerSection
@@ -1398,6 +1400,7 @@ struct ModelsTabView: View {
                 }
                 #if canImport(FluidAudio)
                 NemotronModelRow()
+                NemotronHebrewModelRow()
                 #endif
             }
 
@@ -1451,6 +1454,25 @@ struct ModelsTabView: View {
                     }
 
                     if appState.isDownloadingNemotron {
+                        ProgressView()
+                            .progressViewStyle(.linear)
+                            .tint(MBColors.accent)
+                    }
+                }
+                .padding(.leading, 20)
+            }
+            if appState.isDownloadingNemotronHebrew || appState.isLoadingNemotronHebrew {
+                VStack(alignment: .leading, spacing: 6) {
+                    HStack(spacing: 6) {
+                        ProgressView()
+                            .scaleEffect(0.5)
+                            .frame(width: 12, height: 12)
+                        Text(appState.nemotronHebrewDownloadStatus)
+                            .font(.system(size: 11, weight: .medium))
+                            .foregroundColor(MBColors.textSecondary)
+                    }
+
+                    if appState.isDownloadingNemotronHebrew {
                         ProgressView()
                             .progressViewStyle(.linear)
                             .tint(MBColors.accent)
@@ -2248,6 +2270,89 @@ struct NemotronModelRow: View {
                         Image(systemName: "arrow.down.circle")
                             .font(.system(size: 14))
                         Text("1.5 GB")
+                            .font(.caption2)
+                    }
+                    .foregroundColor(MBColors.accent)
+                }
+            }
+            .padding(.vertical, 6)
+            .padding(.horizontal, 8)
+            .background(
+                RoundedRectangle(cornerRadius: 6)
+                    .fill(isHighlighted ? MBColors.accent.opacity(0.12) : Color.clear)
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 6)
+                    .stroke(isHighlighted ? MBColors.accent.opacity(0.3) : Color.clear, lineWidth: 1)
+            )
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain).pointerOnHover()
+        .disabled(appState.isModelBusy)
+    }
+}
+
+// MARK: - Nemotron Hebrew Model Row
+
+struct NemotronHebrewModelRow: View {
+    @ObservedObject var appState = AppState.shared
+
+    var isActive: Bool { appState.isModelLoaded && appState.loadedBackendType == .nemotronHebrew }
+    var isLoading: Bool { appState.isDownloadingNemotronHebrew || appState.isLoadingNemotronHebrew }
+    var isHighlighted: Bool { isActive || isLoading }
+    var isCached: Bool { appState.isNemotronHebrewModelCached() }
+
+    var body: some View {
+        Button(action: {
+            if isCached {
+                appState.selectBackend(.nemotronHebrew)
+            } else {
+                appState.downloadNemotronHebrewModel()
+            }
+        }) {
+            HStack(spacing: 10) {
+                Image(systemName: "waveform.badge.mic")
+                    .foregroundColor(.orange)
+                    .font(.system(size: 10, weight: .medium))
+                    .frame(width: 16)
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Nemotron Hebrew")
+                        .font(.system(size: 12, weight: isHighlighted ? .semibold : .regular))
+                        .foregroundColor(isHighlighted ? MBColors.textPrimary : MBColors.textSecondary)
+
+                    Text("Hebrew fine-tune · True streaming · 37ms/chunk")
+                        .font(.caption2)
+                        .foregroundColor(MBColors.textTertiary)
+                }
+
+                Spacer()
+
+                if isLoading {
+                    HStack(spacing: 4) {
+                        ProgressView()
+                            .scaleEffect(0.5)
+                            .frame(width: 12, height: 12)
+                        Text(isActive ? "Loading" : "Downloading")
+                            .font(.caption2)
+                            .foregroundColor(MBColors.accent)
+                    }
+                } else if isActive {
+                    Text("Active")
+                        .font(.system(size: 10, weight: .semibold))
+                        .foregroundColor(MBColors.accent)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 3)
+                        .background(Capsule().fill(MBColors.accent.opacity(0.15)))
+                } else if isCached {
+                    Image(systemName: "checkmark.circle.fill")
+                        .foregroundColor(MBColors.accent.opacity(0.5))
+                        .font(.system(size: 14))
+                } else {
+                    HStack(spacing: 4) {
+                        Image(systemName: "arrow.down.circle")
+                            .font(.system(size: 14))
+                        Text("~1.5 GB")
                             .font(.caption2)
                     }
                     .foregroundColor(MBColors.accent)
