@@ -2704,12 +2704,17 @@ class AppState: ObservableObject {
         startStopWatchdog()
 
         Task {
+            let transcriber = streamingTranscriber
+            let stopPreparation = Task.detached(priority: .userInitiated) { [weak transcriber] in
+                await transcriber?.prepareForStopAsync()
+            }
             // One input-buffer interval is sufficient for WhisperKit's batch path;
             // stateful streaming engines retain the longer drain period.
             let drainNanoseconds: UInt64 = (loadedBackendType ?? selectedBackendType) == .whisperKit
                 ? 100_000_000
                 : 200_000_000
             await audioRecorder?.stopRecording(drainNanoseconds: drainNanoseconds)
+            await stopPreparation.value
 
             // No separate live preview engine to stop — StreamingTranscriber handles everything
 
@@ -2731,7 +2736,6 @@ class AppState: ObservableObject {
             // stopAsync() worst case: 2s abort wait + 4s tail timeout in FluidAudioBridge = 6s.
             // 10s gives comfortable margin for all backends.
             var finalText = ""
-            let transcriber = streamingTranscriber
             if let transcriber {
                 // WhisperKit's final decoder already receives Prompt Words; avoid a
                 // second fuzzy pass that can rewrite valid ordinary-language phrases.

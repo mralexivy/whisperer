@@ -32,6 +32,7 @@ private final class CallbackGate: @unchecked Sendable {
     private var _chunkGeneration: UInt64 = 0
     private var _lastWindowId: Int = -1
     private var _lastTokenCount: Int = -1
+    private var _lastAverageLogProbability: Float?
     private var _shouldAbort: Bool = false
     private var _callback: ((PartialTranscription) -> Void)?
 
@@ -41,6 +42,7 @@ private final class CallbackGate: @unchecked Sendable {
         _chunkGeneration = chunkGeneration
         _lastWindowId = -1
         _lastTokenCount = -1
+        _lastAverageLogProbability = nil
         _shouldAbort = false
         _callback = nil
     }
@@ -50,6 +52,7 @@ private final class CallbackGate: @unchecked Sendable {
         _chunkGeneration = chunkGeneration
         _lastWindowId = -1
         _lastTokenCount = -1
+        _lastAverageLogProbability = nil
         _callback = cb
     }
 
@@ -67,6 +70,7 @@ private final class CallbackGate: @unchecked Sendable {
         guard !text.isEmpty else { return nil }
         let wid = progress.windowId
         let tc = progress.tokens.count
+        _lastAverageLogProbability = progress.avgLogprob
         guard (wid, tc) > (_lastWindowId, _lastTokenCount) else { return nil }
         _lastWindowId = wid
         _lastTokenCount = tc
@@ -85,6 +89,7 @@ private final class CallbackGate: @unchecked Sendable {
     func requestAbort() { lock.lock(); defer { lock.unlock() }; _shouldAbort = true }
     func resetAbort() { lock.lock(); defer { lock.unlock() }; _shouldAbort = false }
     var currentSessionGeneration: UInt64 { lock.withLock { _sessionGeneration } }
+    var lastAverageLogProbability: Float? { lock.withLock { _lastAverageLogProbability } }
 
     func nextSessionGeneration() -> UInt64 {
         lock.lock(); defer { lock.unlock() }
@@ -233,6 +238,7 @@ final class WhisperKitBridge: TranscriptionBackend {
     func clearCallbacks() { gate.clearCallback() }
 
     func detectedLanguage() async -> String? { await runtime.detectedLanguage() }
+    var lastAverageLogProbability: Float? { gate.lastAverageLogProbability }
 
     // MARK: TranscriptionBackend protocol
 
