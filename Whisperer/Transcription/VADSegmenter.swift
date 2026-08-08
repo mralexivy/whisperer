@@ -30,17 +30,19 @@ class VADSegmenter {
     let overlapDuration: Double = 0.3     // overlap between chunks for context
 
     // Force-split threshold: never exceed this even in continuous speech.
-    // 10s keeps chunks short for dictation-like live text via onNewSegment.
-    let maxChunkDuration: Double = 10.0
+    // Backends can lower it when earlier background commits reduce stop latency.
+    let maxChunkDuration: Double
 
     init(
         vad: SileroVAD?,
         targetChunkDuration: Double = 20.0,
-        silenceForFinalization: Double = 1.5
+        silenceForFinalization: Double = 1.5,
+        maxChunkDuration: Double = 10.0
     ) {
         self.vad = vad
         self.targetChunkDuration = targetChunkDuration
         self.silenceForFinalization = silenceForFinalization
+        self.maxChunkDuration = maxChunkDuration
     }
 
     // MARK: - Scan & Emit Chunks

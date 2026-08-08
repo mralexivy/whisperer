@@ -15,6 +15,7 @@ enum BackendType: String, CaseIterable, Identifiable {
     case nemotron = "Nemotron"
     case nemotronHebrew = "NemotronHebrew"
     case speechAnalyzer = "Apple Speech"
+    case whisperKit = "WhisperKit"
 
     var id: String { rawValue }
 
@@ -25,6 +26,7 @@ enum BackendType: String, CaseIterable, Identifiable {
         case .nemotron: return "Nemotron"
         case .nemotronHebrew: return "Nemotron Hebrew"
         case .speechAnalyzer: return "Apple Speech"
+        case .whisperKit: return "WhisperKit"
         }
     }
 
@@ -35,6 +37,7 @@ enum BackendType: String, CaseIterable, Identifiable {
         case .nemotron: return "waveform.badge.mic"
         case .nemotronHebrew: return "waveform.badge.mic"
         case .speechAnalyzer: return "apple.logo"
+        case .whisperKit: return "bolt.fill"
         }
     }
 
@@ -46,6 +49,7 @@ enum BackendType: String, CaseIterable, Identifiable {
         case .nemotron: return "Streaming"
         case .nemotronHebrew: return "Hebrew"
         case .speechAnalyzer: return "System"
+        case .whisperKit: return "Core ML"
         }
     }
 
@@ -57,6 +61,7 @@ enum BackendType: String, CaseIterable, Identifiable {
         case .nemotron: return "True streaming, 37ms/chunk"
         case .nemotronHebrew: return "Hebrew fine-tune, 37ms/chunk"
         case .speechAnalyzer: return "macOS 26+"
+        case .whisperKit: return "Core ML optimized · 100 languages"
         }
     }
 
@@ -76,6 +81,19 @@ enum BackendType: String, CaseIterable, Identifiable {
         case .speechAnalyzer:
             if #available(macOS 26.0, *) { return true }
             return false
+        case .whisperKit:
+            #if canImport(WhisperKit)
+            var sysinfo = utsname()
+            uname(&sysinfo)
+            let arch = withUnsafePointer(to: &sysinfo.machine) {
+                $0.withMemoryRebound(to: CChar.self, capacity: 1) {
+                    String(cString: $0)
+                }
+            }
+            return arch.hasPrefix("arm64")
+            #else
+            return false
+            #endif
         }
     }
 }
@@ -168,7 +186,7 @@ extension BackendType {
     ) -> Bool {
         guard language != .auto else { return true }
         switch self {
-        case .whisperCpp, .nemotron, .nemotronHebrew: return true
+        case .whisperCpp, .nemotron, .nemotronHebrew, .whisperKit: return true
         case .parakeet:
             let supported = (parakeetVariant == .v2) ? Self.parakeetV2Languages : Self.parakeetV3Languages
             return supported.contains(language.rawValue)

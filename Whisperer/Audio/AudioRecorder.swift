@@ -422,7 +422,7 @@ class AudioRecorder: NSObject {
 
     // MARK: - Stop
 
-    func stopRecording() async {
+    func stopRecording(drainNanoseconds: UInt64 = 200_000_000) async {
         // Increment generation first — invalidates any in-flight startRecordingInternal attempts
         currentGeneration += 1
 
@@ -447,9 +447,10 @@ class AudioRecorder: NSObject {
             }
         }
 
-        // Keep audio flowing to Nemotron for 200ms after key release so the last
-        // word's samples reach addSamples/feed() before the session ends.
-        try? await Task.sleep(nanoseconds: 200_000_000)
+        // Keep audio flowing briefly after key release so the last microphone buffer
+        // reaches the transcriber. Stateful streaming engines use the longer default;
+        // callers may use one hardware-buffer interval for batch engines.
+        try? await Task.sleep(nanoseconds: drainNanoseconds)
         Logger.debug("Drain period complete", subsystem: .audio)
 
         isRecording = false  // stops deliverSamples — no new disk write dispatches

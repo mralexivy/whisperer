@@ -472,47 +472,36 @@ class SmoothTextUpdater: ObservableObject {
             return
         }
 
-        markActive()
-
         // Already committed this exact text
         guard newText != committedText else { return }
 
-        // RTL: skip word-by-word animation — show immediately.
+        // ASR hypotheses revise punctuation and occasionally an earlier word. Replacing
+        // the target makes the whole NSTextField blink. The live UI is intentionally a
+        // monotonic projection: preserve every visible/planned word and enqueue only
+        // candidate words beyond the current word count. The accurate final result is
+        // still used for insertion after recording stops.
+        let committedWordCount = committedText.split(whereSeparator: { $0.isWhitespace }).count
+        let candidateWords = newText.split(whereSeparator: { $0.isWhitespace }).map(String.init)
+        guard candidateWords.count > committedWordCount else { return }
+
+        let appendedWords = Array(candidateWords.dropFirst(committedWordCount))
+        guard !appendedWords.isEmpty else { return }
+        markActive()
+        let suffix = appendedWords.joined(separator: " ")
+        committedText = committedText.isEmpty ? suffix : committedText + " " + suffix
+
+        // RTL should remain immediate because animating logical word order can move the
+        // insertion edge unpredictably, but it follows the same append-only contract.
         if rtl {
             animationTimer?.invalidate()
             animationTimer = nil
             pendingWords.removeAll()
-            displayedText = newText
-            committedText = newText
-            // plain String — no highlighting computation needed
+            displayedText = committedText
             return
         }
 
-        // New text extends what we've committed — queue the new words for animation
-        if committedText.isEmpty || newText.hasPrefix(committedText) {
-            let suffix: String
-            if committedText.isEmpty {
-                suffix = newText
-            } else {
-                suffix = String(newText.dropFirst(committedText.count))
-                    .trimmingCharacters(in: .whitespaces)
-            }
-
-            let newWords = suffix.split(separator: " ").map(String.init)
-            guard !newWords.isEmpty else { return }
-
-            pendingWords.append(contentsOf: newWords)
-            committedText = newText
-            startAnimation()
-        } else {
-            // Text changed fundamentally (e.g., preview replace) — show immediately
-            animationTimer?.invalidate()
-            animationTimer = nil
-            pendingWords.removeAll()
-            displayedText = newText
-            committedText = newText
-            // plain String — no highlighting computation needed
-        }
+        pendingWords.append(contentsOf: appendedWords)
+        startAnimation()
     }
 
     private func startAnimation() {

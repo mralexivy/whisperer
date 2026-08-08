@@ -274,7 +274,7 @@ class AppState: ObservableObject {
         ) else { return nil }
 
         switch selectedBackendType {
-        case .whisperCpp, .nemotron, .nemotronHebrew: return nil
+        case .whisperCpp, .nemotron, .nemotronHebrew, .whisperKit: return nil
         case .parakeet:
             return selectedParakeetModel == .v2
                 ? "Parakeet v2 supports English only — language will be ignored"
@@ -292,6 +292,7 @@ class AppState: ObservableObject {
         case .nemotron: return "Nemotron Multilingual"
         case .nemotronHebrew: return "Nemotron Hebrew"
         case .speechAnalyzer: return "Apple Speech"
+        case .whisperKit: return "WhisperKit Turbo"
         }
     }
     private var loadedModel: WhisperModel? = nil
@@ -351,6 +352,13 @@ class AppState: ObservableObject {
     var nemotronHebrewBridgeInstance: NemotronHebrewBridge?
     #endif
 
+    // WhisperKit CoreML backend state
+    @Published var isDownloadingWhisperKit: Bool = false
+    @Published var isLoadingWhisperKit: Bool = false
+    @Published var whisperKitDownloadStatus: String = ""
+    var whisperKitDownloadTask: Task<Void, Never>?
+    var whisperKitLoadTask: Task<Void, Never>?
+
     // Parakeet EOU (streaming live preview) download/load state
     @Published var isDownloadingEou: Bool = false
     @Published var eouDownloadProgress: Double = 0
@@ -373,7 +381,9 @@ class AppState: ObservableObject {
         isDownloadingNemotronHebrew ||
         isLoadingNemotronHebrew ||
         isDownloadingEou ||
-        isLoadingSpeechAnalyzer
+        isLoadingSpeechAnalyzer ||
+        isDownloadingWhisperKit ||
+        isLoadingWhisperKit
     }
 
     // LLM post-processing
@@ -832,6 +842,12 @@ class AppState: ObservableObject {
         nemotronLoadTask = nil
         nemotronHebrewLoadTask?.cancel()
         nemotronHebrewLoadTask = nil
+        whisperKitDownloadTask?.cancel()
+        whisperKitDownloadTask = nil
+        whisperKitLoadTask?.cancel()
+        whisperKitLoadTask = nil
+        isLoadingWhisperKit = false
+        isDownloadingWhisperKit = false
 
         // Release Nemotron bridge if loaded
         #if canImport(FluidAudio)
@@ -998,6 +1014,8 @@ class AppState: ObservableObject {
             preloadNemotronHebrewModel()
         case .speechAnalyzer:
             preloadSpeechAnalyzer()
+        case .whisperKit:
+            preloadWhisperKitModel()
         }
     }
 
@@ -1470,6 +1488,115 @@ class AppState: ObservableObject {
     func downloadNemotronHebrewModel() { }
     func preloadNemotronHebrewModel() { }
     #endif
+
+    // MARK: - WhisperKit
+
+    func isWhisperKitModelCached() -> Bool {
+        #if canImport(WhisperKit)
+        return WhisperKitBridge.isModelCached()
+        #else
+        return false
+        #endif
+    }
+
+    func downloadWhisperKitModel() {
+        #if canImport(WhisperKit)
+        guard !isDownloadingWhisperKit else { return }
+        isDownloadingWhisperKit = true
+        whisperKitDownloadStatus = "Downloading WhisperKit…"
+        downloadProgress = 0
+        state = .downloadingModel(progress: 0)
+
+        whisperKitDownloadTask = Task.detached(priority: .userInitiated) { [weak self] in
+            do {
+                try await WhisperKitBridge.download { [weak self] fraction in
+                    Task { @MainActor [weak self] in
+                        guard let self, self.isDownloadingWhisperKit else { return }
+                        self.downloadProgress = fraction
+                        self.state = .downloadingModel(progress: fraction)
+                    }
+                }
+                Logger.info("WhisperKit model downloaded", subsystem: .model)
+                await MainActor.run { [weak self] in
+                    guard let self else { return }
+                    self.isDownloadingWhisperKit = false
+                    self.whisperKitDownloadStatus = ""
+                    self.downloadProgress = 0
+                    self.state = .idle
+                    if self.selectedBackendType == .whisperKit {
+                        self.preloadWhisperKitModel()
+                    }
+                }
+            } catch {
+                Logger.error("Failed to download WhisperKit: \(error)", subsystem: .model)
+                await MainActor.run { [weak self] in
+                    guard let self else { return }
+                    self.isDownloadingWhisperKit = false
+                    self.whisperKitDownloadStatus = ""
+                    self.downloadProgress = 0
+                    self.state = .idle
+                    self.errorMessage = "Failed to download WhisperKit: \(error.localizedDescription)"
+                }
+            }
+        }
+        #endif
+    }
+
+    func preloadWhisperKitModel() {
+        #if canImport(WhisperKit)
+        guard isWhisperKitModelCached(), !isLoadingWhisperKit else { return }
+        isLoadingWhisperKit = true
+        whisperKitDownloadStatus = "Loading WhisperKit…"
+
+        whisperKitLoadTask = Task.detached(priority: .userInitiated) { [weak self] in
+            do {
+                let bridge = try await WhisperKitBridge.loadFromCache()
+                // Warm-up pass: force CoreML JIT compilation before the first user recording.
+                // prewarm:true compiles model weights but the decoder KV cache and tokenizer
+                // allocate on the first actual transcription call. Running a speech-like dummy
+                // pass here ensures the full decoder runs so CoreML JIT completes at load time,
+                // not on the first user recording.
+                // IMPORTANT: silence triggers noSpeechThreshold (0.6) early-exit BEFORE the
+                // decoder runs — so silence warmup never JITs the decoder. Use a 440Hz sine wave
+                // (speech-like energy) to force the full encoder+decoder pipeline.
+                // Uses async path (not transcribe()) to avoid blocking a thread pool thread
+                // and triggering HealthManager's "main thread unresponsive" false positive.
+                let sampleRate: Float = 16000
+                let warmupSamples: [Float] = (0..<32000).map { i in
+                    0.3 * sin(2 * Float.pi * 440 * Float(i) / sampleRate)
+                }
+                let wt = CFAbsoluteTimeGetCurrent()
+                await withCheckedContinuation { cont in
+                    bridge.transcribeAsync(samples: warmupSamples, initialPrompt: nil, language: .auto, singleSegment: false, maxTokens: 0) { _ in cont.resume() }
+                }
+                Logger.info("[AppState] WhisperKit warmup complete in \(String(format: "%.1f", (CFAbsoluteTimeGetCurrent() - wt) * 1000))ms", subsystem: .model)
+
+                await MainActor.run { [weak self] in
+                    guard let self else { return }
+                    // Transactional swap: shut down old backend AFTER new one is live
+                    let old = self.whisperBridge
+                    self.whisperBridge = bridge
+                    self.isModelLoaded = true
+                    self.loadedBackendType = .whisperKit
+                    self.isLoadingWhisperKit = false
+                    self.whisperKitDownloadStatus = ""
+                    Logger.info("[AppState] WhisperKit active (transactional swap)", subsystem: .model)
+                    old?.prepareForShutdown()
+                }
+                await self?.preloadVAD()
+            } catch {
+                Logger.error("Failed to load WhisperKit: \(error)", subsystem: .model)
+                await MainActor.run { [weak self] in
+                    guard let self else { return }
+                    self.isLoadingWhisperKit = false
+                    self.whisperKitDownloadStatus = ""
+                    // Prior backend remains active as fallback — do NOT clear whisperBridge
+                    self.errorMessage = "WhisperKit load failed — previous backend still active. \(error.localizedDescription)"
+                }
+            }
+        }
+        #endif
+    }
 
     private func preloadSpeechAnalyzer() {
         guard #available(macOS 26.0, *) else {
@@ -2025,6 +2152,16 @@ class AppState: ObservableObject {
         configureVocabularyBoostingOnBridge(bridge, variant: variant)
     }
 
+    private func livePreviewBridge(for bridge: TranscriptionBackend) -> TranscriptionBackend? {
+        #if canImport(WhisperKit)
+        // WhisperKit can provide low-latency rolling previews with the already-loaded
+        // Core ML model. StreamingTranscriber serializes these with committed chunks.
+        if bridge is WhisperKitBridge { return bridge }
+        #endif
+        if bridge is FluidAudioBridge { return bridge }
+        return modelPool?.previewBridge
+    }
+
     // MARK: - Global Dictation Lifecycle
 
     /// Start global dictation — creates and starts the key listener
@@ -2177,6 +2314,13 @@ class AppState: ObservableObject {
 
         Task {
             do {
+                #if canImport(WhisperKit)
+                // Reset gate before StreamingTranscriber is created — synchronous, no race
+                if let wkBridge = bridge as? WhisperKitBridge {
+                    wkBridge.beginSession()
+                }
+                #endif
+
                 #if canImport(FluidAudio)
                 let nemotronInApp: NemotronBridge? = selectedBackendType == .nemotron ? nemotronBridgeInstance : nil
                 let nemotronHebrewInApp: NemotronHebrewBridge? = selectedBackendType == .nemotronHebrew ? nemotronHebrewBridgeInstance : nil
@@ -2184,7 +2328,7 @@ class AppState: ObservableObject {
                 #else
                 let anyNemotronInApp: AnyObject? = nil
                 #endif
-                streamingTranscriber = StreamingTranscriber(backend: bridge, vad: sileroVAD, language: selectedLanguage, initialPrompt: promptWordsString, fillerWordRemovalEnabled: fillerWordRemovalEnabled, modelPool: modelPool, languageRouter: routingConfig.isRoutingEnabled ? LanguageRouter(allowed: routingConfig.allowedLanguages, primary: routingConfig.primaryLanguage) : nil, modelRouter: routingConfig.isRoutingEnabled ? ModelRouter(languageModelMap: buildLanguageModelMap(), fallbackProfile: buildFallbackProfile()) : nil, previewBridge: bridge is FluidAudioBridge ? bridge : modelPool?.previewBridge, nemotronBridge: anyNemotronInApp)
+                streamingTranscriber = StreamingTranscriber(backend: bridge, vad: sileroVAD, language: selectedLanguage, initialPrompt: promptWordsString, fillerWordRemovalEnabled: fillerWordRemovalEnabled, modelPool: modelPool, languageRouter: routingConfig.isRoutingEnabled ? LanguageRouter(allowed: routingConfig.allowedLanguages, primary: routingConfig.primaryLanguage) : nil, modelRouter: routingConfig.isRoutingEnabled ? ModelRouter(languageModelMap: buildLanguageModelMap(), fallbackProfile: buildFallbackProfile()) : nil, previewBridge: livePreviewBridge(for: bridge), nemotronBridge: anyNemotronInApp)
 
                 // Wire language detection → UI update
                 streamingTranscriber?.onLanguageDetected = { [weak self] lang in
@@ -2225,6 +2369,7 @@ class AppState: ObservableObject {
                 let route = audioDeviceManager.resolveInputRouteForRecording()
                 Logger.info("In-app recording with route: \(route)", subsystem: .audio)
 
+                HealthManager.shared.suppressForStartup(seconds: 3)
                 let audioURL = try await audioRecorder?.startRecording(route: route)
                 currentAudioURL = audioURL
                 cancelStateWatchdog()  // Startup succeeded, audio is flowing
@@ -2269,7 +2414,13 @@ class AppState: ObservableObject {
         startStopWatchdog()
 
         Task {
-            await audioRecorder?.stopRecording()
+            // WhisperKit consumes complete buffers rather than maintaining an RNNT
+            // stream, so one ~100ms input-buffer interval is sufficient at release.
+            // The default 200ms remains for Nemotron and the other streaming paths.
+            let drainNanoseconds: UInt64 = (loadedBackendType ?? selectedBackendType) == .whisperKit
+                ? 100_000_000
+                : 200_000_000
+            await audioRecorder?.stopRecording(drainNanoseconds: drainNanoseconds)
 
             if muteOtherAudioDuringRecording {
                 audioMuter?.unmuteSystemAudio()
@@ -2280,9 +2431,16 @@ class AppState: ObservableObject {
             var finalText = ""
             var savedRecordId: UUID?
             if let transcriber = streamingTranscriber {
-                let skipCorrections = llmEnabled
+                // WhisperKit's final decoder already receives Prompt Words. Running
+                // fuzzy dictionary correction afterward can corrupt ordinary phrases
+                // (for example "And it" → "audit" and "so far" → "SOAR").
+                let skipCorrections = llmEnabled ||
+                    (loadedBackendType ?? selectedBackendType) == .whisperKit
+                let stopTask = Task.detached(priority: .userInitiated) { [weak transcriber] in
+                    await transcriber?.stopAsync(skipCorrections: skipCorrections) ?? ""
+                }
                 finalText = await withTimeoutResult(seconds: 10.0) {
-                    await transcriber.stopAsync(skipCorrections: skipCorrections)
+                    await stopTask.value
                 } ?? ""
 
                 if saveRecordings && !finalText.isEmpty {
@@ -2402,13 +2560,20 @@ class AppState: ObservableObject {
             do {
                 // Create streaming transcriber with pre-loaded bridge, optional VAD, and language.
                 // Nemotron path: pass NullTranscriptionBackend + nemotronBridge (VAD chunking bypassed).
+                #if canImport(WhisperKit)
+                // Reset gate before StreamingTranscriber is created — synchronous, no race
+                if let wkBridge = bridge as? WhisperKitBridge {
+                    wkBridge.beginSession()
+                }
+                #endif
+
                 #if canImport(FluidAudio)
                 let nemotron: (any AnyObject)? = selectedBackendType == .nemotron ? nemotronBridgeInstance :
                     selectedBackendType == .nemotronHebrew ? nemotronHebrewBridgeInstance : nil
                 #else
                 let nemotron: AnyObject? = nil
                 #endif
-                streamingTranscriber = StreamingTranscriber(backend: bridge, vad: sileroVAD, language: selectedLanguage, initialPrompt: promptWordsString, fillerWordRemovalEnabled: fillerWordRemovalEnabled, modelPool: modelPool, languageRouter: routingConfig.isRoutingEnabled ? LanguageRouter(allowed: routingConfig.allowedLanguages, primary: routingConfig.primaryLanguage) : nil, modelRouter: routingConfig.isRoutingEnabled ? ModelRouter(languageModelMap: buildLanguageModelMap(), fallbackProfile: buildFallbackProfile()) : nil, previewBridge: bridge is FluidAudioBridge ? bridge : modelPool?.previewBridge, nemotronBridge: nemotron)
+                streamingTranscriber = StreamingTranscriber(backend: bridge, vad: sileroVAD, language: selectedLanguage, initialPrompt: promptWordsString, fillerWordRemovalEnabled: fillerWordRemovalEnabled, modelPool: modelPool, languageRouter: routingConfig.isRoutingEnabled ? LanguageRouter(allowed: routingConfig.allowedLanguages, primary: routingConfig.primaryLanguage) : nil, modelRouter: routingConfig.isRoutingEnabled ? ModelRouter(languageModelMap: buildLanguageModelMap(), fallbackProfile: buildFallbackProfile()) : nil, previewBridge: livePreviewBridge(for: bridge), nemotronBridge: nemotron)
 
                 // Wire language detection → UI update
                 streamingTranscriber?.onLanguageDetected = { [weak self] lang in
@@ -2457,6 +2622,7 @@ class AppState: ObservableObject {
                 let route = audioDeviceManager.resolveInputRouteForRecording()
                 Logger.info("Recording with route: \(route)", subsystem: .audio)
 
+                HealthManager.shared.suppressForStartup(seconds: 3)
                 let audioURL = try await audioRecorder?.startRecording(route: route)
                 currentAudioURL = audioURL
                 cancelStateWatchdog()  // Startup succeeded, audio is flowing
@@ -2538,7 +2704,12 @@ class AppState: ObservableObject {
         startStopWatchdog()
 
         Task {
-            await audioRecorder?.stopRecording()
+            // One input-buffer interval is sufficient for WhisperKit's batch path;
+            // stateful streaming engines retain the longer drain period.
+            let drainNanoseconds: UInt64 = (loadedBackendType ?? selectedBackendType) == .whisperKit
+                ? 100_000_000
+                : 200_000_000
+            await audioRecorder?.stopRecording(drainNanoseconds: drainNanoseconds)
 
             // No separate live preview engine to stop — StreamingTranscriber handles everything
 
@@ -2562,9 +2733,16 @@ class AppState: ObservableObject {
             var finalText = ""
             let transcriber = streamingTranscriber
             if let transcriber {
-                let skipCorrections = llmEnabled
+                // WhisperKit's final decoder already receives Prompt Words; avoid a
+                // second fuzzy pass that can rewrite valid ordinary-language phrases.
+                let skipCorrections = llmEnabled ||
+                    (loadedBackendType ?? selectedBackendType) == .whisperKit
+                // Run stopAsync() off the main actor so main thread stays free during tail transcription.
+                let stopTask = Task.detached(priority: .userInitiated) { [weak transcriber] in
+                    await transcriber?.stopAsync(skipCorrections: skipCorrections) ?? ""
+                }
                 finalText = await withTimeoutResult(seconds: 10.0) {
-                    await transcriber.stopAsync(skipCorrections: skipCorrections)
+                    await stopTask.value
                 } ?? ""
 
                 // Fallback: if final pass timed out, use the live streaming result.
@@ -2630,7 +2808,7 @@ class AppState: ObservableObject {
     }
 
     /// Run an async operation with a timeout. Returns nil if the operation times out.
-    private func withTimeoutResult<T: Sendable>(seconds: TimeInterval, operation: @escaping @Sendable () async -> T) async -> T? {
+    private nonisolated func withTimeoutResult<T: Sendable>(seconds: TimeInterval, operation: @escaping @Sendable () async -> T) async -> T? {
         await withTaskGroup(of: T?.self) { group in
             group.addTask {
                 await operation()
@@ -2808,8 +2986,12 @@ class AppState: ObservableObject {
         cancelStateWatchdog()
 
         Task {
-            // Stop audio recording immediately
-            await audioRecorder?.stopRecording()
+            // Cancel inference first so no stale progress callback can mutate the UI
+            // while the recorder is shutting down. A cancelled recording is discarded,
+            // so it does not need the normal trailing-audio drain.
+            let transcriber = streamingTranscriber
+            await transcriber?.cancelAsync()
+            await audioRecorder?.stopRecording(drainNanoseconds: 0)
 
             // Unmute audio
             if muteOtherAudioDuringRecording {

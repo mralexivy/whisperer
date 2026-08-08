@@ -114,6 +114,15 @@ final class ChunkPipelineFixTests: XCTestCase {
         XCTAssertEqual(segmenter.minChunkDuration, 3.0, "minChunkDuration should be 3.0s")
         XCTAssertEqual(segmenter.minTailDuration, 0.5, "minTailDuration should be 0.5s")
         XCTAssertEqual(segmenter.silenceForFinalization, 1.5, "silenceForFinalization should be 1.5s")
+        XCTAssertEqual(segmenter.maxChunkDuration, 10.0, "default maxChunkDuration should remain 10.0s")
+
+        let lowLatencySegmenter = VADSegmenter(
+            vad: nil,
+            targetChunkDuration: 6.0,
+            silenceForFinalization: 0.5,
+            maxChunkDuration: 6.0
+        )
+        XCTAssertEqual(lowLatencySegmenter.maxChunkDuration, 6.0)
 
         // 1.5s tail: below minChunkDuration (3.0) but above minTailDuration (0.5)
         let samples = [Float](repeating: 0.1, count: Int(1.5 * 16000))

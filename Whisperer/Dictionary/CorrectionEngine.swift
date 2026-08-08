@@ -18,6 +18,9 @@ class CorrectionEngine {
 
     // Multi-word phrase matching
     private var phraseLookup: [String: DictionaryEntry] = [:]
+    // Avoid scanning every dictionary phrase for every transcription. Most recordings
+    // contain only a small subset of the phrases' first words.
+    private var phraseKeysByFirstToken: [String: [String]] = [:]
 
     // SymSpell for high-performance fuzzy matching
     private var symSpell: SymSpell?
@@ -37,6 +40,7 @@ class CorrectionEngine {
     func rebuild(with entries: [DictionaryEntry]) {
         exactLookup.removeAll()
         phraseLookup.removeAll()
+        phraseKeysByFirstToken.removeAll()
 
         for entry in entries where entry.isEnabled {
             let incorrect = entry.incorrectForm.lowercased()
@@ -44,6 +48,9 @@ class CorrectionEngine {
             // Check if it's a multi-word phrase
             if incorrect.contains(" ") {
                 phraseLookup[incorrect] = entry
+                if let firstToken = searchTokens(in: incorrect).first {
+                    phraseKeysByFirstToken[firstToken, default: []].append(incorrect)
+                }
             } else {
                 exactLookup[incorrect] = entry
             }
@@ -65,7 +72,9 @@ class CorrectionEngine {
         var offset = 0
 
         // First pass: multi-word phrases (longer matches first)
-        let sortedPhrases = phraseLookup.keys.sorted { $0.count > $1.count }
+        let inputTokens = Set(searchTokens(in: result.lowercased()))
+        let candidatePhrases = Set(inputTokens.flatMap { phraseKeysByFirstToken[$0] ?? [] })
+        let sortedPhrases = candidatePhrases.sorted { $0.count > $1.count }
         for phrase in sortedPhrases {
             guard let entry = phraseLookup[phrase] else { continue }
             let replacement = entry.correctForm
@@ -163,6 +172,11 @@ class CorrectionEngine {
         }
 
         return CorrectionResult(text: processedText, corrections: corrections)
+    }
+
+    private func searchTokens(in text: String) -> [String] {
+        text.split(whereSeparator: { !$0.isLetter && !$0.isNumber })
+            .map { $0.lowercased() }
     }
 
     private func correctCompoundWords(_ text: String, maxEditDistance: Int, corrections: inout [(range: Range<String.Index>, original: String, replacement: String, category: String?, notes: String?, entryId: UUID)]) -> String {

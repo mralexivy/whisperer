@@ -731,13 +731,14 @@ struct StatusTabView: View {
         case .nemotron: return "Nemotron Multilingual"
         case .nemotronHebrew: return "Nemotron Hebrew"
         case .speechAnalyzer: return "On-Device"
+        case .whisperKit: return "WhisperKit Turbo"
         }
     }
 
     private var activeModelDetail: String? {
         switch appState.selectedBackendType {
         case .whisperCpp: return appState.selectedModel.sizeDescription
-        case .parakeet, .nemotron, .nemotronHebrew, .speechAnalyzer: return nil
+        case .parakeet, .nemotron, .nemotronHebrew, .speechAnalyzer, .whisperKit: return nil
         }
     }
 
@@ -748,6 +749,7 @@ struct StatusTabView: View {
         case .nemotron: return .purple
         case .nemotronHebrew: return .orange
         case .speechAnalyzer: return .cyan
+        case .whisperKit: return .blue
         }
     }
 
@@ -1291,6 +1293,10 @@ struct ModelsTabView: View {
                             ModelMenuItem(model: model)
                         }
                     }
+                } else if appState.selectedBackendType == .whisperKit {
+                    #if canImport(WhisperKit)
+                    whisperKitModelSection
+                    #endif
                 } else if appState.selectedBackendType == .parakeet || appState.selectedBackendType == .nemotron || appState.selectedBackendType == .nemotronHebrew {
                     parakeetModelSection
                 } else if appState.selectedBackendType == .speechAnalyzer {
@@ -1374,6 +1380,53 @@ struct ModelsTabView: View {
                 )
         )
     }
+
+    #if canImport(WhisperKit)
+    private var whisperKitModelSection: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 10) {
+                ZStack {
+                    RoundedRectangle(cornerRadius: 6)
+                        .fill(Color.blue.opacity(0.15))
+                        .frame(width: 26, height: 26)
+                    Image(systemName: "bolt.fill")
+                        .foregroundColor(.blue)
+                        .font(.system(size: 12, weight: .medium))
+                }
+
+                Text("Core ML Models")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundColor(MBColors.textPrimary)
+
+                Spacer()
+            }
+
+            VStack(spacing: 4) {
+                WhisperKitModelRow()
+            }
+
+            if appState.isDownloadingWhisperKit || appState.isLoadingWhisperKit {
+                VStack(alignment: .leading, spacing: 6) {
+                    HStack(spacing: 6) {
+                        ProgressView()
+                            .scaleEffect(0.5)
+                            .frame(width: 12, height: 12)
+                        Text(appState.whisperKitDownloadStatus)
+                            .font(.system(size: 11, weight: .medium))
+                            .foregroundColor(MBColors.textSecondary)
+                    }
+
+                    if appState.isDownloadingWhisperKit {
+                        ProgressView(value: appState.downloadProgress)
+                            .progressViewStyle(.linear)
+                            .tint(MBColors.accent)
+                    }
+                }
+                .padding(.leading, 20)
+            }
+        }
+    }
+    #endif
 
     private var parakeetModelSection: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -2353,6 +2406,91 @@ struct NemotronHebrewModelRow: View {
                         Image(systemName: "arrow.down.circle")
                             .font(.system(size: 14))
                         Text("~1.5 GB")
+                            .font(.caption2)
+                    }
+                    .foregroundColor(MBColors.accent)
+                }
+            }
+            .padding(.vertical, 6)
+            .padding(.horizontal, 8)
+            .background(
+                RoundedRectangle(cornerRadius: 6)
+                    .fill(isHighlighted ? MBColors.accent.opacity(0.12) : Color.clear)
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 6)
+                    .stroke(isHighlighted ? MBColors.accent.opacity(0.3) : Color.clear, lineWidth: 1)
+            )
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain).pointerOnHover()
+        .disabled(appState.isModelBusy)
+    }
+}
+#endif
+
+// MARK: - WhisperKit Model Row
+
+#if canImport(WhisperKit)
+struct WhisperKitModelRow: View {
+    @ObservedObject var appState = AppState.shared
+
+    var isActive: Bool { appState.isModelLoaded && appState.loadedBackendType == .whisperKit }
+    var isLoading: Bool { appState.isDownloadingWhisperKit || appState.isLoadingWhisperKit }
+    var isHighlighted: Bool { isActive || isLoading }
+    var isCached: Bool { appState.isWhisperKitModelCached() }
+
+    var body: some View {
+        Button(action: {
+            if isCached {
+                appState.selectBackend(.whisperKit)
+            } else {
+                appState.downloadWhisperKitModel()
+            }
+        }) {
+            HStack(spacing: 10) {
+                Image(systemName: "bolt.fill")
+                    .foregroundColor(.blue)
+                    .font(.system(size: 10, weight: .medium))
+                    .frame(width: 16)
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("WhisperKit Turbo")
+                        .font(.system(size: 12, weight: isHighlighted ? .semibold : .regular))
+                        .foregroundColor(isHighlighted ? MBColors.textPrimary : MBColors.textSecondary)
+
+                    Text("Core ML optimized · 100 languages · ~646 MB download")
+                        .font(.caption2)
+                        .foregroundColor(MBColors.textTertiary)
+                }
+
+                Spacer()
+
+                if isLoading {
+                    HStack(spacing: 4) {
+                        ProgressView()
+                            .scaleEffect(0.5)
+                            .frame(width: 12, height: 12)
+                        Text(appState.isDownloadingWhisperKit ? "Downloading" : "Loading")
+                            .font(.caption2)
+                            .foregroundColor(MBColors.accent)
+                    }
+                } else if isActive {
+                    Text("Active")
+                        .font(.system(size: 10, weight: .semibold))
+                        .foregroundColor(MBColors.accent)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 3)
+                        .background(Capsule().fill(MBColors.accent.opacity(0.15)))
+                } else if isCached {
+                    Image(systemName: "checkmark.circle.fill")
+                        .foregroundColor(MBColors.accent.opacity(0.5))
+                        .font(.system(size: 14))
+                } else {
+                    HStack(spacing: 4) {
+                        Image(systemName: "arrow.down.circle")
+                            .font(.system(size: 14))
+                        Text("~646 MB")
                             .font(.caption2)
                     }
                     .foregroundColor(MBColors.accent)
