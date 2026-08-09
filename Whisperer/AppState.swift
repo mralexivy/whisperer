@@ -321,6 +321,35 @@ class AppState: ObservableObject {
             NotificationCenter.default.post(name: NSNotification.Name("AppStateChanged"), object: nil)
         }
     }
+
+    // Meeting detection notification — shown when a conference app is detected while idle.
+    #if !APP_STORE
+    @Published var showMeetingDetectedToast: Bool = false {
+        didSet {
+            NotificationCenter.default.post(name: NSNotification.Name("AppStateChanged"), object: nil)
+        }
+    }
+    @Published var detectedMeetingApp: MeetingDetector.DetectedMeetingApp? = nil
+
+    func showMeetingNotification(app: MeetingDetector.DetectedMeetingApp) {
+        detectedMeetingApp = app
+        showMeetingDetectedToast = true
+        Task { @MainActor [weak self] in
+            try? await Task.sleep(nanoseconds: 30_000_000_000)
+            guard let self, self.showMeetingDetectedToast else { return }
+            self.dismissMeetingNotification()
+        }
+    }
+
+    func dismissMeetingNotification() {
+        showMeetingDetectedToast = false
+        detectedMeetingApp = nil
+    }
+    #else
+    // Stubs so OverlayPanel can reference this property unconditionally.
+    var showMeetingDetectedToast: Bool { false }
+    #endif
+
     /// Which backend type is currently loaded (may differ from selectedBackendType while browsing tabs)
     @Published var loadedBackendType: BackendType? = nil
 
@@ -483,6 +512,12 @@ class AppState: ObservableObject {
     // Long-record session state
     private var currentSessionID: UUID?
     private var idleSleepAssertion: IOPMAssertionID = 0
+
+    // Meeting mode
+    @Published private(set) var activeMeetingSession: MeetingSession?
+    private var meetingStartDate: Date?
+    private(set) var meetingAudioFileURL: String?
+    var isMeetingMode: Bool { activeMeetingSession != nil }
 
     // Language routing
     private var modelPool: ModelPool?
@@ -2339,7 +2374,14 @@ class AppState: ObservableObject {
                 // Wire incremental CoreData persistence for crash recovery
                 // and per-chunk LLM correction (runs during audio collection windows).
                 streamingTranscriber?.onChunkCompleted = { [weak self] chunkText, duration in
-                    guard let self, let id = self.currentSessionID else { return }
+                    guard let self else { return }
+                    // Meeting mode — route chunk to session instead of history
+                    if let meetingSession = self.activeMeetingSession {
+                        let ts = self.meetingStartDate.map { Date().timeIntervalSince($0) } ?? duration
+                        Task { @MainActor in meetingSession.onNewChunk(text: chunkText, timestamp: ts) }
+                        return
+                    }
+                    guard let id = self.currentSessionID else { return }
                     Task { await HistoryManager.shared.appendChunk(sessionID: id, chunkText: chunkText, totalDuration: duration) }
                     Task { @MainActor [weak self] in
                         guard let self, self.llmEnabled else { return }
@@ -2443,7 +2485,7 @@ class AppState: ObservableObject {
                     await stopTask.value
                 } ?? ""
 
-                if saveRecordings && !finalText.isEmpty {
+                if saveRecordings && !finalText.isEmpty && !isMeetingMode {
                     savedRecordId = saveRecordingFromTranscriber(transcriber, transcription: finalText)
                 }
             }
@@ -2454,7 +2496,7 @@ class AppState: ObservableObject {
             // Bail out if watchdog already forced idle
             guard case .stopping = state else { return }
 
-            if !finalText.isEmpty {
+            if !finalText.isEmpty && !isMeetingMode {
                 // Per-chunk path: drain coordinator (tail already queued via onChunkCompleted).
                 // Transformative modes or no chunks collected → existing full-text path.
                 let mode = AIModeManager.shared.postProcessMode
@@ -2584,7 +2626,14 @@ class AppState: ObservableObject {
                 // Wire incremental CoreData persistence for crash recovery
                 // and per-chunk LLM correction (runs during audio collection windows).
                 streamingTranscriber?.onChunkCompleted = { [weak self] chunkText, duration in
-                    guard let self, let id = self.currentSessionID else { return }
+                    guard let self else { return }
+                    // Meeting mode — route chunk to session instead of history
+                    if let meetingSession = self.activeMeetingSession {
+                        let ts = self.meetingStartDate.map { Date().timeIntervalSince($0) } ?? duration
+                        Task { @MainActor in meetingSession.onNewChunk(text: chunkText, timestamp: ts) }
+                        return
+                    }
+                    guard let id = self.currentSessionID else { return }
                     Task { await HistoryManager.shared.appendChunk(sessionID: id, chunkText: chunkText, totalDuration: duration) }
                     Task { @MainActor [weak self] in
                         guard let self, self.llmEnabled else { return }
@@ -3032,6 +3081,7 @@ class AppState: ObservableObject {
     }
 
     private func beginRecordingSession(language: String, modelUsed: String) {
+        guard !isMeetingMode else { return }
         guard let sessionURL = audioRecorder?.sessionAudioURL else { return }
         Task {
             let id = await HistoryManager.shared.beginSession(audioFileURL: sessionURL, language: language, modelUsed: modelUsed)
@@ -3258,5 +3308,35 @@ class AppState: ObservableObject {
         #endif
 
         Logger.debug("Transcription resources released", subsystem: .transcription)
+    }
+
+    // MARK: - Meeting Mode
+
+    func startMeetingRecording(session: MeetingSession) {
+        guard state == .idle else {
+            Logger.warning("Cannot start meeting recording — AppState not idle", subsystem: .app)
+            return
+        }
+
+        activeMeetingSession = session
+        meetingStartDate = Date()
+        meetingAudioFileURL = nil
+
+        // Reuse in-app recording path (isInAppMode = true suppresses text injection)
+        isInAppMode = true
+        startInAppRecording()
+    }
+
+    func stopMeetingRecording() {
+        guard isMeetingMode else { return }
+
+        // Save audio file URL before tearing down
+        meetingAudioFileURL = audioRecorder?.sessionAudioURL.map { $0.lastPathComponent }
+
+        activeMeetingSession = nil
+        meetingStartDate = nil
+        isInAppMode = false
+
+        stopInAppRecording()
     }
 }
