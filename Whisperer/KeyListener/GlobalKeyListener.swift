@@ -191,17 +191,17 @@ class GlobalKeyListener {
             return
         }
 
-        Logger.debug("flagsChanged keyCode=\(event.keyCode) flags=\(event.modifierFlags.rawValue)", subsystem: .keyListener)
-
         // Fn+key combo: another modifier pressed while Fn is held during recording.
         // Cancel recording entirely — don't process audio.
         if fnDown && recordingInProgress && config.useFnKey && config.keyCode == 0 && config.modifierFlags == 0 {
+            Logger.debug("flagsChanged Fn+modifier cancel keyCode=\(event.keyCode) flags=\(event.modifierFlags.rawValue)", subsystem: .keyListener)
             handleShortcutCancelled(config: config, reason: "Fn+modifier keyCode=\(event.keyCode)")
             return
         }
 
         // For modifier-only shortcuts (non-Fn), check if modifiers match
         if !config.useFnKey && config.keyCode == 0 && config.modifierFlags != 0 {
+            Logger.debug("flagsChanged modifier-only keyCode=\(event.keyCode) flags=\(event.modifierFlags.rawValue)", subsystem: .keyListener)
             handleModifierOnlyShortcut(event, config: config)
         }
     }

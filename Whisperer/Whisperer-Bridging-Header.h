@@ -14,5 +14,6 @@
 #include "../whisper.cpp/include/whisper.h"
 
 #import "Core/ObjCExceptionCatcher.h"
+#include <dns_sd.h>
 
 #endif /* Whisperer_Bridging_Header_h */

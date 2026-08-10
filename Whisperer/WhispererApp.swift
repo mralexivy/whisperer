@@ -37,6 +37,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     private var isShuttingDown = false
     private var rightClickMenu: NSMenu?
     private var rightClickMonitor: Any?
+    private var mcpCancellables = Set<AnyCancellable>()
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         Logger.info("Application launched", subsystem: .app)
@@ -135,6 +136,11 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             }
         }
 
+        // Recover any meeting sessions that were interrupted by a crash or force-quit.
+        Task {
+            await MeetingManager.shared.recoverCrashedSessions()
+        }
+
         // Clean up orphaned session audio files older than 7 days
         SessionStorage.deleteOrphanedSessions()
     }
@@ -148,11 +154,54 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         appState.soundPlayer = SoundPlayer()
         #if !APP_STORE
         appState.textSelectionService = TextSelectionService()
+        MeetingDetector.shared.start()
         #endif
 
         // Register long-lived components with HealthManager
         if let recorder = appState.audioRecorder { HealthManager.shared.register(recorder) }
         if let injector = appState.textInjector { HealthManager.shared.register(injector) }
+
+        // mDNS: resolve the machine's .local hostname at startup so the UI can
+        // show a friendly URL (e.g. "alexs-macbook-pro.local:8080/mcp").
+        #if !APP_STORE
+        Task {
+            let ok = MDNSHostnameRegistrar.shared.register()
+            let hostname = MDNSHostnameRegistrar.shared.registeredHostname
+            await MainActor.run {
+                AppState.shared.mcpBonjourReady = ok
+                AppState.shared.mcpBonjourHostname = hostname
+            }
+        }
+        #endif
+
+        // MCP server
+        if appState.mcpEnabled {
+            let port = appState.mcpPort
+            Task { await WhispererMCPServer.shared.start(port: port) }
+        }
+        appState.$mcpEnabled
+            .dropFirst()
+            .sink { [weak self] enabled in
+                guard let self else { return }
+                let port = self.appState.mcpPort
+                Task {
+                    if enabled {
+                        await WhispererMCPServer.shared.start(port: port)
+                    } else {
+                        await WhispererMCPServer.shared.stop()
+                    }
+                }
+            }
+            .store(in: &mcpCancellables)
+        appState.$mcpPort
+            .dropFirst()
+            .removeDuplicates()
+            .debounce(for: .seconds(1.0), scheduler: DispatchQueue.main)
+            .sink { [weak self] port in
+                guard let self, self.appState.mcpEnabled else { return }
+                Task { await WhispererMCPServer.shared.restart(port: port) }
+            }
+            .store(in: &mcpCancellables)
 
 
         // Device selection is resolved fresh at recording time via
@@ -222,7 +271,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             } else {
                 await MainActor.run {
                     self.appState.preloadModel()
-                    self.appState.preloadLLM()
+                    // LLM loads after the transcription model completes — sequential to
+                    // avoid ANE/Metal resource contention during CoreML compilation.
                 }
             }
         }
@@ -289,7 +339,14 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         Logger.debug("Stopping health monitoring...", subsystem: .app)
         HealthManager.shared.stopMonitoring()
 
-        // 7. Remove crash marker (clean exit)
+        // 7. Stop MCP server
+        Logger.debug("Stopping MCP server...", subsystem: .app)
+        await WhispererMCPServer.shared.stop()
+        #if !APP_STORE
+        MDNSHostnameRegistrar.shared.unregister()
+        #endif
+
+        // 8. Remove crash marker (clean exit)
         CrashHandler.shared.uninstall()
     }
 
@@ -1636,6 +1693,7 @@ struct ModelsTabView: View {
 struct SettingsTabView: View {
     @Binding var scrollTarget: SettingsScrollTarget?
     @ObservedObject var appState = AppState.shared
+    @AppStorage("meetingDetectionEnabled") private var meetingDetectionEnabled: Bool = true
 
     var body: some View {
         ScrollViewReader { proxy in
@@ -1959,6 +2017,25 @@ struct SettingsTabView: View {
                 }
 
                 #if !APP_STORE
+                // Meeting Detection
+                settingsCard(title: "Meeting Detection", icon: "video.fill", color: .blue) {
+                    HStack {
+                        VStack(alignment: .leading, spacing: 3) {
+                            Text("Detect meetings automatically")
+                                .font(.system(size: 13, weight: .medium))
+                                .foregroundColor(MBColors.textPrimary)
+                            Text("Show a prompt when Zoom, Teams, or Google Meet is active")
+                                .font(.system(size: 11))
+                                .foregroundColor(MBColors.textSecondary)
+                        }
+                        Spacer()
+                        Toggle("", isOn: $meetingDetectionEnabled)
+                            .toggleStyle(.switch)
+                            .tint(MBColors.accent)
+                            .labelsHidden()
+                    }
+                }
+
                 // AI Post-Processing
                 settingsCard(title: "AI Post-Processing", icon: "sparkles", color: .purple) {
                     LLMSettingsView()
@@ -1968,6 +2045,11 @@ struct SettingsTabView: View {
                 // Diagnostics
                 settingsCard(title: "Diagnostics", icon: "ladybug.fill", color: .gray) {
                     DiagnosticsView()
+                }
+
+                // MCP Server
+                settingsCard(title: "MCP Server", icon: "network", color: .mint) {
+                    MCPSettingsView()
                 }
 
             }
@@ -2993,6 +3075,175 @@ struct PermissionsView: View {
             permissionManager.requestAccessibilityPermission()
         }
         #endif
+    }
+}
+
+// MARK: - MCP Settings View
+
+struct MCPSettingsView: View {
+    @ObservedObject var appState = AppState.shared
+    @State private var copied = false
+    @State private var pulse = false
+
+    private var serverURL: String {
+        #if !APP_STORE
+        if let hostname = appState.mcpBonjourHostname {
+            return "http://\(hostname):\(appState.mcpPort)/mcp"
+        }
+        #endif
+        return "http://localhost:\(appState.mcpPort)/mcp"
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+
+            // Enable toggle
+            HStack {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Enable MCP Server")
+                        .font(.system(size: 13, weight: .medium))
+                        .foregroundColor(MBColors.textPrimary)
+                    Text("Connect Claude, Cursor and other AI tools to your data")
+                        .font(.system(size: 11))
+                        .foregroundColor(MBColors.textSecondary)
+                }
+                Spacer()
+                Toggle("", isOn: $appState.mcpEnabled)
+                    .toggleStyle(.switch).tint(MBColors.accent).labelsHidden()
+            }
+
+            if appState.mcpEnabled {
+                Divider().background(MBColors.border)
+
+                // Connection URL block
+                VStack(alignment: .leading, spacing: 8) {
+
+                    // Status row
+                    HStack(spacing: 6) {
+                        ZStack {
+                            if appState.mcpServerRunning {
+                                Circle()
+                                    .fill(Color.green.opacity(0.25))
+                                    .frame(width: 14, height: 14)
+                                    .scaleEffect(pulse ? 1.4 : 1.0)
+                                    .opacity(pulse ? 0 : 1)
+                                    .animation(.easeOut(duration: 1.4).repeatForever(autoreverses: false), value: pulse)
+                                    .onAppear { pulse = true }
+                                    .onDisappear { pulse = false }
+                            }
+                            Circle()
+                                .fill(appState.mcpServerRunning ? Color.green : Color.gray.opacity(0.4))
+                                .frame(width: 7, height: 7)
+                        }
+                        Text(appState.mcpServerRunning ? "Active" : "Stopped")
+                            .font(.system(size: 11, weight: .semibold))
+                            .foregroundColor(appState.mcpServerRunning ? .green : MBColors.textTertiary)
+
+                        Spacer()
+
+                        // Port field inline
+                        HStack(spacing: 4) {
+                            Text("Port")
+                                .font(.system(size: 10, weight: .medium))
+                                .foregroundColor(MBColors.textTertiary)
+                            TextField("8080", text: Binding(
+                                get: { String(appState.mcpPort) },
+                                set: { if let v = Int($0), v > 1024, v < 65535 { appState.mcpPort = v } }
+                            ))
+                            .font(.system(size: 11, design: .monospaced))
+                            .frame(width: 42)
+                            .multilineTextAlignment(.trailing)
+                            .foregroundColor(.white)
+                        }
+                    }
+
+                    // URL row with copy button
+                    HStack(spacing: 6) {
+                        Image(systemName: "link")
+                            .font(.system(size: 9, weight: .semibold))
+                            .foregroundColor(MBColors.accent)
+
+                        Text(serverURL)
+                            .font(.system(size: 10.5, weight: .regular, design: .monospaced))
+                            .foregroundColor(MBColors.textSecondary)
+                            .lineLimit(1)
+                            .truncationMode(.middle)
+
+                        Spacer()
+
+                        Button {
+                            NSPasteboard.general.clearContents()
+                            NSPasteboard.general.setString(serverURL, forType: .string)
+                            withAnimation(.easeInOut(duration: 0.15)) { copied = true }
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
+                                withAnimation(.easeInOut(duration: 0.15)) { copied = false }
+                            }
+                        } label: {
+                            HStack(spacing: 3) {
+                                Image(systemName: copied ? "checkmark" : "doc.on.doc")
+                                    .font(.system(size: 10, weight: .medium))
+                                if copied {
+                                    Text("Copied")
+                                        .font(.system(size: 10, weight: .medium))
+                                }
+                            }
+                            .foregroundColor(copied ? .green : MBColors.accent)
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+                .padding(10)
+                .background(
+                    RoundedRectangle(cornerRadius: 8)
+                        .fill(MBColors.accent.opacity(0.06))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 8)
+                                .stroke(
+                                    appState.mcpServerRunning
+                                        ? MBColors.accent.opacity(0.18)
+                                        : MBColors.border,
+                                    lineWidth: 1
+                                )
+                        )
+                )
+
+                Divider().background(MBColors.border)
+
+                // What AI tools can access
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("AI TOOLS CAN ACCESS")
+                        .font(.system(size: 9, weight: .bold))
+                        .foregroundColor(MBColors.textTertiary)
+                        .tracking(0.8)
+
+                    HStack(spacing: 6) {
+                        mcpCapabilityChip(icon: "video.fill",        label: "Meetings",       color: .mint)
+                        mcpCapabilityChip(icon: "waveform.and.mic",  label: "Transcriptions", color: MBColors.accent)
+                        Spacer()
+                        Text("4 tools")
+                            .font(.system(size: 10, weight: .medium))
+                            .foregroundColor(MBColors.textTertiary)
+                            .padding(.horizontal, 6).padding(.vertical, 2)
+                            .background(Color.white.opacity(0.06))
+                            .cornerRadius(4)
+                    }
+                }
+            }
+        }
+    }
+
+    private func mcpCapabilityChip(icon: String, label: String, color: Color) -> some View {
+        HStack(spacing: 4) {
+            Image(systemName: icon)
+                .font(.system(size: 9, weight: .semibold))
+                .foregroundColor(color)
+            Text(label)
+                .font(.system(size: 10.5, weight: .medium))
+                .foregroundColor(MBColors.textSecondary)
+        }
+        .padding(.horizontal, 7).padding(.vertical, 3)
+        .background(color.opacity(0.1))
+        .cornerRadius(5)
     }
 }
 

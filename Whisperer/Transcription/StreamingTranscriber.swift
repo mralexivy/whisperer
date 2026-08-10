@@ -45,6 +45,23 @@ final class NullTranscriptionBackend: TranscriptionBackend {
     func prepareForShutdown() { }
 }
 
+// MARK: - TranscriptChunk
+
+/// A committed piece of transcript together with the span of audio it covers.
+///
+/// `start`/`end` are seconds from the beginning of the recording measured on the **audio
+/// clock** (`samplesReceived / sampleRate`), not wall-clock. Inference latency, model
+/// promotion stalls and UI hitches therefore never skew them, and the gap between one
+/// chunk's `end` and the next chunk's `start` is real silence for VAD-segmented backends.
+struct TranscriptChunk {
+    let text: String
+    let start: Double
+    let end: Double
+    /// Total audio received when this chunk committed — for callers that need the session
+    /// length rather than this chunk's own span.
+    let recordedDuration: Double
+}
+
 // MARK: - StreamingTranscriber
 
 class StreamingTranscriber {
@@ -131,6 +148,9 @@ class StreamingTranscriber {
     }
 
     private var onTranscription: ((String) -> Void)?
+    // Fires with ONLY the live preview tail (previewAccumulatedText), not the full accumulated display.
+    // Used by MeetingSession to avoid echoing already-committed chunk text.
+    var onPreviewTail: ((String) -> Void)?
     var onLanguageDetected: ((TranscriptionLanguage) -> Void)?
 
     // Thread-safe transcription state
@@ -164,6 +184,11 @@ class StreamingTranscriber {
     private var vadScanTask: Task<Void, Never>?
     private var previewTask: Task<Void, Never>?
     private var isStopped: Bool = false
+    private let stopGateLock = NSLock()
+    private var _isPreparingToStop: Bool = false
+    private var isPreparingToStop: Bool {
+        stopGateLock.withLock { _isPreparingToStop }
+    }
     // Set to true only after Nemotron beginSession + setPreviewCallback complete.
     // Samples arriving before the session is open are dropped rather than sent to
     // an uninitialised RNNT state machine.
@@ -172,14 +197,24 @@ class StreamingTranscriber {
     private var previewAccumulatedText: String = ""
     private var previewPassID: Int = 0
     private var latestWhisperKitPreviewText: String = ""
+    private var lastPreviewVADCheckEndIndex: Int = 0
     private var latestWhisperKitPreviewStartIndex: Int = 0
     private var latestWhisperKitPreviewEndIndex: Int = 0
     private var latestWhisperKitPreviewAverageLogProbability: Float?
+    private var latestWhisperKitPreviewLanguageIsLocked: Bool = false
     private var activeWhisperKitPreviewStartIndex: Int = 0
     private var activeWhisperKitPreviewEndIndex: Int = 0
     private var whisperKitPreviewAnchoredAtTailStart: Bool = false
 
     #if canImport(WhisperKit)
+    private struct WhisperKitAbsoluteWord: Sendable {
+        let text: String
+        let tokens: [Int]
+        let startIndex: Int
+        let endIndex: Int
+        let probability: Float
+    }
+
     private enum WhisperKitInferenceOwner: Equatable {
         case none
         case preview
@@ -187,6 +222,10 @@ class StreamingTranscriber {
     }
     private let whisperKitInferenceLock = NSLock()
     private var whisperKitInferenceOwner: WhisperKitInferenceOwner = .none
+    private var whisperKitConfirmedWords: [WhisperKitAbsoluteWord] = []
+    private var whisperKitPreviousHypothesis: [WhisperKitAbsoluteWord] = []
+    private var whisperKitAgreementStartIndex: Int?
+    private var whisperKitAgreementPrefixTokens: [Int] = []
     #endif
 
     // Filler word removal (applied in final pass)
@@ -226,9 +265,10 @@ class StreamingTranscriber {
     // Session audio file on disk (set by AppState after creation, used for saveRecording and tail)
     var sessionAudioURL: URL?
 
-    /// Fired after each committed chunk (and tail). Parameters: (chunkText, totalRecordedDuration).
-    /// Used by AppState to incrementally persist text to CoreData for crash recovery.
-    var onChunkCompleted: ((String, Double) -> Void)?
+    /// Fired after each committed chunk (and tail).
+    /// Used by AppState to incrementally persist text to CoreData for crash recovery,
+    /// and by MeetingSession to place transcript segments on the audio timeline.
+    var onChunkCompleted: ((TranscriptChunk) -> Void)?
 
     /// Effective language for transcription — driven by router or fallback to configured language
     var effectiveLanguage: TranscriptionLanguage {
@@ -291,6 +331,7 @@ class StreamingTranscriber {
         fullTranscription = ""
         isProcessing = false
         isStopped = false
+        stopGateLock.withLock { _isPreparingToStop = false }
         isNemotronSessionReady = false
         #if canImport(FluidAudio)
         nemotronFeedTask = nil
@@ -313,12 +354,14 @@ class StreamingTranscriber {
         pendingChunks = []
         isTranscribingChunk = false
         lastPreviewedSampleIndex = feedbackSoundSamples  // Skip feedback sound window
+        lastPreviewVADCheckEndIndex = feedbackSoundSamples
         previewAccumulatedText = ""
         previewPassID = 0
         latestWhisperKitPreviewText = ""
         latestWhisperKitPreviewStartIndex = 0
         latestWhisperKitPreviewEndIndex = 0
         latestWhisperKitPreviewAverageLogProbability = nil
+        latestWhisperKitPreviewLanguageIsLocked = false
         activeWhisperKitPreviewStartIndex = 0
         activeWhisperKitPreviewEndIndex = 0
         whisperKitPreviewAnchoredAtTailStart = false
@@ -326,6 +369,7 @@ class StreamingTranscriber {
         whisperKitInferenceLock.lock()
         whisperKitInferenceOwner = .none
         whisperKitInferenceLock.unlock()
+        resetWhisperKitStreamingState(at: feedbackSoundSamples)
         #endif
 
         // Nemotron path: preview is push-based; no VAD chunking needed.
@@ -347,7 +391,10 @@ class StreamingTranscriber {
                     let wordCount = accumulatedText.split(separator: " ").count
                     Logger.debug("[Nemotron] Partial #\(n): \(wordCount) words — \"\(accumulatedText.prefix(60))\"", subsystem: .transcription)
                     self.previewAccumulatedText = accumulatedText
-                    DispatchQueue.main.async { self.onTranscription?(accumulatedText) }
+                    DispatchQueue.main.async {
+                        self.onTranscription?(accumulatedText)
+                        self.onPreviewTail?(accumulatedText)
+                    }
                 }
                 Logger.debug("[Nemotron] beginSession (language: \(lang.rawValue))", subsystem: .transcription)
                 await nemotron.beginSession(language: lang)
@@ -368,7 +415,11 @@ class StreamingTranscriber {
             while !Task.isCancelled {
                 guard let self = self, !self.isStopped else { break }
                 self.scanAndProcessChunks()
-                try? await Task.sleep(nanoseconds: self.vadScanInterval)
+                do {
+                    try await Task.sleep(nanoseconds: self.vadScanInterval)
+                } catch {
+                    break
+                }
             }
         }
 
@@ -382,9 +433,9 @@ class StreamingTranscriber {
                     self.languageRouter == nil || self.modelRouter == nil { break }
             }
 
-            // WhisperKit is a batch decoder, but its token callback can animate the
-            // result during each pass. Start the next pass promptly after completion
-            // so there is no extra half-second dead period between hypotheses.
+            // WhisperKit is a batch decoder. Start the next timestamped pass promptly
+            // after completion so there is no extra dead period between hypotheses.
+            // 40 ms balances responsiveness against the ~600-700 ms inference budget.
             #if canImport(WhisperKit)
             let previewInterval: UInt64 = self?.previewBridge is WhisperKitBridge
                 ? 40_000_000
@@ -393,9 +444,13 @@ class StreamingTranscriber {
             let previewInterval: UInt64 = 500_000_000
             #endif
             while !Task.isCancelled {
-                guard let self, !self.isStopped else { break }
+                guard let self, !self.isStopped, !self.isPreparingToStop else { break }
                 self.runLivePreviewPass()
-                try? await Task.sleep(nanoseconds: previewInterval)
+                do {
+                    try await Task.sleep(nanoseconds: previewInterval)
+                } catch {
+                    break
+                }
             }
         }
 
@@ -494,6 +549,16 @@ class StreamingTranscriber {
                 }
             }
         }
+
+        #if canImport(WhisperKit)
+        // WhisperKit has one serial Core ML runtime. Its eager word-agreement stream
+        // is already the committed path, so scheduling a second VAD chunk decode here
+        // would transcribe the same audio twice and stall live preview.
+        if whisper is WhisperKitBridge {
+            lastVADScanIndex = ringBase + allSamples.count
+            return
+        }
+        #endif
 
         // Run VAD scan with ring-relative indices
         let result = vadSegmenter.scanAndEmitChunks(
@@ -661,7 +726,14 @@ class StreamingTranscriber {
 
                 if !deduped.isEmpty {
                     self.completedChunkTexts.append(deduped)
-                    self.onChunkCompleted?(deduped, self.recordedDuration)
+                    // VAD chunk boundaries are the exact voiced span, so the gap to the
+                    // next chunk's start is genuine silence.
+                    self.onChunkCompleted?(TranscriptChunk(
+                        text: deduped,
+                        start: Double(chunk.startSample) / self.sampleRate,
+                        end: Double(chunk.endSample) / self.sampleRate,
+                        recordedDuration: self.recordedDuration
+                    ))
                 }
             }
 
@@ -679,7 +751,11 @@ class StreamingTranscriber {
                 self.latestWhisperKitPreviewStartIndex = chunk.endSample
                 self.latestWhisperKitPreviewEndIndex = chunk.endSample
                 self.latestWhisperKitPreviewAverageLogProbability = nil
+                self.latestWhisperKitPreviewLanguageIsLocked = false
                 self.whisperKitPreviewAnchoredAtTailStart = false
+                #if canImport(WhisperKit)
+                self.resetWhisperKitStreamingState(at: chunk.endSample)
+                #endif
             }
             self.currentChunkLiveText = ""
             self.provisionalChunkText = ""
@@ -778,6 +854,7 @@ class StreamingTranscriber {
 
         DispatchQueue.main.async { [weak self] in
             self?.onTranscription?(display)
+            self?.onPreviewTail?(guarded)
         }
         transcriptionProgressCounter &+= 1
     }
@@ -789,6 +866,7 @@ class StreamingTranscriber {
     /// - WhisperKit: growing tail from the last committed chunk with replace semantics.
     /// - whisper.cpp: append-only from last previewed position with 0.5s overlap.
     private func runLivePreviewPass() {
+        guard !isStopped, !isPreparingToStop else { return }
         guard let preview = previewBridge else { return }
         #if canImport(WhisperKit)
         let isWhisperKitPreview = preview is WhisperKitBridge
@@ -838,11 +916,13 @@ class StreamingTranscriber {
             guard ringEnd > tailStartAbs + Int(0.3 * sampleRate) else { return }
             endAbsIndex = ringEnd
         } else if isWhisperKitPreview {
-            // WhisperKit is a batch decoder, so every short overlapping window may
-            // revise its beginning. Keep one replaceable snapshot of the complete
-            // uncommitted region instead of trying to exact-deduplicate fragments.
-            let maxGrowingSamples = Int(6.0 * sampleRate)
-            tailStartAbs = max(lastTranscribedSampleIndex, ringEnd - maxGrowingSamples)
+            // Pass the complete uncommitted recording, but ask WhisperKit to seek to
+            // the cross-window agreement point. This preserves file-relative word
+            // timestamps while the encoder only processes the uncertain suffix.
+            tailStartAbs = max(lastTranscribedSampleIndex, ringBase)
+            // WhisperKit does not produce a usable timestamped result below roughly
+            // one second. Starting sooner created a 40ms retry storm without improving
+            // actual time-to-first-text.
             guard ringEnd > tailStartAbs + Int(1.0 * sampleRate) else { return }
             endAbsIndex = ringEnd
         } else {
@@ -857,9 +937,17 @@ class StreamingTranscriber {
         guard !windowSamples.isEmpty else { return }
         let candidateEndIndex = endAbsIndex
 
-        // VAD check: skip preview pass if no speech detected
-        if let vad = vad, !vad.hasSpeech(samples: windowSamples) {
-            return
+        // Incremental VAD: only check new audio since the last pass (max 3 s).
+        // Full-window VAD grew O(n) with recording length; now O(1) per pass.
+        if let vad = vad {
+            let vadStart = max(lastPreviewVADCheckEndIndex, ringEnd - Int(3.0 * sampleRate))
+            if vadStart < ringEnd {
+                let vadSamples = ring.slice(fromAbsolute: vadStart, toAbsolute: ringEnd)
+                if !vadSamples.isEmpty {
+                    lastPreviewVADCheckEndIndex = ringEnd
+                    if !vad.hasSpeech(samples: vadSamples) { return }
+                }
+            }
         }
 
         let normalizedSamples = normalizeSamples(windowSamples)
@@ -891,7 +979,9 @@ class StreamingTranscriber {
 
         #if canImport(WhisperKit)
         if isWhisperKitPreview, !pendingChunks.isEmpty { return }
-        if isWhisperKitPreview, !claimWhisperKitInference(.preview) { return }
+        // Admission is atomic with the release gate: either this pass owns the
+        // runtime before stop preparation starts, or it cannot start at all.
+        if isWhisperKitPreview, !claimWhisperKitPreviewInferenceUnlessStopping() { return }
         if isWhisperKitPreview {
             activeWhisperKitPreviewStartIndex = tailStartAbs
             activeWhisperKitPreviewEndIndex = candidateEndIndex
@@ -917,32 +1007,49 @@ class StreamingTranscriber {
         #endif
         #if canImport(WhisperKit)
         if let wkBridge = preview as? WhisperKitBridge {
-            // Six seconds of token-dense multilingual dictation can exceed 64 tokens.
-            // Keep a cap for runaway decoding while leaving room for those languages.
-            // WhisperKit reports token progress during the pass; publishing its guarded
-            // prefix avoids waiting for the full Core ML decode before the UI moves.
-            wkBridge.setChunkCallback({ [weak self] snapshot in
-                guard let self, !self.isStopped else { return }
-                guard snapshot.chunkGeneration == UInt64(currentPassID),
-                      currentPassID == self.previewPassID else { return }
-                let progressText: String
-                if tailStartAbs > self.lastTranscribedSampleIndex,
-                   self.whisperKitPreviewAnchoredAtTailStart,
-                   self.latestWhisperKitPreviewStartIndex <= self.lastTranscribedSampleIndex,
-                   let merged = self.mergeWhisperKitRollingPreview(
-                       previous: self.latestWhisperKitPreviewText,
-                       newWindow: snapshot.text
-                   ) {
-                    progressText = merged
-                } else {
-                    progressText = snapshot.text
+            // Raw token callbacks are intentionally not shown: they are mutable beam
+            // hypotheses and caused unrelated vocabulary to flash in the overlay.
+            let agreementIndex = whisperKitAgreementStartIndex ?? tailStartAbs
+            let clipSeconds = Float(max(0, agreementIndex - tailStartAbs)) / Float(sampleRate)
+            // prefixTokens are NOT passed in preview passes: forced tokens receive
+            // timestamp 0.0 rather than their acoustic position, which breaks the
+            // agreement state machine (anchor=0 on every pass after first confirmation).
+            // clipTimestamps alone is sufficient to advance the encoder to the
+            // agreement boundary; the decoder then produces correct file-relative timestamps.
+            // whisperKitAgreementPrefixTokens is still updated on each confirmation
+            // and is used only on the stop-path tail reconciliation decode.
+            wkBridge.clearCallbacks()
+            wkBridge.transcribeStreamingAsync(
+                samples: normalizedSamples,
+                language: lang,
+                clipSeconds: clipSeconds,
+                prefixTokens: nil,
+                maxTokens: 96
+            ) { [weak self, weak wkBridge] result in
+                guard let self else { return }
+                defer {
+                    wkBridge?.clearCallbacks()
+                    self.activeWhisperKitPreviewStartIndex = 0
+                    self.activeWhisperKitPreviewEndIndex = 0
+                    self.releaseWhisperKitInference(.preview)
                 }
-                self.publishWhisperKitPreview(progressText, through: candidateEndIndex)
-            }, chunkGeneration: UInt64(currentPassID))
-            doPreviewTranscribe = { cb in
-                wkBridge.transcribeAsync(samples: normalizedSamples, initialPrompt: prompt,
-                    language: lang, singleSegment: true, maxTokens: 96, completion: cb)
+                guard !self.isStopped,
+                      currentPassID == self.previewPassID,
+                      let result else { return }
+                guard let text = self.consumeWhisperKitStreamingResult(
+                    result, audioBaseIndex: tailStartAbs,
+                    through: candidateEndIndex
+                ) else { return }
+                let latency = String(format: "%.0f", result.pipelineDuration * 1000)
+                Logger.debug(
+                    "WhisperKit eager preview \(currentPassID): \(result.words.count) words, " +
+                    "pipeline=\(latency)ms clip=\(String(format: "%.2f", clipSeconds))s " +
+                    "language=\(result.language ?? "unknown") locked=\(result.languageIsLocked)",
+                    subsystem: .transcription
+                )
+                self.publishWhisperKitStreamingPreview(text, through: candidateEndIndex)
             }
+            return
         }
         #endif
 
@@ -1031,9 +1138,11 @@ class StreamingTranscriber {
             display += self.previewAccumulatedText
 
             self.fullTranscription = display
+            let tail = self.previewAccumulatedText
 
             DispatchQueue.main.async { [weak self] in
                 self?.onTranscription?(display)
+                self?.onPreviewTail?(tail)
             }
 
             EventRingBuffer.shared.record(
@@ -1047,12 +1156,213 @@ class StreamingTranscriber {
     }
 
     #if canImport(WhisperKit)
+    private func resetWhisperKitStreamingState(at sampleIndex: Int) {
+        whisperKitConfirmedWords.removeAll(keepingCapacity: true)
+        whisperKitPreviousHypothesis.removeAll(keepingCapacity: true)
+        whisperKitAgreementStartIndex = sampleIndex
+        whisperKitAgreementPrefixTokens.removeAll(keepingCapacity: true)
+    }
+
+    private func normalizedWhisperKitWord(_ text: String) -> String {
+        text.lowercased().filter { $0.isLetter || $0.isNumber }
+    }
+
+    private func commonWhisperKitPrefixCount(
+        _ previous: [WhisperKitAbsoluteWord], _ current: [WhisperKitAbsoluteWord]
+    ) -> Int {
+        var count = 0
+        while count < previous.count, count < current.count {
+            let left = normalizedWhisperKitWord(previous[count].text)
+            let right = normalizedWhisperKitWord(current[count].text)
+            guard !left.isEmpty, left == right else { break }
+            count += 1
+        }
+        return count
+    }
+
+    /// Converts a completed timestamped decode into an eager-streaming snapshot.
+    /// Words agreed by two consecutive windows become immutable. The last two agreed
+    /// words remain revisable and are also reused as decoder prefix tokens.
+    private func consumeWhisperKitStreamingResult(
+        _ result: WhisperKitStreamingResult,
+        audioBaseIndex: Int,
+        through candidateEndIndex: Int
+    ) -> String? {
+        var hypothesis = result.words.map { word in
+            WhisperKitAbsoluteWord(
+                text: word.text,
+                tokens: word.tokens,
+                startIndex: audioBaseIndex + Int(Double(word.start) * sampleRate),
+                endIndex: audioBaseIndex + Int(Double(word.end) * sampleRate),
+                probability: word.probability
+            )
+        }
+        let agreementStart = whisperKitAgreementStartIndex ?? audioBaseIndex
+        hypothesis = hypothesis.filter { $0.startIndex >= agreementStart }
+        guard !hypothesis.isEmpty else { return nil }
+
+        let commonCount = commonWhisperKitPrefixCount(whisperKitPreviousHypothesis, hypothesis)
+        if !whisperKitPreviousHypothesis.isEmpty {
+            let requiredAnchor = min(2, min(whisperKitPreviousHypothesis.count, hypothesis.count))
+            let lostWordCount = whisperKitPreviousHypothesis.count - hypothesis.count
+            let isUnanchored = commonCount < requiredAnchor
+            let isLargeRetraction = lostWordCount > 3
+            if isUnanchored || isLargeRetraction {
+                // Keep the visible hypothesis for one more pass. A genuinely corrected
+                // path will agree with itself on the next window; a transient decoder
+                // collapse never reaches the UI.
+                whisperKitPreviousHypothesis = hypothesis
+                Logger.debug(
+                    "WhisperKit eager preview held unstable revision " +
+                    "(anchor=\(commonCount), retraction=\(max(0, lostWordCount)) words)",
+                    subsystem: .transcription
+                )
+                return nil
+            }
+        }
+        let boundaryWordCount = 2
+        if result.languageIsLocked, commonCount > boundaryWordCount {
+            let newlyConfirmed = Array(hypothesis.prefix(commonCount - boundaryWordCount))
+            whisperKitConfirmedWords.append(contentsOf: newlyConfirmed)
+            let boundaryWords = Array(hypothesis[(commonCount - boundaryWordCount)..<commonCount])
+            whisperKitAgreementStartIndex = boundaryWords.first?.startIndex
+            whisperKitAgreementPrefixTokens = boundaryWords.flatMap(\.tokens)
+            let nextStart = whisperKitAgreementStartIndex ?? agreementStart
+            hypothesis = hypothesis.filter { $0.startIndex >= nextStart }
+            Logger.debug(
+                "WhisperKit eager stream confirmed \(newlyConfirmed.count) words; " +
+                "boundary=\(String(format: "%.2f", Double(nextStart - audioBaseIndex) / sampleRate))s",
+                subsystem: .transcription
+            )
+        } else if result.languageIsLocked,
+                  commonCount == hypothesis.count,
+                  !hypothesis.isEmpty,
+                  hypothesis.count <= boundaryWordCount {
+            // Short-tail: full agreement on a hypothesis smaller than boundaryWordCount.
+            // Confirm all but the last word; keep 1 boundary word to preserve acoustic
+            // context for clipSeconds on the next pass. Unblocks stagnation when only
+            // 1–2 words remain in the window (observed at recording tail, passes 7-10).
+            let confirmCount = hypothesis.count - 1
+            if confirmCount > 0 {
+                whisperKitConfirmedWords.append(contentsOf: hypothesis.prefix(confirmCount))
+            }
+            let boundaryWord = hypothesis.last!
+            whisperKitAgreementStartIndex = boundaryWord.startIndex
+            whisperKitAgreementPrefixTokens = boundaryWord.tokens
+            hypothesis = hypothesis.filter { $0.startIndex >= boundaryWord.startIndex }
+            Logger.debug(
+                "WhisperKit eager stream (short-tail) confirmed \(confirmCount) word(s); " +
+                "boundary=\(String(format: "%.2f", Double(boundaryWord.startIndex - audioBaseIndex) / sampleRate))s",
+                subsystem: .transcription
+            )
+        }
+
+        // Entropy gate: commit high-confidence words without a second window.
+        // A word with probability ≥ 0.95 has >95% decoder confidence — it agrees
+        // with itself across all beam paths and doesn't need cross-window confirmation.
+        // Keep the last `boundaryWordCount` words provisional so clipSeconds always
+        // has acoustic context for the next pass.
+        if result.languageIsLocked, hypothesis.count > boundaryWordCount {
+            let singlePassThreshold: Float = 0.95
+            var eagerCount = 0
+            for word in hypothesis.prefix(hypothesis.count - boundaryWordCount) {
+                guard word.probability >= singlePassThreshold else { break }
+                eagerCount += 1
+            }
+            if eagerCount > 0 {
+                whisperKitConfirmedWords.append(contentsOf: hypothesis.prefix(eagerCount))
+                let newStart = hypothesis[eagerCount].startIndex
+                whisperKitAgreementStartIndex = newStart
+                whisperKitAgreementPrefixTokens = Array(hypothesis.prefix(eagerCount)).suffix(2).flatMap(\.tokens)
+                hypothesis = hypothesis.filter { $0.startIndex >= newStart }
+                Logger.debug(
+                    "WhisperKit entropy-gate instant-committed \(eagerCount) word(s) " +
+                    "(p≥0.95); boundary=\(String(format: "%.2f", Double(newStart - audioBaseIndex) / sampleRate))s",
+                    subsystem: .transcription
+                )
+            }
+        }
+
+        // Store post-gate hypothesis so next pass compares from the same clip boundary.
+        // Must be AFTER the entropy gate — if set before, gate-trimmed hypothesis yields
+        // stale prevHypothesis words that mismatch the new clip → anchor=0 cascade.
+        whisperKitPreviousHypothesis = hypothesis
+
+        // Commit old, cross-window-agreed words without another inference call. Keep
+        // the two boundary words provisional and in the audio buffer. This bounds a
+        // long recording while preserving enough acoustic context for revisions.
+        if let nextStart = whisperKitAgreementStartIndex,
+           nextStart - lastTranscribedSampleIndex >= Int(6.0 * sampleRate),
+           !whisperKitConfirmedWords.isEmpty {
+            let committed = whisperKitConfirmedWords.map(\.text).joined()
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            if !committed.isEmpty {
+                completedChunkTexts.append(committed)
+                // Covers everything between the previous commit boundary and this one.
+                // Read before lastTranscribedSampleIndex advances to nextStart below.
+                onChunkCompleted?(TranscriptChunk(
+                    text: committed,
+                    start: Double(lastTranscribedSampleIndex) / sampleRate,
+                    end: Double(nextStart) / sampleRate,
+                    recordedDuration: recordedDuration
+                ))
+            }
+            whisperKitConfirmedWords.removeAll(keepingCapacity: true)
+            lastTranscribedSampleIndex = nextStart
+            lastClaimedSampleIndex = nextStart
+            do {
+                try allSamplesLock.withLock {
+                    ring.dropFront(toAbsoluteIndex: nextStart)
+                }
+            } catch {
+                Logger.warning("WhisperKit eager stream could not prune committed audio", subsystem: .transcription)
+            }
+            lastPreviewVADCheckEndIndex = max(lastPreviewVADCheckEndIndex, nextStart)
+            Logger.debug("WhisperKit eager stream soft-committed stable audio", subsystem: .transcription)
+        }
+
+        let allWords = whisperKitConfirmedWords + hypothesis
+        let text = allWords.map(\.text).joined()
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !text.isEmpty, !isHallucination(text) else { return nil }
+
+        latestWhisperKitPreviewText = text
+        latestWhisperKitPreviewStartIndex = lastTranscribedSampleIndex
+        latestWhisperKitPreviewEndIndex = candidateEndIndex
+        latestWhisperKitPreviewAverageLogProbability = result.averageLogProbability
+        latestWhisperKitPreviewLanguageIsLocked = result.languageIsLocked
+        whisperKitPreviewAnchoredAtTailStart = true
+        return text
+    }
+
+    private func publishWhisperKitStreamingPreview(_ text: String, through sampleIndex: Int) {
+        guard !isStopped, !text.isEmpty, text != previewAccumulatedText else { return }
+        previewAccumulatedText = text
+        lastPreviewedSampleIndex = sampleIndex
+        var display = completedChunkTexts.joined(separator: " ")
+        if !display.isEmpty { display += " " }
+        display += text
+        fullTranscription = display
+        DispatchQueue.main.async { [weak self] in
+            self?.onTranscription?(display)
+            self?.onPreviewTail?(text)
+        }
+        transcriptionProgressCounter &+= 1
+    }
+
     private func claimWhisperKitInference(_ owner: WhisperKitInferenceOwner) -> Bool {
         whisperKitInferenceLock.lock()
         defer { whisperKitInferenceLock.unlock() }
         guard whisperKitInferenceOwner == .none else { return false }
         whisperKitInferenceOwner = owner
         return true
+    }
+
+    private func claimWhisperKitPreviewInferenceUnlessStopping() -> Bool {
+        stopGateLock.lock()
+        defer { stopGateLock.unlock() }
+        guard !_isPreparingToStop else { return false }
+        return claimWhisperKitInference(.preview)
     }
 
     private func isWhisperKitInferenceIdle() -> Bool {
@@ -1257,7 +1567,12 @@ class StreamingTranscriber {
             }
             if !deduped.isEmpty {
                 completedChunkTexts.append(deduped)
-                onChunkCompleted?(deduped, recordedDuration)
+                onChunkCompleted?(TranscriptChunk(
+                    text: deduped,
+                    start: Double(tailChunk.startSample) / sampleRate,
+                    end: Double(tailChunk.endSample) / sampleRate,
+                    recordedDuration: recordedDuration
+                ))
             }
         }
     }
@@ -1273,6 +1588,7 @@ class StreamingTranscriber {
         guard !isStopped else { return }
         Logger.debug("Cancelling StreamingTranscriber without final pass...", subsystem: .transcription)
 
+        stopGateLock.withLock { _isPreparingToStop = true }
         isStopped = true
         vadScanTask?.cancel()
         vadScanTask = nil
@@ -1301,6 +1617,10 @@ class StreamingTranscriber {
     /// buffer. A stale WhisperKit pass can be cancelled in parallel with that drain;
     /// a pass close enough to the release boundary is preserved for hybrid reuse.
     func prepareForStopAsync() async {
+        // Close the preview admission gate before the audio drain begins. Task
+        // cancellation alone is insufficient because an interrupted sleep used to
+        // fall through and launch one final, immediately-cancelled model pass.
+        stopGateLock.withLock { _isPreparingToStop = true }
         #if canImport(WhisperKit)
         guard let wkBridge = whisper as? WhisperKitBridge else { return }
         vadScanTask?.cancel()
@@ -1322,6 +1642,7 @@ class StreamingTranscriber {
     func stopAsync(skipCorrections: Bool = false) async -> String {
         Logger.debug("Stopping StreamingTranscriber (async)...", subsystem: .transcription)
 
+        stopGateLock.withLock { _isPreparingToStop = true }
         vadScanTask?.cancel()
         vadScanTask = nil
         previewTask?.cancel()
@@ -1369,15 +1690,15 @@ class StreamingTranscriber {
 
         // Wait for in-flight chunk to complete (abort fires within ms)
         var waitCount = 0
-        while isTranscribingChunk && waitCount < 40 {  // Max 2 seconds
+        while isTranscribingChunk && waitCount < 40 {  // Max 400ms
             try? await Task.sleep(nanoseconds: 10_000_000)
             waitCount += 1
         }
 
         if isTranscribingChunk {
-            Logger.warning("In-flight chunk still transcribing after 2s, proceeding anyway", subsystem: .transcription)
+            Logger.warning("In-flight chunk still transcribing after 400ms, proceeding anyway", subsystem: .transcription)
         } else if waitCount > 0 {
-            Logger.debug("In-flight chunk completed after \(waitCount * 50)ms", subsystem: .transcription)
+            Logger.debug("In-flight chunk completed after \(waitCount * 10)ms", subsystem: .transcription)
         }
 
         // Nemotron: get complete transcript from finish(), skip tail transcription.
@@ -1402,7 +1723,14 @@ class StreamingTranscriber {
                     if fillerWordRemovalEnabled { text = FillerWordFilter.removeFillers(from: text) }
                 }
                 completedChunkTexts = [text]
-                onChunkCompleted?(text, durationSec)
+                // Nemotron returns the whole session in one blob at stop, so the span is
+                // the entire recording. Consumers that need finer granularity subdivide it.
+                onChunkCompleted?(TranscriptChunk(
+                    text: text,
+                    start: 0,
+                    end: durationSec,
+                    recordedDuration: durationSec
+                ))
             }
             return clearAndReturn(text)
         }
@@ -1452,7 +1780,7 @@ class StreamingTranscriber {
               activeWhisperKitPreviewStartIndex <= lastTranscribedSampleIndex,
               let ringEnd = currentRingEndIndex() else { return false }
         let uncoveredSamples = max(0, ringEnd - activeWhisperKitPreviewEndIndex)
-        return uncoveredSamples <= Int(0.25 * sampleRate) &&
+        return uncoveredSamples <= Int(0.40 * sampleRate) &&
             !containsSpeech(from: activeWhisperKitPreviewEndIndex, until: ringEnd)
     }
 
@@ -1464,7 +1792,7 @@ class StreamingTranscriber {
 
         guard let ringEnd = currentRingEndIndex() else { return false }
 
-        let maximumUncoveredSamples = Int(0.25 * sampleRate)
+        let maximumUncoveredSamples = Int(0.40 * sampleRate)
         let uncoveredSamples = max(0, ringEnd - latestWhisperKitPreviewEndIndex)
         let coversUncommittedStart = latestWhisperKitPreviewStartIndex <= lastTranscribedSampleIndex
         let hasStrongConfidence = averageLogProbability >= -0.65
@@ -1474,6 +1802,7 @@ class StreamingTranscriber {
         )
         let canReuse = coversUncommittedStart &&
             whisperKitPreviewAnchoredAtTailStart &&
+            (effectiveLanguage != .auto || latestWhisperKitPreviewLanguageIsLocked) &&
             uncoveredSamples <= maximumUncoveredSamples && hasStrongConfidence &&
             !uncoveredContainsSpeech
 
@@ -1520,20 +1849,23 @@ class StreamingTranscriber {
         // of most of the uncommitted tail. Reconcile only the audio that arrived after
         // that snapshot (plus a short word-boundary overlap) instead of decoding the
         // complete tail again. Both pieces come from the same WhisperKit model.
-        if let reconciliation = prepareWhisperKitTailReconciliation() {
+        if let reconciliation = await prepareWhisperKitTailReconciliation(bridge: wkBridge) {
             wkBridge.resetAbort()
-            let suffix = await wkBridge.transcribeDirectAsync(
+            let suffix = await wkBridge.transcribeStreamingAsync(
                 samples: reconciliation.samples,
-                initialPrompt: reconciliation.prompt,
                 language: effectiveLanguage,
+                clipSeconds: 0,
+                prefixTokens: reconciliation.prefixTokens,
                 maxTokens: 64
             )
-            if let stitched = stitchWhisperKitTail(
+            if let suffix,
+               let stitched = stitchWhisperKitTimestampedTail(
                 prefix: reconciliation.prefix,
-                overlappingSuffix: suffix
+                suffix: suffix,
+                boundarySeconds: reconciliation.boundarySeconds
             ) {
                 Logger.info(
-                    "Hybrid stop reconciled only \(String(format: "%.1f", reconciliation.duration))s " +
+                    "Hybrid stop timestamp-reconciled \(String(format: "%.1f", reconciliation.duration))s " +
                     "of the release tail (saved \(String(format: "%.1f", reconciliation.savedDuration))s)",
                     subsystem: .transcription
                 )
@@ -1558,14 +1890,15 @@ class StreamingTranscriber {
         return finalizeCompletedChunks(skipCorrections: skipCorrections)
     }
 
-    private func prepareWhisperKitTailReconciliation() -> (
-        samples: [Float], prompt: String?, prefix: String,
-        duration: Double, savedDuration: Double
+    private func prepareWhisperKitTailReconciliation(bridge: WhisperKitBridge) async -> (
+        samples: [Float], prefix: String, prefixTokens: [Int]?,
+        boundarySeconds: Float, duration: Double, savedDuration: Double
     )? {
         guard !latestWhisperKitPreviewText.isEmpty,
               let confidence = latestWhisperKitPreviewAverageLogProbability,
               confidence >= -0.65,
               whisperKitPreviewAnchoredAtTailStart,
+              (effectiveLanguage != .auto || latestWhisperKitPreviewLanguageIsLocked),
               latestWhisperKitPreviewStartIndex <= lastTranscribedSampleIndex else {
             return nil
         }
@@ -1593,29 +1926,49 @@ class StreamingTranscriber {
 
         let fullTailDuration = Double(ringEnd - lastTranscribedSampleIndex) / sampleRate
         let duration = Double(samples.count) / sampleRate
-        let prompt = String(latestWhisperKitPreviewText.suffix(120))
+        let boundarySeconds = Float(latestWhisperKitPreviewEndIndex - reconciliationStart) /
+            Float(sampleRate)
+        // Encode last 10 confirmed words for richer decoder context (30-50 tokens).
+        // Falls back to the 2-word boundary tokens if encoding fails or produces nothing.
+        let contextWords = latestWhisperKitPreviewText
+            .split(whereSeparator: { $0.isWhitespace }).suffix(10).joined(separator: " ")
+        let prefixTokens: [Int]?
+        if !contextWords.isEmpty,
+           let encoded = await bridge.encodeText(contextWords), !encoded.isEmpty {
+            prefixTokens = encoded
+        } else {
+            prefixTokens = whisperKitAgreementPrefixTokens.isEmpty
+                ? nil : whisperKitAgreementPrefixTokens
+        }
         Logger.debug(
             "Hybrid tail reconciliation: gap=" +
             "\(String(format: "%.2f", Double(ringEnd - latestWhisperKitPreviewEndIndex) / sampleRate))s " +
-            "decode=\(String(format: "%.2f", duration))s",
+            "decode=\(String(format: "%.2f", duration))s " +
+            "boundary=\(String(format: "%.2f", boundarySeconds))s",
             subsystem: .transcription
         )
         return (
-            normalizeSamples(samples), prompt, latestWhisperKitPreviewText,
+            normalizeSamples(samples), latestWhisperKitPreviewText, prefixTokens,
+            boundarySeconds,
             duration, max(0, fullTailDuration - duration)
         )
     }
 
-    /// Join a cached WhisperKit prefix to a short overlapping WhisperKit suffix. WhisperKit
-    /// frequently consumes the overlap as prompt context and returns only new words. In
-    /// that case there is deliberately no textual anchor, so append the continuation
-    /// directly instead of paying for a second full-tail decode.
-    private func stitchWhisperKitTail(prefix: String, overlappingSuffix suffix: String) -> String? {
-        let cleanSuffix = suffix.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !cleanSuffix.isEmpty, !isHallucination(cleanSuffix) else { return nil }
+    /// Join by acoustic time, not by an assumed text match. The suffix decode includes
+    /// 800ms of overlap, so only words beginning at/after the cached preview boundary
+    /// are new. Text overlap is still removed when present, but is never required.
+    private func stitchWhisperKitTimestampedTail(
+        prefix: String,
+        suffix: WhisperKitStreamingResult,
+        boundarySeconds: Float
+    ) -> String? {
+        guard suffix.averageLogProbability.map({ $0 >= -0.8 }) ?? false else {
+            Logger.debug("Hybrid timestamped suffix rejected for low confidence", subsystem: .transcription)
+            return nil
+        }
 
         let prefixWords = prefix.split(whereSeparator: { $0.isWhitespace }).map(String.init)
-        let suffixWords = cleanSuffix.split(whereSeparator: { $0.isWhitespace }).map(String.init)
+        let suffixWords = suffix.words.map(\.text)
         guard !prefixWords.isEmpty, !suffixWords.isEmpty else { return nil }
 
         func normalized(_ word: String) -> String {
@@ -1628,16 +1981,77 @@ class StreamingTranscriber {
             let right = suffixWords.prefix(count).map(normalized)
             guard !left.contains(where: { $0.isEmpty }) else { continue }
             if left == right {
-                let newWords = suffixWords.dropFirst(count)
-                return (prefixWords + newWords).joined(separator: " ")
+                // Replace the acoustic overlap with the final suffix decode instead
+                // of retaining provisional punctuation at the seam.
+                let stablePrefix = prefixWords.dropLast(count).joined(separator: " ")
+                let replacement = suffixWords.joined()
+                let combined = joinWhisperKitText(stablePrefix, replacement)
+                guard !replacement.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+                      !isHallucination(combined) else { return nil }
+                Logger.debug(
+                    "Hybrid timestamped suffix replaced \(count)-word acoustic overlap",
+                    subsystem: .transcription
+                )
+                return combined.trimmingCharacters(in: .whitespacesAndNewlines)
             }
         }
 
+        // Word timestamps are relative to the reconciliation audio. A word spoken
+        // across the cached-preview boundary is new final evidence even though its
+        // start timestamp belongs to the overlap. Using only `start` discarded that
+        // word and unnecessarily triggered a second full-tail decode at release.
+        let boundaryTolerance: Float = 0.05
+        var newWords = suffix.words.filter {
+            $0.end > boundarySeconds + boundaryTolerance
+        }
+
+        // If the first retained word crosses the boundary, replace the provisional
+        // final prefix word with the final decode. This avoids both duplicating it
+        // and preserving stale punctuation. Keep the conservative append behavior
+        // for scripts without whitespace-delimited words.
+        var stablePrefix = prefix
+        if let firstNew = newWords.first,
+           firstNew.start < boundarySeconds - boundaryTolerance,
+           prefixWords.count > 1 {
+            stablePrefix = prefixWords.dropLast().joined(separator: " ")
+        }
+        if let lastPrefix = prefixWords.last, let firstNew = newWords.first,
+           normalized(lastPrefix) == normalized(firstNew.text) {
+            newWords.removeFirst()
+            stablePrefix = prefix
+        }
+        let addition = newWords.map(\.text).joined()
+        guard !addition.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            Logger.debug("Hybrid timestamped suffix had no words beyond boundary", subsystem: .transcription)
+            return nil
+        }
+        let combined = joinWhisperKitText(stablePrefix, addition)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !isHallucination(combined) else { return nil }
         Logger.debug(
-            "Hybrid suffix contained no repeated boundary words; treating it as prompt-conditioned continuation",
+            "Hybrid timestamped suffix reconciled \(newWords.count) boundary/post-boundary words",
             subsystem: .transcription
         )
-        return (prefixWords + suffixWords).joined(separator: " ")
+        return combined
+    }
+
+    private func joinWhisperKitText(_ prefix: String, _ addition: String) -> String {
+        guard !prefix.isEmpty else { return addition }
+        guard !addition.isEmpty else { return prefix }
+        if prefix.last?.isWhitespace == true || addition.first?.isWhitespace == true {
+            return prefix + addition
+        }
+        // Whisper word timings normally preserve their leading whitespace. If a model
+        // omits it, add a separator only for adjacent ASCII word characters; CJK and
+        // punctuation must retain their native no-space formatting.
+        if let left = prefix.unicodeScalars.last,
+           let right = addition.unicodeScalars.first,
+           left.value < 128, right.value < 128,
+           CharacterSet.alphanumerics.contains(left),
+           CharacterSet.alphanumerics.contains(right) {
+            return prefix + " " + addition
+        }
+        return prefix + addition
     }
 
     /// Preserve text that falls off the front of WhisperKit's capped rolling window.
@@ -1745,7 +2159,14 @@ class StreamingTranscriber {
         }
         guard !deduped.isEmpty else { return }
         completedChunkTexts.append(deduped)
-        onChunkCompleted?(deduped, recordedDuration)
+        // The tail is by definition everything not yet committed, so it spans from the
+        // last commit boundary to the end of the captured audio.
+        onChunkCompleted?(TranscriptChunk(
+            text: deduped,
+            start: Double(lastTranscribedSampleIndex) / sampleRate,
+            end: recordedDuration,
+            recordedDuration: recordedDuration
+        ))
     }
 
     private func finalizeCompletedChunks(skipCorrections: Bool) -> String {

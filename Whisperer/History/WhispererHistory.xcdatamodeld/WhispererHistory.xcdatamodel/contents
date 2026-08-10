@@ -13,6 +13,20 @@
         <attribute name="notes" optional="YES" attributeType="String"/>
         <attribute name="useCount" attributeType="Integer 32" defaultValueString="0" usesScalarValueType="YES"/>
     </entity>
+    <entity name="MeetingEntity" representedClassName="MeetingEntity" syncable="YES">
+        <attribute name="id" attributeType="UUID" usesScalarValueType="NO"/>
+        <attribute name="title" attributeType="String"/>
+        <attribute name="createdAt" attributeType="Date" usesScalarValueType="NO"/>
+        <attribute name="duration" attributeType="Double" defaultValueString="0.0" usesScalarValueType="YES"/>
+        <attribute name="audioFileURL" optional="YES" attributeType="String"/>
+        <attribute name="segmentsJSON" optional="YES" attributeType="String"/>
+        <attribute name="aiSummaryJSON" optional="YES" attributeType="String"/>
+        <attribute name="notesJSON" optional="YES" attributeType="String"/>
+        <attribute name="wordCount" attributeType="Integer 32" defaultValueString="0" usesScalarValueType="YES"/>
+        <attribute name="language" attributeType="String"/>
+        <attribute name="modelUsed" attributeType="String"/>
+        <attribute name="isInProgress" attributeType="Boolean" defaultValueString="NO" usesScalarValueType="YES"/>
+    </entity>
     <entity name="TranscriptionEntity" representedClassName="TranscriptionEntity" syncable="YES">
         <attribute name="aiEnhancedText" optional="YES" attributeType="String"/>
         <attribute name="aiModeName" optional="YES" attributeType="String"/>

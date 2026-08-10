@@ -256,7 +256,10 @@ class OverlayPanel: NSPanel {
         let capturedGen = generation
 
         let appState = AppState.shared
-        let shouldShow = appState.state != .idle || appState.showModelLoadingToast || appState.showClipboardToast || appState.showFileTranscribingToast
+        // Suppress the HUD entirely when the meeting window is handling the recording UI
+        let isMeetingWindowOpen = appState.isMeetingMode && appState.meetingWindowIsVisible
+        let shouldShow = (appState.state != .idle || appState.showModelLoadingToast || appState.showClipboardToast || appState.showFileTranscribingToast || appState.showMeetingDetectedToast)
+            && !isMeetingWindowOpen
 
         if shouldShow && !self.isVisible {
             // Reposition at bottom-center every time we show

@@ -149,6 +149,7 @@ struct HistoryWindowView: View {
     @ObservedObject private var historyManager = HistoryManager.shared
     @State private var selectedSidebarItem: HistorySidebarItem = .transcriptions
     @State private var isSidebarCollapsed = false
+    @State private var meetingStudioSelectedID: UUID?
 
     #if !APP_STORE
     @StateObject private var commandModeService: CommandModeService = {
@@ -179,7 +180,7 @@ struct HistoryWindowView: View {
                 case .transcriptions:
                     TranscriptionsView()
                 case .meetingStudio:
-                    MeetingStudioView()
+                    MeetingStudioView(selectedMeetingID: $meetingStudioSelectedID)
                 case .fileTranscription:
                     FileTranscriptionView()
                 case .statistics:
@@ -1148,6 +1149,7 @@ struct HistorySettingsView: View {
                     dictionarySection
                     languageRoutingSection
                     storageSection
+                    mcpSection
                     dataManagementSection
                     dangerZoneSection
                 }
@@ -2120,6 +2122,25 @@ struct HistorySettingsView: View {
 
     // MARK: - Storage Section
 
+    // MARK: - MCP Server Section
+
+    private var mcpSection: some View {
+        SettingsCard(colorScheme: colorScheme) {
+            VStack(alignment: .leading, spacing: 20) {
+                SettingsSectionHeader(
+                    icon: "network",
+                    title: "MCP Server",
+                    colorScheme: colorScheme,
+                    color: .mint
+                )
+
+                WorkspaceMCPSettingsView(colorScheme: colorScheme)
+            }
+        }
+    }
+
+    // MARK: - Storage Section
+
     private var storageSection: some View {
         SettingsCard(colorScheme: colorScheme) {
             VStack(alignment: .leading, spacing: 20) {
@@ -2950,6 +2971,224 @@ struct ResizableDivider: View {
 }
 
 // MARK: - Color Extension
+
+// MARK: - Workspace MCP Settings View
+
+struct WorkspaceMCPSettingsView: View {
+    let colorScheme: ColorScheme
+    @ObservedObject private var appState = AppState.shared
+    @State private var copied = false
+    @State private var pulse = false
+
+    private var serverURL: String {
+        #if !APP_STORE
+        if let hostname = appState.mcpBonjourHostname {
+            return "http://\(hostname):\(appState.mcpPort)/mcp"
+        }
+        #endif
+        return "http://localhost:\(appState.mcpPort)/mcp"
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+
+            // Enable row
+            SettingsRow(colorScheme: colorScheme) {
+                HStack(spacing: 14) {
+                    ZStack {
+                        RoundedRectangle(cornerRadius: 8)
+                            .fill(
+                                LinearGradient(
+                                    colors: [Color.mint.opacity(0.22), Color.teal.opacity(0.12)],
+                                    startPoint: .topLeading, endPoint: .bottomTrailing
+                                )
+                            )
+                            .frame(width: 36, height: 36)
+                        Image(systemName: "network")
+                            .font(.system(size: 15, weight: .semibold))
+                            .foregroundColor(.mint)
+                    }
+
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text("Enable MCP Server")
+                            .font(.system(size: 13, weight: .medium))
+                            .foregroundColor(WhispererColors.primaryText(colorScheme))
+                        Text("Connect Claude, Cursor and other AI tools to your data locally")
+                            .font(.system(size: 11))
+                            .foregroundColor(WhispererColors.secondaryText(colorScheme))
+                    }
+
+                    Spacer()
+
+                    Toggle("", isOn: $appState.mcpEnabled)
+                        .toggleStyle(.switch)
+                        .tint(WhispererColors.accent)
+                        .labelsHidden()
+                }
+            }
+
+            if appState.mcpEnabled {
+
+                // Connection URL block
+                VStack(alignment: .leading, spacing: 12) {
+
+                    // Status + port row
+                    HStack(spacing: 8) {
+                        // Status badge
+                        HStack(spacing: 6) {
+                            ZStack {
+                                if appState.mcpServerRunning {
+                                    Circle()
+                                        .fill(Color.green.opacity(0.25))
+                                        .frame(width: 16, height: 16)
+                                        .scaleEffect(pulse ? 1.5 : 1.0)
+                                        .opacity(pulse ? 0 : 1)
+                                        .animation(.easeOut(duration: 1.4).repeatForever(autoreverses: false), value: pulse)
+                                        .onAppear { pulse = true }
+                                        .onDisappear { pulse = false }
+                                }
+                                Circle()
+                                    .fill(appState.mcpServerRunning ? Color.green : Color.gray.opacity(0.4))
+                                    .frame(width: 8, height: 8)
+                            }
+                            Text(appState.mcpServerRunning ? "Active" : "Stopped")
+                                .font(.system(size: 12, weight: .semibold))
+                                .foregroundColor(appState.mcpServerRunning ? .green : WhispererColors.tertiaryText(colorScheme))
+                        }
+                        .padding(.horizontal, 10).padding(.vertical, 5)
+                        .background(
+                            Capsule().fill(
+                                appState.mcpServerRunning
+                                    ? Color.green.opacity(0.1)
+                                    : Color.white.opacity(0.05)
+                            )
+                        )
+
+                        Spacer()
+
+                        // Port
+                        HStack(spacing: 6) {
+                            Text("Port")
+                                .font(.system(size: 12, weight: .medium))
+                                .foregroundColor(WhispererColors.tertiaryText(colorScheme))
+                            TextField("8080", text: Binding(
+                                get: { String(appState.mcpPort) },
+                                set: { if let v = Int($0), v > 1024, v < 65535 { appState.mcpPort = v } }
+                            ))
+                            .font(.system(size: 12, design: .monospaced))
+                            .frame(width: 50)
+                            .multilineTextAlignment(.trailing)
+                            .foregroundColor(WhispererColors.primaryText(colorScheme))
+                        }
+                        .padding(.horizontal, 10).padding(.vertical, 5)
+                        .background(
+                            RoundedRectangle(cornerRadius: 7)
+                                .fill(Color.white.opacity(0.05))
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 7)
+                                        .stroke(WhispererColors.border(colorScheme), lineWidth: 1)
+                                )
+                        )
+                    }
+
+                    // URL row
+                    HStack(spacing: 8) {
+                        Image(systemName: "link")
+                            .font(.system(size: 11, weight: .medium))
+                            .foregroundColor(WhispererColors.accentBlue)
+                            .frame(width: 16)
+
+                        Text(serverURL)
+                            .font(.system(size: 12, weight: .regular, design: .monospaced))
+                            .foregroundColor(WhispererColors.secondaryText(colorScheme))
+                            .lineLimit(1)
+                            .truncationMode(.middle)
+
+                        Spacer()
+
+                        Button {
+                            NSPasteboard.general.clearContents()
+                            NSPasteboard.general.setString(serverURL, forType: .string)
+                            withAnimation(.easeInOut(duration: 0.15)) { copied = true }
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
+                                withAnimation(.easeInOut(duration: 0.15)) { copied = false }
+                            }
+                        } label: {
+                            HStack(spacing: 4) {
+                                Image(systemName: copied ? "checkmark" : "doc.on.doc")
+                                    .font(.system(size: 11, weight: .medium))
+                                if copied {
+                                    Text("Copied!")
+                                        .font(.system(size: 11, weight: .medium))
+                                        .transition(.opacity)
+                                }
+                            }
+                            .foregroundColor(copied ? .green : WhispererColors.accentBlue)
+                            .padding(.horizontal, 10).padding(.vertical, 5)
+                            .background(
+                                Capsule().fill(
+                                    copied
+                                        ? Color.green.opacity(0.1)
+                                        : WhispererColors.accentBlue.opacity(0.1)
+                                )
+                            )
+                        }
+                        .buttonStyle(.plain)
+                        .animation(.easeInOut(duration: 0.15), value: copied)
+                    }
+                    .padding(12)
+                    .background(
+                        RoundedRectangle(cornerRadius: 10)
+                            .fill(WhispererColors.accentBlue.opacity(0.06))
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 10)
+                                    .stroke(
+                                        appState.mcpServerRunning
+                                            ? WhispererColors.accentBlue.opacity(0.2)
+                                            : WhispererColors.border(colorScheme),
+                                        lineWidth: 1
+                                    )
+                            )
+                    )
+                }
+
+                // Capabilities
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("AI TOOLS CAN ACCESS")
+                        .font(.system(size: 10, weight: .bold))
+                        .foregroundColor(WhispererColors.tertiaryText(colorScheme))
+                        .tracking(0.8)
+
+                    HStack(spacing: 8) {
+                        workspaceCapabilityChip(icon: "video.fill",       label: "Meetings",       color: .mint)
+                        workspaceCapabilityChip(icon: "waveform.and.mic", label: "Transcriptions", color: WhispererColors.accentBlue)
+                        Spacer()
+                        Text("4 tools")
+                            .font(.system(size: 11, weight: .medium))
+                            .foregroundColor(WhispererColors.tertiaryText(colorScheme))
+                            .padding(.horizontal, 8).padding(.vertical, 3)
+                            .background(Color.white.opacity(0.06))
+                            .cornerRadius(5)
+                    }
+                }
+            }
+        }
+    }
+
+    private func workspaceCapabilityChip(icon: String, label: String, color: Color) -> some View {
+        HStack(spacing: 5) {
+            Image(systemName: icon)
+                .font(.system(size: 10, weight: .semibold))
+                .foregroundColor(color)
+            Text(label)
+                .font(.system(size: 12, weight: .medium))
+                .foregroundColor(WhispererColors.secondaryText(colorScheme))
+        }
+        .padding(.horizontal, 10).padding(.vertical, 5)
+        .background(color.opacity(0.1))
+        .cornerRadius(6)
+    }
+}
 
 extension Color {
     init(hex: String) {

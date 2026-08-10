@@ -10,36 +10,30 @@ import SwiftUI
 struct MeetingStudioView: View {
     @ObservedObject private var appState = AppState.shared
     @StateObject private var localSession = MeetingSession()
+    @StateObject private var audioPlayer = MeetingAudioPlayer()
+    @StateObject private var detailVM = MeetingDetailViewModel()
 
     private var session: MeetingSession {
         appState.activeMeetingSession ?? localSession
     }
     @ObservedObject private var manager = MeetingManager.shared
-    @State private var selectedMeetingID: UUID?
-    @State private var showNewNoteSheet = false
-    @State private var newNoteTitle = ""
-
-    var selectedMeeting: MeetingRecord? {
-        guard let id = selectedMeetingID else { return nil }
-        return manager.meetings.first { $0.id == id }
-    }
+    @Binding var selectedMeetingID: UUID?
 
     var body: some View {
         HStack(spacing: 0) {
             // Left: library + live card
             MeetingListPanel(
                 session: session,
-                selectedMeetingID: $selectedMeetingID,
-                showNewNoteSheet: $showNewNoteSheet,
-                newNoteTitle: $newNoteTitle
+                selectedMeetingID: $selectedMeetingID
             )
             .frame(width: 260)
 
             divider
 
-            // Center: transcript / overview
-            if let meeting = selectedMeeting {
-                MeetingDetailView(meeting: meeting, session: session)
+            // Center: transcript / overview — always show if a selection exists or is loading
+            if selectedMeetingID != nil || detailVM.isLoading {
+                MeetingDetailView(detailVM: detailVM, session: session, playheadSeconds: audioPlayer.currentTime)
+                    .id(selectedMeetingID)
             } else {
                 notesPlaceholder
             }
@@ -47,22 +41,68 @@ struct MeetingStudioView: View {
             divider
 
             // Right: player + assistant
-            MeetingRightPanel(meeting: selectedMeeting, session: session)
+            MeetingRightPanel(meeting: detailVM.meeting, session: session, player: audioPlayer)
                 .frame(width: 420)
+                .id(selectedMeetingID)
         }
         .environment(\.colorScheme, .dark)
-        .sheet(isPresented: $showNewNoteSheet) { newNoteSheet }
         .onAppear {
             if selectedMeetingID == nil, let first = manager.meetings.first {
                 selectedMeetingID = first.id
             }
+            // Audio load happens via onChange(of: detailVM.meeting?.id)
         }
-        .onChange(of: session.meetingID) { id in
+        // When selection changes: clear detail immediately (shows skeleton), then load new record
+        .onChange(of: selectedMeetingID) { _, newID in
+            audioPlayer.stop()
+            detailVM.clear()
+            if let id = newID { Task { await detailVM.load(meetingID: id) } }
+        }
+        // When the loaded detail record appears, load its audio
+        .onChange(of: detailVM.meeting?.id) { _, _ in
+            if let url = detailVM.meeting?.resolvedAudioURL,
+               FileManager.default.fileExists(atPath: url.path),
+               audioPlayer.duration == 0 {
+                audioPlayer.load(url: url)
+            }
+        }
+        .onChange(of: session.meetingID) { _, id in
             if let id { selectedMeetingID = id }
         }
-        .onChange(of: manager.meetings) { meetings in
-            if let id = selectedMeetingID, !meetings.contains(where: { $0.id == id }) {
+        // Belt-and-suspenders: when recording starts, ensure the live meeting is selected
+        .onChange(of: session.isRecording) { _, isRec in
+            if isRec, let id = session.meetingID {
+                selectedMeetingID = id
+            } else {
+                // refreshDetail(), not load(): load() clears the record to a skeleton before
+                // fetching (and early-returns here anyway since loadedMeetingID is unchanged),
+                // which is what made the whole transcript blink out at stop.
+                Task { await detailVM.refreshDetail() }
+            }
+        }
+        // The tail chunk appends one more segment after stopRecording() has returned.
+        // Pick it up without blanking what is already on screen.
+        .onChange(of: session.segments.count) { _, _ in
+            guard !session.isRecording else { return }
+            Task { await detailVM.refreshDetail() }
+        }
+        .onChange(of: manager.meetings) { _, meetings in
+            // While recording, always track the live meeting
+            if session.isRecording, let id = session.meetingID {
+                selectedMeetingID = id
+                return
+            }
+            if selectedMeetingID == nil {
                 selectedMeetingID = meetings.first?.id
+            } else if let id = selectedMeetingID, !meetings.contains(where: { $0.id == id }) {
+                selectedMeetingID = meetings.first?.id
+            }
+            // Audio becomes available after finalize — check list item for the URL
+            if let item = meetings.first(where: { $0.id == selectedMeetingID }),
+               let url = item.resolvedAudioURL,
+               FileManager.default.fileExists(atPath: url.path),
+               audioPlayer.duration == 0 {
+                audioPlayer.load(url: url)
             }
         }
     }
@@ -77,9 +117,7 @@ struct MeetingStudioView: View {
 
     private var notesPlaceholder: some View {
         VStack(spacing: 28) {
-            // Icon with radial glow
             ZStack {
-                // Outer glow ring
                 Circle()
                     .fill(
                         RadialGradient(
@@ -89,7 +127,6 @@ struct MeetingStudioView: View {
                     )
                     .frame(width: 180, height: 180)
 
-                // Inner card
                 RoundedRectangle(cornerRadius: 20)
                     .fill(Color(hex: "14142B"))
                     .overlay(
@@ -114,7 +151,6 @@ struct MeetingStudioView: View {
                     )
             }
 
-            // Text hierarchy
             VStack(spacing: 10) {
                 Text("Your notes live here")
                     .font(.system(size: 22, weight: .bold, design: .rounded))
@@ -127,10 +163,8 @@ struct MeetingStudioView: View {
                     .lineSpacing(4)
             }
 
-            // CTA
             Button {
-                newNoteTitle = defaultNoteTitle()
-                showNewNoteSheet = true
+                Task { await session.startRecording(title: defaultNoteTitle()) }
             } label: {
                 HStack(spacing: 8) {
                     Image(systemName: "plus")
@@ -152,7 +186,6 @@ struct MeetingStudioView: View {
             }
             .buttonStyle(.plain)
 
-            // Feature pills
             HStack(spacing: 10) {
                 featurePill("mic.fill", "Voice transcription", Color(hex: "5B6CF7"))
                 featurePill("magnifyingglass", "Searchable", Color(hex: "F59E0B"))
@@ -175,61 +208,6 @@ struct MeetingStudioView: View {
         .padding(.vertical, 5)
         .background(Capsule().fill(color.opacity(0.1)))
         .overlay(Capsule().stroke(color.opacity(0.18), lineWidth: 0.5))
-    }
-
-    // MARK: - New note sheet
-
-    private var newNoteSheet: some View {
-        VStack(spacing: 20) {
-            Text("New Note")
-                .font(.system(size: 20, weight: .bold, design: .rounded))
-                .foregroundColor(.white)
-
-            VStack(alignment: .leading, spacing: 6) {
-                Text("TITLE")
-                    .font(.system(size: 10, weight: .bold))
-                    .tracking(0.8)
-                    .foregroundColor(.white.opacity(0.5))
-                TextField("Note title", text: $newNoteTitle)
-                    .font(.system(size: 14))
-                    .foregroundColor(.white)
-                    .textFieldStyle(.plain)
-                    .padding(10)
-                    .background(Color.white.opacity(0.06))
-                    .clipShape(RoundedRectangle(cornerRadius: 8))
-            }
-
-            HStack(spacing: 12) {
-                Button("Cancel") { showNewNoteSheet = false }
-                    .buttonStyle(.plain)
-                    .font(.system(size: 14, weight: .medium))
-                    .foregroundColor(.white.opacity(0.5))
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 10)
-                    .background(Color.white.opacity(0.06))
-                    .clipShape(RoundedRectangle(cornerRadius: 8))
-
-                Button("Start Recording") {
-                    showNewNoteSheet = false
-                    let title = newNoteTitle.isEmpty ? defaultNoteTitle() : newNoteTitle
-                    Task { await session.startRecording(title: title) }
-                }
-                .buttonStyle(.plain)
-                .font(.system(size: 14, weight: .semibold))
-                .foregroundColor(.white)
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 10)
-                .background(
-                    LinearGradient(colors: [Color(hex: "5B6CF7"), Color(hex: "8B5CF6")],
-                                   startPoint: .leading, endPoint: .trailing)
-                )
-                .clipShape(RoundedRectangle(cornerRadius: 8))
-            }
-        }
-        .padding(24)
-        .frame(width: 360)
-        .background(Color(hex: "14142B"))
-        .environment(\.colorScheme, .dark)
     }
 
     private func defaultNoteTitle() -> String {

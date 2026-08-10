@@ -101,6 +101,11 @@ class HistoryWindowManager {
             let frameString = NSStringFromRect(window.frame)
             UserDefaults.standard.set(frameString, forKey: "historyWindowFrame")
 
+            // If a meeting is recording, show the HUD fallback bar instead
+            if AppState.shared.isMeetingMode {
+                AppState.shared.meetingWindowIsVisible = false
+            }
+
             // Don't nil out historyWindow - keep it for reuse
             // This avoids the crash in NSWindowTransformAnimation dealloc
         }

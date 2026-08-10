@@ -78,7 +78,8 @@ final class HealthManager {
     private var timelineStart: ContinuousClock.Instant?
     private var timelineLock = NSLock()
 
-    // Main thread monitor
+    // Main thread monitor — protected by mainThreadLock (accessed from monitorQueue and DispatchQueue.main)
+    private let mainThreadLock = NSLock()
     private var mainThreadPendingSince: ContinuousClock.Instant?
     private var lastMainThreadResponse: ContinuousClock.Instant = .now
     private var mainThreadAlertFired: Bool = false
@@ -139,8 +140,11 @@ final class HealthManager {
             queue: nil
         ) { [weak self] _ in
             self?.monitorQueue.async { [weak self] in
-                self?.mainThreadPendingSince = nil
-                self?.mainThreadAlertFired = false
+                guard let self else { return }
+                self.mainThreadLock.lock()
+                self.mainThreadPendingSince = nil
+                self.mainThreadAlertFired = false
+                self.mainThreadLock.unlock()
             }
         }
 
@@ -355,21 +359,45 @@ final class HealthManager {
     private func checkMainThread() {
         let now = ContinuousClock.now
 
-        if mainThreadPendingSince == nil {
+        // Read state under lock — mainThreadPendingSince is written from DispatchQueue.main
+        mainThreadLock.lock()
+        let pendingSince = mainThreadPendingSince
+        let alreadyAlerted = mainThreadAlertFired
+        mainThreadLock.unlock()
+
+        if pendingSince == nil {
+            mainThreadLock.lock()
             mainThreadPendingSince = now
+            mainThreadLock.unlock()
             DispatchQueue.main.async { [weak self] in
                 guard let self else { return }
+                self.mainThreadLock.lock()
                 self.lastMainThreadResponse = .now
                 self.mainThreadPendingSince = nil
                 self.mainThreadAlertFired = false
+                self.mainThreadLock.unlock()
             }
+            // Elapsed on this tick would be ~0 — skip the check until next poll.
+            return
         }
 
-        if let pending = mainThreadPendingSince {
+        if let pending = pendingSince {
             let elapsed = now - pending
-            if elapsed > .milliseconds(500) && !mainThreadAlertFired {
+            // ContinuousClock advances through Mac sleep. If the pending timestamp was captured
+            // before a sleep period, elapsed will be enormous after wake — a false positive.
+            // Any elapsed > 30s cannot be a real main-thread hang; reset and re-probe instead.
+            if elapsed > .seconds(30) {
+                mainThreadLock.lock()
+                mainThreadPendingSince = nil
+                mainThreadAlertFired = false
+                mainThreadLock.unlock()
+                return
+            }
+            if elapsed > .milliseconds(500) && !alreadyAlerted {
                 if let suppress = suppressStallUntil, now < suppress { return }
+                mainThreadLock.lock()
                 mainThreadAlertFired = true
+                mainThreadLock.unlock()
                 let elapsedStr = String(format: "%.1f", elapsedSeconds(elapsed))
                 Logger.error("Main thread unresponsive for \(elapsedStr)s — possible AppKit/AX hang", subsystem: .app)
                 EventRingBuffer.shared.record(

@@ -21,6 +21,23 @@ struct PartialTranscription: Sendable {
     let text: String
 }
 
+struct WhisperKitStreamingWord: Sendable {
+    let text: String
+    let tokens: [Int]
+    let start: Float
+    let end: Float
+    let probability: Float
+}
+
+struct WhisperKitStreamingResult: Sendable {
+    let text: String
+    let words: [WhisperKitStreamingWord]
+    let averageLogProbability: Float?
+    let language: String?
+    let languageIsLocked: Bool
+    let pipelineDuration: Double
+}
+
 // MARK: - CallbackGate
 // NSLock-protected, @Sendable-safe gate. Owns abort flag, session/chunk
 // generation counters, and the snapshot callback. All fields readable from
@@ -105,6 +122,9 @@ private actor WhisperKitRuntime {
     let whisperKit: WhisperKit
     private var _isShuttingDown = false
     private var _sessionDetectedLanguage: String?
+    private var _preparedSessionGeneration: UInt64 = 0
+    private var _languageCandidate: String?
+    private var _languageCandidateConfirmations: Int = 0
     private var _activeTranscriptionTask: Task<[TranscriptionResult], Error>?
     private var _activeTranscriptionID: UUID?
 
@@ -112,7 +132,33 @@ private actor WhisperKitRuntime {
 
     func setDetectedLanguage(_ lang: String?) { _sessionDetectedLanguage = lang }
     func detectedLanguage() -> String? { _sessionDetectedLanguage }
-    func clearLanguageCache() { _sessionDetectedLanguage = nil }
+    func prepareSession(generation: UInt64) {
+        guard generation != _preparedSessionGeneration else { return }
+        _preparedSessionGeneration = generation
+        _sessionDetectedLanguage = nil
+        _languageCandidate = nil
+        _languageCandidateConfirmations = 0
+    }
+
+    func observeStreamingLanguage(_ language: String, eligibleForLock: Bool) -> (
+        candidate: String?, confirmations: Int, locked: String?
+    ) {
+        guard _sessionDetectedLanguage == nil, eligibleForLock else {
+            return (_languageCandidate, _languageCandidateConfirmations, _sessionDetectedLanguage)
+        }
+        if _languageCandidate == language {
+            _languageCandidateConfirmations += 1
+        } else {
+            _languageCandidate = language
+            _languageCandidateConfirmations = 1
+        }
+        // Short streaming windows can easily confuse related languages or English.
+        // Lock only after two independent, sufficiently long windows agree.
+        if _languageCandidateConfirmations >= 2 {
+            _sessionDetectedLanguage = language
+        }
+        return (_languageCandidate, _languageCandidateConfirmations, _sessionDetectedLanguage)
+    }
     func isHealthy() -> Bool { !_isShuttingDown }
 
     func encodePromptTokens(_ text: String) -> [Int]? {
@@ -202,7 +248,7 @@ final class WhisperKitBridge: TranscriptionBackend {
         let config = WhisperKitConfig(
             modelFolder: folder.path,
             verbose: false,
-            prewarm: true,
+            prewarm: false,  // sine wave warmup in AppState covers this (silence triggers noSpeechThreshold early-exit, never JITs decoder)
             load: true,
             download: false
         )
@@ -226,8 +272,6 @@ final class WhisperKitBridge: TranscriptionBackend {
         let gen = gate.nextSessionGeneration()
         gate.clearCallback()
         gate.resetAbort()
-        // Language cache cleared asynchronously — acceptable for session continuity
-        Task { [weak self] in await self?.runtime.clearLanguageCache() }
         Logger.debug("[WhisperKitBridge] beginSession gen=\(gen)", subsystem: .transcription)
     }
 
@@ -239,6 +283,11 @@ final class WhisperKitBridge: TranscriptionBackend {
 
     func detectedLanguage() async -> String? { await runtime.detectedLanguage() }
     var lastAverageLogProbability: Float? { gate.lastAverageLogProbability }
+
+    /// Encodes `text` into token IDs for richer tail reconciliation decoder context.
+    func encodeText(_ text: String) async -> [Int]? {
+        await runtime.encodePromptTokens(text)
+    }
 
     // MARK: TranscriptionBackend protocol
 
@@ -290,12 +339,41 @@ final class WhisperKitBridge: TranscriptionBackend {
         )
     }
 
+    /// Timestamped inference used by the eager streaming state machine. `clipSeconds`
+    /// skips audio that has already reached cross-window agreement, while the two
+    /// boundary words are supplied as decoder prefix tokens for linguistic continuity.
+    func transcribeStreamingAsync(
+        samples: [Float], language: TranscriptionLanguage,
+        clipSeconds: Float, prefixTokens: [Int]?, maxTokens: Int = 96
+    ) async -> WhisperKitStreamingResult? {
+        await performStreamingTranscription(
+            samples: samples, language: language, clipSeconds: clipSeconds,
+            prefixTokens: prefixTokens, maxTokens: maxTokens
+        )
+    }
+
+    func transcribeStreamingAsync(
+        samples: [Float], language: TranscriptionLanguage,
+        clipSeconds: Float, prefixTokens: [Int]?, maxTokens: Int = 96,
+        completion: @escaping (WhisperKitStreamingResult?) -> Void
+    ) {
+        Task.detached(priority: .userInitiated) { [weak self] in
+            guard let self else { completion(nil); return }
+            let result = await self.transcribeStreamingAsync(
+                samples: samples, language: language, clipSeconds: clipSeconds,
+                prefixTokens: prefixTokens, maxTokens: maxTokens
+            )
+            completion(result)
+        }
+    }
+
     private func performTranscription(
         samples: [Float], initialPrompt: String?,
         language: TranscriptionLanguage, maxTokens: Int32
     ) async -> String {
         guard await runtime.isHealthy(), !gate.shouldAbort else { return "" }
         gate.resetAbort()
+        await runtime.prepareSession(generation: gate.currentSessionGeneration)
 
         var options = DecodingOptions()
         options.task = .transcribe
@@ -350,6 +428,105 @@ final class WhisperKitBridge: TranscriptionBackend {
         } catch {
             Logger.error("[WhisperKitBridge] Transcription error: \(error)", subsystem: .transcription)
             return ""
+        }
+    }
+
+    private func performStreamingTranscription(
+        samples: [Float], language: TranscriptionLanguage,
+        clipSeconds: Float, prefixTokens: [Int]?, maxTokens: Int
+    ) async -> WhisperKitStreamingResult? {
+        guard await runtime.isHealthy(), !gate.shouldAbort else { return nil }
+        gate.resetAbort()
+        await runtime.prepareSession(generation: gate.currentSessionGeneration)
+
+        var options = DecodingOptions()
+        options.task = .transcribe
+        options.temperature = 0.0
+        options.temperatureFallbackCount = 0
+        options.suppressBlank = true
+        options.skipSpecialTokens = true
+        options.withoutTimestamps = false
+        options.wordTimestamps = true
+        options.noSpeechThreshold = 0.6
+        options.compressionRatioThreshold = 2.4
+        options.logProbThreshold = -1.0
+        options.sampleLength = maxTokens
+        options.chunkingStrategy = .none  // Our window is already short; prevent internal VAD chunking from interfering with clipTimestamps
+        if clipSeconds > 0 { options.clipTimestamps = [clipSeconds] }
+        if let prefixTokens, !prefixTokens.isEmpty {
+            options.prefixTokens = prefixTokens
+        }
+
+        let cachedLang = await runtime.detectedLanguage()
+        switch language {
+        case .auto:
+            if let cached = cachedLang {
+                options.language = cached
+                options.detectLanguage = false
+            } else {
+                options.detectLanguage = true
+            }
+        default:
+            options.language = language.rawValue
+            options.detectLanguage = false
+        }
+
+        do {
+            let results = try await runtime.transcribe(
+                audioArray: samples, options: options, callback: nil
+            )
+            guard !results.isEmpty else { return nil }
+            var languageIsLocked = language != .auto
+            if let detected = results.first?.language {
+                let uncertainAudioSeconds = Float(samples.count) / 16_000.0 - clipSeconds
+                // Ignore the very first short-window guess, but start consensus as
+                // soon as there is enough speech for a useful language decision.
+                // Two matching passes are still required, so a transient English
+                // guess cannot pin a Russian/Hebrew session to the wrong language.
+                let eligibleForLock = language == .auto && uncertainAudioSeconds >= 1.5 &&
+                    Float(samples.count) / 16_000.0 >= 1.5
+                let languageState = await runtime.observeStreamingLanguage(
+                    detected, eligibleForLock: eligibleForLock
+                )
+                if language == .auto {
+                    languageIsLocked = languageState.locked != nil
+                    Logger.debug(
+                        "[WhisperKitBridge] Streaming language candidate=\(detected) " +
+                        "confirmations=\(languageState.confirmations) " +
+                        "locked=\(languageState.locked ?? "none") " +
+                        "eligible=\(eligibleForLock)",
+                        subsystem: .transcription
+                    )
+                }
+            }
+            let words = results.flatMap(\.segments).flatMap { $0.words ?? [] }.map {
+                WhisperKitStreamingWord(
+                    text: $0.word, tokens: $0.tokens, start: $0.start,
+                    end: $0.end, probability: $0.probability
+                )
+            }
+            let segments = results.flatMap(\.segments)
+            let weightedLogProbability: Float? = {
+                let weighted = segments.reduce(into: (sum: Float(0), count: Int(0))) { partial, segment in
+                    let weight = max(1, segment.tokens.count)
+                    partial.sum += segment.avgLogprob * Float(weight)
+                    partial.count += weight
+                }
+                return weighted.count > 0 ? weighted.sum / Float(weighted.count) : nil
+            }()
+            let text = results.map(\.text).joined(separator: " ")
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            let duration = results.reduce(0.0) { $0 + $1.timings.fullPipeline }
+            return WhisperKitStreamingResult(
+                text: text, words: words, averageLogProbability: weightedLogProbability,
+                language: results.first?.language, languageIsLocked: languageIsLocked,
+                pipelineDuration: duration
+            )
+        } catch is CancellationError {
+            return nil
+        } catch {
+            Logger.error("[WhisperKitBridge] Streaming transcription error: \(error)", subsystem: .transcription)
+            return nil
         }
     }
 

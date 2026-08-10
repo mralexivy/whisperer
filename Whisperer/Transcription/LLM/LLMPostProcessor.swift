@@ -13,6 +13,17 @@ import MLXLMCommon
 import Hub
 import Tokenizers
 
+enum LLMFallbackError: Error, LocalizedError {
+    case noModelLoaded
+    case emptyOutput
+    var errorDescription: String? {
+        switch self {
+        case .noModelLoaded: return "LLM not loaded"
+        case .emptyOutput:   return "LLM produced empty output (timeout or EOS on first token)"
+        }
+    }
+}
+
 enum LLMLoadPhase: Equatable {
     case idle
     case downloading(progress: Double)
@@ -376,10 +387,14 @@ class LLMPostProcessor: ObservableObject {
         topP: Float = 1.0,
         topK: Int = 0,
         repetitionPenalty: Float = 1.05,
-        maxTokensCap: Int = 256
+        maxTokensCap: Int = 256,
+        outputTokensHint: Int? = nil,
+        timeoutSecondsOverride: Double? = nil,
+        throwOnFallback: Bool = false
     ) async throws -> String {
         guard let container = modelContainer else {
             Logger.warning("LLM not loaded, returning original text", subsystem: .transcription)
+            if throwOnFallback { throw LLMFallbackError.noModelLoaded }
             return text
         }
 
@@ -402,7 +417,9 @@ class LLMPostProcessor: ObservableObject {
         let charsPerToken: Int = isNonLatin ? 2 : 4
         let estimatedTokens = max(4, charCount / charsPerToken)
         let maxTokens: Int
-        if charCount < 30 {
+        if let hint = outputTokensHint {
+            maxTokens = min(maxTokensCap, hint)
+        } else if charCount < 30 {
             maxTokens = min(maxTokensCap, estimatedTokens + 8)
         } else if charCount < 200 {
             maxTokens = min(maxTokensCap, Int(ceil(Float(estimatedTokens) * 1.15)) + 4)
@@ -423,7 +440,9 @@ class LLMPostProcessor: ObservableObject {
                 isNonLatin: isNonLatin,
                 maxTokensCap: maxTokensCap,
                 targetLanguage: targetLanguage,
-                originalText: text
+                originalText: text,
+                timeoutSecondsOverride: timeoutSecondsOverride,
+                throwOnFallback: throwOnFallback
             )
             return mtpResult
         }
@@ -478,7 +497,7 @@ class LLMPostProcessor: ObservableObject {
             ? Int(Float(charCount) * 1.5) + 20
             : nil
 
-        let timeoutSeconds: Double = charCount < 30 ? 5 : charCount < 200 ? 10 : 15
+        let timeoutSeconds: Double = timeoutSecondsOverride ?? (charCount < 30 ? 5 : charCount < 200 ? 10 : 15)
 
         var result = ""
         var completionInfo: GenerateCompletionInfo?
@@ -518,6 +537,7 @@ class LLMPostProcessor: ObservableObject {
         } catch {
             timeoutTask.cancel()
             Logger.warning("LLM gen failed (\(type(of: error)): \(error)) after \(Int(timeoutSeconds))s timeout (\(charCount) chars), returning original", subsystem: .transcription)
+            if throwOnFallback { throw error }
             return text
         }
 
@@ -568,9 +588,11 @@ class LLMPostProcessor: ObservableObject {
         isNonLatin: Bool,
         maxTokensCap: Int,
         targetLanguage: String?,
-        originalText: String
+        originalText: String,
+        timeoutSecondsOverride: Double? = nil,
+        throwOnFallback: Bool = false
     ) async throws -> String {
-        let timeoutSeconds: Double = charCount < 30 ? 5 : charCount < 200 ? 10 : 15
+        let timeoutSeconds: Double = timeoutSecondsOverride ?? (charCount < 30 ? 5 : charCount < 200 ? 10 : 15)
         let mtpOutput = MTPOutput()
 
         // Timeout: sets stop flag so onToken returns false, ending generation early.
@@ -698,6 +720,7 @@ class LLMPostProcessor: ObservableObject {
         // Fall back to original if MTP produced nothing (model refused, EOS on first token, etc.)
         guard !result.isEmpty else {
             Logger.warning("MTP gen: empty output, returning original text", subsystem: .transcription)
+            if throwOnFallback { throw LLMFallbackError.emptyOutput }
             return originalText
         }
         return result

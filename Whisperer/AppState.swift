@@ -515,9 +515,12 @@ class AppState: ObservableObject {
 
     // Meeting mode
     @Published private(set) var activeMeetingSession: MeetingSession?
-    private var meetingStartDate: Date?
     private(set) var meetingAudioFileURL: String?
     var isMeetingMode: Bool { activeMeetingSession != nil }
+    private var isMeetingStopInFlight = false
+    @Published var meetingWindowIsVisible: Bool = false {
+        didSet { NotificationCenter.default.post(name: NSNotification.Name("AppStateChanged"), object: nil) }
+    }
 
     // Language routing
     private var modelPool: ModelPool?
@@ -539,6 +542,17 @@ class AppState: ObservableObject {
     }
     @Published var activeRouteInfo: String?
     @Published var isLiveTranscriptionRTL: Bool = false
+
+    // MCP server
+    @Published var mcpEnabled: Bool = true {
+        didSet { UserDefaults.standard.set(mcpEnabled, forKey: "mcpEnabled") }
+    }
+    @Published var mcpPort: Int = 8080 {
+        didSet { UserDefaults.standard.set(mcpPort, forKey: "mcpPort") }
+    }
+    @Published var mcpServerRunning: Bool = false
+    @Published var mcpBonjourReady: Bool = false
+    @Published var mcpBonjourHostname: String? = nil  // machine's .local hostname, set at launch
 
     private var currentAudioURL: URL?
     private var lastTargetAppName: String?
@@ -737,6 +751,14 @@ class AppState: ObservableObject {
                     self?.showClipboardToast = false
                 }
             }
+        }
+
+        // Load MCP server settings
+        if UserDefaults.standard.object(forKey: "mcpEnabled") != nil {
+            _mcpEnabled = Published(wrappedValue: UserDefaults.standard.bool(forKey: "mcpEnabled"))
+        }
+        if UserDefaults.standard.object(forKey: "mcpPort") != nil {
+            _mcpPort = Published(wrappedValue: UserDefaults.standard.integer(forKey: "mcpPort"))
         }
 
         // Start monitoring audio device changes (for UI device picker only)
@@ -1133,6 +1155,7 @@ class AppState: ObservableObject {
                     self.isLoadingWhisper = false
                     self.preloadVAD()
                     self.preloadLanguageRouting()
+                    self.preloadLLM()
 
                     Logger.info("Whisper model loaded. Process memory: \(String(format: "%.0f", BenchmarkUtilities.currentMemoryMB()))MB", subsystem: .model)
                 }
@@ -1337,6 +1360,7 @@ class AppState: ObservableObject {
                     self.isLoadingParakeet = false
                     self.parakeetDownloadStatus = ""
                     self.preloadVAD()
+                    self.preloadLLM()
 
                     Logger.info("Parakeet model loaded. Process memory: \(String(format: "%.0f", BenchmarkUtilities.currentMemoryMB()))MB", subsystem: .model)
 
@@ -1423,6 +1447,7 @@ class AppState: ObservableObject {
                     self.loadedBackendType = .nemotron
                     self.isLoadingNemotron = false
                     self.nemotronDownloadStatus = ""
+                    self.preloadLLM()
                     Logger.info("Nemotron multilingual ready", subsystem: .model)
                 }
             } catch {
@@ -1502,6 +1527,7 @@ class AppState: ObservableObject {
                     self.loadedBackendType = .nemotronHebrew
                     self.isLoadingNemotronHebrew = false
                     self.nemotronHebrewDownloadStatus = ""
+                    self.preloadLLM()
                     Logger.info("Nemotron Hebrew ready", subsystem: .model)
                 }
             } catch {
@@ -1586,25 +1612,31 @@ class AppState: ObservableObject {
         whisperKitLoadTask = Task.detached(priority: .userInitiated) { [weak self] in
             do {
                 let bridge = try await WhisperKitBridge.loadFromCache()
-                // Warm-up pass: force CoreML JIT compilation before the first user recording.
-                // prewarm:true compiles model weights but the decoder KV cache and tokenizer
-                // allocate on the first actual transcription call. Running a speech-like dummy
-                // pass here ensures the full decoder runs so CoreML JIT completes at load time,
-                // not on the first user recording.
+                Logger.info("[AppState] WhisperKit model loaded, checking warmup state", subsystem: .model)
+                // Warm-up pass: force CoreML decoder JIT before the first user recording.
                 // IMPORTANT: silence triggers noSpeechThreshold (0.6) early-exit BEFORE the
                 // decoder runs — so silence warmup never JITs the decoder. Use a 440Hz sine wave
                 // (speech-like energy) to force the full encoder+decoder pipeline.
                 // Uses async path (not transcribe()) to avoid blocking a thread pool thread
                 // and triggering HealthManager's "main thread unresponsive" false positive.
-                let sampleRate: Float = 16000
-                let warmupSamples: [Float] = (0..<32000).map { i in
-                    0.3 * sin(2 * Float.pi * 440 * Float(i) / sampleRate)
+                // Skipped on subsequent launches if CoreML is already compiled for this OS version.
+                let warmupKey = "whisperKitWarmupVersion"
+                let warmupTag = "\(WhisperKitBridge.modelVariant)_\(ProcessInfo.processInfo.operatingSystemVersionString)"
+                let alreadyWarmed = UserDefaults.standard.string(forKey: warmupKey) == warmupTag
+                if !alreadyWarmed {
+                    let sampleRate: Float = 16000
+                    let warmupSamples: [Float] = (0..<32000).map { i in
+                        0.3 * sin(2 * Float.pi * 440 * Float(i) / sampleRate)
+                    }
+                    let wt = CFAbsoluteTimeGetCurrent()
+                    await withCheckedContinuation { cont in
+                        bridge.transcribeAsync(samples: warmupSamples, initialPrompt: nil, language: .auto, singleSegment: false, maxTokens: 0) { _ in cont.resume() }
+                    }
+                    Logger.info("[AppState] WhisperKit warmup complete in \(String(format: "%.1f", (CFAbsoluteTimeGetCurrent() - wt) * 1000))ms", subsystem: .model)
+                    UserDefaults.standard.set(warmupTag, forKey: warmupKey)
+                } else {
+                    Logger.info("[AppState] WhisperKit decoder already warmed for this OS version, skipping", subsystem: .model)
                 }
-                let wt = CFAbsoluteTimeGetCurrent()
-                await withCheckedContinuation { cont in
-                    bridge.transcribeAsync(samples: warmupSamples, initialPrompt: nil, language: .auto, singleSegment: false, maxTokens: 0) { _ in cont.resume() }
-                }
-                Logger.info("[AppState] WhisperKit warmup complete in \(String(format: "%.1f", (CFAbsoluteTimeGetCurrent() - wt) * 1000))ms", subsystem: .model)
 
                 await MainActor.run { [weak self] in
                     guard let self else { return }
@@ -1617,6 +1649,7 @@ class AppState: ObservableObject {
                     self.whisperKitDownloadStatus = ""
                     Logger.info("[AppState] WhisperKit active (transactional swap)", subsystem: .model)
                     old?.prepareForShutdown()
+                    self.preloadLLM()
                 }
                 await self?.preloadVAD()
             } catch {
@@ -1690,6 +1723,7 @@ class AppState: ObservableObject {
                     self.isLoadingSpeechAnalyzer = false
                     self.speechAnalyzerStatus = ""
                     self.preloadVAD()
+                    self.preloadLLM()
 
                     Logger.info("SpeechAnalyzer loaded. Process memory: \(String(format: "%.0f", BenchmarkUtilities.currentMemoryMB()))MB", subsystem: .model)
                 }
@@ -1720,8 +1754,8 @@ class AppState: ObservableObject {
         let processor = llmPostProcessor ?? LLMPostProcessor()
         llmPostProcessor = processor
 
-        // Skip if already loading or the correct model is loaded
-        if processor.isLoading { return }
+        // Skip if already loading or already loaded
+        if processor.isLoading || processor.isModelLoaded { return }
 
         let variant = selectedLLMModel
 
@@ -2373,16 +2407,30 @@ class AppState: ObservableObject {
 
                 // Wire incremental CoreData persistence for crash recovery
                 // and per-chunk LLM correction (runs during audio collection windows).
-                streamingTranscriber?.onChunkCompleted = { [weak self] chunkText, duration in
+                // Capture session/startDate at wiring time — activeMeetingSession is nilled
+                // inside stopInAppRecording()'s Task AFTER stopAsync() completes, so the tail
+                // chunk fires while activeMeetingSession is still set. The captured refs are a
+                // safety net in case of any ordering race between the async stop and the nil.
+                let capturedMeetingSession = activeMeetingSession
+                let capturedGeneration = activeMeetingSession?.chunkGeneration ?? 0
+                streamingTranscriber?.onChunkCompleted = { [weak self] chunk in
                     guard let self else { return }
-                    // Meeting mode — route chunk to session instead of history
-                    if let meetingSession = self.activeMeetingSession {
-                        let ts = self.meetingStartDate.map { Date().timeIntervalSince($0) } ?? duration
-                        Task { @MainActor in meetingSession.onNewChunk(text: chunkText, timestamp: ts) }
+                    // Meeting mode — route chunk to session instead of history.
+                    // Prefer the live property; fall back to the capture for the tail chunk
+                    // that arrives while stopInAppRecording()'s Task is still running.
+                    let meetingSession = self.activeMeetingSession ?? capturedMeetingSession
+                    if let meetingSession = meetingSession {
+                        Task { @MainActor in
+                            // Reject stale chunks from a previous recording that completed
+                            // before this session's startRecording() incremented chunkGeneration.
+                            guard meetingSession.chunkGeneration == capturedGeneration else { return }
+                            meetingSession.onNewChunk(text: chunk.text, start: chunk.start, end: chunk.end)
+                        }
                         return
                     }
                     guard let id = self.currentSessionID else { return }
-                    Task { await HistoryManager.shared.appendChunk(sessionID: id, chunkText: chunkText, totalDuration: duration) }
+                    let chunkText = chunk.text
+                    Task { await HistoryManager.shared.appendChunk(sessionID: id, chunkText: chunkText, totalDuration: chunk.recordedDuration) }
                     Task { @MainActor [weak self] in
                         guard let self, self.llmEnabled else { return }
                         let mode = AIModeManager.shared.postProcessMode
@@ -2399,6 +2447,14 @@ class AppState: ObservableObject {
                         if self?.liveTranscriptionEnabled == true {
                             self?.liveTranscription = text
                         }
+                    }
+                }
+
+                // Meeting mode: only deliver the live preview tail (not full accumulated text)
+                // to avoid echoing already-committed chunk text in the transcript bubble.
+                streamingTranscriber?.onPreviewTail = { [weak self] tail in
+                    Task { @MainActor in
+                        self?.activeMeetingSession?.livePreviewText = tail
                     }
                 }
 
@@ -2426,7 +2482,8 @@ class AppState: ObservableObject {
                 // Mute AFTER engine is running and aggregate device is stable.
                 // Muting during engine startup can break the AUHAL bus connection (kAudioUnitErr_NoConnection
                 // / -10877), causing the engine to produce zero-filled buffers silently.
-                if muteOtherAudioDuringRecording {
+                // Skip muting in meeting mode — meeting audio must keep playing for participants to be heard.
+                if muteOtherAudioDuringRecording && !isMeetingMode {
                     audioMuter?.muteSystemAudio()
                 }
 
@@ -2456,6 +2513,12 @@ class AppState: ObservableObject {
         startStopWatchdog()
 
         Task {
+            // Capture meeting-stop flag synchronously before any await.
+            // activeMeetingSession is still set at this point — it is nilled below after
+            // stopAsync() completes so the tail chunk can route to the meeting session.
+            let wasMeetingStop = isMeetingStopInFlight
+            isMeetingStopInFlight = false
+
             // WhisperKit consumes complete buffers rather than maintaining an RNNT
             // stream, so one ~100ms input-buffer interval is sufficient at release.
             // The default 200ms remains for Nemotron and the other streaming paths.
@@ -2464,7 +2527,8 @@ class AppState: ObservableObject {
                 : 200_000_000
             await audioRecorder?.stopRecording(drainNanoseconds: drainNanoseconds)
 
-            if muteOtherAudioDuringRecording {
+            // Meeting mode never muted audio, so nothing to unmute.
+            if muteOtherAudioDuringRecording && !wasMeetingStop {
                 audioMuter?.unmuteSystemAudio()
             }
 
@@ -2485,7 +2549,7 @@ class AppState: ObservableObject {
                     await stopTask.value
                 } ?? ""
 
-                if saveRecordings && !finalText.isEmpty && !isMeetingMode {
+                if saveRecordings && !finalText.isEmpty && !wasMeetingStop {
                     savedRecordId = saveRecordingFromTranscriber(transcriber, transcription: finalText)
                 }
             }
@@ -2493,10 +2557,15 @@ class AppState: ObservableObject {
             discardCurrentSession()
             streamingTranscriber = nil
 
+            // Tail transcription has now been delivered via onChunkCompleted — safe to nil meeting session.
+            if wasMeetingStop {
+                activeMeetingSession = nil
+            }
+
             // Bail out if watchdog already forced idle
             guard case .stopping = state else { return }
 
-            if !finalText.isEmpty && !isMeetingMode {
+            if !finalText.isEmpty && !wasMeetingStop {
                 // Per-chunk path: drain coordinator (tail already queued via onChunkCompleted).
                 // Transformative modes or no chunks collected → existing full-text path.
                 let mode = AIModeManager.shared.postProcessMode
@@ -2523,6 +2592,11 @@ class AppState: ObservableObject {
             HealthManager.shared.recordingStopped()
             isInAppMode = false
             liveTranscription = ""
+            // Clear meeting suppression only after state is idle so the HUD never appears
+            // during the .stopping/.transcribing transient states.
+            if wasMeetingStop {
+                meetingWindowIsVisible = false
+            }
         }
     }
 
@@ -2625,16 +2699,18 @@ class AppState: ObservableObject {
 
                 // Wire incremental CoreData persistence for crash recovery
                 // and per-chunk LLM correction (runs during audio collection windows).
-                streamingTranscriber?.onChunkCompleted = { [weak self] chunkText, duration in
+                streamingTranscriber?.onChunkCompleted = { [weak self] chunk in
                     guard let self else { return }
                     // Meeting mode — route chunk to session instead of history
                     if let meetingSession = self.activeMeetingSession {
-                        let ts = self.meetingStartDate.map { Date().timeIntervalSince($0) } ?? duration
-                        Task { @MainActor in meetingSession.onNewChunk(text: chunkText, timestamp: ts) }
+                        Task { @MainActor in
+                            meetingSession.onNewChunk(text: chunk.text, start: chunk.start, end: chunk.end)
+                        }
                         return
                     }
                     guard let id = self.currentSessionID else { return }
-                    Task { await HistoryManager.shared.appendChunk(sessionID: id, chunkText: chunkText, totalDuration: duration) }
+                    let chunkText = chunk.text
+                    Task { await HistoryManager.shared.appendChunk(sessionID: id, chunkText: chunkText, totalDuration: chunk.recordedDuration) }
                     Task { @MainActor [weak self] in
                         guard let self, self.llmEnabled else { return }
                         let mode = AIModeManager.shared.postProcessMode
@@ -2652,6 +2728,14 @@ class AppState: ObservableObject {
                         }
                     }
                 }
+
+                // Meeting mode: only deliver the live preview tail (not full accumulated text)
+                streamingTranscriber?.onPreviewTail = { [weak self] tail in
+                    Task { @MainActor in
+                        self?.activeMeetingSession?.livePreviewText = tail
+                    }
+                }
+
                 Logger.info("Streaming transcriber initialized (VAD: \(sileroVAD != nil ? "enabled" : "disabled"))", subsystem: .transcription)
 
                 audioRecorder?.onStreamingSamples = { [weak self] samples in
@@ -3319,8 +3403,12 @@ class AppState: ObservableObject {
         }
 
         activeMeetingSession = session
-        meetingStartDate = Date()
         meetingAudioFileURL = nil
+
+        // Suppress HUD before recording starts so it never flashes.
+        meetingWindowIsVisible = true
+        HistoryWindowManager.shared.showWindow()
+        NotificationCenter.default.post(name: .switchToMeetingStudioTab, object: nil)
 
         // Reuse in-app recording path (isInAppMode = true suppresses text injection)
         isInAppMode = true
@@ -3330,13 +3418,31 @@ class AppState: ObservableObject {
     func stopMeetingRecording() {
         guard isMeetingMode else { return }
 
+        // Do NOT clear meetingWindowIsVisible here — the OverlayPanel uses it to suppress the HUD,
+        // and we need that suppression to hold during the .stopping/.transcribing states.
+        // It is cleared inside stopInAppRecording()'s Task once state reaches .idle.
+
         // Save audio file URL before tearing down
         meetingAudioFileURL = audioRecorder?.sessionAudioURL.map { $0.lastPathComponent }
 
-        activeMeetingSession = nil
-        meetingStartDate = nil
-        isInAppMode = false
+        // NOTE: activeMeetingSession is NOT cleared here. The tail transcription fires
+        // asynchronously inside stopInAppRecording()'s Task (after transcriber.stopAsync()
+        // completes), and the onChunkCompleted closure routes via activeMeetingSession.
+        // Clearing it here would drop the last ~10s of content. It is nilled inside the
+        // stopInAppRecording Task after finalText is obtained.
+        isMeetingStopInFlight = true
+        // isInAppMode stays true so stopInAppRecording() takes the in-app path (not stopRecording())
+        // and avoids both LLM post-processing and text insertion into other apps.
 
         stopInAppRecording()
+    }
+
+    /// Stops whichever recording mode is active. Used by the HUD stop button.
+    func stopActiveRecording() {
+        if let session = activeMeetingSession {
+            Task { await session.stopRecording() }
+        } else {
+            stopRecording()
+        }
     }
 }

@@ -177,6 +177,12 @@ struct OverlayView: View {
 
     var body: some View {
         VStack(spacing: 8 * scale) {
+            #if !APP_STORE
+            if appState.showMeetingDetectedToast, let meetingApp = appState.detectedMeetingApp {
+                MeetingNotificationCard(app: meetingApp)
+            }
+            #endif
+
             if appState.showClipboardToast {
                 ClipboardToastIndicator(scale: scale)
             } else if appState.showFileTranscribingToast {
@@ -208,70 +214,156 @@ struct OverlayView: View {
                     )
                 }
 
-                // Main control bar — crossfades to hands-free toast when activated
-                ZStack {
-                    // Normal recording controls
-                    HStack(spacing: spacing) {
-                        PauseResumeButton(
-                            isPaused: $appState.isPaused,
-                            isRecording: appState.state.isRecording,
-                            scale: scale
-                        ) {
-                            appState.togglePause()
-                        }
-
-                        if let icon = appState.targetAppIcon {
-                            Image(nsImage: icon)
-                                .resizable()
-                                .frame(width: appIconSize, height: appIconSize)
-                                .clipShape(RoundedRectangle(cornerRadius: 4 * scale))
-                        }
-
-                        WaveformView(waveformState: appState.waveformState)
-                            .frame(width: waveformWidth, height: waveformHeight)
-
-                        if case .transcribing = appState.state {
-                            TranscribingIndicator(scale: scale)
-                        } else if case .rewriting = appState.state {
-                            TranscribingIndicator(scale: scale)
-                        } else {
-                            OutputAudioButton(
-                                isOutputMuted: $appState.isOutputAudioMuted,
+                // Main control bar — meeting fallback or normal dictation controls
+                if appState.isMeetingMode {
+                    // Shown when the meeting window is closed — lets user reopen or stop
+                    MeetingFallbackBar(appState: appState, scale: scale)
+                } else {
+                    // Normal recording controls — crossfades to hands-free toast when activated
+                    ZStack {
+                        HStack(spacing: spacing) {
+                            PauseResumeButton(
+                                isPaused: $appState.isPaused,
+                                isRecording: appState.state.isRecording,
                                 scale: scale
                             ) {
-                                appState.toggleOutputAudioMute()
+                                appState.togglePause()
+                            }
+
+                            if let icon = appState.targetAppIcon {
+                                Image(nsImage: icon)
+                                    .resizable()
+                                    .frame(width: appIconSize, height: appIconSize)
+                                    .clipShape(RoundedRectangle(cornerRadius: 4 * scale))
+                            }
+
+                            WaveformView(waveformState: appState.waveformState)
+                                .frame(width: waveformWidth, height: waveformHeight)
+
+                            if case .transcribing = appState.state {
+                                TranscribingIndicator(scale: scale)
+                            } else if case .rewriting = appState.state {
+                                TranscribingIndicator(scale: scale)
+                            } else {
+                                OutputAudioButton(
+                                    isOutputMuted: $appState.isOutputAudioMuted,
+                                    scale: scale
+                                ) {
+                                    appState.toggleOutputAudioMute()
+                                }
+                            }
+
+                            CloseButton(scale: scale, isHovered: $isCloseHovered) {
+                                appState.stopActiveRecording()
                             }
                         }
+                        .opacity(appState.showHandsFreeToast ? 0 : 1)
 
-                        CloseButton(scale: scale, isHovered: $isCloseHovered) {
-                            appState.stopRecording()
+                        // Hands-free toast (replaces controls for 3s)
+                        if appState.showHandsFreeToast {
+                            HandsFreeToastContent(scale: scale)
+                                .transition(.opacity)
                         }
                     }
-                    .opacity(appState.showHandsFreeToast ? 0 : 1)
-
-                    // Hands-free toast (replaces controls for 3s)
-                    if appState.showHandsFreeToast {
-                        HandsFreeToastContent(scale: scale)
-                            .transition(.opacity)
-                    }
+                    .padding(.horizontal, hPadding)
+                    .padding(.vertical, vPadding)
+                    .background(Capsule().fill(hudBackground))
+                    .overlay(
+                        Capsule()
+                            .stroke(appState.showHandsFreeToast ? blueAccent.opacity(0.2) : hudBorder, lineWidth: 1)
+                    )
+                    .shadow(color: appState.showHandsFreeToast ? blueAccent.opacity(0.1) : .clear, radius: 8, y: 2)
+                    .animation(.easeInOut(duration: 0.3), value: appState.showHandsFreeToast)
                 }
-                .padding(.horizontal, hPadding)
-                .padding(.vertical, vPadding)
-                .background(
-                    Capsule()
-                        .fill(hudBackground)
-                )
-                .overlay(
-                    Capsule()
-                        .stroke(appState.showHandsFreeToast ? blueAccent.opacity(0.2) : hudBorder, lineWidth: 1)
-                )
-                .shadow(color: appState.showHandsFreeToast ? blueAccent.opacity(0.1) : .clear, radius: 8, y: 2)
-                .animation(.easeInOut(duration: 0.3), value: appState.showHandsFreeToast)
             }
         }
         .padding(.top, 35 * scale)  // Space for expand/collapse tooltip
         .environment(\.overlayScale, scale)
         .background(Color.clear)
+    }
+}
+
+// MARK: - Meeting Fallback Bar
+
+/// Minimal HUD shown when a meeting is recording but the meeting window has been closed.
+/// Gives the user a clear way to reopen the window or stop the recording without exposing
+/// dictation-mode controls that don't apply to meetings.
+private struct MeetingFallbackBar: View {
+    @ObservedObject var appState: AppState
+    var scale: CGFloat
+
+    @State private var isStopHovered = false
+    @State private var isOpenHovered = false
+
+    private var hudBackground: Color { Color(hex: "14142B") }
+    private var hudBorder: Color { Color.white.opacity(0.06) }
+    private var hPadding: CGFloat { 16 * scale }
+    private var vPadding: CGFloat { 10 * scale }
+    private var spacing: CGFloat { 12 * scale }
+    private var buttonSize: CGFloat { 36 * scale }
+
+    var body: some View {
+        HStack(spacing: spacing) {
+            // Pulsing dot + label
+            HStack(spacing: 6 * scale) {
+                Circle()
+                    .fill(Color.red)
+                    .frame(width: 7 * scale, height: 7 * scale)
+                    .overlay(
+                        Circle()
+                            .stroke(Color.red.opacity(0.35), lineWidth: 3 * scale)
+                            .scaleEffect(1.6)
+                    )
+                    .animation(.easeInOut(duration: 0.9).repeatForever(autoreverses: true), value: appState.isMeetingMode)
+
+                Text("Meeting")
+                    .font(.system(size: 13 * scale, weight: .semibold, design: .rounded))
+                    .foregroundColor(.white)
+
+                if let elapsed = appState.activeMeetingSession?.elapsedDisplay {
+                    Text(elapsed)
+                        .font(.system(size: 12 * scale, weight: .medium).monospacedDigit())
+                        .foregroundColor(.white.opacity(0.5))
+                }
+            }
+
+            Spacer()
+
+            // Open window button
+            Button {
+                HistoryWindowManager.shared.showWindow()
+                NotificationCenter.default.post(name: .switchToMeetingStudioTab, object: nil)
+            } label: {
+                Image(systemName: "rectangle.on.rectangle")
+                    .font(.system(size: 13 * scale, weight: .medium))
+                    .foregroundColor(isOpenHovered ? .white : .white.opacity(0.7))
+                    .frame(width: buttonSize, height: buttonSize)
+                    .background(Color.white.opacity(isOpenHovered ? 0.12 : 0.07))
+                    .clipShape(Circle())
+            }
+            .buttonStyle(.plain)
+            .onHover { isOpenHovered = $0 }
+            .help("Open Meeting Window")
+
+            // Stop meeting button
+            Button {
+                appState.stopActiveRecording()
+            } label: {
+                Image(systemName: "xmark")
+                    .font(.system(size: 11 * scale, weight: .semibold))
+                    .foregroundColor(isStopHovered ? .white : Color.red.opacity(0.9))
+                    .frame(width: buttonSize, height: buttonSize)
+                    .background(Color.red.opacity(isStopHovered ? 0.25 : 0.12))
+                    .clipShape(Circle())
+            }
+            .buttonStyle(.plain)
+            .onHover { isStopHovered = $0 }
+            .help("Stop Meeting Recording")
+        }
+        .padding(.horizontal, hPadding)
+        .padding(.vertical, vPadding)
+        .background(Capsule().fill(hudBackground))
+        .overlay(Capsule().stroke(Color.red.opacity(0.18), lineWidth: 1))
     }
 }
 
