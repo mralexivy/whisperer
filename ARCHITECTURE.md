@@ -68,6 +68,225 @@ Live text appears during recording via two sources:
 - `TranscriptionTextView` (NSTextField via NSViewRepresentable) renders text for guaranteed RTL paragraph direction
 - `.id(recordingSessionID)` on LiveTranscriptionCard forces full SwiftUI state reset between recordings (including expand/collapse state)
 
+## Meeting Notes System
+
+### Overview
+
+Meeting Notes is a separate recording mode layered on top of the existing whisper pipeline. Key distinction from standard dictation: chunks go to `MeetingManager` (CoreData) instead of `HistoryManager`, and text injection is suppressed.
+
+### Component Chain
+
+```
+MeetingDetector (hardware events + fallback poll, watches mic/camera/known apps)
+    ↓ AppState.showMeetingNotification(app:)
+MeetingNotificationCard (toast) → user taps "Start Recording"
+    ↓ MeetingSession.startRecording(title:) → AppState.startMeetingRecording(session:)
+    ↓ startInAppRecording() (isInAppMode=true, text injection suppressed)
+    ↓ StreamingTranscriber.onChunkCompleted routed to MeetingSession.onNewChunk()
+    ↓ [segment flush rules: 30s audio-time cap, 1.2s silence gap, 2.5s idle, or on stop]
+MeetingManager.appendSegment() → CoreData (segmentsJSON blob)
+    ↓ MeetingSession.stopRecording() → moves audio file Sessions/ → Meetings/
+    ↓ MeetingManager.finalizeSession()
+MeetingAIService.generateOverview() + MeetingRAGEngine.index()
+    ↓
+Meeting Studio UI (MeetingStudioView, 3-column)
+```
+
+### Storage
+
+| What | Where | Format |
+|---|---|---|
+| Meeting metadata, segments, AI summary | CoreData `MeetingEntity` | JSON blobs in string columns |
+| Audio (intermediate) | `~/Library/Application Support/Whisperer/Sessions/<uuid>.m4a` | m4a |
+| Audio (final, after stop) | `…/Meetings/<uuid>.m4a` | m4a (moved by MeetingSession.stopRecording) |
+| Wax vector index | `…/Meetings/<uuid>.wax` | Wax binary format |
+| Chat history | `…/Meetings/<uuid>-chat.json` | JSON array of `MeetingChatMessage` |
+
+### MeetingDetector
+
+`@MainActor final class MeetingDetector` (singleton). Watches hardware signals (mic + camera) and running apps to detect meetings. Two-stage debounce: 800ms hardware callback → 500ms confirmation → `AppState.showMeetingNotification`. Also runs a 5-second fallback poll to catch browser meetings and Bluetooth mic quirks.
+
+**Detection mechanism:**
+- `CameraUsageMonitor` — CoreMediaIO `kCMIODevicePropertyDeviceIsRunningSomewhere` property listener.
+- `MicrophoneUsageMonitor` — CoreAudio `kAudioDevicePropertyDeviceIsRunningSomewhere` on all input devices.
+- Native app providers: Zoom, Teams, Webex, FaceTime (by bundle ID).
+- Browser detection (not in App Store build — `#if !APP_STORE`): reads window titles via AX API for Chrome, Safari, Arc, Firefox, Edge, Brave, Opera, Slack; matches Meet, Hangouts, Teams web, Zoom web, Webex, Whereby, Around, Slack Huddle patterns.
+
+**Confidence scoring:** mic+camera=0.60, camera-only=0.35, mic-only=0.30; bonuses for running (+0.15), frontmost (+0.15), recently activated (+0.10), browser window match (+0.30); penalty for known non-meeting apps (−0.60). Threshold: 0.45.
+
+**Suppression guards:**
+- Per-app refire cooldown: 30 minutes.
+- Suppressed while Whisperer itself is recording (`AppState.state != .idle`).
+- `meetingDetectionEnabled` UserDefaults key (defaults true).
+- User dismissing toast → `suppressedUntilHardwareIdle`; clears when hardware goes idle or the app quits.
+
+### MeetingSession
+
+`@MainActor ObservableObject`. Holds all ephemeral live-recording state. Lives in `MeetingStudioView` as a `@StateObject`; `AppState` references it via `activeMeetingSession`.
+
+**Published state:** `meetingID`, `segments`, `notes`, `isRecording`, `elapsedSeconds`, `livePreviewText` (gray tail from `onPreviewTail`), `currentSegmentText`, `currentSegmentStartTimestamp`.
+
+**Segment flushing rules** — all boundaries are placed on the **audio clock** (`TranscriptChunk.start`/`.end` = `samplesReceived / sampleRate`), never on wall-clock or `elapsedSeconds`, so transcript cards line up with the recorded `.m4a` during playback scrubbing:
+
+- **Silence-based**: a chunk whose `start` is ≥ `silenceSplitGap` (1.2s) after the previous chunk's `end` closes the current segment at that previous `end`. For VAD-segmented backends the chunk span is the exact voiced range, so this gap is genuine silence.
+- **Time-based**: `end - currentSegmentStartTimestamp` ≥ `maxSegmentDuration` (30s) → flush.
+- **Idle-based**: 2.5s after the last chunk with none arriving, flush at `lastChunkEndTimestamp`. The gap rule above only fires when the *next* chunk lands, so this is what closes a card during a long pause.
+- **Stop-based**: `stopRecording()` flushes remaining text (including `livePreviewText`) as the final segment.
+- **Post-hoc split**: `flushCurrentSegment()` runs the text through `MeetingSession.splitByDuration()`, which subdivides any span longer than 30s at sentence boundaries (word boundaries when unpunctuated), assigning each piece start/end proportionally to its character share.
+
+The split step is not redundant with the cap: chunk cadence is a property of the backend, not of the speech. whisper.cpp emits one chunk per voiced VAD segment, WhisperKit commits roughly every 6s, and **Nemotron returns the entire session as a single chunk at stop**. Arrival-driven rules alone leave that last case as one unreadable card.
+
+`onNewChunk(text:start:end:)` clamps to `max(0, start)` / `max(chunkStart, end)` — an out-of-order span would otherwise produce a card that runs backwards. When it fires with `isRecording == false` (the tail delivered while `stopInAppRecording()`'s Task is still running), it drains immediately via `drainTailChunk()`, deduping against the last committed segment with `VADSegmenter.deduplicateOverlap` since `stopRecording()` already committed the overlapping `livePreviewText`.
+
+**`chunkGeneration`** — integer incremented at every `startRecording()` call. The `onChunkCompleted` closure captures it and rejects any chunk whose generation doesn't match, preventing stale chunks from a previous session from leaking into the new one.
+
+**Audio file lifecycle:** `stopRecording()` moves the session audio file from `Whisperer/Sessions/<filename>` to `Whisperer/Meetings/<filename>` so `MeetingRecord.resolvedAudioURL` finds it, then calls `MeetingManager.finalizeSession()`.
+
+**AI trigger:** After stop, a detached Task calls `MeetingAIService.shared.generateTitle(segments:meetingID:currentTitle:)` then `generateOverview(segments:meetingID:)` (both skipped if the transcript is empty). `currentTitle` is read from `MeetingManager.shared.meetings` rather than the value passed to `startRecording()`, so a rename made during the recording is respected.
+
+### Chunk Routing in AppState
+
+`StreamingTranscriber.onChunkCompleted` delivers a `TranscriptChunk { text, start, end, recordedDuration }`. All five emit sites (whisper.cpp VAD chunk, WhisperKit eager commit, `transcribeTail()`, Nemotron single-blob, `appendTailTranscription()`) supply a real audio-time span derived from sample indices — `recordedDuration` alone is not enough to segment on.
+
+```swift
+// onChunkCompleted closure captures session + generation at wiring time
+if let meetingSession = activeMeetingSession ?? capturedMeetingSession {
+    guard meetingSession.chunkGeneration == capturedGeneration else { return }
+    meetingSession.onNewChunk(text: chunk.text, start: chunk.start, end: chunk.end)
+    return
+}
+// else: normal history path — HistoryManager.appendChunk(totalDuration: chunk.recordedDuration)
+```
+
+`activeMeetingSession` is nilled inside `stopInAppRecording()`'s async Task **after** `transcriber.stopAsync()` completes, so the tail chunk routes to the meeting session before teardown. The `capturedMeetingSession` safety net covers the window between nil-assignment and tail delivery.
+
+`isMeetingStopInFlight` flag prevents the tail chunk from being treated as a normal history chunk during the async stop.
+
+### Ask AI — RAG Pipeline
+
+```
+MeetingSegment[] (from CoreData)
+    ↓ MeetingRAGEngine.index()
+    chunk into ≤60s windows; last segment of each window prepended to next (boundary overlap)
+    ↓ Memory(at: uuid.wax, builtInEmbedding: .miniLM)
+    MiniLM CoreML (.mlmodelc bundled in Wax SPM) → 384-dim embeddings via ANE
+    ↓ memory.save(text, metadata: [start/end/speakers: String])
+                              ─── .wax on disk ───
+
+User question
+    ↓ MeetingRAGEngine.retrieve(question:meetingID:limit:8)
+    memory.search(question, options: .topK(8))   // hybrid BM25+HNSW
+    ↓ top-8 RAGChunk with timestamps + speakers
+    ↓ MeetingAIService.ask()
+    format: "[MM:SS] Speaker: text" per chunk
+    ↓ llmPostProcessor.process() (existing LLM, temperature=0.3, ≤512 tokens)
+    ↓ RAGAnswer { text, sources: [RAGChunk], usedRAG: Bool }
+    ↓ AskAIPane (source citations, scroll-to-timestamp)
+```
+
+### AI Title Generation
+
+`MeetingAIService.generateTitle(segments:meetingID:currentTitle:)` names a recording from its content. Runs **before** `generateOverview()` on both paths (`MeetingSession.stopRecording()` and the Overview tab's regenerate button) — it is a ~32-token generation, so the library row picks up a real name in a couple of seconds instead of waiting out the summary pass.
+
+- **Guarded by `isAutoGeneratedTitle()`** — only replaces titles the app produced: `Note <date>` / `Meeting <date>` prefixes, or a bare provider display name from `MeetingDetector` (Zoom, Microsoft Teams, Google Meet, …). Anything the user typed is left alone.
+- **Input is head+tail** (first 1600 + last 500 chars). The opening states the subject, the close usually states the conclusion; the middle rarely changes what to call it.
+- **`sanitizeTitle()`** takes the first non-empty line and strips the decorations small on-device models add (a `TITLE:` label, quotes, markdown, trailing punctuation), caps at 70 chars, and rejects output that is itself auto-title-shaped.
+- On success: `MeetingManager.updateTitle()` (updates CoreData + `MeetingListItem`) then posts `.meetingTitleDidGenerate`. `MeetingDetailView` caches the title in `@State editableTitle` and only re-reads it on meeting-ID change, so it **needs** that notification to refresh the header field.
+
+### AI Overview Generation
+
+`MeetingAIService.generateOverview(segments:meetingID:)` takes segments (not a flat string) and builds a **timestamped transcript** — `[95s] Speaker 1: text` per line. Without those markers the model has no timestamps to cite and fabricates the seconds fields in TOPIC/DECISION/OPEN.
+
+Two prompts, chosen by word count:
+
+| Kind | Trigger | Prompt | outputTokensHint | timeout |
+|---|---|---|---|---|
+| Note | < 60 words | `notePrompt` — OVERVIEW line only, 2-3 sentences | 200 | 30s |
+| Full | ≥ 60 words | `overviewPrompt` — 250-350 word OVERVIEW + conditional labels | 1200 | 120s |
+
+Both use temperature=0.15, repetitionPenalty=1.15, maxTokensCap=2048. Raw output is parsed by `MeetingOverviewParser.parse()`.
+
+**Prompt design notes** — the earlier "OVERVIEW: one paragraph (2-4 sentences)" instruction produced summaries that named a topic without saying what was said about it, and the "if this is a real meeting with multiple speakers" branch made the model invent decisions and action items for lectures and solo notes. The current prompt instead: (a) spends most of its length on OVERVIEW, demanding 250-350 words across 2-4 paragraphs with the specifics kept (names, numbers, definitions, examples) and banning "The speaker discusses…" openers; (b) states that DECISION / OPEN / NEXT / ACTION apply to real discussions and that omitting them is the correct answer for a monologue. **There is no diarization** — every segment is `Speaker 1` unless the user renames it — so speaker count cannot be used to classify the recording; the prompt makes the model decide from content instead.
+
+**`MeetingOverviewParser`** uses a custom line/pipe-delimited format (not JSON) — intentionally more robust against on-device LLM syntax errors and truncated output:
+```
+OVERVIEW: <text, may span multiple paragraphs>
+TOPIC: <text> | <seconds>
+DECISION: <label> | <text> | <seconds>
+OPEN: <question> | <seconds>
+NEXT: <text or "none">
+ACTION: <verb phrase> | <owner name> | <due date or "none">
+```
+
+The `OVERVIEW:` label appears once; every following line belongs to it until the next known label. Blank lines are kept as paragraph breaks and consecutive non-blank lines are joined with a space (`joinParagraphs`) — the model hard-wraps mid-sentence, so a raw newline join would leave ragged text in the card.
+
+`MeetingAISummary` has a lenient `init(from decoder:)` — all fields fall back to empty/nil on decode failure so partial summaries from truncated output are still usable.
+
+### Key Actors
+
+- **`MeetingRAGEngine`** (actor) — owns all Wax `Memory` handles, one per meeting UUID. Caches open handles in `openMemories: [UUID: Memory]`. `isIndexed()` is `nonisolated` (checks filesystem). RAG indexing is triggered both at `finalizeSession()` and during `loadMeetings()` for any persisted meeting without a `.wax` file.
+- **`MeetingChatStore`** (actor) — reads/writes `<uuid>-chat.json`. Each `append()` loads, appends, and writes atomically. Cleared by `MeetingManager.deleteMeeting`.
+- **`MeetingAIService`** (actor) — RAG retrieval + LLM call. Falls back to first 4000 chars of transcript when index is absent.
+- **`MeetingSession`** (@MainActor ObservableObject) — ephemeral live state (segments, notes, elapsed timer). Writes to CoreData via `MeetingManager` as chunks arrive.
+- **`MeetingManager`** (@MainActor ObservableObject singleton) — sole CoreData gateway for `MeetingEntity`. All writes use `HistoryDatabase.shared.newBackgroundContext()`. Crash-recovery via `loadInProgressSessions()`.
+
+### Wax Dependency
+
+- SPM: `https://github.com/christopherkarani/Wax.git` (≥ 0.1.8)
+- Targets linked: `Wax`, `WaxVectorSearchMiniLM`
+- MiniLM ships as a CoreML `.mlmodelc` bundle — no runtime download. Requires macOS 14. Runs on ANE/CPU.
+- `Memory` is an `actor`; all calls are `await`-ed inside `MeetingRAGEngine`.
+
+### Meeting Studio UI
+
+3-column layout in `MeetingStudioView`:
+
+| Column | Width | Component | Contents |
+|---|---|---|---|
+| Left | 260pt | `MeetingListPanel` | Library rows + live recording card (sonar animation, elapsed timer, stop button) |
+| Center | flexible | `MeetingDetailView` | Editable title, metadata, Transcript / Overview tabs |
+| Right | 420pt | `MeetingRightPanel` | Recording state: sonar animation; Stopped: `MeetingPlayerCard` + `MeetingAssistantPanel` |
+
+**`MeetingAssistantPanel`** — three-tab bottom section:
+- **Ask AI** — RAG Q&A with indexing status pill, thinking animation, source citation chips (tap → scroll to timestamp).
+- **Live Notes** — `MeetingNote` items (DECISION / RISK / IDEA) with inline editing; add-note bar during recording.
+- **Speakers** — word count and turn count per speaker with proportional bar chart.
+
+**`MeetingTranscriptView`** — groups segments into 5-minute chapter buckets. Shows live bubble during recording (`currentSegmentText` in white + `livePreviewText` in white 0.4 opacity as `AttributedString`). Syncs scroll to playhead position during playback. Receives `.meetingScrollToTimestamp` notification from `AskAIPane`.
+
+**`MeetingPlayerCard`** — wraps `MeetingAudioPlayer` (`AVAudioPlayer` with `enableRate=true`, 50ms timer tick). Renders 70-bar waveform from `WaveformGenerator`, draggable scrubber, speed picker (0.5–2×).
+
+**RTL in transcript:** `MeetingSegmentTextView` (NSViewRepresentable wrapping NSTextField) with `NSMutableParagraphStyle.baseWritingDirection = .rightToLeft`. RTL detection uses >30% RTL-letter ratio from first 150 chars (Hebrew 0x0590–0x05FF, Arabic 0x0600–0x06FF, Syriac 0x0700–0x074F, Arabic Presentation Forms).
+
+**Speaker color palette:** 8 colors by `speakerIndex % 8` — indigo (#5B6CF7), amber, emerald, pink, purple, cyan, red, lime. Used in segment rows, speaker headers, and playback active-segment indicator.
+
+### The Stop Transition
+
+Stopping a recording used to blank the transcript for as long as the AI pass took, then snap it back. Two independent causes, both fixed:
+
+**1. The live→persisted handoff had no overlap.** `MeetingDetailView.transcriptSegments` switched from `session.segments` to `detailVM.displayedSegments` the moment `isRecording` flipped, but `detailVM`'s copy was whatever was fetched when the (then empty) meeting was created. The reload wired to that same flag called `detailVM.load(meetingID:)`, which early-returns when `loadedMeetingID` is unchanged and `meeting != nil` — so nothing actually reloaded, and segments only reappeared when `.meetingOverviewDidGenerate` finally fired `refreshDetail()` tens of seconds later.
+
+The handoff now keeps rendering `session.segments` until `detailVM.allSegments.count >= session.segments.count` (compared against `allSegments`, not the page-capped `displayedSegments`), and `MeetingStudioView` calls `refreshDetail()` — which fetches before assigning and never shrinks the display window — on both `isRecording` and `session.segments.count`. The second trigger catches the tail chunk that lands after `stopRecording()` has already returned.
+
+**2. Nothing showed that work was still happening.** `MeetingProcessingPhase` (`.finalizing` → `.naming` → `.summarizing`) is published on `MeetingManager.processingPhases[UUID]` and driven from `MeetingSession.stopRecording()`: `.finalizing` is set the instant the LIVE badge goes away, then the detached AI Task advances it around `generateTitle` / `generateOverview` and clears it at the end (including on the empty-transcript early exit — otherwise the indicator would never stop).
+
+`MeetingProcessingBanner` renders it between the tab bar and the tab content: breathing gradient orb, phase label with `.contentTransition(.opacity)`, an indeterminate sweeping capsule (on-device LLM latency is too variable for a percentage to be honest), and three step dots keyed off the phase index for real progress. `MeetingLibraryRow` mirrors the phase as a pulsing dot plus a `shortLabel` pill so the left panel stays in sync.
+
+### Notification Names (meeting-specific)
+
+| Name | Posted by | Observed by |
+|---|---|---|
+| `.switchToMeetingStudioTab` | `AppState.startMeetingRecording`, `OverlayView`, toast tap | `HistoryWindowView` (tab switch) |
+| `.meetingOverviewDidGenerate` | `MeetingAIService.generateOverview` (success) | `MeetingDetailView` (toast), `MeetingOverviewView` (clear skeleton) |
+| `.meetingOverviewDidFail` | `MeetingAIService.generateOverview` (failure) | `MeetingOverviewView` (show error) |
+| `.meetingRAGIndexingCompleted` | `MeetingAIService.indexMeeting` (success) | `AskAIPane` (update status pill to "Indexed") |
+| `.meetingTitleDidGenerate` | `MeetingAIService.generateTitle` (success) | `MeetingDetailView` (refresh cached `editableTitle`) |
+| `.meetingScrollToTimestamp` | `AskAIPane` source chip tap | `MeetingTranscriptView` (scroll to segment) |
+
+### Scroll-to-Timestamp
+
+Source citation taps in `AskAIPane` post `.meetingScrollToTimestamp` with `chunk.startTimestamp` as `object: Double`. `MeetingTranscriptView` finds the last segment with `timestamp <= seconds + 2` and scrolls to it via `ScrollViewReader.scrollTo(segmentID, anchor: .top)`.
+
 ## RTL Support
 
 ### Why NSTextField, not SwiftUI Text
@@ -105,6 +324,59 @@ whisper.cpp automatically looks for `{model-name}-encoder.mlmodelc` next to the 
 - Main model (large-v3-turbo-q5) with Core ML encoder: **588ms** alone (vs 731ms GPU-only = 19% faster)
 - Both models on ANE: total memory **990MB** (vs 1023MB GPU-only)
 - Tiny detector on ANE: **31ms** detection (acceptable)
+
+## MCP Server
+
+Whisperer hosts a local [Model Context Protocol](https://modelcontextprotocol.io) server so AI tools (Claude Desktop, Cursor, etc.) can query meeting notes and transcription history without any cloud relay.
+
+### Architecture
+
+```
+AppDelegate.setupComponents()
+  └── WhispererMCPServer.shared (Swift actor, Whisperer/MCP/)
+        ├── NWListener  →  TCP port 8080 (default, user-configurable)
+        │     └── per-connection Task  →  HTTP/1.1 request loop
+        │           └── StatefulHTTPServerTransport.handleRequest()
+        ├── MDNSHostnameRegistrar  →  registers whisperer.local → 127.0.0.1 via dns_sd
+        │     (non-sandboxed builds only; goes through mDNSResponder, no root needed)
+        └── Session lifecycle loop (Task): creates Server + Transport,
+              awaits Server.waitUntilCompleted(), then recreates for next client
+
+MCP Tools (one JSON-RPC handler each):
+  tools/list    → MCPMeetingTools.toolDefinitions + MCPTranscriptionTools.toolDefinitions
+  tools/call    → dispatch by name:
+    list_meetings         → CoreData fetch of MeetingEntity, sorted by createdAt DESC
+    get_meeting           → single MeetingEntity by UUID (segments, AI summary, notes)
+    search_transcriptions → CoreData fetch of TranscriptionEntity with NSPredicate text+date filter
+    get_transcription     → single TranscriptionEntity by UUID
+
+Settings: SettingsTabView → "MCP Server" settingsCard → MCPSettingsView
+AppState:  mcpEnabled (Bool, UserDefaults), mcpPort (Int, UserDefaults), mcpServerRunning (Bool, runtime), mcpBonjourReady (Bool, runtime)
+URL:       http://whisperer.local:8080/mcp (non-sandboxed) / http://localhost:8080/mcp (App Store)
+```
+
+### Transport Layer
+
+`StatefulHTTPServerTransport` (from `modelcontextprotocol/swift-sdk`) is framework-agnostic — it does not bind to a port itself. `WhispererMCPServer` wraps it with a custom HTTP/1.1 server using `NWListener` (Network.framework):
+
+1. `NWListener` binds to the configured port once and lives for the app session.
+2. Each TCP connection spawns a Task that reads HTTP/1.1 requests (headers + body via Content-Length) and writes responses.
+3. `GET /mcp` → `HTTPResponse.stream` → headers sent, then SSE chunks forwarded as they arrive from the transport's `AsyncThrowingStream<Data>`.
+4. `POST /mcp` → JSON-RPC request forwarded to transport → response written and connection kept alive for next request.
+5. `DELETE /mcp` → terminates the session; `server.waitUntilCompleted()` returns; outer loop restarts with a fresh Server + Transport for the next client.
+
+### Tool Data Access
+
+Both tool modules read CoreData directly via `HistoryDatabase.shared.newBackgroundContext()` and `ctx.perform { }`. This avoids hopping to the main actor (and serializing through `MeetingManager`/`HistoryManager`) while keeping CoreData thread safety intact.
+
+### Pitfalls
+
+- **`Server` is a Swift actor** — `withMethodHandler` must be called with `await` from any other actor.
+- **`StatefulHTTPServerTransport` is stateful** — one session per instance. On `DELETE` or disconnect, recreate both `Server` and transport for the next connection.
+- **`OriginValidator.disabled`** — used instead of `.localhost()` because MCP clients (Claude Desktop, Cursor) connect programmatically without an `Origin` header; the localhost-only validator would reject them. DNS rebinding is not a real threat for a dictation app.
+- **NWListener outlives sessions** — only one listener is created; the session loop (Server + Transport) recreates per-client, not per-connection.
+- **`MDNSHostnameRegistrar` requires `DNSServiceCreateConnection`** — the `connectionRef` must remain alive while the server is running; `DNSServiceRefDeallocate` in `unregister()` removes the A record. `kDNSServiceFlagsUnique` means if another process already claimed `whisperer.local`, registration fails silently and the UI falls back to `localhost`. Entire class is `#if !APP_STORE`.
+- **dns_sd is part of libSystem** — no separate framework to link. `#include <dns_sd.h>` in the bridging header is all that's needed.
 
 ## Key Design Decisions
 
@@ -203,6 +475,9 @@ WhispererApp
               ├── AudioMuter (owned, optional)
               ├── SoundPlayer (owned, optional)
               └── AudioDeviceManager.shared (shared singleton)
+        └── WhispererMCPServer.shared (Swift actor, started by AppDelegate)
+              ├── NWListener (TCP server, lives for app session)
+              └── StatefulHTTPServerTransport + Server (recreated per MCP client session)
 ```
 
 **Rule**: AppState holds service references. Services NEVER hold AppState references. Services communicate back via closures (`onStreamingSamples`, `onTranscription`).

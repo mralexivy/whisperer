@@ -7,4 +7,6 @@ Domain folders are created on demand as insights emerge. Each folder contains:
 
 ## Domains
 
-_(none yet — folders will appear here as insights are captured)_
+- [ui/](ui/knowledge.md) — SwiftUI layout gotchas, AppKit (`NSViewRepresentable`) interop
+- [transcription/](transcription/knowledge.md) — backend chunk cadence, audio-clock timestamps, silence detection ([rules](transcription/rules.md))
+- [llm/](llm/knowledge.md) — on-device LLM prompting: output budgets, summary length, fabrication under conditional formats
