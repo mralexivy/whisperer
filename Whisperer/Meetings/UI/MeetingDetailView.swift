@@ -11,12 +11,15 @@ struct MeetingDetailView: View {
     @ObservedObject var detailVM: MeetingDetailViewModel
     @ObservedObject var session: MeetingSession
     @ObservedObject private var manager = MeetingManager.shared
+    @ObservedObject private var refiner = MeetingTranscriptRefiner.shared
     let playheadSeconds: Double
 
     @State private var selectedTab: DetailTab = .transcript
     @State private var searchQuery = ""
     @State private var editableTitle: String = ""
     @State private var showOverviewReadyToast = false
+    /// Render the pre-LLM ASR text. View-level only — nothing is written back.
+    @State private var showOriginal = false
 
     // Convenience shorthand — nil while loading
     private var meeting: MeetingRecord? { detailVM.meeting }
@@ -29,6 +32,10 @@ struct MeetingDetailView: View {
     // CoreData round-trip lands. The session deliberately keeps meetingID and segments after
     // stop, so keep rendering them until detailVM has caught up.
     private var transcriptSegments: [MeetingSegment] {
+        applyOriginalToggle(liveOrPersistedSegments)
+    }
+
+    private var liveOrPersistedSegments: [MeetingSegment] {
         guard session.meetingID == meeting?.id, !session.segments.isEmpty else {
             return detailVM.displayedSegments
         }
@@ -40,8 +47,37 @@ struct MeetingDetailView: View {
             : session.segments
     }
 
+    /// Substitute the stored raw ASR text at render time. Cheaper and safer than keeping two
+    /// arrays around: the polished text stays the persisted truth, this is only a view.
+    private func applyOriginalToggle(_ segments: [MeetingSegment]) -> [MeetingSegment] {
+        guard showOriginal else { return segments }
+        return segments.map { seg in
+            guard let raw = seg.rawText else { return seg }
+            var copy = seg
+            copy.text = raw
+            return copy
+        }
+    }
+
+    private var hasPolishedSegments: Bool {
+        liveOrPersistedSegments.contains { $0.isPolished }
+    }
+
+    /// The manual re-transcribe action is offered only when there is something left to correct,
+    /// the recording is still on disk, and no run is already in flight for this meeting.
+    private var canPolishManually: Bool {
+        guard let id = meeting?.id, !session.isRecording else { return false }
+        guard refiner.activeMeetingID == nil, manager.processingPhase(for: id) == nil else { return false }
+        return MeetingTranscriptRefiner.shared.shouldRun(for: detailVM.allSegments,
+                                                         audioURL: meeting?.resolvedAudioURL)
+    }
+
     private var processingPhase: MeetingProcessingPhase? {
         manager.processingPhase(for: meeting?.id)
+    }
+
+    private var processingNotice: String? {
+        manager.processingNotice(for: meeting?.id)
     }
 
     var body: some View {
@@ -52,8 +88,13 @@ struct MeetingDetailView: View {
                 meetingHeader
                 tabBar
                 if let phase = processingPhase {
-                    MeetingProcessingBanner(phase: phase)
-                        .transition(.move(edge: .top).combined(with: .opacity))
+                    MeetingProcessingBanner(
+                        phase: phase,
+                        // Only the polish pass counts anything, and only for its own meeting.
+                        progress: refiner.activeMeetingID == meeting?.id ? refiner.progress : nil,
+                        notice: processingNotice
+                    )
+                    .transition(.move(edge: .top).combined(with: .opacity))
                 }
                 tabContent
             }
@@ -65,12 +106,24 @@ struct MeetingDetailView: View {
             editableTitle = meeting?.title ?? ""
             selectedTab = .transcript
             searchQuery = ""
+            showOriginal = false
         }
         .onReceive(NotificationCenter.default.publisher(for: .meetingTitleDidGenerate)) { notif in
             guard let id = notif.object as? UUID, id == meeting?.id,
                   let title = notif.userInfo?["title"] as? String else { return }
             editableTitle = title
             detailVM.updateTitleInMemory(title)
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .meetingSegmentsDidRefine)) { notif in
+            guard let id = notif.object as? UUID, id == meeting?.id,
+                  let refined = notif.userInfo?["segments"] as? [MeetingSegment] else { return }
+            // The polish pass fires this exactly once, at the end of a run. Both sides of the
+            // live→persisted handoff have to be updated or `transcriptSegments` keeps serving
+            // whichever one was missed.
+            withAnimation(.easeInOut(duration: 0.3)) {
+                detailVM.applyRefinedSegments(refined)
+                session.applyRefined(refined, meetingID: id)
+            }
         }
         .onReceive(NotificationCenter.default.publisher(for: .meetingOverviewDidGenerate)) { notif in
             guard let id = notif.object as? UUID, id == meeting?.id,
@@ -336,6 +389,78 @@ struct MeetingDetailView: View {
         .clipShape(RoundedRectangle(cornerRadius: 6))
     }
 
+    /// Search + the polish controls. The controls only exist once there is something to
+    /// control: no toggle before a run has produced raw/polished pairs, no manual action
+    /// while one is running or while there is nothing left to clean.
+    private var transcriptToolbar: some View {
+        HStack(spacing: 8) {
+            searchField
+                .frame(maxWidth: 280)
+
+            Spacer(minLength: 8)
+
+            if hasPolishedSegments {
+                polishedToggle
+                    .transition(.opacity.combined(with: .scale(scale: 0.9)))
+            }
+            if canPolishManually {
+                cleanUpButton
+                    .transition(.opacity.combined(with: .scale(scale: 0.9)))
+            }
+        }
+        .animation(.easeInOut(duration: 0.2), value: hasPolishedSegments)
+        .animation(.easeInOut(duration: 0.2), value: canPolishManually)
+    }
+
+    private var polishedToggle: some View {
+        HStack(spacing: 2) {
+            polishedToggleOption("Polished", selected: !showOriginal) { showOriginal = false }
+            polishedToggleOption("Original", selected: showOriginal) { showOriginal = true }
+        }
+        .padding(2)
+        .background(Color.white.opacity(0.06))
+        .clipShape(Capsule())
+        .help("Switch between the AI-cleaned transcript and the raw transcription")
+    }
+
+    private func polishedToggleOption(_ label: String, selected: Bool, action: @escaping () -> Void) -> some View {
+        Button(action: {
+            withAnimation(.easeInOut(duration: 0.18)) { action() }
+        }) {
+            Text(label)
+                .font(.system(size: 11, weight: selected ? .semibold : .medium))
+                .foregroundColor(selected ? .white : .white.opacity(0.45))
+                .padding(.horizontal, 10)
+                .padding(.vertical, 4)
+                .background(
+                    Capsule().fill(selected ? Color(hex: "5B6CF7") : Color.clear)
+                )
+        }
+        .buttonStyle(.plain)
+    }
+
+    private var cleanUpButton: some View {
+        Button {
+            guard let id = meeting?.id else { return }
+            MeetingTranscriptRefiner.shared.start(meetingID: id, segments: detailVM.allSegments,
+                                                  audioURL: meeting?.resolvedAudioURL)
+        } label: {
+            HStack(spacing: 5) {
+                Image(systemName: "waveform.badge.magnifyingglass")
+                    .font(.system(size: 10, weight: .semibold))
+                Text("Re-transcribe")
+                    .font(.system(size: 11, weight: .medium))
+            }
+            .foregroundColor(Color(hex: "5B6CF7"))
+            .padding(.horizontal, 10)
+            .padding(.vertical, 5)
+            .background(Color(hex: "5B6CF7").opacity(0.12))
+            .clipShape(Capsule())
+        }
+        .buttonStyle(.plain)
+        .help("Re-transcribe the recording with a more accurate model to fix misheard words and punctuation")
+    }
+
     // MARK: - Content
 
     @ViewBuilder
@@ -343,7 +468,7 @@ struct MeetingDetailView: View {
         switch selectedTab {
         case .transcript:
             VStack(spacing: 0) {
-                searchField
+                transcriptToolbar
                     .padding(.horizontal, 16)
                     .padding(.vertical, 10)
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -378,14 +503,22 @@ struct MeetingDetailView: View {
     // MARK: - Actions
 
     private func handleSpeakerRename(segID: UUID, newName: String) async {
-        guard let meetingID = meeting?.id,
-              let seg = detailVM.allSegments.first(where: { $0.id == segID }) else { return }
-        var updated = seg
-        updated.speakerName = newName
-        detailVM.updateSegmentInMemory(updated)
-        await MeetingManager.shared.updateSegment(meetingID: meetingID, segment: updated)
-        if session.isRecording && session.meetingID == meeting?.id {
-            session.updateSpeaker(segmentID: segID, newName: newName)
+        guard let meetingID = meeting?.id else { return }
+        // Live segments live on the session until CoreData catches up, so the segment being
+        // renamed may exist in either collection.
+        let source = detailVM.allSegments.first(where: { $0.id == segID })
+            ?? session.segments.first(where: { $0.id == segID })
+        guard let seg = source else { return }
+        let oldName = seg.speakerName
+        let trimmed = newName.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty, trimmed != oldName else { return }
+
+        // Rename every segment this speaker owns — a per-card rename would leave the same
+        // person under two names in one transcript.
+        detailVM.renameSpeakerInMemory(from: oldName, to: trimmed)
+        await MeetingManager.shared.renameSpeaker(meetingID: meetingID, oldName: oldName, newName: trimmed)
+        if session.meetingID == meetingID {
+            session.updateSpeaker(segmentID: segID, newName: trimmed)
         }
     }
 

@@ -165,6 +165,7 @@ class MeetingSession: ObservableObject {
         }
 
         let willPolish = MeetingTranscriptRefiner.shared.shouldRun(for: segments, audioURL: audioURL)
+        let capturedAudioURL = audioURL
 
         await MeetingManager.shared.finalizeSession(
             meetingID: id,
@@ -172,9 +173,8 @@ class MeetingSession: ObservableObject {
             audioFileURL: audioFileName
         )
 
-        // Trigger AI naming + polish + overview in background. Title first: it is a short
-        // generation, so the library row picks up a real name in a couple of
-        // seconds instead of waiting out the full summary pass.
+        // Trigger AI cleanup + naming + overview in background.
+        // Order: cleanup first so title and summary are generated from corrected text.
         let finalSegments = segments
         let transcript = finalSegments.map { $0.text }.joined(separator: " ")
         let currentTitle = MeetingManager.shared.meetings.first(where: { $0.id == id })?.title ?? ""
@@ -182,23 +182,45 @@ class MeetingSession: ObservableObject {
         if !transcript.isEmpty {
             // Inherits @MainActor, so the phase updates land on the main actor between awaits.
             Task { [weak self] in
-                MeetingManager.shared.setProcessing(.naming, for: id)
-                await MeetingAIService.shared.generateTitle(
-                    segments: finalSegments, meetingID: id, currentTitle: currentTitle
-                )
-
-                // Re-transcribe between naming and summarizing: the overview and the Wax index
-                // are both built from whatever this returns, so they see the corrected text.
+                // 1. Cleanup (re-transcription)
+                MeetingManager.shared.setProcessing(.polishing, for: id)
                 var segmentsForSummary = finalSegments
                 if willPolish {
-                    MeetingManager.shared.setProcessing(.polishing, for: id)
-                    segmentsForSummary = await MeetingTranscriptRefiner.shared.run(
-                        meetingID: id, segments: finalSegments
-                    )
-                    self?.applyRefined(segmentsForSummary, meetingID: id)
+                    if let reason = MeetingTranscriptRefiner.shared.blockingReason(for: id, audioURL: capturedAudioURL) {
+                        Logger.warning("Meeting session stop: cleanup skipped — \(reason)", subsystem: .transcription)
+                        MeetingManager.shared.setProcessing(.polishing, notice: "Cleanup skipped — model not downloaded", for: id)
+                    } else {
+                        segmentsForSummary = await MeetingTranscriptRefiner.shared.run(
+                            meetingID: id, segments: finalSegments
+                        )
+                        self?.applyRefined(segmentsForSummary, meetingID: id)
+                    }
                 }
 
-                MeetingManager.shared.setProcessing(.summarizing, for: id)
+                // 2. Title: a short generation — the library row picks up a real name in a
+                // couple of seconds instead of waiting out the full summary pass.
+                MeetingManager.shared.setProcessing(.naming, for: id)
+                await MeetingAIService.shared.generateTitle(
+                    segments: segmentsForSummary, meetingID: id, currentTitle: currentTitle
+                )
+
+                // 3. Overview — check intelligence engine readiness to surface a notice when
+                // the model is not available, so the user knows why no summary appears.
+                let intelligenceNotice: String?
+                #if canImport(FluidAudio)
+                switch MeetingEngines.shared.readiness[.intelligence] {
+                case .needsDownload:
+                    intelligenceNotice = "Summary skipped — meeting intelligence not downloaded"
+                case .unavailable(let msg):
+                    intelligenceNotice = "Summary skipped — \(msg)"
+                default:
+                    intelligenceNotice = nil
+                }
+                #else
+                intelligenceNotice = nil
+                #endif
+
+                MeetingManager.shared.setProcessing(.summarizing, notice: intelligenceNotice, for: id)
                 await MeetingAIService.shared.generateOverview(segments: segmentsForSummary, meetingID: id)
                 MeetingManager.shared.setProcessing(nil, for: id)
             }

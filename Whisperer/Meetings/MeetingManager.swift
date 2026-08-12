@@ -17,15 +17,15 @@ import Combine
 /// rather than a frozen screen.
 enum MeetingProcessingPhase: Equatable {
     case finalizing
-    case naming
     case polishing
+    case naming
     case summarizing
 
     var label: String {
         switch self {
         case .finalizing:  return "Finalizing transcript"
-        case .naming:      return "Naming your note"
         case .polishing:   return "Re-transcribing audio"
+        case .naming:      return "Naming your note"
         case .summarizing: return "Writing the overview"
         }
     }
@@ -34,8 +34,8 @@ enum MeetingProcessingPhase: Equatable {
     var shortLabel: String {
         switch self {
         case .finalizing:  return "Finalizing"
-        case .naming:      return "Naming"
         case .polishing:   return "Re-transcribing"
+        case .naming:      return "Naming"
         case .summarizing: return "Summarizing"
         }
     }
@@ -54,17 +54,32 @@ class MeetingManager: ObservableObject {
     /// Meetings with a post-recording AI pass still running, keyed by meeting ID.
     @Published private(set) var processingPhases: [UUID: MeetingProcessingPhase] = [:]
 
-    func setProcessing(_ phase: MeetingProcessingPhase?, for meetingID: UUID) {
+    /// Optional short notice shown below the phase label in the processing banner.
+    /// Non-nil when a stage was skipped or a condition worth surfacing to the user applies.
+    @Published private(set) var processingNotices: [UUID: String] = [:]
+
+    func setProcessing(_ phase: MeetingProcessingPhase?, notice: String? = nil, for meetingID: UUID) {
         if let phase {
             processingPhases[meetingID] = phase
+            if let notice {
+                processingNotices[meetingID] = notice
+            } else {
+                processingNotices.removeValue(forKey: meetingID)
+            }
         } else {
             processingPhases.removeValue(forKey: meetingID)
+            processingNotices.removeValue(forKey: meetingID)
         }
     }
 
     func processingPhase(for meetingID: UUID?) -> MeetingProcessingPhase? {
         guard let meetingID else { return nil }
         return processingPhases[meetingID]
+    }
+
+    func processingNotice(for meetingID: UUID?) -> String? {
+        guard let meetingID else { return nil }
+        return processingNotices[meetingID]
     }
 
     // MARK: - Pagination
