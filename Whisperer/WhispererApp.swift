@@ -1712,12 +1712,81 @@ struct ModelsTabView: View {
 
 // MARK: - Settings Tab
 
+// MARK: - Compact audio library
+
+/// Disk-usage row in the Audio settings card.
+///
+/// Pre-Opus `.wav` / `.caf` recordings keep playing untouched, so nothing here is a repair —
+/// it only reclaims space, which is why it is a button and not something that happens on
+/// launch. It is also the only place the library's real footprint is shown.
+private struct AudioLibraryCompactRow: View {
+    @ObservedObject private var compactor = AudioLibraryCompactor.shared
+
+    var body: some View {
+        HStack {
+            VStack(alignment: .leading, spacing: 3) {
+                Text("Compact audio library")
+                    .font(.system(size: 13, weight: .medium))
+                    .foregroundColor(MBColors.textPrimary)
+                Text(detail)
+                    .font(.system(size: 11))
+                    .foregroundColor(MBColors.textSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            Spacer()
+
+            if compactor.isRunning {
+                ProgressView()
+                    .scaleEffect(0.5)
+            } else {
+                Button(action: { Task { await compactor.compact() } }) {
+                    Text("Compact")
+                        .font(.system(size: 10, weight: .semibold))
+                        .foregroundColor(.white)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 3)
+                        .background(Capsule().fill(MBColors.accent))
+                }
+                .buttonStyle(.plain)
+                .disabled(!canCompact)
+                .opacity(canCompact ? 1 : 0.4)
+            }
+        }
+        .task { await compactor.refreshSurvey() }
+    }
+
+    private var canCompact: Bool {
+        !compactor.isSurveying && (compactor.survey?.legacyCount ?? 0) > 0
+    }
+
+    /// One line, in priority order: what is happening now, then what the last run did, then
+    /// what a run would achieve.
+    private var detail: String {
+        if compactor.isRunning {
+            return "Converting \(min(compactor.completed + 1, compactor.total)) of \(compactor.total)…"
+        }
+        if let message = compactor.lastResultMessage {
+            return message
+        }
+        guard let survey = compactor.survey else {
+            return compactor.isSurveying ? "Measuring…" : "Recordings, meetings and session audio"
+        }
+        let total = AudioLibraryCompactor.format(survey.totalBytes)
+        guard survey.legacyCount > 0 else {
+            return "\(total) of audio · already compact"
+        }
+        let plural = survey.legacyCount == 1 ? "" : "s"
+        let saving = AudioLibraryCompactor.format(survey.estimatedSaving)
+        return "\(total) of audio · \(survey.legacyCount) older file\(plural) can free about \(saving)"
+    }
+}
+
 struct SettingsTabView: View {
     @Binding var scrollTarget: SettingsScrollTarget?
     @ObservedObject var appState = AppState.shared
     @AppStorage("meetingDetectionEnabled") private var meetingDetectionEnabled: Bool = true
     @AppStorage("meetingPolishEnabled") private var meetingPolishEnabled: Bool = true
-    @AppStorage("meetingRefineModel") private var meetingRefineModel: String = WhisperModel.largeTurbo.rawValue
 
     var body: some View {
         ScrollViewReader { proxy in
@@ -1879,6 +1948,12 @@ struct SettingsTabView: View {
                             .frame(width: 110)
                             .tint(MBColors.accent)
                         }
+
+                        Rectangle()
+                            .fill(Color.white.opacity(0.04))
+                            .frame(height: 1)
+
+                        AudioLibraryCompactRow()
                     }
                 }
 
@@ -2065,10 +2140,10 @@ struct SettingsTabView: View {
 
                     HStack {
                         VStack(alignment: .leading, spacing: 3) {
-                            Text("Re-transcribe after recording")
+                            Text("Re-transcribe with Whisperer V3")
                                 .font(.system(size: 13, weight: .medium))
                                 .foregroundColor(MBColors.textPrimary)
-                            Text("Run the recording through a more accurate model to fix misheard words and punctuation.")
+                            Text("Re-runs the recording through Whisperer V3 after the meeting to fix misheard words and punctuation.")
                                 .font(.system(size: 11))
                                 .foregroundColor(MBColors.textSecondary)
                                 .fixedSize(horizontal: false, vertical: true)
@@ -2078,10 +2153,6 @@ struct SettingsTabView: View {
                             .toggleStyle(.switch)
                             .tint(MBColors.accent)
                             .labelsHidden()
-                    }
-
-                    if meetingPolishEnabled {
-                        refineModelPicker
                     }
                 }
 
@@ -2124,39 +2195,6 @@ struct SettingsTabView: View {
         }
     }
 
-    #if !APP_STORE
-    /// Models worth a second pass. Tiny/base/small are excluded on purpose: re-transcribing with
-    /// a model no better than the live one costs minutes and changes nothing.
-    private var refineModelCandidates: [WhisperModel] {
-        [.largeTurbo, .largeV3, .largeV3Q5, .largeTurboQ5, .distilLargeV3, .ivritLargeTurbo, .medium]
-    }
-
-    private var refineModelPicker: some View {
-        let selected = WhisperModel(rawValue: meetingRefineModel) ?? .largeTurbo
-        let downloaded = ModelDownloader.shared.isModelDownloaded(selected)
-        return VStack(alignment: .leading, spacing: 4) {
-            HStack {
-                Text("Model")
-                    .font(.system(size: 12))
-                    .foregroundColor(MBColors.textSecondary)
-                Spacer()
-                Picker("", selection: $meetingRefineModel) {
-                    ForEach(refineModelCandidates) { model in
-                        Text(model.displayName).tag(model.rawValue)
-                    }
-                }
-                .labelsHidden()
-                .frame(width: 170)
-            }
-            if !downloaded {
-                Text("\(selected.displayName) is not downloaded — get it in the Models tab, or the pass is skipped.")
-                    .font(.system(size: 11))
-                    .foregroundColor(.orange)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-        }
-    }
-    #endif
 
     private func settingsCard<Content: View>(title: String, icon: String, color: Color, @ViewBuilder content: () -> Content) -> some View {
         VStack(alignment: .leading, spacing: 12) {
