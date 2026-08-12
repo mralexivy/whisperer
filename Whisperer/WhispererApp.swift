@@ -1787,6 +1787,9 @@ struct SettingsTabView: View {
     @ObservedObject var appState = AppState.shared
     @AppStorage("meetingDetectionEnabled") private var meetingDetectionEnabled: Bool = true
     @AppStorage("meetingPolishEnabled") private var meetingPolishEnabled: Bool = true
+    #if canImport(FluidAudio)
+    @ObservedObject private var engines = MeetingEngines.shared
+    #endif
 
     var body: some View {
         ScrollViewReader { proxy in
@@ -2154,6 +2157,39 @@ struct SettingsTabView: View {
                             .tint(MBColors.accent)
                             .labelsHidden()
                     }
+
+                    #if canImport(FluidAudio)
+                    Divider()
+                        .background(MBColors.border)
+                        .padding(.vertical, 2)
+
+                    // Read-only engine status list
+                    ForEach(MeetingEngine.allCases, id: \.self) { engine in
+                        HStack {
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(engine.roleLabel)
+                                    .font(.system(size: 13, weight: .semibold))
+                                    .foregroundColor(MBColors.textPrimary)
+                                Text(engine.downloadSizeLabel)
+                                    .font(.caption)
+                                    .foregroundColor(MBColors.textSecondary)
+                            }
+                            Spacer()
+                            readinessIndicator(for: engines.readiness[engine] ?? .needsDownload(""))
+                        }
+                    }
+
+                    // "Prepare now" button when anything is missing
+                    if engines.needsPreparation {
+                        Button("Prepare Now") {
+                            // Open Meeting Studio which shows MeetingPrepView when needsPreparation
+                            NotificationCenter.default.post(name: .switchToMeetingStudioTab, object: nil)
+                        }
+                        .buttonStyle(.plain)
+                        .foregroundColor(Color(hex: "5B6CF7"))
+                        .font(.system(size: 13, weight: .medium))
+                    }
+                    #endif
                 }
 
                 // AI Post-Processing
@@ -2227,6 +2263,32 @@ struct SettingsTabView: View {
                 )
         )
     }
+
+    #if canImport(FluidAudio)
+    @ViewBuilder
+    private func readinessIndicator(for state: EngineReadiness) -> some View {
+        switch state {
+        case .ready:
+            Image(systemName: "checkmark.circle.fill")
+                .foregroundColor(MBColors.accent)
+                .font(.system(size: 16))
+        case .downloading(let p):
+            ProgressView(value: p)
+                .progressViewStyle(.linear)
+                .frame(width: 60)
+                .tint(MBColors.accent)
+        case .preparing:
+            ProgressView()
+                .progressViewStyle(.circular)
+                .scaleEffect(0.6)
+                .frame(width: 20, height: 20)
+        default:
+            Image(systemName: "exclamationmark.circle")
+                .foregroundColor(MBColors.textSecondary)
+                .font(.system(size: 16))
+        }
+    }
+    #endif
 }
 
 // MARK: - Model Menu Item

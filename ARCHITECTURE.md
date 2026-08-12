@@ -22,7 +22,7 @@ Microphone → AudioRecorder → StreamingTranscriber → WhisperBridge → Corr
             Waveform UI          Live Preview
 ```
 
-- **AudioRecorder** — `AVAudioEngine` capture, converts to 16kHz mono Float32. Streams samples via `onStreamingSamples` callback.
+- **AudioRecorder** — `AVAudioEngine` capture, converts to 16kHz mono Float32. Streams samples via `onStreamingSamples` callback, and in parallel encodes them to Ogg Opus on `sessionWriteQueue` (see [Audio Storage](#audio-storage--one-format-and-something-that-deletes)).
 - **StreamingTranscriber** — Buffers audio, processes 2s chunks with 0.5s overlap (single-segment mode for speed). Context carrying + deduplication. Tail-only final pass on stop (only transcribes unprocessed audio after the last chunk, not the entire recording).
 - **WhisperBridge** — Swift wrapper around whisper.cpp C library. Manages `whisper_context` lifecycle, Metal GPU acceleration. Thread-safe with SafeLock. Uses deterministic greedy decoding (temperature=0, no fallback ladder) and performance-core-aware thread count.
 - **SileroVAD** — Optional Silero voice activity detection (~2MB model, CPU-only to avoid GPU contention). Provides both full segment detection and lightweight `hasSpeech()` probability check.
@@ -77,6 +77,9 @@ Meeting Notes is a separate recording mode layered on top of the existing whispe
 ### Component Chain
 
 ```
+MeetingEngines.shared (preparation layer — downloads + warms all four engines)
+    ↓ MeetingPrepView shown when needsPreparation (readiness-driven, not a "seen it" flag)
+
 MeetingDetector (hardware events + fallback poll, watches mic/camera/known apps)
     ↓ AppState.showMeetingNotification(app:)
 MeetingNotificationCard (toast) → user taps "Start Recording"
@@ -87,19 +90,54 @@ MeetingNotificationCard (toast) → user taps "Start Recording"
 MeetingManager.appendSegment() → CoreData (segmentsJSON blob)
     ↓ MeetingSession.stopRecording() → moves audio file Sessions/ → Meetings/
     ↓ MeetingManager.finalizeSession()
-MeetingAIService.generateOverview() + MeetingRAGEngine.index()
+    ↓ MeetingTranscriptRefiner (cleanup — re-transcribes with Whisperer V3 for accuracy)
+    ↓ MeetingAIService.generateTitle()
+    ↓ MeetingAIService.generateOverview()
     ↓
 Meeting Studio UI (MeetingStudioView, 3-column)
 ```
+
+### Meeting Engine Set
+
+`@MainActor final class MeetingEngines: ObservableObject` (singleton at `MeetingEngines.shared`) owns
+the download and warm lifecycle for the four model engines meeting features depend on:
+
+| Engine | Role | Model | Residency |
+|---|---|---|---|
+| `.speech` | Live transcription (ASR) | Nemotron (~1.5 GB) | Resident for the duration of a meeting — it IS the live pipeline |
+| `.cleanup` | Post-stop re-transcription | Whisperer V3 / `largeTurboQ5` (~547 MB) | Load per pass, free in `defer` |
+| `.intelligence` | Title, overview, Ask AI | Qwen3.5-4B MTP (~3.2 GB) | Load per pass via `borrowLLM()`, 60s idle unload |
+| `.speakers` | Speaker diarization | Sortformer (~330 MB) | Delegated entirely to `MeetingDiarizerService` |
+
+**Readiness state** — `readiness: [MeetingEngine: EngineReadiness]` is a single published snapshot.
+`EngineReadiness` is: `.ready`, `.needsDownload(String)`, `.downloading(Double)`, `.preparing`,
+`.unavailable(String)`. `needsPreparation: Bool` is true when any engine is not `.ready`.
+`overallProgress: Double` is weighted by `downloadBytes` so the bar tracks actual download work.
+
+**`prefetch()`** — idempotent. Called on every app launch (if meetings exist) and on detection events.
+Starts a background `Task.detached` per non-ready engine; guards against double-submission with
+`engineTasks[engine]`.
+
+**`borrowLLM()` / `releaseLLM()`** — refcounted access to the intelligence model. `borrowLLM()` loads
+inside a `ModelWorkQueue` slot; `releaseLLM()` schedules an unload after 60 seconds of idle time.
+Multiple callers (`MeetingAIService.ask`, `generateTitle`, `generateOverview`) share one instance.
+
+### Meeting Onboarding
+
+`MeetingPrepView` is a full-window onboarding screen shown in `MeetingStudioView` when
+`engines.needsPreparation && !continueAnyway`. It displays a sonar animation with a `sparkles`
+icon, one row per engine with its state indicator (download progress, preparing spinner, or ready
+checkmark), a weighted progress rail, and a gated CTA that becomes active only when all engines are
+ready. The screen is **readiness-driven, not flag-driven** — it reappears whenever a model is
+deleted, ensuring the UI accurately reflects what is on disk rather than what the user last saw.
 
 ### Storage
 
 | What | Where | Format |
 |---|---|---|
 | Meeting metadata, segments, AI summary | CoreData `MeetingEntity` | JSON blobs in string columns |
-| Audio (intermediate) | `~/Library/Application Support/Whisperer/Sessions/<uuid>.m4a` | m4a |
-| Audio (final, after stop) | `…/Meetings/<uuid>.m4a` | m4a (moved by MeetingSession.stopRecording) |
-| Wax vector index | `…/Meetings/<uuid>.wax` | Wax binary format |
+| Audio (intermediate) | `~/Library/Application Support/Whisperer/Sessions/<uuid>.opus` | Ogg Opus, written live by the recorder |
+| Audio (final, after stop) | `…/Meetings/<uuid>.opus` | same file, moved by `MeetingSession.stopRecording` — no transcode |
 | Chat history | `…/Meetings/<uuid>-chat.json` | JSON array of `MeetingChatMessage` |
 
 ### MeetingDetector
@@ -126,13 +164,15 @@ Meeting Studio UI (MeetingStudioView, 3-column)
 
 **Published state:** `meetingID`, `segments`, `notes`, `isRecording`, `elapsedSeconds`, `livePreviewText` (gray tail from `onPreviewTail`), `currentSegmentText`, `currentSegmentStartTimestamp`.
 
-**Segment flushing rules** — all boundaries are placed on the **audio clock** (`TranscriptChunk.start`/`.end` = `samplesReceived / sampleRate`), never on wall-clock or `elapsedSeconds`, so transcript cards line up with the recorded `.m4a` during playback scrubbing:
+**Segment flushing rules** — all boundaries are placed on the **audio clock** (`TranscriptChunk.start`/`.end` = `samplesReceived / sampleRate`), never on wall-clock or `elapsedSeconds`, so transcript cards line up with the recorded `.opus` during playback scrubbing:
 
 - **Silence-based**: a chunk whose `start` is ≥ `silenceSplitGap` (1.2s) after the previous chunk's `end` closes the current segment at that previous `end`. For VAD-segmented backends the chunk span is the exact voiced range, so this gap is genuine silence.
 - **Time-based**: `end - currentSegmentStartTimestamp` ≥ `maxSegmentDuration` (30s) → flush.
-- **Idle-based**: 2.5s after the last chunk with none arriving, flush at `lastChunkEndTimestamp`. The gap rule above only fires when the *next* chunk lands, so this is what closes a card during a long pause.
+- **Idle-based**: 2.5s after the last chunk with none arriving, flush at `lastChunkEndTimestamp`. The gap rule above only fires when the *next* chunk lands, so this is what closes a card during a long pause. **Only on the whisper VAD-chunk path** (`accumulate(idleFlushTracksSpeech: true)`) — see below.
 - **Stop-based**: `stopRecording()` flushes remaining text (including `livePreviewText`) as the final segment.
 - **Post-hoc split**: `flushCurrentSegment()` runs the text through `MeetingSession.splitByDuration()`, which subdivides any span longer than 30s at sentence boundaries (word boundaries when unpunctuated), assigning each piece start/end proportionally to its character share.
+
+**Arrival time is not speech time.** The idle rule assumes a gap in chunk *arrival* means the speaker stopped. That holds for whisper.cpp, which emits one chunk per voiced VAD segment, and is false for the Nemotron + Sortformer path: `MeetingSpeakerCoordinator` withholds text until Sortformer's finalized timeline covers it, and `DiarizerTimeline.updateSegments` only finalizes a turn when the turn *closes*. During an unbroken monologue the timeline stalls and text is released in bursts at every micro-breath — so the idle timer fired between bursts and chopped a 48s continuous recording into seven 2–9s cards with no audio-time gap between them. `onAttributedText` therefore passes `idleFlushTracksSpeech: false` and the card stays open until a real audio-clock gap, the 30s cap, or a speaker change closes it. Nothing is at risk while it is open: the live bubble renders `currentSegmentText` and every `accumulate` writes it to `MeetingPendingStore`.
 
 The split step is not redundant with the cap: chunk cadence is a property of the backend, not of the speech. whisper.cpp emits one chunk per voiced VAD segment, WhisperKit commits roughly every 6s, and **Nemotron returns the entire session as a single chunk at stop**. Arrival-driven rules alone leave that last case as one unreadable card.
 
@@ -162,27 +202,17 @@ if let meetingSession = activeMeetingSession ?? capturedMeetingSession {
 
 `isMeetingStopInFlight` flag prevents the tail chunk from being treated as a normal history chunk during the async stop.
 
-### Ask AI — RAG Pipeline
+### Ask AI
 
-```
-MeetingSegment[] (from CoreData)
-    ↓ MeetingRAGEngine.index()
-    chunk into ≤60s windows; last segment of each window prepended to next (boundary overlap)
-    ↓ Memory(at: uuid.wax, builtInEmbedding: .miniLM)
-    MiniLM CoreML (.mlmodelc bundled in Wax SPM) → 384-dim embeddings via ANE
-    ↓ memory.save(text, metadata: [start/end/speakers: String])
-                              ─── .wax on disk ───
-
-User question
-    ↓ MeetingRAGEngine.retrieve(question:meetingID:limit:8)
-    memory.search(question, options: .topK(8))   // hybrid BM25+HNSW
-    ↓ top-8 RAGChunk with timestamps + speakers
-    ↓ MeetingAIService.ask()
-    format: "[MM:SS] Speaker: text" per chunk
-    ↓ llmPostProcessor.process() (existing LLM, temperature=0.3, ≤512 tokens)
-    ↓ RAGAnswer { text, sources: [RAGChunk], usedRAG: Bool }
-    ↓ AskAIPane (source citations, scroll-to-timestamp)
-```
+`MeetingAIService.ask(question:meetingID:)` answers questions using the **whole transcript** as the LLM
+system prompt, with the KV cache pre-filled once per meeting (`reuseWarmCache: true`). The entire
+transcript is formatted as `"[Ns] Speaker: text"` per segment so the model has timestamps to cite.
+After generation, `parseCitations(from:segments:)` extracts `[Ns]` patterns from the response and maps
+them to `RAGChunk` values with `startTimestamp` + `endTimestamp`, which `AskAIPane` renders as source
+citation chips (tap → scroll to timestamp). Chat history is persisted per meeting as
+`<uuid>-chat.json` by `MeetingChatStore`. No external index or embedding model is involved — the
+whole transcript fits the LLM context and the KV cache makes repeated questions in the same meeting
+fast.
 
 ### AI Title Generation
 
@@ -206,7 +236,7 @@ Two prompts, chosen by word count:
 
 Both use temperature=0.15, repetitionPenalty=1.15, maxTokensCap=2048. Raw output is parsed by `MeetingOverviewParser.parse()`.
 
-**Prompt design notes** — the earlier "OVERVIEW: one paragraph (2-4 sentences)" instruction produced summaries that named a topic without saying what was said about it, and the "if this is a real meeting with multiple speakers" branch made the model invent decisions and action items for lectures and solo notes. The current prompt instead: (a) spends most of its length on OVERVIEW, demanding 250-350 words across 2-4 paragraphs with the specifics kept (names, numbers, definitions, examples) and banning "The speaker discusses…" openers; (b) states that DECISION / OPEN / NEXT / ACTION apply to real discussions and that omitting them is the correct answer for a monologue. **There is no diarization** — every segment is `Speaker 1` unless the user renames it — so speaker count cannot be used to classify the recording; the prompt makes the model decide from content instead.
+**Prompt design notes** — the earlier "OVERVIEW: one paragraph (2-4 sentences)" instruction produced summaries that named a topic without saying what was said about it, and the "if this is a real meeting with multiple speakers" branch made the model invent decisions and action items for lectures and solo notes. The current prompt instead: (a) spends most of its length on OVERVIEW, demanding 250-350 words across 2-4 paragraphs with the specifics kept (names, numbers, definitions, examples) and banning "The speaker discusses…" openers; (b) states that DECISION / OPEN / NEXT / ACTION apply to real discussions and that omitting them is the correct answer for a monologue. Speaker count is not used to classify the recording; the prompt makes the model decide from content instead. That was originally forced — before Sortformer landed, every segment was `Speaker 1` — but it stays deliberate now that diarization exists: a lecture with an audience question and a two-person meeting both report two speakers, so the count still does not separate a monologue from a discussion.
 
 **`MeetingOverviewParser`** uses a custom line/pipe-delimited format (not JSON) — intentionally more robust against on-device LLM syntax errors and truncated output:
 ```
@@ -224,18 +254,19 @@ The `OVERVIEW:` label appears once; every following line belongs to it until the
 
 ### Key Actors
 
-- **`MeetingRAGEngine`** (actor) — owns all Wax `Memory` handles, one per meeting UUID. Caches open handles in `openMemories: [UUID: Memory]`. `isIndexed()` is `nonisolated` (checks filesystem). RAG indexing is triggered both at `finalizeSession()` and during `loadMeetings()` for any persisted meeting without a `.wax` file.
+- **`MeetingEngines`** (@MainActor ObservableObject singleton) — downloads, warms, and vends the four meeting model engines (speech/Nemotron, cleanup/WhisperBridge, intelligence/LLM, speakers/Sortformer). Publishes `readiness: [MeetingEngine: EngineReadiness]` and `overallProgress: Double`. `prefetch()` is idempotent. `borrowLLM()` / `releaseLLM()` handle refcounted LLM access with a 60-second idle-unload window.
 - **`MeetingChatStore`** (actor) — reads/writes `<uuid>-chat.json`. Each `append()` loads, appends, and writes atomically. Cleared by `MeetingManager.deleteMeeting`.
-- **`MeetingAIService`** (actor) — RAG retrieval + LLM call. Falls back to first 4000 chars of transcript when index is absent.
+- **`MeetingAIService`** (actor) — whole-transcript + KV-cache LLM calls. `ask()` uses the full transcript as a system prompt (cached once per meeting), parses `[Ns]` citation patterns via `parseCitations(from:segments:)`. `generateTitle` and `generateOverview` are one-shot and do not cache.
 - **`MeetingSession`** (@MainActor ObservableObject) — ephemeral live state (segments, notes, elapsed timer). Writes to CoreData via `MeetingManager` as chunks arrive.
 - **`MeetingManager`** (@MainActor ObservableObject singleton) — sole CoreData gateway for `MeetingEntity`. All writes use `HistoryDatabase.shared.newBackgroundContext()`. Crash-recovery via `loadInProgressSessions()`.
 
-### Wax Dependency
+### swift-ogg Dependency
 
-- SPM: `https://github.com/christopherkarani/Wax.git` (≥ 0.1.8)
-- Targets linked: `Wax`, `WaxVectorSearchMiniLM`
-- MiniLM ships as a CoreML `.mlmodelc` bundle — no runtime download. Requires macOS 14. Runs on ANE/CPU.
-- `Memory` is an `actor`; all calls are `await`-ed inside `MeetingRAGEngine`.
+- SPM: `https://github.com/element-hq/swift-ogg` (branch `main` — the repo has no release tags). Product linked: `SwiftOGG`.
+- Transitively pulls `vector-im/opus-swift` and `vector-im/ogg-swift` as **binary xcframeworks** (~1.3 MB of macOS slices).
+- Both are **dynamic and ad-hoc signed** (`TeamIdentifier=not set`), so they must be **Embed & Sign** in the target's Frameworks phase — the same treatment FluidAudio gets — or the archive fails notarization. Verify with `codesign -dv --verbose=4` on the embedded frameworks after archiving: they must show our team ID, not `not set`.
+- `OGGEncoder` exposes no `opus_encoder_ctl`, so there is **no bitrate knob** — the encoder runs at libopus's default for 16 kHz mono VoIP (~19 kbps). The lever, if quality ever needs one, is `application: .voip` → `.audio`.
+- `OGGEncoder.endstream()` is `internal`, so the last page carries no `e_o_s`. Measured: nothing in AVFoundation, `afinfo`, or `ffprobe` cares.
 
 ### Meeting Studio UI
 
@@ -268,9 +299,41 @@ Stopping a recording used to blank the transcript for as long as the AI pass too
 
 The handoff now keeps rendering `session.segments` until `detailVM.allSegments.count >= session.segments.count` (compared against `allSegments`, not the page-capped `displayedSegments`), and `MeetingStudioView` calls `refreshDetail()` — which fetches before assigning and never shrinks the display window — on both `isRecording` and `session.segments.count`. The second trigger catches the tail chunk that lands after `stopRecording()` has already returned.
 
-**2. Nothing showed that work was still happening.** `MeetingProcessingPhase` (`.finalizing` → `.naming` → `.summarizing`) is published on `MeetingManager.processingPhases[UUID]` and driven from `MeetingSession.stopRecording()`: `.finalizing` is set the instant the LIVE badge goes away, then the detached AI Task advances it around `generateTitle` / `generateOverview` and clears it at the end (including on the empty-transcript early exit — otherwise the indicator would never stop).
+**2. Nothing showed that work was still happening.** `MeetingProcessingPhase` (`.finalizing` → `.polishing` → `.naming` → `.summarizing`) is published on `MeetingManager.processingPhases[UUID]` and driven from `MeetingSession.stopRecording()`: `.finalizing` is set the instant the LIVE badge goes away, then the detached AI Task advances it around the cleanup (re-transcription) pass / `generateTitle` / `generateOverview` and clears it at the end (including on the empty-transcript early exit — otherwise the indicator would never stop).
 
-`MeetingProcessingBanner` renders it between the tab bar and the tab content: breathing gradient orb, phase label with `.contentTransition(.opacity)`, an indeterminate sweeping capsule (on-device LLM latency is too variable for a percentage to be honest), and three step dots keyed off the phase index for real progress. `MeetingLibraryRow` mirrors the phase as a pulsing dot plus a `shortLabel` pill so the left panel stays in sync.
+`MeetingProcessingBanner` renders it between the tab bar and the tab content: breathing gradient orb, phase label with `.contentTransition(.opacity)`, a progress rail, and four step dots keyed off the phase index. The rail is indeterminate by default — on-device LLM latency is too variable for a percentage to be honest — but takes an optional `progress: Double?` and renders a determinate gradient fill when one is supplied. Only `.polishing` supplies it, because batch count is genuinely known. `MeetingLibraryRow` mirrors the phase as a pulsing dot plus a `shortLabel` pill so the left panel stays in sync.
+
+### Transcript Refine (post-stop Whisper re-transcription)
+
+Meeting chunks never reach the dictation LLM pass — `AppState`'s `onChunkCompleted` closure routes to `MeetingSession.onNewChunk` and returns *before* `chunkLLMCoordinator.enqueue`. Raw ASR errors would otherwise propagate into the AI overview and Ask AI, both built from the same text. `MeetingTranscriptRefiner` (`@MainActor` singleton) cleans the transcript in the window after stop, before naming and summarizing.
+
+**Why a second decode, not an LLM.** This pass used to hand the finished transcript to the on-device MTP model and ask it to fix spelling, punctuation and "obvious mishearings" — asking a language model to guess what the audio said. It can pattern-match a plausible correction; it cannot hear. It also needed a byte-identical system prompt (one warm KV slot), a 256-token cap, batch sizes derived from that cap, a numbered `N| text` protocol with a two-strike fallback, a custom script table for the token estimator, and per-line strict validation to catch the model rewriting lines it was told to leave alone. The audio is still on disk: re-running it through a large Whisper model replaces every guess with a real decode, and Whisper's own punctuation and capitalization come for free.
+
+```
+MeetingRefineWindow.plan(segments, maxDuration: 30)   // group cards, never split one
+    ↓ per window
+SessionStorage.readFloat32Window(audioURL, start-0.5s … end)   // decoded to 16 kHz mono Float32 = whisper's input
+    ↓ ModelWorkQueue.shared.run("meeting-refine")
+WhisperBridge.transcribeTimestamped → [WhisperTimedSegment]     // no_timestamps = false, t0/t1 in centiseconds
+    ↓ shift by lead-in, drop pieces ending before window.start
+MeetingRefineWindow.assign → [cardIndex: text]                  // each piece to the card it overlaps most
+    ↓ DictionaryManager.correctText → plausibility guard → rawText/text write
+MeetingManager.updateSegments (one bulk encode per window)
+```
+
+| Constraint | Consequence |
+|---|---|
+| The transcript is **one** `NSTextView` (`SelectableTranscriptView`); any content-signature change triggers a full `setAttributedString` + relayout and clears an in-progress selection | Text is **never** mutated during the run. Progress is drawn purely from the published `segmentMetrics` geometry (sweep + done-edge overlays), and the refined array is committed **once** at the end via `.meetingSegmentsDidRefine`. |
+| Whisper is trained on 30s windows, and its encoder cost is per window, not per card | `plan` greedily groups cards while `end - windowStart <= 30s` and never splits a card. Grouping is both the cheapest shape and the one Whisper is most accurate on — one decode per 30s of audio, not one per card. |
+| `ModelWorkQueue` reclaims a slot after a 120s `stallCeiling` | One queue job **per window** (a 1–3s decode), not one per run. Per-window submission also re-checks the meeting gate, so starting a new recording suspends the run at a window boundary. |
+| An Ogg Opus file reports **48 kHz** through `AVAudioFile` whatever it was encoded at, so a hardcoded 16 000 in the window arithmetic is silently 3× off | `readFloat32Window` derives `framePosition` from `file.processingFormat.sampleRate` and converts into a 16 kHz Float32 buffer through an explicit `AVAudioConverter`. Refined text landing on the wrong card is this, not the codec. |
+| Per-window auto-detect can flip language mid-meeting | Language comes from `AppState.selectedLanguage`; when it is `.auto` it is pinned to `bridge.lastDetectedLanguage` after the first decoded window. |
+| `TranscriptPostValidator(.strict)` exists to catch an LLM drifting off a line it was told to preserve | Not reused — a genuine second decode legitimately differs far more. The guard only rejects the two failure modes a decode actually has: an empty result, and a length ratio outside 0.4…2.5 (hallucination spiral or dropped utterance). |
+The model is fixed at `MeetingTranscriptRefiner.cleanupModel` (a compile-time constant: `.largeTurboQ5`) and is deliberately independent of the dictation model: this runs after the meeting, off the latency path, so accuracy is the only thing that matters. Its `WhisperBridge` is loaded as its own `"meeting-refine-load"` queue job and released via `prepareForShutdown()` on every exit path. Context carry matches `FileTranscriptionManager`: the last 100 chars of refined text become the next window's `initial_prompt`. A window whose cards were all refined by an earlier run is skipped without a decode (its text still feeds the next window's prompt). Each window is persisted through `MeetingManager.updateSegments` (one bulk encode — `updateSegment` per segment would be quadratic), so a quit mid-run loses at most one window.
+
+Raw text is preserved in `MeetingSegment.rawText` (nil = never refined; `isPolished` derives from it), and is set only when still nil so repeat runs keep the Original toggle showing true live-ASR text. The synthesized `Codable` uses `decodeIfPresent`, so stored `segmentsJSON` blobs keep decoding. A Polished/Original control in the transcript header swaps `text` for `rawText` at render time — view state only, no writes. Meetings recorded before the feature get a "Re-transcribe" action in the same header.
+
+The run is automatic when `meetingPolishEnabled` (default on) and the meeting audio is on disk; otherwise it is silently skipped and the phase sequence stays `.finalizing → .naming → .summarizing`. It is also skipped below 2GB free memory — the same threshold `AppState.prepareMeetingBackend()` uses — since it loads a second multi-GB model alongside the meeting backend.
 
 ### Notification Names (meeting-specific)
 
@@ -279,8 +342,8 @@ The handoff now keeps rendering `session.segments` until `detailVM.allSegments.c
 | `.switchToMeetingStudioTab` | `AppState.startMeetingRecording`, `OverlayView`, toast tap | `HistoryWindowView` (tab switch) |
 | `.meetingOverviewDidGenerate` | `MeetingAIService.generateOverview` (success) | `MeetingDetailView` (toast), `MeetingOverviewView` (clear skeleton) |
 | `.meetingOverviewDidFail` | `MeetingAIService.generateOverview` (failure) | `MeetingOverviewView` (show error) |
-| `.meetingRAGIndexingCompleted` | `MeetingAIService.indexMeeting` (success) | `AskAIPane` (update status pill to "Indexed") |
 | `.meetingTitleDidGenerate` | `MeetingAIService.generateTitle` (success) | `MeetingDetailView` (refresh cached `editableTitle`) |
+| `.meetingSegmentsDidRefine` | `MeetingTranscriptRefiner.run` (once per run, incl. cancel) | `MeetingDetailView` (single polished-text commit) |
 | `.meetingScrollToTimestamp` | `AskAIPane` source chip tap | `MeetingTranscriptView` (scroll to segment) |
 
 ### Scroll-to-Timestamp
@@ -506,6 +569,40 @@ Infrastructure (Logger, SafeLock, CrashHandler)
 | Audio recordings | File system (`~/Library/Application Support/Whisperer/Recordings/`) | Large binary data |
 | Whisper models | File system (`~/Library/Application Support/Whisperer/`) | ~500MB-1.5GB files |
 | Logs | File system (`~/Library/Logs/Whisperer/`) | Rotation, crash recovery |
+
+## Audio Storage — one format, and something that deletes
+
+Every recording in the app — dictation, meeting, and imported file — is stored as **Ogg Opus**, 16 kHz mono, `~8.3 MB/hour`. `AudioArchiveFormat` is the single source of truth for the extension, the rate, the writer, and the transcoder; nothing else names a container.
+
+### Written live, not transcoded at stop
+
+`AudioRecorder` holds an `AudioArchiveWriter` (an `OGGEncoder` + `FileHandle` from [swift-ogg](https://github.com/element-hq/swift-ogg)) and encodes on `sessionWriteQueue` as buffers arrive — 0.81% of one core, 14× fewer bytes than the Int16 LPCM it replaced. **The session file already is the archive**, so `StreamingTranscriber.saveRecording` is a `copyItem` and `MeetingSession.moveAudioToMeetingsDirectory` is a `moveItem`. There is no second copy and no transcode step on the latency path.
+
+This was previously the app's largest disk leak: a dictation wrote a 32 KB/s CAF into `Sessions/` **and** a 64 KB/s Float32 WAV into `Recordings/`, and `SessionStorage.deleteSessionFile` had zero call sites — both copies survived for a week until an orphan sweep found the CAF. `AppState.saveRecordingFromTranscriber` now deletes the session file once the copy succeeds (skipped in meeting mode, where `MeetingSession` consumes the same file).
+
+Two consequences of Ogg worth knowing before touching this code:
+
+- **It always reports 48 kHz.** `AVAudioFile.processingFormat.sampleRate` on a 16 kHz-encoded `.opus` is 48 000 — that is how Ogg Opus presents itself to every decoder, not a resample. All sample-index and duration arithmetic must be **rate-relative**, and duration comparisons must be in **seconds**, never frames. `SessionStorage.readFloat32Window` and `WaveformGenerator` both derive position from `processingFormat.sampleRate`.
+- **It survives a `kill -9`.** Ogg is page-framed with a CRC per page, so a decoder stops cleanly at the last complete page. Measured: 29.96 s recovered of 30 s written, with no `e_o_s` packet. A periodic `flush()` bounds the loss further.
+
+### AudioRetentionService
+
+`@MainActor final class AudioRetentionService` (singleton) is the only thing in the app that deletes. Before it existed, the `autoDeleteAfterDays` picker was wired to nothing while the Data Management card promised automatic removal.
+
+| | |
+|---|---|
+| **Schedule** | `start()` from `AppDelegate.setupComponents()` (behind `AudioStartupGate`, so launch is never blocked), then a repeating 6-hour `Task` — a menu bar app stays up for weeks, so once-per-launch cleanup never runs. `runLaunchSweep()` is a **separate** entry point called *after* `loadInProgressSessions` / `recoverCrashedSessions`; the old bare `deleteOrphanedSessions()` call ran before them and could unlink audio a row was still being finalized against. A change to the picker re-sweeps immediately via `UserDefaults.didChangeNotification`. |
+| **What it deletes** | Whole records, never just audio: the CoreData row, the recording, and for a meeting its `.wax` index and `<uuid>-chat.json`. A library entry with a dead play button is worse than no entry. Deletion goes through the owning manager (`HistoryManager.deleteTranscriptions(olderThan:)`, `MeetingManager.deleteMeeting`) so there is one delete path per record type. Orphaned `Sessions/` files are swept unconditionally, independent of the retention setting — no record refers to them. |
+| **Setting** | `autoDeleteAfterDays` — Never / 7 / 30 / 90 / 365, one setting covering dictation **and** meetings (meetings are hours of audio against a dictation's seconds). Default `0` = Never: an update must never silently delete a library. |
+| **Safety gates** | `currentBlocker` returns non-nil while `AppState.state != .idle`, a meeting session is active, or `MeetingTranscriptRefiner` is running — the cycle is skipped, not queued. Re-checked between the transcription and meeting halves, since an hour-long meeting library takes a while. `isInProgress` rows are skipped (crash-recovery candidates, not expired ones). Age comes from `createdAt`, never file mtime, which a refine or transcode pass resets. |
+
+`HistoryManager.deleteTranscription(_:)` also used to drop the row and orphan its audio forever; both it and `deleteAllTranscriptions` now go through one private path resolver.
+
+### AudioLibraryCompactor
+
+Opt-in rewrite of pre-Opus `.wav` / `.caf` library audio, offered as a row in Settings → Audio. **Not automatic** — every reader goes through `AVAudioFile` / `AVAudioPlayer`, so legacy files play and render waveforms exactly as before; this only reclaims disk.
+
+Record-driven, not directory-driven: only files a CoreData row points at are converted, because the conversion is only safe if the row can be repointed. The ordering is the whole design — transcode to a sibling `.compacting.opus` → verify it opens and its duration matches **in seconds** (source reports 16 kHz, output reports 48 kHz) → move to a unique `.opus` → commit the filename through the owning manager → *only then* unlink the original. A failed commit deletes the **new** file and keeps the original, so a row never points at nothing. It shares `AudioRetentionService.currentBlocker` and re-checks it per file, stopping at a file boundary if a recording starts.
 
 ## Common Pitfalls
 
