@@ -130,13 +130,16 @@ final class MeetingEngines: ObservableObject {
             }
             .store(in: &cancellables)
 
+        // Throttle to 100 ms — Sortformer fires progress on every URLSession delegate
+        // callback, which can be several hundred times per second on a fast link.
+        // With DispatchQueue.main as the scheduler, the sink fires on the main queue
+        // so we can touch @MainActor state directly without an extra Task hop.
         MeetingDiarizerService.shared.$downloadProgress
+            .throttle(for: .milliseconds(100), scheduler: DispatchQueue.main, latest: true)
             .sink { [weak self] progress in
-                Task { @MainActor [weak self] in
-                    guard let self, progress > 0, progress < 1 else { return }
-                    self.readiness[.speakers] = .downloading(progress)
-                    self.updateStatusText()
-                }
+                guard let self = self, progress > 0, progress < 1 else { return }
+                self.readiness[.speakers] = .downloading(progress)
+                self.updateStatusText()
             }
             .store(in: &cancellables)
     }
@@ -276,42 +279,58 @@ final class MeetingEngines: ObservableObject {
     }
 
     // MARK: - Per-engine warm passes
+    //
+    // All three methods are @MainActor (inherited from the class). State properties
+    // (readiness, statusText, llmInstance, etc.) are accessed directly — no MainActor.run
+    // wrappers needed. After each `await`, execution resumes on the main actor.
 
     private func runSpeech() async {
         guard NemotronBridge.isModelCached() else {
             Logger.info("MeetingEngines: speech model not on disk, skipping warm", subsystem: .model)
             return
         }
-        await MainActor.run { [weak self] in
-            guard let self else { return }
-            self.readiness[.speech] = .preparing
-            self.statusText = "Preparing \(MeetingEngine.speech.roleLabel)…"
-        }
+        readiness[.speech] = .preparing
+        statusText = "Preparing \(MeetingEngine.speech.roleLabel)…"
+        // prepareMeetingBackend manages its own ModelWorkQueue slot ("nemotron-load").
+        // Do NOT wrap in an outer MWQ job — that would deadlock (outer slot held, inner
+        // "nemotron-load" queued behind it and never dequeued).
         let success = await AppState.shared.prepareMeetingBackend()
         Logger.info("MeetingEngines: speech warm \(success ? "succeeded" : "failed")", subsystem: .model)
         if !success {
-            await MainActor.run { [weak self] in
-                guard let self else { return }
-                self.readiness[.speech] = .unavailable("Nemotron could not be loaded.")
-            }
+            readiness[.speech] = .unavailable("Nemotron could not be loaded.")
         }
     }
 
     private func runCleanup() async {
-        guard ModelDownloader.shared.isModelDownloaded(.largeTurboQ5) else {
-            Logger.info("MeetingEngines: cleanup model not on disk, skipping warm", subsystem: .model)
-            return
+        // 1. Download if not on disk.
+        if !ModelDownloader.shared.isModelDownloaded(.largeTurboQ5) {
+            readiness[.cleanup] = .downloading(0)
+            updateStatusText()
+            // Capture a weak reference before the @Sendable ModelWorkQueue closure so
+            // the progress callback can hop back to main actor without retaining self.
+            weak var weakSelf: MeetingEngines? = self
+            do {
+                try await ModelWorkQueue.shared.run("meeting-engine-download-cleanup") {
+                    try await ModelDownloader.shared.downloadModel(.largeTurboQ5) { fraction in
+                        Task { @MainActor in
+                            weakSelf?.readiness[.cleanup] = .downloading(fraction)
+                            weakSelf?.updateStatusText()
+                        }
+                    }
+                }
+            } catch {
+                Logger.error("MeetingEngines: cleanup download failed — \(error.localizedDescription)", subsystem: .model)
+                readiness[.cleanup] = .unavailable(error.localizedDescription)
+                return
+            }
         }
-        await MainActor.run { [weak self] in
-            guard let self else { return }
-            self.readiness[.cleanup] = .preparing
-            self.statusText = "Preparing \(MeetingEngine.cleanup.roleLabel)…"
-        }
+
+        // 2. Warm pass: pay the CoreML/ANE first-run compile cost (~40s) so subsequent
+        //    loads hit the on-disk cache and finish in ~2s.
+        readiness[.cleanup] = .preparing
+        statusText = "Preparing \(MeetingEngine.cleanup.roleLabel)…"
         let modelPath = ModelDownloader.shared.modelPath(for: .largeTurboQ5)
         do {
-            // Construct and immediately shut down a WhisperBridge with useGPU: false.
-            // This pays the ~40s CoreML/ANE compile cost once; all subsequent loads
-            // hit the on-disk cache and finish in ~2s.
             try await ModelWorkQueue.shared.run("meeting-engine-warm-cleanup") {
                 let bridge = try WhisperBridge(modelPath: modelPath, useGPU: false)
                 bridge.prepareForShutdown()
@@ -319,28 +338,37 @@ final class MeetingEngines: ObservableObject {
             }
         } catch {
             Logger.error("MeetingEngines: cleanup warm failed — \(error.localizedDescription)", subsystem: .model)
-            await MainActor.run { [weak self] in
-                guard let self else { return }
-                self.readiness[.cleanup] = .unavailable(error.localizedDescription)
-            }
+            readiness[.cleanup] = .unavailable(error.localizedDescription)
         }
     }
 
     private func runIntelligence() async {
-        guard isIntelligenceModelOnDisk() else {
-            Logger.info("MeetingEngines: intelligence model not on disk, skipping warm", subsystem: .model)
-            return
-        }
-        await MainActor.run { [weak self] in
-            guard let self else { return }
-            self.readiness[.intelligence] = .preparing
-            self.statusText = "Preparing \(MeetingEngine.intelligence.roleLabel)…"
-        }
-        // Create on main actor — LLMPostProcessor is @MainActor.
-        let processor = await MainActor.run { LLMPostProcessor() }
+        // Drop the "model on disk" guard: let loadModel handle the download from HuggingFace
+        // Hub automatically. The Combine bridge below mirrors loadModel's own progress into
+        // our readiness slot so the UI shows accurate download state.
+        readiness[.intelligence] = .preparing
+        statusText = "Preparing \(MeetingEngine.intelligence.roleLabel)…"
+
+        let processor = LLMPostProcessor()  // @MainActor — created directly
+
+        // Bridge LLMPostProcessor's download progress to our .intelligence readiness slot.
+        // processor.$loadPhase publishes on the main actor; the sink fires there too.
+        var bridgeCancellable: AnyCancellable? = processor.$loadPhase
+            .compactMap { phase -> EngineReadiness? in
+                if case .downloading(let p) = phase { return .downloading(p) }
+                return nil
+            }
+            .sink { [weak self] r in
+                self?.readiness[.intelligence] = r
+                self?.updateStatusText()
+            }
+        defer { bridgeCancellable?.cancel(); bridgeCancellable = nil }
+
         do {
-            // Load, then immediately unload: puts weights in the page cache so
-            // the first real meeting load skips the cold Metal compile.
+            // loadModel downloads (if needed) then loads weights into memory.
+            // unloadModel frees GPU memory and Metal resources.
+            // Both hop to main actor inside the ModelWorkQueue body — the slot is held
+            // for the full download+load+unload pass so no other model work overlaps.
             try await ModelWorkQueue.shared.run("meeting-engine-warm-intelligence") {
                 try await processor.loadModel(.qwen3_5_4B_mtp)
                 await processor.unloadModel()
@@ -348,10 +376,7 @@ final class MeetingEngines: ObservableObject {
             }
         } catch {
             Logger.error("MeetingEngines: intelligence warm failed — \(error.localizedDescription)", subsystem: .model)
-            await MainActor.run { [weak self] in
-                guard let self else { return }
-                self.readiness[.intelligence] = .unavailable(error.localizedDescription)
-            }
+            readiness[.intelligence] = .unavailable(error.localizedDescription)
         }
     }
 
@@ -387,10 +412,13 @@ final class MeetingEngines: ObservableObject {
             return nil
         }
 
-        // Load if not already loaded (guard in loadModel covers re-entrant calls).
+        // Load inside a ModelWorkQueue slot — same serialization as the warm pass,
+        // prevents contention with other concurrent model work.
         if !processor.isModelLoaded {
             do {
-                try await processor.loadModel(.qwen3_5_4B_mtp)
+                try await ModelWorkQueue.shared.run("meeting-engine-borrow-llm") {
+                    try await processor.loadModel(.qwen3_5_4B_mtp)
+                }
             } catch {
                 Logger.error("MeetingEngines: borrowLLM load failed — \(error.localizedDescription)", subsystem: .model)
                 llmRefcount -= 1
