@@ -16,7 +16,10 @@ extension NSNotification.Name {
     static let overlayContentHeightChanged = Notification.Name("overlayContentHeightChanged")
     static let meetingOverviewDidGenerate  = Notification.Name("meetingOverviewDidGenerate")
     static let meetingOverviewDidFail      = Notification.Name("meetingOverviewDidFail")
-    static let meetingRAGIndexingCompleted = Notification.Name("meetingRAGIndexingCompleted")
     /// object: the meeting UUID, userInfo["title"]: the generated title.
     static let meetingTitleDidGenerate     = Notification.Name("meetingTitleDidGenerate")
+    /// object: the meeting UUID, userInfo["segments"]: `[MeetingSegment]` after the LLM polish
+    /// pass. Posted exactly once at the end of a run — the transcript is one NSTextView, so each
+    /// post costs a full text-storage rebuild and clears any in-progress selection.
+    static let meetingSegmentsDidRefine    = Notification.Name("meetingSegmentsDidRefine")
 }

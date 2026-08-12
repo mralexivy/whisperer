@@ -2,19 +2,40 @@
 //  MeetingAIService.swift
 //  Whisperer
 //
-//  LLM-powered meeting overview generation and RAG-based Q&A.
-//  ask() retrieves the top-8 semantically relevant chunks from the
-//  Wax index before calling the LLM — much faster and more accurate
-//  than dumping the full transcript.
+//  LLM-powered meeting overview generation and whole-transcript Q&A.
+//  ask() passes the full timestamped transcript in the system prompt, enabling
+//  KV-cache reuse so repeated questions about the same meeting are fast.
 //
 
 import Foundation
+
+// MARK: - Chunk value type (citation resolved from an LLM response)
+
+/// Represents a segment of the meeting transcript cited by the LLM in its answer.
+/// Moved here from the deleted MeetingRAGEngine. Must stay Codable — MeetingChatStore
+/// persists assistant messages with their sources as JSON.
+struct RAGChunk: Codable, Equatable {
+    let text: String
+    let startTimestamp: Double
+    let endTimestamp: Double
+    let speakers: [String]
+    var score: Float
+
+    var formattedStart: String {
+        let s = Int(startTimestamp)
+        return String(format: "%d:%02d", s / 60, s % 60)
+    }
+
+    var speakersLabel: String {
+        speakers.isEmpty ? "Speaker" : speakers.joined(separator: ", ")
+    }
+}
 
 // MARK: - Answer model
 
 struct RAGAnswer {
     let text: String
-    let sources: [RAGChunk]   // chunks fed to the LLM (empty when falling back)
+    let sources: [RAGChunk]   // citations parsed from the LLM response
     let usedRAG: Bool
 }
 
@@ -25,92 +46,78 @@ actor MeetingAIService {
 
     private init() {}
 
-    // MARK: - RAG indexing
+    // MARK: - LLM borrow helpers
 
-    /// Index (or re-index) a meeting's segments into Wax. Safe to call from
-    /// a background Task — failures are logged, not thrown to the caller.
-    func indexMeeting(meetingID: UUID, segments: [MeetingSegment]) async {
-        guard !segments.isEmpty else { return }
-        do {
-            try await MeetingRAGEngine.shared.index(meetingID: meetingID, segments: segments)
-            await MainActor.run {
-                NotificationCenter.default.post(name: .meetingRAGIndexingCompleted, object: meetingID)
-            }
-        } catch {
-            Logger.error("Meeting RAG indexing failed (\(meetingID)): \(error)", subsystem: .transcription)
+    /// Acquires the meeting intelligence LLM. Returns nil when unavailable.
+    /// Callers MUST call releaseLLM() on every code path after a successful acquire.
+    private func acquireLLM() async -> LLMPostProcessor? {
+        #if canImport(FluidAudio)
+        return await MeetingEngines.shared.borrowLLM()
+        #else
+        let (llm, loaded) = await MainActor.run {
+            (AppState.shared.llmPostProcessor, AppState.shared.llmPostProcessor?.isModelLoaded ?? false)
         }
+        guard let llm, loaded else { return nil }
+        return llm
+        #endif
+    }
+
+    private func releaseLLM() {
+        #if canImport(FluidAudio)
+        // MeetingEngines is @MainActor — hop via Task since defer blocks cannot await.
+        // Both borrowLLM() and releaseLLM() pass through the MainActor queue, so
+        // ordering is preserved even if a subsequent borrow is enqueued immediately.
+        Task { @MainActor in MeetingEngines.shared.releaseLLM() }
+        #endif
     }
 
     // MARK: - Q&A
 
-    /// Ask a question about a meeting. Uses Wax semantic retrieval when
-    /// an index is available; falls back to the first 4000 chars of the
-    /// full transcript when it isn't.
+    /// Ask a question about a meeting. Passes the whole timestamped transcript in the
+    /// system prompt and sets `reuseWarmCache: true` so repeated questions about the
+    /// same meeting hit the cached KV prefix instead of recomputing it.
     func ask(question: String, meetingID: UUID, segments: [MeetingSegment]) async -> RAGAnswer {
         guard !question.isEmpty else {
             return RAGAnswer(text: "Please enter a question.", sources: [], usedRAG: false)
         }
 
-        let (llm, loaded) = await MainActor.run {
-            (AppState.shared.llmPostProcessor, AppState.shared.llmPostProcessor?.isModelLoaded ?? false)
-        }
-        guard let llm, loaded else {
+        guard let llm = await acquireLLM() else {
+            Logger.warning("Meeting AI: skipped — meeting intelligence engine not ready", subsystem: .transcription)
             return RAGAnswer(
-                text: "No AI model is loaded. Load one in Settings → AI Modes to use Ask AI.",
+                text: "Meeting intelligence engine is not ready. Download it from Settings → Meeting Engines.",
                 sources: [], usedRAG: false
             )
         }
+        defer { releaseLLM() }
 
-        // --- Retrieval ---
-        let chunks: [RAGChunk]
-        let usedRAG: Bool
-
-        if MeetingRAGEngine.shared.isIndexed(meetingID),
-           let retrieved = try? await MeetingRAGEngine.shared.retrieve(
-               question: question, meetingID: meetingID, limit: 8),
-           !retrieved.isEmpty {
-            chunks  = retrieved
-            usedRAG = true
+        // For very long transcripts, prefilter segments to the most relevant ones so the
+        // system prompt stays within ~3,000 tokens. Log when this path is taken.
+        let useSegments: [MeetingSegment]
+        let fullTranscript = Self.timestampedTranscript(segments)
+        if fullTranscript.count > Self.maxTranscriptChars {
+            Logger.info("Meeting Q&A: transcript \(fullTranscript.count) chars — applying BM25 prefilter", subsystem: .transcription)
+            useSegments = Self.bm25PrefilterSegments(segments, question: question)
         } else {
-            chunks  = []
-            usedRAG = false
+            useSegments = segments
         }
 
-        // --- Context assembly ---
-        let context: String
-        if usedRAG {
-            context = chunks.map { chunk in
-                "[\(chunk.formattedStart)] \(chunk.speakersLabel): \(chunk.text)"
-            }.joined(separator: "\n\n")
-        } else {
-            // Fallback: first 4000 chars of the full transcript
-            let full = segments.map { "[\(formatSeconds($0.timestamp))] \($0.speakerName): \($0.text)" }
-                               .joined(separator: "\n")
-            context = String(full.prefix(4000))
-        }
-
-        let systemPrompt = """
-        You are a meeting assistant. Answer the user's question using ONLY the meeting transcript context provided below.
-        Be concise and direct. Reference specific speakers and timestamps (e.g. "at 10:23, Speaker 1 said…") when it adds clarity.
-        If the answer is not in the context, say so honestly.
-
-        TRANSCRIPT CONTEXT:
-        \(context)
-        """
+        let transcript = Self.timestampedTranscript(useSegments)
+        let systemPrompt = Self.askSystemPrompt(transcript: transcript)
 
         do {
-            let answer = try await llm.process(
+            let response = try await llm.process(
                 text:           question,
                 systemPrompt:   systemPrompt,
                 userMessage:    question,
                 temperature:    0.3,
-                maxTokensCap:   512
+                maxTokensCap:   512,
+                // Stable per meeting — every question embeds the same transcript prefix,
+                // so the first question prefills the cache and later ones reuse it.
+                reuseWarmCache: true
             )
-            return RAGAnswer(
-                text:     answer.trimmingCharacters(in: .whitespacesAndNewlines),
-                sources:  chunks,
-                usedRAG:  usedRAG
-            )
+            let answer = response.trimmingCharacters(in: .whitespacesAndNewlines)
+            let sources = parseCitations(from: answer, segments: segments)
+            return RAGAnswer(text: answer, sources: sources, usedRAG: false)
         } catch {
             Logger.error("Meeting Q&A failed: \(error)", subsystem: .transcription)
             return RAGAnswer(text: "Sorry, I couldn't answer that. Please try again.", sources: [], usedRAG: false)
@@ -130,13 +137,11 @@ actor MeetingAIService {
         let transcript = Self.plainTranscript(segments)
         guard transcript.count >= 40 else { return }
 
-        let (llm, loaded) = await MainActor.run {
-            (AppState.shared.llmPostProcessor, AppState.shared.llmPostProcessor?.isModelLoaded ?? false)
-        }
-        guard let llm, loaded else {
-            Logger.warning("Meeting title: skipped — no LLM loaded", subsystem: .transcription)
+        guard let llm = await acquireLLM() else {
+            Logger.warning("Meeting AI: skipped — meeting intelligence engine not ready", subsystem: .transcription)
             return
         }
+        defer { releaseLLM() }
 
         let systemPrompt = """
         You name voice recordings. Read the transcript and reply with a title for it.
@@ -164,7 +169,9 @@ actor MeetingAIService {
                 maxTokensCap:           48,
                 outputTokensHint:       32,
                 timeoutSecondsOverride: 25,
-                throwOnFallback:        true
+                throwOnFallback:        true,
+                // One-shot prompt, and the overview pass that follows uses a different one.
+                reuseWarmCache:         false
             )
             guard let title = Self.sanitizeTitle(raw) else {
                 Logger.warning("Meeting title: unusable LLM output \"\(raw.prefix(80))\"", subsystem: .transcription)
@@ -193,14 +200,14 @@ actor MeetingAIService {
             await MainActor.run { NotificationCenter.default.post(name: .meetingOverviewDidFail, object: meetingID) }
             return
         }
-        let (llm, loaded) = await MainActor.run {
-            (AppState.shared.llmPostProcessor, AppState.shared.llmPostProcessor?.isModelLoaded ?? false)
-        }
-        guard let llm, loaded else {
-            Logger.warning("Meeting overview: skipped — no LLM loaded", subsystem: .transcription)
+
+        guard let llm = await acquireLLM() else {
+            Logger.warning("Meeting AI: skipped — meeting intelligence engine not ready", subsystem: .transcription)
             await MainActor.run { NotificationCenter.default.post(name: .meetingOverviewDidFail, object: meetingID) }
             return
         }
+        defer { releaseLLM() }
+
         Logger.info("Meeting overview: LLM ready, starting generation", subsystem: .transcription)
 
         // A voice memo of a few sentences has nothing to structure — asking for the
@@ -222,7 +229,9 @@ actor MeetingAIService {
                 maxTokensCap:           2048,
                 outputTokensHint:       isNote ? 200 : 1200,
                 timeoutSecondsOverride: isNote ? 30 : 120,
-                throwOnFallback:        true
+                throwOnFallback:        true,
+                // Runs once per meeting; warming this prefix only evicts the dictation cache.
+                reuseWarmCache:         false
             )
         } catch {
             Logger.error("Meeting overview: LLM generation failed: \(error.localizedDescription)", subsystem: .transcription)
@@ -302,6 +311,92 @@ actor MeetingAIService {
     6. Never use the characters < or >.
     """
 
+    // MARK: - Ask system prompt
+
+    /// System prompt for Q&A. Stable per meeting — the transcript is embedded verbatim,
+    /// so every question about the same meeting hits the same KV-cache prefix.
+    private static func askSystemPrompt(transcript: String) -> String {
+        """
+        You are an AI assistant analyzing a meeting transcript. Answer questions about this meeting concisely, citing specific moments using [Xs] timestamps from the transcript when relevant.
+
+        Transcript:
+        \(transcript)
+        """
+    }
+
+    // MARK: - Citation parsing
+
+    /// Scan the LLM response for [Ns] timestamp patterns and resolve each to the
+    /// closest segment in the transcript (within ±30s). Returns deduplicated citations.
+    private func parseCitations(from text: String, segments: [MeetingSegment]) -> [RAGChunk] {
+        guard !segments.isEmpty, !text.isEmpty else { return [] }
+        var results: [RAGChunk] = []
+        var seen = Set<Int>()   // segment indices already included
+
+        let pattern = try? NSRegularExpression(pattern: #"\[(\d+)s\]"#)
+        let nsText = text as NSString
+        let matches = pattern?.matches(in: text, range: NSRange(location: 0, length: nsText.length)) ?? []
+
+        for match in matches {
+            guard let range = Range(match.range(at: 1), in: text),
+                  let seconds = Double(text[range]) else { continue }
+
+            // Find the segment whose timestamp is closest to this cited moment.
+            let best = segments.enumerated().min {
+                abs($0.element.timestamp - seconds) < abs($1.element.timestamp - seconds)
+            }
+            guard let (idx, seg) = best,
+                  !seen.contains(idx),
+                  abs(seg.timestamp - seconds) <= 30 else { continue }
+            seen.insert(idx)
+            results.append(RAGChunk(
+                text:           seg.text,
+                startTimestamp: seg.timestamp,
+                endTimestamp:   seg.endTimestamp,
+                speakers:       [seg.speakerName],
+                score:          0
+            ))
+        }
+        return results
+    }
+
+    // MARK: - Long-meeting prefilter
+
+    /// Threshold above which a BM25-style prefilter is applied before building the
+    /// system prompt, to keep the context within ~3,000 tokens.
+    private static let maxTranscriptChars = 12_000
+
+    /// Simple term-frequency prefilter for transcripts exceeding `maxTranscriptChars`.
+    /// Groups segments into buckets, scores each by question-word overlap, and returns
+    /// the top-5 buckets in original timestamp order. No external dependency.
+    private static func bm25PrefilterSegments(
+        _ segments: [MeetingSegment], question: String
+    ) -> [MeetingSegment] {
+        let questionWords = Set(
+            question.lowercased()
+                .components(separatedBy: .whitespacesAndNewlines)
+                .filter { $0.count > 2 }
+        )
+        guard !questionWords.isEmpty else { return segments }
+
+        let chunkSize = 5
+        var groups: [(range: Range<Int>, score: Int)] = []
+        var i = 0
+        while i < segments.count {
+            let end = min(i + chunkSize, segments.count)
+            let text = segments[i..<end].map { $0.text }.joined(separator: " ").lowercased()
+            let score = questionWords.reduce(0) { acc, word in acc + (text.contains(word) ? 1 : 0) }
+            groups.append((i..<end, score))
+            i = end
+        }
+
+        // Take top-5 groups by score, then restore original order.
+        let topRanges = groups.sorted { $0.score > $1.score }.prefix(5).map { $0.range }
+        return topRanges
+            .flatMap { range in Array(segments[range]) }
+            .sorted { $0.timestamp < $1.timestamp }
+    }
+
     // MARK: - Auto-generated titles
 
     /// Titles produced by the app itself, which the LLM may replace. Anything the
@@ -320,11 +415,6 @@ actor MeetingAIService {
     }
 
     // MARK: - Private helpers
-
-    private func formatSeconds(_ seconds: Double) -> String {
-        let s = Int(seconds)
-        return String(format: "%d:%02d", s / 60, s % 60)
-    }
 
     /// Transcript with a seconds marker per line. Without it the model has no
     /// timestamps to cite and fabricates the seconds fields in TOPIC/DECISION/OPEN.
@@ -358,7 +448,7 @@ actor MeetingAIService {
         for label in ["TITLE:", "Title:", "OVERVIEW:"] where line.hasPrefix(label) {
             line = String(line.dropFirst(label.count))
         }
-        line = line.trimmingCharacters(in: CharacterSet(charactersIn: " \t\"'“”«»<>*#.-–—"))
+        line = line.trimmingCharacters(in: CharacterSet(charactersIn: " \t\"'\u{201C}\u{201D}«»<>*#.-–—"))
         line = line.replacingOccurrences(of: "<", with: "")
                    .replacingOccurrences(of: ">", with: "")
                    .trimmingCharacters(in: .whitespaces)

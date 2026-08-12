@@ -24,6 +24,25 @@ class MeetingSession: ObservableObject {
     @Published var currentSegmentText: String = ""
     @Published var currentSegmentStartTimestamp: Double = 0
 
+    /// Speaker the diarizer currently attributes speech to. Stays 0 on backends without
+    /// diarization, which is exactly today's single-speaker behaviour.
+    @Published var currentSpeakerIndex: Int = 0
+    @Published var currentSpeakerName: String = "Speaker 1"
+
+    /// Who the diarizer believes is talking *right now*, from its tentative (not yet
+    /// finalized) timeline. Drives the live bubble label only — `currentSpeakerIndex`
+    /// moves later, when text is actually attributed, which is what closes a paragraph.
+    @Published var liveSpeakerIndex: Int = 0
+    @Published var liveSpeakerName: String = "Speaker 1"
+
+    /// True once the diarizer has reported any speaker at all — lets the UI show
+    /// "Detecting…" instead of asserting "Speaker 1" before it knows.
+    @Published var hasSpeakerSignal: Bool = false
+
+    /// Custom names typed during the recording, keyed by speaker index, so segments
+    /// flushed *after* a rename pick the new name up too.
+    private var speakerNames: [Int: String] = [:]
+
     /// Hard cap on how much audio one transcript card may cover.
     private let maxSegmentDuration: Double = 30.0
 
@@ -38,17 +57,33 @@ class MeetingSession: ObservableObject {
     /// placed on this clock so they line up with the recorded audio during playback.
     private var lastChunkEndTimestamp: Double = 0
 
-    // Speaker index assigned to next new speaker detected
-    private var nextSpeakerIndex: Int = 0
-
     // Elapsed timer
     private var timerTask: Task<Void, Never>?
     private var recordingStartDate: Date?
 
+    /// True from the first line of `startRecording` until it has either bailed out or
+    /// set `isRecording`. `isRecording` alone cannot guard the entry: it is only set
+    /// after `prepareMeetingBackend()` and `beginSession()`, and the former polls for
+    /// up to 90s while Nemotron loads. Every tap on Start during that window used to
+    /// pass the guard and create its own CoreData row — the extra rows were then left
+    /// with `isInProgress = true` and showed up as "crash recovery: finalizing N
+    /// interrupted session(s)" on the next launch.
+    private var isStarting = false
+
     // MARK: - Start
 
     func startRecording(title: String) async {
-        guard !isRecording else { return }
+        guard !isRecording, !isStarting else { return }
+        isStarting = true
+        defer { isStarting = false }
+
+        #if canImport(FluidAudio)
+        // Force Nemotron before anything is created — a failure here must leave no
+        // half-started meeting behind. AppState surfaces the reason via errorMessage.
+        guard await AppState.shared.prepareMeetingBackend() else { return }
+        guard !isRecording else { return }   // re-check: the await above yielded
+        #endif
+
         // Increment before any await — invalidates stale onChunkCompleted closures
         // that captured the previous generation and may still be in-flight.
         chunkGeneration += 1
@@ -65,7 +100,12 @@ class MeetingSession: ObservableObject {
         currentSegmentStartTimestamp = 0
         lastChunkEndTimestamp = 0
         elapsedSeconds = 0
-        nextSpeakerIndex = 0
+        currentSpeakerIndex = 0
+        currentSpeakerName = "Speaker 1"
+        liveSpeakerIndex = 0
+        liveSpeakerName = "Speaker 1"
+        hasSpeakerSignal = false
+        speakerNames = [:]
 
         let language = await AppState.shared.selectedLanguage.rawValue
         let model = await AppState.shared.selectedModel.rawValue
@@ -119,9 +159,12 @@ class MeetingSession: ObservableObject {
 
         // Move the session audio file from Sessions/ into Meetings/ so MeetingRecord.resolvedAudioURL finds it.
         let audioFileName = AppState.shared.meetingAudioFileURL
+        var audioURL: URL?
         if let filename = audioFileName {
-            moveAudioToMeetingsDirectory(filename: filename)
+            audioURL = moveAudioToMeetingsDirectory(filename: filename)
         }
+
+        let willPolish = MeetingTranscriptRefiner.shared.shouldRun(for: segments, audioURL: audioURL)
 
         await MeetingManager.shared.finalizeSession(
             meetingID: id,
@@ -129,26 +172,44 @@ class MeetingSession: ObservableObject {
             audioFileURL: audioFileName
         )
 
-        // Trigger AI naming + overview in background. Title first: it is a short
+        // Trigger AI naming + polish + overview in background. Title first: it is a short
         // generation, so the library row picks up a real name in a couple of
         // seconds instead of waiting out the full summary pass.
         let finalSegments = segments
         let transcript = finalSegments.map { $0.text }.joined(separator: " ")
         let currentTitle = MeetingManager.shared.meetings.first(where: { $0.id == id })?.title ?? ""
-        Logger.info("Meeting session stop: segments=\(finalSegments.count), transcript=\(transcript.count) chars", subsystem: .transcription)
+        Logger.info("Meeting session stop: segments=\(finalSegments.count), transcript=\(transcript.count) chars, polish=\(willPolish)", subsystem: .transcription)
         if !transcript.isEmpty {
             // Inherits @MainActor, so the phase updates land on the main actor between awaits.
-            Task {
+            Task { [weak self] in
                 MeetingManager.shared.setProcessing(.naming, for: id)
                 await MeetingAIService.shared.generateTitle(
                     segments: finalSegments, meetingID: id, currentTitle: currentTitle
                 )
+
+                // Re-transcribe between naming and summarizing: the overview and the Wax index
+                // are both built from whatever this returns, so they see the corrected text.
+                var segmentsForSummary = finalSegments
+                if willPolish {
+                    MeetingManager.shared.setProcessing(.polishing, for: id)
+                    segmentsForSummary = await MeetingTranscriptRefiner.shared.run(
+                        meetingID: id, segments: finalSegments
+                    )
+                    self?.applyRefined(segmentsForSummary, meetingID: id)
+                }
+
                 MeetingManager.shared.setProcessing(.summarizing, for: id)
-                await MeetingAIService.shared.generateOverview(segments: finalSegments, meetingID: id)
+                await MeetingAIService.shared.generateOverview(segments: segmentsForSummary, meetingID: id)
                 MeetingManager.shared.setProcessing(nil, for: id)
             }
         } else {
-            Logger.warning("Meeting session stop: transcript empty — overview skipped (did chunks arrive?)", subsystem: .transcription)
+            // A recording stopped within a couple of seconds legitimately has nothing to
+            // summarize. Only a longer one that produced no text points at a real bug.
+            if finalSegments.isEmpty && elapsedSeconds < 2 {
+                Logger.debug("Meeting session stop: nothing recorded — overview skipped", subsystem: .transcription)
+            } else {
+                Logger.warning("Meeting session stop: transcript empty — overview skipped (did chunks arrive?)", subsystem: .transcription)
+            }
             MeetingManager.shared.setProcessing(nil, for: id)
         }
 
@@ -161,6 +222,17 @@ class MeetingSession: ObservableObject {
         livePreviewText = ""
     }
 
+    /// Swap in the polished transcript.
+    ///
+    /// `MeetingDetailView` renders `session.segments` until the persisted copy has caught up
+    /// with it, so without this the live→persisted handoff would keep showing the raw text
+    /// until the next detail refresh. Guarded on the meeting ID: a run that finishes after the
+    /// user started recording something else must not overwrite the new session's segments.
+    func applyRefined(_ refined: [MeetingSegment], meetingID id: UUID) {
+        guard meetingID == id, !isRecording, !refined.isEmpty else { return }
+        segments = refined
+    }
+
     func cancelRecording() async {
         guard isRecording, let id = meetingID else { return }
         isRecording = false
@@ -171,6 +243,12 @@ class MeetingSession: ObservableObject {
         currentSegmentText = ""
         currentSegmentStartTimestamp = 0
         lastChunkEndTimestamp = 0
+        currentSpeakerIndex = 0
+        currentSpeakerName = "Speaker 1"
+        liveSpeakerIndex = 0
+        liveSpeakerName = "Speaker 1"
+        hasSpeakerSignal = false
+        speakerNames = [:]
         MeetingPendingStore.clear(meetingID: id)
         meetingID = nil
         segments = []
@@ -184,6 +262,51 @@ class MeetingSession: ObservableObject {
     /// so they line up with the recorded `.m4a` used for playback and are unaffected by
     /// inference latency.
     func onNewChunk(text: String, start: Double, end: Double) {
+        // whisper.cpp emits one chunk per voiced VAD segment, so chunk *arrival* really does
+        // track speech — the idle timer is a valid pause signal on this path.
+        accumulate(text: text, start: start, end: end, idleFlushTracksSpeech: true)
+    }
+
+    /// Nemotron + Sortformer path: `text` is already attributed to a speaker.
+    ///
+    /// A speaker change closes the current paragraph at the boundary — that is what turns
+    /// the transcript into per-turn cards instead of one wall of text.
+    func onAttributedText(text: String, speakerIndex: Int, startTimestamp: Double, endTimestamp: Double) {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty, meetingID != nil else { return }
+
+        if speakerIndex != currentSpeakerIndex {
+            if !currentSegmentText.isEmpty {
+                silenceFlushTask?.cancel()
+                silenceFlushTask = nil
+                // Close at the last voiced sample of the previous turn, not at this turn's
+                // start — a pause between speakers belongs to neither card.
+                flushCurrentSegment(endTimestamp: max(lastChunkEndTimestamp, currentSegmentStartTimestamp))
+            }
+            currentSpeakerIndex = speakerIndex
+            currentSpeakerName = speakerName(for: speakerIndex)
+        }
+        // Attributed text is stronger evidence than a tentative segment — realign the
+        // live label so the bubble can't sit on a speaker the transcript disagrees with.
+        liveSpeakerIndex = speakerIndex
+        liveSpeakerName = currentSpeakerName
+        hasSpeakerSignal = true
+
+        // No idle flush here: on this path text arrival is gated by the diarizer, not by
+        // speech. See `accumulate(idleFlushTracksSpeech:)`.
+        accumulate(text: trimmed, start: startTimestamp, end: endTimestamp, idleFlushTracksSpeech: false)
+    }
+
+    /// Shared accumulation used by both the whisper VAD-chunk path and the attributed
+    /// Nemotron path. Kept in one place so the two can't drift on flush rules.
+    ///
+    /// - Parameter idleFlushTracksSpeech: whether a gap in *arrival* is evidence that the
+    ///   speaker stopped. True for whisper VAD chunks. **False for the attributed path**:
+    ///   `MeetingSpeakerCoordinator` withholds text until Sortformer's finalized timeline
+    ///   covers it, and Sortformer only finalizes a turn when it *closes* — so during an
+    ///   unbroken monologue text arrives in bursts at every micro-breath. Treating those
+    ///   arrival gaps as pauses chopped a 48s continuous recording into seven cards.
+    private func accumulate(text: String, start: Double, end: Double, idleFlushTracksSpeech: Bool) {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         // Guard on meetingID rather than isRecording so the tail chunk delivered
         // after isRecording=false (during stop drain) still accumulates.
@@ -225,11 +348,18 @@ class MeetingSession: ObservableObject {
             silenceFlushTask?.cancel()
             silenceFlushTask = nil
             flushCurrentSegment(endTimestamp: chunkEnd)
-        } else {
+        } else if idleFlushTracksSpeech {
             // Reset silence timer: if no new chunk arrives within 2.5s, flush the
             // current paragraph. The gap check above only fires once the *next* chunk
             // lands, so this is what closes the card during a long pause.
             scheduleSilenceFlush()
+        } else {
+            // Attributed path: the card stays open until a real audio-clock gap arrives with
+            // the next item, the 30s cap trips, or the speaker changes. Nothing is lost while
+            // it is open — the live bubble renders `currentSegmentText`, and every accumulate
+            // writes it to MeetingPendingStore for crash recovery.
+            silenceFlushTask?.cancel()
+            silenceFlushTask = nil
         }
     }
 
@@ -272,8 +402,8 @@ class MeetingSession: ObservableObject {
                 timestamp: $0.start,
                 endTimestamp: $0.end,
                 text: $0.text,
-                speakerName: speakerName(for: 0),
-                speakerIndex: 0
+                speakerName: speakerName(for: currentSpeakerIndex),
+                speakerIndex: currentSpeakerIndex
             )
         }
         segments.append(contentsOf: newSegments)
@@ -380,17 +510,41 @@ class MeetingSession: ObservableObject {
     // MARK: - Speaker management
 
     private func speakerName(for index: Int) -> String {
-        return index == 0 ? "Speaker 1" : "Speaker \(index + 1)"
+        speakerNames[index] ?? "Speaker \(index + 1)"
     }
 
+    /// Tentative speaker report from the diarizer. Deliberately does **not** touch
+    /// `currentSpeakerIndex`: tentative segments flip around, and a flush triggered by one
+    /// would fragment the transcript into cards that later turn out to be the same speaker.
+    func noteLiveSpeaker(_ index: Int) {
+        hasSpeakerSignal = true
+        guard index != liveSpeakerIndex else { return }
+        liveSpeakerIndex = index
+        liveSpeakerName = speakerName(for: index)
+    }
+
+    /// Applies a rename to the **live** session copy: every segment that speaker owns, plus
+    /// the label future flushes will use. A per-card rename would leave the same person
+    /// under two names in one transcript.
+    ///
+    /// In-memory only — persistence is the caller's job (`MeetingManager.renameSpeaker`),
+    /// so the CoreData write isn't issued twice.
     func updateSpeaker(segmentID: UUID, newName: String) {
-        guard let idx = segments.firstIndex(where: { $0.id == segmentID }) else { return }
-        segments[idx].speakerName = newName
-        guard let id = meetingID else { return }
-        let segment = segments[idx]
-        Task {
-            await MeetingManager.shared.updateSegment(meetingID: id, segment: segment)
+        let trimmed = newName.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+
+        // The renamed card may already have handed over to CoreData, in which case the
+        // session no longer holds it — fall back to the speaker currently being recorded.
+        let speakerIndex = segments.first(where: { $0.id == segmentID })?.speakerIndex
+            ?? currentSpeakerIndex
+
+        // Recorded so segments flushed later in this same recording inherit the new name.
+        speakerNames[speakerIndex] = trimmed
+        for i in segments.indices where segments[i].speakerIndex == speakerIndex {
+            segments[i].speakerName = trimmed
         }
+        if speakerIndex == currentSpeakerIndex { currentSpeakerName = trimmed }
+        if speakerIndex == liveSpeakerIndex { liveSpeakerName = trimmed }
     }
 
     // MARK: - Notes
@@ -423,16 +577,21 @@ class MeetingSession: ObservableObject {
 
     // MARK: - Audio
 
-    private func moveAudioToMeetingsDirectory(filename: String) {
+    /// Returns the final location, which the re-transcription pass decodes from. Nil when there
+    /// is no recording on disk — the move is best-effort and a missing file is not fatal here.
+    @discardableResult
+    private func moveAudioToMeetingsDirectory(filename: String) -> URL? {
         let fm = FileManager.default
         let appSupport = fm.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
         let source = appSupport.appendingPathComponent("Whisperer/Sessions/\(filename)")
         let meetingsDir = appSupport.appendingPathComponent("Whisperer/Meetings")
         let dest = meetingsDir.appendingPathComponent(filename)
 
-        guard fm.fileExists(atPath: source.path) else { return }
-        try? fm.createDirectory(at: meetingsDir, withIntermediateDirectories: true)
-        try? fm.moveItem(at: source, to: dest)
+        if fm.fileExists(atPath: source.path) {
+            try? fm.createDirectory(at: meetingsDir, withIntermediateDirectories: true)
+            try? fm.moveItem(at: source, to: dest)
+        }
+        return fm.fileExists(atPath: dest.path) ? dest : nil
     }
 
     // MARK: - Timer

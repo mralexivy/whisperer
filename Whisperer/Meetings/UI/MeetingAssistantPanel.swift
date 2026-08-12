@@ -22,15 +22,6 @@ enum AssistantPaneTab: String, CaseIterable, Identifiable {
     var id: String { rawValue }
 }
 
-// MARK: - RAG status
-
-enum RAGIndexStatus: Equatable {
-    case checking
-    case indexing
-    case indexed
-    case unavailable   // no LLM or no index + no fallback possible
-}
-
 // MARK: - Root panel
 
 struct MeetingAssistantPanel: View {
@@ -83,7 +74,6 @@ struct AskAIPane: View {
     @State private var question:      String = ""
     @State private var isThinking:    Bool   = false
     @State private var thinkingPhase: String = "Searching transcript…"
-    @State private var ragStatus:     RAGIndexStatus = .checking
     @State private var expandedSourceID: UUID? = nil
     @State private var showClearConfirm: Bool = false
 
@@ -103,10 +93,6 @@ struct AskAIPane: View {
         }
         .onAppear { onAppear() }
         .onChange(of: meeting?.id) { _ in onAppear() }
-        .onReceive(NotificationCenter.default.publisher(for: .meetingRAGIndexingCompleted)) { notif in
-            guard let id = notif.object as? UUID, id == meeting?.id else { return }
-            ragStatus = .indexed
-        }
         .alert("Clear conversation?", isPresented: $showClearConfirm) {
             Button("Clear", role: .destructive) { clearConversation() }
             Button("Cancel", role: .cancel) { }
@@ -132,50 +118,9 @@ struct AskAIPane: View {
                 .buttonStyle(.plain)
                 .help("Clear conversation")
             }
-
-            ragStatusPill
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 6)
-    }
-
-    @ViewBuilder
-    private var ragStatusPill: some View {
-        switch ragStatus {
-        case .checking:
-            EmptyView()
-
-        case .indexing:
-            IndexingPill()
-
-        case .indexed:
-            HStack(spacing: 4) {
-                Circle()
-                    .fill(Color(hex: "5B6CF7"))
-                    .frame(width: 5, height: 5)
-                Text("Indexed")
-                    .font(.system(size: 10, weight: .medium))
-                    .foregroundColor(Color(hex: "5B6CF7"))
-            }
-            .padding(.horizontal, 7)
-            .padding(.vertical, 3)
-            .background(Color(hex: "5B6CF7").opacity(0.1))
-            .clipShape(Capsule())
-
-        case .unavailable:
-            HStack(spacing: 4) {
-                Circle()
-                    .fill(Color.white.opacity(0.2))
-                    .frame(width: 5, height: 5)
-                Text("No index")
-                    .font(.system(size: 10, weight: .medium))
-                    .foregroundColor(.white.opacity(0.3))
-            }
-            .padding(.horizontal, 7)
-            .padding(.vertical, 3)
-            .background(Color.white.opacity(0.05))
-            .clipShape(Capsule())
-        }
     }
 
     // MARK: - Empty state
@@ -483,55 +428,9 @@ struct AskAIPane: View {
     private func onAppear() {
         guard let meeting else { return }
         Task {
-            // Load persisted chat
             let saved: [MeetingChatMessage] = await MeetingChatStore.shared.load(meetingID: meeting.id)
             await MainActor.run { messages = saved }
-
-            // Check RAG status — trigger lazy indexing if needed
-            let indexed = MeetingRAGEngine.shared.isIndexed(meeting.id)
-            let hasSegments = !meeting.segments.isEmpty
-            await MainActor.run {
-                if indexed {
-                    ragStatus = .indexed
-                } else if hasSegments {
-                    ragStatus = .indexing
-                } else {
-                    ragStatus = .unavailable
-                }
-            }
-            // Lazy indexing: if not yet indexed but segments are available, build the index now
-            if !indexed && hasSegments {
-                let id = meeting.id
-                let segs = meeting.segments
-                Task.detached(priority: .background) {
-                    await MeetingAIService.shared.indexMeeting(meetingID: id, segments: segs)
-                }
-            }
         }
-    }
-}
-
-// MARK: - Indexing pill
-
-private struct IndexingPill: View {
-    @State private var pulse = false
-
-    var body: some View {
-        HStack(spacing: 5) {
-            Circle()
-                .fill(Color.orange)
-                .frame(width: 5, height: 5)
-                .opacity(pulse ? 1.0 : 0.25)
-                .animation(.easeInOut(duration: 0.65).repeatForever(autoreverses: true), value: pulse)
-            Text("Building index…")
-                .font(.system(size: 10, weight: .medium))
-                .foregroundColor(.orange.opacity(0.85))
-        }
-        .padding(.horizontal, 7)
-        .padding(.vertical, 3)
-        .background(Color.orange.opacity(0.1))
-        .clipShape(Capsule())
-        .onAppear { pulse = true }
     }
 }
 

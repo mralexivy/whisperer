@@ -6,8 +6,8 @@
 //  audio with a more accurate Whisper model. Raw live-ASR text is preserved in
 //  MeetingSegment.rawText so the user can switch back.
 //
-//  Runs between the naming and summarizing phases so the overview and the Wax/Ask-AI
-//  index are built from the corrected text.
+//  Runs between the naming and summarizing phases so the overview and the Ask-AI
+//  answers are built from the corrected text.
 //
 //  ### Why a second decode and not an LLM
 //  This pass used to hand the finished transcript to the on-device LLM and ask it to fix
@@ -299,10 +299,6 @@ final class MeetingTranscriptRefiner: ObservableObject {
     /// Every exit path goes through here. Posts `.meetingSegmentsDidRefine` so observers
     /// (MeetingDetailView) can apply the refined text in one atomic update.
     private func finish(_ segments: [MeetingSegment], meetingID: UUID) -> [MeetingSegment] {
-        // TODO-Task3: indexMeeting call removed — MeetingRAGEngine will be deleted in Task 3.
-        // Task.detached(priority: .background) {
-        //     await MeetingAIService.shared.indexMeeting(meetingID: meetingID, segments: segments, force: true)
-        // }
         NotificationCenter.default.post(
             name: .meetingSegmentsDidRefine, object: meetingID, userInfo: ["segments": segments]
         )
