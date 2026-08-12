@@ -120,29 +120,27 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             await self.checkPermissions()
         }
 
-        // Recover any recordings that were interrupted by a crash or force-quit.
+        // Recover anything interrupted by a crash or force-quit, then sweep. The order matters:
+        // the sweep unlinks session audio no record refers to, and a session interrupted 7+ days
+        // ago is only claimed once `loadInProgressSessions` has finalized the row pointing at it.
         Task {
             let orphans = await HistoryManager.shared.loadInProgressSessions()
-            guard !orphans.isEmpty else { return }
-            Logger.info("Crash recovery: finalizing \(orphans.count) interrupted session(s)", subsystem: .app)
-            for record in orphans {
-                let text = record.transcription.isEmpty ? "(recording interrupted — no transcription saved)" : record.transcription
-                try? await HistoryManager.shared.finalizeSession(
-                    sessionID: record.id,
-                    finalText: text,
-                    duration: record.duration,
-                    audioFileURL: record.audioFileURL
-                )
+            if !orphans.isEmpty {
+                Logger.info("Crash recovery: finalizing \(orphans.count) interrupted session(s)", subsystem: .app)
+                for record in orphans {
+                    let text = record.transcription.isEmpty ? "(recording interrupted — no transcription saved)" : record.transcription
+                    try? await HistoryManager.shared.finalizeSession(
+                        sessionID: record.id,
+                        finalText: text,
+                        duration: record.duration,
+                        audioFileURL: record.audioFileURL
+                    )
+                }
             }
-        }
 
-        // Recover any meeting sessions that were interrupted by a crash or force-quit.
-        Task {
             await MeetingManager.shared.recoverCrashedSessions()
+            await AudioRetentionService.shared.runLaunchSweep()
         }
-
-        // Clean up orphaned session audio files older than 7 days
-        SessionStorage.deleteOrphanedSessions()
     }
 
     private func setupComponents() {
@@ -155,11 +153,29 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         #if !APP_STORE
         appState.textSelectionService = TextSelectionService()
         MeetingDetector.shared.start()
+        // Warm the speaker-diarization model on disk while the user is doing something
+        // else. Gated on the same toggle MeetingDetector gates itself with, so users who
+        // turned meetings off never pay for the download.
+        #if canImport(FluidAudio)
+        if UserDefaults.standard.object(forKey: "meetingDetectionEnabled") == nil
+            || UserDefaults.standard.bool(forKey: "meetingDetectionEnabled") {
+            MeetingDiarizerService.shared.prefetch()
+            // Warm the meeting engine set for users who already have meetings — this is a
+            // silent background top-up; new installs skip it until the first meeting lands.
+            if !MeetingManager.shared.meetings.isEmpty {
+                MeetingEngines.shared.prefetch()
+            }
+        }
+        #endif
         #endif
 
         // Register long-lived components with HealthManager
         if let recorder = appState.audioRecorder { HealthManager.shared.register(recorder) }
         if let injector = appState.textInjector { HealthManager.shared.register(injector) }
+
+        // Repeating retention sweep. The launch sweep is fired separately from
+        // applicationDidFinishLaunching, after crash recovery — see runLaunchSweep().
+        AudioRetentionService.shared.start()
 
         // mDNS: resolve the machine's .local hostname at startup so the UI can
         // show a friendly URL (e.g. "alexs-macbook-pro.local:8080/mcp").
@@ -307,6 +323,12 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func gracefulShutdown() async {
+        // 0. Stop the retention sweep before anything else — it must not start deleting
+        // records while the rest of this sequence is tearing the pipeline down.
+        await MainActor.run {
+            AudioRetentionService.shared.prepareForShutdown()
+        }
+
         // 1. Stop any active recording
         Logger.debug("Stopping active recording if any...", subsystem: .app)
         await MainActor.run {
@@ -1694,6 +1716,8 @@ struct SettingsTabView: View {
     @Binding var scrollTarget: SettingsScrollTarget?
     @ObservedObject var appState = AppState.shared
     @AppStorage("meetingDetectionEnabled") private var meetingDetectionEnabled: Bool = true
+    @AppStorage("meetingPolishEnabled") private var meetingPolishEnabled: Bool = true
+    @AppStorage("meetingRefineModel") private var meetingRefineModel: String = WhisperModel.largeTurbo.rawValue
 
     var body: some View {
         ScrollViewReader { proxy in
@@ -2034,6 +2058,31 @@ struct SettingsTabView: View {
                             .tint(MBColors.accent)
                             .labelsHidden()
                     }
+
+                    Divider()
+                        .background(MBColors.border)
+                        .padding(.vertical, 2)
+
+                    HStack {
+                        VStack(alignment: .leading, spacing: 3) {
+                            Text("Re-transcribe after recording")
+                                .font(.system(size: 13, weight: .medium))
+                                .foregroundColor(MBColors.textPrimary)
+                            Text("Run the recording through a more accurate model to fix misheard words and punctuation.")
+                                .font(.system(size: 11))
+                                .foregroundColor(MBColors.textSecondary)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+                        Spacer()
+                        Toggle("", isOn: $meetingPolishEnabled)
+                            .toggleStyle(.switch)
+                            .tint(MBColors.accent)
+                            .labelsHidden()
+                    }
+
+                    if meetingPolishEnabled {
+                        refineModelPicker
+                    }
                 }
 
                 // AI Post-Processing
@@ -2074,6 +2123,40 @@ struct SettingsTabView: View {
             }
         }
     }
+
+    #if !APP_STORE
+    /// Models worth a second pass. Tiny/base/small are excluded on purpose: re-transcribing with
+    /// a model no better than the live one costs minutes and changes nothing.
+    private var refineModelCandidates: [WhisperModel] {
+        [.largeTurbo, .largeV3, .largeV3Q5, .largeTurboQ5, .distilLargeV3, .ivritLargeTurbo, .medium]
+    }
+
+    private var refineModelPicker: some View {
+        let selected = WhisperModel(rawValue: meetingRefineModel) ?? .largeTurbo
+        let downloaded = ModelDownloader.shared.isModelDownloaded(selected)
+        return VStack(alignment: .leading, spacing: 4) {
+            HStack {
+                Text("Model")
+                    .font(.system(size: 12))
+                    .foregroundColor(MBColors.textSecondary)
+                Spacer()
+                Picker("", selection: $meetingRefineModel) {
+                    ForEach(refineModelCandidates) { model in
+                        Text(model.displayName).tag(model.rawValue)
+                    }
+                }
+                .labelsHidden()
+                .frame(width: 170)
+            }
+            if !downloaded {
+                Text("\(selected.displayName) is not downloaded — get it in the Models tab, or the pass is skipped.")
+                    .font(.system(size: 11))
+                    .foregroundColor(.orange)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+    }
+    #endif
 
     private func settingsCard<Content: View>(title: String, icon: String, color: Color, @ViewBuilder content: () -> Content) -> some View {
         VStack(alignment: .leading, spacing: 12) {

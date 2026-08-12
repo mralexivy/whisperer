@@ -80,7 +80,17 @@ class AppState: ObservableObject {
     }
     let waveformState = WaveformState()
     @Published var errorMessage: String?
-    @Published var saveRecordings: Bool = true  // Save recordings by default
+
+    /// Languages already reported as unsupported by the active ASR model, so the notice is shown
+    /// once per app session instead of on every recording.
+    private var reportedUnforceableLanguages: Set<TranscriptionLanguage> = []
+
+    /// The selected language has no prompt in the loaded model, so it transcribes unconditioned.
+    /// Surfaced through `errorMessage` — the same banner every other transcription degradation uses.
+    private func reportLanguageForcingUnavailable(_ language: TranscriptionLanguage) {
+        guard reportedUnforceableLanguages.insert(language).inserted else { return }
+        errorMessage = "\(language.displayName) isn't supported by the current speech model — transcription will be less accurate."
+    }
     @Published var liveTranscription: String = ""  // Live transcription during recording
     @Published var recordingSessionID: UUID = UUID()  // Forces SwiftUI state reset between recordings
 
@@ -334,6 +344,11 @@ class AppState: ObservableObject {
     func showMeetingNotification(app: MeetingDetector.DetectedMeetingApp) {
         detectedMeetingApp = app
         showMeetingDetectedToast = true
+        #if canImport(FluidAudio)
+        // Kick off engine warm passes as soon as a meeting is detected — before the user
+        // taps Start Recording — so the ANE compile costs are already paid.
+        MeetingEngines.shared.prefetch()
+        #endif
         Task { @MainActor [weak self] in
             try? await Task.sleep(nanoseconds: 30_000_000_000)
             guard let self, self.showMeetingDetectedToast else { return }
@@ -518,6 +533,42 @@ class AppState: ObservableObject {
     private(set) var meetingAudioFileURL: String?
     var isMeetingMode: Bool { activeMeetingSession != nil }
     private var isMeetingStopInFlight = false
+    #if canImport(FluidAudio)
+    /// Live speaker diarization for the current meeting. Nil on non-Nemotron backends
+    /// or when the Sortformer model isn't on disk — the meeting then records exactly as
+    /// it did before, everything under "Speaker 1".
+    private var meetingSpeakerCoordinator: MeetingSpeakerCoordinator?
+    /// Serializes `coordinator.feed()` calls. Feeding an actor from the audio callback
+    /// without chaining lets re-entrancy across the ANE `await` interleave buffers.
+    private var diarizerFeedTask: Task<Void, Never>?
+    /// True while a meeting holds its own Nemotron bridge.
+    ///
+    /// Meetings need Nemotron (it is the only backend whose partial callback delivers the
+    /// growing accumulated transcript that speaker attribution diffs against), but they no
+    /// longer take it by switching `selectedBackendType`. That switch cost a teardown plus a
+    /// reload on the way in and again on the way out — ~62s per meeting for anyone whose
+    /// dictation backend isn't Nemotron, with the return leg landing on top of the
+    /// post-meeting AI work. The bridge is now loaded alongside the user's backend and
+    /// released through `ModelWorkQueue` once the AI tail has drained.
+    private var meetingOwnsNemotron = false
+    /// Set when free memory was too tight to hold the user's backend and Nemotron at once,
+    /// so the user's bridge was evicted for the duration of the meeting and must be reloaded
+    /// afterwards. `selectedBackendType` is still never written.
+    private var meetingEvictedUserBackend = false
+    #endif
+
+    /// The backend the in-app recording path (meetings, workspace recorder) should drive.
+    ///
+    /// A meeting borrows Nemotron through its own bridge instead of switching
+    /// `selectedBackendType`, so while one is running this reports `.nemotron` and the
+    /// user's dictation backend stays exactly as they left it.
+    var effectiveInAppBackend: BackendType {
+        #if canImport(FluidAudio)
+        if meetingOwnsNemotron, nemotronBridgeInstance != nil { return .nemotron }
+        #endif
+        return selectedBackendType
+    }
+
     @Published var meetingWindowIsVisible: Bool = false {
         didSet { NotificationCenter.default.post(name: NSNotification.Name("AppStateChanged"), object: nil) }
     }
@@ -895,8 +946,16 @@ class AppState: ObservableObject {
         parakeetLoadTask = nil
         speechAnalyzerLoadTask?.cancel()
         speechAnalyzerLoadTask = nil
+        #if canImport(FluidAudio)
+        // A meeting-initiated Nemotron load must survive a backend switch — see meetingOwnsNemotron.
+        if !meetingOwnsNemotron {
+            nemotronLoadTask?.cancel()
+            nemotronLoadTask = nil
+        }
+        #else
         nemotronLoadTask?.cancel()
         nemotronLoadTask = nil
+        #endif
         nemotronHebrewLoadTask?.cancel()
         nemotronHebrewLoadTask = nil
         whisperKitDownloadTask?.cancel()
@@ -908,7 +967,9 @@ class AppState: ObservableObject {
 
         // Release Nemotron bridge if loaded
         #if canImport(FluidAudio)
-        if let nemotron = nemotronBridgeInstance {
+        // A meeting-owned bridge survives backend switches — the meeting is recording through
+        // it right now, and it is not the user's selected backend to begin with.
+        if let nemotron = nemotronBridgeInstance, !meetingOwnsNemotron {
             Task { await nemotron.prepareForShutdown() }
             nemotronBridgeInstance = nil
             isLoadingNemotron = false
@@ -1438,15 +1499,23 @@ class AppState: ObservableObject {
 
         nemotronLoadTask = Task.detached(priority: .userInitiated) { [weak self] in
             do {
-                let bridge = try await NemotronBridge.loadFromCache()
+                let bridge = try await ModelWorkQueue.shared.run("nemotron-load") {
+                    try await NemotronBridge.loadFromCache()
+                }
                 await MainActor.run { [weak self] in
                     guard let self else { return }
-                    guard self.selectedBackendType == .nemotron else { return }
+                    // Meetings load this bridge for themselves without touching the user's
+                    // backend selection, so always keep the instance. Only the user-visible
+                    // "this is the loaded backend" state is gated on their actual choice.
                     self.nemotronBridgeInstance = bridge
-                    self.isModelLoaded = true
-                    self.loadedBackendType = .nemotron
                     self.isLoadingNemotron = false
                     self.nemotronDownloadStatus = ""
+                    guard self.selectedBackendType == .nemotron else {
+                        Logger.info("Nemotron multilingual ready (meeting-owned)", subsystem: .model)
+                        return
+                    }
+                    self.isModelLoaded = true
+                    self.loadedBackendType = .nemotron
                     self.preloadLLM()
                     Logger.info("Nemotron multilingual ready", subsystem: .model)
                 }
@@ -1518,7 +1587,9 @@ class AppState: ObservableObject {
 
         nemotronHebrewLoadTask = Task.detached(priority: .userInitiated) { [weak self] in
             do {
-                let bridge = try await NemotronHebrewBridge.loadFromCache()
+                let bridge = try await ModelWorkQueue.shared.run("nemotron-hebrew-load") {
+                    try await NemotronHebrewBridge.loadFromCache()
+                }
                 await MainActor.run { [weak self] in
                     guard let self else { return }
                     guard self.selectedBackendType == .nemotronHebrew else { return }
@@ -1766,23 +1837,27 @@ class AppState: ObservableObject {
         // access (AIModeManager, splitPrompt) is wrapped in MainActor.run { }.
         llmLoadTask = Task.detached(priority: .userInitiated) { [weak self] in
             do {
-                try await processor.loadModel(variant)
-                let memAfter = BenchmarkUtilities.currentMemoryMB()
-                Logger.info("LLM \(variant.displayName) pre-loaded. Process memory: \(String(format: "%.0f", memBefore))MB → \(String(format: "%.0f", memAfter))MB (+\(String(format: "%.0f", memAfter - memBefore))MB)", subsystem: .model)
-                // Warm up the system prompt KV cache now — absorbs the cold-start prefill penalty
-                // (897ms–24s) into the model load phase rather than the first user transcription.
-                if let self = self {
-                    // Gather prompt on main actor (AIModeManager + splitPrompt are @MainActor
-                    // non-async, so they need an explicit MainActor.run hop).
-                    let sysPrompt: String = await MainActor.run {
-                        let mode = AIModeManager.shared.postProcessMode
-                        var (prompt, _) = self.splitPrompt(mode.prompt, text: ".")
-                        if let lang = mode.targetLanguage, !lang.isEmpty {
-                            prompt += " Translate to \(lang)."
+                // Weights + warmup are one queue slot: a warmup that lands on top of another
+                // family's ANE load is exactly the contention this queue exists to remove.
+                try await ModelWorkQueue.shared.run("llm-load") {
+                    try await processor.loadModel(variant)
+                    let memAfter = BenchmarkUtilities.currentMemoryMB()
+                    Logger.info("LLM \(variant.displayName) pre-loaded. Process memory: \(String(format: "%.0f", memBefore))MB → \(String(format: "%.0f", memAfter))MB (+\(String(format: "%.0f", memAfter - memBefore))MB)", subsystem: .model)
+                    // Warm up the system prompt KV cache now — absorbs the cold-start prefill penalty
+                    // (897ms–24s) into the model load phase rather than the first user transcription.
+                    if let self = self {
+                        // Gather prompt on main actor (AIModeManager + splitPrompt are @MainActor
+                        // non-async, so they need an explicit MainActor.run hop).
+                        let sysPrompt: String = await MainActor.run {
+                            let mode = AIModeManager.shared.postProcessMode
+                            var (prompt, _) = self.splitPrompt(mode.prompt, text: ".")
+                            if let lang = mode.targetLanguage, !lang.isEmpty {
+                                prompt += " Translate to \(lang)."
+                            }
+                            return prompt
                         }
-                        return prompt
+                        await processor.warmupPrompt(sysPrompt)
                     }
-                    await processor.warmupPrompt(sysPrompt)
                 }
             } catch {
                 Logger.error("Failed to pre-load LLM \(variant.displayName): \(error)", subsystem: .model)
@@ -2334,8 +2409,9 @@ class AppState: ObservableObject {
     func startInAppRecording() {
         // Show loading indicator if model isn't ready (works even during download)
         #if canImport(FluidAudio)
-        let nemotronReadyInApp = (selectedBackendType == .nemotron && nemotronBridgeInstance != nil)
-            || (selectedBackendType == .nemotronHebrew && nemotronHebrewBridgeInstance != nil)
+        let inAppBackend = effectiveInAppBackend
+        let nemotronReadyInApp = (inAppBackend == .nemotron && nemotronBridgeInstance != nil)
+            || (inAppBackend == .nemotronHebrew && nemotronHebrewBridgeInstance != nil)
         #else
         let nemotronReadyInApp = false
         #endif
@@ -2391,8 +2467,8 @@ class AppState: ObservableObject {
                 #endif
 
                 #if canImport(FluidAudio)
-                let nemotronInApp: NemotronBridge? = selectedBackendType == .nemotron ? nemotronBridgeInstance : nil
-                let nemotronHebrewInApp: NemotronHebrewBridge? = selectedBackendType == .nemotronHebrew ? nemotronHebrewBridgeInstance : nil
+                let nemotronInApp: NemotronBridge? = inAppBackend == .nemotron ? nemotronBridgeInstance : nil
+                let nemotronHebrewInApp: NemotronHebrewBridge? = inAppBackend == .nemotronHebrew ? nemotronHebrewBridgeInstance : nil
                 let anyNemotronInApp: (any AnyObject)? = (nemotronInApp as AnyObject?) ?? (nemotronHebrewInApp as AnyObject?)
                 #else
                 let anyNemotronInApp: AnyObject? = nil
@@ -2404,6 +2480,9 @@ class AppState: ObservableObject {
                     self?.activeRouteInfo = "Detected: \(lang.displayName)"
                     self?.isLiveTranscriptionRTL = lang.isRTL
                 }
+                streamingTranscriber?.onLanguageForcingUnavailable = { [weak self] lang in
+                    self?.reportLanguageForcingUnavailable(lang)
+                }
 
                 // Wire incremental CoreData persistence for crash recovery
                 // and per-chunk LLM correction (runs during audio collection windows).
@@ -2413,6 +2492,46 @@ class AppState: ObservableObject {
                 // safety net in case of any ordering race between the async stop and the nil.
                 let capturedMeetingSession = activeMeetingSession
                 let capturedGeneration = activeMeetingSession?.chunkGeneration ?? 0
+
+                #if canImport(FluidAudio)
+                // Speaker diarization runs only on the Nemotron path: it is the backend whose
+                // partial callback delivers a growing accumulated transcript, which is what the
+                // coordinator diffs into per-speaker deltas. whisper.cpp meetings keep their
+                // VAD-chunk behaviour with no speaker labels.
+                if let meetingSession = capturedMeetingSession, anyNemotronInApp != nil {
+                    let coordinator = MeetingSpeakerCoordinator()
+                    meetingSpeakerCoordinator = coordinator
+                    Task {
+                        await coordinator.setCallbacks(
+                            onAttributed: { text, speakerIndex, start, end in
+                                Task { @MainActor in
+                                    guard meetingSession.chunkGeneration == capturedGeneration else { return }
+                                    meetingSession.onAttributedText(
+                                        text: text,
+                                        speakerIndex: speakerIndex,
+                                        startTimestamp: start,
+                                        endTimestamp: end
+                                    )
+                                }
+                            },
+                            onPendingTail: { tail in
+                                Task { @MainActor in
+                                    guard meetingSession.chunkGeneration == capturedGeneration else { return }
+                                    meetingSession.livePreviewText = tail
+                                }
+                            },
+                            onLiveSpeaker: { index in
+                                Task { @MainActor in
+                                    guard meetingSession.chunkGeneration == capturedGeneration else { return }
+                                    meetingSession.noteLiveSpeaker(index)
+                                }
+                            }
+                        )
+                        await coordinator.start()
+                    }
+                }
+                #endif
+
                 streamingTranscriber?.onChunkCompleted = { [weak self] chunk in
                     guard let self else { return }
                     // Meeting mode — route chunk to session instead of history.
@@ -2420,6 +2539,19 @@ class AppState: ObservableObject {
                     // that arrives while stopInAppRecording()'s Task is still running.
                     let meetingSession = self.activeMeetingSession ?? capturedMeetingSession
                     if let meetingSession = meetingSession {
+                        #if canImport(FluidAudio)
+                        // With a coordinator active, this final text goes through the same diff
+                        // as the partials — sending it to onNewChunk as well would append the
+                        // whole meeting a second time.
+                        if let coordinator = self.meetingSpeakerCoordinator {
+                            let finalText = chunk.text
+                            self.diarizerFeedTask = Task { [previous = self.diarizerFeedTask] in
+                                await previous?.value
+                                await coordinator.onFinalText(finalText)
+                            }
+                            return
+                        }
+                        #endif
                         Task { @MainActor in
                             // Reject stale chunks from a previous recording that completed
                             // before this session's startRecording() incremented chunkGeneration.
@@ -2436,7 +2568,8 @@ class AppState: ObservableObject {
                         let mode = AIModeManager.shared.postProcessMode
                         // Nemotron fires onChunkCompleted once with the full session text at stop time.
                         // Per-chunk LLM is redundant — full-text path runs in stopRecording() instead.
-                        guard mode.supportsChunkProcessing, self.selectedBackendType != .nemotron, self.selectedBackendType != .nemotronHebrew else { return }
+                        let chunkBackend = self.effectiveInAppBackend
+                        guard mode.supportsChunkProcessing, chunkBackend != .nemotron, chunkBackend != .nemotronHebrew else { return }
                         self.chunkLLMCoordinator.enqueue(chunkText: chunkText)
                     }
                 }
@@ -2454,13 +2587,51 @@ class AppState: ObservableObject {
                 // to avoid echoing already-committed chunk text in the transcript bubble.
                 streamingTranscriber?.onPreviewTail = { [weak self] tail in
                     Task { @MainActor in
-                        self?.activeMeetingSession?.livePreviewText = tail
+                        guard let self else { return }
+                        #if canImport(FluidAudio)
+                        // On the Nemotron path this "tail" is the FULL accumulated transcript.
+                        // The coordinator diffs it, attributes the new words to a speaker, and
+                        // feeds back only the not-yet-attributed remainder as livePreviewText.
+                        if let coordinator = self.meetingSpeakerCoordinator {
+                            self.diarizerFeedTask = Task { [previous = self.diarizerFeedTask] in
+                                await previous?.value
+                                await coordinator.onPartial(tail)
+                            }
+                            return
+                        }
+                        #endif
+                        self.activeMeetingSession?.livePreviewText = tail
                     }
                 }
+
+                #if canImport(FluidAudio)
+                // Sortformer consumes 0.48s of audio per ANE inference, so handing it every
+                // ~85ms capture buffer spawns ~12 Tasks/s that mostly no-op inside the diarizer.
+                // Batching to 0.25s cuts that churn ~3x, and the added clock skew is an order of
+                // magnitude inside the diarizer's own ~1s finalization lag.
+                var diarizerBatch: [Float] = []
+                let diarizerBatchSize = 4000
+                #endif
 
                 audioRecorder?.onStreamingSamples = { [weak self] samples in
                     guard let self = self, !self.isMicMuted, !self.isPaused else { return }
                     self.streamingTranscriber?.addSamples(samples)
+                    #if canImport(FluidAudio)
+                    // Same buffers the ASR sees, so the coordinator's sample counter is an exact
+                    // audio clock. Chained rather than fire-and-forget: SortformerDiarizer is not
+                    // thread-safe and actor re-entrancy across its ANE await would interleave.
+                    if let coordinator = self.meetingSpeakerCoordinator {
+                        diarizerBatch.append(contentsOf: samples)
+                        if diarizerBatch.count >= diarizerBatchSize {
+                            let batch = diarizerBatch
+                            diarizerBatch.removeAll(keepingCapacity: true)
+                            self.diarizerFeedTask = Task { [previous = self.diarizerFeedTask] in
+                                await previous?.value
+                                await coordinator.feed(batch)
+                            }
+                        }
+                    }
+                    #endif
                 }
 
                 // Resolve input route fresh at recording time
@@ -2519,6 +2690,26 @@ class AppState: ObservableObject {
             let wasMeetingStop = isMeetingStopInFlight
             isMeetingStopInFlight = false
 
+            // Deferred, not placed at the end of the Task: the watchdog bail-out below
+            // (`guard case .stopping`) returns early, and a stranded gate would suspend
+            // every background model load for the rest of the app session.
+            //
+            // One ordered Task, not two: the gate must be DOWN before the release job is
+            // submitted. As two independent Tasks the submission could win the race, land on a
+            // still-raised gate, and — before the queue was reordered to wait on the gate ahead
+            // of the slot — park there holding the only execution slot, wedging every job behind
+            // it (transcript polish, overview, RAG index) for the rest of the session.
+            defer {
+                if wasMeetingStop {
+                    Task { @MainActor in
+                        await ModelWorkQueue.shared.setMeetingActive(false)
+                        #if canImport(FluidAudio)
+                        self.releaseMeetingNemotron()
+                        #endif
+                    }
+                }
+            }
+
             // WhisperKit consumes complete buffers rather than maintaining an RNNT
             // stream, so one ~100ms input-buffer interval is sufficient at release.
             // The default 200ms remains for Nemotron and the other streaming paths.
@@ -2549,13 +2740,26 @@ class AppState: ObservableObject {
                     await stopTask.value
                 } ?? ""
 
-                if saveRecordings && !finalText.isEmpty && !wasMeetingStop {
+                if !finalText.isEmpty && !wasMeetingStop {
                     savedRecordId = saveRecordingFromTranscriber(transcriber, transcription: finalText)
                 }
             }
             // Discard the in-progress CoreData session — saveRecordingFromTranscriber wrote the clean final record
             discardCurrentSession()
             streamingTranscriber = nil
+
+            #if canImport(FluidAudio)
+            // Drain the diarizer and commit any still-unattributed text BEFORE the session
+            // reference goes away — finish() emits through the callbacks captured above.
+            if let coordinator = meetingSpeakerCoordinator {
+                await diarizerFeedTask?.value
+                diarizerFeedTask = nil
+                await coordinator.finish()
+                meetingSpeakerCoordinator = nil
+                // Let the callbacks' MainActor hops land before activeMeetingSession is nilled.
+                await Task.yield()
+            }
+            #endif
 
             // Tail transcription has now been delivered via onChunkCompleted — safe to nil meeting session.
             if wasMeetingStop {
@@ -2696,6 +2900,9 @@ class AppState: ObservableObject {
                     self?.activeRouteInfo = "Detected: \(lang.displayName)"
                     self?.isLiveTranscriptionRTL = lang.isRTL
                 }
+                streamingTranscriber?.onLanguageForcingUnavailable = { [weak self] lang in
+                    self?.reportLanguageForcingUnavailable(lang)
+                }
 
                 // Wire incremental CoreData persistence for crash recovery
                 // and per-chunk LLM correction (runs during audio collection windows).
@@ -2827,6 +3034,24 @@ class AppState: ObservableObject {
     }
 
     func stopRecording() {
+        // This is the dictation stop path: it writes a TranscriptionEntity and injects the text
+        // into the focused app. A meeting or in-app recording must never end through it.
+        //
+        // GlobalKeyListener tracks its own `recordingInProgress` independently of AppState.state,
+        // so a stray Fn press during a meeting is swallowed by startRecording()'s `state == .idle`
+        // guard while the matching release still lands here with state == .recording. That saved
+        // the whole meeting into transcription history and typed the transcript into whatever app
+        // happened to be focused.
+        if isMeetingMode {
+            Logger.info("stopRecording() ignored — a meeting recording is active", subsystem: .app)
+            return
+        }
+        if isInAppMode {
+            Logger.info("stopRecording() routed to the in-app path — isInAppMode is set", subsystem: .app)
+            stopInAppRecording()
+            return
+        }
+
         guard case .recording = state else {
             Logger.warning("stopRecording() called but state is \(state), ignoring", subsystem: .app)
             return
@@ -2906,9 +3131,11 @@ class AppState: ObservableObject {
             guard case .stopping = state else { return }
 
             if !finalText.isEmpty {
-                // Save recording if enabled (only when there are actual words)
+                // Archive the audio alongside the text — only when there are actual words.
+                // Audio is always kept now; retention (AudioRetentionService) is the answer
+                // to disk usage, not a switch that stops recordings from being saved.
                 var savedRecordId: UUID?
-                if saveRecordings, let transcriber {
+                if let transcriber {
                     savedRecordId = saveRecordingFromTranscriber(transcriber, transcription: finalText)
                 }
 
@@ -3122,6 +3349,18 @@ class AppState: ObservableObject {
         Logger.debug("Recording cancelled (Fn+key combo)", subsystem: .app)
         cancelStateWatchdog()
 
+        // Cancelling out of a meeting never reaches stopInAppRecording(), so the queue gate
+        // would stay raised for the rest of the session. Ordered, as in stopInAppRecording():
+        // the release job must not be submitted while the gate is still up.
+        if isMeetingMode {
+            Task { @MainActor in
+                await ModelWorkQueue.shared.setMeetingActive(false)
+                #if canImport(FluidAudio)
+                self.releaseMeetingNemotron()
+                #endif
+            }
+        }
+
         Task {
             // Cancel inference first so no stale progress callback can mutate the UI
             // while the recorder is shutting down. A cancelled recording is discarded,
@@ -3208,12 +3447,21 @@ class AppState: ObservableObject {
             .trimmingCharacters(in: .whitespaces)
             .replacingOccurrences(of: " ", with: "_")
 
-        let fileName = safeText.isEmpty ? "\(timestamp).wav" : "\(timestamp)_\(safeText).wav"
+        let ext = AudioArchiveFormat.fileExtension
+        let fileName = safeText.isEmpty ? "\(timestamp).\(ext)" : "\(timestamp)_\(safeText).\(ext)"
         let destURL = recordingsDir.appendingPathComponent(fileName)
 
         // Save recording from in-memory samples
         if transcriber.saveRecording(to: destURL) {
             Logger.info("Recording saved to: \(destURL.path)", subsystem: .app)
+
+            // The archive is now a self-contained copy, so the session file is dead weight.
+            // Without this it survived until a launch 7+ days later reaped it as an orphan,
+            // doubling disk cost for every dictation in the meantime. Never in meeting mode —
+            // MeetingSession.moveAudioToMeetingsDirectory consumes that same file.
+            if activeMeetingSession == nil, let sessionURL = transcriber.sessionAudioURL {
+                SessionStorage.deleteSessionFile(at: sessionURL)
+            }
 
             // Save to history database
             Task {
@@ -3396,6 +3644,90 @@ class AppState: ObservableObject {
 
     // MARK: - Meeting Mode
 
+    #if canImport(FluidAudio)
+    /// Minimum free memory required to hold Nemotron alongside a different dictation backend.
+    /// Below this the user's bridge is evicted for the meeting and reloaded afterwards.
+    private static let meetingDualBackendHeadroomGB: Double = 2.0
+
+    /// Gets a Nemotron bridge ready for a meeting, without disturbing the user's backend.
+    ///
+    /// Nemotron is the only backend whose partial callback delivers a growing accumulated
+    /// transcript, and that stream is what speaker attribution diffs against. Called before
+    /// the meeting record is created so a failure leaves nothing half-started.
+    ///
+    /// The bridge is loaded *alongside* whatever the user dictates with rather than swapped in:
+    /// `selectBackend()` tore the previous backend down and rebuilt it on the way out, ~62s of
+    /// pure loading per meeting, with the return leg landing on top of the post-meeting AI work.
+    ///
+    /// Returns `false` when Nemotron cannot be made ready — the caller must not record.
+    func prepareMeetingBackend() async -> Bool {
+        if nemotronBridgeInstance != nil {
+            meetingOwnsNemotron = selectedBackendType != .nemotron
+            return true
+        }
+
+        guard isNemotronModelCached() else {
+            errorMessage = "Meeting Notes needs the Nemotron model. Download it from the Models tab, then start the meeting."
+            return false
+        }
+
+        meetingOwnsNemotron = selectedBackendType != .nemotron
+
+        // Two ASR models resident at once is the trade that buys back the swap time, but only
+        // when there is room for it. When there isn't, evict the user's bridge for the duration
+        // and reload it at the end — the old behaviour, minus the write to selectedBackendType.
+        if meetingOwnsNemotron, SystemMemory.availableGB() < Self.meetingDualBackendHeadroomGB {
+            Logger.info("Meeting: low memory — evicting \(selectedBackendType.displayName) for the meeting", subsystem: .model)
+            meetingEvictedUserBackend = true
+            releaseCurrentBridge()
+        }
+
+        if nemotronLoadTask == nil {
+            preloadNemotronModel()
+        }
+        // The load runs detached and is queued behind any other model work. Waiting beats
+        // starting a meeting that records no words.
+        await nemotronLoadTask?.value
+
+        guard nemotronBridgeInstance != nil else {
+            errorMessage = "Nemotron did not finish loading — try starting the meeting again."
+            releaseMeetingNemotron()
+            return false
+        }
+        return true
+    }
+
+    /// Hands back the Nemotron bridge a meeting borrowed.
+    ///
+    /// Submitted to `ModelWorkQueue` rather than torn down inline so the teardown cannot overlap
+    /// another model load. It is the *first* job in line, not the last: title generation, the
+    /// overview and the initial RAG index do not go through the queue at all, and transcript
+    /// polish is submitted a second or two later. Callers must therefore lower the meeting gate
+    /// before calling this — see the ordered Task in `stopInAppRecording()`.
+    private func releaseMeetingNemotron() {
+        guard meetingOwnsNemotron else { return }
+        meetingOwnsNemotron = false
+
+        if let bridge = nemotronBridgeInstance, selectedBackendType != .nemotron {
+            nemotronBridgeInstance = nil
+            nemotronLoadTask = nil
+            isLoadingNemotron = false
+            Task {
+                // try? — run() now throws only on cancellation of this Task, in which case the
+                // bridge is being torn down by app shutdown anyway.
+                try? await ModelWorkQueue.shared.run("nemotron-meeting-release") {
+                    await bridge.prepareForShutdown()
+                }
+            }
+        }
+
+        guard meetingEvictedUserBackend else { return }
+        meetingEvictedUserBackend = false
+        // preloadModel() dispatches on selectedBackendType, which the meeting never changed.
+        preloadModel()
+    }
+    #endif
+
     func startMeetingRecording(session: MeetingSession) {
         guard state == .idle else {
             Logger.warning("Cannot start meeting recording — AppState not idle", subsystem: .app)
@@ -3413,6 +3745,12 @@ class AppState: ObservableObject {
         // Reuse in-app recording path (isInAppMode = true suppresses text injection)
         isInAppMode = true
         startInAppRecording()
+
+        // Only once recording actually began: startInAppRecording() bails out early when no
+        // backend is ready, and a gate raised then would never be lowered.
+        if case .recording = state {
+            Task { await ModelWorkQueue.shared.setMeetingActive(true) }
+        }
     }
 
     func stopMeetingRecording() {

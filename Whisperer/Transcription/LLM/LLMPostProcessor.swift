@@ -41,13 +41,20 @@ class LLMPostProcessor: ObservableObject {
     @Published var errorMessage: String?
 
     private var modelContainer: ModelContainer?
-    private var loadedVariant: LLMModelVariant?
+    private(set) var loadedVariant: LLMModelVariant?
 
     // Per-instructions KV caches — keyed on the full instructions string (system prompt + language).
     // Capped at 4 entries with FIFO eviction. Each value is a warmed prompt prefix ready to copy().
     private var cachedPrompts: [String: [any KVCache]] = [:]
     private var cachedPromptOrder: [String] = []
     private static let maxCachedPrompts = 4
+
+    // Degeneration cut-off: the model has emitted the identical token this many times in a row.
+    // Natural text never does this — the longest legitimate run is a few characters of padding —
+    // so any value in the tens behaves the same on real output and there is nothing to tune.
+    // Observed failure this bounds: ~1200 tokens of a repeated Hebrew "ה" over 31.8s, which
+    // stayed inside both the token budget and any character ceiling.
+    private static let degenerateRepeatLimit = 48
 
     // MTP system-prefix KV cache — pre-filled once per instructions string.
     // Copied on each processMTP call so only user-suffix tokens need prefilling (~25 vs ~150 tokens).
@@ -390,7 +397,8 @@ class LLMPostProcessor: ObservableObject {
         maxTokensCap: Int = 256,
         outputTokensHint: Int? = nil,
         timeoutSecondsOverride: Double? = nil,
-        throwOnFallback: Bool = false
+        throwOnFallback: Bool = false,
+        reuseWarmCache: Bool = true
     ) async throws -> String {
         guard let container = modelContainer else {
             Logger.warning("LLM not loaded, returning original text", subsystem: .transcription)
@@ -442,7 +450,8 @@ class LLMPostProcessor: ObservableObject {
                 targetLanguage: targetLanguage,
                 originalText: text,
                 timeoutSecondsOverride: timeoutSecondsOverride,
-                throwOnFallback: throwOnFallback
+                throwOnFallback: throwOnFallback,
+                reuseWarmCache: reuseWarmCache
             )
             return mtpResult
         }
@@ -484,7 +493,10 @@ class LLMPostProcessor: ObservableObject {
                 additionalContext: ["enable_thinking": false]
             )
             // Trigger background warmup for next call if not already building.
-            if cachedPrompts[instructions] == nil {
+            // Skipped for one-shot prompts (reuseWarmCache: false) — the warmup would prefill
+            // the whole system prefix on the same serial ModelContainer as this generation,
+            // contending with it to populate a cache no later call will ever hit.
+            if reuseWarmCache, cachedPrompts[instructions] == nil {
                 Task { [weak self] in
                     await self?.warmupPrompt(instructions)
                 }
@@ -505,6 +517,8 @@ class LLMPostProcessor: ObservableObject {
         let genTask = Task {
             var r = ""
             var info: GenerateCompletionInfo?
+            var lastChunk: String?
+            var repeatRun = 0
             generation: for try await token in session.streamDetails(
                 to: userMessage, images: [], videos: []
             ) {
@@ -514,6 +528,16 @@ class LLMPostProcessor: ObservableObject {
                     if let limit = outputCharLimit, r.count > limit {
                         Logger.debug("LLM length guard: \(r.count) > \(limit) chars", subsystem: .transcription)
                         break generation
+                    }
+                    if chunk == lastChunk {
+                        repeatRun += 1
+                        if repeatRun >= Self.degenerateRepeatLimit {
+                            Logger.warning("LLM degeneration guard: same token emitted \(repeatRun) times in a row — stopping", subsystem: .transcription)
+                            break generation
+                        }
+                    } else {
+                        lastChunk = chunk
+                        repeatRun = 1
                     }
                 case .info(let i):
                     info = i
@@ -577,6 +601,9 @@ class LLMPostProcessor: ObservableObject {
     private final class MTPOutput: @unchecked Sendable {
         var text: String = ""
         var stop: Bool = false
+        /// Degeneration tracking — last token id and how many times in a row it has been emitted.
+        var lastTokenId: Int? = nil
+        var repeatRun: Int = 0
     }
 
     private func processMTP(
@@ -590,7 +617,8 @@ class LLMPostProcessor: ObservableObject {
         targetLanguage: String?,
         originalText: String,
         timeoutSecondsOverride: Double? = nil,
-        throwOnFallback: Bool = false
+        throwOnFallback: Bool = false,
+        reuseWarmCache: Bool = true
     ) async throws -> String {
         let timeoutSeconds: Double = timeoutSecondsOverride ?? (charCount < 30 ? 5 : charCount < 200 ? 10 : 15)
         let mtpOutput = MTPOutput()
@@ -611,7 +639,7 @@ class LLMPostProcessor: ObservableObject {
         if mtpWarmCache != nil && instructions == mtpWarmInstructions {
             warmBox.cache = mtpWarmCache!.map { $0.copy() }
             warmBox.prefixLength = mtpWarmPrefixLength
-        } else {
+        } else if reuseWarmCache {
             Task { [weak self, container, instructions] in
                 await self?.runMTPWarmup(container: container, instructions: instructions)
             }
@@ -676,6 +704,18 @@ class LLMPostProcessor: ObservableObject {
                     let piece = tokenizer.decode(tokens: [tokenId])
                     mtpOutput.text += piece
                     if let limit = outputCharLimit, mtpOutput.text.count > limit { return false }
+                    // Degeneration cut-off — the model is looping on one token.
+                    if tokenId == mtpOutput.lastTokenId {
+                        mtpOutput.repeatRun += 1
+                        if mtpOutput.repeatRun >= Self.degenerateRepeatLimit {
+                            Logger.warning("MTP gen: degeneration guard — token \(tokenId) emitted \(mtpOutput.repeatRun) times in a row, stopping", subsystem: .transcription)
+                            mtpOutput.stop = true
+                            return false
+                        }
+                    } else {
+                        mtpOutput.lastTokenId = tokenId
+                        mtpOutput.repeatRun = 1
+                    }
                     return true
                 }
             )
