@@ -44,6 +44,10 @@ struct RAGAnswer {
 actor MeetingAIService {
     static let shared = MeetingAIService()
 
+    /// Pre-compiled regex for citation parsing. The pattern is a string literal
+    /// that never fails to compile, so force-try is safe.
+    private static let citationRegex = try! NSRegularExpression(pattern: #"\[(\d+)s\]"#)
+
     private init() {}
 
     // MARK: - LLM borrow helpers
@@ -333,9 +337,8 @@ actor MeetingAIService {
         var results: [RAGChunk] = []
         var seen = Set<Int>()   // segment indices already included
 
-        let pattern = try? NSRegularExpression(pattern: #"\[(\d+)s\]"#)
         let nsText = text as NSString
-        let matches = pattern?.matches(in: text, range: NSRange(location: 0, length: nsText.length)) ?? []
+        let matches = MeetingAIService.citationRegex.matches(in: text, range: NSRange(location: 0, length: nsText.length))
 
         for match in matches {
             guard let range = Range(match.range(at: 1), in: text),

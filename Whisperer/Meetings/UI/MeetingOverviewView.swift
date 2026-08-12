@@ -439,30 +439,9 @@ struct MeetingOverviewView: View {
         let id = meeting.id
         let title = meeting.title
         Task {
-            // Pre-flight: acquire the meeting intelligence engine. If unavailable, show
-            // the noLLMBanner so the user knows to download / prepare the engine.
-            #if canImport(FluidAudio)
-            guard let _ = await MeetingEngines.shared.borrowLLM() else {
-                await MainActor.run {
-                    withAnimation { noLLMBanner = true }
-                    isGenerating = false
-                }
-                return
-            }
-            defer { MeetingEngines.shared.releaseLLM() }
-            #else
-            let llmLoaded = await MainActor.run {
-                AppState.shared.llmPostProcessor?.isModelLoaded ?? false
-            }
-            guard llmLoaded else {
-                await MainActor.run {
-                    withAnimation { noLLMBanner = true }
-                    isGenerating = false
-                }
-                return
-            }
-            #endif
-            // Name it too, unless the user already titled it themselves.
+            // generateTitle / generateOverview each own their borrow/release via
+            // MeetingEngines.borrowLLM(). If the engine is unavailable either method
+            // posts .meetingOverviewDidFail, which sets generationFailed = true.
             await MeetingAIService.shared.generateTitle(segments: segments, meetingID: id, currentTitle: title)
             await MeetingAIService.shared.generateOverview(segments: segments, meetingID: id)
             await MainActor.run { isGenerating = false }
