@@ -19,7 +19,126 @@ struct MeetingStudioView: View {
     @ObservedObject private var manager = MeetingManager.shared
     @Binding var selectedMeetingID: UUID?
 
+    #if canImport(FluidAudio)
+    @ObservedObject private var engines = MeetingEngines.shared
+    @State private var continueAnyway = false
+    #endif
+
     var body: some View {
+        #if canImport(FluidAudio)
+        Group {
+            if engines.needsPreparation && !continueAnyway {
+                MeetingPrepView(continueAnyway: $continueAnyway)
+            } else {
+                mainContent
+            }
+        }
+        .environment(\.colorScheme, .dark)
+        .onAppear {
+            if selectedMeetingID == nil, let first = manager.meetings.first {
+                selectedMeetingID = first.id
+            }
+        }
+        .onChange(of: selectedMeetingID) { _, newID in
+            audioPlayer.stop()
+            detailVM.clear()
+            if let id = newID { Task { await detailVM.load(meetingID: id) } }
+        }
+        .onChange(of: detailVM.meeting?.id) { _, _ in
+            if let url = detailVM.meeting?.resolvedAudioURL,
+               FileManager.default.fileExists(atPath: url.path),
+               audioPlayer.duration == 0 {
+                audioPlayer.load(url: url)
+            }
+        }
+        .onChange(of: session.meetingID) { _, id in
+            if let id { selectedMeetingID = id }
+        }
+        .onChange(of: session.isRecording) { _, isRec in
+            if isRec, let id = session.meetingID {
+                selectedMeetingID = id
+            } else {
+                Task { await detailVM.refreshDetail() }
+            }
+        }
+        .onChange(of: session.segments.count) { _, _ in
+            guard !session.isRecording else { return }
+            Task { await detailVM.refreshDetail() }
+        }
+        .onChange(of: manager.meetings) { _, meetings in
+            if session.isRecording, let id = session.meetingID {
+                selectedMeetingID = id
+                return
+            }
+            if selectedMeetingID == nil {
+                selectedMeetingID = meetings.first?.id
+            } else if let id = selectedMeetingID, !meetings.contains(where: { $0.id == id }) {
+                selectedMeetingID = meetings.first?.id
+            }
+            if let item = meetings.first(where: { $0.id == selectedMeetingID }),
+               let url = item.resolvedAudioURL,
+               FileManager.default.fileExists(atPath: url.path),
+               audioPlayer.duration == 0 {
+                audioPlayer.load(url: url)
+            }
+        }
+        #else
+        mainContent
+            .environment(\.colorScheme, .dark)
+            .onAppear {
+                if selectedMeetingID == nil, let first = manager.meetings.first {
+                    selectedMeetingID = first.id
+                }
+            }
+            .onChange(of: selectedMeetingID) { _, newID in
+                audioPlayer.stop()
+                detailVM.clear()
+                if let id = newID { Task { await detailVM.load(meetingID: id) } }
+            }
+            .onChange(of: detailVM.meeting?.id) { _, _ in
+                if let url = detailVM.meeting?.resolvedAudioURL,
+                   FileManager.default.fileExists(atPath: url.path),
+                   audioPlayer.duration == 0 {
+                    audioPlayer.load(url: url)
+                }
+            }
+            .onChange(of: session.meetingID) { _, id in
+                if let id { selectedMeetingID = id }
+            }
+            .onChange(of: session.isRecording) { _, isRec in
+                if isRec, let id = session.meetingID {
+                    selectedMeetingID = id
+                } else {
+                    Task { await detailVM.refreshDetail() }
+                }
+            }
+            .onChange(of: session.segments.count) { _, _ in
+                guard !session.isRecording else { return }
+                Task { await detailVM.refreshDetail() }
+            }
+            .onChange(of: manager.meetings) { _, meetings in
+                if session.isRecording, let id = session.meetingID {
+                    selectedMeetingID = id
+                    return
+                }
+                if selectedMeetingID == nil {
+                    selectedMeetingID = meetings.first?.id
+                } else if let id = selectedMeetingID, !meetings.contains(where: { $0.id == id }) {
+                    selectedMeetingID = meetings.first?.id
+                }
+                if let item = meetings.first(where: { $0.id == selectedMeetingID }),
+                   let url = item.resolvedAudioURL,
+                   FileManager.default.fileExists(atPath: url.path),
+                   audioPlayer.duration == 0 {
+                    audioPlayer.load(url: url)
+                }
+            }
+        #endif
+    }
+
+    // MARK: - Main 3-column content
+
+    private var mainContent: some View {
         HStack(spacing: 0) {
             // Left: library + live card
             MeetingListPanel(
@@ -44,66 +163,6 @@ struct MeetingStudioView: View {
             MeetingRightPanel(meeting: detailVM.meeting, session: session, player: audioPlayer)
                 .frame(width: 420)
                 .id(selectedMeetingID)
-        }
-        .environment(\.colorScheme, .dark)
-        .onAppear {
-            if selectedMeetingID == nil, let first = manager.meetings.first {
-                selectedMeetingID = first.id
-            }
-            // Audio load happens via onChange(of: detailVM.meeting?.id)
-        }
-        // When selection changes: clear detail immediately (shows skeleton), then load new record
-        .onChange(of: selectedMeetingID) { _, newID in
-            audioPlayer.stop()
-            detailVM.clear()
-            if let id = newID { Task { await detailVM.load(meetingID: id) } }
-        }
-        // When the loaded detail record appears, load its audio
-        .onChange(of: detailVM.meeting?.id) { _, _ in
-            if let url = detailVM.meeting?.resolvedAudioURL,
-               FileManager.default.fileExists(atPath: url.path),
-               audioPlayer.duration == 0 {
-                audioPlayer.load(url: url)
-            }
-        }
-        .onChange(of: session.meetingID) { _, id in
-            if let id { selectedMeetingID = id }
-        }
-        // Belt-and-suspenders: when recording starts, ensure the live meeting is selected
-        .onChange(of: session.isRecording) { _, isRec in
-            if isRec, let id = session.meetingID {
-                selectedMeetingID = id
-            } else {
-                // refreshDetail(), not load(): load() clears the record to a skeleton before
-                // fetching (and early-returns here anyway since loadedMeetingID is unchanged),
-                // which is what made the whole transcript blink out at stop.
-                Task { await detailVM.refreshDetail() }
-            }
-        }
-        // The tail chunk appends one more segment after stopRecording() has returned.
-        // Pick it up without blanking what is already on screen.
-        .onChange(of: session.segments.count) { _, _ in
-            guard !session.isRecording else { return }
-            Task { await detailVM.refreshDetail() }
-        }
-        .onChange(of: manager.meetings) { _, meetings in
-            // While recording, always track the live meeting
-            if session.isRecording, let id = session.meetingID {
-                selectedMeetingID = id
-                return
-            }
-            if selectedMeetingID == nil {
-                selectedMeetingID = meetings.first?.id
-            } else if let id = selectedMeetingID, !meetings.contains(where: { $0.id == id }) {
-                selectedMeetingID = meetings.first?.id
-            }
-            // Audio becomes available after finalize — check list item for the URL
-            if let item = meetings.first(where: { $0.id == selectedMeetingID }),
-               let url = item.resolvedAudioURL,
-               FileManager.default.fileExists(atPath: url.path),
-               audioPlayer.duration == 0 {
-                audioPlayer.load(url: url)
-            }
         }
     }
 

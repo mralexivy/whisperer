@@ -11,7 +11,6 @@ struct MeetingListPanel: View {
     @ObservedObject var session: MeetingSession
     @Binding var selectedMeetingID: UUID?
     @ObservedObject private var manager = MeetingManager.shared
-
     @State private var searchText = ""
 
     private var filtered: [MeetingListItem] {
