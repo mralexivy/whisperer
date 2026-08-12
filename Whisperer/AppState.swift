@@ -3357,6 +3357,16 @@ class AppState: ObservableObject {
                 await ModelWorkQueue.shared.setMeetingActive(false)
                 #if canImport(FluidAudio)
                 self.releaseMeetingNemotron()
+                // Mirror the teardown that stopInAppRecording() performs so the abandoned
+                // session and its coordinator cannot receive chunks from the next recording.
+                if let coordinator = self.meetingSpeakerCoordinator {
+                    await self.diarizerFeedTask?.value
+                    self.diarizerFeedTask = nil
+                    await coordinator.finish()
+                    self.meetingSpeakerCoordinator = nil
+                    await Task.yield()
+                }
+                self.activeMeetingSession = nil
                 #endif
             }
         }

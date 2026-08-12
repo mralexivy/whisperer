@@ -108,6 +108,9 @@ final class MeetingEngines: ObservableObject {
     private var llmInstance: LLMPostProcessor?
     private var llmRefcount: Int = 0
     private var llmIdleTask: Task<Void, Never>?
+    /// True while the idle-unload body (unloadModel + nil assignment) is executing.
+    /// Guards borrowLLM() from calling loadModel() concurrently with an in-flight unload.
+    private var isUnloading: Bool = false
 
     // MARK: - init
 
@@ -296,7 +299,9 @@ final class MeetingEngines: ObservableObject {
         // "nemotron-load" queued behind it and never dequeued).
         let success = await AppState.shared.prepareMeetingBackend()
         Logger.info("MeetingEngines: speech warm \(success ? "succeeded" : "failed")", subsystem: .model)
-        if !success {
+        if success {
+            readiness[.speech] = .ready
+        } else {
             readiness[.speech] = .unavailable("Nemotron could not be loaded.")
         }
     }
@@ -339,7 +344,9 @@ final class MeetingEngines: ObservableObject {
         } catch {
             Logger.error("MeetingEngines: cleanup warm failed — \(error.localizedDescription)", subsystem: .model)
             readiness[.cleanup] = .unavailable(error.localizedDescription)
+            return
         }
+        readiness[.cleanup] = .ready
     }
 
     private func runIntelligence() async {
@@ -377,7 +384,9 @@ final class MeetingEngines: ObservableObject {
         } catch {
             Logger.error("MeetingEngines: intelligence warm failed — \(error.localizedDescription)", subsystem: .model)
             readiness[.intelligence] = .unavailable(error.localizedDescription)
+            return
         }
+        readiness[.intelligence] = .ready
     }
 
     // MARK: - LLM borrow/release (refcounted)
@@ -397,6 +406,15 @@ final class MeetingEngines: ObservableObject {
         llmIdleTask?.cancel()
         llmIdleTask = nil
         llmRefcount += 1
+
+        // If the idle-unload body is executing concurrently (cancel() cannot interrupt an
+        // already-suspended unloadModel() call), yield until it finishes. Without this guard,
+        // borrowLLM() would call loadModel() while unloadModel() is still in flight, and the
+        // subsequent `self.llmInstance = nil` at the end of the idle task would orphan the
+        // freshly loaded model, causing the next borrow to build a third LLMPostProcessor.
+        while isUnloading {
+            await Task.yield()
+        }
 
         // Reuse an existing instance if already loaded.
         if let existing = llmInstance, existing.isModelLoaded {
@@ -436,8 +454,10 @@ final class MeetingEngines: ObservableObject {
         llmIdleTask = Task { @MainActor [weak self] in
             try? await Task.sleep(nanoseconds: 60_000_000_000)
             guard let self, self.llmRefcount == 0 else { return }
+            self.isUnloading = true
             await self.llmInstance?.unloadModel()
             self.llmInstance = nil
+            self.isUnloading = false
             Logger.info("MeetingEngines: LLM unloaded after 60s idle", subsystem: .model)
         }
     }

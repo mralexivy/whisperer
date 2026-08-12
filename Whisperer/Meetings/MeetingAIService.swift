@@ -97,12 +97,15 @@ actor MeetingAIService {
         // For very long transcripts, prefilter segments to the most relevant ones so the
         // system prompt stays within ~3,000 tokens. Log when this path is taken.
         let useSegments: [MeetingSegment]
+        let usedBM25: Bool
         let fullTranscript = Self.timestampedTranscript(segments)
         if fullTranscript.count > Self.maxTranscriptChars {
             Logger.info("Meeting Q&A: transcript \(fullTranscript.count) chars — applying BM25 prefilter", subsystem: .transcription)
             useSegments = Self.bm25PrefilterSegments(segments, question: question)
+            usedBM25 = true
         } else {
             useSegments = segments
+            usedBM25 = false
         }
 
         let transcript = Self.timestampedTranscript(useSegments)
@@ -115,9 +118,11 @@ actor MeetingAIService {
                 userMessage:    question,
                 temperature:    0.3,
                 maxTokensCap:   512,
-                // Stable per meeting — every question embeds the same transcript prefix,
-                // so the first question prefills the cache and later ones reuse it.
-                reuseWarmCache: true
+                // Cache only when the system prompt is stable (same full transcript every call).
+                // BM25 prefilter builds a question-specific subset, so the prompt changes on
+                // every question — reuseWarmCache would silently evict + rebuild the KV prefix
+                // each time rather than reusing it, wasting the flag's purpose.
+                reuseWarmCache: !usedBM25
             )
             let answer = response.trimmingCharacters(in: .whitespacesAndNewlines)
             let sources = parseCitations(from: answer, segments: segments)
