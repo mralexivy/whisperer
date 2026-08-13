@@ -108,6 +108,14 @@ actor NemotronHebrewBridge {
 
     private var _sessionSampleCount: Int = 0
 
+    /// This bridge always forces `he`, whatever the caller asks for — so that, and not the
+    /// requested language, is what has to be present in the fine-tune's prompt dictionary.
+    func forcedLanguageSupport(for language: TranscriptionLanguage) async -> (code: String, isSupported: Bool)? {
+        guard let manager else { return nil }
+        let config = await manager.config
+        return ("he", config.promptId(forLanguage: "he") != config.defaultPromptId)
+    }
+
     func beginSession(language: TranscriptionLanguage) async {
         guard let manager else {
             Logger.warning("[NemotronHebrew] beginSession called but manager is nil", subsystem: .transcription)

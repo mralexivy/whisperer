@@ -110,6 +110,28 @@ final class MeetingDetailViewModel: ObservableObject {
         }
     }
 
+    /// Swap in a whole polished array in one pass. Calling `updateSegmentInMemory` per segment
+    /// would republish `displayedSegments` N times, and every publish costs a full transcript
+    /// relayout in `SelectableTranscriptView`.
+    func applyRefinedSegments(_ refined: [MeetingSegment]) {
+        guard !refined.isEmpty else { return }
+        let byID = Dictionary(refined.map { ($0.id, $0) }, uniquingKeysWith: { _, last in last })
+        if var m = meeting {
+            for i in m.segments.indices {
+                if let r = byID[m.segments[i].id] { m.segments[i] = r }
+            }
+            meeting = m
+        }
+        for i in allSegments.indices {
+            if let r = byID[allSegments[i].id] { allSegments[i] = r }
+        }
+        // Never shrink the window — the polish pass can add nothing, but the tail chunk may
+        // have grown allSegments since the last page load.
+        let keepCount = max(displayedSegments.count, min(pageSize, allSegments.count))
+        displayedSegments = Array(allSegments.prefix(keepCount))
+        hasMoreSegments = displayedSegments.count < allSegments.count
+    }
+
     func renameSpeakerInMemory(from oldName: String, to newName: String) {
         if var m = meeting {
             for i in m.segments.indices where m.segments[i].speakerName == oldName {

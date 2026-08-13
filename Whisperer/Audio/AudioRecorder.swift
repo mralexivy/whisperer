@@ -60,7 +60,6 @@ class AudioRecorder: NSObject {
         get { isRecordingLock.lock(); defer { isRecordingLock.unlock() }; return _isRecording }
         set { isRecordingLock.lock(); _isRecording = newValue; isRecordingLock.unlock() }
     }
-    private var currentURL: URL?
 
     // MARK: - Callbacks
 
@@ -128,16 +127,18 @@ class AudioRecorder: NSObject {
 
     private(set) var lastEngineStartError: Error?
 
-    // MARK: - Disk write (Int16 16kHz mono CAF, parallel with Float32 callback)
+    // MARK: - Disk write (Ogg Opus, 16 kHz mono, parallel with Float32 callback)
 
-    private var sessionAudioFile: AVAudioFile?
+    private var sessionAudioWriter: AudioArchiveWriter?
     private(set) var sessionAudioURL: URL?
-    private let int16Format: AVAudioFormat = AVAudioFormat(
-        commonFormat: .pcmFormatInt16, sampleRate: 16000, channels: 1, interleaved: true)!
     // Float32 format used for AVAudioPCMBuffer reconstruction in disk write
-    private let whisperFormat: AVAudioFormat = AVAudioFormat(
-        commonFormat: .pcmFormatFloat32, sampleRate: 16000, channels: 1, interleaved: false)!
+    private let whisperFormat: AVAudioFormat = AudioArchiveFormat.pcmFormat
     private let sessionWriteQueue = DispatchQueue(label: "whisperer.sessionWrite", qos: .utility)
+    /// Frames encoded since the last forced flush. Touched only on `sessionWriteQueue`.
+    private var framesSinceFlush = 0
+    /// Ogg emits a page roughly every 1.7 s on its own; flushing every 5 s bounds what a
+    /// crash costs to a fixed interval rather than to whatever is sitting in the encoder.
+    private let flushIntervalFrames = Int(AudioArchiveFormat.sampleRate * 5)
 
     // MARK: - Device monitoring
 
@@ -276,21 +277,18 @@ class AudioRecorder: NSObject {
 
         guard isGenerationCurrent(generation) else { throw RecordingError.engineCleanedUp }
 
-        // Prepare output URL
-        let tempDir = FileManager.default.temporaryDirectory
-        let fileName = "recording_\(Date().timeIntervalSince1970).wav"
-        let audioURL = tempDir.appendingPathComponent(fileName)
-        currentURL = audioURL
-
-        // Open session CAF file for parallel disk write
+        // Open the session audio file for parallel disk write. It is written in the archive
+        // format directly, so it *is* the archive — no transcode at stop.
         let sessionURL = SessionStorage.makeSessionAudioURL()
         sessionAudioURL = sessionURL
-        if let file = try? AVAudioFile(forWriting: sessionURL, settings: int16Format.settings) {
-            sessionAudioFile = file
+        framesSinceFlush = 0
+        do {
+            sessionAudioWriter = try AudioArchiveFormat.makeWriter(at: sessionURL)
             Logger.debug("Session audio file opened: \(sessionURL.lastPathComponent)", subsystem: .audio)
-        } else {
-            Logger.warning("Failed to open session audio file — disk write disabled", subsystem: .audio)
-            sessionAudioFile = nil
+        } catch {
+            Logger.warning("Failed to open session audio file — disk write disabled: \(error.localizedDescription)",
+                           subsystem: .audio)
+            sessionAudioWriter = nil
         }
 
         lastAudioCallbackTime = nil
@@ -321,7 +319,7 @@ class AudioRecorder: NSObject {
             )
         } catch {
             lastEngineStartError = error
-            sessionAudioFile = nil
+            closeSessionWriter()
             throw error
         }
 
@@ -335,7 +333,7 @@ class AudioRecorder: NSObject {
         } catch {
             lastEngineStartError = error
             await engineLifecycle.stopEngine()
-            sessionAudioFile = nil
+            closeSessionWriter()
             throw error
         }
 
@@ -357,7 +355,9 @@ class AudioRecorder: NSObject {
         startAudioFlowWatchdog()
 
         Logger.debug("Started recording (route: \(route), gen: \(gen))", subsystem: .audio)
-        return audioURL
+        // The session file is the only audio this recorder produces — there is no separate
+        // temp capture file to hand back.
+        return sessionURL
     }
 
     // MARK: - Sample delivery (called from CoreAudio real-time thread via actor tap)
@@ -396,8 +396,8 @@ class AudioRecorder: NSObject {
 
         autoreleasepool { onStreamingSamples?(samples) }
 
-        // Disk write — reconstruct AVAudioPCMBuffer from [Float] for AVAudioFile
-        if sessionAudioFile != nil {
+        // Disk write — reconstruct AVAudioPCMBuffer from [Float] for the Opus encoder
+        if sessionAudioWriter != nil {
             let frameCount = AVAudioFrameCount(samples.count)
             if let buf = AVAudioPCMBuffer(pcmFormat: whisperFormat, frameCapacity: frameCount) {
                 buf.frameLength = frameCount
@@ -406,11 +406,29 @@ class AudioRecorder: NSObject {
                 }
                 let captured = buf
                 sessionWriteQueue.async { [weak self] in
-                    guard let self, let file = self.sessionAudioFile else { return }
-                    try? file.write(from: captured)
+                    guard let self, let writer = self.sessionAudioWriter else { return }
+                    do {
+                        try writer.write(captured)
+                    } catch {
+                        Logger.error("Session audio encode failed: \(error.localizedDescription)", subsystem: .audio)
+                        return
+                    }
+                    self.framesSinceFlush += Int(captured.frameLength)
+                    if self.framesSinceFlush >= self.flushIntervalFrames {
+                        self.framesSinceFlush = 0
+                        writer.flush()
+                    }
                 }
             }
         }
+    }
+
+    /// Drain queued encodes, then finalize the session file. No-op when disk write is disabled.
+    private func closeSessionWriter() {
+        guard sessionAudioWriter != nil else { return }
+        sessionWriteQueue.sync {}
+        sessionAudioWriter?.close()
+        sessionAudioWriter = nil
     }
 
     private func calculateRMS(samples: [Float]) -> Float {
@@ -455,9 +473,8 @@ class AudioRecorder: NSObject {
 
         isRecording = false  // stops deliverSamples — no new disk write dispatches
 
-        // Drain pending disk writes before closing the file
-        sessionWriteQueue.sync {}
-        sessionAudioFile = nil
+        // Drain pending disk writes, then flush the encoder and close the file
+        closeSessionWriter()
 
         stopAudioFlowWatchdog()
         stopMonitoringDevice()
@@ -471,8 +488,6 @@ class AudioRecorder: NSObject {
 
         Logger.debug("Audio recording stopped", subsystem: .audio)
     }
-
-    var recordingURL: URL? { currentURL }
 
     // MARK: - Mid-Recording Recovery
 

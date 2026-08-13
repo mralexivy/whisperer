@@ -82,6 +82,18 @@ actor NemotronBridge {
 
     private var _sessionSampleCount: Int = 0
 
+    /// Whether the loaded model has a prompt for `language`.
+    ///
+    /// `setLanguage` falls back to `defaultPromptId` (the "auto" prompt) for anything missing from
+    /// the prompt dictionary and reports success either way, so the only way to know the encoder
+    /// was actually conditioned is to compare the resolved id against that default.
+    func forcedLanguageSupport(for language: TranscriptionLanguage) async -> (code: String, isSupported: Bool)? {
+        guard language != .auto, let manager else { return nil }
+        let code = language.rawValue
+        let config = await manager.config
+        return (code, config.promptId(forLanguage: code) != config.defaultPromptId)
+    }
+
     func beginSession(language: TranscriptionLanguage) async {
         guard let manager else {
             Logger.warning("[Nemotron] beginSession called but manager is nil", subsystem: .transcription)

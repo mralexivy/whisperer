@@ -291,21 +291,38 @@ class FileTranscriptionManager: ObservableObject {
         // Ensure recordings directory exists
         try? fileManager.createDirectory(at: recordingsDir, withIntermediateDirectories: true)
 
-        // Copy source file with timestamp prefix
         let timestamp = ISO8601DateFormatter().string(from: Date())
             .replacingOccurrences(of: ":", with: "-")
             .replacingOccurrences(of: "T", with: "_")
-        let destFileName = "\(timestamp)_\(sourceURL.lastPathComponent)"
-        let destURL = recordingsDir.appendingPathComponent(destFileName)
+        let baseName = sourceURL.deletingPathExtension().lastPathComponent
 
-        do {
-            try fileManager.copyItem(at: sourceURL, to: destURL)
-        } catch {
-            Logger.warning("Could not copy source file to recordings: \(error.localizedDescription)", subsystem: .app)
-            // Continue saving without the audio file reference
-        }
+        // Archive the import in the app's own format rather than copying it verbatim — a
+        // 200 MB WAV import used to stay 200 MB forever. Off the main actor: transcoding an
+        // hour-long file is a decode + resample + encode pass, not a filesystem copy.
+        let archiveName = "\(timestamp)_\(baseName).\(AudioArchiveFormat.fileExtension)"
+        let verbatimName = "\(timestamp)_\(sourceURL.lastPathComponent)"
 
-        let audioFileName = fileManager.fileExists(atPath: destURL.path) ? destFileName : nil
+        let audioFileName: String? = await Task.detached(priority: .userInitiated) { () -> String? in
+            let archiveURL = recordingsDir.appendingPathComponent(archiveName)
+            do {
+                try AudioArchiveFormat.transcode(from: sourceURL, to: archiveURL)
+                return archiveName
+            } catch {
+                Logger.warning("Could not transcode import, keeping the original: \(error.localizedDescription)",
+                               subsystem: .app)
+            }
+            // Something in the source the encoder could not read. Keep the bytes rather than
+            // lose the audio — every reader goes through AVAudioFile and is format-agnostic.
+            let verbatimURL = recordingsDir.appendingPathComponent(verbatimName)
+            do {
+                try FileManager.default.copyItem(at: sourceURL, to: verbatimURL)
+                return verbatimName
+            } catch {
+                Logger.warning("Could not copy source file to recordings: \(error.localizedDescription)",
+                               subsystem: .app)
+                return nil
+            }
+        }.value
 
         // Use detected language when auto-detect is active, otherwise use user selection
         let recordedLanguage: String

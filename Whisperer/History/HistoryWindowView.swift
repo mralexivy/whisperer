@@ -1118,7 +1118,6 @@ struct TranscriptionsView: View {
 
 struct HistorySettingsView: View {
     @Environment(\.colorScheme) var colorScheme
-    @AppStorage("saveAudioRecordings") private var saveAudioRecordings = true
     @AppStorage("autoDeleteAfterDays") private var autoDeleteAfterDays = 0
     @AppStorage("timeFormat") private var timeFormat: String = TimeFormatSetting.twelveHour.rawValue
     @State private var showDeleteConfirmation = false
@@ -1148,7 +1147,6 @@ struct HistorySettingsView: View {
                     #endif
                     dictionarySection
                     languageRoutingSection
-                    storageSection
                     mcpSection
                     dataManagementSection
                     dangerZoneSection
@@ -2139,61 +2137,6 @@ struct HistorySettingsView: View {
         }
     }
 
-    // MARK: - Storage Section
-
-    private var storageSection: some View {
-        SettingsCard(colorScheme: colorScheme) {
-            VStack(alignment: .leading, spacing: 20) {
-                SettingsSectionHeader(
-                    icon: "externaldrive.fill",
-                    title: "Storage",
-                    colorScheme: colorScheme,
-                    color: .cyan
-                )
-
-                SettingsRow(colorScheme: colorScheme) {
-                    HStack(spacing: 14) {
-                        ZStack {
-                            RoundedRectangle(cornerRadius: 8)
-                                .fill(
-                                    LinearGradient(
-                                        colors: [
-                                            WhispererColors.accentBlue.opacity(0.18),
-                                            WhispererColors.accentPurple.opacity(0.10)
-                                        ],
-                                        startPoint: .topLeading,
-                                        endPoint: .bottomTrailing
-                                    )
-                                )
-                                .frame(width: 36, height: 36)
-
-                            Image(systemName: "waveform")
-                                .font(.system(size: 14, weight: .semibold))
-                                .foregroundColor(WhispererColors.accentBlue)
-                        }
-
-                        VStack(alignment: .leading, spacing: 3) {
-                            Text("Save Audio Recordings")
-                                .font(.system(size: 13, weight: .medium))
-                                .foregroundColor(WhispererColors.primaryText(colorScheme))
-
-                            Text("Keep original audio files with transcriptions")
-                                .font(.system(size: 11))
-                                .foregroundColor(WhispererColors.secondaryText(colorScheme))
-                        }
-
-                        Spacer()
-
-                        Toggle("", isOn: $saveAudioRecordings)
-                            .toggleStyle(.switch)
-                            .tint(WhispererColors.accent)
-                            .labelsHidden()
-                    }
-                }
-            }
-        }
-    }
-
     // MARK: - Data Management Section
 
     private var dataManagementSection: some View {
@@ -2207,7 +2150,7 @@ struct HistorySettingsView: View {
                 )
 
                 VStack(alignment: .leading, spacing: 14) {
-                    Text("Auto-delete old transcriptions")
+                    Text("Auto-delete old recordings")
                         .font(.system(size: 14, weight: .semibold))
                         .foregroundColor(WhispererColors.primaryText(colorScheme))
 
@@ -2226,9 +2169,10 @@ struct HistorySettingsView: View {
                         }
                     }
 
-                    Text("Transcriptions older than the selected period will be automatically removed")
+                    Text("Transcriptions and meetings older than the selected period are permanently removed, audio included. Pinned transcriptions are always kept.")
                         .font(.system(size: 12))
                         .foregroundColor(WhispererColors.secondaryText(colorScheme))
+                        .fixedSize(horizontal: false, vertical: true)
                 }
             }
         }

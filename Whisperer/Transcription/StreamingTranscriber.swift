@@ -152,6 +152,9 @@ class StreamingTranscriber {
     // Used by MeetingSession to avoid echoing already-committed chunk text.
     var onPreviewTail: ((String) -> Void)?
     var onLanguageDetected: ((TranscriptionLanguage) -> Void)?
+    // Fires when the active model has no prompt for the selected language, so transcription runs
+    // unforced. Reported by closure rather than read from AppState — services never reach back.
+    var onLanguageForcingUnavailable: ((TranscriptionLanguage) -> Void)?
 
     // Thread-safe transcription state
     private let transcriptionLock = SafeLock()
@@ -394,6 +397,16 @@ class StreamingTranscriber {
                     DispatchQueue.main.async {
                         self.onTranscription?(accumulatedText)
                         self.onPreviewTail?(accumulatedText)
+                    }
+                }
+                // Forcing a language the model has no prompt for is a silent no-op inside
+                // FluidAudio: setLanguage falls back to the "auto" prompt and the forced-prefix
+                // seed is skipped, so the session runs unconditioned while every log line reads
+                // like success. Report it instead of pretending the language was applied.
+                if let support = await nemotron.forcedLanguageSupport(for: lang), !support.isSupported {
+                    Logger.warning("[Nemotron] Model has no prompt for '\(support.code)' (\(lang.displayName)) — transcribing unforced; accuracy will suffer", subsystem: .transcription)
+                    DispatchQueue.main.async { [weak self] in
+                        self?.onLanguageForcingUnavailable?(lang)
                     }
                 }
                 Logger.debug("[Nemotron] beginSession (language: \(lang.rawValue))", subsystem: .transcription)
@@ -2344,57 +2357,23 @@ class StreamingTranscriber {
         return samples
     }
 
-    /// Save recorded audio to a CAF or WAV file.
-    /// Prefers copying the on-disk session CAF (complete, disk-backed). Falls back to
+    /// Save the recorded audio to `url`.
+    ///
+    /// The session file is already written in the archive format, so this is a copy —
+    /// there is no transcode step and no second encode of the same audio. Falls back to
     /// writing the in-memory ring buffer for very short recordings that were never pruned.
     func saveRecording(to url: URL) -> Bool {
         // Prefer the complete disk-backed session file
         if let srcURL = sessionAudioURL, FileManager.default.fileExists(atPath: srcURL.path) {
             do {
-                // If destination is CAF, just copy. AudioPlayerView accepts CAF.
-                if url.pathExtension.lowercased() == "caf" {
+                if AudioArchiveFormat.isAlreadyArchived(srcURL) {
                     try FileManager.default.copyItem(at: srcURL, to: url)
-                    Logger.debug("Recording copied (CAF) to: \(url.lastPathComponent)", subsystem: .transcription)
+                    Logger.debug("Recording copied to: \(url.lastPathComponent)", subsystem: .transcription)
                     return true
                 }
-                // Destination is WAV/other — transcode via AVAudioConverter
-                let srcFile = try AVAudioFile(forReading: srcURL)
-                let frameCount = AVAudioFrameCount(srcFile.length)
-                guard frameCount > 0,
-                      let srcBuffer = AVAudioPCMBuffer(pcmFormat: srcFile.processingFormat, frameCapacity: frameCount) else {
-                    Logger.warning("Session CAF is empty", subsystem: .transcription)
-                    return false
-                }
-                try srcFile.read(into: srcBuffer, frameCount: frameCount)
-                guard srcBuffer.frameLength > 0 else {
-                    Logger.warning("Session CAF read 0 frames", subsystem: .transcription)
-                    return false
-                }
-                guard let dstFormat = AVAudioFormat(
-                    commonFormat: .pcmFormatFloat32,
-                    sampleRate: sampleRate,
-                    channels: 1,
-                    interleaved: false
-                ),
-                      let dstBuffer = AVAudioPCMBuffer(pcmFormat: dstFormat, frameCapacity: srcBuffer.frameLength),
-                      let converter = AVAudioConverter(from: srcFile.processingFormat, to: dstFormat) else {
-                    Logger.error("Failed to create converter for saveRecording transcode", subsystem: .transcription)
-                    return false
-                }
-                var returned = false
-                let status = converter.convert(to: dstBuffer, error: nil) { _, outStatus in
-                    if returned { outStatus.pointee = .noDataNow; return nil }
-                    returned = true
-                    outStatus.pointee = .haveData
-                    return srcBuffer
-                }
-                guard status == .haveData || status == .endOfStream, dstBuffer.frameLength > 0 else {
-                    Logger.error("CAF→WAV conversion failed (status=\(status.rawValue))", subsystem: .transcription)
-                    return false
-                }
-                let dstFile = try AVAudioFile(forWriting: url, settings: dstFormat.settings)
-                try dstFile.write(from: dstBuffer)
-                Logger.debug("Recording transcoded to: \(url.lastPathComponent)", subsystem: .transcription)
+                // A session file left over from a pre-Opus build — encode it once on the way out.
+                try AudioArchiveFormat.transcode(from: srcURL, to: url)
+                Logger.debug("Legacy session file transcoded to: \(url.lastPathComponent)", subsystem: .transcription)
                 return true
             } catch {
                 Logger.error("Failed to save recording from disk: \(error.localizedDescription)", subsystem: .transcription)
@@ -2420,16 +2399,7 @@ class StreamingTranscriber {
 
         samples = trimLeadingNonSpeech(samples)
 
-        guard let format = AVAudioFormat(
-            commonFormat: .pcmFormatFloat32,
-            sampleRate: sampleRate,
-            channels: 1,
-            interleaved: false
-        ) else {
-            Logger.error("Failed to create audio format", subsystem: .transcription)
-            return false
-        }
-
+        let format = AudioArchiveFormat.pcmFormat
         guard let buffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: AVAudioFrameCount(samples.count)) else {
             Logger.error("Failed to create audio buffer", subsystem: .transcription)
             return false
@@ -2445,12 +2415,14 @@ class StreamingTranscriber {
         }
 
         do {
-            let file = try AVAudioFile(forWriting: url, settings: format.settings)
-            try file.write(from: buffer)
+            let writer = try AudioArchiveFormat.makeWriter(at: url)
+            try writer.write(buffer)
+            writer.close()
             Logger.debug("Recording saved (ring buffer) to: \(url.lastPathComponent)", subsystem: .transcription)
             return true
         } catch {
             Logger.error("Failed to save recording: \(error.localizedDescription)", subsystem: .transcription)
+            try? FileManager.default.removeItem(at: url)
             return false
         }
     }

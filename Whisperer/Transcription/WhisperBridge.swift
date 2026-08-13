@@ -255,6 +255,16 @@ enum WhisperError: Error, LocalizedError {
     }
 }
 
+// MARK: - Timed segment
+
+/// One whisper segment with its own timing, relative to the start of the decoded buffer.
+/// Produced only by `WhisperBridge.transcribeTimestamped` — every other path discards timings.
+struct WhisperTimedSegment {
+    let text: String
+    let start: Double   // seconds
+    let end: Double     // seconds
+}
+
 class WhisperBridge: TranscriptionBackend {
     private var ctx: OpaquePointer?
     private let modelPath: URL
@@ -506,13 +516,58 @@ class WhisperBridge: TranscriptionBackend {
             metadata: ["op": .int(Int(opID)), "durationSec": .double(duration)]
         )
 
+        let wparams = makeFullParams(singleSegment: singleSegment, maxTokens: maxTokens, noTimestamps: true)
+        let result = runWhisperFull(ctx: ctx, samples: samples, params: wparams,
+                                    initialPrompt: initialPrompt, language: language)
+
+        guard handleTranscriptionResult(result) else { return "" }
+
+        // Extract detected language (useful when auto-detect is enabled)
+        let langId = whisper_full_lang_id(ctx)
+        if langId >= 0, let langStr = whisper_lang_str(langId) {
+            lastDetectedLanguage = String(cString: langStr)
+        }
+
+        var text = ""
+        let nSegments = whisper_full_n_segments(ctx)
+        for i in 0..<nSegments {
+            let noSpeechProb = whisper_full_get_segment_no_speech_prob(ctx, i)
+            if noSpeechProb > noSpeechProbThreshold {
+                if let segmentText = whisper_full_get_segment_text(ctx, i) {
+                    EventRingBuffer.shared.record(
+                        component: "WhisperBridge",
+                        operation: "skipNonSpeech",
+                        kind: .state,
+                        metadata: ["prob": .double(Double(noSpeechProb))]
+                    )
+                }
+                continue
+            }
+            if let segmentText = whisper_full_get_segment_text(ctx, i) {
+                text += String(cString: segmentText)
+            }
+        }
+
+        return text.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    // MARK: - Shared decode plumbing
+    //
+    // performTranscription and performTimestampedTranscription differ only in whether
+    // whisper keeps its segment timings. Everything else — the ~40-line params block,
+    // the C-string lifetime dance around language/prompt, and the Metal-corruption
+    // recovery path — is identical and lives here so the two cannot drift apart.
+
+    /// Build the decode params. `noTimestamps: false` also implies multi-segment output,
+    /// since a single forced segment carries a single useless span.
+    private func makeFullParams(singleSegment: Bool, maxTokens: Int32, noTimestamps: Bool) -> whisper_full_params {
         var wparams = whisper_full_default_params(WHISPER_SAMPLING_GREEDY)
         wparams.print_progress = false
         wparams.print_special = false
         wparams.print_realtime = false
         wparams.print_timestamps = false
         wparams.single_segment = singleSegment
-        wparams.no_timestamps = true
+        wparams.no_timestamps = noTimestamps
         wparams.n_threads = WhisperBridge.optimalThreadCount
         wparams.suppress_nst = true
         wparams.suppress_blank = true
@@ -580,18 +635,25 @@ class WhisperBridge: TranscriptionBackend {
         // initial_prompt (prompt words) still works with no_context=true because
         // whisper.cpp adds initial_prompt tokens AFTER clearing prompt_past.
         wparams.no_context = true
+
+        return wparams
+    }
+
+    /// Run `whisper_full`, keeping the language and prompt C strings alive for its duration.
+    private func runWhisperFull(ctx: OpaquePointer, samples: [Float], params: whisper_full_params,
+                                initialPrompt: String?, language: TranscriptionLanguage) -> Int32 {
+        var wparams = params
+
         if let prompt = initialPrompt, !prompt.isEmpty {
             Logger.debug("Initial prompt: '\(prompt.prefix(100))'", subsystem: .transcription)
         }
 
-        // Helper to run transcription with current wparams
         func runTranscription() -> Int32 {
             samples.withUnsafeBufferPointer { ptr -> Int32 in
                 whisper_full(ctx, wparams, ptr.baseAddress, Int32(samples.count))
             }
         }
 
-        // Helper to set prompt and run
         func runWithPrompt(_ prompt: String) -> Int32 {
             prompt.withCString { promptPtr in
                 wparams.initial_prompt = promptPtr
@@ -599,85 +661,145 @@ class WhisperBridge: TranscriptionBackend {
             }
         }
 
-        // Perform transcription with language and prompt handling
-        // Language C string must remain valid during whisper_full call
-        let result: Int32
         if language == .auto {
             wparams.language = nil
             Logger.debug("Language: auto-detect", subsystem: .transcription)
 
             if let prompt = initialPrompt, !prompt.isEmpty {
-                result = runWithPrompt(prompt)
-            } else {
-                result = runTranscription()
+                return runWithPrompt(prompt)
             }
-        } else {
-            // Set specific language - C string must stay alive
-            result = language.rawValue.withCString { langPtr in
-                wparams.language = langPtr
-                wparams.detect_language = false
-                Logger.debug("Language: \(language.displayName)", subsystem: .transcription)
+            return runTranscription()
+        }
 
-                if let prompt = initialPrompt, !prompt.isEmpty {
-                    return runWithPrompt(prompt)
-                } else {
-                    return runTranscription()
+        // Set specific language - C string must stay alive
+        return language.rawValue.withCString { langPtr in
+            wparams.language = langPtr
+            wparams.detect_language = false
+            Logger.debug("Language: \(language.displayName)", subsystem: .transcription)
+
+            if let prompt = initialPrompt, !prompt.isEmpty {
+                return runWithPrompt(prompt)
+            }
+            return runTranscription()
+        }
+    }
+
+    /// Returns true when the decode succeeded. On failure, schedules context recovery
+    /// once the Metal context has failed enough times to be presumed corrupt.
+    private func handleTranscriptionResult(_ result: Int32) -> Bool {
+        guard result != 0 else {
+            consecutiveFailures = 0
+            whisperCurrentOp = nil
+            return true
+        }
+
+        consecutiveFailures += 1
+        Logger.error("Whisper transcription failed with code: \(result) (failure \(consecutiveFailures)/\(maxConsecutiveFailures))", subsystem: .transcription)
+
+        // After repeated failures (e.g., Metal encode errors), the GPU context
+        // may be corrupted. Schedule async recovery to reload the model.
+        if consecutiveFailures >= maxConsecutiveFailures {
+            Logger.warning("Consecutive failures reached \(maxConsecutiveFailures), scheduling context recovery", subsystem: .transcription)
+            let bridge = self
+            queue.async {
+                do {
+                    try bridge.recoverContext()
+                    bridge.consecutiveFailures = 0
+                } catch {
+                    Logger.error("Auto-recovery failed: \(error.localizedDescription)", subsystem: .transcription)
                 }
             }
         }
+        return false
+    }
 
-        if result != 0 {
-            consecutiveFailures += 1
-            Logger.error("Whisper transcription failed with code: \(result) (failure \(consecutiveFailures)/\(maxConsecutiveFailures))", subsystem: .transcription)
+    // MARK: - Timestamped transcription
 
-            // After repeated failures (e.g., Metal encode errors), the GPU context
-            // may be corrupted. Schedule async recovery to reload the model.
-            if consecutiveFailures >= maxConsecutiveFailures {
-                Logger.warning("Consecutive failures reached \(maxConsecutiveFailures), scheduling context recovery", subsystem: .transcription)
-                let bridge = self
-                queue.async {
-                    do {
-                        try bridge.recoverContext()
-                        bridge.consecutiveFailures = 0
-                    } catch {
-                        Logger.error("Auto-recovery failed: \(error.localizedDescription)", subsystem: .transcription)
-                    }
-                }
-            }
-            return ""
+    /// Transcribe and keep whisper's own segment boundaries.
+    ///
+    /// Every other path in this class throws the timings away (`no_timestamps = true`) because
+    /// dictation only ever needs the concatenated string. The meeting re-transcription pass does
+    /// need them: it decodes a ~30s window covering several transcript cards and has to know
+    /// which card each piece of the new text belongs to.
+    ///
+    /// - Parameters:
+    ///   - samples: 16 kHz mono float32 audio
+    ///   - initialPrompt: context from the previous window, for boundary continuity
+    ///   - language: fixed language, or `.auto` to detect (read back via `lastDetectedLanguage`)
+    /// - Returns: Segments in decode order with start/end in seconds relative to `samples[0]`.
+    ///            Empty on failure — callers keep their existing text.
+    func transcribeTimestamped(samples: [Float], initialPrompt: String? = nil,
+                               language: TranscriptionLanguage = .auto) -> [WhisperTimedSegment] {
+        guard !isShuttingDown else {
+            Logger.warning("Timestamped transcription skipped - WhisperBridge is shutting down", subsystem: .transcription)
+            return []
+        }
+        guard isInitialized else {
+            Logger.warning("Timestamped transcription skipped - WhisperBridge not initialized", subsystem: .transcription)
+            return []
         }
 
-        // Reset failure counter on success
-        consecutiveFailures = 0
-        whisperCurrentOp = nil
+        do {
+            return try ctxLock.withLock(timeout: lockTimeout) { [weak self] in
+                guard let self = self else { return [] }
+                return self.performTimestampedTranscription(samples: samples, initialPrompt: initialPrompt, language: language)
+            }
+        } catch SafeLockError.timeout {
+            Logger.error("Failed to acquire context lock within \(lockTimeout) seconds - possible deadlock", subsystem: .transcription)
+            return []
+        } catch {
+            Logger.error("Lock acquisition error: \(error.localizedDescription)", subsystem: .transcription)
+            return []
+        }
+    }
 
-        // Extract detected language (useful when auto-detect is enabled)
+    /// Perform the timestamped transcription (must be called with lock held)
+    private func performTimestampedTranscription(samples: [Float], initialPrompt: String?,
+                                                 language: TranscriptionLanguage) -> [WhisperTimedSegment] {
+        guard let ctx = ctx else {
+            Logger.warning("Whisper context is nil, cannot transcribe", subsystem: .transcription)
+            return []
+        }
+        guard !samples.isEmpty else { return [] }
+
+        // Track operation for HealthManager
+        let opID = whisperOperationID &+ 1
+        let duration = Double(samples.count) / 16000.0
+        let estimatedMs = duration * 1000.0 * (WhisperBridge.isAppleSilicon ? 0.15 : 0.5)
+        whisperOperationID = opID
+        whisperOperationStart = .now
+        whisperOperationDeadline = .now + .milliseconds(Int(estimatedMs * 2))
+        whisperCurrentOp = "transcribing"
+        whisperSegmentCount = 0
+        expectedSegmentCount = max(1, Int(duration / 2.0))
+
+        let wparams = makeFullParams(singleSegment: false, maxTokens: 0, noTimestamps: false)
+        let result = runWhisperFull(ctx: ctx, samples: samples, params: wparams,
+                                    initialPrompt: initialPrompt, language: language)
+
+        guard handleTranscriptionResult(result) else { return [] }
+
         let langId = whisper_full_lang_id(ctx)
         if langId >= 0, let langStr = whisper_lang_str(langId) {
             lastDetectedLanguage = String(cString: langStr)
         }
 
-        var text = ""
+        var segments: [WhisperTimedSegment] = []
         let nSegments = whisper_full_n_segments(ctx)
+        segments.reserveCapacity(Int(nSegments))
         for i in 0..<nSegments {
-            let noSpeechProb = whisper_full_get_segment_no_speech_prob(ctx, i)
-            if noSpeechProb > noSpeechProbThreshold {
-                if let segmentText = whisper_full_get_segment_text(ctx, i) {
-                    EventRingBuffer.shared.record(
-                        component: "WhisperBridge",
-                        operation: "skipNonSpeech",
-                        kind: .state,
-                        metadata: ["prob": .double(Double(noSpeechProb))]
-                    )
-                }
-                continue
-            }
-            if let segmentText = whisper_full_get_segment_text(ctx, i) {
-                text += String(cString: segmentText)
-            }
+            if whisper_full_get_segment_no_speech_prob(ctx, i) > noSpeechProbThreshold { continue }
+            guard let raw = whisper_full_get_segment_text(ctx, i) else { continue }
+            let text = String(cString: raw).trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !text.isEmpty else { continue }
+            // whisper timestamps are centiseconds
+            segments.append(WhisperTimedSegment(
+                text: text,
+                start: Double(whisper_full_get_segment_t0(ctx, i)) / 100.0,
+                end: Double(whisper_full_get_segment_t1(ctx, i)) / 100.0
+            ))
         }
-
-        return text.trimmingCharacters(in: .whitespacesAndNewlines)
+        return segments
     }
 
     /// Transcribe asynchronously with optional context prompt

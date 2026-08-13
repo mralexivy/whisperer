@@ -17,9 +17,17 @@ struct MeetingSegment: Codable, Identifiable, Equatable {
     var speakerName: String        // default "Speaker 1", user-editable inline
     var speakerIndex: Int          // 0-7, drives color from palette
     var tags: [SegmentTag]
+    /// Raw ASR text, kept when the LLM polish pass rewrites `text`. nil = never polished.
+    /// Optional, so every `segmentsJSON` blob written before this field existed still decodes
+    /// (the synthesized Decodable uses `decodeIfPresent` for optionals).
+    var rawText: String?
+
+    /// True once the polish pass has rewritten this segment — drives the Polished/Original toggle.
+    var isPolished: Bool { rawText != nil }
 
     init(id: UUID = UUID(), timestamp: Double, endTimestamp: Double, text: String,
-         speakerName: String = "Speaker 1", speakerIndex: Int = 0, tags: [SegmentTag] = []) {
+         speakerName: String = "Speaker 1", speakerIndex: Int = 0, tags: [SegmentTag] = [],
+         rawText: String? = nil) {
         self.id = id
         self.timestamp = timestamp
         self.endTimestamp = endTimestamp
@@ -27,6 +35,7 @@ struct MeetingSegment: Codable, Identifiable, Equatable {
         self.speakerName = speakerName
         self.speakerIndex = speakerIndex
         self.tags = tags
+        self.rawText = rawText
     }
 }
 

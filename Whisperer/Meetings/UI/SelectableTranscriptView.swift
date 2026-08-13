@@ -21,6 +21,7 @@ enum TranscriptLayout {
 
     static let speakerToCardGap: CGFloat = 8    // speaker name baseline box → card top
     static let cardToSpeakerGap: CGFloat = 22   // card bottom → next speaker name
+    static let groupedCardGap:   CGFloat = 8    // card bottom → next card of the SAME speaker
 
     /// Text sits `innerHPad` inside a card that is itself `outerMargin` inside the view.
     static var textInset: NSSize { NSSize(width: outerMargin + innerHPad, height: 16) }
@@ -30,6 +31,10 @@ enum TranscriptLayout {
 
     /// Paragraph spacing before a speaker line, so the name clears the previous card.
     static var interSegmentSpacing: CGFloat { cardVPad + cardToSpeakerGap }
+
+    /// Paragraph spacing before a body paragraph that has no speaker line of its own —
+    /// covers both cards' vertical padding plus the gap between them.
+    static var groupedSegmentSpacing: CGFloat { cardVPad * 2 + groupedCardGap }
 }
 
 // MARK: - Per-segment layout metrics reported to SwiftUI
@@ -157,25 +162,39 @@ struct SelectableTranscriptView: NSViewRepresentable {
         let alignment: NSTextAlignment = isRTL ? .right : .left
 
         for (index, segment) in segments.enumerated() {
-            // Speaker name — its own paragraph so it sits above the card.
-            let speakerStart = result.length
-            let speakerStyle = NSMutableParagraphStyle()
-            speakerStyle.paragraphSpacingBefore = index == 0 ? 0 : TranscriptLayout.interSegmentSpacing
-            speakerStyle.paragraphSpacing = TranscriptLayout.speakerParagraphSpacing
-            speakerStyle.baseWritingDirection = direction
-            speakerStyle.alignment = alignment
-            result.append(NSAttributedString(string: segment.speakerName + "\n", attributes: [
-                .font: speakerFont,
-                .foregroundColor: speakerNSColor(for: segment.speakerIndex),
-                .paragraphStyle: speakerStyle
-            ]))
-            speakerRanges.append(NSRange(location: speakerStart, length: result.length - speakerStart))
+            // A run of consecutive segments from one speaker is a single turn: only the
+            // first card carries the name, the rest stack tightly underneath it.
+            let previous = index > 0 ? segments[index - 1] : nil
+            let startsTurn = previous.map {
+                $0.speakerIndex != segment.speakerIndex || $0.speakerName != segment.speakerName
+            } ?? true
+
+            if startsTurn {
+                // Speaker name — its own paragraph so it sits above the card.
+                let speakerStart = result.length
+                let speakerStyle = NSMutableParagraphStyle()
+                speakerStyle.paragraphSpacingBefore = index == 0 ? 0 : TranscriptLayout.interSegmentSpacing
+                speakerStyle.paragraphSpacing = TranscriptLayout.speakerParagraphSpacing
+                speakerStyle.baseWritingDirection = direction
+                speakerStyle.alignment = alignment
+                result.append(NSAttributedString(string: segment.speakerName + "\n", attributes: [
+                    .font: speakerFont,
+                    .foregroundColor: speakerNSColor(for: segment.speakerIndex),
+                    .paragraphStyle: speakerStyle
+                ]))
+                speakerRanges.append(NSRange(location: speakerStart, length: result.length - speakerStart))
+            } else {
+                // Kept parallel with `segments` — NSNotFound means "no speaker line".
+                speakerRanges.append(NSRange(location: NSNotFound, length: 0))
+            }
 
             // Body text — the region the card is drawn behind.
             let bodyStart = result.length
             let bodyStyle = NSMutableParagraphStyle()
             bodyStyle.lineSpacing = 5
             bodyStyle.paragraphSpacing = 0
+            // Without a speaker line above it the body paragraph has to open the gap itself.
+            bodyStyle.paragraphSpacingBefore = startsTurn ? 0 : TranscriptLayout.groupedSegmentSpacing
             bodyStyle.baseWritingDirection = direction
             bodyStyle.alignment = alignment
             let bodyText = segment.text + (index < segments.count - 1 ? "\n" : "")
@@ -264,13 +283,21 @@ struct SelectableTranscriptView: NSViewRepresentable {
             var metrics: [SegmentMetrics] = []
             for (index, id) in segmentIDs.enumerated() {
                 guard index < speakerRanges.count, index < bodyRanges.count,
-                      let speaker = lineBounds(layoutManager, speakerRanges[index]),
                       let body = lineBounds(layoutManager, bodyRanges[index]) else { continue }
+
+                let speakerRange = speakerRanges[index]
+                let speaker = speakerRange.location == NSNotFound
+                    ? nil
+                    : lineBounds(layoutManager, speakerRange)
+                let cardTop = insetY + body.minY - TranscriptLayout.cardVPad
+
+                // Continuation cards have no speaker line, so the accessory row and the
+                // hover region anchor to the card's own top edge instead.
                 metrics.append(SegmentMetrics(
                     id: id,
-                    speakerY: insetY + speaker.minY,
-                    speakerHeight: speaker.maxY - speaker.minY,
-                    cardTop: insetY + body.minY - TranscriptLayout.cardVPad,
+                    speakerY: speaker.map { insetY + $0.minY } ?? cardTop - 1,
+                    speakerHeight: speaker.map { $0.maxY - $0.minY } ?? 0,
+                    cardTop: cardTop,
                     cardHeight: (body.maxY - body.minY) + TranscriptLayout.cardVPad * 2
                 ))
             }

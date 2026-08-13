@@ -23,13 +23,20 @@ final class CameraUsageMonitor {
     private(set) var isActive: Bool = false
     private var deviceIDs: [CMIODeviceID] = []
     private(set) var isAvailable: Bool = false
+    /// The monitor is restarted on every device change, and a machine with no camera
+    /// entitlement fails identically each time — 16 copies of the same line in one session.
+    private var hasLoggedUnavailable = false
 
     func start() {
         refreshDevices()
         if deviceIDs.isEmpty {
-            Logger.warning("CameraUsageMonitor: no CMIO devices found (camera entitlement may be missing) — camera signal unavailable", subsystem: .app)
+            if !hasLoggedUnavailable {
+                hasLoggedUnavailable = true
+                Logger.warning("CameraUsageMonitor: no CMIO devices found (camera entitlement may be missing) — camera signal unavailable", subsystem: .app)
+            }
             return
         }
+        hasLoggedUnavailable = false
         isAvailable = true
         installListeners()
         let active = anyRunning()
@@ -101,12 +108,57 @@ final class CameraUsageMonitor {
 
 // MARK: - Microphone Monitor (monitors all input devices)
 
+/// Watches `kAudioDevicePropertyDeviceIsRunningSomewhere` on every input device.
+///
+/// ### Why the device list is itself watched
+/// The list used to be captured once in `start()` and never revisited, and no listener was ever
+/// removed. A session log showed what that costs: unplugging `iPhone Microphone` left the ID in
+/// the cached array and every later callback polled it, producing 17 × `AudioObjectGetPropertyData:
+/// no object with given ID 140` over 75 minutes and — worse — a stale `active=true` that burnt a
+/// debounce cycle with nothing recording. Devices that appeared afterwards (including the
+/// `CADefaultDeviceAggregate` CoreAudio builds mid-recording) never got a listener at all, so the
+/// monitor grew progressively blinder the longer the app ran.
+///
+/// The system's `kAudioHardwarePropertyDevices` listener rebuilds the per-device set on every
+/// topology change. `AudioDeviceManager` watches the same property for its own purposes; this is a
+/// second, independent registration rather than a notification hop, because the two have different
+/// lifetimes and CoreAudio allows any number of listener blocks on one property.
 final class MicrophoneUsageMonitor {
     var onChange: ((Bool) -> Void)?
     private(set) var isActive: Bool = false
     private var inputDeviceIDs: [AudioDeviceID] = []
 
+    /// Installed per-device listeners, keyed by device. The block is the removal token —
+    /// `AudioObjectRemovePropertyListenerBlock` matches on identity, so it has to be the same
+    /// object that was registered. Keying by ID also makes a re-`start()` idempotent: a device
+    /// that survives a topology change keeps its one listener instead of gaining a second.
+    private var deviceListeners: [AudioDeviceID: AudioObjectPropertyListenerBlock] = [:]
+    private var deviceListListener: AudioObjectPropertyListenerBlock?
+
+    /// Fresh value per use — `AudioObject*PropertyListenerBlock` takes the address `inout`, and a
+    /// shared mutable static would be handed to CoreAudio from several queues at once.
+    private static var deviceListAddress: AudioObjectPropertyAddress {
+        AudioObjectPropertyAddress(
+            mSelector: kAudioHardwarePropertyDevices,
+            mScope: kAudioObjectPropertyScopeGlobal,
+            mElement: kAudioObjectPropertyElementMain
+        )
+    }
+
+    private static var isRunningAddress: AudioObjectPropertyAddress {
+        AudioObjectPropertyAddress(
+            mSelector: kAudioDevicePropertyDeviceIsRunningSomewhere,
+            mScope: kAudioObjectPropertyScopeGlobal,
+            mElement: kAudioObjectPropertyElementMain
+        )
+    }
+
+    deinit {
+        stop()
+    }
+
     func start() {
+        installDeviceListListener()
         refreshInputDevices()
         if inputDeviceIDs.isEmpty {
             Logger.warning("MicrophoneUsageMonitor: no input devices found", subsystem: .app)
@@ -116,6 +168,69 @@ final class MicrophoneUsageMonitor {
         let active = anyInputRunning()
         isActive = active
         Logger.debug("MicrophoneUsageMonitor: started, \(inputDeviceIDs.count) device(s), initial active=\(active)", subsystem: .app)
+        onChange?(active)
+    }
+
+    /// Removes every listener this monitor installed. Safe to call twice.
+    func stop() {
+        var isRunning = Self.isRunningAddress
+        for (deviceID, block) in deviceListeners {
+            AudioObjectRemovePropertyListenerBlock(deviceID, &isRunning, DispatchQueue.main, block)
+        }
+        deviceListeners.removeAll()
+        inputDeviceIDs.removeAll()
+
+        if let block = deviceListListener {
+            var deviceList = Self.deviceListAddress
+            AudioObjectRemovePropertyListenerBlock(
+                AudioObjectID(kAudioObjectSystemObject), &deviceList, DispatchQueue.main, block
+            )
+            deviceListListener = nil
+        }
+    }
+
+    // MARK: - Topology
+
+    private func installDeviceListListener() {
+        guard deviceListListener == nil else { return }
+        let block: AudioObjectPropertyListenerBlock = { [weak self] _, _ in
+            guard let self else { return }
+            self.rebuildListeners()
+        }
+        var address = Self.deviceListAddress
+        let status = AudioObjectAddPropertyListenerBlock(
+            AudioObjectID(kAudioObjectSystemObject), &address, DispatchQueue.main, block
+        )
+        guard status == noErr else {
+            Logger.error("MicrophoneUsageMonitor: device list listener failed (\(status)) — the device set will not track hot-plugs", subsystem: .app)
+            return
+        }
+        deviceListListener = block
+    }
+
+    /// Re-enumerates, drops listeners on departed devices and installs them on arrivals.
+    ///
+    /// The active flag is recomputed and only published when it actually changed — a device
+    /// arriving or leaving is not itself a microphone event, and republishing would spend a
+    /// debounce cycle in `MeetingDetector` for nothing.
+    private func rebuildListeners() {
+        let previous = Set(inputDeviceIDs)
+        refreshInputDevices()
+        let current = Set(inputDeviceIDs)
+        guard previous != current else { return }
+
+        var isRunning = Self.isRunningAddress
+        for departed in previous.subtracting(current) {
+            if let block = deviceListeners.removeValue(forKey: departed) {
+                AudioObjectRemovePropertyListenerBlock(departed, &isRunning, DispatchQueue.main, block)
+            }
+        }
+        installListeners()
+        Logger.debug("MicrophoneUsageMonitor: device set changed — now \(inputDeviceIDs.count) input device(s)", subsystem: .app)
+
+        let active = anyInputRunning()
+        guard active != isActive else { return }
+        isActive = active
         onChange?(active)
     }
 
@@ -156,11 +271,7 @@ final class MicrophoneUsageMonitor {
     private func isRunning(_ deviceID: AudioDeviceID) -> Bool {
         var value: UInt32 = 0
         var size = UInt32(MemoryLayout<UInt32>.size)
-        var address = AudioObjectPropertyAddress(
-            mSelector: kAudioDevicePropertyDeviceIsRunningSomewhere,
-            mScope: kAudioObjectPropertyScopeGlobal,
-            mElement: kAudioObjectPropertyElementMain
-        )
+        var address = Self.isRunningAddress
         let status = AudioObjectGetPropertyData(deviceID, &address, 0, nil, &size, &value)
         return status == noErr && value != 0
     }
@@ -169,19 +280,25 @@ final class MicrophoneUsageMonitor {
         inputDeviceIDs.contains { isRunning($0) }
     }
 
+    /// Installs a listener on every input device that does not already have one.
     private func installListeners() {
-        for deviceID in inputDeviceIDs {
-            var address = AudioObjectPropertyAddress(
-                mSelector: kAudioDevicePropertyDeviceIsRunningSomewhere,
-                mScope: kAudioObjectPropertyScopeGlobal,
-                mElement: kAudioObjectPropertyElementMain
-            )
-            AudioObjectAddPropertyListenerBlock(deviceID, &address, DispatchQueue.main) { [weak self] _, _ in
+        for deviceID in inputDeviceIDs where deviceListeners[deviceID] == nil {
+            let block: AudioObjectPropertyListenerBlock = { [weak self] _, _ in
                 guard let self else { return }
                 let active = self.anyInputRunning()
+                // CoreAudio fires this per device, so a machine with several inputs reports the
+                // same aggregate answer several times per transition. Only the transitions matter.
+                guard active != self.isActive else { return }
                 self.isActive = active
                 Logger.debug("MicrophoneUsageMonitor: any input active=\(active)", subsystem: .app)
                 self.onChange?(active)
+            }
+            var address = Self.isRunningAddress
+            let status = AudioObjectAddPropertyListenerBlock(
+                deviceID, &address, DispatchQueue.main, block
+            )
+            if status == noErr {
+                deviceListeners[deviceID] = block
             }
         }
     }
@@ -370,6 +487,7 @@ final class MeetingDetector {
         detectorState = .idle
         pollTimer?.invalidate()
         pollTimer = nil
+        micMonitor.stop()
         if let obs = activationObserver { NSWorkspace.shared.notificationCenter.removeObserver(obs) }
         if let obs = terminateObserver { NSWorkspace.shared.notificationCenter.removeObserver(obs) }
         if let obs = appStateObserver { NotificationCenter.default.removeObserver(obs) }
@@ -415,7 +533,9 @@ final class MeetingDetector {
             task.cancel()
             detectorState = .idle
         case .prompted:
+            #if !APP_STORE
             AppState.shared.dismissMeetingNotification()
+            #endif
             detectorState = .idle
         case .suppressedUntilHardwareIdle:
             detectorState = .idle
@@ -469,12 +589,14 @@ final class MeetingDetector {
     private func fire(_ candidate: MeetingCandidate) {
         lastFiredDate[candidate.displayName] = Date()
         detectorState = .prompted
+        #if !APP_STORE
         AppState.shared.showMeetingNotification(app: DetectedMeetingApp(
             name: candidate.displayName,
             iconSystemName: candidate.iconSystemName,
             iconColor: candidate.iconColor,
             bundleID: candidate.bundleID
         ))
+        #endif
         Logger.info("MeetingDetector: \(candidate.displayName) (confidence \(String(format: "%.2f", candidate.confidence)))", subsystem: .app)
     }
 
@@ -768,12 +890,14 @@ final class MeetingDetector {
     private func fireDirect(name: String, iconSystemName: String, iconColor: Color, bundleID: String) {
         lastFiredDate[name] = Date()
         detectorState = .prompted
+        #if !APP_STORE
         AppState.shared.showMeetingNotification(app: DetectedMeetingApp(
             name: name,
             iconSystemName: iconSystemName,
             iconColor: iconColor,
             bundleID: bundleID
         ))
+        #endif
         Logger.info("MeetingDetector: fallback detected \(name)", subsystem: .app)
     }
 

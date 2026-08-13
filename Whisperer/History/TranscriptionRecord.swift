@@ -11,7 +11,9 @@ struct TranscriptionRecord: Identifiable {
     let id: UUID
     let timestamp: Date
     let transcription: String
-    let audioFileURL: String?
+    /// `var` because library compaction rewrites the recording to Opus under a new name and
+    /// patches the loaded page in place rather than forcing a full reload.
+    var audioFileURL: String?
     let duration: Double
     let wordCount: Int
     let language: String

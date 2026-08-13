@@ -5,7 +5,8 @@
 //  Transcript for both post-recording and live recording views.
 //
 //  Layout:
-//    - Speaker label: OUTSIDE and ABOVE the card, in the speaker's accent color
+//    - Speaker label: OUTSIDE and ABOVE the card, in the speaker's accent color, printed
+//      once per turn — consecutive segments from the same speaker stack without repeating it
 //    - Card: rounded navy box behind the body text, with a speaker-colored leading edge
 //    - Timestamps: OUTSIDE the card in a fixed gutter — start pinned to the card's top
 //      edge, end pinned to the card's bottom edge, so the pair spans the segment
@@ -36,23 +37,42 @@ struct MeetingTranscriptView: View {
     var onSpeakerRenamed: ((UUID, String) -> Void)?
     var onTagToggled: ((UUID, SegmentTag) -> Void)?
 
+    @ObservedObject private var refiner = MeetingTranscriptRefiner.shared
+
     @State private var transcriptHeight: CGFloat = 100
     @State private var segmentMetrics: [SegmentMetrics] = []
     @State private var hoveredSegmentID: UUID?
     @State private var renamingSegmentID: UUID?
     @State private var renameDraft = ""
+    /// Drives the polish sweep. Same 1.4s cadence as MeetingProcessingBanner's rail.
+    @State private var polishSweepPhase = false
 
     private var isLive: Bool {
         session.isRecording && session.meetingID == meeting?.id
     }
 
     private var isRTL: Bool {
-        let sample = segments.prefix(3).map(\.text).joined()
-        if !sample.isEmpty { return Self.detectRTL(in: String(sample.prefix(150))) }
+        // Content wins over the configured language: `meeting.language` is the shortlist
+        // entry the session started with, not what was actually spoken. `segments` stays
+        // empty until the first chunk commits — on the Nemotron backend that is the whole
+        // recording, since it emits one chunk at finish() — so the live bubble's own text
+        // has to be sampled too. Otherwise a `he`-configured user dictating English gets a
+        // right-aligned card for the entire session.
+        var sample = segments.prefix(3).map { $0.text.prefix(150) }.joined()
+        if sample.isEmpty, isLive {
+            sample = session.currentSegmentText.prefix(150) + " " + session.livePreviewText.prefix(150)
+        }
+        let trimmed = sample.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !trimmed.isEmpty { return Self.detectRTL(in: String(trimmed.prefix(150))) }
         if let lang = TranscriptionLanguage(rawValue: meeting?.language ?? ""), lang != .auto {
             return lang.isRTL
         }
         return false
+    }
+
+    /// True while the LLM polish pass is working on *this* meeting.
+    private var isPolishing: Bool {
+        refiner.activeMeetingID != nil && refiner.activeMeetingID == meeting?.id
     }
 
     private var segmentByID: [UUID: MeetingSegment] {
@@ -116,6 +136,15 @@ struct MeetingTranscriptView: View {
                 card(for: info)
             }
 
+            // Polish progress. Pure overlay geometry from `segmentMetrics` — it never touches
+            // the text storage, so the transcript stays selectable and scrollable while the
+            // model runs and no relayout is triggered until the single end-of-run commit.
+            if isPolishing {
+                ForEach(segmentMetrics) { info in
+                    polishOverlay(for: info)
+                }
+            }
+
             SelectableTranscriptView(
                 segments: segments,
                 searchQuery: searchQuery,
@@ -142,7 +171,74 @@ struct MeetingTranscriptView: View {
         }
         .padding(isRTL ? .leading : .trailing, timestampCol)
         .overlay(alignment: isRTL ? .topLeading : .topTrailing) { timestampGutter }
+        .animation(.easeInOut(duration: 0.25), value: isPolishing)
+        .onAppear { syncPolishSweep(isPolishing) }
+        .onChange(of: isPolishing) { _, active in syncPolishSweep(active) }
         .id("transcriptBody")
+    }
+
+    // MARK: - Polish progress overlays
+
+    @ViewBuilder
+    private func polishOverlay(for info: SegmentMetrics) -> some View {
+        if refiner.activeSegmentIDs.contains(info.id) {
+            polishSweep(for: info)
+        } else if refiner.doneSegmentIDs.contains(info.id) {
+            polishDoneEdge(for: info)
+        }
+    }
+
+    /// Segment currently in the model: a gradient band travelling across the card.
+    private func polishSweep(for info: SegmentMetrics) -> some View {
+        GeometryReader { geo in
+            let width = geo.size.width
+            let band = max(60, width * 0.45)
+            LinearGradient(
+                colors: [
+                    Color(hex: "5B6CF7").opacity(0),
+                    Color(hex: "5B6CF7").opacity(0.30),
+                    Color(hex: "8B5CF6").opacity(0.30),
+                    Color(hex: "8B5CF6").opacity(0)
+                ],
+                startPoint: .leading, endPoint: .trailing
+            )
+            .frame(width: band)
+            .offset(x: polishSweepPhase ? width : -band)
+        }
+        .frame(height: info.cardHeight)
+        .clipShape(RoundedRectangle(cornerRadius: cardRadius, style: .continuous))
+        .padding(.horizontal, outerMargin)
+        .offset(y: info.cardTop)
+        .allowsHitTesting(false)
+        .transition(.opacity)
+    }
+
+    /// Already polished in this run: the card's leading edge takes the accent gradient.
+    private func polishDoneEdge(for info: SegmentMetrics) -> some View {
+        Rectangle()
+            .fill(
+                LinearGradient(
+                    colors: [Color(hex: "5B6CF7"), Color(hex: "8B5CF6")],
+                    startPoint: .top, endPoint: .bottom
+                )
+            )
+            .frame(width: 3, height: info.cardHeight)
+            .frame(maxWidth: .infinity, alignment: isRTL ? .trailing : .leading)
+            .padding(.horizontal, outerMargin)
+            .offset(y: info.cardTop)
+            .allowsHitTesting(false)
+            .transition(.opacity)
+    }
+
+    private func syncPolishSweep(_ active: Bool) {
+        guard active else {
+            polishSweepPhase = false
+            return
+        }
+        polishSweepPhase = false
+        withAnimation(.easeInOut(duration: 1.4).repeatForever(autoreverses: false)) {
+            polishSweepPhase = true
+        }
     }
 
     private func card(for info: SegmentMetrics) -> some View {
@@ -316,11 +412,13 @@ struct MeetingTranscriptView: View {
 
     private var liveSegmentBubble: some View {
         VStack(alignment: isRTL ? .trailing : .leading, spacing: TranscriptLayout.speakerToCardGap) {
-            Text("Speaker 1")
-                .font(.system(size: 12, weight: .semibold))
-                .foregroundColor(Color(hex: "5B6CF7"))
-                .padding(isRTL ? .trailing : .leading, outerMargin + innerHPad)
-                .padding(isRTL ? .leading : .trailing, outerMargin + timestampCol + innerHPad)
+            if !continuesPreviousTurn {
+                Text(session.hasSpeakerSignal ? session.liveSpeakerName : "Detecting…")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundColor(session.hasSpeakerSignal ? liveSpeakerColor : .white.opacity(0.4))
+                    .padding(isRTL ? .trailing : .leading, outerMargin + innerHPad)
+                    .padding(isRTL ? .leading : .trailing, outerMargin + timestampCol + innerHPad)
+            }
 
             Text(combinedSegmentText)
                 .font(.system(size: 14, weight: .regular))
@@ -334,7 +432,7 @@ struct MeetingTranscriptView: View {
                         .fill(Color(hex: "14142B"))
                         .overlay(alignment: isRTL ? .trailing : .leading) {
                             Rectangle()
-                                .fill(Color(hex: "5B6CF7").opacity(0.32))
+                                .fill(liveSpeakerColor.opacity(0.32))
                                 .frame(width: 3)
                         }
                         .clipShape(RoundedRectangle(cornerRadius: cardRadius, style: .continuous))
@@ -346,7 +444,20 @@ struct MeetingTranscriptView: View {
                 .padding(.leading, isRTL ? outerMargin + timestampCol : outerMargin)
                 .padding(.trailing, isRTL ? outerMargin : outerMargin + timestampCol)
         }
-        .padding(.top, TranscriptLayout.cardToSpeakerGap)
+        .padding(.top, continuesPreviousTurn ? TranscriptLayout.groupedCardGap : TranscriptLayout.cardToSpeakerGap)
+    }
+
+    /// True when the live bubble belongs to the same turn as the last committed card,
+    /// so the name is already printed above it and must not be repeated.
+    private var continuesPreviousTurn: Bool {
+        guard session.hasSpeakerSignal, let last = segments.last else { return false }
+        return last.speakerIndex == session.liveSpeakerIndex
+            && last.speakerName == session.liveSpeakerName
+    }
+
+    /// Same palette the finished cards use, so a turn keeps its colour when it flushes.
+    private var liveSpeakerColor: Color {
+        speakerColor(for: session.liveSpeakerIndex)
     }
 
     private var combinedSegmentText: AttributedString {

@@ -442,6 +442,26 @@ class HistoryManager: ObservableObject {
 
     // MARK: - Delete
 
+    /// Absolute location of a stored recording. `audioFileURL` holds a bare filename relative
+    /// to `Recordings/`, not a path — the one place that is resolved, so the row-delete and the
+    /// wipe-all path cannot drift apart and start orphaning files.
+    private static func recordingURL(for audioFileURL: String?) -> URL? {
+        guard let audioFileURL, !audioFileURL.isEmpty else { return nil }
+        let appSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+        return appSupport
+            .appendingPathComponent("Whisperer/Recordings")
+            .appendingPathComponent(audioFileURL)
+    }
+
+    /// Removes the audio for a row being deleted and reports how many bytes came back.
+    @discardableResult
+    private static func deleteRecordingFile(for audioFileURL: String?) -> Int64 {
+        guard let url = Self.recordingURL(for: audioFileURL) else { return 0 }
+        let size = (try? url.resourceValues(forKeys: [.fileSizeKey]).fileSize).flatMap { Int64($0) } ?? 0
+        guard (try? FileManager.default.removeItem(at: url)) != nil else { return 0 }
+        return size
+    }
+
     func deleteTranscription(_ record: TranscriptionRecord) async throws {
         let fetchRequest: NSFetchRequest<TranscriptionEntity> = TranscriptionEntity.fetchRequest()
         fetchRequest.predicate = NSPredicate(format: "id == %@", record.id as CVarArg)
@@ -451,8 +471,13 @@ class HistoryManager: ObservableObject {
             throw HistoryError.recordNotFound
         }
 
+        let audioFileURL = entity.audioFileURL
         context.delete(entity)
         try context.save()
+
+        // Only after the row is committed — a file removed ahead of a save that then throws
+        // leaves a library entry with a dead play button.
+        Self.deleteRecordingFile(for: audioFileURL)
 
         transcriptions.removeAll { $0.id == record.id }
         currentOffset = max(0, currentOffset - 1)
@@ -464,22 +489,17 @@ class HistoryManager: ObservableObject {
 
         do {
             let allEntities = try context.fetch(fetchRequest)
+            let audioFiles = allEntities.map { $0.audioFileURL }
 
             for entity in allEntities {
-                // Optionally delete associated audio files
-                if let audioFileURL = entity.audioFileURL {
-                    let fileManager = FileManager.default
-                    let appSupport = fileManager.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-                    let recordingsDir = appSupport.appendingPathComponent("Whisperer/Recordings")
-                    let audioURL = recordingsDir.appendingPathComponent(audioFileURL)
-
-                    try? fileManager.removeItem(at: audioURL)
-                }
-
                 context.delete(entity)
             }
 
             try context.save()
+
+            for audioFileURL in audioFiles {
+                Self.deleteRecordingFile(for: audioFileURL)
+            }
 
             await loadTranscriptions(filter: currentFilter, searchQuery: currentSearchQuery, dateRange: currentDateRange)
             await updateStatistics()
@@ -487,6 +507,99 @@ class HistoryManager: ObservableObject {
             Logger.error("Failed to delete all transcriptions: \(error)", subsystem: .app)
             throw error
         }
+    }
+
+    /// Delete every transcription created before `cutoff`, audio included. Returns the number of
+    /// rows removed and the bytes reclaimed, for the retention sweep's log line.
+    ///
+    /// Ages on `createdAt`, never on the file's mtime: a transcode or a re-transcription pass
+    /// rewrites mtime and would otherwise keep resetting the clock on an old recording.
+    /// `isInProgress` rows are left alone — those belong to crash recovery, not to retention —
+    /// and so are pinned ones, since pinning is the user explicitly saying "keep this".
+    func deleteTranscriptions(olderThan cutoff: Date) async -> (count: Int, bytes: Int64) {
+        let fetchRequest: NSFetchRequest<TranscriptionEntity> = TranscriptionEntity.fetchRequest()
+        fetchRequest.predicate = NSPredicate(
+            format: "createdAt < %@ AND isPinned == NO AND (isInProgress == NO OR isInProgress == nil)",
+            cutoff as NSDate
+        )
+
+        do {
+            let expired = try context.fetch(fetchRequest)
+            guard !expired.isEmpty else { return (0, 0) }
+
+            let audioFiles = expired.map { $0.audioFileURL }
+            let ids = Set(expired.compactMap { $0.id })
+
+            for entity in expired {
+                context.delete(entity)
+            }
+            try context.save()
+
+            var bytes: Int64 = 0
+            for audioFileURL in audioFiles {
+                bytes += Self.deleteRecordingFile(for: audioFileURL)
+            }
+
+            transcriptions.removeAll { ids.contains($0.id) }
+            currentOffset = max(0, currentOffset - expired.count)
+            await updateStatistics()
+
+            return (expired.count, bytes)
+        } catch {
+            Logger.error("Retention: failed to delete expired transcriptions: \(error)", subsystem: .app)
+            return (0, 0)
+        }
+    }
+
+    // MARK: - Library compaction
+
+    /// Rows whose stored audio predates the Opus archive format, as `(id, bare filename)`.
+    ///
+    /// `isInProgress` rows are excluded — their audio is still being written, and the
+    /// compaction pass must not read a file the recorder holds open.
+    func legacyAudioRecordings() async -> [(id: UUID, fileName: String)] {
+        let fetchRequest: NSFetchRequest<TranscriptionEntity> = TranscriptionEntity.fetchRequest()
+        fetchRequest.predicate = NSPredicate(
+            format: "audioFileURL != nil AND (isInProgress == NO OR isInProgress == nil)"
+        )
+        guard let entities = try? context.fetch(fetchRequest) else { return [] }
+        return entities.compactMap { entity in
+            guard let name = entity.audioFileURL, !name.isEmpty else { return nil }
+            guard !AudioArchiveFormat.isAlreadyArchived(URL(fileURLWithPath: name)) else { return nil }
+            return (entity.id, name)
+        }
+    }
+
+    /// Absolute location of a stored recording — the compaction pass needs to read and
+    /// replace the file, and this is the only resolver for `Recordings/`.
+    static func absoluteRecordingURL(for fileName: String) -> URL? {
+        recordingURL(for: fileName)
+    }
+
+    /// Repoint a row at a different file in `Recordings/`.
+    ///
+    /// Compaction calls this **after** the replacement is written and verified and **before**
+    /// the original is unlinked: if the save fails, the row still names a file that exists.
+    func updateAudioFileName(id: UUID, fileName: String) async -> Bool {
+        let fetchRequest: NSFetchRequest<TranscriptionEntity> = TranscriptionEntity.fetchRequest()
+        fetchRequest.predicate = NSPredicate(format: "id == %@", id as CVarArg)
+        fetchRequest.fetchLimit = 1
+
+        do {
+            guard let entity = try context.fetch(fetchRequest).first else { return false }
+            entity.audioFileURL = fileName
+            try context.save()
+        } catch {
+            Logger.error("Compaction: failed to repoint recording \(id): \(error)", subsystem: .audio)
+            return false
+        }
+
+        // Keep the loaded page in step so the detail view's play button follows the new file
+        // without a full reload.
+        if let index = transcriptions.firstIndex(where: { $0.id == id }) {
+            transcriptions[index].audioFileURL = fileName
+        }
+        return true
     }
 
     // MARK: - Statistics

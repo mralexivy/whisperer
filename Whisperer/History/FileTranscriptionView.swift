@@ -933,7 +933,12 @@ struct FileTranscriptionView: View {
         panel.allowsMultipleSelection = false
         panel.canChooseDirectories = false
         panel.canChooseFiles = true
-        panel.allowedContentTypes = [.audio, .mpeg4Movie, .quickTimeMovie, .wav, .mp3, .aiff]
+        // `.audio` does not cover Ogg — macOS declares `org.xiph.ogg-audio` (extensions
+        // ogg / oga / opus) as its own type, and without it the app's own recordings are
+        // greyed out in its own import picker.
+        var types: [UTType] = [.audio, .mpeg4Movie, .quickTimeMovie, .wav, .mp3, .aiff]
+        if let ogg = UTType("org.xiph.ogg-audio") { types.append(ogg) }
+        panel.allowedContentTypes = types
         panel.message = "Select an audio or video file to transcribe"
         panel.prompt = "Select"
 
