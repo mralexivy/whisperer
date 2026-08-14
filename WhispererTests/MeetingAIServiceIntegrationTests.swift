@@ -146,4 +146,38 @@ final class MeetingAIServiceIntegrationTests: XCTestCase {
         XCTAssertGreaterThan(raw.count, 30,
             "Output too short (\(raw.count) chars) — outputTokensHint may not be applied")
     }
+
+    // MARK: - Repetition penalty reaches the MTP decoder
+
+    /// The shipped defect, end to end. `generateOverview` passed `repetitionPenalty: 1.15`,
+    /// `process()` logged it, and then handed the work to `processMTP`, whose signature had no
+    /// sampling parameters at all — so `generateMTPTokens` ran at the 1.0 default, i.e. pure
+    /// greedy argmax with nothing to break a cycle. Every overview on this transcript collapsed
+    /// into "to Michael to Michael to to to…" and was guillotined by the degeneration guard at
+    /// well under a hundred tokens.
+    ///
+    /// Asserted on the raw decoder output rather than through the parser: the parser now trims a
+    /// loop away, which would hide exactly the regression this test exists to catch.
+    func testMTPDecodeDoesNotLoop_realHistoryTranscript() async throws {
+        let p = try await processor()
+        let request = MeetingAIService.overviewRequest(
+            transcriptWords: realHistoryTranscript.split(whereSeparator: { $0.isWhitespace }).count)
+
+        let raw = try await p.process(
+            text:                   realHistoryTranscript,
+            systemPrompt:           request.systemPrompt,
+            userMessage:            "[INPUT]\n\(realHistoryTranscript)\n[/INPUT]",
+            temperature:            0.15,
+            repetitionPenalty:      1.15,
+            maxTokensCap:           2048,
+            outputTokensHint:       request.outputTokensHint,
+            timeoutSecondsOverride: request.timeoutSeconds
+        )
+
+        XCTAssertFalse(raw.isEmpty, "LLM produced no output")
+        if let loop = TestLoopDetector.firstRepeat(in: raw) {
+            XCTFail("Decode looped on \"\(loop)\" — repetition penalty is not reaching "
+                    + "generateMTPTokens.\nRaw output (\(raw.count) chars):\n\(raw)")
+        }
+    }
 }

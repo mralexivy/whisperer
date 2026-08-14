@@ -20,6 +20,11 @@ struct MeetingDetailView: View {
     @State private var showOverviewReadyToast = false
     /// Render the pre-LLM ASR text. View-level only — nothing is written back.
     @State private var showOriginal = false
+    /// Speaker cards vs continuous prose. View-level only, and deliberately not persisted:
+    /// it is how you want to read *this* transcript right now, not a preference.
+    @State private var transcriptMode: TranscriptMode = .speakers
+    @State private var didCopy = false
+    @State private var floatHovering = false
 
     // Convenience shorthand — nil while loading
     private var meeting: MeetingRecord? { detailVM.meeting }
@@ -61,6 +66,43 @@ struct MeetingDetailView: View {
 
     private var hasPolishedSegments: Bool {
         liveOrPersistedSegments.contains { $0.isPolished }
+    }
+
+    /// Every segment, not the page.
+    ///
+    /// `transcriptSegments` resolves to `detailVM.displayedSegments`, which is capped at 20 and
+    /// grown by `MeetingTranscriptView`'s scroll. Neither consumer here scrolls that view: a
+    /// "Full Text" that stops at segment 20 is not the full text, and a Copy that silently
+    /// takes a fifth of the meeting is worse than no Copy at all.
+    private var completeSegments: [MeetingSegment] {
+        applyOriginalToggle(
+            session.meetingID == meeting?.id && !session.segments.isEmpty
+                && (session.isRecording || detailVM.allSegments.count < session.segments.count)
+                ? session.segments
+                : detailVM.allSegments
+        )
+    }
+
+    /// The prose rendering, shared by the Full Text view and the clipboard so the two cannot
+    /// disagree. The Polished/Original choice flows through `completeSegments`.
+    private var plainProse: String {
+        MeetingTranscriptText.plainProse(from: completeSegments)
+    }
+
+    /// Content decides direction; the configured language is only the fallback when there is
+    /// no text yet. Same rule as `MeetingTranscriptView`.
+    private var isRTL: Bool {
+        let sample = completeSegments.prefix(3)
+            .map { $0.text.prefix(150) }
+            .joined()
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        if !sample.isEmpty {
+            return MeetingTranscriptText.isRightToLeft(sample: String(sample.prefix(150)))
+        }
+        if let lang = TranscriptionLanguage(rawValue: meeting?.language ?? ""), lang != .auto {
+            return lang.isRTL
+        }
+        return false
     }
 
     /// The manual re-transcribe action is offered only when there is something left to correct,
@@ -107,6 +149,8 @@ struct MeetingDetailView: View {
             selectedTab = .transcript
             searchQuery = ""
             showOriginal = false
+            transcriptMode = .speakers
+            didCopy = false
         }
         .onReceive(NotificationCenter.default.publisher(for: .meetingTitleDidGenerate)) { notif in
             guard let id = notif.object as? UUID, id == meeting?.id,
@@ -233,7 +277,7 @@ struct MeetingDetailView: View {
                 }
 
                 Spacer()
-                exportButton
+                if canFloat { floatWindowButton }
             }
 
             HStack(spacing: 12) {
@@ -276,19 +320,58 @@ struct MeetingDetailView: View {
         .clipShape(Capsule())
     }
 
-    private var exportButton: some View {
+    /// Only offered when this meeting is the one the live window would show. The floating window
+    /// binds a `MeetingSession` at construction, so there is nothing to float for a meeting the
+    /// user merely selected in the library — and `show(session:)` would either warn and do nothing
+    /// or put an empty session on screen. `meetingID` survives Stop deliberately, so the control
+    /// stays available through naming and summarizing, which is exactly when the compact window is
+    /// still worth having.
+    private var canFloat: Bool {
+        session.meetingID != nil && session.meetingID == meeting?.id
+    }
+
+    /// The mirror of the live window's "Open in Workspace": float the meeting and get the
+    /// workspace out of the way. Same hand-over rule in the same order — the floating surface is
+    /// up (which sets `meetingWindowIsVisible`) before the workspace goes away, so the HUD never
+    /// flashes in the gap.
+    ///
+    /// `hideWindow()` orders out rather than closing, so `HistoryWindowManager`'s
+    /// `willCloseNotification` observer does not run and the window comes back with its state
+    /// intact.
+    private var floatWindowButton: some View {
         Button {
-            exportTranscript()
+            MeetingLiveWindowManager.shared.show(session: session)
+            HistoryWindowManager.shared.hideWindow()
         } label: {
-            Label("Export", systemImage: "square.and.arrow.up")
-                .font(.system(size: 12, weight: .medium))
-                .foregroundColor(.white.opacity(0.6))
-                .padding(.horizontal, 10)
-                .padding(.vertical, 5)
-                .background(Color.white.opacity(0.06))
-                .clipShape(RoundedRectangle(cornerRadius: 6))
+            Image(systemName: "arrow.down.right.and.arrow.up.left")
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(
+                    LinearGradient(colors: [Color(hex: "5B6CF7"), Color(hex: "8B5CF6")],
+                                   startPoint: .topLeading,
+                                   endPoint: .bottomTrailing)
+                )
+                .frame(width: 26, height: 26)
+                .background(
+                    RoundedRectangle(cornerRadius: 6, style: .continuous)
+                        .fill(
+                            LinearGradient(
+                                colors: [Color(hex: "5B6CF7").opacity(floatHovering ? 0.28 : 0.15),
+                                         Color(hex: "8B5CF6").opacity(floatHovering ? 0.28 : 0.15)],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            )
+                        )
+                )
+                .scaleEffect(floatHovering ? 1.08 : 1)
+                .shadow(color: Color(hex: "5B6CF7").opacity(floatHovering ? 0.35 : 0),
+                        radius: 6, y: 1)
+                .contentShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
         }
         .buttonStyle(.plain)
+        .help("Float over your call and hide the workspace")
+        .onHover { hovering in
+            withAnimation(.easeOut(duration: 0.14)) { floatHovering = hovering }
+        }
     }
 
     private var speakerPills: some View {
@@ -347,9 +430,15 @@ struct MeetingDetailView: View {
                 HStack(spacing: 5) {
                     Text(tab.label)
                         .font(.system(size: 13, weight: selectedTab == tab ? .semibold : .medium))
+                        // A tab label is a name, not prose — never wrap or hyphenate it
+                        // when the centre column is narrow.
+                        .lineLimit(1)
+                        .fixedSize(horizontal: true, vertical: false)
                     if tab == .transcript && !detailVM.allSegments.isEmpty {
                         Text("\(detailVM.allSegments.count)")
                             .font(.system(size: 10, weight: .bold))
+                            .lineLimit(1)
+                            .fixedSize(horizontal: true, vertical: false)
                             .foregroundColor(selectedTab == tab ? Color(hex: "5B6CF7") : .white.opacity(0.3))
                             .padding(.horizontal, 5)
                             .padding(.vertical, 1)
@@ -389,20 +478,29 @@ struct MeetingDetailView: View {
         .clipShape(RoundedRectangle(cornerRadius: 6))
     }
 
-    /// Search + the polish controls. The controls only exist once there is something to
-    /// control: no toggle before a run has produced raw/polished pairs, no manual action
-    /// while one is running or while there is nothing left to clean.
+    /// Search, view mode, copy, and the polish controls. The polish controls only exist once
+    /// there is something to control: no toggle before a run has produced raw/polished pairs,
+    /// no manual action while one is running or while there is nothing left to clean.
+    ///
+    /// Search is dropped in Full Text mode. `searchQuery` drives per-segment highlighting
+    /// inside `SelectableTranscriptView`, which the prose path does not use — a search box
+    /// that silently does nothing is worse than no search box.
     private var transcriptToolbar: some View {
         HStack(spacing: 8) {
-            searchField
-                .frame(maxWidth: 280)
+            if transcriptMode == .speakers {
+                searchField
+                    .frame(maxWidth: 280)
+                    .transition(.opacity.combined(with: .move(edge: .leading)))
+            }
 
             Spacer(minLength: 8)
 
+            modeToggle
             if hasPolishedSegments {
                 polishedToggle
                     .transition(.opacity.combined(with: .scale(scale: 0.9)))
             }
+            copyButton
             if canPolishManually {
                 cleanUpButton
                     .transition(.opacity.combined(with: .scale(scale: 0.9)))
@@ -410,12 +508,30 @@ struct MeetingDetailView: View {
         }
         .animation(.easeInOut(duration: 0.2), value: hasPolishedSegments)
         .animation(.easeInOut(duration: 0.2), value: canPolishManually)
+        .animation(.easeInOut(duration: 0.2), value: transcriptMode)
+    }
+
+    /// Always visible, unlike the polish toggle — reading the transcript straight through is
+    /// available whether or not a cleanup pass has ever run.
+    private var modeToggle: some View {
+        HStack(spacing: 2) {
+            segmentedOption("Speakers", selected: transcriptMode == .speakers) {
+                transcriptMode = .speakers
+            }
+            segmentedOption("Full Text", selected: transcriptMode == .fullText) {
+                transcriptMode = .fullText
+            }
+        }
+        .padding(2)
+        .background(Color.white.opacity(0.06))
+        .clipShape(Capsule())
+        .help("Switch between speaker-by-speaker cards and the transcript as plain text")
     }
 
     private var polishedToggle: some View {
         HStack(spacing: 2) {
-            polishedToggleOption("Polished", selected: !showOriginal) { showOriginal = false }
-            polishedToggleOption("Original", selected: showOriginal) { showOriginal = true }
+            segmentedOption("Polished", selected: !showOriginal) { showOriginal = false }
+            segmentedOption("Original", selected: showOriginal) { showOriginal = true }
         }
         .padding(2)
         .background(Color.white.opacity(0.06))
@@ -423,7 +539,7 @@ struct MeetingDetailView: View {
         .help("Switch between the AI-cleaned transcript and the raw transcription")
     }
 
-    private func polishedToggleOption(_ label: String, selected: Bool, action: @escaping () -> Void) -> some View {
+    private func segmentedOption(_ label: String, selected: Bool, action: @escaping () -> Void) -> some View {
         Button(action: {
             withAnimation(.easeInOut(duration: 0.18)) { action() }
         }) {
@@ -437,6 +553,31 @@ struct MeetingDetailView: View {
                 )
         }
         .buttonStyle(.plain)
+    }
+
+    /// Copies whatever is on screen — labelled lines in Speakers mode, prose in Full Text.
+    /// One control rather than two, so what you copy is always what you are looking at.
+    private var copyButton: some View {
+        Button(action: copyTranscript) {
+            HStack(spacing: 5) {
+                Image(systemName: didCopy ? "checkmark" : "doc.on.doc")
+                    .font(.system(size: 10, weight: .semibold))
+                Text(didCopy ? "Copied" : "Copy")
+                    .font(.system(size: 11, weight: .medium))
+            }
+            .foregroundColor(didCopy ? Color(hex: "10B981") : .white.opacity(0.6))
+            .padding(.horizontal, 10)
+            .padding(.vertical, 5)
+            .background(
+                Capsule().fill(didCopy ? Color(hex: "10B981").opacity(0.12) : Color.white.opacity(0.06))
+            )
+        }
+        .buttonStyle(.plain)
+        .disabled(completeSegments.isEmpty)
+        .opacity(completeSegments.isEmpty ? 0.35 : 1)
+        .help(transcriptMode == .fullText
+              ? "Copy the whole transcript as plain text"
+              : "Copy the transcript with speaker names and timestamps")
     }
 
     private var cleanUpButton: some View {
@@ -478,26 +619,56 @@ struct MeetingDetailView: View {
                     .fill(Color.white.opacity(0.04))
                     .frame(height: 1)
 
-                MeetingTranscriptView(
-                    meeting: meeting,
-                    session: session,
-                    segments: transcriptSegments,
-                    isLoadingSegments: detailVM.isLoading,
-                    hasMoreSegments: detailVM.hasMoreSegments,
-                    onLoadMoreSegments: detailVM.loadMoreSegments,
-                    searchQuery: searchQuery,
-                    playheadSeconds: playheadSeconds,
-                    onSpeakerRenamed: { segID, name in
-                        Task { await handleSpeakerRename(segID: segID, newName: name) }
-                    },
-                    onTagToggled: { segID, tag in
-                        Task { await handleTagToggle(segID: segID, tag: tag) }
-                    }
-                )
+                switch transcriptMode {
+                case .speakers:
+                    MeetingTranscriptView(
+                        meeting: meeting,
+                        session: session,
+                        segments: transcriptSegments,
+                        isLoadingSegments: detailVM.isLoading,
+                        hasMoreSegments: detailVM.hasMoreSegments,
+                        onLoadMoreSegments: detailVM.loadMoreSegments,
+                        searchQuery: searchQuery,
+                        playheadSeconds: playheadSeconds,
+                        onSpeakerRenamed: { segID, name in
+                            Task { await handleSpeakerRename(segID: segID, newName: name) }
+                        },
+                        onTagToggled: { segID, tag in
+                            Task { await handleTagToggle(segID: segID, tag: tag) }
+                        }
+                    )
+                case .fullText:
+                    fullTextContent
+                }
             }
         case .overview:
             MeetingOverviewView(meeting: meeting)
         }
+    }
+
+    @ViewBuilder
+    private var fullTextContent: some View {
+        let prose = plainProse
+        if prose.isEmpty {
+            fullTextEmptyState
+        } else {
+            MeetingFullTranscriptView(text: prose, isRTL: isRTL)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .background(Color(hex: "0C0C1A"))
+        }
+    }
+
+    private var fullTextEmptyState: some View {
+        VStack(spacing: 10) {
+            Image(systemName: "text.alignleft")
+                .font(.system(size: 32, weight: .light))
+                .foregroundColor(.white.opacity(0.15))
+            Text("No transcript yet")
+                .font(.system(size: 14))
+                .foregroundColor(.white.opacity(0.3))
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(Color(hex: "0C0C1A"))
     }
 
     // MARK: - Actions
@@ -534,16 +705,24 @@ struct MeetingDetailView: View {
         await MeetingManager.shared.updateSegment(meetingID: meetingID, segment: seg)
     }
 
-    private func exportTranscript() {
-        let segs = meeting?.segments ?? detailVM.allSegments
-        let text = segs.map { "[\(formatTS($0.timestamp))] \($0.speakerName): \($0.text)" }
-            .joined(separator: "\n")
+    /// Copies exactly what the current mode renders. Splitting this into two controls would let
+    /// the button and the screen drift; both shapes come from `MeetingTranscriptText`.
+    private func copyTranscript() {
+        let segments = completeSegments
+        guard !segments.isEmpty else { return }
+        let text = transcriptMode == .fullText
+            ? MeetingTranscriptText.plainProse(from: segments)
+            : MeetingTranscriptText.labelled(from: segments)
+        guard !text.isEmpty else { return }
+
         NSPasteboard.general.clearContents()
         NSPasteboard.general.setString(text, forType: .string)
-    }
 
-    private func formatTS(_ s: Double) -> String {
-        String(format: "%d:%02d", Int(s) / 60, Int(s) % 60)
+        withAnimation(.easeInOut(duration: 0.15)) { didCopy = true }
+        Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 1_500_000_000)
+            withAnimation(.easeInOut(duration: 0.15)) { didCopy = false }
+        }
     }
 }
 
@@ -558,4 +737,13 @@ enum DetailTab: String, CaseIterable, Identifiable {
         case .overview:   return "Overview"
         }
     }
+}
+
+/// How the Transcript tab renders. A view mode rather than a third `DetailTab`: it is the same
+/// content, and putting it beside Overview would imply otherwise.
+enum TranscriptMode {
+    /// Speaker-grouped cards with timestamps, tags and rename — the review surface.
+    case speakers
+    /// Continuous prose. No names, no timestamps: for reading it through or taking the lot.
+    case fullText
 }

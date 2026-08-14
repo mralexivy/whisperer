@@ -107,3 +107,119 @@ Writing to a `@Binding` synchronously inside `updateNSView` mutates state during
 update. Dispatch to the main queue and only write when the value actually changed
 (`abs(old - new) > 0.5` for heights, `!=` for arrays) — otherwise the write-back re-triggers
 `updateNSView` and the loop never converges.
+
+## Floating always-on-top windows
+
+### An overlay surface must never take focus — `orderFrontRegardless()`, not `makeKeyAndOrderFront`
+
+A window that appears *over* the app the user is working in (the live meeting window over Zoom)
+has to arrive without stealing key status, or the user's next keystroke lands in Whisperer
+instead of the call's chat. `orderFrontRegardless()` shows it in place; `makeKeyAndOrderFront`
+and `NSApp.activate` both pull focus. `canBecomeKey = true` is still required — the title field
+and note editors need to accept text once the user *clicks* them — but `canBecomeMain = false`,
+so the meeting app keeps its main-window chrome.
+
+Same reason `OverlayPanel` uses `.orderFront(nil)`; this is the `NSWindow` form of that rule.
+
+### Persist the frame you want back, not the frame that exists
+
+A window with a collapsed state (header strip only) will be closed while collapsed. Saving
+`frame` at `willCloseNotification` then reopens it as a bare strip with no obvious way out.
+Persist a reconstructed rect instead — the remembered expanded height, with the **top edge**
+held where the collapsed window's top edge was:
+
+```swift
+var persistableFrame: NSRect {
+    guard isCollapsed else { return frame }
+    return NSRect(x: frame.origin.x,
+                  y: frame.origin.y + frame.height - expandedHeight,
+                  width: frame.width, height: expandedHeight)
+}
+```
+
+Pin the top edge for the collapse animation itself, too: growing downward from a fixed top
+keeps the header under the pointer that just clicked the chevron.
+
+### `NSPanel` vs `NSWindow` is a question about who else enumerates windows
+
+`HistoryWindowManager.dismissMenuBarWindow()` orders out the first visible `NSPanel` that is not
+on its skip list. Any new panel therefore has to be added to that list or it gets dismissed by
+unrelated code. Choosing `NSWindow` for the meeting live window made the interaction not exist.
+Check what already filters `NSApp.windows` by class before picking a base class.
+
+### Two surfaces for one state need one "who owns the UI" flag, checked both ways
+
+`meetingWindowIsVisible` means "a meeting surface owns the UI, suppress the HUD". Adding a
+second surface needed no new plumbing — but *both* close paths must consult the other:
+closing the workspace only un-suppresses the HUD when the live window is not visible, and
+closing the live window clears the flag so the HUD returns. Miss one direction and you get
+either two live surfaces or none.
+
+## Live dictation streaming
+
+Full design: [docs/design-docs/2026-08-14-live-dictation-streaming-ux.md](../../design-docs/2026-08-14-live-dictation-streaming-ux.md).
+
+### Batched ASR output carries timing you can re-use
+
+Nemotron emits a partial every 1120ms; whisper.cpp finalizes a VAD chunk every 1–2s. A batch of
+N words that arrived one period after the last one *is* one period of speech. Spreading the
+batch across the measured inter-arrival gap — rather than printing it and going quiet — makes
+each word surface roughly when it was said, with no added latency beyond what the chunker
+already imposed.
+
+```
+interval = clamp((arrivalPeriod × 0.8) / pendingCount, 0.035s, 0.34s)
+```
+
+Compute it **once per batch**. Recomputing per word makes the interval grow as the queue drains,
+so a phrase decelerates into its own tail and overruns the next arrival. The duty cycle must be
+under 1.0 or jitter accumulates backlog permanently. Let the first word of each batch skip the
+schedule — that word is the app answering.
+
+### A dimmed tail must mean something true of the backend that is running
+
+Nemotron's RNNT decoding is monotonic — no word is ever retracted — so "grey = may still change"
+is factually false there, and `MeetingLiveTranscriptView` already found that a dimmed tail reads
+as a rendering fault rather than as uncertainty. A **graded** ramp (0.50 → 0.90 over four words)
+that resolves to ink when streaming stops says "these just landed" instead, which is true of
+every backend. Settle by colour only: changing weight or slant re-measures the text.
+
+### One view per word costs a layout pass per word
+
+A custom `Layout` measures every subview on every pass, and a pass runs on each append — so an
+unbounded word list is O(n²) over a recording. Cap the rendered window (200 words here) and key
+`ForEach` on the word's **absolute** index; with positional identity every survivor re-runs its
+entrance animation each time the window drops its oldest word.
+
+### Pace timers in `.common`, not `.default`
+
+`OverlayPanel` animates its frame on expand/collapse. A word-reveal timer in `.default` stalls
+mid-phrase while that runs.
+
+### A blinking-string caret is a full relayout; a caret view is not
+
+`text + " |"` toggled at 530ms re-renders the whole `NSTextField` twice a second and can wrap
+onto its own line. A caret **view** placed as the last subview of the flow layout inherits the
+wrap for free, and animating the layout on word count makes it glide to its new x — which is
+what makes a word look like it poured out from behind it. Confine the string version to the RTL
+path, which needs `NSTextField` for `baseWritingDirection` anyway, and stop its timer in LTR:
+otherwise it re-evaluates the card body — re-measuring every word — twice a second for a value
+nothing reads.
+
+### An append-only text projection needs an explicit reset, and identity is it
+
+`SmoothTextUpdater`'s projection discards targets with fewer words than are already displayed —
+correct for an ASR revision, wrong for a genuine reset. The meeting live bubble hits the second
+case every time a segment commits: `currentSegmentText` clears into `segments`, the live string
+*shrinks* to the tail, and the pour keeps rendering text that has already moved into a card above
+it. There is no "clear" call to add; `.id(session.currentSegmentStartTimestamp)` re-creates the
+view and its `@StateObject`, which is the reset. Any surface that reuses a monotonic updater for a
+string that can restart needs the same key.
+
+### A derived window frame must not be persisted
+
+`MeetingLiveWindow` saved its frame on close and restored it whenever it still intersected any
+display. One 560pt box saved by an older build then permanently defeated `preferredFrame(on:)`, so
+changes to the resting shape were invisible and looked like the layout code was broken. A frame
+that depends on which screen the pointer is on is a derived shape, not a user preference — restoring
+it across launches would have to be per-display anyway. Drag/resize still holds for the session.

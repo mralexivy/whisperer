@@ -33,9 +33,14 @@ enum MeetingOverviewParser {
         var openQuestions = [QuestionItem]()
         var nextMeeting:    String? = nil
         var actionItems   = [MeetingActionItem]()
+        // Prose emitted before any label at all. Short notes come back as a bare sentence
+        // from every model measured — the label is the first thing a small model drops when
+        // the answer is one line long — and that sentence is unambiguously the overview.
+        var strayLines    = [String]()
+        var sawLabel      = false
 
         for rawLine in raw.components(separatedBy: "\n") {
-            let line     = rawLine.trimmingCharacters(in: .whitespaces)
+            let line     = undecorate(rawLine)
             let isLabel  = labels.contains { line.hasPrefix($0) }
 
             // The overview runs to several paragraphs, so it continues across every
@@ -48,13 +53,15 @@ enum MeetingOverviewParser {
             inOverview = false
             guard !line.isEmpty else { continue }
 
+            if isLabel { sawLabel = true }
+
             if line.hasPrefix("OVERVIEW:") {
                 overviewLines = [field(line, after: "OVERVIEW:")]
                 inOverview = true
 
             } else if line.hasPrefix("TOPIC:") {
                 let parts = parts(line, after: "TOPIC:", count: 2)
-                if let text = parts.first.map(cleanText), !text.isEmpty {
+                if let text = parts.first.map(cleanItem), !text.isEmpty {
                     let secs = parts.count > 1 ? Double(parts[1]) ?? 0 : 0
                     keyTopics.append(TopicItem(text: text, timestampSeconds: secs))
                 }
@@ -62,8 +69,8 @@ enum MeetingOverviewParser {
             } else if line.hasPrefix("DECISION:") {
                 let parts = parts(line, after: "DECISION:", count: 3)
                 if parts.count >= 2 {
-                    let label = cleanText(parts[0])
-                    let text  = cleanText(parts[1])
+                    let label = cleanItem(parts[0])
+                    let text  = cleanItem(parts[1])
                     let secs  = parts.count > 2 ? Double(parts[2]) ?? 0 : 0
                     if !label.isEmpty && !text.isEmpty {
                         decisions.append(DecisionItem(label: label, text: text, timestampSeconds: secs))
@@ -72,31 +79,40 @@ enum MeetingOverviewParser {
 
             } else if line.hasPrefix("OPEN:") {
                 let parts = parts(line, after: "OPEN:", count: 2)
-                if let text = parts.first.map(cleanText), !text.isEmpty {
+                if let text = parts.first.map(cleanItem), !text.isEmpty {
                     let secs = parts.count > 1 ? Double(parts[1]) ?? 0 : 0
                     openQuestions.append(QuestionItem(text: text, timestampSeconds: secs))
                 }
 
             } else if line.hasPrefix("NEXT:") {
-                let val = cleanText(field(line, after: "NEXT:"))
+                let val = cleanItem(field(line, after: "NEXT:"))
                 nextMeeting = (val.lowercased() == "none" || val.isEmpty) ? nil : val
 
             } else if line.hasPrefix("ACTION:") {
                 let parts = parts(line, after: "ACTION:", count: 3)
                 if parts.count >= 2 {
-                    let text  = cleanText(parts[0])
-                    let owner = cleanText(parts[1])
-                    let due   = parts.count > 2 ? (parts[2].lowercased() == "none" ? nil : cleanText(parts[2])) : nil
+                    let text  = cleanItem(parts[0])
+                    let owner = cleanItem(parts[1])
+                    let due   = parts.count > 2 ? (parts[2].lowercased() == "none" ? nil : cleanItem(parts[2])) : nil
                     // Reject if owner is empty or looks like a timestamp (e.g. "0:5:10")
                     let isTimestamp = owner.range(of: #"^\d+:\d"#, options: .regularExpression) != nil
                     if !text.isEmpty && !owner.isEmpty && !isTimestamp {
                         actionItems.append(MeetingActionItem(text: text, ownerName: owner, dueLabel: due))
                     }
                 }
+
+            } else if !sawLabel {
+                strayLines.append(line)
             }
         }
 
-        let overview = joinParagraphs(overviewLines)
+        // Unlabeled prose is used only when the model produced no OVERVIEW at all. It lets a
+        // refusal through as a summary, which is the cost of not throwing away every
+        // correctly-summarized short note — measured, both Qwen2.5-1.5B and Qwen3.5-4B drop
+        // the label on those.
+        var overview = joinParagraphs(overviewLines)
+        if overview.isEmpty { overview = joinParagraphs(strayLines) }
+        overview = truncatingLoop(overview)
         guard !overview.isEmpty else { return nil }
         return MeetingAISummary(
             overview:      overview,
@@ -107,6 +123,98 @@ enum MeetingOverviewParser {
             actionItems:   actionItems,
             generatedAt:   nil
         )
+    }
+
+    // MARK: - Degeneration
+
+    // A structural gate passes a degenerate output: `TOPIC: the speaker is the is the is the…`
+    // parses, has a timestamp in range and is non-empty, so it logged "parsed successfully" and
+    // was written to CoreData as a summary. The decoder's own guard counts *identical consecutive*
+    // tokens, which a two-token cycle never trips, so the content check has to live here.
+    //
+    // Consecutive n-gram repetition only. A distinct-word ratio was the other candidate and is
+    // the wrong instrument: healthy prose in Hebrew or Russian carries far more inflected repeats
+    // than English, so any threshold that catches a loop also flags real summaries in one of the
+    // three languages this has to work in. A phrase repeated back-to-back three times is not
+    // something a working decode does in any of them.
+
+    /// Longest n-gram considered. Beyond ~5 words a "loop" is more likely a real refrain.
+    private static let maxLoopPhrase = 5
+
+    /// Word index at which the output starts looping, or nil when it never does.
+    private static func loopStart(_ words: [String]) -> Int? {
+        guard words.count >= 3 else { return nil }
+        var earliest: Int? = nil
+
+        for n in 1...maxLoopPhrase {
+            // A single word has to repeat more before it counts: "no, no, no" is speech, and
+            // "the the the" is not something the decoder produces without the longer runs too.
+            let needed = n == 1 ? 5 : 3
+            guard words.count >= n * needed else { continue }
+
+            var i = 0
+            while i + n * needed <= words.count {
+                var repeats = 1
+                while i + n * (repeats + 1) <= words.count,
+                      Array(words[(i + n * repeats)..<(i + n * (repeats + 1))])
+                        == Array(words[i..<(i + n)]) {
+                    repeats += 1
+                }
+                if repeats >= needed {
+                    // Keep the first occurrence — it is usually the tail of a real sentence.
+                    earliest = min(earliest ?? Int.max, i + n)
+                    break
+                }
+                i += 1
+            }
+        }
+        return earliest
+    }
+
+    private static func isLooping(_ text: String) -> Bool {
+        loopStart(words(of: text)) != nil
+    }
+
+    /// Cuts a looping tail off `text` and backs up to the last sentence terminator, so what
+    /// survives reads as prose rather than stopping mid-clause. Returns "" when nothing does.
+    private static func truncatingLoop(_ text: String) -> String {
+        let parts = words(of: text)
+        guard let start = loopStart(parts) else { return text }
+
+        let kept = parts[0..<start].joined(separator: " ")
+        Logger.warning("Meeting overview: looping output trimmed at word \(start) of \(parts.count)", subsystem: .transcription)
+
+        guard let end = lastSentenceEnd(in: kept) else { return "" }
+        return String(kept[..<end]).trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    /// `cleanText` for a one-line field. A looping TOPIC / DECISION / OPEN / ACTION is dropped
+    /// whole rather than trimmed — the line is one short phrase, and half of one is not a topic.
+    private static func cleanItem(_ s: String) -> String {
+        let cleaned = cleanText(s)
+        guard isLooping(cleaned) else { return cleaned }
+        Logger.warning("Meeting overview: dropped looping item \"\(cleaned.prefix(60))\"", subsystem: .transcription)
+        return ""
+    }
+
+    private static func words(of text: String) -> [String] {
+        text.split(whereSeparator: { $0.isWhitespace }).map { String($0) }
+    }
+
+    /// Index just past the last sentence terminator, requiring whitespace or end-of-string after
+    /// it so the `.` in "3.5 million" is not mistaken for one.
+    private static func lastSentenceEnd(in text: String) -> String.Index? {
+        let terminators: Set<Character> = [".", "!", "?", "。", "！", "？"]
+        var found: String.Index? = nil
+        var i = text.startIndex
+        while i < text.endIndex {
+            let next = text.index(after: i)
+            if terminators.contains(text[i]), next == text.endIndex || text[next].isWhitespace {
+                found = next
+            }
+            i = next
+        }
+        return found
     }
 
     // MARK: - Private helpers
@@ -135,6 +243,21 @@ enum MeetingOverviewParser {
             .map { $0.trimmingCharacters(in: .whitespaces) }
             .filter { !$0.isEmpty }
             .joined(separator: "\n\n")
+    }
+
+    /// Strips the markdown a small model adds around a label it was told not to decorate —
+    /// `**OVERVIEW:**`, `## TOPIC:`, `- OPEN:`. The decoration carries no information, and
+    /// two asterisks were enough to make `hasPrefix("OVERVIEW:")` miss and drop a whole summary.
+    /// Applied to body lines too, which turns a stray bullet back into the plain sentence the
+    /// prompt asked for.
+    private static func undecorate(_ line: String) -> String {
+        var s = line
+            .replacingOccurrences(of: "**", with: "")
+            .replacingOccurrences(of: "__", with: "")
+        while let first = s.first, first == "#" || first == "*" || first == "-" || first == ">" || first == " " || first == "\t" {
+            s = String(s.dropFirst())
+        }
+        return s.trimmingCharacters(in: .whitespaces)
     }
 
     private static func cleanText(_ s: String) -> String {

@@ -67,6 +67,7 @@ enum MeetingEngine: CaseIterable {
 enum EngineReadiness: Equatable {
     case ready
     case needsDownload(String)  // message explaining why
+    case needsWarmup            // on disk, but its first-run compile has not been paid yet
     case downloading(Double)    // 0.0 – 1.0
     case preparing              // warm pass in progress (after download)
     case unavailable(String)    // error message
@@ -83,6 +84,12 @@ enum EngineReadiness: Equatable {
 @MainActor
 final class MeetingEngines: ObservableObject {
     static let shared = MeetingEngines()
+
+    /// Model behind the `.intelligence` engine (title, overview, Ask AI). Deliberately one constant,
+    /// mirroring `MeetingTranscriptRefiner.cleanupModel`: reverting a quality regression is a
+    /// one-line change rather than a three-site edit. Keep `downloadSizeLabel` / `downloadBytes`
+    /// in sync with it — `MeetingPrepView`'s progress rail is weighted by those.
+    static let intelligenceVariant: LLMModelVariant = .qwen3_5_4B_mtp
 
     // MARK: - Published state
 
@@ -175,6 +182,23 @@ final class MeetingEngines: ObservableObject {
         return min(1.0, sum)
     }
 
+    // MARK: - Cleanup warm marker
+
+    /// Records that this machine has already paid the cleanup model's first-run Core ML
+    /// compile. The compiled artifact lives in an OS-managed cache we neither own nor can
+    /// query, so a marker of our own is the only signal available — and it can over-promise
+    /// if the OS evicts that cache, in which case exactly one meeting pays the compile again.
+    /// Keyed by model filename so changing `MeetingTranscriptRefiner.cleanupModel` re-warms.
+    private static let cleanupWarmKey = "meetingCleanupWarmSignature"
+
+    private static var cleanupWarmSignature: String {
+        ModelDownloader.shared.modelPath(for: .largeTurboQ5).lastPathComponent
+    }
+
+    private static var isCleanupWarm: Bool {
+        UserDefaults.standard.string(forKey: cleanupWarmKey) == cleanupWarmSignature
+    }
+
     // MARK: - Readiness checks
 
     /// Snapshot the current on-disk readiness state for each engine.
@@ -189,13 +213,23 @@ final class MeetingEngines: ObservableObject {
                 : .needsDownload("Download the Nemotron model from the Models tab.")
         }
 
-        // .cleanup — Whisperer V3 (largeTurboQ5) on disk
+        // .cleanup — Whisperer V3 (largeTurboQ5) on disk AND its Core ML encoder compiled.
+        //
+        // "Downloaded" is not "ready". whisper.cpp compiles `…-encoder.mlmodelc` for the ANE
+        // the first time the model is loaded on a machine — a measured 37s of the 39.9s
+        // `meeting-refine-load` job that froze the app at the end of a meeting. Deriving
+        // `.ready` from file existence alone meant `prefetch()` skipped `runCleanup()` from
+        // the second launch onward, so the warm pass it exists to run never ran and the
+        // compile always landed at meeting end, with no progress UI in front of it.
+        // Readiness therefore tracks the warm marker, not the `.bin`.
         switch readiness[.cleanup] {
         case .downloading, .preparing: break
         default:
-            readiness[.cleanup] = ModelDownloader.shared.isModelDownloaded(.largeTurboQ5)
-                ? .ready
-                : .needsDownload("Download the Whisperer V3 model from the Models tab.")
+            if !ModelDownloader.shared.isModelDownloaded(.largeTurboQ5) {
+                readiness[.cleanup] = .needsDownload("Download the Whisperer V3 model from the Models tab.")
+            } else {
+                readiness[.cleanup] = Self.isCleanupWarm ? .ready : .needsWarmup
+            }
         }
 
         // .intelligence — Qwen3.5-4B MTP model directory on disk
@@ -223,7 +257,7 @@ final class MeetingEngines: ObservableObject {
     /// importing or instantiating LLMPostProcessor. Returns true when config.json is present.
     private func isIntelligenceModelOnDisk() -> Bool {
         let hub = HubApi()
-        let idConfig = ModelConfiguration(id: LLMModelVariant.qwen3_5_4B_mtp.huggingFaceId)
+        let idConfig = ModelConfiguration(id: Self.intelligenceVariant.huggingFaceId)
         let localDir = idConfig.modelDirectory(hub: hub)
         return FileManager.default.fileExists(
             atPath: localDir.appendingPathComponent("config.json").path)
@@ -332,20 +366,33 @@ final class MeetingEngines: ObservableObject {
 
         // 2. Warm pass: pay the CoreML/ANE first-run compile cost (~40s) so subsequent
         //    loads hit the on-disk cache and finish in ~2s.
+        //
+        //    `useGPU: false` deliberately: the Core ML encoder is loaded unconditionally by
+        //    whisper.cpp regardless of the flag, so this pays the whole compile without
+        //    standing up a Metal context that would contend with SwiftUI while the prep
+        //    screen animates. The refiner's own load asks for the GPU and still hits the
+        //    warmed encoder cache.
         readiness[.cleanup] = .preparing
         statusText = "Preparing \(MeetingEngine.cleanup.roleLabel)…"
         let modelPath = ModelDownloader.shared.modelPath(for: .largeTurboQ5)
+        let warmStart = Date()
         do {
-            try await ModelWorkQueue.shared.run("meeting-engine-warm-cleanup") {
+            try await ModelWorkQueue.shared.runBlocking("meeting-engine-warm-cleanup") {
                 let bridge = try WhisperBridge(modelPath: modelPath, useGPU: false)
                 bridge.prepareForShutdown()
-                Logger.info("MeetingEngines: cleanup warm done — CoreML/ANE primed", subsystem: .model)
             }
         } catch {
             Logger.error("MeetingEngines: cleanup warm failed — \(error.localizedDescription)", subsystem: .model)
             readiness[.cleanup] = .unavailable(error.localizedDescription)
             return
         }
+        // Marker written only on success — a failed warm must re-run on the next launch
+        // rather than silently deferring the compile to meeting end.
+        UserDefaults.standard.set(Self.cleanupWarmSignature, forKey: Self.cleanupWarmKey)
+        Logger.info(
+            "MeetingEngines: cleanup warm done in \(Int(Date().timeIntervalSince(warmStart) * 1000))ms — CoreML/ANE primed",
+            subsystem: .model
+        )
         readiness[.cleanup] = .ready
     }
 
@@ -377,7 +424,7 @@ final class MeetingEngines: ObservableObject {
             // Both hop to main actor inside the ModelWorkQueue body — the slot is held
             // for the full download+load+unload pass so no other model work overlaps.
             try await ModelWorkQueue.shared.run("meeting-engine-warm-intelligence") {
-                try await processor.loadModel(.qwen3_5_4B_mtp)
+                try await processor.loadModel(Self.intelligenceVariant)
                 await processor.unloadModel()
                 Logger.info("MeetingEngines: intelligence warm done — weights paged in+out", subsystem: .model)
             }
@@ -435,7 +482,7 @@ final class MeetingEngines: ObservableObject {
         if !processor.isModelLoaded {
             do {
                 try await ModelWorkQueue.shared.run("meeting-engine-borrow-llm") {
-                    try await processor.loadModel(.qwen3_5_4B_mtp)
+                    try await processor.loadModel(Self.intelligenceVariant)
                 }
             } catch {
                 Logger.error("MeetingEngines: borrowLLM load failed — \(error.localizedDescription)", subsystem: .model)

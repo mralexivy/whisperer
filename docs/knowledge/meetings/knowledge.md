@@ -172,3 +172,206 @@ of a 30s window returns its own segmentation, which does not line up with the li
 `MeetingRefineWindow.assign` gives each decoded piece to the card it overlaps most (ties to the earlier
 card) and joins per card, with a nearest-card fallback so a piece that overlaps nothing is attached
 rather than dropped. Cards that receive nothing keep their original text.
+
+## "Downloaded" is not "ready" for a Core ML–backed model
+
+A meeting stop froze the whole app for ~40s. The log names it exactly:
+
+```
+ModelWorkQueue: meeting-refine-load waited=458ms ran=39903ms
+ModelWorkQueue: meeting-refine  waited=1ms ran=1341ms
+whisper_init_state: first run on a device may take a while ...
+Main thread unresponsive for 2.0s   (×2, 32.0s apart)
+```
+
+~96% of the stall was the **load**, not the refine — whisper.cpp compiling
+`ggml-large-v3-turbo-encoder.mlmodelc` for the ANE for the first time on that machine. The refine
+itself was one window and 1.3s.
+
+The cause was upstream in readiness, not in the refiner. `MeetingEngines.refreshReadiness()` derived
+`.cleanup == .ready` from `ModelDownloader.isModelDownloaded(.largeTurboQ5)` — file on disk. But
+`prefetch()` skips any engine already `.ready`, so from the second launch onward `runCleanup()` never
+ran, and the warm pass whose entire purpose is to pay that compile off the latency path never
+happened. The compile therefore landed at meeting end every time, with no progress UI in front of it.
+
+The compiled encoder lives in an OS-managed cache we neither own nor can query, so the only available
+signal is a marker of our own: `meetingCleanupWarmSignature` in UserDefaults, keyed by the model
+filename so changing `MeetingTranscriptRefiner.cleanupModel` re-warms. It can over-promise if the OS
+evicts the cache — cost is exactly one meeting paying the compile again — and it is written **only**
+on a successful warm, so a failed warm re-runs next launch instead of silently deferring.
+
+Representing this state needed a new `EngineReadiness` case rather than reuse of an existing one:
+
+| Reuse candidate | Why it breaks |
+|---|---|
+| `.preparing` | `prefetch()` has `case .ready, .downloading, .preparing: continue` — the engine would be skipped forever |
+| `.needsDownload` | `MeetingTranscriptRefiner.blockingReason` would tell the user to download a model already on disk, and the prep footer would add its bytes to "remaining to download" |
+
+Hence `.needsWarmup`: on disk, owes a first-run compile. It falls through `prefetch()`'s `default`,
+contributes no download bytes, and `blockingReason`'s `default: return nil` lets a refine proceed on a
+cold model rather than refusing to run.
+
+The warm pass itself uses `useGPU: false`. whisper.cpp loads the Core ML encoder unconditionally
+regardless of that flag, so this pays the entire compile without standing up a Metal context that
+would contend with SwiftUI while the prep screen animates. The refiner's own load asks for the GPU and
+still hits the warmed encoder cache.
+
+## Refcounted borrows compose, but only if someone holds the outer one
+
+`MeetingAIService.generateTitle` and `generateOverview` each `acquireLLM()` → `defer releaseLLM()`,
+and `MeetingEngines.releaseLLM()` arms a 60s idle unload when the refcount hits zero. Run
+back-to-back, the count dips to 0 between them — a slow title generation can let the 3.2 GB model
+unload and be reloaded for the overview. One outer `borrowLLM()` spanning both keeps it ≥ 1.
+
+Placement matters: the borrow is taken **after** the cleanup re-transcription, not before. The refiner
+loads its own multi-GB Whisper model and skips itself below 2 GB free; holding the LLM resident across
+it would work against that check.
+
+## The "silence" between two cards was a hole in the diarizer's timeline
+
+Reported as one sentence split across a `0:31 → 0:33` seven-word card and a continuation:
+`"For example, if you train a model"` / `"based on Nike sales data, you can then use…"`. There is
+no pause between *model* and *based*.
+
+The sequence:
+
+1. The first card closed on the 30s `maxSegmentDuration` cap, and the close set the next card's
+   start to that same `end` — the Rule 18 contiguous-timestamp signature.
+2. The next delivery arrived with `start - lastChunkEndTimestamp >= silenceSplitGap` (1.2s), so the
+   gap rule fired and committed the 7-word card.
+
+That gap is manufactured, not spoken. `MeetingSpeakerCoordinator.voicedRuns` reports Sortformer's
+finalized timeline verbatim — deliberately, its doc comment defers the threshold decision to
+`MeetingSession` — and `emit()` apportions an item's words across the runs proportionally by voiced
+duration, so a hole between two runs lands the cut wherever the arithmetic puts it, including
+mid-sentence. On the audio clock a timeline hole and real silence are the same number.
+
+The same defect shows in already-committed text: a refine window's carried context read
+`'…broken down into something called discriminative models. and generalize.'` — a card that ends on
+a complete sentence followed by the orphan fragment `and generalize.`
+
+The fix is Rule 36 — arbitrate every break through `closeSegment(endTimestamp:policy:)` and make the
+arrival-derived ones prove themselves against the text. Notably the floors alone would not have been
+enough: a 7-word card is caught by `minSegmentWords`, but the mid-sentence *cut* is the actual defect,
+and only the sentence-boundary test addresses it.
+
+## Two live colours described the pipeline, not the recording
+
+`MeetingTranscriptView` drew `currentSegmentText` at `white.opacity(0.88)` and `livePreviewText` at
+`white.opacity(0.4)`. The dim half is real state — it is `MeetingSpeakerCoordinator`'s pending queue,
+text Nemotron decoded that Sortformer has not yet attributed, and it can still change. But that is a
+distinction between two stages of our pipeline, and the user has no stage to map it onto: both halves
+are words they finished saying. Reported as "why some text white some not — all text we see already
+been spoken". Rendered as one colour now.
+
+## `kAudioDevicePropertyDeviceIsRunningSomewhere` is a trigger, not attribution
+
+*Confirmed 2026-08-14 from a 3-hour user log (11:20 → 14:22) plus a live read-only probe of this
+machine.*
+
+The log showed ~30 identical cycles and never once fired a toast:
+
+```
+MicrophoneUsageMonitor: any input active=true
+MeetingDetector: hardware changed (camera=false, mic=true) — debouncing
+MeetingDetector: resolve returned nil (score below threshold)
+```
+
+**That last line was false, and it is what made the bug hard to see.** `score()` is the only emitter
+of `"<name> score X < 0.45, skipping"`, and not one such line exists in the whole session — so
+`score()` was never called. `resolve()` fell through every strategy without producing a candidate.
+Nothing was scored below threshold; nothing was scored at all. A log line that names a *plausible*
+cause instead of the *observed* one is worse than no line: it sends every reader down the same wrong
+path. The replacement prints the evidence (which bundle IDs are capturing, camera/mic state, whether
+AX is reachable) and lets the reader draw the conclusion.
+
+The real cause: the property is **per device**, so it only says "some input is hot". `resolve()` then
+*guessed* the provider from running/frontmost apps — impossible for a browser meeting or a Slack
+huddle, where there is nothing to guess from.
+
+A probe of `kAudioHardwarePropertyProcessObjectList` returned 36 audio process objects, of which
+exactly one had `runningInput=1`: `pid=2444 bundle=com.cisco.Proximity` — the Webex room-pairing
+agent, which opens the mic on a timer all day. Under the old design that is byte-identical to a real
+meeting. **Every one of the 30 cycles was Cisco Proximity.**
+
+The fix is attribution, not tuning: `kAudioProcessPropertyIsRunningInput` per process object answers
+"who". It is read-only public API and needs no TCC grant, unlike process taps — which matters
+because it is therefore the only attribution path that can ever exist in the sandboxed App Store
+build.
+
+Corollaries worth keeping:
+- Capture is reported against **helper** processes (`com.google.Chrome.helper`, Electron helpers), so
+  a pid → parent-pid walk to the owning `NSRunningApplication` is mandatory, not a nicety.
+- Slack is always running and often frontmost, so "Slack is open" is worthless — but Slack opens the
+  mic *only* during a huddle, so "Slack is capturing" is by itself conclusive. Hence
+  `requiresAudioCapture` on `MeetingAppDefinition`: some apps must never match on presence alone.
+- A browser capturing for two seconds is a voice search, not a meeting. Duration of an *unbroken*
+  capture run is the discriminator (15s), which means tracking a first-seen timestamp per bundle ID
+  and clearing it the instant capture stops.
+
+## A build setting can silently override the entitlements file you named
+
+*Confirmed 2026-08-14.* The Debug config pointed at `whisperer-nosandbox.entitlements` and still ran
+sandboxed, because `ENABLE_APP_SANDBOX = YES` injects `com.apple.security.app-sandbox` regardless of
+the file's contents. The filename read as documentation of intent; the build setting was the truth.
+
+The tell was in the log paths — `~/Library/Containers/com.ivy.whisperer/Data/Library/Logs/` rather
+than `~/Library/Logs/Whisperer/`. Verify with the artifact, never the filename:
+
+```bash
+codesign -d --entitlements - path/to/whisperer.app | grep -A1 app-sandbox
+```
+
+The consequence was invisible: a sandboxed process cannot read another app's AX window titles, and
+`allWindowTitles` warned only on `.apiDisabled` / `.notImplemented` — not the `.cannotComplete` a
+sandbox actually returns. Browser detection was dead in every Debug build for as long as this held,
+and no line in the log said so. **When a permission-gated read can fail, warn on every failure
+mode, not on the ones you predicted**; the unpredicted one is the one that bites.
+
+## The Google Meet prompt fired on the one title that proves there is no call
+
+*Confirmed 2026-08-14.* User report: the "MEETING DETECTED / Google Meet" toast appeared on
+`meet.google.com/home` ("No meetings scheduled for today", camera off, nothing running), and a real
+call with the camera on produced nothing. Both halves are the same defect seen from two sides.
+
+`meetingPatterns` matched the string `"Google Meet"` against browser window titles. That is
+**exactly** the title of the Meet landing page. An in-call tab is titled `Meet – abc-defg-hij`,
+which contains neither `"Google Meet"` nor `"meet.google.com"` (a window title is the page title;
+it never contains the URL). So the table matched the one state that proves a call is *not*
+happening and missed every state where one is. The Zoom row (`zoom.us/j/`) shows the intent — narrow
+to the join path — but no Meet row was ever narrowed, and `zoom.us/j/` cannot match a title either.
+
+Why the score gate did not save it: there are two firing paths, and only one of them scores.
+`resolve()` → `score()` correctly rejected a title-only candidate (`browserMeetingWindow` 0.30 with
+no hardware = 0.30 < 0.45 threshold). But `fallbackPoll()`'s browser branch calls `fireDirect()`,
+which fires with no evidence object and no threshold, and it sat outside the
+`if hardware.microphoneActive { … }` block that guards the native branches above it. The poll —
+whose job is to *back up* the resolver — was strictly more trigger-happy than the resolver.
+
+The log shows the loop this produced, on a 40-second period:
+
+```
+10:14:05 MeetingDetector: fallback detected Google Meet     ← fireDirect, zero hardware
+10:14:16 MeetingDetector: suppressed until hardware goes idle  ← user hits Dismiss
+10:14:28 CameraUsageMonitor: camera active=true              ← unrelated blip
+10:14:36 CameraUsageMonitor: camera active=false
+10:14:36 MeetingDetector: hardware idle — suppression cleared  ← lastFiredDate.removeAll()
+10:14:45 MeetingDetector: fallback detected Google Meet     ← 30-min cooldown is gone
+```
+
+`hardwareWentIdle()` called `lastFiredDate.removeAll()` when clearing suppression, destroying the
+30-minute refire guard on every hardware idle transition. "Dismiss" was a ~40-second snooze.
+
+The camera blip at 10:14:28 is also the false *negative*: `isReadyToTrigger()` returns false in
+`.suppressedUntilHardwareIdle`, so the genuine camera-on event was swallowed by the state the false
+positive had left behind. One bug, presenting as two opposite symptoms.
+
+The fix is a gate that means something rather than a narrower string:
+`detectBrowserMeeting()` now requires the matched browser to be in `capturingApps`. A meeting tab
+that is not holding the microphone is a landing page, a calendar invite, or this morning's call left
+open. The title says *which* service; capture says *whether*. Both call sites inherit it, so the
+poll and the resolver finally agree. Belt and braces on top: exact landing-page titles
+(`nonCallWindowTitles`) are skipped, and `Meet – ` / `Meet — ` / `Meet - ` were added so a real call
+matches at all. Services whose in-call titles we cannot verify are covered by the existing
+`sustainedCapturingBrowser` path, which fires "Meeting in <browser>" after 15s of unbroken capture —
+generic, but honest, and it needs no guess about anyone's title format.

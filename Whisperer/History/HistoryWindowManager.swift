@@ -101,8 +101,10 @@ class HistoryWindowManager {
             let frameString = NSStringFromRect(window.frame)
             UserDefaults.standard.set(frameString, forKey: "historyWindowFrame")
 
-            // If a meeting is recording, show the HUD fallback bar instead
-            if AppState.shared.isMeetingMode {
+            // If a meeting is recording, show the HUD fallback bar instead — but only when the
+            // compact live window isn't already the surface, or closing the workspace would put
+            // two live surfaces on screen at once.
+            if AppState.shared.isMeetingMode && !MeetingLiveWindowManager.shared.isVisible {
                 AppState.shared.meetingWindowIsVisible = false
             }
 

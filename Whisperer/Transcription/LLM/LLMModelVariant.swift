@@ -8,6 +8,7 @@
 import Foundation
 
 enum LLMModelVariant: String, CaseIterable, Identifiable {
+    case qwen2_5_1_5B = "Qwen2.5-1.5B"
     case whispererV3 = "Whisperer V3"
     case qwen3_5_4B_mtp = "Qwen3.5-4B (MTP)"
     case qwen3_5_4B = "Qwen3.5-4B"
@@ -18,6 +19,7 @@ enum LLMModelVariant: String, CaseIterable, Identifiable {
 
     var huggingFaceId: String {
         switch self {
+        case .qwen2_5_1_5B:   return "mlx-community/Qwen2.5-1.5B-Instruct-8bit"
         case .whispererV3:    return "shantanugoel/aawaaz-qwen3-0.6b-transcriber-4bit"
         case .qwen3_5_4B_mtp: return "Youssofal/Qwen3.5-4B-MTPLX-Optimized-Speed"
         case .qwen3_5_4B:     return "mlx-community/Qwen3.5-4B-MLX-4bit"
@@ -30,6 +32,7 @@ enum LLMModelVariant: String, CaseIterable, Identifiable {
 
     var sizeDescription: String {
         switch self {
+        case .qwen2_5_1_5B:   return "~1.6 GB"
         case .whispererV3:    return "~0.3 GB"
         case .qwen3_5_4B_mtp: return "~3.2 GB"
         case .qwen3_5_4B:     return "~2.8 GB"
@@ -40,6 +43,7 @@ enum LLMModelVariant: String, CaseIterable, Identifiable {
 
     var speedDescription: String {
         switch self {
+        case .qwen2_5_1_5B:   return "Fast · Multilingual"
         case .whispererV3:    return "Ultra-fast · EN"
         case .qwen3_5_4B_mtp: return "Ultra-fast (MTP)"
         case .qwen3_5_4B:     return "Balanced"
@@ -49,7 +53,7 @@ enum LLMModelVariant: String, CaseIterable, Identifiable {
     }
 
     var isRecommended: Bool {
-        self == .whispererV3
+        self == .qwen3_5_4B_mtp
     }
 
     /// True for models that embed MTP speculative decoding heads and use generateMTPTokens().

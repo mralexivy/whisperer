@@ -265,6 +265,25 @@ struct WhisperTimedSegment {
     let end: Double     // seconds
 }
 
+// MARK: - Streaming word output
+
+/// One word from the eager streaming decode path.
+/// Field-for-field matches `WhisperKitStreamingWord` so `EagerStreamEngine` takes both.
+struct WhisperStreamWord: Sendable {
+    let text: String        // includes leading space when present in BPE output
+    let tokens: [Int]
+    let start: Double       // seconds, relative to decoded buffer start
+    let end: Double         // seconds, relative to decoded buffer start
+    let probability: Float
+}
+
+/// Result of one eager streaming decode pass over `WhisperBridge`.
+struct WhisperStreamResult: Sendable {
+    let words: [WhisperStreamWord]
+    let averageLogProbability: Float
+    let languageCode: String?
+}
+
 class WhisperBridge: TranscriptionBackend {
     private var ctx: OpaquePointer?
     private let modelPath: URL
@@ -560,7 +579,10 @@ class WhisperBridge: TranscriptionBackend {
 
     /// Build the decode params. `noTimestamps: false` also implies multi-segment output,
     /// since a single forced segment carries a single useless span.
-    private func makeFullParams(singleSegment: Bool, maxTokens: Int32, noTimestamps: Bool) -> whisper_full_params {
+    /// `tokenTimestamps: true` enables per-token t0/t1 and probability from `whisper_full_get_token_data`.
+    /// `audioCtx > 0` overrides the default 1500-frame (30s) context, scaling encoder cost to the window.
+    private func makeFullParams(singleSegment: Bool, maxTokens: Int32, noTimestamps: Bool,
+                                tokenTimestamps: Bool = false, audioCtx: Int32 = 0) -> whisper_full_params {
         var wparams = whisper_full_default_params(WHISPER_SAMPLING_GREEDY)
         wparams.print_progress = false
         wparams.print_special = false
@@ -635,6 +657,13 @@ class WhisperBridge: TranscriptionBackend {
         // initial_prompt (prompt words) still works with no_context=true because
         // whisper.cpp adds initial_prompt tokens AFTER clearing prompt_past.
         wparams.no_context = true
+
+        wparams.token_timestamps = tokenTimestamps
+        // audio_ctx > 0: scale the mel tensor to 2×audio_ctx instead of the default
+        // 2×1500 (30s). Proportional to the window, so encoder cost shrinks with it.
+        // Mutually exclusive with the Core ML/ANE encoder (which uses a fixed-shape
+        // MLMultiArray); Phase 0b measures which configuration wins on this machine.
+        wparams.audio_ctx = audioCtx
 
         return wparams
     }
@@ -818,7 +847,160 @@ class WhisperBridge: TranscriptionBackend {
         }
     }
 
-    /// Detect language from audio samples. Returns probabilities for all languages, or nil on failure.
+    // MARK: - Eager streaming decode
+
+    /// Decode `samples` and return per-word text + timing + probability for the eager
+    /// streaming engine. Runs on the serial `queue` under `ctxLock`, so it serializes
+    /// with the regular `transcribeAsync` path — call only from the preview polling loop,
+    /// never from the VAD-chunk path simultaneously.
+    ///
+    /// - Parameters:
+    ///   - samples: 16 kHz mono Float32, typically 1–12s uncommitted tail
+    ///   - language: fixed language or `.auto`
+    ///   - initialPrompt: last ~50 chars of committed text, for boundary continuity
+    ///   - audioCtx: mel-context override (0 = default 30s). Use Phase 0b result.
+    ///   - maxTokens: per-segment cap (96 is sufficient for rolling windows)
+    ///   - completion: called on background queue with result, or nil on failure/shutdown
+    func transcribeStreamingAsync(
+        samples: [Float],
+        language: TranscriptionLanguage,
+        initialPrompt: String?,
+        audioCtx: Int32 = 0,
+        maxTokens: Int32 = 96,
+        completion: @escaping (WhisperStreamResult?) -> Void
+    ) {
+        queue.async { [weak self] in
+            guard let self else { completion(nil); return }
+            guard !self.isShuttingDown, self.isInitialized else { completion(nil); return }
+            do {
+                let result = try self.ctxLock.withLock(timeout: self.lockTimeout) { [self] in
+                    self.performStreamingDecode(
+                        samples: samples, language: language,
+                        initialPrompt: initialPrompt, audioCtx: audioCtx, maxTokens: maxTokens
+                    )
+                }
+                completion(result)
+            } catch SafeLockError.timeout {
+                Logger.error("Streaming decode lock timeout", subsystem: .transcription)
+                completion(nil)
+            } catch {
+                Logger.error("Streaming decode lock error: \(error)", subsystem: .transcription)
+                completion(nil)
+            }
+        }
+    }
+
+    /// Decode and return word-level results. Must be called with `ctxLock` held.
+    private func performStreamingDecode(
+        samples: [Float],
+        language: TranscriptionLanguage,
+        initialPrompt: String?,
+        audioCtx: Int32,
+        maxTokens: Int32
+    ) -> WhisperStreamResult? {
+        guard let ctx else { return nil }
+        guard !samples.isEmpty else { return nil }
+
+        let wparams = makeFullParams(
+            singleSegment: false, maxTokens: maxTokens, noTimestamps: false,
+            tokenTimestamps: true, audioCtx: audioCtx
+        )
+        let r = runWhisperFull(ctx: ctx, samples: samples, params: wparams,
+                               initialPrompt: initialPrompt, language: language)
+        guard handleTranscriptionResult(r) else { return nil }
+
+        var langCode: String?
+        let langId = whisper_full_lang_id(ctx)
+        if langId >= 0, let ptr = whisper_lang_str(langId) {
+            langCode = String(cString: ptr)
+            lastDetectedLanguage = langCode ?? lastDetectedLanguage
+        }
+
+        let nSegments = whisper_full_n_segments(ctx)
+        var words: [WhisperStreamWord] = []
+        var logProbSum: Float = 0.0
+        var logProbCount = 0
+
+        for i in 0..<nSegments {
+            if whisper_full_get_segment_no_speech_prob(ctx, i) > noSpeechProbThreshold { continue }
+            let nTokens = whisper_full_n_tokens(ctx, i)
+            guard nTokens > 0 else { continue }
+
+            // Merge BPE tokens into words. A new word begins when a token's text has a
+            // leading space (the BPE word-boundary marker in all whisper vocab variants).
+            var wordText = ""
+            var wordT0: Int64 = -1
+            var wordT1: Int64 = 0
+            var wordIds: [Int] = []
+            var wordProbSum: Float = 0.0
+            var wordProbCount = 0
+
+            for j in 0..<nTokens {
+                guard let rawPtr = whisper_full_get_token_text(ctx, i, j) else { continue }
+                let tokenText = String(cString: rawPtr)
+                // Skip special tokens: timestamps and control tokens all start with "<|"
+                guard !tokenText.hasPrefix("<|"), !tokenText.isEmpty else { continue }
+
+                let data = whisper_full_get_token_data(ctx, i, j)
+
+                // Word boundary: token starts with a space (BPE leading-space convention)
+                if tokenText.first == " ", !wordText.isEmpty {
+                    // flush the accumulated word
+                    let trimmed = wordText.trimmingCharacters(in: .whitespaces)
+                    if !trimmed.isEmpty, wordT0 >= 0 {
+                        let prob = wordProbCount > 0 ? wordProbSum / Float(wordProbCount) : 0.0
+                        words.append(WhisperStreamWord(
+                            text: wordText,
+                            tokens: wordIds,
+                            start: Double(wordT0) / 100.0,
+                            end: Double(wordT1) / 100.0,
+                            probability: prob
+                        ))
+                        if prob > 0 {
+                            logProbSum += log(max(prob, 1e-7))
+                            logProbCount += 1
+                        }
+                    }
+                    wordText = ""
+                    wordIds = []
+                    wordProbSum = 0.0
+                    wordProbCount = 0
+                    wordT0 = -1
+                }
+
+                if wordT0 < 0 { wordT0 = data.t0 }
+                wordT1 = data.t1
+                wordText += tokenText
+                wordIds.append(Int(data.id))
+                if data.p > 0 {
+                    wordProbSum += data.p
+                    wordProbCount += 1
+                }
+            }
+
+            // flush last word in segment
+            let trimmed = wordText.trimmingCharacters(in: .whitespaces)
+            if !trimmed.isEmpty, wordT0 >= 0 {
+                let prob = wordProbCount > 0 ? wordProbSum / Float(wordProbCount) : 0.0
+                words.append(WhisperStreamWord(
+                    text: wordText,
+                    tokens: wordIds,
+                    start: Double(wordT0) / 100.0,
+                    end: Double(wordT1) / 100.0,
+                    probability: prob
+                ))
+                if prob > 0 {
+                    logProbSum += log(max(prob, 1e-7))
+                    logProbCount += 1
+                }
+            }
+        }
+
+        let avgLogProb = logProbCount > 0 ? logProbSum / Float(logProbCount) : -1.0
+        return WhisperStreamResult(words: words, averageLogProbability: avgLogProb, languageCode: langCode)
+    }
+
+    /// Detect language from audio samples. Returns probabilities for all languages, or nil on failure. Returns probabilities for all languages, or nil on failure.
     /// Serialized with transcription via ctxLock — safe to call from any thread.
     func detectLanguage(samples: [Float]) -> [String: Float]? {
         guard !isShuttingDown, isInitialized else { return nil }

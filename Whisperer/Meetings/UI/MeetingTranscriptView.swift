@@ -460,23 +460,19 @@ struct MeetingTranscriptView: View {
         speakerColor(for: session.liveSpeakerIndex)
     }
 
+    /// The open card's text, in one colour.
+    ///
+    /// `currentSegmentText` and `livePreviewText` are two stages of the same pipeline —
+    /// attributed text, and text the diarizer has not caught up with — and the tail is still
+    /// revisable while it sits in `MeetingSpeakerCoordinator`'s pending queue. That is an
+    /// internal distinction: both halves are words the user already spoke, so drawing the tail
+    /// dimmed read as a rendering fault rather than as "this may still change".
     private var combinedSegmentText: AttributedString {
-        var result = AttributedString()
-        if !session.currentSegmentText.isEmpty {
-            var committed = AttributedString(session.currentSegmentText)
-            committed.foregroundColor = .white.opacity(0.88)
-            result += committed
-        }
-        if !session.livePreviewText.isEmpty {
-            if !result.characters.isEmpty {
-                var spacer = AttributedString(" ")
-                spacer.foregroundColor = .white.opacity(0.4)
-                result += spacer
-            }
-            var live = AttributedString(session.livePreviewText)
-            live.foregroundColor = .white.opacity(0.4)
-            result += live
-        }
+        var parts: [String] = []
+        if !session.currentSegmentText.isEmpty { parts.append(session.currentSegmentText) }
+        if !session.livePreviewText.isEmpty { parts.append(session.livePreviewText) }
+        var result = AttributedString(parts.joined(separator: " "))
+        result.foregroundColor = .white.opacity(0.88)
         return result
     }
 
@@ -516,15 +512,7 @@ struct MeetingTranscriptView: View {
     }
 
     private static func detectRTL(in text: String) -> Bool {
-        var rtl = 0, letters = 0
-        for scalar in text.prefix(50).unicodeScalars {
-            let v = scalar.value
-            if scalar.properties.isAlphabetic { letters += 1 }
-            if (v >= 0x0590 && v <= 0x05FF) || (v >= 0x0600 && v <= 0x06FF) ||
-               (v >= 0x0700 && v <= 0x074F) || (v >= 0xFB50 && v <= 0xFDFF) ||
-               (v >= 0xFE70 && v <= 0xFEFF) { rtl += 1 }
-        }
-        return letters > 0 && Double(rtl) / Double(letters) > 0.3
+        MeetingTranscriptText.isRightToLeft(sample: text)
     }
 }
 

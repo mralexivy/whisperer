@@ -7,7 +7,7 @@
 //
 
 import XCTest
-@testable import Whisperer
+@testable import whisperer
 
 final class MCPServerTests: XCTestCase {
 

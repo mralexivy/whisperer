@@ -9,6 +9,21 @@ import Foundation
 import SwiftUI
 import Combine
 
+/// Which surface owns the live UI for a recording, decided by where it was started from.
+///
+/// Both surfaces render the same `MeetingSession`, so this only says which one to *raise* —
+/// the user can hand over either way at any time (the workspace header's float button, the
+/// live window's "Open in Workspace"). Raising the wrong one is not cosmetic: the floating
+/// window sits over whatever the user is meeting in, and the workspace is 1100pt of review
+/// affordances that cover the call.
+enum MeetingLiveSurface {
+    /// Floating rail. A detected call: the workspace is not open and must not be raised over it.
+    case floatingWindow
+    /// The workspace itself. The user pressed Start in Meeting Studio and is already looking at
+    /// the transcript there — nothing extra is put on screen.
+    case workspace
+}
+
 @MainActor
 class MeetingSession: ObservableObject {
     @Published var meetingID: UUID?
@@ -50,8 +65,19 @@ class MeetingSession: ObservableObject {
     /// chunks are treated as one continuous paragraph.
     private let silenceSplitGap: Double = 1.2
 
+    /// Floors below which a paragraph is not worth its own card. A gap or idle break that
+    /// would produce one is declined and the text merges into the next card instead — per
+    /// Rule 19 an open card is neither invisible nor at risk, and the 30s cap is the backstop.
+    private let minSegmentDuration: Double = 5.0
+    private let minSegmentWords: Int = 12
+
     // Silence-based flush: fires 2.5s after the last chunk if no further speech arrives.
     private var silenceFlushTask: Task<Void, Never>?
+
+    /// Tail of the chain of CoreData appends. Every commit awaits its predecessor, so cards
+    /// reach `segmentsJSON` in transcript order and the post-stop pass has one handle to wait
+    /// on. Two bare `Task`s fired from consecutive flushes had no order between them.
+    private var pendingPersistence: Task<Void, Never>?
 
     /// Audio-time end of the most recently appended chunk. All segment boundaries are
     /// placed on this clock so they line up with the recorded audio during playback.
@@ -72,7 +98,7 @@ class MeetingSession: ObservableObject {
 
     // MARK: - Start
 
-    func startRecording(title: String) async {
+    func startRecording(title: String, surface: MeetingLiveSurface) async {
         guard !isRecording, !isStarting else { return }
         isStarting = true
         defer { isStarting = false }
@@ -123,7 +149,7 @@ class MeetingSession: ObservableObject {
         recordingStartDate = Date()
 
         startElapsedTimer()
-        AppState.shared.startMeetingRecording(session: self)
+        AppState.shared.startMeetingRecording(session: self, surface: surface)
     }
 
     func stopRecording() async {
@@ -149,7 +175,7 @@ class MeetingSession: ObservableObject {
             // elapsedSeconds is the wall-clock display counter; lastChunkEndTimestamp is the
             // audio clock. Take the later so the final card reaches the end of the recording
             // whichever one is ahead.
-            flushCurrentSegment(endTimestamp: max(lastChunkEndTimestamp, elapsedSeconds))
+            closeSegment(endTimestamp: max(lastChunkEndTimestamp, elapsedSeconds), policy: .commitAll)
         }
         currentSegmentText = ""
         livePreviewText = ""
@@ -164,7 +190,6 @@ class MeetingSession: ObservableObject {
             audioURL = moveAudioToMeetingsDirectory(filename: filename)
         }
 
-        let willPolish = MeetingTranscriptRefiner.shared.shouldRun(for: segments, audioURL: audioURL)
         let capturedAudioURL = audioURL
 
         await MeetingManager.shared.finalizeSession(
@@ -175,13 +200,38 @@ class MeetingSession: ObservableObject {
 
         // Trigger AI cleanup + naming + overview in background.
         // Order: cleanup first so title and summary are generated from corrected text.
-        let finalSegments = segments
-        let transcript = finalSegments.map { $0.text }.joined(separator: " ")
         let currentTitle = MeetingManager.shared.meetings.first(where: { $0.id == id })?.title ?? ""
-        Logger.info("Meeting session stop: segments=\(finalSegments.count), transcript=\(transcript.count) chars, polish=\(willPolish)", subsystem: .transcription)
-        if !transcript.isEmpty {
-            // Inherits @MainActor, so the phase updates land on the main actor between awaits.
-            Task { [weak self] in
+
+        // Inherits @MainActor, so the phase updates land on the main actor between awaits.
+        Task { [weak self] in
+            // Everything below is built from the transcript, so it has to wait for the last
+            // of it. The backend's tail chunk is delivered *after* stopRecording() returns
+            // (see awaitTailDelivery) — snapshotting `segments` here would summarize, name
+            // and re-transcribe a meeting missing its final card. The refiner defends itself
+            // by re-reading CoreData, but the two skip paths below never reach it.
+            await self?.awaitTailDelivery()
+            guard let self else { return }
+
+            let finalSegments = self.segments
+            let transcript = finalSegments.map { $0.text }.joined(separator: " ")
+            let willPolish = MeetingTranscriptRefiner.shared.shouldRun(for: finalSegments, audioURL: capturedAudioURL)
+            Logger.info("Meeting session stop: segments=\(finalSegments.count), transcript=\(transcript.count) chars, polish=\(willPolish)", subsystem: .transcription)
+
+            guard !transcript.isEmpty else {
+                // A recording stopped within a couple of seconds legitimately has nothing to
+                // summarize. Only a longer one that produced no text points at a real bug.
+                if finalSegments.isEmpty && self.elapsedSeconds < 2 {
+                    Logger.debug("Meeting session stop: nothing recorded — overview skipped", subsystem: .transcription)
+                } else {
+                    Logger.warning("Meeting session stop: transcript empty — overview skipped (did chunks arrive?)", subsystem: .transcription)
+                }
+                MeetingManager.shared.setProcessing(nil, for: id)
+                return
+            }
+
+            // Scope for the LLM borrow's `defer` — it must release before the Task ends,
+            // and after the last generation, not at some later suspension point.
+            do {
                 // 1. Cleanup (re-transcription)
                 MeetingManager.shared.setProcessing(.polishing, for: id)
                 var segmentsForSummary = finalSegments
@@ -193,9 +243,23 @@ class MeetingSession: ObservableObject {
                         segmentsForSummary = await MeetingTranscriptRefiner.shared.run(
                             meetingID: id, segments: finalSegments
                         )
-                        self?.applyRefined(segmentsForSummary, meetingID: id)
+                        self.applyRefined(segmentsForSummary, meetingID: id)
                     }
                 }
+
+                // Title and overview run under ONE outer LLM borrow.
+                //
+                // Each MeetingAIService call borrows and releases on its own, and a release
+                // that drops the refcount to zero arms a 60s idle unload. Holding an outer
+                // borrow across both keeps the count ≥ 1 for the whole sequence, so the 3.2 GB
+                // model cannot unload between them and be paid for twice. Taken *after* the
+                // cleanup pass, not before: the refiner loads its own multi-GB Whisper model
+                // and gates on free memory, so keeping the LLM resident across it would work
+                // against that check.
+                #if canImport(FluidAudio)
+                let llmHeld = await MeetingEngines.shared.borrowLLM() != nil
+                defer { if llmHeld { MeetingEngines.shared.releaseLLM() } }
+                #endif
 
                 // 2. Title: a short generation — the library row picks up a real name in a
                 // couple of seconds instead of waiting out the full summary pass.
@@ -224,15 +288,6 @@ class MeetingSession: ObservableObject {
                 await MeetingAIService.shared.generateOverview(segments: segmentsForSummary, meetingID: id)
                 MeetingManager.shared.setProcessing(nil, for: id)
             }
-        } else {
-            // A recording stopped within a couple of seconds legitimately has nothing to
-            // summarize. Only a longer one that produced no text points at a real bug.
-            if finalSegments.isEmpty && elapsedSeconds < 2 {
-                Logger.debug("Meeting session stop: nothing recorded — overview skipped", subsystem: .transcription)
-            } else {
-                Logger.warning("Meeting session stop: transcript empty — overview skipped (did chunks arrive?)", subsystem: .transcription)
-            }
-            MeetingManager.shared.setProcessing(nil, for: id)
         }
 
         // Clear transient live state — segments kept for post-recording display via CoreData.
@@ -242,6 +297,31 @@ class MeetingSession: ObservableObject {
         // The next startRecording() call resets meetingID before the CoreData round-trip.
         currentSegmentText = ""
         livePreviewText = ""
+    }
+
+    /// Waits until the backend's final chunk has landed **and** reached CoreData.
+    ///
+    /// `stopRecording()` returns while `AppState.stopInAppRecording()`'s Task is still draining:
+    /// the tail arrives afterwards through `onNewChunk` / `onAttributedText` and appends one
+    /// more card. `AppState` nils `activeMeetingSession` immediately after `stopAsync()` and the
+    /// diarizer's `finish()` have returned, precisely so that assignment can be read as "the
+    /// tail has been delivered". Then drain `pendingPersistence` — `MeetingTranscriptRefiner`
+    /// re-reads the record from CoreData, and would otherwise rewrite the whole `segmentsJSON`
+    /// blob from a copy that predates the tail row.
+    ///
+    /// Bounded because `stopInAppRecording` already caps `stopAsync()` at 10s. The ceiling only
+    /// expires when its `guard case .recording` bailed out and the nil-assignment never ran, so
+    /// reaching it is worth a warning rather than a silent extra wait.
+    private func awaitTailDelivery() async {
+        let deadline = Date().addingTimeInterval(12)
+        while AppState.shared.activeMeetingSession === self {
+            guard Date() < deadline else {
+                Logger.warning("Meeting session stop: tail delivery timed out — proceeding without it", subsystem: .transcription)
+                break
+            }
+            try? await Task.sleep(nanoseconds: 100_000_000)
+        }
+        await pendingPersistence?.value
     }
 
     /// Swap in the polished transcript.
@@ -278,6 +358,57 @@ class MeetingSession: ObservableObject {
         await MeetingManager.shared.discardSession(meetingID: id)
     }
 
+    /// Tear down a meeting whose recording never actually ran — a failed audio start, or a
+    /// watchdog force-idle.
+    ///
+    /// Deliberately not `cancelRecording()`, which is the user's explicit discard and routes
+    /// through `AppState.stopMeetingRecording()`. There is no stop to perform here, and that
+    /// path latches `isMeetingStopInFlight = true` with no `stopInAppRecording()` behind it to
+    /// clear it — the next dictation would then route its chunks as a meeting tail.
+    ///
+    /// The CoreData row `beginSession` created moments ago is still `isInProgress`. Left as it
+    /// is, it returns on the next launch as "crash recovery: finalizing 1 interrupted session".
+    /// So it is discarded when it holds nothing at all — the failed-start case, where no audio
+    /// was ever captured — and otherwise finalized. Never deleted with content in it.
+    func abandonRecording() async {
+        guard isRecording || meetingID != nil else { return }
+
+        let id = meetingID
+        let hadContent = !segments.isEmpty
+            || !currentSegmentText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+
+        isRecording = false
+        silenceFlushTask?.cancel()
+        silenceFlushTask = nil
+        stopElapsedTimer()
+        livePreviewText = ""
+        currentSegmentText = ""
+        currentSegmentStartTimestamp = 0
+        lastChunkEndTimestamp = 0
+        currentSpeakerIndex = 0
+        currentSpeakerName = "Speaker 1"
+        liveSpeakerIndex = 0
+        liveSpeakerName = "Speaker 1"
+        hasSpeakerSignal = false
+        speakerNames = [:]
+
+        guard let id else { return }
+        MeetingPendingStore.clear(meetingID: id)
+        MeetingManager.shared.setProcessing(nil, for: id)
+
+        if hadContent {
+            await MeetingManager.shared.finalizeSession(
+                meetingID: id,
+                duration: elapsedSeconds,
+                audioFileURL: nil
+            )
+        } else {
+            meetingID = nil
+            segments = []
+            await MeetingManager.shared.discardSession(meetingID: id)
+        }
+    }
+
     // MARK: - Chunk callback (called from AppState)
 
     /// `start`/`end` are seconds on the **audio clock** (samples received / sample rate),
@@ -298,13 +429,22 @@ class MeetingSession: ObservableObject {
         guard !trimmed.isEmpty, meetingID != nil else { return }
 
         if speakerIndex != currentSpeakerIndex {
-            if !currentSegmentText.isEmpty {
+            // Close at the last voiced sample of the previous turn, not at this turn's start —
+            // a pause between speakers belongs to neither card.
+            let boundary = max(lastChunkEndTimestamp, currentSegmentStartTimestamp)
+            if isSubstantial(currentSegmentText, from: currentSegmentStartTimestamp, to: boundary) {
                 silenceFlushTask?.cancel()
                 silenceFlushTask = nil
-                // Close at the last voiced sample of the previous turn, not at this turn's
-                // start — a pause between speakers belongs to neither card.
-                flushCurrentSegment(endTimestamp: max(lastChunkEndTimestamp, currentSegmentStartTimestamp))
+                // `.commitAll`: a different person is talking now, so no remainder may carry.
+                closeSegment(endTimestamp: boundary, policy: .commitAll)
             }
+            // Otherwise the open card is too small to defend its own label, so a change here is
+            // likelier a diarizer wobble than a turn — and committing would leave a two-word
+            // orphan mid-sentence, the exact outcome the gap rule already declines to cause.
+            // Falling through re-labels the open card instead: the newest attribution is at
+            // least as good as whatever produced a sub-floor card, and a genuine one-word
+            // interjection gets absorbed rather than mislabelling everything said after it.
+            // This was the last unguarded break in the file — see `SegmentBreakPolicy`.
             currentSpeakerIndex = speakerIndex
             currentSpeakerName = speakerName(for: speakerIndex)
         }
@@ -344,10 +484,12 @@ class MeetingSession: ObservableObject {
         if currentSegmentText.isEmpty {
             currentSegmentStartTimestamp = chunkStart
         } else if chunkStart - lastChunkEndTimestamp >= silenceSplitGap {
-            // The speaker paused. Close the paragraph at the last voiced sample rather
-            // than letting the card stretch across the silence.
-            flushCurrentSegment(endTimestamp: lastChunkEndTimestamp)
-            currentSegmentStartTimestamp = chunkStart
+            // The speaker paused — or the diarizer's finalized timeline has a hole, which is
+            // the same thing on the audio clock. `.softBreak` makes the text arbitrate.
+            closeSegment(endTimestamp: lastChunkEndTimestamp, policy: .softBreak)
+            // A declined break, or one that carried a remainder forward, leaves the paragraph
+            // open — only restart the clock when the card actually closed empty.
+            if currentSegmentText.isEmpty { currentSegmentStartTimestamp = chunkStart }
         }
 
         currentSegmentText += currentSegmentText.isEmpty ? trimmed : " " + trimmed
@@ -369,7 +511,7 @@ class MeetingSession: ObservableObject {
         if chunkEnd - currentSegmentStartTimestamp >= maxSegmentDuration {
             silenceFlushTask?.cancel()
             silenceFlushTask = nil
-            flushCurrentSegment(endTimestamp: chunkEnd)
+            closeSegment(endTimestamp: chunkEnd, policy: .capBreak)
         } else if idleFlushTracksSpeech {
             // Reset silence timer: if no new chunk arrives within 2.5s, flush the
             // current paragraph. The gap check above only fires once the *next* chunk
@@ -392,7 +534,7 @@ class MeetingSession: ObservableObject {
             try? await Task.sleep(nanoseconds: 2_500_000_000)
             guard !Task.isCancelled else { return }
             guard let self, self.isRecording, !self.currentSegmentText.isEmpty else { return }
-            self.flushCurrentSegment(endTimestamp: self.lastChunkEndTimestamp)
+            self.closeSegment(endTimestamp: self.lastChunkEndTimestamp, policy: .softBreak)
         }
     }
 
@@ -407,17 +549,75 @@ class MeetingSession: ObservableObject {
             MeetingPendingStore.clear(meetingID: id)
             return
         }
-        flushCurrentSegment(endTimestamp: endTimestamp)
+        // Nothing follows the tail, so there is nowhere for a remainder to be carried to.
+        closeSegment(endTimestamp: endTimestamp, policy: .commitAll)
     }
 
     // MARK: - Segment flushing
 
-    private func flushCurrentSegment(endTimestamp: Double) {
+    /// How much a proposed paragraph boundary may be trusted, and therefore how hard the
+    /// close tries to land it on a sentence end.
+    ///
+    /// A break derived from *arrival* timing is a hypothesis, not a fact: the gap rule cannot
+    /// tell real silence from a hole in Sortformer's finalized timeline, which
+    /// `MeetingSpeakerCoordinator.voicedRuns` reports verbatim and `emit()` then apportions
+    /// words across. That is how a single sentence got cut into a 7-word orphan card and a
+    /// continuation. The text is the only signal that survives both backends, so a soft break
+    /// has to prove itself against it.
+    private enum SegmentBreakPolicy {
+        /// Gap rule and idle timer. Breaks only at a sentence end that clears both size
+        /// floors; otherwise leaves the card open.
+        case softBreak
+        /// The 30s cap. Must produce a card, but carries a trailing incomplete sentence
+        /// forward when the complete part stands on its own.
+        case capBreak
+        /// Speaker change, stop, tail drain. Commits everything as-is — no carry, no floors.
+        case commitAll
+    }
+
+    private func closeSegment(endTimestamp: Double, policy: SegmentBreakPolicy) {
         let text = currentSegmentText.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !text.isEmpty, let id = meetingID else { return }
+        guard !text.isEmpty else { return }
 
         let start = currentSegmentStartTimestamp
         let end = max(endTimestamp, start)
+
+        if policy != .commitAll, let split = Self.splitAtLastSentenceEnd(text) {
+            // Same character-share arithmetic `splitByDuration` uses: with no word-level
+            // timings, a prefix holding 60% of the characters gets 60% of the span.
+            let cut = split.remainder.isEmpty
+                ? end
+                : start + (end - start) * Double(split.complete.count) / Double(text.count)
+            if isSubstantial(split.complete, from: start, to: cut) {
+                commitSegment(text: split.complete, start: start, end: cut,
+                              carrying: split.remainder, from: cut)
+                return
+            }
+        }
+
+        // No honest cut available. A soft break declines rather than forcing one; the cap
+        // and the hard breaks have to commit regardless.
+        guard policy != .softBreak else { return }
+        commitSegment(text: text, start: start, end: end, carrying: nil, from: end)
+    }
+
+    /// Whether a span earns its own card. A two-second, seven-word fragment is noise — it
+    /// belongs to the paragraph around it, not beside it.
+    private func isSubstantial(_ text: String, from start: Double, to end: Double) -> Bool {
+        guard end - start >= minSegmentDuration else { return false }
+        return text.split(separator: " ", omittingEmptySubsequences: true).count >= minSegmentWords
+    }
+
+    /// Commits `text` as one or more cards and rolls the open paragraph forward.
+    ///
+    /// `remainder` is the trailing incomplete sentence a break chose not to cut through. It
+    /// becomes the new open card starting at `remainderStart`, and is **re-saved** to
+    /// `MeetingPendingStore` rather than cleared — an uncommitted remainder is exactly the
+    /// text a crash would otherwise lose.
+    private func commitSegment(text: String, start: Double, end: Double,
+                               carrying remainder: String?, from remainderStart: Double) {
+        guard let id = meetingID else { return }
+
         let pieces = Self.splitByDuration(text: text, start: start, end: end, cap: maxSegmentDuration)
         let newSegments = pieces.map {
             MeetingSegment(
@@ -430,14 +630,18 @@ class MeetingSession: ObservableObject {
         }
         segments.append(contentsOf: newSegments)
 
-        currentSegmentText = ""
-        currentSegmentStartTimestamp = end
+        let carried = (remainder ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        currentSegmentText = carried
+        currentSegmentStartTimestamp = carried.isEmpty ? end : remainderStart
         lastChunkEndTimestamp = max(lastChunkEndTimestamp, end)
-        // Segment committed to CoreData — clear the crash-recovery sidecar.
-        // This runs before the Task so no new chunk's save can race with a stale clear.
-        MeetingPendingStore.clear(meetingID: id)
+        // Committed text is in CoreData; the sidecar now holds only what is still open
+        // (empty text clears the file). This runs before the Task so no new chunk's save
+        // can race with a stale write.
+        MeetingPendingStore.save(meetingID: id, text: carried, startTimestamp: currentSegmentStartTimestamp)
         let duration = max(end, elapsedSeconds)
-        Task {
+        let previous = pendingPersistence
+        pendingPersistence = Task {
+            await previous?.value
             for segment in newSegments {
                 await MeetingManager.shared.appendSegment(
                     meetingID: id,
@@ -522,6 +726,34 @@ class MeetingSession: ObservableObject {
         }
         if !current.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { units.append(current) }
         return units
+    }
+
+    /// Closing marks that belong to the sentence they follow, not to the next one.
+    private static let sentenceClosers: Set<Character> = ["\"", "'", ")", "]", "”", "’", "»", "」"]
+
+    /// Splits `text` after its last sentence end.
+    ///
+    /// Returns `nil` when there is no usable terminator — one unbroken run with no honest
+    /// place to cut. A fully-terminated text returns an empty `remainder`.
+    ///
+    /// A terminator only counts when whitespace or the end of the string follows it, so the
+    /// `.` in "3.5 million" or "e.g." is not mistaken for a sentence end and the number is
+    /// not cut in half.
+    static func splitAtLastSentenceEnd(_ text: String) -> (complete: String, remainder: String)? {
+        var index = text.endIndex
+        while index > text.startIndex {
+            index = text.index(before: index)
+            guard sentenceTerminators.contains(text[index]) else { continue }
+
+            var cut = text.index(after: index)
+            while cut < text.endIndex, sentenceClosers.contains(text[cut]) { cut = text.index(after: cut) }
+            guard cut == text.endIndex || text[cut].isWhitespace else { continue }
+
+            let complete = String(text[..<cut]).trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !complete.isEmpty else { return nil }
+            return (complete, String(text[cut...]).trimmingCharacters(in: .whitespacesAndNewlines))
+        }
+        return nil
     }
 
     /// Fallback for speech with no punctuation — common in raw whisper output.

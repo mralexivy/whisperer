@@ -39,7 +39,7 @@ struct MeetingListPanel: View {
                 .foregroundColor(.white)
             Spacer()
             Button {
-                Task { await session.startRecording(title: defaultTitle()) }
+                Task { await session.startRecording(title: defaultTitle(), surface: .workspace) }
             } label: {
                 Image(systemName: "plus")
                     .font(.system(size: 13, weight: .semibold))

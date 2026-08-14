@@ -78,7 +78,7 @@ skew an order of magnitude below the diarizer's own ~1s finalization lag.
 
 ## `drainPending()` runs per buffer; the tail changes per partial
 
-The two are ~12x apart in frequency. Publishing the grey tail unconditionally from
+The two are ~12x apart in frequency. Publishing the pending tail unconditionally from
 `drainPending()` means ~12 `@Published` writes a second into `MeetingSession.livePreviewText`,
 each re-rendering `MeetingTranscriptView` — an `NSViewRepresentable` wrapping `NSTextField`.
 Guarding on "did the string actually change" drops it to the partial rate. Any callback fired

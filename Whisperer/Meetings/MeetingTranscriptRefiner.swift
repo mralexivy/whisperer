@@ -167,7 +167,9 @@ final class MeetingTranscriptRefiner: ObservableObject {
         let modelPath = ModelDownloader.shared.modelPath(for: model)
         let bridge: WhisperBridge
         do {
-            bridge = try await ModelWorkQueue.shared.run("meeting-refine-load") {
+            // `runBlocking`, not `run`: this is blocking C, and on the first launch after a model
+            // is installed it is a ~40s synchronous-XPC CoreML/ANE encoder compile.
+            bridge = try await ModelWorkQueue.shared.runBlocking("meeting-refine-load") {
                 try WhisperBridge(modelPath: modelPath, useGPU: true)
             }
         } catch {
@@ -225,7 +227,7 @@ final class MeetingTranscriptRefiner: ObservableObject {
                 // queue's 120s stall ceiling and have its slot reclaimed mid-flight, whereas a
                 // ≤30s window is a 1-3s job. Re-submitting per window also re-checks the
                 // meeting gate, so starting a new recording suspends the run at a boundary.
-                timed = try await ModelWorkQueue.shared.run("meeting-refine") {
+                timed = try await ModelWorkQueue.shared.runBlocking("meeting-refine") {
                     bridge.transcribeTimestamped(samples: samples, initialPrompt: prompt, language: fixedLanguage)
                 }
             } catch {

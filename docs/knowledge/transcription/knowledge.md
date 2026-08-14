@@ -55,3 +55,19 @@ allocating each piece a share of the span equal to its share of the characters i
 enough for scroll-to-timestamp. Cut at sentence terminators; fall back to word boundaries
 when the text is unpunctuated (common in raw whisper output). Pin the final piece's end to
 the true end so rounding never leaves a gap.
+
+## The stored `language` column is the router's decision, not the transcript's language
+
+`TranscriptionEntity.language` records what `LanguageRouter` locked onto, which for a
+recording that switched language mid-way — or that locked before enough voiced audio
+arrived — is not the language of the text that was ultimately produced. In the dev
+history, a purely Hebrew recording is stored as `"en"`.
+
+Anything that needs to know what language a transcript *is* must read the transcript.
+`ScriptAnalyzer.dominantScript(in:allowedLanguages:)` filtered to the shortlist in play
+answers it directly (Latin→en, Cyrillic→ru, Hebrew→he), and a stray English technical
+term inside a Hebrew sentence loses on character count as it should.
+
+This cost a whole benchmark run: selecting multilingual test fixtures by the `language`
+column produced four English chunks and one each of Hebrew and Russian, all mislabelled,
+and the "multilingual" comparison it fed was effectively an English-only one.

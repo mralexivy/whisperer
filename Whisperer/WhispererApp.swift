@@ -840,8 +840,16 @@ struct StatusTabView: View {
                     permissionWarningBanner
                 }
 
-                // In-App Transcription — core feature, no Accessibility required
-                inAppTranscriptionCard
+                // In-App Transcription — core feature, no Accessibility required.
+                // Hidden during a meeting: the card reads AppState's live recording state, which a
+                // meeting drives, so it rendered the meeting's own waveform and transcript here and
+                // offered a Stop button for it. Meeting notes belong in the Studio window only —
+                // the menu bar must not surface a recording the user chose to take silently. Its
+                // idle Record button is a no-op mid-meeting anyway (startInAppRecording() guards on
+                // state == .idle), so nothing usable is lost.
+                if !appState.isMeetingMode {
+                    inAppTranscriptionCard
+                }
 
                 // Quick info cards
                 VStack(spacing: 12) {

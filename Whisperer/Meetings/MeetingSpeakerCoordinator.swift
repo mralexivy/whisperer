@@ -56,7 +56,7 @@ actor MeetingSpeakerCoordinator {
     private var audioSeconds: TimeInterval { Double(samplesFed) / sampleRate }
 
     /// Speaker turns the diarizer has committed to, and how far that timeline reaches.
-    private var finalized: [(start: TimeInterval, end: TimeInterval, speaker: Int)] = []
+    private var finalized: [SpeakerAttribution.Turn] = []
     private var finalizedUntil: TimeInterval = 0
     private var tentativeSpeaker: Int?
     private var lastEmittedSpeaker: Int?
@@ -248,7 +248,7 @@ actor MeetingSpeakerCoordinator {
             let start = TimeInterval(segment.startTime)
             let end = TimeInterval(segment.endTime)
             guard end > start else { continue }
-            finalized.append((start: start, end: end, speaker: segment.speakerIndex))
+            finalized.append(SpeakerAttribution.Turn(start: start, end: end, speaker: segment.speakerIndex))
             finalizedUntil = max(finalizedUntil, end)
         }
 
@@ -294,13 +294,24 @@ actor MeetingSpeakerCoordinator {
     /// only thing `MeetingSession` can split a paragraph on.
     private func emit(_ item: (words: [String], start: TimeInterval, end: TimeInterval)) {
         emittedWordCount += item.words.count
-        let runs = voicedRuns(from: item.start, to: item.end)
+
+        // The speaker is resolved **once, over the whole item**. An item is one Nemotron
+        // partial — roughly a second of continuous speech from one person — so the runs below
+        // say where the pauses are, not who is talking. Resolving per run let a single delta
+        // change hands mid-sentence, which is how a card boundary landed inside a word.
+        let speaker = dominantSpeaker(from: item.start, to: item.end)
+        // Placement is clipped to **that speaker's** finalized turns and nobody else's — see
+        // `SpeakerAttribution.voicedRuns(in:by:from:to:)`. A foreign slot's blip says nothing
+        // about where these words sit, and treating it as if it did is what manufactured the
+        // sub-second gaps that `MeetingSession.silenceSplitGap` then broke cards on.
+        let runs = SpeakerAttribution.voicedRuns(in: finalized, by: speaker,
+                                                 from: item.start, to: item.end)
 
         // One run — nothing to apportion. No runs means the diarizer never armed (or the
         // window is pure silence); fall back to the raw span rather than dropping the text.
         guard runs.count > 1, runs.count <= item.words.count else {
             let span = runs.first ?? (start: item.start, end: item.end)
-            deliver(words: item.words, start: span.start, end: span.end)
+            deliver(words: item.words, speaker: speaker, start: span.start, end: span.end)
             return
         }
 
@@ -322,55 +333,39 @@ actor MeetingSpeakerCoordinator {
                 let share = voiced > 0 ? Double(item.words.count) * ((run.end - run.start) / voiced) : 0
                 count = min(available, max(1, Int(share.rounded())))
             }
-            deliver(words: Array(item.words[cursor..<(cursor + count)]), start: run.start, end: run.end)
+            deliver(words: Array(item.words[cursor..<(cursor + count)]), speaker: speaker,
+                    start: run.start, end: run.end)
             cursor += count
         }
     }
 
-    private func deliver(words: [String], start: TimeInterval, end: TimeInterval) {
+    private func deliver(words: [String], speaker: Int, start: TimeInterval, end: TimeInterval) {
         guard !words.isEmpty else { return }
-        let speaker = dominantSpeaker(from: start, to: end)
+        // A switch closes a transcript card, so it is worth a line. Logged here rather than at
+        // the session, which only sees the ones that survive its floors — the absence of any
+        // speaker logging is what made per-second relabelling invisible in the log.
+        if let previous = lastEmittedSpeaker, previous != speaker {
+            Logger.info("Diarization: speaker \(previous + 1) → \(speaker + 1) at \(String(format: "%.1f", start))s",
+                        subsystem: .model)
+        }
         lastEmittedSpeaker = speaker
         onAttributed?(words.joined(separator: " "), speaker, start, end)
     }
 
-    /// Merged voiced intervals inside the span, in order, per the finalized timeline.
+    /// The speaker the finalized timeline puts in the span, or the current one when it has no
+    /// real opinion — see `SpeakerAttribution.dominantSpeaker`, which holds both the floors and
+    /// the reason "no opinion" is the normal state of affairs in the middle of a turn.
     ///
-    /// Overlapping turns collapse into one interval — this answers *where there is sound*, not
-    /// who made it. No threshold is applied: the gaps are reported as they are and
-    /// `MeetingSession.silenceSplitGap` decides which of them is long enough to break a card.
-    private func voicedRuns(from start: TimeInterval, to end: TimeInterval) -> [(start: TimeInterval, end: TimeInterval)] {
-        var clipped: [(start: TimeInterval, end: TimeInterval)] = []
-        for turn in finalized {
-            let lo = max(turn.start, start)
-            let hi = min(turn.end, end)
-            if hi > lo { clipped.append((start: lo, end: hi)) }
-        }
-        guard !clipped.isEmpty else { return [] }
-        clipped.sort { $0.start < $1.start }
-
-        var merged: [(start: TimeInterval, end: TimeInterval)] = [clipped[0]]
-        for interval in clipped.dropFirst() {
-            if interval.start <= merged[merged.count - 1].end {
-                merged[merged.count - 1].end = max(merged[merged.count - 1].end, interval.end)
-            } else {
-                merged.append(interval)
-            }
-        }
-        return merged
-    }
-
-    /// The speaker holding the most audio time across the span. Overlapping speech resolves to
-    /// whoever dominates rather than whoever happened to start first.
+    /// Carrying the current speaker is the right prior: speech continues far more often than it
+    /// changes hands, and a real handover shows up as finalized coverage on the next window.
+    ///
+    /// The tentative track deliberately gets no say. It flips on every inference, and waiting it
+    /// out is this coordinator's entire reason to exist — letting it decide a *committed* label
+    /// defeats the queue that holds text back for exactly that reason. It seeds the very first
+    /// emit only, when there is no current speaker to carry.
     private func dominantSpeaker(from start: TimeInterval, to end: TimeInterval) -> Int {
-        var totals: [Int: TimeInterval] = [:]
-        for turn in finalized {
-            let overlap = min(turn.end, end) - max(turn.start, start)
-            if overlap > 0 { totals[turn.speaker, default: 0] += overlap }
-        }
-        if let best = totals.max(by: { $0.value < $1.value })?.key { return best }
-        // No finalized coverage (silence-only span, or the diarizer never armed).
-        return tentativeSpeaker ?? lastEmittedSpeaker ?? 0
+        SpeakerAttribution.dominantSpeaker(in: finalized, from: start, to: end)
+            ?? lastEmittedSpeaker ?? tentativeSpeaker ?? 0
     }
 }
 #endif

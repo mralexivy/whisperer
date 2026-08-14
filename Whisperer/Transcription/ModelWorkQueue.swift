@@ -36,12 +36,54 @@ import Foundation
 /// `run` only logged on completion. It now logs on submission, warns about long queue waits, and
 /// reclaims the slot from a job that overruns `stallCeiling`.
 ///
+/// ### The body runs off the caller's executor — and `Task.detached` is not what achieves that
+/// An `async` closure parameter with no isolation annotation runs on the *caller's* executor. Every
+/// meeting-engine call site is a method on a `@MainActor` class, so `WhisperBridge(modelPath:)` —
+/// blocking C plus a first-run CoreML/ANE encoder compile — executed on the main thread: 40.7s of
+/// frozen UI the first time Meeting Notes was opened (`stall-2026-08-14T07-13-33Z.dump`), with the
+/// whole stack from `mach_msg2_trap` down to `MeetingEngines.runCleanup` on thread 0.
+///
+/// Wrapping the call in `Task.detached` inside `run` was the first fix and it **did not work**. The
+/// detach changes where the *task* starts, not where `body` runs: `body`'s type still carries the
+/// caller's isolation, so `await body()` hops straight back. `stall-2026-08-14T12-17-13Z.dump`
+/// caught the identical freeze on thread 0 with the detach in place, and named the mechanism in the
+/// symbol itself —
+/// `closure #1 nonisolated(nonsending) @Sendable () async throws -> WhisperBridge in
+/// MeetingTranscriptRefiner.run(...)` under `swift::runJobInEstablishedExecutorContext`, 44.5s
+/// inside `whisper_coreml_init` → `-[_ANEDaemonConnection compileModel:…]`. Under this target's
+/// `SWIFT_APPROACHABLE_CONCURRENCY = YES` (SE-0461) an unannotated `async` function type is
+/// `nonisolated(nonsending)`, and `SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor` makes essentially
+/// every caller in this module the main actor. `@Sendable` does not change either fact, and neither
+/// does this type being an `actor` — an actor serializes *scheduling*, not execution.
+///
+/// Two entry points, so the guarantee is structural rather than attribute-dependent:
+///
+/// - `run` — async bodies. The hop is forced by `offCallerExecutor`, which is `@concurrent`
+///   `nonisolated`: it is required to run on the global concurrent executor, so the `body()` call
+///   nested inside it inherits *that*, not the caller. It also trips a `Logger.error` if it ever
+///   finds itself on thread 0, because the whole cost of this bug was that it was silent.
+/// - `runBlocking` — **synchronous** bodies (`WhisperBridge.init`, `transcribeTimestamped`, and
+///   anything else that blocks a thread in C). A synchronous closure has no executor to inherit; it
+///   runs wherever it is called, and it is called on a private serial `DispatchQueue`. Nothing about
+///   the caller's isolation, the language mode, or a future upcoming-feature flag can move it back
+///   onto the main thread. Blocking C also has no business on a cooperative-pool thread, where a
+///   44s stall would consume one of a handful of workers.
+///
+/// Anything that blocks should use `runBlocking`. `run` is for genuinely async work.
+///
 /// What must NOT go through here: live ASR, live diarization `feed()`, and interactive dictation
 /// post-processing. Those are the latency path, not background work.
 actor ModelWorkQueue {
     static let shared = ModelWorkQueue()
 
     private init() {}
+
+    /// Carries a job's result out of the detached task. `T` is unconstrained for the reason given
+    /// on `run` — the model handles callers return predate `Sendable` — so the box is the same
+    /// unchecked hand-off their existing load paths already perform, made explicit in one place.
+    private struct Transferred<T>: @unchecked Sendable {
+        let value: T
+    }
 
     /// A job that overruns this is presumed wedged: the slot is reclaimed so the queue survives.
     /// Sized well above the slowest legitimate job ever measured (a cold `llm-load` at ~5s).
@@ -104,7 +146,93 @@ actor ModelWorkQueue {
     /// Throws `CancellationError` if the calling task is cancelled before `body` starts. It is
     /// `throws` rather than `rethrows` for exactly that reason — a non-throwing body still has a
     /// cancellable wait in front of it.
-    func run<T>(_ label: String, _ body: @Sendable () async throws -> T) async throws -> T {
+    ///
+    /// `body` is forced onto the global concurrent executor and never runs on the caller's — see
+    /// the class note. If it blocks a thread rather than suspending, use `runBlocking` instead.
+    func run<T>(_ label: String, _ body: @escaping @Sendable () async throws -> T) async throws -> T {
+        let ticket = try await acquire(label)
+        defer { finish(ticket) }
+
+        // Priority is carried across explicitly: a detached task inherits nothing, and the
+        // dictation loads (`nemotron-load`, `llm-load`) submit at `.userInitiated` on purpose.
+        let job = Task.detached(priority: Task.currentPriority) {
+            try await Self.offCallerExecutor(label, body)
+        }
+        return try await withTaskCancellationHandler {
+            try await job.value.value
+        } onCancel: {
+            job.cancel()
+        }
+    }
+
+    /// Same admission control as `run`, for a **synchronous** body that blocks its thread —
+    /// `WhisperBridge.init`, `transcribeTimestamped`, any other blocking whisper.cpp call.
+    ///
+    /// A synchronous closure carries no isolation to inherit, so running it on `blockingQueue` is a
+    /// structural guarantee that it is off the main thread and off the cooperative pool. This is the
+    /// entry point every blocking model call should use; `run` is for work that genuinely suspends.
+    func runBlocking<T>(_ label: String, _ body: @escaping @Sendable () throws -> T) async throws -> T {
+        let ticket = try await acquire(label)
+        defer { finish(ticket) }
+        return try await Self.onBlockingQueue(body).value
+    }
+
+    // MARK: - Execution
+
+    /// Forces `body` off whatever executor called `run`.
+    ///
+    /// `@concurrent` is the load-bearing part: it requires this function to run on the global
+    /// concurrent executor, and `body` — being `nonisolated(nonsending)` — then inherits *this*
+    /// isolation instead of the original caller's. Removing the attribute silently reintroduces the
+    /// main-thread freeze, which is what the tripwire below exists to catch.
+    @concurrent
+    private nonisolated static func offCallerExecutor<T>(
+        _ label: String,
+        _ body: @escaping @Sendable () async throws -> T
+    ) async throws -> Transferred<T> {
+        if Thread.isMainThread {
+            Logger.error(
+                "ModelWorkQueue: \(label) entered on the main thread — isolation inheritance is back, "
+                + "the UI will freeze for the duration of this job",
+                subsystem: .model
+            )
+        }
+        return Transferred(value: try await body())
+    }
+
+    /// Where blocking C runs. Serial and `.userInitiated`: the queue already admits one job at a
+    /// time, so a concurrent queue would buy nothing.
+    private nonisolated static let blockingQueue = DispatchQueue(
+        label: "com.ivy.whisperer.modelwork.blocking",
+        qos: .userInitiated
+    )
+
+    private nonisolated static func onBlockingQueue<T>(
+        _ body: @escaping @Sendable () throws -> T
+    ) async throws -> Transferred<T> {
+        try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Transferred<T>, Error>) in
+            blockingQueue.async {
+                do {
+                    continuation.resume(returning: Transferred(value: try body()))
+                } catch {
+                    continuation.resume(throwing: error)
+                }
+            }
+        }
+    }
+
+    // MARK: - Admission
+
+    /// Identifies one admitted job, for the timing log and the owner-checked slot release.
+    private struct Ticket {
+        let id: Int
+        let label: String
+        let waitedMs: Int
+        let startedAt: Date
+    }
+
+    /// Waits out the meeting gate and the slot, then arms the stall watchdog.
+    private func acquire(_ label: String) async throws -> Ticket {
         let submittedAt = Date()
         let id = nextJobID
         nextJobID += 1
@@ -115,6 +243,8 @@ actor ModelWorkQueue {
         )
         armLongWaitWarning(id: id, label: label)
 
+        // Safe to drop the cancellation record once the slot is held — it is only read while
+        // waiting, and every throwing path below leaves the queues via `cancelWait`.
         defer { cancelledJobIDs.remove(id) }
 
         // Gate first, slot second. Re-check after acquiring: a meeting can start while the slot
@@ -126,15 +256,22 @@ actor ModelWorkQueue {
             releaseSlot(owner: id)
         }
 
-        let waitedMs = Int(Date().timeIntervalSince(submittedAt) * 1000)
-        let startedAt = Date()
         armStallWatchdog(id: id, label: label)
-        defer {
-            let ranMs = Int(Date().timeIntervalSince(startedAt) * 1000)
-            Logger.info("ModelWorkQueue: \(label) waited=\(waitedMs)ms ran=\(ranMs)ms", subsystem: .model)
-            releaseSlot(owner: id)
-        }
-        return try await body()
+        return Ticket(
+            id: id,
+            label: label,
+            waitedMs: Int(Date().timeIntervalSince(submittedAt) * 1000),
+            startedAt: Date()
+        )
+    }
+
+    private func finish(_ ticket: Ticket) {
+        let ranMs = Int(Date().timeIntervalSince(ticket.startedAt) * 1000)
+        Logger.info(
+            "ModelWorkQueue: \(ticket.label) waited=\(ticket.waitedMs)ms ran=\(ranMs)ms",
+            subsystem: .model
+        )
+        releaseSlot(owner: ticket.id)
     }
 
     // MARK: - Waiting

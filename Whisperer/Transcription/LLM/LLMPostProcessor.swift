@@ -32,6 +32,82 @@ enum LLMLoadPhase: Equatable {
     case error(String)
 }
 
+/// Throughput of the most recent generation. Both decode paths already compute these numbers for
+/// their debug log line; this exposes them so benchmarks can compare models without scraping logs.
+struct LLMGenerationStats: Equatable {
+    let promptTokens: Int
+    let genTokens: Int
+    /// Prefill — scales with prompt length, not model speed. Kept separate from decode for that reason.
+    let promptTime: TimeInterval
+    let generateTime: TimeInterval
+    let usedMTP: Bool
+    let cacheHit: Bool
+    /// Speculative-decoding acceptance rate, 0…1. Nil on the generic path, which has no drafts.
+    /// Without it a "4B beats 1.5B on tok/s" result has no explanation attached to it.
+    let acceptRate: Double?
+
+    var tokensPerSecond: Double {
+        generateTime > 0 ? Double(genTokens) / generateTime : 0
+    }
+}
+
+// MARK: - Degeneration guard
+
+private enum Degeneration {
+    /// Longest cycle worth looking for. A looping clause is a handful of tokens; beyond
+    /// that the repeats are more likely a real pattern (list items, parallel sentences).
+    static let maxPeriod = 8
+    /// How many units of history to keep. Must exceed `maxPeriod × requiredCycles`.
+    static let window = 96
+    /// One token repeated is only degenerate after a long run — "…", "----" and numeric
+    /// padding are real text. A multi-token cycle repeated four times never is.
+    static func requiredCycles(period: Int) -> Int { period == 1 ? 16 : 4 }
+}
+
+/// Detects a decoder that has fallen into a loop, and says how much of the output to throw away.
+///
+/// The previous version of this counted one thing — the same token 48 times in a row — and the
+/// failure that shipped was neither: "to Michael to Michael to to to…" is a two-token cycle, and
+/// by the time its one-token tail tripped the counter, 48 tokens of it had already been appended
+/// to the string that goes on to the parser, CoreData and the UI. So this checks every short
+/// period rather than just 1, and returns a rewind point so the loop is cut back out of the text
+/// instead of merely being stopped after the fact.
+///
+/// Generic over the unit because the two decode paths see different things: the MTP path has
+/// token ids, `ChatSession` only hands out decoded string chunks.
+private struct DegenerationGuard<Unit: Equatable> {
+    private var units: [Unit] = []
+    /// Output length (in characters) before the unit at the same index was appended.
+    private var lengths: [Int] = []
+
+    /// Records `unit`, emitted when the output was `lengthBefore` characters long. Returns the
+    /// length to truncate the output back to once the tail has become a repeating cycle, or nil
+    /// while the output is still healthy.
+    mutating func record(_ unit: Unit, lengthBefore: Int) -> Int? {
+        units.append(unit)
+        lengths.append(lengthBefore)
+        if units.count > Degeneration.window {
+            units.removeFirst()
+            lengths.removeFirst()
+        }
+        for period in 1...Degeneration.maxPeriod {
+            let span = period * Degeneration.requiredCycles(period: period)
+            guard tailRepeats(period: period, span: span) else { continue }
+            return lengths[units.count - span]
+        }
+        return nil
+    }
+
+    private func tailRepeats(period: Int, span: Int) -> Bool {
+        guard units.count >= span else { return false }
+        let start = units.count - span
+        for i in start..<(units.count - period) where units[i] != units[i + period] {
+            return false
+        }
+        return true
+    }
+}
+
 @MainActor
 class LLMPostProcessor: ObservableObject {
     @Published var isModelLoaded = false
@@ -39,6 +115,10 @@ class LLMPostProcessor: ObservableObject {
     @Published var isProcessing = false
     @Published var loadPhase: LLMLoadPhase = .idle
     @Published var errorMessage: String?
+
+    /// Throughput of the last completed generation. Diagnostics/benchmarks only — nothing in the
+    /// app's behaviour reads it. Nil until the first generation completes; unchanged on timeout.
+    @Published private(set) var lastGenerationStats: LLMGenerationStats?
 
     private var modelContainer: ModelContainer?
     private(set) var loadedVariant: LLMModelVariant?
@@ -48,13 +128,6 @@ class LLMPostProcessor: ObservableObject {
     private var cachedPrompts: [String: [any KVCache]] = [:]
     private var cachedPromptOrder: [String] = []
     private static let maxCachedPrompts = 4
-
-    // Degeneration cut-off: the model has emitted the identical token this many times in a row.
-    // Natural text never does this — the longest legitimate run is a few characters of padding —
-    // so any value in the tens behaves the same on real output and there is nothing to tune.
-    // Observed failure this bounds: ~1200 tokens of a repeated Hebrew "ה" over 31.8s, which
-    // stayed inside both the token budget and any character ceiling.
-    private static let degenerateRepeatLimit = 48
 
     // MTP system-prefix KV cache — pre-filled once per instructions string.
     // Copied on each processMTP call so only user-suffix tokens need prefilling (~25 vs ~150 tokens).
@@ -148,6 +221,7 @@ class LLMPostProcessor: ObservableObject {
         // only intermediate/KV-cache buffers from inference are constrained.
         let cacheMB: Int = switch variant {
             case .whispererV3:    128
+            case .qwen2_5_1_5B:   256
             case .qwen3_5_2B:     256
             case .qwen3_5_4B:     256
             case .qwen3_5_4B_mtp: 256
@@ -435,10 +509,18 @@ class LLMPostProcessor: ObservableObject {
             maxTokens = min(maxTokensCap, Int(ceil(Float(estimatedTokens) * 1.15)))
         }
 
-        Logger.debug("LLM gen: inputChars=\(charCount) nonLatin=\(isNonLatin) estTokens=\(estimatedTokens) maxTokens=\(maxTokens) cap=\(maxTokensCap) temp=\(temperature) topP=\(topP) topK=\(topK) repPenalty=\(repetitionPenalty)", subsystem: .transcription)
+        // The MTP path is a batched speculative decoder, not a sampler: it honours the
+        // repetition penalty and nothing else. Logging temp/topP/topK for it would describe a
+        // configuration that is not in effect — which is exactly how a dropped repetition
+        // penalty stayed invisible while it produced looping meeting overviews.
+        let usingMTP = loadedVariant?.isMTPCapable == true
+        let sampling = usingMTP
+            ? "decode=greedy(MTP) repPenalty=\(repetitionPenalty)"
+            : "temp=\(temperature) topP=\(topP) topK=\(topK) repPenalty=\(repetitionPenalty)"
+        Logger.debug("LLM gen: inputChars=\(charCount) nonLatin=\(isNonLatin) estTokens=\(estimatedTokens) maxTokens=\(maxTokens) cap=\(maxTokensCap) \(sampling)", subsystem: .transcription)
 
         // MTP fast path — bypasses ChatSession entirely, uses generateMTPTokens() directly.
-        if loadedVariant?.isMTPCapable == true {
+        if usingMTP {
             let mtpResult = try await processMTP(
                 container: container,
                 instructions: instructions,
@@ -449,6 +531,7 @@ class LLMPostProcessor: ObservableObject {
                 maxTokensCap: maxTokensCap,
                 targetLanguage: targetLanguage,
                 originalText: text,
+                repetitionPenalty: repetitionPenalty,
                 timeoutSecondsOverride: timeoutSecondsOverride,
                 throwOnFallback: throwOnFallback,
                 reuseWarmCache: reuseWarmCache
@@ -517,27 +600,24 @@ class LLMPostProcessor: ObservableObject {
         let genTask = Task {
             var r = ""
             var info: GenerateCompletionInfo?
-            var lastChunk: String?
-            var repeatRun = 0
+            var degeneration = DegenerationGuard<String>()
+            var charCount = 0
             generation: for try await token in session.streamDetails(
                 to: userMessage, images: [], videos: []
             ) {
                 switch token {
                 case .chunk(let chunk):
+                    let lengthBefore = charCount
                     r += chunk
-                    if let limit = outputCharLimit, r.count > limit {
-                        Logger.debug("LLM length guard: \(r.count) > \(limit) chars", subsystem: .transcription)
+                    charCount += chunk.count
+                    if let limit = outputCharLimit, charCount > limit {
+                        Logger.debug("LLM length guard: \(charCount) > \(limit) chars", subsystem: .transcription)
                         break generation
                     }
-                    if chunk == lastChunk {
-                        repeatRun += 1
-                        if repeatRun >= Self.degenerateRepeatLimit {
-                            Logger.warning("LLM degeneration guard: same token emitted \(repeatRun) times in a row — stopping", subsystem: .transcription)
-                            break generation
-                        }
-                    } else {
-                        lastChunk = chunk
-                        repeatRun = 1
+                    if let rewind = degeneration.record(chunk, lengthBefore: lengthBefore) {
+                        Logger.warning("LLM degeneration guard: output looped — trimming \(charCount - rewind) chars and stopping", subsystem: .transcription)
+                        r = String(r.prefix(rewind))
+                        break generation
                     }
                 case .info(let i):
                     info = i
@@ -567,6 +647,15 @@ class LLMPostProcessor: ObservableObject {
 
         if let info = completionInfo {
             Logger.debug("LLM gen: promptTokens=\(info.promptTokenCount) genTokens=\(info.generationTokenCount) stopReason=\(info.stopReason) cacheHit=\(usingCache) promptTime=\(String(format: "%.1f", info.promptTime * 1000))ms genTime=\(String(format: "%.1f", info.generateTime * 1000))ms", subsystem: .transcription)
+            lastGenerationStats = LLMGenerationStats(
+                promptTokens: info.promptTokenCount,
+                genTokens: info.generationTokenCount,
+                promptTime: info.promptTime,
+                generateTime: info.generateTime,
+                usedMTP: false,
+                cacheHit: usingCache,
+                acceptRate: nil
+            )
         } else {
             Logger.warning("LLM gen: stream ended without completion info", subsystem: .transcription)
         }
@@ -599,11 +688,30 @@ class LLMPostProcessor: ObservableObject {
     /// Mutable accumulator shared between the generateMTPTokens onToken callback and the timeout task.
     /// @unchecked Sendable: accessed from a single serial queue (container.perform) + one flag write from timeout.
     private final class MTPOutput: @unchecked Sendable {
-        var text: String = ""
+        private(set) var text: String = ""
         var stop: Bool = false
-        /// Degeneration tracking — last token id and how many times in a row it has been emitted.
-        var lastTokenId: Int? = nil
-        var repeatRun: Int = 0
+        /// Throughput, carried back out of the @Sendable container closure.
+        var stats: LLMGenerationStats? = nil
+        /// Length of `text`, maintained incrementally — the guard needs it once per token and
+        /// `String.count` is a walk of the whole output.
+        private(set) var charCount = 0
+        private var degeneration = DegenerationGuard<Int>()
+
+        /// Appends `piece` (the decoding of `tokenId`). Returns false when the output has fallen
+        /// into a loop, having first rewound `text` to before the loop began — a summary that
+        /// stops mid-sentence is recoverable; one with 48 tokens of "to to to" welded onto it is
+        /// what the user actually saw.
+        func append(tokenId: Int, piece: String) -> Bool {
+            let lengthBefore = charCount
+            text += piece
+            charCount += piece.count
+            guard let rewind = degeneration.record(tokenId, lengthBefore: lengthBefore) else {
+                return true
+            }
+            text = String(text.prefix(rewind))
+            charCount = rewind
+            return false
+        }
     }
 
     private func processMTP(
@@ -616,6 +724,7 @@ class LLMPostProcessor: ObservableObject {
         maxTokensCap: Int,
         targetLanguage: String?,
         originalText: String,
+        repetitionPenalty: Float = 1.0,
         timeoutSecondsOverride: Double? = nil,
         throwOnFallback: Bool = false,
         reuseWarmCache: Bool = true
@@ -699,23 +808,16 @@ class LLMPostProcessor: ObservableObject {
                 promptTokens: tokensToFill,
                 maxTokens: maxTokens,
                 eosTokenIds: eosIds,
+                repetitionPenalty: repetitionPenalty,
                 onToken: { tokenId in
                     if mtpOutput.stop { return false }
                     let piece = tokenizer.decode(tokens: [tokenId])
-                    mtpOutput.text += piece
-                    if let limit = outputCharLimit, mtpOutput.text.count > limit { return false }
-                    // Degeneration cut-off — the model is looping on one token.
-                    if tokenId == mtpOutput.lastTokenId {
-                        mtpOutput.repeatRun += 1
-                        if mtpOutput.repeatRun >= Self.degenerateRepeatLimit {
-                            Logger.warning("MTP gen: degeneration guard — token \(tokenId) emitted \(mtpOutput.repeatRun) times in a row, stopping", subsystem: .transcription)
-                            mtpOutput.stop = true
-                            return false
-                        }
-                    } else {
-                        mtpOutput.lastTokenId = tokenId
-                        mtpOutput.repeatRun = 1
+                    guard mtpOutput.append(tokenId: tokenId, piece: piece) else {
+                        Logger.warning("MTP gen: degeneration guard — output looped, trimmed back to \(mtpOutput.charCount) chars and stopped", subsystem: .transcription)
+                        mtpOutput.stop = true
+                        return false
                     }
+                    if let limit = outputCharLimit, mtpOutput.charCount > limit { return false }
                     return true
                 }
             )
@@ -738,7 +840,19 @@ class LLMPostProcessor: ObservableObject {
                 "cacheHit=\(warmBox.cache != nil)",
                 subsystem: .transcription
             )
+            // genTokens excludes the prompt-forced first token so tokensPerSecond matches `tps` above.
+            mtpOutput.stats = LLMGenerationStats(
+                promptTokens: promptTokens.count,
+                genTokens: max(0, stats.tokenCount - 1),
+                promptTime: stats.prefillTime,
+                generateTime: stats.generateTime,
+                usedMTP: true,
+                cacheHit: warmBox.cache != nil,
+                acceptRate: Double(stats.acceptanceRate)
+            )
         }
+
+        if let s = mtpOutput.stats { lastGenerationStats = s }
 
         // Stop flag in case timeout fires after perform returns (no-op if already done).
         mtpOutput.stop = true

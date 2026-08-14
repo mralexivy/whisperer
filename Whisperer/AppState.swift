@@ -452,7 +452,7 @@ class AppState: ObservableObject {
             }
         }
     }
-    @Published var selectedLLMModel: LLMModelVariant = .whispererV3 {
+    @Published var selectedLLMModel: LLMModelVariant = .qwen3_5_4B_mtp {
         didSet {
             UserDefaults.standard.set(selectedLLMModel.rawValue, forKey: "selectedLLMModel")
             if llmEnabled {
@@ -532,6 +532,11 @@ class AppState: ObservableObject {
     @Published private(set) var activeMeetingSession: MeetingSession?
     private(set) var meetingAudioFileURL: String?
     var isMeetingMode: Bool { activeMeetingSession != nil }
+    /// A meeting records silently on both edges. The feature exists to make starting one cost
+    /// nothing socially — a Tink mid-call announces it, and the Pop at the end announces it to
+    /// everyone still on the line. Deliberately independent of the Sound Effects picker, which
+    /// governs dictation: "Default" there must not put a sound into a meeting.
+    var suppressesFeedbackSound: Bool { isMeetingMode }
     private var isMeetingStopInFlight = false
     #if canImport(FluidAudio)
     /// Live speaker diarization for the current meeting. Nil on non-Nemotron backends
@@ -740,6 +745,11 @@ class AppState: ObservableObject {
         if UserDefaults.standard.object(forKey: "llmEnabled") != nil {
             _llmEnabled = Published(wrappedValue: UserDefaults.standard.bool(forKey: "llmEnabled"))
         }
+        // The key is written only in selectedLLMModel's didSet, so its absence means the user never
+        // touched the picker — they fall through to the current default (Qwen3.5-4B MTP, the model
+        // the Correct prompt is measured against). A stored
+        // value is a deliberate choice and is preserved, including "Whisperer V3": silently pulling
+        // 1.6GB onto someone who picked the 0.3GB model is a surprise, not a migration.
         if let savedLLMModel = UserDefaults.standard.string(forKey: "selectedLLMModel"),
            let llmModel = LLMModelVariant(rawValue: savedLLMModel) {
             // Migrate old default 4B to the faster MTP variant
@@ -2452,10 +2462,14 @@ class AppState: ObservableObject {
         lastNonSilentAmplitudeTime = nil
         hasTriggeredSilentAudioDump = false
         chunkLLMCoordinator.reset()  // Clear any leftover state from previous recording
-        startStateWatchdog()  // 4s startup watchdog — cancelled when audio starts
+        startStartupWatchdog()  // cancelled when audio starts; waits on the recorder, not the clock
 
-        // Play feedback sound first (user hears it)
-        soundPlayer?.playStartSound()
+        // Play feedback sound first (user hears it) — except in a meeting, which starts silently.
+        // startMeetingRecording() assigns activeMeetingSession before calling this, on the same
+        // MainActor hop with no await between, so isMeetingMode is already true here.
+        if !suppressesFeedbackSound {
+            soundPlayer?.playStartSound()
+        }
 
         Task {
             do {
@@ -2668,6 +2682,11 @@ class AppState: ObservableObject {
                 if muteOtherAudioDuringRecording {
                     audioMuter?.unmuteSystemAudio()
                 }
+                // The audio start failed, so a meeting started by startMeetingRecording() never
+                // recorded anything. Without this it kept its session, its raised ModelWorkQueue
+                // gate, its diarizer coordinator and a floating window showing LIVE — and the
+                // user's eventual Stop produced "segments=0, transcript=0 chars".
+                abandonMeetingMode(reason: "audio start failed: \(error.localizedDescription)")
             }
         }
     }
@@ -2675,6 +2694,17 @@ class AppState: ObservableObject {
     /// Stop in-app recording — stores result in lastInAppTranscription, no text entry into other apps
     func stopInAppRecording() {
         guard case .recording = state else { return }
+        // A live meeting must end through MeetingSession.stopRecording() — that is what flushes the
+        // tail segment, moves the audio into Meetings/, finalizes the record and starts the AI pass.
+        // The menu bar's in-app Stop button renders during a meeting and used to land here directly,
+        // ending the meeting as if it were a dictation. isMeetingStopInFlight distinguishes the
+        // legitimate re-entry from stopMeetingRecording().
+        if isMeetingMode && !isMeetingStopInFlight {
+            if let session = activeMeetingSession {
+                Task { await session.stopRecording() }
+            }
+            return
+        }
         guard isInAppMode else {
             stopRecording()
             return
@@ -2689,6 +2719,14 @@ class AppState: ObservableObject {
             // stopAsync() completes so the tail chunk can route to the meeting session.
             let wasMeetingStop = isMeetingStopInFlight
             isMeetingStopInFlight = false
+
+            // Captured here, before any await: activeMeetingSession is nilled further down this
+            // same Task, so the sound decision must not depend on winning that race. Widened
+            // beyond wasMeetingStop because isMeetingStopInFlight is set only by
+            // stopMeetingRecording(); a meeting reaching this Task by any other route is still a
+            // meeting and still ends silently. Kept separate from wasMeetingStop, which also gates
+            // unmuting, the history save, and the ModelWorkQueue meeting gate.
+            let wasSilentRecording = wasMeetingStop || suppressesFeedbackSound
 
             // Deferred, not placed at the end of the Task: the watchdog bail-out below
             // (`guard case .stopping`) returns early, and a stranded gate would suspend
@@ -2723,7 +2761,9 @@ class AppState: ObservableObject {
                 audioMuter?.unmuteSystemAudio()
             }
 
-            soundPlayer?.playStopSound()
+            if !wasSilentRecording {
+                soundPlayer?.playStopSound()
+            }
 
             var finalText = ""
             var savedRecordId: UUID?
@@ -2870,7 +2910,7 @@ class AppState: ObservableObject {
         lastAmplitudeUpdateTime = nil  // Reset audio-progress watchdog
         lastNonSilentAmplitudeTime = nil
         hasTriggeredSilentAudioDump = false
-        startStateWatchdog()  // 4s startup watchdog — cancelled when audio starts
+        startStartupWatchdog()  // cancelled when audio starts; waits on the recorder, not the clock
 
         // Play feedback sound first (user hears it)
         soundPlayer?.playStartSound()
@@ -3191,23 +3231,70 @@ class AppState: ObservableObject {
     /// Immediately stops recording, unmutes audio, and returns to idle state
     // MARK: - State Watchdog
 
-    /// Start a main-thread watchdog that forces .idle if stuck in .recording/.stopping.
-    /// Uses DispatchSourceTimer on the main RunLoop — completely independent of the Swift
-    /// cooperative thread pool. Even if all cooperative threads are exhausted, this fires.
-    /// - Parameter timeout: Seconds before forcing idle. 4s for startup, 5s for stop/transcription.
-    private func startStateWatchdog(timeout: TimeInterval = 4.0) {
+    /// Poll interval for the startup watchdog.
+    private static let startupWatchdogInterval: TimeInterval = 1.0
+    /// No audio start in flight and still not recording — the pre-audio setup is what is wedged.
+    private static let startupSetupDeadline: TimeInterval = 4.0
+    /// A start the recorder reports as genuinely in flight gets this long. Deliberately above
+    /// `AudioRecorder.startupHardDeadline` (20s) so the recorder aborts first and the failure
+    /// arrives as a thrown error on the clean path, rather than as a force-idle from out here.
+    private static let startupHardCeiling: TimeInterval = 25.0
+    /// When to say out loud that CoreAudio is taking its time.
+    private static let startupSlowThreshold: TimeInterval = 3.0
+
+    /// Activity-aware watchdog for the startup phase, mirroring `startStopWatchdog()`.
+    ///
+    /// The fixed 4s version force-idled on wall clock alone, and force-idling is not passive:
+    /// `forceIdleFromWatchdog()` calls `AudioRecorder.stopRecording()`, which bumps the
+    /// recorder's generation and so invalidates whatever start it was waiting on. Creating the
+    /// AUHAL audio unit (`AVAudioEngine.inputNode`) is a CoreAudio round trip with no bounded
+    /// latency — normally 30–250ms, measured at 4.30s with coreaudiod cleaning up after a
+    /// killed process — so the 4s deadline destroyed a start that was 400ms from succeeding and
+    /// the meeting recorded nothing. A slow start is not a stuck start: while the recorder
+    /// reports one in flight we wait, up to a hard ceiling.
+    ///
+    /// DispatchSourceTimer on the main RunLoop — independent of the Swift cooperative thread
+    /// pool, so it fires even when every cooperative thread is exhausted.
+    private func startStartupWatchdog() {
         stateWatchdog?.cancel()
+        let began = Date()
+        var loggedSlowStart = false
+        // Sticky, not sampled per tick. The recorder clears its in-flight marker in a `defer`,
+        // and `cancelStateWatchdog()` runs one main-actor hop later — so a tick landing in
+        // between would see "no start in flight" and apply the 4s setup deadline to a start
+        // that had just succeeded after 5s, force-idling it. Once a start has been observed,
+        // only the hard ceiling applies.
+        var sawStartInFlight = false
+        let interval = Self.startupWatchdogInterval
         let timer = DispatchSource.makeTimerSource(queue: .main)
-        timer.schedule(deadline: .now() + timeout)
+        timer.schedule(deadline: .now() + interval, repeating: interval)
         timer.setEventHandler { [weak self] in
             guard let self else { return }
-            switch self.state {
-            case .recording, .stopping:
-                Logger.error("State watchdog: stuck in \(self.state) for \(timeout)s, forcing idle", subsystem: .app)
-                self.forceIdleFromWatchdog()
-            default:
-                break
+            guard case .recording = self.state else {
+                self.stateWatchdog?.cancel()
+                self.stateWatchdog = nil
+                return
             }
+
+            let elapsed = Date().timeIntervalSince(began)
+            let startupInFlight = self.audioRecorder?.startupInFlightSince != nil
+            if startupInFlight { sawStartInFlight = true }
+            let deadline = sawStartInFlight ? Self.startupHardCeiling : Self.startupSetupDeadline
+
+            if startupInFlight, elapsed >= Self.startupSlowThreshold, !loggedSlowStart {
+                loggedSlowStart = true
+                Logger.warning(
+                    "Audio startup slow: \(String(format: "%.1f", elapsed))s and still in flight — waiting up to \(Int(Self.startupHardCeiling))s",
+                    subsystem: .app
+                )
+            }
+
+            guard elapsed >= deadline else { return }
+            Logger.error(
+                "Startup watchdog: stuck in \(self.state) for \(String(format: "%.1f", elapsed))s (audio start in flight: \(startupInFlight)), forcing idle",
+                subsystem: .app
+            )
+            self.forceIdleFromWatchdog()
         }
         timer.resume()
         stateWatchdog = timer
@@ -3290,10 +3377,59 @@ class AppState: ObservableObject {
             audioMuter?.unmuteSystemAudio()
         }
         isOutputAudioMuted = false
+        // A meeting force-idled here used to keep every piece of its live state: the session, the
+        // queue gate, the diarizer coordinator and a floating window still showing LIVE. The
+        // recording was over; only the UI did not know, so the user stopped a meeting that had
+        // not been running and got an empty transcript with no explanation.
+        abandonMeetingMode(reason: "recording watchdog")
         if let recorder = audioRecorder {
             DispatchQueue.global(qos: .utility).async {
                 Task { await recorder.stopRecording() }
             }
+        }
+    }
+
+    /// Tear down meeting mode for a meeting that never really ran — a failed audio start or a
+    /// watchdog force-idle. Not a substitute for `MeetingSession.stopRecording()`: there is no
+    /// tail to flush, no title to generate and no overview to write, because nothing was
+    /// captured. Ordered as in `stopInAppRecording()` — the queue gate comes down before the
+    /// release job is submitted, or the release waits behind a gate nothing will lower.
+    private func abandonMeetingMode(reason: String) {
+        guard let session = activeMeetingSession else { return }
+        // A meeting already stopping the normal way owns its own teardown: `stopInAppRecording()`
+        // lowers the gate in its defer, the tail chunk is still being routed through
+        // `activeMeetingSession`, and `MeetingSession.stopRecording()`'s Task is driving polish,
+        // naming and summarizing. The stop watchdog reaches here too, and abandoning underneath
+        // that pipeline would clear the processing banner and drop the tail.
+        guard !isMeetingStopInFlight else {
+            Logger.warning("Meeting teardown skipped (\(reason)) — a normal stop is already in flight", subsystem: .app)
+            return
+        }
+        Logger.warning("Abandoning meeting mode: \(reason)", subsystem: .app)
+
+        // Not left on screen: the window binds its session at construction and would keep
+        // showing a LIVE badge over a recording that is not happening. Closing it also clears
+        // `meetingWindowIsVisible` through the willClose observer, handing the HUD back.
+        MeetingLiveWindowManager.shared.close()
+        meetingWindowIsVisible = false
+
+        Task { @MainActor in
+            await session.abandonRecording()
+            await ModelWorkQueue.shared.setMeetingActive(false)
+            #if canImport(FluidAudio)
+            self.releaseMeetingNemotron()
+            if let coordinator = self.meetingSpeakerCoordinator {
+                await self.diarizerFeedTask?.value
+                self.diarizerFeedTask = nil
+                await coordinator.finish()
+                self.meetingSpeakerCoordinator = nil
+                await Task.yield()
+            }
+            #endif
+            // Outside the FluidAudio guard on purpose — a build without it still assigned
+            // this in startMeetingRecording(), and leaving it set makes `isMeetingMode` true
+            // forever, so every later dictation routes its chunks into a dead session.
+            self.activeMeetingSession = nil
         }
     }
 
@@ -3350,26 +3486,8 @@ class AppState: ObservableObject {
         cancelStateWatchdog()
 
         // Cancelling out of a meeting never reaches stopInAppRecording(), so the queue gate
-        // would stay raised for the rest of the session. Ordered, as in stopInAppRecording():
-        // the release job must not be submitted while the gate is still up.
-        if isMeetingMode {
-            Task { @MainActor in
-                await ModelWorkQueue.shared.setMeetingActive(false)
-                #if canImport(FluidAudio)
-                self.releaseMeetingNemotron()
-                // Mirror the teardown that stopInAppRecording() performs so the abandoned
-                // session and its coordinator cannot receive chunks from the next recording.
-                if let coordinator = self.meetingSpeakerCoordinator {
-                    await self.diarizerFeedTask?.value
-                    self.diarizerFeedTask = nil
-                    await coordinator.finish()
-                    self.meetingSpeakerCoordinator = nil
-                    await Task.yield()
-                }
-                self.activeMeetingSession = nil
-                #endif
-            }
-        }
+        // would stay raised for the rest of the session.
+        abandonMeetingMode(reason: "recording cancelled")
 
         Task {
             // Cancel inference first so no stale progress callback can mutate the UI
@@ -3738,7 +3856,7 @@ class AppState: ObservableObject {
     }
     #endif
 
-    func startMeetingRecording(session: MeetingSession) {
+    func startMeetingRecording(session: MeetingSession, surface: MeetingLiveSurface) {
         guard state == .idle else {
             Logger.warning("Cannot start meeting recording — AppState not idle", subsystem: .app)
             return
@@ -3747,10 +3865,18 @@ class AppState: ObservableObject {
         activeMeetingSession = session
         meetingAudioFileURL = nil
 
-        // Suppress HUD before recording starts so it never flashes.
+        // Suppress HUD before recording starts so it never flashes. `meetingWindowIsVisible`
+        // means "a meeting surface owns the recording UI", not "the floating window is up" —
+        // the workspace is equally that surface, and `HistoryWindowManager`'s close observer
+        // lowers this again if the workspace is closed with no floating window to take over.
         meetingWindowIsVisible = true
-        HistoryWindowManager.shared.showWindow()
-        NotificationCenter.default.post(name: .switchToMeetingStudioTab, object: nil)
+
+        // Raise the floating rail only for a detected call. Starting from Meeting Studio means
+        // the user is already watching the transcript there; putting a second copy of it on top
+        // of the window they pressed Start in is noise, and it covers what they came to read.
+        if surface == .floatingWindow {
+            MeetingLiveWindowManager.shared.show(session: session)
+        }
 
         // Reuse in-app recording path (isInAppMode = true suppresses text injection)
         isInAppMode = true

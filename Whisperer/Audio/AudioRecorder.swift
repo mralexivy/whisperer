@@ -118,6 +118,30 @@ class AudioRecorder: NSObject {
     private var recorderState: RecorderState = .idle
     private var currentGeneration = 0
 
+    // MARK: - Startup progress (read cross-thread by AppState's startup watchdog)
+
+    private let startupLock = NSLock()
+    private var _startupInFlight: (generation: Int, since: Date)?
+
+    /// Non-nil while a `startRecording` attempt is in flight, carrying the moment it began.
+    ///
+    /// `AVAudioEngine.inputNode` — the accessor that forces AUHAL audio-unit creation — is a
+    /// CoreAudio round trip with no bounded latency. It normally returns in 30–250ms, but has
+    /// been measured at 4.30s with coreaudiod still cleaning up after a killed process. A
+    /// caller that gives up on wall clock alone cannot tell that apart from a wedged start,
+    /// and giving up is destructive: it goes through `stopRecording()`, which bumps the
+    /// generation and invalidates the start it was waiting on.
+    var startupInFlightSince: Date? {
+        startupLock.lock(); defer { startupLock.unlock() }
+        return _startupInFlight?.since
+    }
+
+    /// Ceiling on a single `startRecording` call. Past this the start is presumed wedged inside
+    /// CoreAudio — `AudioEngineLifecycle.configure()` suspends on a continuation that only
+    /// `buildGraph` resumes, so nothing else can unblock it — and the recorder resets itself so
+    /// the user can try again.
+    private let startupHardDeadline: TimeInterval = 20.0
+
     // MARK: - Timing
 
     private var recordingStartTime: Date?
@@ -204,20 +228,35 @@ class AudioRecorder: NSObject {
         let generation = currentGeneration
         recordingStartTime = Date()
         recorderState = .starting(generation: generation)
+        markStartupInFlight(generation: generation)
         let attemptStart = Date()
 
-        // Safety net: if configure() hangs in buildGraph (e.g. engine.inputNode blocks waiting
+        // Every exit from this function resets the recorder. Attempts 1 and 2 used to throw
+        // `engineCleanedUp` while leaving `recorderState == .starting`, and nothing else cleared
+        // it — the recorder was wedged until the next successful start. It was only ever
+        // recoverable because the timeout task below swallowed its own cancellation and fired
+        // immediately on every failed start; fixing that bug alone would have made the wedge
+        // permanent. Generation-stamped so a start that began after ours is never clobbered.
+        defer {
+            clearStartupInFlight(generation: generation)
+            if case .starting(let g) = recorderState, g == generation {
+                recorderState = .idle
+                discardSessionAudio()
+            }
+        }
+
+        // Last resort: if configure() hangs in buildGraph (e.g. engine.inputNode blocks waiting
         // for CoreAudio), the continuation never resumes and all three attempts stay stuck.
-        // After 15s, force-idle so the user can try again. The hung Task will clean up when
-        // buildGraph eventually unblocks and sees the generation mismatch.
+        // Past the deadline the recorder resets so the user can try again. The hung Task cleans
+        // up its own engine when buildGraph eventually unblocks and sees the generation mismatch.
         let timeoutGen = generation
+        let deadline = startupHardDeadline
         let timeoutTask = Task { [weak self] in
-            guard let self else { return }
-            try? await Task.sleep(nanoseconds: 15_000_000_000)
-            guard case .starting(let g) = self.recorderState, g == timeoutGen else { return }
-            Logger.error("startRecording timed out after 15s (gen \(timeoutGen)) — forcing idle", subsystem: .audio)
-            self.currentGeneration += 1
-            self.recorderState = .idle
+            // NOT `try?` — that swallows the CancellationError from the `defer` below and runs
+            // the body immediately, which is what logged "timed out after 15s" 4.4s into a start.
+            do { try await Task.sleep(nanoseconds: UInt64(deadline * 1_000_000_000)) }
+            catch { return }
+            self?.abortWedgedStartup(generation: timeoutGen, after: deadline)
         }
         defer { timeoutTask.cancel() }
 
@@ -258,13 +297,38 @@ class AudioRecorder: NSObject {
             let elapsed = Int(Date().timeIntervalSince(recordingStartTime!) * 1000)
             Logger.error("All attempts failed: \(error.localizedDescription)", subsystem: .audio)
             StartupFailure(stage: "full_startup", route: .systemDefault, generation: generation, reason: .restartOnDefaultFailed, osStatus: nil, elapsedMs: elapsed).log()
-            recorderState = .idle
-            throw error
+            throw error  // the defer at the top resets recorderState and discards the session file
         }
     }
 
     private func isGenerationCurrent(_ generation: Int) -> Bool {
         return currentGeneration == generation
+    }
+
+    // MARK: - Startup bookkeeping
+
+    private func markStartupInFlight(generation: Int) {
+        startupLock.lock()
+        _startupInFlight = (generation: generation, since: Date())
+        startupLock.unlock()
+    }
+
+    private func clearStartupInFlight(generation: Int) {
+        startupLock.lock()
+        if _startupInFlight?.generation == generation { _startupInFlight = nil }
+        startupLock.unlock()
+    }
+
+    /// Abandon a start that never returned. Idempotent via the generation stamp — the suspended
+    /// start Task will find the generation moved on, throw `engineCleanedUp`, and its own defer
+    /// will find `recorderState` no longer `.starting(generation)` and leave this cleanup alone.
+    private func abortWedgedStartup(generation: Int, after seconds: TimeInterval) {
+        guard case .starting(let g) = recorderState, g == generation else { return }
+        Logger.error("startRecording wedged for \(Int(seconds))s (gen \(generation)) — abandoning", subsystem: .audio)
+        currentGeneration += 1
+        recorderState = .idle
+        clearStartupInFlight(generation: generation)
+        discardSessionAudio()
     }
 
     private func startRecordingInternal(route: ResolvedInputRoute, generation: Int) async throws -> URL {
@@ -319,12 +383,16 @@ class AudioRecorder: NSObject {
             )
         } catch {
             lastEngineStartError = error
-            closeSessionWriter()
+            discardSessionAudio()
             throw error
         }
 
+        // Every abort below discards the session file. The two generation checks used to skip
+        // it, so a start cancelled mid-flight left an open encoder and a fraction-of-a-second
+        // .opus in Sessions/ that no record pointed at, surviving until the retention sweep.
         guard isGenerationCurrent(generation) else {
             await engineLifecycle.stopEngine()
+            discardSessionAudio()
             throw RecordingError.engineCleanedUp
         }
 
@@ -333,12 +401,13 @@ class AudioRecorder: NSObject {
         } catch {
             lastEngineStartError = error
             await engineLifecycle.stopEngine()
-            closeSessionWriter()
+            discardSessionAudio()
             throw error
         }
 
         guard isGenerationCurrent(generation) else {
             await engineLifecycle.stopEngine()
+            discardSessionAudio()
             throw RecordingError.engineCleanedUp
         }
 
@@ -423,6 +492,17 @@ class AudioRecorder: NSObject {
         }
     }
 
+    /// Close the session writer and unlink the file. Used only on failed-start paths: a start
+    /// that never reached `.recording` produced at most a fraction of a second of Opus and no
+    /// record refers to it, so leaving it behind is a leak the retention sweep has to mop up.
+    private func discardSessionAudio() {
+        closeSessionWriter()
+        if let url = sessionAudioURL {
+            try? FileManager.default.removeItem(at: url)
+            sessionAudioURL = nil
+        }
+    }
+
     /// Drain queued encodes, then finalize the session file. No-op when disk write is disabled.
     private func closeSessionWriter() {
         guard sessionAudioWriter != nil else { return }
@@ -445,7 +525,16 @@ class AudioRecorder: NSObject {
         currentGeneration += 1
 
         guard isRecording else {
-            Logger.debug("stopRecording called but not recording", subsystem: .audio)
+            // The generation bump above just cancelled a start that had not reached .recording.
+            // That is correct for an explicit stop, and disastrous for a watchdog that fired
+            // only because CoreAudio was slow — which is why the startup watchdog waits on
+            // `startupInFlightSince` instead of on wall clock. Log it so the distinction is
+            // visible in the next stuck-state report rather than inferred from silence.
+            if case .starting(let g) = recorderState {
+                Logger.warning("stopRecording cancelled an in-flight start (gen \(g))", subsystem: .audio)
+            } else {
+                Logger.debug("stopRecording called but not recording", subsystem: .audio)
+            }
             return
         }
 

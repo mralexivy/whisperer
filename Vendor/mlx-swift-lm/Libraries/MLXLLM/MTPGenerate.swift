@@ -1,6 +1,6 @@
 // MTPGenerate.swift — MTP batched speculative decode for Qwen3.5 models.
 //
-// Algorithm (batched, greedy only):
+// Algorithm (batched, greedy — optionally with a repetition penalty):
 //   Prefill → firstToken (emit)
 //   Loop:
 //     A) backbone(y) or prefetch     → logitsA, hA  → verified
@@ -61,6 +61,8 @@ public struct MTPStats {
 ///   - promptTokens: Tokens to prefill.
 ///   - maxTokens: Hard limit on generated tokens.
 ///   - eosTokenIds: Set of token IDs that terminate generation.
+///   - repetitionPenalty: HF-style penalty on recently *generated* tokens. 1.0 disables it.
+///   - repetitionContextSize: How many recent generated tokens the penalty covers.
 ///   - onToken: Called synchronously for each emitted token. Return false to stop.
 /// - Returns: MTPStats for the generation call.
 @discardableResult
@@ -71,9 +73,38 @@ public func generateMTPTokens(
     promptTokens: [Int],
     maxTokens: Int,
     eosTokenIds: Set<Int>,
+    repetitionPenalty: Float = 1.0,
+    repetitionContextSize: Int = 64,
     onToken: (Int) -> Bool
 ) -> MTPStats {
     var stats = MTPStats()
+
+    // Greedy decoding cannot climb out of a loop on its own: the argmax that produced
+    // "to Michael to Michael to to to…" is the argmax the same state produces again. The
+    // penalty is the only thing here that breaks the cycle, so it is applied to *every*
+    // distribution this function takes an argmax of — including the MTP draft, which must
+    // see the same distribution as the verify step or accept/rollback stop agreeing.
+    //
+    // Generated tokens only, never the prompt: a summary is supposed to reuse the words of
+    // the transcript underneath it, and penalizing those would push the model off its source.
+    var repetition: RepetitionContext? =
+        (repetitionPenalty != 1.0 && repetitionContextSize > 0)
+        ? RepetitionContext(
+            repetitionPenalty: repetitionPenalty, repetitionContextSize: repetitionContextSize)
+        : nil
+
+    /// Penalized greedy pick from a 1-D `[vocabSize]` logits slice.
+    func pick(_ logits: MLXArray) -> Int {
+        guard let rep = repetition else { return logits.argMax().item(Int.self) }
+        return rep.process(logits: logits.expandedDimensions(axes: [0]))[0, 0...]
+            .argMax().item(Int.self)
+    }
+
+    /// Record an emitted token so the next `pick` sees it.
+    func remember(_ token: Int) {
+        repetition?.didSample(token: MLXArray(Int32(token)))
+    }
+
     let prefillStart = Date()
 
     // --- Prefill ---
@@ -85,7 +116,8 @@ public func generateMTPTokens(
     let generateStart = Date()
 
     // Extract first token from prefill.
-    var y = prefillLogits[0, -1, 0...].argMax().item(Int.self)
+    var y = pick(prefillLogits[0, -1, 0...])
+    remember(y)
     stats.tokenCount += 1
 
     if isEOS(y, eosTokenIds: eosTokenIds, tokenizer: tokenizer) || !onToken(y) {
@@ -121,7 +153,11 @@ public func generateMTPTokens(
             (logitsA, hA) = model.forwardWithHiddenState(yArr, cache: cache)
             eval(logitsA, hA)
         }
-        let verified = logitsA[0, -1, 0...].argMax().item(Int.self)
+        let verified = pick(logitsA[0, -1, 0...])
+        // Recorded before Step B and Step D so the draft and the verify that checks it are
+        // taken from the identical penalized distribution — otherwise every accept becomes
+        // a coin toss and the speculative path degrades to plain sequential decoding.
+        remember(verified)
 
         // Step B: MTP draft — predict what comes after verified.
         let embVerified = model.embedTokens(MLXArray([Int32(verified)]).reshaped(1, 1))
@@ -133,7 +169,7 @@ public func generateMTPTokens(
         var draft: Int? = nil
         if let dl = draftLogits {
             eval(dl)
-            draft = dl[0, -1, 0...].argMax().item(Int.self)
+            draft = pick(dl[0, -1, 0...])
         }
         stats.draftTime += -draftStart.timeIntervalSinceNow
 
@@ -170,7 +206,7 @@ public func generateMTPTokens(
             // logitsBatch: [1, 2, vocabSize]  hBatch: [1, 2, hiddenDim]
 
             // pos-0 result = what backbone(verified) would return = nextVerified.
-            nextVerified = logitsBatch[0, 0, 0...].argMax().item(Int.self)
+            nextVerified = pick(logitsBatch[0, 0, 0...])
 
             if d == nextVerified {
                 // ACCEPT: both positions are correctly committed to cache.
@@ -195,8 +231,9 @@ public func generateMTPTokens(
             let verifiedArr = MLXArray([Int32(verified)]).reshaped(1, 1)
             let (logitsD, _) = model.forwardWithHiddenState(verifiedArr, cache: cache)
             eval(logitsD)
-            nextVerified = logitsD[0, -1, 0...].argMax().item(Int.self)
+            nextVerified = pick(logitsD[0, -1, 0...])
         }
+        remember(nextVerified)
 
         // Step E: emit nextVerified — always, regardless of accept/rollback.
         stats.tokenCount += 1

@@ -227,3 +227,68 @@ A dictation currently costs **96 KB/s**, not 32 — the session CAF is transcode
 into a Float32 WAV and the source is then never deleted
 (`SessionStorage.deleteSessionFile` has zero call sites; `deleteOrphanedSessions`
 only reaps it on a launch 7+ days later).
+
+## Starting AVAudioEngine — the latency is unbounded (measured, Aug 2026)
+
+### `engine.inputNode` is a CoreAudio round trip, not a property read
+
+`AudioEngineLifecycle.buildGraph` reaches `let inputNode = engine.inputNode` to force AUHAL
+audio-unit creation. That accessor talks to `coreaudiod`, and it has **no upper bound**.
+
+Ten recording starts in one session's log, timed from "Session audio file opened" to
+"Input node obtained":
+
+| Starts | Elapsed |
+|---|---|
+| 9 of 10 | 30–250 ms |
+| 1 of 10 | **4396 ms** |
+
+The slow one was not a cold process: another gen-1 start in a fresh process the same afternoon
+took 132 ms. It was not slow aggregate-device publication either — the aggregate appeared at
++82 ms on the failing start versus +78 ms on a working one, so the stall is entirely *after*
+publication, inside AUHAL creation. What was different: the previous run had been `kill -9`'d
+with an aggregate device live, so `coreaudiod` was still cleaning up, and the device list held
+`iPhone Microphone` (Continuity) plus the `Microsoft Teams Audio` and `ZoomAudioDevice` virtual
+HAL plugins.
+
+There is nothing to await and nothing to poll — the call is synchronous inside the actor, so a
+caller can only decide how long it is willing to wait. Treat 4–5 s as a real value of "normal",
+not as evidence of a hang.
+
+### A wall-clock watchdog destroyed a start that was 400 ms from succeeding
+
+`AppState`'s state watchdog force-idled at a fixed 4.0 s. `forceIdleFromWatchdog()` is not
+passive: it calls `AudioRecorder.stopRecording()`, which bumps `currentGeneration` **before**
+its `isRecording` guard. So the in-flight `startRecordingInternal(generation: 1)` was invalidated
+while it was suspended in `configure()`; when the continuation finally resumed at 4.30 s the
+generation check failed, it threw `RecordingError.engineCleanedUp`, and a meeting that had
+successfully built its engine recorded nothing (`segments=0, transcript=0 chars`).
+
+The fix is not a longer constant. `AudioRecorder.startupInFlightSince` publishes whether a start
+is genuinely in flight (an `NSLock`-guarded tuple, since the watchdog reads it from the main
+queue), and `startStartupWatchdog()` waits on that observation rather than on the clock:
+
+| Condition | Deadline |
+|---|---|
+| No start ever observed in flight — the pre-audio setup is what is wedged | 4 s |
+| A start observed in flight | 25 s (`AppState.startupHardCeiling`) |
+| Inside `AudioRecorder` itself | 20 s (`startupHardDeadline`) |
+
+The in-flight flag must be **sticky in the watchdog closure**, not sampled per tick. The recorder
+clears its marker in a `defer` and `cancelStateWatchdog()` runs one main-actor hop later, so a
+1 Hz tick landing in that window sees "no start in flight", applies the 4 s deadline, and
+force-idles a start that had just *succeeded* after 5 s.
+
+### `try? await Task.sleep` swallows its own cancellation
+
+The recorder's startup timeout was `try? await Task.sleep(...)` followed by the abort. `defer {
+timeoutTask.cancel() }` makes the sleep throw `CancellationError`, `try?` turns that into `nil`,
+and execution **falls through to the body** — so every failed start immediately logged
+`startRecording timed out after 15s`, 4.4 s in. Use `do { try await Task.sleep(...) } catch {
+return }` for any sleep whose only job is to expire.
+
+That bug was load-bearing: attempt 1 of 3 threw `engineCleanedUp` while leaving
+`recorderState == .starting`, and nothing else reset it. The only thing that ever un-wedged the
+recorder was the bogus immediate timeout. Fixing the `try?` alone would have made the wedge
+permanent — the generation-stamped cleanup `defer` at the top of `startRecording` had to land in
+the same change.

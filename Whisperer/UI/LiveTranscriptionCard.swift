@@ -190,7 +190,12 @@ struct LiveTranscriptionCard: View {
                     )
                     .frame(height: 0.5)
 
-                // Text area — NSTextField for guaranteed RTL paragraph direction
+                // Text area. Two renderers, one for each writing direction:
+                //   LTR — DictationStreamView, one view per word so each can pour in behind a
+                //         caret that glides to meet it.
+                //   RTL — TranscriptionTextView (NSTextField), the only thing that can set
+                //         paragraph base writing direction, and the direction whose reveal
+                //         animation is deliberately skipped anyway (see ARCHITECTURE.md).
                 let cardHeight: CGFloat = isExpanded
                     ? min(max(contentHeight, minimizedHeight * scale), maxExpandedHeight * scale)
                     : minimizedHeight * scale
@@ -198,7 +203,17 @@ struct LiveTranscriptionCard: View {
                 let trackHeight: CGFloat = cardHeight - trackInset * 2
                 ScrollViewReader { proxy in
                     ScrollView(.vertical, showsIndicators: false) {
-                        TranscriptionTextView(text: displayText, isRTL: isTextRTL, scale: scale)
+                        Group {
+                            if isTextRTL {
+                                TranscriptionTextView(text: rtlDisplayText, isRTL: true, scale: scale)
+                            } else {
+                                DictationStreamView(
+                                    words: textUpdater.words,
+                                    isStreaming: textUpdater.isActive,
+                                    scale: scale
+                                )
+                            }
+                        }
                             .padding(.horizontal, 20 * scale)
                             .padding(.vertical, 14 * scale)
                             .background(
@@ -254,11 +269,7 @@ struct LiveTranscriptionCard: View {
                 isPulsing = true
             }
 
-            // Start cursor blinking (invalidate any existing timer first)
-            cursorTimer?.invalidate()
-            cursorTimer = Timer.scheduledTimer(withTimeInterval: 0.53, repeats: true) { _ in
-                showCursor.toggle()
-            }
+            syncCursorTimer()
 
             // Initialize with current text
             textUpdater.setTarget(appState.liveTranscription, rtl: isTextRTL)
@@ -275,6 +286,7 @@ struct LiveTranscriptionCard: View {
                 isTextRTL = Self.detectRTL(in: newText)
             }
             textUpdater.setTarget(newText, rtl: isTextRTL)
+            syncCursorTimer()
         }
         .onChange(of: contentHeight) { _ in
             if isExpanded {
@@ -340,6 +352,21 @@ struct LiveTranscriptionCard: View {
         }
     }
 
+    /// The blinking caret belongs to the RTL renderer only. Running its timer in LTR would
+    /// re-evaluate the card body — and re-measure every word in `DictationFlowLayout` — twice a
+    /// second to flip a flag nothing on that path reads.
+    private func syncCursorTimer() {
+        if isTextRTL {
+            guard cursorTimer == nil else { return }
+            cursorTimer = Timer.scheduledTimer(withTimeInterval: 0.53, repeats: true) { _ in
+                showCursor.toggle()
+            }
+        } else {
+            cursorTimer?.invalidate()
+            cursorTimer = nil
+        }
+    }
+
     private func flashScrollIndicator() {
         withAnimation(.easeIn(duration: 0.15)) {
             scrollIndicatorOpacity = 1.0
@@ -352,10 +379,13 @@ struct LiveTranscriptionCard: View {
         }
     }
 
-    /// Plain string display
-    private var displayText: String {
+    /// RTL path only. The blinking `" |"` is an ASCII stand-in for a caret: it re-renders the
+    /// whole `NSTextField` twice a second and can wrap onto its own line. The LTR path has a real
+    /// one (`KineticCaret`) that costs no relayout, so this stays confined to the direction that
+    /// cannot have it.
+    private var rtlDisplayText: String {
         let text = textUpdater.displayedText
-        if text.isEmpty { return "Listening..." }
+        if text.isEmpty { return "Listening…" }
         let cursor = showCursor && !textUpdater.isActive ? " |" : ""
         return text + cursor
     }
@@ -437,12 +467,24 @@ struct TranscriptionTextView: NSViewRepresentable {
 
 // MARK: - Smooth Text Updater
 
-/// Word-by-word dictation animation. Whisper returns chunks of 3-7 words
-/// every 1-1.5s. Instead of showing all words at once, this queues them and
-/// reveals one word at a time at 60ms intervals — creating the effect of
-/// words being typed as you speak.
+/// Re-times batched ASR output into a word-at-a-time stream.
+///
+/// **The batch is an artefact of the encoder, not of the speech.** Nemotron emits a partial every
+/// `NemotronBridge.chunkMs` (1120ms) and whisper.cpp finalizes a VAD chunk every 1–2s, so text
+/// arrives as 3–7 words at once — but those words were *spoken* spread across that same period.
+/// Printing them together and then going quiet is the block-delivery artefact: the UI alternates
+/// between a dump and dead air, and neither moment resembles dictation.
+///
+/// So the queue is drained at the rate the words were produced: the backlog is spread across the
+/// measured interval between arrivals, so a word surfaces roughly when it was said. The result is
+/// continuous — something is always moving, and the next batch lands just as the last one finishes.
 class SmoothTextUpdater: ObservableObject {
     @Published var displayedText: String = ""
+
+    /// The same content as `displayedText`, already split — `DictationStreamView` renders one view
+    /// per element so each word can arrive with its own fade+slide. Kept in lockstep rather than
+    /// derived in the view: splitting a growing string on every published change is O(n) per word.
+    @Published private(set) var words: [String] = []
 
     /// True when words are being animated or text was recently updated
     @Published var isActive: Bool = false
@@ -452,8 +494,27 @@ class SmoothTextUpdater: ObservableObject {
     private var pendingWords: [String] = []
     private var animationTimer: Timer?
     private var idleTimer: Timer?
-    private let wordInterval: TimeInterval = 0.06  // 60ms per word
     private var isRTL: Bool = false
+
+    // MARK: Pacing
+
+    /// Seeded to Nemotron's partial cadence and re-estimated from real arrivals, so the same code
+    /// paces whisper.cpp's VAD chunks (irregular, typically 1–2s) and the 500ms preview pass.
+    private var arrivalPeriod: TimeInterval = 1.12
+    private var lastArrivalAt: Date?
+    /// Interval for the batch currently draining. Held for the whole batch rather than recomputed
+    /// per word: recomputing makes the interval grow as the queue shrinks, so a phrase would
+    /// visibly decelerate into its own tail and overrun the next arrival.
+    private var currentWordInterval: TimeInterval = 0.18
+
+    /// Fraction of the arrival period a batch is given to pour. Under 1.0 so jitter can never
+    /// accumulate backlog — each batch finishes a little before the next is due.
+    private let pourDutyCycle: Double = 0.8
+    /// Floor. Below this the reveal stops reading as words arriving and starts reading as a flush.
+    private let minWordInterval: TimeInterval = 0.035
+    /// Ceiling, ≈175 wpm. A lone word must not hang around for most of a second waiting out a
+    /// period it does not need.
+    private let maxWordInterval: TimeInterval = 0.34
 
     func setTarget(_ text: String, rtl: Bool = false) {
         let newText = text.trimmingCharacters(in: .whitespaces)
@@ -467,8 +528,11 @@ class SmoothTextUpdater: ObservableObject {
             idleTimer = nil
             pendingWords.removeAll()
             displayedText = ""
+            words = []
             committedText = ""
             isActive = false
+            arrivalPeriod = 1.12
+            lastArrivalAt = nil
             return
         }
 
@@ -497,49 +561,89 @@ class SmoothTextUpdater: ObservableObject {
             animationTimer = nil
             pendingWords.removeAll()
             displayedText = committedText
+            words = committedText.split(whereSeparator: { $0.isWhitespace }).map(String.init)
             return
         }
 
+        noteArrival()
         pendingWords.append(contentsOf: appendedWords)
+        repaceCurrentBatch()
         startAnimation()
     }
 
+    // MARK: - Pacing
+
+    /// Exponential moving average of the gap between arrivals. Bounded because the first partial
+    /// of a recording follows model warm-up rather than a chunk boundary, and a long silence is a
+    /// pause in speech, not evidence that the encoder slowed down.
+    private func noteArrival() {
+        let now = Date()
+        defer { lastArrivalAt = now }
+        guard let last = lastArrivalAt else { return }
+        let delta = now.timeIntervalSince(last)
+        guard delta > 0.2, delta < 2.5 else { return }
+        arrivalPeriod = arrivalPeriod * 0.6 + delta * 0.4
+    }
+
+    private func repaceCurrentBatch() {
+        let count = max(1, pendingWords.count)
+        let spread = (arrivalPeriod * pourDutyCycle) / Double(count)
+        currentWordInterval = min(maxWordInterval, max(minWordInterval, spread))
+    }
+
     private func startAnimation() {
-        // If timer is already running, new words are in the queue — it'll pick them up
+        // Already draining — the running timer picks up whatever was just appended, at the
+        // interval `repaceCurrentBatch()` just recomputed for the combined queue.
         guard animationTimer == nil else { return }
 
-        // Show first word immediately for responsiveness
+        // First word of a batch lands immediately. Everything after it is paced; this one is
+        // the app answering, and the answer should not wait on a schedule.
         showNextWord()
-        guard !pendingWords.isEmpty else { return }
+        scheduleNextWord()
+    }
 
-        animationTimer = Timer.scheduledTimer(withTimeInterval: wordInterval, repeats: true) { [weak self] timer in
-            guard let self = self else { timer.invalidate(); return }
-
-            self.showNextWord()
-
-            if self.pendingWords.isEmpty {
-                timer.invalidate()
-                self.animationTimer = nil
-            }
+    /// One-shot and self-rescheduling rather than a repeating timer, so a mid-batch arrival can
+    /// change the cadence at the next word instead of at the next batch.
+    private func scheduleNextWord() {
+        guard !pendingWords.isEmpty else {
+            animationTimer = nil
+            return
         }
+        let timer = Timer(timeInterval: currentWordInterval, repeats: false) { [weak self] _ in
+            guard let self = self else { return }
+            self.showNextWord()
+            self.scheduleNextWord()
+        }
+        // `.common`, so the pour keeps its rhythm while the overlay panel animates its frame —
+        // in `.default` the run loop switches modes and the stream visibly stalls mid-phrase.
+        RunLoop.main.add(timer, forMode: .common)
+        animationTimer = timer
     }
 
     private func showNextWord() {
         guard !pendingWords.isEmpty else { return }
         let word = pendingWords.removeFirst()
+        words.append(word)
         if displayedText.isEmpty {
             displayedText = word
         } else {
             displayedText += " " + word
         }
+        // Re-armed per word, not per arrival: the pour trails the batch that produced it, and
+        // the tail should settle to ink relative to the last word the user actually saw.
+        markActive()
     }
 
     private func markActive() {
-        isActive = true
+        // Guarded: this runs on every poured word, and an unconditional write would publish a
+        // change — re-evaluating the card body — for a value that is already true.
+        if !isActive { isActive = true }
         idleTimer?.invalidate()
-        idleTimer = Timer.scheduledTimer(withTimeInterval: 1.5, repeats: false) { [weak self] _ in
+        let timer = Timer(timeInterval: 1.5, repeats: false) { [weak self] _ in
             self?.isActive = false
         }
+        RunLoop.main.add(timer, forMode: .common)
+        idleTimer = timer
     }
 
     func stop() {
@@ -549,6 +653,7 @@ class SmoothTextUpdater: ObservableObject {
         idleTimer = nil
         pendingWords.removeAll()
         committedText = ""
+        lastArrivalAt = nil
     }
 }
 

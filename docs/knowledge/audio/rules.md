@@ -57,3 +57,31 @@
     new filename → *then* delete. If the save fails, delete the **new** file and keep the old
     one. Any other order can leave a library row with a dead play button, which is worse than
     the bytes it saved.
+
+12. **A watchdog whose remedy is destructive must wait on observed progress, not on wall clock.**
+    `forceIdleFromWatchdog()` calls `stopRecording()`, which bumps the recorder generation and
+    invalidates the very start it was supervising — so a 4 s deadline against a CoreAudio call
+    with no bounded latency does not *report* a failure, it *causes* one. Publish a progress
+    signal from the owner (`AudioRecorder.startupInFlightSince`) and hold off while it says work
+    is in flight. Sample that signal **stickily**: the owner clears it in a `defer`, one hop
+    before the watchdog is cancelled, and a tick in that window would punish a start that just
+    succeeded.
+
+13. **The owner's deadline must fire before the supervisor's ceiling.**
+    `AudioRecorder.startupHardDeadline` (20 s) sits below `AppState.startupHardCeiling` (25 s) so
+    a wedged start surfaces as a thrown error on the normal catch path — which resets state,
+    discards the session file and tears down meeting mode — instead of as a force-idle from
+    outside, which does none of that. Two timeouts on one operation is fine; two timeouts with
+    no ordering between them is the bug.
+
+14. **Every exit from a start path must reset the recorder.** Attempts 1 and 2 threw
+    `engineCleanedUp` leaving `recorderState == .starting`, and nothing else cleared it. Use a
+    generation-stamped `defer` (`if case .starting(let g) = recorderState, g == generation`) so
+    the reset cannot clobber a start that began after yours. And discard the session audio on
+    *every* abort — a cancelled start otherwise leaves an open encoder and a fraction-of-a-second
+    `.opus` in `Sessions/` that no record points at.
+
+15. **`try? await Task.sleep` is wrong for any timer that will be cancelled.** `try?` swallows the
+    `CancellationError` and runs the body immediately, so a cancelled timeout fires instead of
+    disappearing — which is how a 15 s timeout logged itself 4.4 s in. Write
+    `do { try await Task.sleep(...) } catch { return }`.

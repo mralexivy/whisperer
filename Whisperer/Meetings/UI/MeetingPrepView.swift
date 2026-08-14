@@ -221,7 +221,7 @@ struct MeetingPrepView: View {
                     .foregroundColor(.white.opacity(0.6))
             }
 
-        case .needsDownload, .unavailable:
+        case .needsDownload, .needsWarmup, .unavailable:
             Circle()
                 .fill(Color.white.opacity(0.35))
                 .frame(width: 8, height: 8)
@@ -307,9 +307,13 @@ struct MeetingPrepView: View {
     // MARK: - Footer
 
     private var footer: some View {
+        // `.needsWarmup` is on disk already — it owes a first-run compile, not a download,
+        // so counting its bytes here would promise a download that will never happen.
         let pendingBytes = MeetingEngine.allCases.reduce(0.0) { acc, engine in
-            if case .ready = engines.readiness[engine] ?? .needsDownload("") { return acc }
-            return acc + engine.downloadBytes
+            switch engines.readiness[engine] ?? .needsDownload("") {
+            case .ready, .needsWarmup, .preparing: return acc
+            default: return acc + engine.downloadBytes
+            }
         }
 
         let sizeLabel: String

@@ -460,6 +460,21 @@ enum StuckStateDumper {
     }
 
     private static func renderThreadSample() -> String {
+        // Checked before the DEBUG branch: the in-process unwind needs no entitlement and no
+        // subprocess, so unlike `sample` it works in the sandboxed build — which is the build
+        // every user-reported stall comes from.
+        if let report = MainThreadBacktrace.latestReport() {
+            let age = Int(Date().timeIntervalSince(report.capturedAt))
+            var out = "\n## Thread Sample\n\n"
+            out += "_main thread, captured \(age)s ago while wedged: \(report.reason)_\n\n"
+            if let failure = report.failure {
+                out += "_capture failed: \(failure)_\n"
+            } else {
+                out += "```\n" + report.frames.joined(separator: "\n") + "\n```\n"
+            }
+            return out
+        }
+
         #if DEBUG
         let pid = ProcessInfo.processInfo.processIdentifier
         let sampleURL = URL(fileURLWithPath: "/tmp/whisperer-stall-sample.txt")

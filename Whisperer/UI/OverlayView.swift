@@ -331,8 +331,9 @@ private struct MeetingFallbackBar: View {
 
             // Open window button
             Button {
-                HistoryWindowManager.shared.showWindow()
-                NotificationCenter.default.post(name: .switchToMeetingStudioTab, object: nil)
+                // Recovery path: the user closed the floating window mid-meeting, which
+                // un-suppressed this HUD. Bring the same session's window back.
+                MeetingLiveWindowManager.shared.show(session: appState.activeMeetingSession)
             } label: {
                 Image(systemName: "rectangle.on.rectangle")
                     .font(.system(size: 13 * scale, weight: .medium))

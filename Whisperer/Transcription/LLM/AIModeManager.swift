@@ -25,8 +25,12 @@ class AIModeManager: ObservableObject {
     private let promptVersionKey = "aiModesPromptVersion"
 
     /// Increment this when built-in prompts change to push updates to existing users.
-    /// Only updates prompts that haven't been customized by the user.
-    private static let currentPromptVersion = 7
+    /// Without a bump the persisted `aiModes` blob wins and the new prompt never ships.
+    /// Overwrites every mode whose `isBuiltIn` is true — including one the user edited
+    /// in place. Only a duplicate (`duplicateMode`, `isBuiltIn == false`) survives a bump.
+    ///
+    /// 8: Correct mode re-optimized for Qwen3.5-4B MTP (W_BEAF). See AIMode.swift.
+    private static let currentPromptVersion = 8
 
     var activeMode: AIMode {
         modes.first { $0.id == activeModeId } ?? AIMode.defaultMode()

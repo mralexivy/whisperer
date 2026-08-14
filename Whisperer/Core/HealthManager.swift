@@ -371,6 +371,9 @@ final class HealthManager {
             mainThreadLock.unlock()
             DispatchQueue.main.async { [weak self] in
                 guard let self else { return }
+                // Piggy-backs on the liveness ping: this is a block that is, by construction,
+                // running on the main thread, which is the only place its mach port can be read.
+                MainThreadBacktrace.registerMainThread()
                 self.mainThreadLock.lock()
                 self.lastMainThreadResponse = .now
                 self.mainThreadPendingSince = nil
@@ -399,6 +402,11 @@ final class HealthManager {
                 mainThreadAlertFired = true
                 mainThreadLock.unlock()
                 let elapsedStr = String(format: "%.1f", elapsedSeconds(elapsed))
+                // Captured here, not in triggerDump: the dump hops to @MainActor, so by the time
+                // it runs the hang is over and the stack that caused it is gone. This poll runs
+                // on `monitorQueue` while the main thread is still wedged — the only moment the
+                // blocking frame can be read.
+                MainThreadBacktrace.capture(reason: "Main thread unresponsive for \(elapsedStr)s")
                 Logger.error("Main thread unresponsive for \(elapsedStr)s — possible AppKit/AX hang", subsystem: .app)
                 EventRingBuffer.shared.record(
                     component: "MainThread",

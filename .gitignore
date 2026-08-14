@@ -52,3 +52,9 @@ fastlane/Preview.html
 fastlane/screenshots/**/*.png
 fastlane/test_output
 reference/
+
+# CodeGraph index (generated, ~70MB)
+.codegraph/
+
+# Experiment result dumps written to the repo root by ChunkSizeExperimentTests
+/*.txt

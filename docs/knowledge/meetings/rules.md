@@ -111,16 +111,21 @@
     arrival gap means "the speaker took a breath and the timeline committed" — the idle timer
     there split a 48s continuous recording into seven 2–9s cards whose timestamps were
     perfectly contiguous, the tell that no real silence existed anywhere in it.
+    Per-backend gating is necessary but **not sufficient**: the gap rule is arrival-derived on
+    both paths, so it must also clear the text test in Rule 36.
 
 18. **Contiguous card timestamps are the signature of a non-audio-clock split.** If card N ends
     exactly where card N+1 begins, the boundary came from arrival timing or from
-    `flushCurrentSegment` setting `currentSegmentStartTimestamp = end` — not from silence. A
-    genuine pause leaves a visible gap on the audio clock.
+    `commitSegment` starting the next card at the close timestamp (`end`, or the interpolated
+    `cut` when a remainder carries forward) — not from silence. A genuine pause leaves a
+    visible gap on the audio clock.
 
 19. **Leaving a segment open is cheap; splitting it wrongly is not.** The live bubble renders
     `currentSegmentText` and every `accumulate` writes to `MeetingPendingStore`, so an open card
     is neither invisible nor at risk from a crash. There is no need for a timer whose only job
     is to close it — the 30s cap already bounds both card length and persistence latency.
+    This is what makes Rule 36's "decline the break" branch safe: a soft break that cannot find
+    an honest cut costs nothing by doing nothing.
 
 20. **An admission-control gate must be waited on *before* the exclusive slot is taken, never
     while holding it.** `ModelWorkQueue.run()` did `acquireSlot()` then `while meetingActive { await }`.
@@ -203,3 +208,283 @@
     download size (a 4-step bar sits at 50% for twenty minutes and then jumps), and include the warm
     pass in it — the one-time ANE/MLX compile is the whole reason the later per-pass loads are cheap,
     so it belongs in the preparation the user is watching, not in the first pass they are waiting on.
+
+33. **Readiness means "usable now", never "the file exists".** A model whose first load costs a
+    one-time compile (Core ML / ANE, MLX graph) is not ready when it is downloaded — it is ready when
+    that compile has been paid. Deriving `.ready` from `isModelDownloaded` made `prefetch()` skip the
+    warm pass from the second launch onward and moved a 37s ANE compile onto the end of every meeting
+    (`meeting-refine-load ran=39903ms` against `meeting-refine ran=1341ms`). The compiled artifact is
+    in an OS cache we cannot query, so persist a marker of our own, key it to the model filename, and
+    write it **only** on a successful warm.
+
+34. **A new lifecycle state gets a new case — check what the existing ones already mean.**
+    `.preparing` is skipped by `prefetch()`; `.needsDownload` drives both a "download it" message and
+    the remaining-bytes footer. Reusing either for "on disk, not yet warm" starves the engine or lies
+    to the user. Add the case and then read every exhaustive switch over the enum — the compiler finds
+    the `switch`es, not the `if case` / `?? .needsDownload("")` defaults.
+
+35. **A refcounted resource used by two calls in sequence needs an outer borrow.** Each
+    `MeetingAIService` call borrows and releases on its own, and a release to zero arms a 60s idle
+    unload — so the model can unload *between* title and overview. Hold one borrow across the whole
+    sequence. Take it after any stage that gates on free memory (the refine pass loads its own
+    multi-GB model), not before.
+
+36. **A break derived from arrival timing is a hypothesis; validate it against the text before
+    applying it.** A hole in Sortformer's finalized timeline is indistinguishable from silence on
+    the audio clock — `MeetingSpeakerCoordinator.voicedRuns` reports it verbatim and `emit()`
+    apportions the item's words across the runs proportionally, so the "gap" can land mid-word.
+    That is how a single sentence became a `0:31 → 0:33` seven-word orphan card plus a
+    continuation. The sentence boundary is the only signal that survives both backends:
+    `closeSegment(endTimestamp:policy:)` makes a soft break (gap rule, idle timer) prove itself
+    against `splitAtLastSentenceEnd` plus size floors (5s / 12 words), carry the trailing
+    incomplete sentence forward as the new open card, and **decline** when no honest cut exists.
+    Only the 30s cap is unconditional; a speaker change, the stop and the tail drain commit
+    as-is because there is nowhere to carry to. Corollary for the search itself: a terminator
+    counts only when followed by whitespace or end-of-string, or the `.` in "3.5 million" is a
+    sentence end.
+
+37. **A snapshot taken before an async pipeline has drained is not the transcript.** The
+    backend's tail chunk arrives *after* `stopRecording()` returns, so `MeetingSession`'s AI Task
+    computes everything — segments, transcript, `shouldRun`, the empty-transcript guard — only
+    after `awaitTailDelivery()`. Defending inside one consumer is not enough:
+    `MeetingTranscriptRefiner` re-read CoreData and compared counts, but the comparison **ties**
+    when the read beats the tail's append, and the `polish disabled` / `model missing` paths skip
+    the re-read entirely, so title and overview summarized a transcript missing its last card.
+    Wait once, at the top, where every path sees it. Correspondingly, serialize the appends
+    (`pendingPersistence`) — two unstructured `Task`s from consecutive flushes have no order
+    between them (Rule 21), and a pass that rewrites the whole `segmentsJSON` blob needs one
+    handle to wait on.
+
+38. **A device-level "is it running" bit is a trigger; only a process-level read is attribution.**
+    `kAudioDevicePropertyDeviceIsRunningSomewhere` says "some input is hot" and nothing more, so
+    `MeetingDetector` had to *guess* the provider from what happened to be running — structurally
+    impossible for a browser meeting or a Slack huddle, and unable to tell a real call from Cisco
+    Proximity's room-pairing agent cycling the mic all day (30 spurious debounce cycles in one
+    3-hour log). Enumerate `kAudioHardwarePropertyProcessObjectList` and read
+    `kAudioProcessPropertyIsRunningInput` per process. It is read-only public API — no TCC grant,
+    unlike process taps — which is what makes it the only attribution path that can exist in the
+    sandboxed build. Then: resolve helper processes to the owning app through a parent-pid walk
+    (capture is reported against `com.google.Chrome.helper`, not Chrome); keep an ignore list for
+    agents that hold the mic without a meeting, including Whisperer itself; gate an app that is
+    always running (Slack) on capture *only*, never on presence; and require a sustained unbroken
+    capture run for a browser, or a two-second voice search prompts.
+
+39. **Verify a build's sandbox from the signed artifact, never from the entitlements filename.**
+    `ENABLE_APP_SANDBOX = YES` injects `com.apple.security.app-sandbox` regardless of what the
+    `.entitlements` file you named contains, so Debug shipped `whisperer-nosandbox.entitlements` and
+    ran sandboxed anyway — silently killing AX browser detection for every developer build. Check
+    with `codesign -d --entitlements -`, or read the log path (`~/Library/Containers/…` is the tell).
+    Corollary: **warn on every failure mode of a permission-gated read, not the ones you predicted.**
+    `allWindowTitles` warned on `.apiDisabled`/`.notImplemented` and stayed silent on the
+    `.cannotComplete` a sandbox actually returns — the one case that was happening.
+
+40. **Never name a plausible cause in a log line; print the observed evidence.**
+    `"resolve returned nil (score below threshold)"` was emitted on a path where the scorer was
+    never called, and it cost real diagnosis time before the absence of any `score X < 0.45` line
+    proved it false. A message that asserts a mechanism it did not verify is worse than no message.
+    Print what was seen — which apps were capturing, the hardware state, whether AX was reachable —
+    and let the reader conclude.
+
+41. **Two firing paths must share one gate, or the backup path becomes the bug.** `MeetingDetector`
+    fires through `resolve()` → `score()` (evidence object, 0.45 threshold) *and* through
+    `fallbackPoll()` → `fireDirect()` (no evidence, no threshold). The scorer correctly rejected a
+    browser-title-only candidate at 0.30; the poll fired it anyway, so the path meant to *back up*
+    the resolver was strictly more trigger-happy than it. Any bypass of a scorer must re-implement
+    the scorer's gates at the bypass site — or, better, push the gate down into the shared
+    predicate both paths call (`detectBrowserMeeting` now requires the browser to be in
+    `capturingApps`, so neither caller can skip it).
+
+42. **A window title identifies the service; it does not establish that anything is happening.**
+    `"Google Meet"` is precisely the title of `meet.google.com/home` — the state that proves there
+    is *no* call — while a real call is `Meet – abc-defg-hij`, containing neither the product name
+    nor the URL (a title is the page title; it never carries the URL, so `zoom.us/j/` matches
+    nothing either). Matching the bare product name inverts the detector: it fires on the landing
+    page and stays silent during the meeting. Pair every title match with an observed hardware
+    fact — for a browser, that it is capturing audio — and exclude exact landing-page titles.
+    When a service's in-call title cannot be verified, do not guess it: fall through to the generic
+    sustained-capture path and say "Meeting in <browser>".
+
+43. **A dismissal is user intent and outlives hardware state; a cooldown wipe is not a reset.**
+    `hardwareWentIdle()` called `lastFiredDate.removeAll()` when clearing suppression, on the
+    reasonable theory that a finished call should let the next one prompt. The effect was that any
+    unrelated camera blip erased the 30-minute refire guard, and the dismissed toast returned ~40
+    seconds later, forever. Clear the ledger for providers the user never answered; keep the full
+    cooldown for names in `dismissedNames`, and expire that set together with the cooldown it is
+    pinned to so a dismissal does not become permanent either.
+
+44. **A suppressed detector is deaf, so a false positive costs you the true one.** The same log
+    shows the prompt firing with zero hardware evidence, the user dismissing it, and then the
+    genuine `camera active=true` eight seconds later being dropped because `isReadyToTrigger()`
+    returns false in `.suppressedUntilHardwareIdle`. "It fires when it shouldn't" and "it does
+    nothing when it should" were one defect reported from two sides — chase the false positive
+    first, and re-test the negative afterwards rather than treating it as a separate bug.
+
+45. **The overview is built from the transcription, not from who said it.** `generateOverview`
+    fed the model `timestampedTranscript` — `[0s] Speaker 1: …` on every line — and got summaries
+    organized around speakers rather than content. A meeting overview answers "what was this
+    about"; attribution is Ask AI's job, and `parseCitations` still needs the `[Ns]` markers, so
+    the split is `narrativeTranscript` (markers, no names) for the overview and
+    `timestampedTranscript` (markers + names) for Ask AI. A note under 60 words gets
+    `plainTranscript` — `notePrompt` has no seconds field to cite into, so the markers are pure
+    noise in the prompt. Secondary effect worth keeping in mind: an identical `Speaker N:` prefix
+    repeated on every line is the strongest repetition in the whole prompt, and the MTP decode
+    path is greedy with no repetition penalty (see `docs/knowledge/llm/`), so it is exactly the
+    token pattern a degenerate loop copies.
+
+46. **A meeting records silently on both edges, independent of the Sound Effects picker.** The
+    feature's entire value is that starting one costs nothing socially: a Tink mid-call announces
+    to the room that you are recording, and the Pop at the end announces it to everyone still on
+    the line. The picker (`SoundOption`, default Tink/Pop) governs *dictation* — "Default" there
+    must not put a sound into a meeting, so the suppression cannot live in `SoundPlayer` or in a
+    new setting. It lives in `AppState.suppressesFeedbackSound` (`isMeetingMode`), read at the two
+    reachable sites: the start sound in `startInAppRecording()` and the stop sound in
+    `stopInAppRecording()`. `stopRecording()`'s sound is already unreachable — that function
+    returns early on `isMeetingMode` — and `startRecording()`'s is behind a `state == .idle`
+    guard. `cancelRecording()` never had one. Nothing visual changes: the Studio window still
+    opens and the transcript still fills in live. "Silent" means inaudible, not invisible.
+
+47. **The stop-sound decision must be captured before the first `await`, not read at the call
+    site.** The stop sound fires inside `stopInAppRecording()`'s Task, several awaits deep, and
+    `activeMeetingSession` is nilled *in that same Task* so the tail chunk can still route to the
+    session. Reading `isMeetingMode` at the sound site is therefore a race with teardown. Capture
+    `wasSilentRecording = wasMeetingStop || suppressesFeedbackSound` synchronously alongside
+    `wasMeetingStop`. Keep it a separate constant: `wasMeetingStop` also gates unmuting, the
+    history save, nilling the session, and lowering the `ModelWorkQueue` meeting gate, so widening
+    *it* would change four unrelated behaviours.
+
+48. **Any path that ends a recording must route through `MeetingSession.stopRecording()`, never
+    `AppState.stopInAppRecording()` directly.** The menu bar Status tab renders its in-app
+    recording card on `isInAppMode && state.isRecording`, both true throughout a meeting, and its
+    Stop button called `stopInAppRecording()` — so stopping a meeting from the menu bar ended it
+    as a dictation: Pop sound, unmute of audio that was never muted, the meeting saved into
+    transcription history, and the `MeetingEntity` never finalized (no title, no overview, no
+    polish, audio stranded in `Sessions/`). Fixing this at the call site would only hold until the
+    next Stop button; the guard belongs at the top of `stopInAppRecording()`, mirroring the one
+    `stopRecording()` already has, with `isMeetingStopInFlight` distinguishing the legitimate
+    re-entry from `stopMeetingRecording()`. General shape: when two entry points must converge on
+    one teardown, enforce it in the function they both reach, not in each caller.
+
+49. **A meeting drives `AppState`'s recording state, so every UI that reads that state renders the
+    meeting unless told otherwise.** The menu bar Status tab's "Transcribe" card branches on
+    `isInAppMode && state.isRecording` — both true for the whole meeting — so it showed the
+    meeting's waveform, its live transcript, and a Stop button for it, in a window the user never
+    associated with meetings. Reusing the in-app dictation path is what makes meetings cheap to
+    build, and this is its standing cost: when adding a surface that reads `state`,
+    `isInAppMode`, `liveTranscription` or `waveformState`, decide explicitly what it does during a
+    meeting. Here the answer is nothing — the card is gated on `!isMeetingMode`, not given a
+    meeting-flavoured variant, because a badge in the menu bar is exactly the indication silent
+    recording exists to avoid. `lastInAppTranscription` was already safe: it is assigned under
+    `!wasMeetingStop`, so the finished transcript never appears there either.
+
+50. **A "don't fire twice" guard must be scoped to the event, not to the clock.** Meeting detection
+    prompted for the first Google Meet of a session and never again — for any provider. The refire
+    guard was a 30-minute wall-clock window keyed by display name, and only the *dismissal* path
+    cleared it; accepting the toast, or letting it auto-dismiss, left the entry in place, and the
+    entry is checked before any scoring or logging so the drop was completely silent. A wall-clock
+    window can only ever be wrong in both directions: too short and one call prompts twice, too long
+    and back-to-back meetings are lost. Ask instead whether the *event* the guard is scoped to has an
+    observable end. Here it did — the provider stops holding the microphone, and `AudioProcessMonitor`
+    already tracked unbroken capture runs — so `MeetingPromptLedger` releases on that, and the clock
+    survives only as a ceiling for providers whose end genuinely cannot be seen (`.unobserved`:
+    matched by virtual audio device or by being frontmost). Corollary: if the guard has a state that
+    only one code path clears, enumerate every path that ends the guarded event before shipping it.
+
+51. **A coarse signal is not evidence that the fine-grained event happened.** Hardware idle (no
+    camera, nobody on the mic) reads *identically* to muting yourself with the camera off, so
+    releasing the prompt guard on it re-toasts the meeting already in progress. Release on the
+    signal that actually distinguishes the two — the provider's own capture run ending, plus a grace
+    period (20s; 120s once dismissed, since a one-minute mute in a long call is ordinary). Reserve
+    the coarse signal for the entries the fine-grained one can say nothing about.
+
+52. **Bookkeeping runs before the gate; only the action runs after it.** `fallbackPoll()` returned
+    early on `!isReadyToTrigger()`, which is false for the whole time a toast is up, a meeting is
+    recording, or a dismissal is in force — so capture-run tracking went stale exactly during a
+    meeting, the one window in which the end of the call was observable. The guard could only be
+    released by an event the code refused to look at. Same failure shape as the latched
+    `hardware.microphoneActive = true` in that poll: a level derived from a live source must be
+    *assigned* from it (`syncMicrophoneWithCapture()`), never raised in one place and left for
+    something else to lower.
+
+53. **Extract the pure decision out of the `@MainActor` observer to test it.** The detector is
+    hardware callbacks, timers, AX reads and a five-state machine — none of it reachable from a unit
+    test. `MeetingPromptLedger` is a struct with injected `Date` and a `(String) -> MeetingCaptureStatus`
+    closure, so every branch of "does this prompt fire" is a table test, and the detector keeps only
+    the plumbing. The reported bug and each guard it must not break are pinned in
+    `WhispererTests/MeetingPromptLedgerTests.swift`.
+
+54. **A state test cannot detect a transition that has already completed.** The refire guard asked
+    "is this provider quiet right now, and for how long" — a question whose answer is *no* by the
+    time it matters. Two meetings back to back are separated by ~8s; the 5s poll that catches the
+    gap open sees it as a few seconds old and declines against the grace period, and by the next
+    poll the provider is capturing again, at which point the gap has left no trace at all. Record
+    the transition itself (`AudioProcessMonitor.runPrecededByGap`) so it can be read *after* it
+    closes. A closed gap is also stronger evidence than an open one, so it earns a shorter
+    threshold: 5s for "went quiet and came back" against 20s for "still quiet".
+
+55. **Silent rejections make the next bug invisible.** `recentlyFired` is checked before any scoring
+    or logging, so a suppressed candidate produced the same `no candidate` line as no candidate at
+    all — twice now, that ambiguity meant a log full of the failure said nothing about its cause. If
+    a guard can drop a candidate, it must say so (throttled, with the state it decided on).
+
+56. **Muting does not release the microphone.** Zoom, Teams and Chrome all hold the input device
+    open while muted — the orange indicator stays lit. So a break in *per-process* capture is a
+    genuine call end, while the *device-level* `IsRunningSomewhere` bit going quiet is not. The two
+    signals warrant opposite amounts of trust; see rule 51.
+
+57. **Sample at the rate of the event you are measuring, not the rate of the loop you already have.**
+    A 5s poll quantizes *both* ends of a capture gap, so the same ±5s error makes an 8s turnaround
+    read as 3s and a 2s device switch read as 7s — the two overlap, and no threshold can separate
+    them however carefully it is picked. The fix is not a better threshold, it is a faster clock:
+    `updateCaptureSampler()` refreshes attribution at 1 Hz, but only while the ledger holds an
+    outstanding entry, so the cost exists only in the window where the measurement matters.
+
+58. **An open app is not a meeting — gate on the call, once, for every vendor.** A meeting app is
+    open most of the working day; only three things say a call is actually *happening*: observed
+    per-process audio capture, the provider's in-call virtual audio device running, or an in-call
+    browser window title (which already requires capture). Running, frontmost and recently-activated
+    are *presence*, and presence must only ever break a tie between candidates that already cleared
+    the gate — it can never assemble one. `MeetingEvidence.callIsLive` is the single expression of
+    this and `score()` returns nil before any arithmetic when it is false, so a vendor added later
+    inherits the rule instead of needing its own patch. Fixing this per provider is the failure mode
+    it replaces: the Google Meet landing-page guard was written for Meet alone, and Zoom's sign-in
+    screen then raised "Meeting detected — Zoom" with `us.zoom.xos` never once attributed a capture
+    run. The asymmetry is deliberate — missing a call nobody can attribute is recoverable (the user
+    starts the recording), a toast over an app they just opened is not.
+
+59. **A view that renders a page must not be the source for "copy everything".** `MeetingDetailView`
+    paginates at 20 segments and grows the window from `MeetingTranscriptView`'s scroll, so any
+    consumer that does not scroll that view sees only the first page. A Full Text mode truncated at
+    segment 20 and a Copy button that silently takes a fifth of the meeting both look like they
+    worked — the failure is invisible at the call site and invisible in the output. Read
+    `allSegments` (via `completeSegments`) for anything whole-document; `displayedSegments` is a
+    rendering optimization, not the transcript.
+
+60. **One function per rendering, shared by the screen and the clipboard.** Every transcript shape is
+    produced twice — once to draw, once to copy — and two implementations of "the same" text drift
+    the moment either is touched. `MeetingTranscriptText.plainProse` / `.labelled` are pure and
+    UI-free, so both callers are literally the same code and the paragraph rules are testable
+    without a UI harness. The same applies to `isRightToLeft(sample:)`: three views had grown
+    identical private copies of the ratio test (one comment openly said so) before it was hoisted.
+
+61. **Paragraph on the speech, not on the segment.** A segment boundary is a property of the ASR
+    backend's chunking — whisper.cpp emits one per voiced VAD span, WhisperKit commits ~6s,
+    Nemotron returns the whole session as one — so breaking prose per segment renders a monologue
+    as a list of fragments and a Nemotron meeting as one unbroken block. Break on a speaker change
+    or a >2.5s **audio-clock** gap. Two edge cases fall out of it: a dropped blank segment must not
+    take its neighbours' break with it, and an overlapping/out-of-order span yields a negative gap,
+    which is not a pause.
+
+62. **A control that says "Export" must export.** The workspace's Export button wore a
+    `square.and.arrow.up` share icon, wrote no file, showed no confirmation, and copied labelled
+    text to the clipboard. Users read the icon and the label, not the implementation; a mislabelled
+    control is worse than a missing one because it consumes the affordance its real version needs.
+    Replaced with a Copy button that names what it does and confirms it happened.
+
+63. **The surface that comes up is decided by where Start was pressed.** `startMeetingRecording`
+    raised the floating rail unconditionally, so pressing Start inside Meeting Studio put a second
+    copy of the transcript on top of the window the user was already reading it in. Thread the
+    origin (`MeetingLiveSurface.floatingWindow` / `.workspace`) from the call site instead of
+    inferring it: a detection toast has no workspace open and must not raise one over the call;
+    the workspace's own Start controls need nothing raised at all. `meetingWindowIsVisible` is set
+    either way — it means "a meeting surface owns the recording UI", and the workspace is equally
+    that surface — so nothing may assume a meeting in progress implies a live window on screen.

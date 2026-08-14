@@ -147,11 +147,17 @@ final class ModelPool {
             return .fallback(backend: fbBackend, loading: existing)
         }
 
-        // Create new loading task
+        // Create new loading task.
+        //
+        // A plain `Task {}` on purpose, not `Task.detached`: this type is implicitly `@MainActor`
+        // (SWIFT_DEFAULT_ACTOR_ISOLATION), so the task inherits main isolation and the
+        // `warmBackends` / in-flight bookkeeping below is race-free. The expensive part —
+        // `WhisperBridge.init` plus a warm-up decode, blocking C and possibly a first-run
+        // CoreML/ANE encoder compile — is pushed off the main thread by `loadBackend` itself.
         let loadingTask = Task<TranscriptionBackend, Error> { [weak self] in
             guard let self else { throw ModelPoolError.modelLoadFailed("ModelPool deallocated") }
 
-            let backend = try self.loadBackend(for: profile)
+            let backend = try await self.loadBackend(for: profile)
 
             // Register as warm and clean up in-flight
             self.warmBackends[profile] = backend
@@ -196,10 +202,13 @@ final class ModelPool {
         }
 
         Logger.info("Preloading standby: \(profile.model.displayName)", subsystem: .model)
-        Task.detached(priority: .utility) { [weak self] in
+        // Priority is set explicitly but the task is NOT detached — it stays on this main-actor
+        // type so the `warmBackends` write below is not a cross-isolation mutation. The blocking
+        // load inside `loadBackend` is what runs off the main thread.
+        Task(priority: .utility) { [weak self] in
             guard let self else { return }
             do {
-                let backend = try self.loadBackend(for: profile)
+                let backend = try await self.loadBackend(for: profile)
                 self.warmBackends[profile] = backend
                 Logger.info("Standby ready: \(profile.model.displayName)", subsystem: .model)
             } catch {
@@ -251,15 +260,24 @@ final class ModelPool {
 
     // MARK: - Internal
 
-    private func loadBackend(for profile: ModelProfile) throws -> TranscriptionBackend {
+    /// Loads and warms a target backend off the main thread.
+    ///
+    /// `runBlocking`, not `run`: `WhisperBridge.init` and the warm-up decode are blocking C, and on
+    /// the first launch after a model is installed the init is a ~40s synchronous-XPC CoreML/ANE
+    /// encoder compile. Both call sites reach here from a main-actor `Task`, whose isolation an
+    /// unannotated `async` body would inherit — see the note on `ModelWorkQueue`. Going through the
+    /// queue also stops a cold target load from contending with a live meeting; the caller is
+    /// already serving the fallback backend while this runs, so waiting costs nothing.
+    private func loadBackend(for profile: ModelProfile) async throws -> TranscriptionBackend {
         let modelPath = ModelDownloader.shared.modelPath(for: profile.model)
         let startTime = CACurrentMediaTime()
 
-        let bridge = try WhisperBridge(modelPath: modelPath)
-
-        // GPU warm-up
-        let warmupSamples = [Float](repeating: 0, count: 16000)
-        _ = bridge.transcribe(samples: warmupSamples)
+        let bridge = try await ModelWorkQueue.shared.runBlocking("routing-target-load") {
+            let bridge = try WhisperBridge(modelPath: modelPath)
+            // GPU warm-up
+            _ = bridge.transcribe(samples: [Float](repeating: 0, count: 16000))
+            return bridge
+        }
 
         let elapsed = CACurrentMediaTime() - startTime
         Logger.info("\(profile.model.displayName) loaded in \(String(format: "%.2f", elapsed))s (includes GPU warm-up)", subsystem: .model)
