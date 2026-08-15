@@ -7,7 +7,7 @@
 //  whisper.cpp can drive the same state machine with its own word-level decode output.
 //
 //  Design constraints:
-//  - Pure: no locks, no SwiftUI, no async, no #if canImport.
+//  - Pure: no locks, no SwiftUI, no async, no Logger, no #if canImport.
 //    The caller (StreamingTranscriber) holds all locks and owns all side effects.
 //  - Owned by StreamingTranscriber on its serial operation queue — never call from multiple threads.
 //  - EagerOutcome carries everything the caller needs to apply; the engine mutates no
@@ -51,7 +51,7 @@ struct EagerOutcome {
 
 // MARK: - EagerStreamEngine
 
-final class EagerStreamEngine {
+final class EagerStreamEngine: @unchecked Sendable {
 
     // MARK: - Config
 
@@ -93,11 +93,17 @@ final class EagerStreamEngine {
         self.config = config
     }
 
+    // Explicit nonisolated deinit prevents Swift 6 from emitting
+    // swift_task_deinitOnExecutorImpl for this class when it's released from a
+    // @MainActor context (e.g., XCTestCase). The engine is pure computation on a
+    // serial queue and is safe to dealloc on any thread.
+    nonisolated deinit {}
+
     func reset(at sampleIndex: Int) {
-        confirmedWords.removeAll(keepingCapacity: true)
-        previousHypothesis.removeAll(keepingCapacity: true)
+        confirmedWords.removeAll()
+        previousHypothesis.removeAll()
         agreementStartIndex = sampleIndex
-        prefixTokens.removeAll(keepingCapacity: true)
+        prefixTokens.removeAll()
     }
 
     // MARK: - consume
@@ -135,10 +141,6 @@ final class EagerStreamEngine {
             if isUnanchored || isLargeRetraction {
                 // Hold — update previousHypothesis so the next window sees the new baseline.
                 previousHypothesis = hyp
-                Logger.debug(
-                    "EagerStream held unstable revision (anchor=\(commonCount), retraction=\(max(0, lostWordCount)))",
-                    subsystem: .transcription
-                )
                 return EagerOutcome(displayText: nil, softCommit: nil, wasHeld: true)
             }
         }
@@ -157,11 +159,6 @@ final class EagerStreamEngine {
                 prefixTokens = boundarySlice.flatMap(\.tokens)
                 let nextStart = agreementStartIndex ?? agreementStart
                 hyp = hyp.filter { $0.startIndex >= nextStart }
-                Logger.debug(
-                    "EagerStream confirmed \(newlyConfirmed.count) words; " +
-                    "boundary=\(String(format: "%.2f", Double(nextStart - audioBaseIndex) / 16000.0))s",
-                    subsystem: .transcription
-                )
             } else if commonCount == hyp.count, !hyp.isEmpty, hyp.count <= boundary {
                 // Short-tail: full agreement on a prefix smaller than boundaryWordCount.
                 // Confirm all but the last word to avoid stagnation at the recording tail.
@@ -173,11 +170,6 @@ final class EagerStreamEngine {
                 agreementStartIndex = boundaryWord.startIndex
                 prefixTokens = boundaryWord.tokens
                 hyp = hyp.filter { $0.startIndex >= boundaryWord.startIndex }
-                Logger.debug(
-                    "EagerStream (short-tail) confirmed \(confirmCount) word(s); " +
-                    "boundary=\(String(format: "%.2f", Double(boundaryWord.startIndex - audioBaseIndex) / 16000.0))s",
-                    subsystem: .transcription
-                )
             }
 
             // ── Entropy gate ───────────────────────────────────────────────────────
@@ -194,11 +186,6 @@ final class EagerStreamEngine {
                     agreementStartIndex = newStart
                     prefixTokens = Array(hyp.prefix(eagerCount)).suffix(2).flatMap(\.tokens)
                     hyp = hyp.filter { $0.startIndex >= newStart }
-                    Logger.debug(
-                        "EagerStream entropy-gate committed \(eagerCount) word(s) (p≥\(config.singlePassThreshold)); " +
-                        "boundary=\(String(format: "%.2f", Double(newStart - audioBaseIndex) / 16000.0))s",
-                        subsystem: .transcription
-                    )
                 }
             }
         }
@@ -223,8 +210,7 @@ final class EagerStreamEngine {
                     endIndex: nextStart
                 )
             }
-            confirmedWords.removeAll(keepingCapacity: true)
-            Logger.debug("EagerStream soft-committed stable audio", subsystem: .transcription)
+            confirmedWords.removeAll()
         }
 
         // ── Display text ───────────────────────────────────────────────────────────

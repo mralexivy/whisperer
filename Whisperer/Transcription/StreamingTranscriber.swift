@@ -210,14 +210,6 @@ class StreamingTranscriber {
     private var whisperKitPreviewAnchoredAtTailStart: Bool = false
 
     #if canImport(WhisperKit)
-    private struct WhisperKitAbsoluteWord: Sendable {
-        let text: String
-        let tokens: [Int]
-        let startIndex: Int
-        let endIndex: Int
-        let probability: Float
-    }
-
     private enum WhisperKitInferenceOwner: Equatable {
         case none
         case preview
@@ -225,11 +217,9 @@ class StreamingTranscriber {
     }
     private let whisperKitInferenceLock = NSLock()
     private var whisperKitInferenceOwner: WhisperKitInferenceOwner = .none
-    private var whisperKitConfirmedWords: [WhisperKitAbsoluteWord] = []
-    private var whisperKitPreviousHypothesis: [WhisperKitAbsoluteWord] = []
-    private var whisperKitAgreementStartIndex: Int?
-    private var whisperKitAgreementPrefixTokens: [Int] = []
     #endif
+
+    private var eagerEngine: EagerStreamEngine?
 
     // Filler word removal (applied in final pass)
     private var fillerWordRemovalEnabled: Bool
@@ -276,6 +266,10 @@ class StreamingTranscriber {
     /// Effective language for transcription — driven by router or fallback to configured language
     var effectiveLanguage: TranscriptionLanguage {
         routeDecision?.lang ?? language
+    }
+
+    private var usesEagerStream: Bool {
+        UserDefaults.standard.bool(forKey: "whisperCppEagerStreaming") && whisper is WhisperBridge
     }
 
     /// Initialize with a pre-loaded backend
@@ -374,6 +368,15 @@ class StreamingTranscriber {
         whisperKitInferenceLock.unlock()
         resetWhisperKitStreamingState(at: feedbackSoundSamples)
         #endif
+
+        // Eager engine: used by both WhisperKit (always) and whisper.cpp (when flag on)
+        #if canImport(WhisperKit)
+        let needsEagerEngine = (whisper is WhisperKitBridge) || usesEagerStream
+        #else
+        let needsEagerEngine = usesEagerStream
+        #endif
+        eagerEngine = needsEagerEngine ? EagerStreamEngine() : nil
+        eagerEngine?.reset(at: feedbackSoundSamples)
 
         // Nemotron path: preview is push-based; no VAD chunking needed.
         #if canImport(FluidAudio)
@@ -573,6 +576,11 @@ class StreamingTranscriber {
         }
         #endif
 
+        if usesEagerStream {
+            lastVADScanIndex = ringBase + allSamples.count
+            return
+        }
+
         // Run VAD scan with ring-relative indices
         let result = vadSegmenter.scanAndEmitChunks(
             allSamples: allSamples,
@@ -611,6 +619,7 @@ class StreamingTranscriber {
     /// Transcribe the next pending chunk
     private func processNextChunk() {
         guard !isStopped, !isTranscribingChunk, !pendingChunks.isEmpty else { return }
+        guard !usesEagerStream else { return }
 
         #if canImport(WhisperKit)
         let usesWhisperKit = whisper is WhisperKitBridge
@@ -880,6 +889,10 @@ class StreamingTranscriber {
     /// - whisper.cpp: append-only from last previewed position with 0.5s overlap.
     private func runLivePreviewPass() {
         guard !isStopped, !isPreparingToStop else { return }
+        if usesEagerStream {
+            runEagerStreamPass()
+            return
+        }
         guard let preview = previewBridge else { return }
         #if canImport(WhisperKit)
         let isWhisperKitPreview = preview is WhisperKitBridge
@@ -1022,14 +1035,14 @@ class StreamingTranscriber {
         if let wkBridge = preview as? WhisperKitBridge {
             // Raw token callbacks are intentionally not shown: they are mutable beam
             // hypotheses and caused unrelated vocabulary to flash in the overlay.
-            let agreementIndex = whisperKitAgreementStartIndex ?? tailStartAbs
+            let agreementIndex = eagerEngine?.agreementStartIndex ?? tailStartAbs
             let clipSeconds = Float(max(0, agreementIndex - tailStartAbs)) / Float(sampleRate)
             // prefixTokens are NOT passed in preview passes: forced tokens receive
             // timestamp 0.0 rather than their acoustic position, which breaks the
             // agreement state machine (anchor=0 on every pass after first confirmation).
             // clipTimestamps alone is sufficient to advance the encoder to the
             // agreement boundary; the decoder then produces correct file-relative timestamps.
-            // whisperKitAgreementPrefixTokens is still updated on each confirmation
+            // eagerEngine?.prefixTokens is still updated on each confirmation
             // and is used only on the stop-path tail reconciliation decode.
             wkBridge.clearCallbacks()
             wkBridge.transcribeStreamingAsync(
@@ -1170,27 +1183,7 @@ class StreamingTranscriber {
 
     #if canImport(WhisperKit)
     private func resetWhisperKitStreamingState(at sampleIndex: Int) {
-        whisperKitConfirmedWords.removeAll(keepingCapacity: true)
-        whisperKitPreviousHypothesis.removeAll(keepingCapacity: true)
-        whisperKitAgreementStartIndex = sampleIndex
-        whisperKitAgreementPrefixTokens.removeAll(keepingCapacity: true)
-    }
-
-    private func normalizedWhisperKitWord(_ text: String) -> String {
-        text.lowercased().filter { $0.isLetter || $0.isNumber }
-    }
-
-    private func commonWhisperKitPrefixCount(
-        _ previous: [WhisperKitAbsoluteWord], _ current: [WhisperKitAbsoluteWord]
-    ) -> Int {
-        var count = 0
-        while count < previous.count, count < current.count {
-            let left = normalizedWhisperKitWord(previous[count].text)
-            let right = normalizedWhisperKitWord(current[count].text)
-            guard !left.isEmpty, left == right else { break }
-            count += 1
-        }
-        return count
+        eagerEngine?.reset(at: sampleIndex)
     }
 
     /// Converts a completed timestamped decode into an eager-streaming snapshot.
@@ -1201,151 +1194,38 @@ class StreamingTranscriber {
         audioBaseIndex: Int,
         through candidateEndIndex: Int
     ) -> String? {
-        var hypothesis = result.words.map { word in
-            WhisperKitAbsoluteWord(
-                text: word.text,
-                tokens: word.tokens,
+        guard let engine = eagerEngine else { return nil }
+        let hypothesis = result.words.map { word -> EagerStreamWord in
+            EagerStreamWord(
+                text: word.text, tokens: word.tokens,
                 startIndex: audioBaseIndex + Int(Double(word.start) * sampleRate),
                 endIndex: audioBaseIndex + Int(Double(word.end) * sampleRate),
                 probability: word.probability
             )
         }
-        let agreementStart = whisperKitAgreementStartIndex ?? audioBaseIndex
-        hypothesis = hypothesis.filter { $0.startIndex >= agreementStart }
-        guard !hypothesis.isEmpty else { return nil }
-
-        let commonCount = commonWhisperKitPrefixCount(whisperKitPreviousHypothesis, hypothesis)
-        if !whisperKitPreviousHypothesis.isEmpty {
-            let requiredAnchor = min(2, min(whisperKitPreviousHypothesis.count, hypothesis.count))
-            let lostWordCount = whisperKitPreviousHypothesis.count - hypothesis.count
-            let isUnanchored = commonCount < requiredAnchor
-            let isLargeRetraction = lostWordCount > 3
-            if isUnanchored || isLargeRetraction {
-                // Keep the visible hypothesis for one more pass. A genuinely corrected
-                // path will agree with itself on the next window; a transient decoder
-                // collapse never reaches the UI.
-                whisperKitPreviousHypothesis = hypothesis
-                Logger.debug(
-                    "WhisperKit eager preview held unstable revision " +
-                    "(anchor=\(commonCount), retraction=\(max(0, lostWordCount)) words)",
-                    subsystem: .transcription
-                )
-                return nil
-            }
+        let outcome = engine.consume(hypothesis: hypothesis, audioBaseIndex: audioBaseIndex,
+            languageIsLocked: result.languageIsLocked, lastCommittedIndex: lastTranscribedSampleIndex)
+        if let commit = outcome.softCommit, !commit.text.isEmpty {
+            completedChunkTexts.append(commit.text)
+            onChunkCompleted?(TranscriptChunk(text: commit.text,
+                start: Double(commit.startIndex) / sampleRate,
+                end: Double(commit.endIndex) / sampleRate,
+                recordedDuration: recordedDuration))
+            lastTranscribedSampleIndex = commit.endIndex
+            lastClaimedSampleIndex = commit.endIndex
+            do { try allSamplesLock.withLock { ring.dropFront(toAbsoluteIndex: commit.endIndex) } }
+            catch { Logger.warning("WhisperKit eager stream could not prune committed audio", subsystem: .transcription) }
+            lastPreviewVADCheckEndIndex = max(lastPreviewVADCheckEndIndex, commit.endIndex)
         }
-        let boundaryWordCount = 2
-        if result.languageIsLocked, commonCount > boundaryWordCount {
-            let newlyConfirmed = Array(hypothesis.prefix(commonCount - boundaryWordCount))
-            whisperKitConfirmedWords.append(contentsOf: newlyConfirmed)
-            let boundaryWords = Array(hypothesis[(commonCount - boundaryWordCount)..<commonCount])
-            whisperKitAgreementStartIndex = boundaryWords.first?.startIndex
-            whisperKitAgreementPrefixTokens = boundaryWords.flatMap(\.tokens)
-            let nextStart = whisperKitAgreementStartIndex ?? agreementStart
-            hypothesis = hypothesis.filter { $0.startIndex >= nextStart }
-            Logger.debug(
-                "WhisperKit eager stream confirmed \(newlyConfirmed.count) words; " +
-                "boundary=\(String(format: "%.2f", Double(nextStart - audioBaseIndex) / sampleRate))s",
-                subsystem: .transcription
-            )
-        } else if result.languageIsLocked,
-                  commonCount == hypothesis.count,
-                  !hypothesis.isEmpty,
-                  hypothesis.count <= boundaryWordCount {
-            // Short-tail: full agreement on a hypothesis smaller than boundaryWordCount.
-            // Confirm all but the last word; keep 1 boundary word to preserve acoustic
-            // context for clipSeconds on the next pass. Unblocks stagnation when only
-            // 1–2 words remain in the window (observed at recording tail, passes 7-10).
-            let confirmCount = hypothesis.count - 1
-            if confirmCount > 0 {
-                whisperKitConfirmedWords.append(contentsOf: hypothesis.prefix(confirmCount))
-            }
-            let boundaryWord = hypothesis.last!
-            whisperKitAgreementStartIndex = boundaryWord.startIndex
-            whisperKitAgreementPrefixTokens = boundaryWord.tokens
-            hypothesis = hypothesis.filter { $0.startIndex >= boundaryWord.startIndex }
-            Logger.debug(
-                "WhisperKit eager stream (short-tail) confirmed \(confirmCount) word(s); " +
-                "boundary=\(String(format: "%.2f", Double(boundaryWord.startIndex - audioBaseIndex) / sampleRate))s",
-                subsystem: .transcription
-            )
-        }
-
-        // Entropy gate: commit high-confidence words without a second window.
-        // A word with probability ≥ 0.95 has >95% decoder confidence — it agrees
-        // with itself across all beam paths and doesn't need cross-window confirmation.
-        // Keep the last `boundaryWordCount` words provisional so clipSeconds always
-        // has acoustic context for the next pass.
-        if result.languageIsLocked, hypothesis.count > boundaryWordCount {
-            let singlePassThreshold: Float = 0.95
-            var eagerCount = 0
-            for word in hypothesis.prefix(hypothesis.count - boundaryWordCount) {
-                guard word.probability >= singlePassThreshold else { break }
-                eagerCount += 1
-            }
-            if eagerCount > 0 {
-                whisperKitConfirmedWords.append(contentsOf: hypothesis.prefix(eagerCount))
-                let newStart = hypothesis[eagerCount].startIndex
-                whisperKitAgreementStartIndex = newStart
-                whisperKitAgreementPrefixTokens = Array(hypothesis.prefix(eagerCount)).suffix(2).flatMap(\.tokens)
-                hypothesis = hypothesis.filter { $0.startIndex >= newStart }
-                Logger.debug(
-                    "WhisperKit entropy-gate instant-committed \(eagerCount) word(s) " +
-                    "(p≥0.95); boundary=\(String(format: "%.2f", Double(newStart - audioBaseIndex) / sampleRate))s",
-                    subsystem: .transcription
-                )
-            }
-        }
-
-        // Store post-gate hypothesis so next pass compares from the same clip boundary.
-        // Must be AFTER the entropy gate — if set before, gate-trimmed hypothesis yields
-        // stale prevHypothesis words that mismatch the new clip → anchor=0 cascade.
-        whisperKitPreviousHypothesis = hypothesis
-
-        // Commit old, cross-window-agreed words without another inference call. Keep
-        // the two boundary words provisional and in the audio buffer. This bounds a
-        // long recording while preserving enough acoustic context for revisions.
-        if let nextStart = whisperKitAgreementStartIndex,
-           nextStart - lastTranscribedSampleIndex >= Int(6.0 * sampleRate),
-           !whisperKitConfirmedWords.isEmpty {
-            let committed = whisperKitConfirmedWords.map(\.text).joined()
-                .trimmingCharacters(in: .whitespacesAndNewlines)
-            if !committed.isEmpty {
-                completedChunkTexts.append(committed)
-                // Covers everything between the previous commit boundary and this one.
-                // Read before lastTranscribedSampleIndex advances to nextStart below.
-                onChunkCompleted?(TranscriptChunk(
-                    text: committed,
-                    start: Double(lastTranscribedSampleIndex) / sampleRate,
-                    end: Double(nextStart) / sampleRate,
-                    recordedDuration: recordedDuration
-                ))
-            }
-            whisperKitConfirmedWords.removeAll(keepingCapacity: true)
-            lastTranscribedSampleIndex = nextStart
-            lastClaimedSampleIndex = nextStart
-            do {
-                try allSamplesLock.withLock {
-                    ring.dropFront(toAbsoluteIndex: nextStart)
-                }
-            } catch {
-                Logger.warning("WhisperKit eager stream could not prune committed audio", subsystem: .transcription)
-            }
-            lastPreviewVADCheckEndIndex = max(lastPreviewVADCheckEndIndex, nextStart)
-            Logger.debug("WhisperKit eager stream soft-committed stable audio", subsystem: .transcription)
-        }
-
-        let allWords = whisperKitConfirmedWords + hypothesis
-        let text = allWords.map(\.text).joined()
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !text.isEmpty, !isHallucination(text) else { return nil }
-
-        latestWhisperKitPreviewText = text
+        guard let displayText = outcome.displayText else { return nil }
+        guard !isHallucination(displayText) else { return nil }
+        latestWhisperKitPreviewText = displayText
         latestWhisperKitPreviewStartIndex = lastTranscribedSampleIndex
         latestWhisperKitPreviewEndIndex = candidateEndIndex
         latestWhisperKitPreviewAverageLogProbability = result.averageLogProbability
         latestWhisperKitPreviewLanguageIsLocked = result.languageIsLocked
         whisperKitPreviewAnchoredAtTailStart = true
-        return text
+        return displayText
     }
 
     private func publishWhisperKitStreamingPreview(_ text: String, through sampleIndex: Int) {
@@ -1391,6 +1271,112 @@ class StreamingTranscriber {
         whisperKitInferenceOwner = .none
     }
     #endif
+
+    // MARK: - Eager Streaming (whisper.cpp main model)
+
+    /// One live-preview pass for the whisper.cpp eager-streaming path.
+    /// Called from `runLivePreviewPass` when `usesEagerStream` is true.
+    private func runEagerStreamPass() {
+        guard let bridge = whisper as? WhisperBridge else { return }
+        guard !isTranscribingChunk else { return }
+
+        var samples: [Float] = []
+        var audioBaseIndex = 0
+        var ringEnd = 0
+        do {
+            try allSamplesLock.withLock {
+                audioBaseIndex = ring.baseSampleIndex
+                samples = ring.toArray()
+                ringEnd = audioBaseIndex + samples.count
+            }
+        } catch { return }
+
+        // Require at least 1s of audio before attempting a decode.
+        guard samples.count >= Int(1.0 * sampleRate) else { return }
+
+        // Incremental VAD — only check new audio since the last pass (max 3s).
+        if let vad {
+            let vadStart = max(lastPreviewVADCheckEndIndex, ringEnd - Int(3.0 * sampleRate))
+            if vadStart < ringEnd {
+                var vadSamples: [Float] = []
+                do {
+                    try allSamplesLock.withLock {
+                        vadSamples = ring.slice(fromAbsolute: vadStart, toAbsolute: ringEnd)
+                    }
+                } catch {}
+                if !vadSamples.isEmpty {
+                    lastPreviewVADCheckEndIndex = ringEnd
+                    if !vad.hasSpeech(samples: vadSamples) { return }
+                }
+            }
+        }
+
+        let normalizedSamples = normalizeSamples(samples)
+        let lang = effectiveLanguage
+        let candidateEndIndex = audioBaseIndex + normalizedSamples.count
+        let prompt = completedChunkTexts.last.map { String($0.suffix(100)) }
+
+        isProcessing = true
+        bridge.transcribeStreamingAsync(
+            samples: normalizedSamples,
+            language: lang,
+            initialPrompt: prompt
+        ) { [weak self] result in
+            guard let self else { return }
+            defer { self.isProcessing = false }
+            guard let result else { return }
+            self.applyEagerOutcome(result: result, audioBaseIndex: audioBaseIndex,
+                candidateEndIndex: candidateEndIndex)
+        }
+    }
+
+    private func applyEagerOutcome(
+        result: WhisperStreamResult,
+        audioBaseIndex: Int,
+        candidateEndIndex: Int
+    ) {
+        guard let engine = eagerEngine else { return }
+        let hypothesis = result.words.map { word -> EagerStreamWord in
+            EagerStreamWord(
+                text: word.text, tokens: word.tokens,
+                startIndex: audioBaseIndex + Int(Double(word.start) * sampleRate),
+                endIndex: audioBaseIndex + Int(Double(word.end) * sampleRate),
+                probability: word.probability
+            )
+        }
+        // Language is always locked for whisper.cpp eager (single-language model, fixed language).
+        let outcome = engine.consume(hypothesis: hypothesis, audioBaseIndex: audioBaseIndex,
+            languageIsLocked: true, lastCommittedIndex: lastTranscribedSampleIndex)
+        if let commit = outcome.softCommit, !commit.text.isEmpty {
+            completedChunkTexts.append(commit.text)
+            onChunkCompleted?(TranscriptChunk(text: commit.text,
+                start: Double(commit.startIndex) / sampleRate,
+                end: Double(commit.endIndex) / sampleRate,
+                recordedDuration: recordedDuration))
+            lastTranscribedSampleIndex = commit.endIndex
+            lastClaimedSampleIndex = commit.endIndex
+            do { try allSamplesLock.withLock { ring.dropFront(toAbsoluteIndex: commit.endIndex) } }
+            catch { Logger.warning("Eager stream (whisper.cpp) could not prune committed audio",
+                subsystem: .transcription) }
+            lastPreviewVADCheckEndIndex = max(lastPreviewVADCheckEndIndex, commit.endIndex)
+        }
+        guard let displayText = outcome.displayText, !displayText.isEmpty else { return }
+        guard !isHallucination(displayText) else { return }
+        let passID = previewPassID &+ 1
+        previewPassID = passID
+        previewAccumulatedText = displayText
+        lastPreviewedSampleIndex = candidateEndIndex
+        var display = completedChunkTexts.joined(separator: " ")
+        if !display.isEmpty { display += " " }
+        display += displayText
+        fullTranscription = display
+        DispatchQueue.main.async { [weak self] in
+            guard let self, self.previewPassID == passID else { return }
+            self.onTranscription?(display)
+            self.onPreviewTail?(displayText)
+        }
+        transcriptionProgressCounter &+= 1
+    }
 
     /// Dedup overlap words between existing accumulated text and new preview text
     private func deduplicateOverlap(existing: String, new: String) -> String {
@@ -1642,7 +1628,7 @@ class StreamingTranscriber {
         previewTask = nil
 
         guard !isWhisperKitInferenceIdle() else { return }
-        guard !shouldWaitForActiveWhisperKitPreviewAtStop() else {
+        guard !shouldWaitForActiveEagerPreviewAtStop() else {
             Logger.debug("Hybrid pre-stop preserved near-boundary WhisperKit preview", subsystem: .transcription)
             return
         }
@@ -1667,7 +1653,7 @@ class StreamingTranscriber {
             // complete spoken tail. Give it a short chance to finish rather than canceling
             // it and paying for an almost identical final Core ML pass.
             var waitIterations = 0
-            let shouldWaitForPreview = shouldWaitForActiveWhisperKitPreviewAtStop()
+            let shouldWaitForPreview = shouldWaitForActiveEagerPreviewAtStop()
             while shouldWaitForPreview, !isWhisperKitInferenceIdle(), waitIterations < 100 {
                 try? await Task.sleep(nanoseconds: 10_000_000)
                 waitIterations += 1
@@ -1676,7 +1662,7 @@ class StreamingTranscriber {
                 Logger.debug("Hybrid stop waited \(waitIterations * 10)ms for active WhisperKit decode", subsystem: .transcription)
             }
 
-            if canReuseWhisperKitPreviewAtStop() {
+            if canReuseEagerPreviewAtStop() {
                 isStopped = true
                 wkBridge.clearCallbacks()
                 pendingChunks.removeAll()
@@ -1788,7 +1774,7 @@ class StreamingTranscriber {
         }
     }
 
-    private func shouldWaitForActiveWhisperKitPreviewAtStop() -> Bool {
+    private func shouldWaitForActiveEagerPreviewAtStop() -> Bool {
         guard activeWhisperKitPreviewEndIndex > 0,
               activeWhisperKitPreviewStartIndex <= lastTranscribedSampleIndex,
               let ringEnd = currentRingEndIndex() else { return false }
@@ -1797,7 +1783,7 @@ class StreamingTranscriber {
             !containsSpeech(from: activeWhisperKitPreviewEndIndex, until: ringEnd)
     }
 
-    private func canReuseWhisperKitPreviewAtStop() -> Bool {
+    private func canReuseEagerPreviewAtStop() -> Bool {
         guard !latestWhisperKitPreviewText.isEmpty,
               let averageLogProbability = latestWhisperKitPreviewAverageLogProbability else {
             return false
@@ -1950,8 +1936,8 @@ class StreamingTranscriber {
            let encoded = await bridge.encodeText(contextWords), !encoded.isEmpty {
             prefixTokens = encoded
         } else {
-            prefixTokens = whisperKitAgreementPrefixTokens.isEmpty
-                ? nil : whisperKitAgreementPrefixTokens
+            let stored = eagerEngine?.prefixTokens ?? []
+            prefixTokens = stored.isEmpty ? nil : stored
         }
         Logger.debug(
             "Hybrid tail reconciliation: gap=" +
