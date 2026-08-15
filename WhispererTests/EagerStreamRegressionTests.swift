@@ -150,7 +150,7 @@ final class EagerStreamRegressionTests: XCTestCase {
             let script = detectScript(fixture.transcript)
 
             Logger.debug(String(format: "  [%@] WER: baseline=%.3f eager=%.3f | ref=%d words",
-                                fixture.id.prefix(8), wer_a, wer_b,
+                                String(fixture.id.prefix(8)), wer_a, wer_b,
                                 fixture.transcript.split(separator: " ").count),
                          subsystem: .transcription)
 
@@ -396,7 +396,7 @@ final class EagerStreamRegressionTests: XCTestCase {
             let id = String(r.fixture.id.prefix(9)).padding(toLength: 9, withPad: " ", startingAt: 0)
             print(String(format: "║ %@ ║  %.3f ║  %.3f ║ %+.3f ║ %-8@ ║%@",
                          id, r.werBaseline, r.werEager, delta,
-                         r.script.prefix(8), marker))
+                         String(r.script.prefix(8)), marker))
             totalBaseline += r.werBaseline
             totalEager += r.werEager
         }
