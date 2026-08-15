@@ -860,7 +860,7 @@ class LLMPostProcessor: ObservableObject {
         if Memory.cacheMemory > Memory.cacheLimit { Memory.clearCache() }
 
         var result = mtpOutput.text
-        Logger.debug("MTP raw output (\(result.count) chars): \(result.prefix(200))", subsystem: .transcription)
+        Logger.step(.asrDone, .transcription, ["stage": .string("mtp_raw"), "chars": .int(result.count), "text": .string(Logger.redact(result))])
         // Strip <think>...</think> (Qwen3 chain-of-thought tokens).
         if let thinkRange = result.range(of: Self.thinkTagPattern, options: .regularExpression) {
             result.removeSubrange(thinkRange)

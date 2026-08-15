@@ -921,8 +921,13 @@ class WhisperBridge: TranscriptionBackend {
         var logProbSum: Float = 0.0
         var logProbCount = 0
 
+        Logger.debug("Streaming decode: \(nSegments) segments", subsystem: .transcription)
         for i in 0..<nSegments {
-            if whisper_full_get_segment_no_speech_prob(ctx, i) > noSpeechProbThreshold { continue }
+            let nsp = whisper_full_get_segment_no_speech_prob(ctx, i)
+            if nsp > noSpeechProbThreshold {
+                Logger.debug("Streaming decode: segment \(i) skipped (no_speech_prob=\(String(format: "%.2f", nsp)))", subsystem: .transcription)
+                continue
+            }
             let nTokens = whisper_full_n_tokens(ctx, i)
             guard nTokens > 0 else { continue }
 
@@ -938,8 +943,8 @@ class WhisperBridge: TranscriptionBackend {
             for j in 0..<nTokens {
                 guard let rawPtr = whisper_full_get_token_text(ctx, i, j) else { continue }
                 let tokenText = String(cString: rawPtr)
-                // Skip special tokens: timestamps and control tokens all start with "<|"
-                guard !tokenText.hasPrefix("<|"), !tokenText.isEmpty else { continue }
+                // Skip special tokens: <|...|> timestamps/control tokens and [_BEG_]/[_TT_N] non-speech tokens
+                guard !tokenText.hasPrefix("<|"), !tokenText.hasPrefix("[_"), !tokenText.isEmpty else { continue }
 
                 let data = whisper_full_get_token_data(ctx, i, j)
 

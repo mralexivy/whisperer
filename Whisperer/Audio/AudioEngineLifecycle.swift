@@ -263,29 +263,29 @@ actor AudioEngineLifecycle {
         onBuffer: @escaping ([Float]) -> Void
     ) throws -> AudioDeviceID? {
         let inputNode = engine.inputNode  // force AUHAL AudioUnit creation
-        Logger.debug("Input node obtained (audioUnit: \(inputNode.audioUnit != nil))", subsystem: .audio)
+        Logger.step(.engBuild, .audio, ["unit": .bool(inputNode.audioUnit != nil)])
 
         // Bind device
         var boundDeviceID: AudioDeviceID? = nil
         switch route {
         case .explicit(let uid, let deviceID):
             if setInputDevice(deviceID, on: inputNode) {
-                Logger.debug("Bound explicit device: uid=\(uid) id=\(deviceID)", subsystem: .audio)
+                Logger.step(.devSelect, .audio, ["uid": .string(uid), "id": .int(Int(deviceID))])
                 boundDeviceID = deviceID
             } else {
-                Logger.warning("Explicit device bind failed: uid=\(uid) id=\(deviceID)", subsystem: .audio)
+                Logger.event(.devFail, .audio, ["uid": .string(uid), "id": .int(Int(deviceID))], level: .error)
                 throw RecordingError.audioUnitFailed
             }
         case .systemDefault:
             if let defaultID = systemDefaultInputDeviceID() {
-                Logger.debug("Using system default: id=\(defaultID)", subsystem: .audio)
                 if setInputDevice(defaultID, on: inputNode) {
+                    Logger.step(.devSelect, .audio, ["id": .int(Int(defaultID)), "explicit": .bool(false)])
                     boundDeviceID = defaultID
                 } else {
-                    Logger.warning("Could not explicitly bind default device — using implicit routing", subsystem: .audio)
+                    Logger.event(.devFail, .audio, ["id": .int(Int(defaultID)), "fallback": .string("implicit")], level: .warning)
                 }
             } else {
-                Logger.debug("Using system default input device (could not resolve ID)", subsystem: .audio)
+                Logger.step(.devSelect, .audio, ["id": .string("unresolved")])
             }
         }
 
@@ -295,21 +295,21 @@ actor AudioEngineLifecycle {
         // Query format — retry if HAL still initializing after sleep/wake
         var inputFormat = inputNode.outputFormat(forBus: 0)
         if inputFormat.sampleRate == 0 || inputFormat.channelCount == 0 {
-            Logger.warning("Initial format invalid (\(inputFormat.sampleRate)Hz, \(inputFormat.channelCount)ch), retrying...", subsystem: .audio)
+            Logger.event(.engBuild, .audio, ["sr": .double(0), "ch": .int(0), "retry": .bool(true)], level: .warning)
             for attempt in 1...5 {
                 Thread.sleep(forTimeInterval: 0.1)  // blocks lifecycleQueue — acceptable on background queue
                 inputFormat = inputNode.outputFormat(forBus: 0)
                 if inputFormat.sampleRate > 0 && inputFormat.channelCount > 0 {
-                    Logger.info("Format valid after retry \(attempt): \(inputFormat.sampleRate)Hz, \(inputFormat.channelCount)ch", subsystem: .audio)
+                    Logger.step(.engBuild, .audio, ["sr": .double(inputFormat.sampleRate), "ch": .int(Int(inputFormat.channelCount)), "attempt": .int(attempt)])
                     break
                 }
             }
         }
         guard inputFormat.sampleRate > 0 && inputFormat.channelCount > 0 else {
-            Logger.error("Invalid input format after retries: \(inputFormat.sampleRate)Hz, \(inputFormat.channelCount) channels", subsystem: .audio)
+            Logger.event(.engBuild, .audio, ["sr": .double(inputFormat.sampleRate), "ch": .int(Int(inputFormat.channelCount)), "fail": .bool(true)], level: .error)
             throw RecordingError.invalidFormat
         }
-        Logger.debug("Input format: \(inputFormat.sampleRate)Hz, \(inputFormat.channelCount) channels", subsystem: .audio)
+        Logger.step(.engBuild, .audio, ["sr": .double(inputFormat.sampleRate), "ch": .int(Int(inputFormat.channelCount))])
 
         // Create 16kHz mono Float32 output format (whisper requirement)
         guard let outputFormat = AVAudioFormat(
@@ -320,7 +320,7 @@ actor AudioEngineLifecycle {
         ) else { throw RecordingError.invalidFormat }
 
         guard let converter = AVAudioConverter(from: inputFormat, to: outputFormat) else {
-            Logger.error("Failed to create audio converter", subsystem: .audio)
+            Logger.event(.engBuild, .audio, ["fail": .string("converter")], level: .error)
             throw RecordingError.invalidFormat
         }
         converter.channelMap = [0]
@@ -346,9 +346,9 @@ actor AudioEngineLifecycle {
                     }
                     if bestCh != 0 && bestEnergy > ch0Energy * 1.5 {
                         converter.channelMap = [NSNumber(value: bestCh)]
-                        Logger.info("RMS channel selection: ch\(bestCh) dominant (energy \(String(format: "%.5f", bestEnergy)) vs ch0 \(String(format: "%.5f", ch0Energy)))", subsystem: .audio)
+                        Logger.step(.engBuild, .audio, ["ch": .int(bestCh), "rms": .double(Double(bestEnergy))])
                     } else {
-                        Logger.debug("RMS channel selection: ch0 retained (ch0=\(String(format: "%.5f", ch0Energy)), best=ch\(bestCh) \(String(format: "%.5f", bestEnergy)))", subsystem: .audio)
+                        Logger.step(.engBuild, .audio, ["ch": .int(0), "rms": .double(Double(ch0Energy))])
                     }
                     channelSelected = true
                 }
@@ -368,10 +368,10 @@ actor AudioEngineLifecycle {
         }, &tapErr)
 
         guard tapOk else {
-            Logger.error("Failed to install tap: \(tapErr?.localizedDescription ?? "unknown")", subsystem: .audio)
+            Logger.event(.engTap, .audio, ["err": .string(tapErr?.localizedDescription ?? "unknown")], level: .error)
             throw RecordingError.audioUnitFailed
         }
-        Logger.debug("Tap installed (bufferSize: \(bufferSize))", subsystem: .audio)
+        Logger.step(.engTap, .audio, ["buf": .int(Int(bufferSize))])
 
         return boundDeviceID
     }

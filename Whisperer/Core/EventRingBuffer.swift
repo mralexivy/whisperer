@@ -37,6 +37,22 @@ enum MetadataValue: CustomStringConvertible {
     }
 }
 
+// Literal conformances so call sites read `["gen": 15, "route": "default"]`
+// instead of `["gen": .int(15), "route": .string("default")]`. Without these
+// the noise at the call site is worse than the prose the format replaces.
+extension MetadataValue: ExpressibleByStringLiteral {
+    init(stringLiteral value: StringLiteralType) { self = .string(value) }
+}
+extension MetadataValue: ExpressibleByIntegerLiteral {
+    init(integerLiteral value: IntegerLiteralType) { self = .int(value) }
+}
+extension MetadataValue: ExpressibleByFloatLiteral {
+    init(floatLiteral value: FloatLiteralType) { self = .double(value) }
+}
+extension MetadataValue: ExpressibleByBooleanLiteral {
+    init(booleanLiteral value: BooleanLiteralType) { self = .bool(value) }
+}
+
 struct HealthEvent {
     let offset: Double       // seconds from recordingStart (negative = before recording)
     let component: String
@@ -52,6 +68,21 @@ struct HealthEvent {
             parts += "  \(meta)"
         }
         return parts
+    }
+
+    /// Same grammar as a file record, so a failed session's dumped timeline reads
+    /// exactly like the lines around it and needs no second legend.
+    var packed: String {
+        let level: String
+        switch kind {
+        case .error:                  level = "E"
+        case .recovery:               level = "I"
+        case .state, .progress, .performance: level = "D"
+        }
+        var line = String(format: "%+.3f ", offset) + "\(level) \(component) \(operation)"
+        let meta = Logger.packMetadata(metadata)
+        if !meta.isEmpty { line += " " + meta }
+        return line
     }
 }
 
@@ -138,5 +169,12 @@ final class EventRingBuffer: Sendable {
         let events = snapshot(last: n)
         guard !events.isEmpty else { return "_no events_" }
         return events.map(\.formatted).joined(separator: "\n")
+    }
+
+    /// Packed rendering for the rolling log — written only when a session fails.
+    func packedSnapshot(last n: Int = 60) -> String {
+        let events = snapshot(last: n)
+        guard !events.isEmpty else { return "" }
+        return events.map(\.packed).joined(separator: "\n")
     }
 }

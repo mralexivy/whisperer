@@ -460,21 +460,6 @@ enum StuckStateDumper {
     }
 
     private static func renderThreadSample() -> String {
-        // Checked before the DEBUG branch: the in-process unwind needs no entitlement and no
-        // subprocess, so unlike `sample` it works in the sandboxed build — which is the build
-        // every user-reported stall comes from.
-        if let report = MainThreadBacktrace.latestReport() {
-            let age = Int(Date().timeIntervalSince(report.capturedAt))
-            var out = "\n## Thread Sample\n\n"
-            out += "_main thread, captured \(age)s ago while wedged: \(report.reason)_\n\n"
-            if let failure = report.failure {
-                out += "_capture failed: \(failure)_\n"
-            } else {
-                out += "```\n" + report.frames.joined(separator: "\n") + "\n```\n"
-            }
-            return out
-        }
-
         #if DEBUG
         let pid = ProcessInfo.processInfo.processIdentifier
         let sampleURL = URL(fileURLWithPath: "/tmp/whisperer-stall-sample.txt")
@@ -500,13 +485,10 @@ enum StuckStateDumper {
     }
 
     private static func renderRecentLogs() -> String {
-        let url = Logger.logFileURL
-        guard let data = try? Data(contentsOf: url),
-              let text = String(data: data, encoding: .utf8) else {
-            return "\n## Recent Logs\n\n_could not read \(url.path)_\n"
+        let sessions = LogExtract.fromCurrentLog(count: 8)
+        if sessions.isEmpty {
+            return "\n## Recent Sessions\n\n_no session blocks in today's log_\n"
         }
-        let lines = text.components(separatedBy: "\n")
-        let tail = lines.suffix(200).joined(separator: "\n")
-        return "\n## Recent Logs (last 200 lines from \(url.lastPathComponent))\n\n```\n\(tail)\n```\n"
+        return "\n## Recent Sessions\n\n```\n\(sessions)\n```\n"
     }
 }

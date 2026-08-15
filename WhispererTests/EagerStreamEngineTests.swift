@@ -51,7 +51,7 @@ final class EagerStreamEngineTests: XCTestCase {
     // MARK: - Initial state
 
     func testInitialState() {
-        let engine = EagerStreamEngine()
+        var engine = EagerStreamEngine()
         XCTAssertNil(engine.agreementStartIndex)
         XCTAssertTrue(engine.confirmedWords.isEmpty)
         XCTAssertTrue(engine.prefixTokens.isEmpty)
@@ -60,7 +60,7 @@ final class EagerStreamEngineTests: XCTestCase {
     // MARK: - First pass (no previousHypothesis)
 
     func testFirstPassReturnsDisplayTextWithNoConfirmation() {
-        let engine = EagerStreamEngine()
+        var engine = EagerStreamEngine()
         engine.reset(at: 0)
 
         let hyp = sentence("hello world how are you")
@@ -82,7 +82,7 @@ final class EagerStreamEngineTests: XCTestCase {
     // MARK: - Normal confirmation (common prefix > boundaryWordCount)
 
     func testConfirmationOnSecondPassWithSuffix() {
-        let engine = EagerStreamEngine()
+        var engine = EagerStreamEngine()
         engine.reset(at: 0)
 
         // Pass 1
@@ -108,7 +108,7 @@ final class EagerStreamEngineTests: XCTestCase {
     // MARK: - Monotonicity: confirmed words + provisional tail never shrink
 
     func testDisplayTextDoesNotShrinkAcrossConsecutivePasses() {
-        let engine = EagerStreamEngine()
+        var engine = EagerStreamEngine()
         engine.reset(at: 0)
 
         var previousLength = 0
@@ -132,7 +132,7 @@ final class EagerStreamEngineTests: XCTestCase {
     // MARK: - Anchor guard: unanchored revision is held
 
     func testUnanchoredRevisionIsHeld() {
-        let engine = EagerStreamEngine()
+        var engine = EagerStreamEngine()
         engine.reset(at: 0)
 
         // Pass 1 — establish a 5-word hypothesis
@@ -157,7 +157,7 @@ final class EagerStreamEngineTests: XCTestCase {
     // MARK: - Large retraction is held
 
     func testLargeRetractionIsHeld() {
-        let engine = EagerStreamEngine()
+        var engine = EagerStreamEngine()
         engine.reset(at: 0)
 
         // Pass 1 — 8 words
@@ -181,7 +181,7 @@ final class EagerStreamEngineTests: XCTestCase {
     // MARK: - Short-tail branch (commonCount == hyp.count and hyp.count <= boundary)
 
     func testShortTailConfirmsAllButLastWord() {
-        let engine = EagerStreamEngine()
+        var engine = EagerStreamEngine()
         engine.reset(at: 0)
 
         // Pass 1 — 4 words
@@ -205,7 +205,7 @@ final class EagerStreamEngineTests: XCTestCase {
     // MARK: - Entropy gate: p ≥ 0.95 words confirmed in one pass without second window
 
     func testEntropyGateConfirmsHighProbWords() {
-        let engine = EagerStreamEngine()
+        var engine = EagerStreamEngine()
         engine.reset(at: 0)
 
         // Pass 1 — 8 words at moderate probability (establish previousHypothesis).
@@ -243,7 +243,7 @@ final class EagerStreamEngineTests: XCTestCase {
     // MARK: - Entropy gate boundary retention: last `boundaryWordCount` remain provisional
 
     func testEntropyGateKeepsBoundaryWordsTentative() {
-        let engine = EagerStreamEngine()
+        var engine = EagerStreamEngine()
         engine.reset(at: 0)
 
         // N words all at p ≥ 0.95 — the last `boundaryWordCount` must stay unconfirmed.
@@ -278,7 +278,7 @@ final class EagerStreamEngineTests: XCTestCase {
 
     func testSoftCommitFiresAfter6Seconds() {
         // Construct agreement boundary at 6.5 × 16000 = 104000 samples past lastCommittedIndex = 0
-        let engine = EagerStreamEngine()
+        var engine = EagerStreamEngine()
         engine.reset(at: 0)
 
         // Manually inject confirmed words and set agreementStartIndex by running two passes
@@ -314,7 +314,7 @@ final class EagerStreamEngineTests: XCTestCase {
     }
 
     func testSoftCommitClearsConfirmedWords() {
-        let engine = EagerStreamEngine()
+        var engine = EagerStreamEngine()
         engine.reset(at: 0)
 
         // Force a commit by passing agreementStartIndex past 6 × 16000 directly.
@@ -345,7 +345,7 @@ final class EagerStreamEngineTests: XCTestCase {
     // MARK: - Language lock gate
 
     func testNoConfirmationWhenLanguageNotLocked() {
-        let engine = EagerStreamEngine()
+        var engine = EagerStreamEngine()
         engine.reset(at: 0)
 
         let hyp1 = sentence("the cat sat on the mat")
@@ -371,7 +371,7 @@ final class EagerStreamEngineTests: XCTestCase {
     // MARK: - Empty hypothesis after filtering
 
     func testEmptyHypothesisAfterFilteringReturnsNil() {
-        let engine = EagerStreamEngine()
+        var engine = EagerStreamEngine()
         engine.reset(at: 5000)  // agreementStartIndex = 5000
 
         // hypothesis words all start BEFORE the agreementStartIndex — all filtered out
@@ -394,7 +394,7 @@ final class EagerStreamEngineTests: XCTestCase {
     // MARK: - Normalization / case insensitivity
 
     func testNormalizationIgnoresPunctuationAndCase() {
-        let engine = EagerStreamEngine()
+        var engine = EagerStreamEngine()
         // "Hello," and "hello" should be treated as equal in the agreement check.
         let prev = [word("Hello,", startSec: 0, endSec: 0.4)]
         let curr = [word("hello.", startSec: 0, endSec: 0.4)]
@@ -403,7 +403,7 @@ final class EagerStreamEngineTests: XCTestCase {
     }
 
     func testNormalizationSkipsEmptyNormalizedWords() {
-        let engine = EagerStreamEngine()
+        var engine = EagerStreamEngine()
         // A word that normalises to "" (e.g. "...") should NOT match anything.
         let prev = [word("...", startSec: 0, endSec: 0.4)]
         let curr = [word("...", startSec: 0, endSec: 0.4)]
@@ -414,7 +414,7 @@ final class EagerStreamEngineTests: XCTestCase {
     // MARK: - Reset
 
     func testResetClearsAllState() {
-        let engine = EagerStreamEngine()
+        var engine = EagerStreamEngine()
         engine.reset(at: 0)
 
         let hyp = sentence("some words here")
@@ -430,7 +430,7 @@ final class EagerStreamEngineTests: XCTestCase {
     // MARK: - Soft-commit span arithmetic
 
     func testSoftCommitSpanMatchesLastCommittedIndex() {
-        let engine = EagerStreamEngine()
+        var engine = EagerStreamEngine()
         engine.reset(at: 0)
         let lastCommitted = 1000
 
@@ -468,7 +468,7 @@ final class EagerStreamEngineTests: XCTestCase {
     // MARK: - No duplication in agreed text
 
     func testAgreedWordsAreNotDuplicated() {
-        let engine = EagerStreamEngine()
+        var engine = EagerStreamEngine()
         engine.reset(at: 0)
 
         let base = sentence("the quick brown fox")

@@ -113,7 +113,7 @@ actor WhispererMCPServer {
         switch state {
         case .failed(let error):
             // Only log non-cancelled failures; cancellation is expected on stop().
-            if !Self.isNWCancelledError(error) {
+            if !isCancelledError(error) {
                 Logger.error("MCP listener failed: \(error.localizedDescription)", subsystem: .app)
             }
         case .cancelled:
@@ -142,8 +142,7 @@ actor WhispererMCPServer {
         do {
             try await s.start(transport: t)
         } catch {
-            let nwError = error as? NWError
-            if nwError.map({ !Self.isNWCancelledError($0) }) ?? true {
+            if !isCancelledError(error) {
                 Logger.error("MCP session failed to start: \(error.localizedDescription)", subsystem: .app)
             }
             transport = nil
@@ -191,7 +190,6 @@ actor WhispererMCPServer {
         let connID = connectionSeq
 
         conn.start(queue: .global(qos: .utility))
-        Logger.debug("MCP connection \(connID) opened", subsystem: .app)
 
         // Each connection gets an idle read timeout. If no data arrives within this
         // window the connection is dead (peer gone without RST) — cancel it cleanly.
@@ -200,9 +198,6 @@ actor WhispererMCPServer {
         var requestCount = 0
         loop: while !Task.isCancelled {
             guard let request = await readHTTPRequest(conn: conn, timeout: idleTimeout) else {
-                if requestCount == 0 {
-                    Logger.debug("MCP connection \(connID) closed before first request", subsystem: .app)
-                }
                 break loop
             }
             requestCount += 1
@@ -220,7 +215,6 @@ actor WhispererMCPServer {
         }
 
         conn.cancel()
-        Logger.debug("MCP connection \(connID) closed after \(requestCount) request(s)", subsystem: .app)
     }
 
     // MARK: - HTTP Request Parsing
@@ -346,12 +340,6 @@ actor WhispererMCPServer {
         await withCheckedContinuation { cont in
             conn.receive(minimumIncompleteLength: 1, maximumLength: 65536) { content, _, isComplete, error in
                 if let error {
-                    // ECONNRESET (54), EPIPE (32), ECANCELED (89), ENOTCONN (57) are normal
-                    // connection lifecycle events — peer disconnected or we cancelled.
-                    // Do not log them; they generate enough NW-internal os_log noise already.
-                    if !Self.isExpectedConnectionError(error) {
-                        Logger.debug("MCP receive error: \(error.localizedDescription)", subsystem: .app)
-                    }
                     cont.resume(returning: nil)
                     return
                 }
@@ -367,9 +355,6 @@ actor WhispererMCPServer {
     private func nwSend(conn: NWConnection, data: Data) async -> Bool {
         await withCheckedContinuation { cont in
             conn.send(content: data, completion: .contentProcessed { error in
-                if let error, !Self.isExpectedConnectionError(error) {
-                    Logger.debug("MCP send error: \(error.localizedDescription)", subsystem: .app)
-                }
                 cont.resume(returning: error == nil)
             })
         }
@@ -380,23 +365,32 @@ actor WhispererMCPServer {
     /// Returns true for connection lifecycle events that are expected and require no logging.
     /// These produce Network.framework os_log messages internally which we cannot suppress,
     /// so we at minimum avoid duplicating them via our own Logger.
-    nonisolated static func isExpectedConnectionError(_ error: NWError) -> Bool {
-        guard case .posix(let code) = error else { return false }
-        switch code {
-        case .ECONNRESET,   // 54 — peer sent RST (common for MCP clients on disconnect)
-             .EPIPE,        // 32 — write to closed socket
-             .ECANCELED,    // 89 — NWConnection cancelled
-             .ENOTCONN,     // 57 — socket not connected
-             .EBADF,        // 9  — bad file descriptor (post-cancel)
-             .ETIMEDOUT:    // 60 — TCP keepalive timeout
-            return true
-        default:
+    private func isExpectedConnectionError(_ error: NWError) -> Bool {
+        switch error {
+        case .posix(let code):
+            switch code {
+            case .ECONNRESET,   // 54 — peer sent RST (common for MCP clients on disconnect)
+                 .EPIPE,        // 32 — write to closed socket
+                 .ECANCELED,    // 89 — NWConnection cancelled
+                 .ENOTCONN,     // 57 — socket not connected
+                 .EBADF,        // 9  — bad file descriptor (post-cancel)
+                 .ETIMEDOUT:    // 60 — TCP keepalive timeout
+                return true
+            default:
+                return false
+            }
+        case .dns:
+            return false
+        case .tls:
+            return false
+        @unknown default:
             return false
         }
     }
 
-    nonisolated static func isNWCancelledError(_ error: NWError) -> Bool {
-        guard case .posix(let code) = error else { return false }
-        return code == .ECANCELED
+    private func isCancelledError(_ error: any Error) -> Bool {
+        guard let nwError = error as? NWError else { return false }
+        if case .posix(let code) = nwError, code == .ECANCELED { return true }
+        return false
     }
 }

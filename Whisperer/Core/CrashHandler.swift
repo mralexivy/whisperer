@@ -23,8 +23,6 @@ final class CrashHandler {
     // MARK: - Installation
 
     func install() {
-        Logger.debug("Installing crash handlers...", subsystem: .app)
-
         // Check if previous session crashed
         checkForPreviousCrash()
 
@@ -37,30 +35,36 @@ final class CrashHandler {
         // Install signal handlers
         installSignalHandlers()
 
-        Logger.debug("Crash handlers installed", subsystem: .app)
+        // Installing handlers cannot fail — reporting that it didn't is narration,
+        // not evidence. Kept in the ring buffer so a dump still shows the ordering.
+        Logger.step("crash.install", .app)
     }
 
     func uninstall() {
         // Remove crash marker on clean exit
         removeCrashMarker()
-        Logger.debug("Crash marker removed - clean exit", subsystem: .app)
+        Logger.step("crash.clean", .app)
     }
 
     // MARK: - Previous Crash Detection
 
     private func checkForPreviousCrash() {
-        if FileManager.default.fileExists(atPath: crashMarkerURL.path) {
-            // Previous session crashed!
-            if let data = try? Data(contentsOf: crashMarkerURL),
-               let crashInfo = String(data: data, encoding: .utf8) {
-                Logger.warning("Previous session crashed! Info: \(crashInfo)", subsystem: .app)
-            } else {
-                Logger.warning("Previous session crashed! (no additional info)", subsystem: .app)
-            }
+        guard FileManager.default.fileExists(atPath: crashMarkerURL.path) else { return }
 
-            // Remove the old marker
-            try? FileManager.default.removeItem(at: crashMarkerURL)
+        // The marker is written by this class in the same `k=v` grammar as the log,
+        // so its fields carry straight through instead of being re-parsed from prose.
+        var fields: [String: MetadataValue] = [:]
+        if let data = try? Data(contentsOf: crashMarkerURL),
+           let marker = String(data: data, encoding: .utf8) {
+            for pair in marker.split(whereSeparator: { $0.isWhitespace }) {
+                let parts = pair.split(separator: "=", maxSplits: 1)
+                if parts.count == 2 { fields[String(parts[0])] = .string(String(parts[1])) }
+            }
         }
+        Logger.event(.appPrevCrash, .app, fields, level: .warning)
+
+        // Remove the old marker
+        try? FileManager.default.removeItem(at: crashMarkerURL)
     }
 
     /// Returns true if the previous app session crashed
@@ -71,12 +75,15 @@ final class CrashHandler {
     // MARK: - Crash Marker
 
     private func writeCrashMarker() {
-        let info = """
-        Session started: \(Date())
-        PID: \(ProcessInfo.processInfo.processIdentifier)
-        Version: \(Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "unknown")
-        """
-        try? info.write(to: crashMarkerURL, atomically: true, encoding: .utf8)
+        // Packed `k=v`, values free of whitespace, so the next launch can read the
+        // fields back without a parser. See checkForPreviousCrash().
+        let info = Bundle.main.infoDictionary
+        let version = info?["CFBundleShortVersionString"] as? String ?? "?"
+        let build = info?["CFBundleVersion"] as? String ?? "?"
+        let marker = "at=\(ISO8601DateFormatter().string(from: Date()))"
+            + " pid=\(ProcessInfo.processInfo.processIdentifier)"
+            + " v=\(version)/\(build)"
+        try? marker.write(to: crashMarkerURL, atomically: true, encoding: .utf8)
     }
 
     private func removeCrashMarker() {
@@ -100,7 +107,15 @@ final class CrashHandler {
         \(exception.callStackSymbols.joined(separator: "\n"))
         """
 
-        Logger.critical(message, subsystem: .app)
+        // One record in the rolling log, the whole trace in crash.log. Duplicating the
+        // backtrace into both was 55% of a day's log volume — 14,044 lines — and the
+        // copy carried nothing crash.log didn't already have.
+        Logger.event(.appException, .app, [
+            "name": .string(exception.name.rawValue),
+            "reason": .string(exception.reason ?? "?"),
+            "frames": .int(exception.callStackSymbols.count),
+            "file": .string("crash.log")
+        ], level: .critical)
         Logger.flush()
 
         // Also write to a separate crash file for persistence
@@ -144,8 +159,14 @@ final class CrashHandler {
         \(stackTrace)
         """
 
-        // Try to log (may not work depending on signal)
-        Logger.critical(message, subsystem: .app)
+        // Try to log (may not work depending on signal). One record only — the frames
+        // go to crash.log, which is where DiagnosticsView already sends the user.
+        Logger.event(.appCrash, .app, [
+            "sig": .string(name.split(separator: " ").first.map(String.init) ?? name),
+            "num": .int(Int(signal)),
+            "frames": .int(Int(frameCount)),
+            "file": .string("crash.log")
+        ], level: .critical)
         Logger.flush()
 
         // Write to crash file

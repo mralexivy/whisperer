@@ -108,6 +108,16 @@ print("Model loaded")  // NO — use Logger
 
 Choose the subsystem that matches the module the code lives in.
 
+### Logging Rule — deviation vs. narration
+
+**A log line must be able to distinguish two different outcomes.**
+
+- `Logger.event()` — writes to file AND os_log. Use for deviations, failures, and outcomes that actually differ between runs: errors, warnings, events with measured values (`chars=`, `ms=`).
+- `Logger.step()` — writes to ring buffer AND os_log, NEVER to file. Use for narration of things that always succeed: "engine started", "tap installed", "session opened". Present in a stuck-state dump (where the ring buffer is flushed), absent from the rolling log.
+- `Logger.redact(_:)` — always wrap user speech before passing to any Logger call. Returns `‹Nc/Nw›` unless `logShowTranscripts` UserDefaults key is true. Never log transcript filenames whose names are derived from speech.
+
+Delete log lines that always emit the same text with no varying payload — they are narration, not evidence. See `docs/references/log-format.md` for event codes and format.
+
 ## Memory Management
 
 ### Weak self in closures and Tasks

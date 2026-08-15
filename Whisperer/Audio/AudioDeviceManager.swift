@@ -86,17 +86,34 @@ class AudioDeviceManager: ObservableObject {
                 let newUIDs = Set(devices.map { $0.uid })
                 let added = newUIDs.subtracting(self.cachedDeviceUIDs)
                 let removed = self.cachedDeviceUIDs.subtracting(newUIDs)
-                if !added.isEmpty {
-                    let names = devices.filter { added.contains($0.uid) }.map { $0.name }
-                    Logger.info("Audio devices added: \(names)", subsystem: .audio)
-                }
-                if !removed.isEmpty {
-                    let names = previousDevices.filter { removed.contains($0.uid) }.map { $0.name }
-                    Logger.warning("Audio devices removed: \(names)", subsystem: .audio)
-                }
                 self.cachedDeviceUIDs = newUIDs
 
-                self.updateSelectedDevice(previousDevices: previousDevices)
+                let selection = self.updateSelectedDevice(previousDevices: previousDevices)
+
+                // An unchanged device list is not news — this runs on every launch,
+                // every HAL notification and every wake, and used to cost three lines
+                // each time. One record, only when the set or the selection moved.
+                guard !added.isEmpty || !removed.isEmpty || selection.changed else { return }
+
+                var fields: [String: MetadataValue] = [
+                    "n": .int(devices.count),
+                    "sel": .string(self.selectedDevice?.name ?? "none"),
+                    "why": .string(selection.reason)
+                ]
+                if !added.isEmpty {
+                    fields["add"] = .string(devices.filter { added.contains($0.uid) }
+                        .map { $0.name }.joined(separator: ","))
+                }
+                if !removed.isEmpty {
+                    fields["rm"] = .string(previousDevices.filter { removed.contains($0.uid) }
+                        .map { $0.name }.joined(separator: ","))
+                }
+                if selection.preferredLost { fields["preflost"] = .bool(true) }
+
+                // Losing the chosen mic or ending up with none is a degraded outcome;
+                // gaining a device is not.
+                let degraded = selection.preferredLost || self.selectedDevice == nil
+                Logger.event(.devChange, .audio, fields, level: degraded ? .warning : .info)
             }
         }
     }
@@ -120,7 +137,7 @@ class AudioDeviceManager: ObservableObject {
         )
 
         guard status == noErr else {
-            Logger.error("Failed to get devices property size: \(status)", subsystem: .audio)
+            Logger.event(.devFail, .audio, ["at": .string("size"), "os": .int(Int(status))], level: .error)
             return []
         }
 
@@ -137,7 +154,7 @@ class AudioDeviceManager: ObservableObject {
         )
 
         guard status == noErr else {
-            Logger.error("Failed to get devices: \(status)", subsystem: .audio)
+            Logger.event(.devFail, .audio, ["at": .string("list"), "os": .int(Int(status))], level: .error)
             return []
         }
 
@@ -152,7 +169,9 @@ class AudioDeviceManager: ObservableObject {
             }
         }
 
-        Logger.info("Found \(inputDevices.count) input devices: \(inputDevices.map { $0.name })", subsystem: .audio)
+        // The set itself is reported by the `dev.change` diff in refreshDevices(),
+        // and only when it moves. Enumerating is not an outcome.
+        Logger.step("dev.enum", .audio, ["n": .int(inputDevices.count)])
         return inputDevices
     }
 
@@ -227,51 +246,65 @@ class AudioDeviceManager: ObservableObject {
 
     // MARK: - Device Selection
 
-    private func updateSelectedDevice(previousDevices: [AudioDevice]) {
+    /// What the selection pass did, so the caller can fold it into the single
+    /// `dev.change` record instead of each branch logging its own line.
+    private struct SelectionOutcome {
+        var changed = false
+        var reason = "preferred"   // preferred | default | first | none
+        var preferredLost = false
+    }
+
+    @discardableResult
+    private func updateSelectedDevice(previousDevices: [AudioDevice]) -> SelectionOutcome {
+        var outcome = SelectionOutcome()
+
         // If we have a preferred device UID, try to find it
         if let preferredUID = preferredDeviceUID {
             if let device = availableInputDevices.first(where: { $0.uid == preferredUID }) {
                 // Preferred device is available
                 if selectedDevice?.uid != device.uid {
                     selectedDevice = device
-                    Logger.info("Switched to preferred device: \(device.name)", subsystem: .audio)
+                    outcome.changed = true
                 }
-                return
+                return outcome
             } else {
                 // Preferred device not available - check if it was just disconnected
-                let wasConnected = previousDevices.contains(where: { $0.uid == preferredUID })
-                if wasConnected {
-                    Logger.warning("Preferred device disconnected, falling back to default", subsystem: .audio)
-                }
+                outcome.preferredLost = previousDevices.contains(where: { $0.uid == preferredUID })
             }
         }
 
         // Fall back to default device
         if let defaultDevice = getDefaultInputDevice() {
+            outcome.reason = "default"
             if selectedDevice?.id != defaultDevice.id {
                 selectedDevice = defaultDevice
-                Logger.info("Using default input device: \(defaultDevice.name)", subsystem: .audio)
+                outcome.changed = true
             }
         } else if let first = availableInputDevices.first {
+            outcome.reason = "first"
+            outcome.changed = selectedDevice?.uid != first.uid
             selectedDevice = first
-            Logger.info("Using first available device: \(first.name)", subsystem: .audio)
         } else {
+            outcome.reason = "none"
+            outcome.changed = selectedDevice != nil
             selectedDevice = nil
-            Logger.warning("No input devices available", subsystem: .audio)
         }
+
+        return outcome
     }
 
     func selectDevice(_ device: AudioDevice?) {
         if let device = device {
             preferredDeviceUID = device.uid
             selectedDevice = device
-            Logger.info("Selected device: \(device.name)", subsystem: .audio)
+            Logger.event(.devSelect, .audio, ["sel": .string(device.name), "pinned": .bool(true)])
         } else {
             // nil means use system default
             preferredDeviceUID = nil
             if let defaultDevice = getDefaultInputDevice() {
                 selectedDevice = defaultDevice
-                Logger.info("Cleared preference, using default: \(defaultDevice.name)", subsystem: .audio)
+                Logger.event(.devSelect, .audio, ["sel": .string(defaultDevice.name),
+                                                  "pinned": .bool(false)])
             }
         }
     }
@@ -316,7 +349,8 @@ class AudioDeviceManager: ObservableObject {
         if let deviceID = Self.resolveDeviceIDByUID(preferredUID) {
             return .explicit(uid: preferredUID, deviceID: deviceID)
         }
-        Logger.warning("Preferred device UID '\(preferredUID)' not found, using default route", subsystem: .audio)
+        Logger.event(.devFail, .audio, ["at": .string("resolve"), "uid": .string(preferredUID),
+                                        "fallback": .string("default")], level: .warning)
         return .systemDefault
     }
 
@@ -386,7 +420,8 @@ class AudioDeviceManager: ObservableObject {
         )
 
         if status != noErr {
-            Logger.error("Failed to start device list monitoring: \(status)", subsystem: .audio)
+            Logger.event(.devFail, .audio, ["at": .string("monitor"), "which": .string("list"),
+                                            "os": .int(Int(status))], level: .error)
             return
         }
 
@@ -403,7 +438,10 @@ class AudioDeviceManager: ObservableObject {
                 // When default device changes, refresh devices and update selection
                 // if user is following system default (preferredDeviceUID is nil)
                 if self.preferredDeviceUID == nil {
-                    Logger.info("Default input device changed, updating selection", subsystem: .audio)
+                    // The refresh below reports the outcome; the trigger is only
+                    // interesting when the outcome went wrong, which is what a
+                    // failure block's ring-buffer dump is for.
+                    Logger.step("dev.defaultchanged", .audio)
                     self.refreshDevices()
                 }
             }
@@ -417,7 +455,8 @@ class AudioDeviceManager: ObservableObject {
         )
 
         if defaultStatus != noErr {
-            Logger.error("Failed to start default device monitoring: \(defaultStatus)", subsystem: .audio)
+            Logger.event(.devFail, .audio, ["at": .string("monitor"), "which": .string("default"),
+                                            "os": .int(Int(defaultStatus))], level: .error)
             // Continue anyway - we have the device list monitoring
         }
 
@@ -430,7 +469,9 @@ class AudioDeviceManager: ObservableObject {
         ) { [weak self] notification in
             if let device = notification.object as? AVCaptureDevice,
                device.hasMediaType(.audio) {
-                Logger.info("AVFoundation: Audio device connected - \(device.localizedName)", subsystem: .audio)
+                // Redundant with the CoreAudio listener — both funnel into the same
+                // refresh, and `dev.change` is the record that says what resulted.
+                Logger.step("dev.avconnect", .audio, ["name": .string(device.localizedName)])
                 self?.refreshDevices()
             }
         }
@@ -442,7 +483,7 @@ class AudioDeviceManager: ObservableObject {
         ) { [weak self] notification in
             if let device = notification.object as? AVCaptureDevice,
                device.hasMediaType(.audio) {
-                Logger.warning("AVFoundation: Audio device disconnected - \(device.localizedName)", subsystem: .audio)
+                Logger.step("dev.avdisconnect", .audio, ["name": .string(device.localizedName)])
                 self?.refreshDevices()
             }
         }
@@ -453,14 +494,14 @@ class AudioDeviceManager: ObservableObject {
             object: nil,
             queue: .main
         ) { [weak self] _ in
-            Logger.info("System wake detected, refreshing audio devices", subsystem: .audio)
+            Logger.step("sys.wake", .audio)
             DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
                 self?.refreshDevices()
             }
         }
 
         isMonitoring = true
-        Logger.info("Started monitoring audio device changes (CoreAudio + AVFoundation)", subsystem: .audio)
+        Logger.step("dev.monitor", .audio, ["state": .string("on")])
     }
 
     func stopMonitoring() {
@@ -518,7 +559,7 @@ class AudioDeviceManager: ObservableObject {
         }
 
         isMonitoring = false
-        Logger.info("Stopped monitoring audio device changes", subsystem: .audio)
+        Logger.step("dev.monitor", .audio, ["state": .string("off")])
     }
 
     // Note: deinit removed - AudioDeviceManager is a singleton that lives for app lifetime

@@ -1964,8 +1964,7 @@ class AppState: ObservableObject {
             }
             userMessage = baseUserMessage
 
-            Logger.debug("LLM processing with mode '\(mode.name)' (temp=\(mode.temperature), topP=\(mode.topP), topK=\(mode.topK), repPenalty=\(mode.repetitionPenalty))", subsystem: .transcription)
-            Logger.debug("LLM input: \(precleanResult.text)", subsystem: .transcription)
+            Logger.step(.asrStart, .transcription, ["mode": .string(mode.name), "in": .string(Logger.redact(precleanResult.text))])
 
             var processed = try await processor.process(
                 text: precleanResult.text,
@@ -1998,7 +1997,7 @@ class AppState: ObservableObject {
                 return TranscriptPreCleaner.restorePlaceholders(precleanResult.text, precleanResult.placeholders)
             }
 
-            Logger.debug("LLM post-processed (\(mode.name)): \(text.prefix(60))... → \(processed.prefix(60))...", subsystem: .transcription)
+            Logger.step(.asrDone, .transcription, ["mode": .string(mode.name), "in": .int(text.count), "out": .int(processed.count)])
             return processed
         } catch {
             Logger.error("LLM post-processing failed: \(error)", subsystem: .transcription)
@@ -2026,7 +2025,7 @@ class AppState: ObservableObject {
                 selectedText: capturedSelectedText,
                 rewritePrompt: rewritePrompt
             )
-            Logger.debug("Rewrite mode (\(mode.name)) processed: \(transcription.prefix(30))... → \(result.prefix(30))...", subsystem: .transcription)
+            Logger.step(.asrDone, .transcription, ["mode": .string(mode.name), "in": .int(transcription.count), "out": .int(result.count)])
             return result
         } catch {
             Logger.error("Rewrite mode failed: \(error)", subsystem: .transcription)
@@ -2059,7 +2058,7 @@ class AppState: ObservableObject {
                     repetitionPenalty: listMode.repetitionPenalty,
                     maxTokensCap: listMode.maxTokensCap
                 )
-                Logger.debug("LLM list formatting: \(text.prefix(30))... → \(llmResult.prefix(30))...", subsystem: .transcription)
+                Logger.step(.asrDone, .transcription, ["mode": .string("list-llm"), "in": .int(text.count), "out": .int(llmResult.count)])
                 return llmResult
             } catch {
                 Logger.error("LLM list formatting failed: \(error)", subsystem: .transcription)
@@ -2068,7 +2067,7 @@ class AppState: ObservableObject {
         }
 
         if result != text {
-            Logger.debug("List formatted: \(text.prefix(30))... → \(result.prefix(30))...", subsystem: .transcription)
+            Logger.step(.asrDone, .transcription, ["mode": .string("list"), "in": .int(text.count), "out": .int(result.count)])
         }
 
         return result
@@ -2313,6 +2312,9 @@ class AppState: ObservableObject {
         if bridge is WhisperKitBridge { return bridge }
         #endif
         if bridge is FluidAudioBridge { return bridge }
+        // WhisperBridge uses eager streaming — the main model's rolling decode IS the preview.
+        // No separate tiny-model preview bridge needed; language detection still uses modelPool.previewBridge directly.
+        if bridge is WhisperBridge { return nil }
         return modelPool?.previewBridge
     }
 
@@ -2748,13 +2750,7 @@ class AppState: ObservableObject {
                 }
             }
 
-            // WhisperKit consumes complete buffers rather than maintaining an RNNT
-            // stream, so one ~100ms input-buffer interval is sufficient at release.
-            // The default 200ms remains for Nemotron and the other streaming paths.
-            let drainNanoseconds: UInt64 = (loadedBackendType ?? selectedBackendType) == .whisperKit
-                ? 100_000_000
-                : 200_000_000
-            await audioRecorder?.stopRecording(drainNanoseconds: drainNanoseconds)
+            await audioRecorder?.stopRecording()
 
             // Meeting mode never muted audio, so nothing to unmute.
             if muteOtherAudioDuringRecording && !wasMeetingStop {
@@ -3106,12 +3102,7 @@ class AppState: ObservableObject {
             let stopPreparation = Task.detached(priority: .userInitiated) { [weak transcriber] in
                 await transcriber?.prepareForStopAsync()
             }
-            // One input-buffer interval is sufficient for WhisperKit's batch path;
-            // stateful streaming engines retain the longer drain period.
-            let drainNanoseconds: UInt64 = (loadedBackendType ?? selectedBackendType) == .whisperKit
-                ? 100_000_000
-                : 200_000_000
-            await audioRecorder?.stopRecording(drainNanoseconds: drainNanoseconds)
+            await audioRecorder?.stopRecording()
             await stopPreparation.value
 
             // No separate live preview engine to stop — StreamingTranscriber handles everything
@@ -3155,12 +3146,12 @@ class AppState: ObservableObject {
                         if fillerWordRemovalEnabled {
                             finalText = FillerWordFilter.removeFillers(from: finalText)
                         }
-                        Logger.debug("Final pass timed out, using streaming result (\(finalText.count) chars)", subsystem: .transcription)
+                        Logger.event(.asrDone, .transcription, ["chars": .int(finalText.count), "fallback": .bool(true)])
                     } else {
-                        Logger.debug("Final transcription empty or timed out", subsystem: .transcription)
+                        Logger.event(.asrFail, .transcription, ["reason": .string("timeout_empty")], level: .warning)
                     }
                 } else {
-                    Logger.debug("Final transcription: '\(finalText)'", subsystem: .transcription)
+                    Logger.step(.asrDone, .transcription, ["chars": .int(finalText.count), "text": .string(Logger.redact(finalText))])
                 }
             }
             // Discard the in-progress CoreData session — saveRecordingFromTranscriber writes the clean final record
@@ -3199,7 +3190,7 @@ class AppState: ObservableObject {
                     }
                 }
 
-                Logger.debug("Entering dictated text: '\(textToInsert)'", subsystem: .app)
+                Logger.step(.asrDone, .transcription, ["chars": .int(textToInsert.count), "text": .string(Logger.redact(textToInsert))])
                 cancelStateWatchdog()
                 state = .inserting(text: textToInsert)
                 await insertText(textToInsert)
@@ -3491,11 +3482,10 @@ class AppState: ObservableObject {
 
         Task {
             // Cancel inference first so no stale progress callback can mutate the UI
-            // while the recorder is shutting down. A cancelled recording is discarded,
-            // so it does not need the normal trailing-audio drain.
+            // while the recorder is shutting down.
             let transcriber = streamingTranscriber
             await transcriber?.cancelAsync()
-            await audioRecorder?.stopRecording(drainNanoseconds: 0)
+            await audioRecorder?.stopRecording()
 
             // Unmute audio
             if muteOtherAudioDuringRecording {
@@ -3581,7 +3571,7 @@ class AppState: ObservableObject {
 
         // Save recording from in-memory samples
         if transcriber.saveRecording(to: destURL) {
-            Logger.info("Recording saved to: \(destURL.path)", subsystem: .app)
+            Logger.event(.recStop, .app, ["file": .string(recordId.uuidString)])
 
             // The archive is now a self-contained copy, so the session file is dead weight.
             // Without this it survived until a launch 7+ days later reaped it as an orphan,

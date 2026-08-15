@@ -269,7 +269,7 @@ class StreamingTranscriber {
     }
 
     private var usesEagerStream: Bool {
-        UserDefaults.standard.bool(forKey: "whisperCppEagerStreaming") && whisper is WhisperBridge
+        whisper is WhisperBridge
     }
 
     /// Initialize with a pre-loaded backend
@@ -308,7 +308,7 @@ class StreamingTranscriber {
             maxChunkDuration: maxChunkDuration
         )
         #if canImport(FluidAudio)
-        self.nemotronBridge = (nemotronBridge as? NemotronBridge) ?? (nemotronBridge as? NemotronHebrewBridge)
+        self.nemotronBridge = nemotronBridge as? any NemotronBridging
         #endif
     }
 
@@ -390,12 +390,7 @@ class StreamingTranscriber {
                     guard let self, !accumulatedText.isEmpty else { return }
                     // Deduplicate: FluidAudio sometimes fires the callback twice for the
                     // same chunk result (same text, ~1ms apart). Skip the duplicate.
-                    guard let n = partialCounter.incrementIfNew(accumulatedText) else {
-                        Logger.debug("[Nemotron] Partial — DUPLICATE skipped", subsystem: .transcription)
-                        return
-                    }
-                    let wordCount = accumulatedText.split(separator: " ").count
-                    Logger.debug("[Nemotron] Partial #\(n): \(wordCount) words — \"\(accumulatedText.prefix(60))\"", subsystem: .transcription)
+                    guard partialCounter.incrementIfNew(accumulatedText) != nil else { return }
                     self.previewAccumulatedText = accumulatedText
                     DispatchQueue.main.async {
                         self.onTranscription?(accumulatedText)
@@ -412,13 +407,10 @@ class StreamingTranscriber {
                         self?.onLanguageForcingUnavailable?(lang)
                     }
                 }
-                Logger.debug("[Nemotron] beginSession (language: \(lang.rawValue))", subsystem: .transcription)
                 await nemotron.beginSession(language: lang)
                 await nemotron.setPreviewCallback(callback)
                 self.isNemotronSessionReady = true
-                Logger.debug("[Nemotron] setPreviewCallback registered — ready for audio", subsystem: .transcription)
             }
-            Logger.debug("StreamingTranscriber started (Nemotron streaming path)", subsystem: .transcription)
             return
         }
         #endif
@@ -455,9 +447,9 @@ class StreamingTranscriber {
             #if canImport(WhisperKit)
             let previewInterval: UInt64 = self?.previewBridge is WhisperKitBridge
                 ? 40_000_000
-                : 500_000_000
+                : (self?.usesEagerStream == true ? 150_000_000 : 500_000_000)
             #else
-            let previewInterval: UInt64 = 500_000_000
+            let previewInterval: UInt64 = self?.usesEagerStream == true ? 150_000_000 : 500_000_000
             #endif
             while !Task.isCancelled {
                 guard let self, !self.isStopped, !self.isPreparingToStop else { break }
@@ -471,7 +463,7 @@ class StreamingTranscriber {
         }
 
         let previewName = previewBridge.map { String(describing: type(of: $0)) } ?? "none"
-        Logger.debug("StreamingTranscriber started (VAD-chunked pipeline, preview: \(previewName))", subsystem: .transcription)
+        Logger.step(.asrStart, .transcription, ["preview": .string(previewName)])
     }
 
     /// Add audio samples from microphone
@@ -480,7 +472,7 @@ class StreamingTranscriber {
 
         #if canImport(FluidAudio)
         // Nemotron: feed directly, bypass ring buffer. Duration tracking still needs updating.
-        if let nemotron = nemotronBridge {
+        if nemotronBridge != nil {
             do {
                 try allSamplesLock.withLock { totalSamplesReceived += samples.count }
             } catch {}
@@ -1194,7 +1186,7 @@ class StreamingTranscriber {
         audioBaseIndex: Int,
         through candidateEndIndex: Int
     ) -> String? {
-        guard let engine = eagerEngine else { return nil }
+        guard var engine = eagerEngine else { return nil }
         let hypothesis = result.words.map { word -> EagerStreamWord in
             EagerStreamWord(
                 text: word.text, tokens: word.tokens,
@@ -1205,6 +1197,7 @@ class StreamingTranscriber {
         }
         let outcome = engine.consume(hypothesis: hypothesis, audioBaseIndex: audioBaseIndex,
             languageIsLocked: result.languageIsLocked, lastCommittedIndex: lastTranscribedSampleIndex)
+        eagerEngine = engine
         if let commit = outcome.softCommit, !commit.text.isEmpty {
             completedChunkTexts.append(commit.text)
             onChunkCompleted?(TranscriptChunk(text: commit.text,
@@ -1275,46 +1268,49 @@ class StreamingTranscriber {
     // MARK: - Eager Streaming (whisper.cpp main model)
 
     /// One live-preview pass for the whisper.cpp eager-streaming path.
-    /// Called from `runLivePreviewPass` when `usesEagerStream` is true.
+    /// Called from `runLivePreviewPass` (as a heartbeat) and self-schedules from
+    /// the decode callback so passes run back-to-back as fast as the model allows.
     private func runEagerStreamPass() {
         guard let bridge = whisper as? WhisperBridge else { return }
-        guard !isTranscribingChunk else { return }
+        guard !isStopped else { return }
+        // One decode at a time — prevents queue pile-up and keeps windows short.
+        guard !isProcessing else { return }
 
         var samples: [Float] = []
         var audioBaseIndex = 0
-        var ringEnd = 0
+        var candidateEndIndex = 0
         do {
             try allSamplesLock.withLock {
-                audioBaseIndex = ring.baseSampleIndex
-                samples = ring.toArray()
-                ringEnd = audioBaseIndex + samples.count
+                let ringBase = ring.baseSampleIndex
+                let allSamples = ring.toArray()
+                let ringEnd = ringBase + allSamples.count
+                candidateEndIndex = ringEnd
+
+                // Clip to agreement boundary so we only decode unconfirmed audio.
+                // Smaller window = faster decode = more updates per second.
+                let agreementStart = max(eagerEngine?.agreementStartIndex ?? ringBase, ringBase)
+                let clipOffset = agreementStart - ringBase
+                samples = clipOffset < allSamples.count
+                    ? Array(allSamples[clipOffset...])
+                    : allSamples
+                audioBaseIndex = agreementStart
             }
         } catch { return }
 
-        // Require at least 1s of audio before attempting a decode.
-        guard samples.count >= Int(1.0 * sampleRate) else { return }
+        // Require at least 0.5s of audio in the unconfirmed window.
+        guard samples.count >= Int(0.5 * sampleRate) else { return }
 
-        // Incremental VAD — only check new audio since the last pass (max 3s).
+        // VAD gate on the window we're about to decode — skip silent tails.
         if let vad {
-            let vadStart = max(lastPreviewVADCheckEndIndex, ringEnd - Int(3.0 * sampleRate))
-            if vadStart < ringEnd {
-                var vadSamples: [Float] = []
-                do {
-                    try allSamplesLock.withLock {
-                        vadSamples = ring.slice(fromAbsolute: vadStart, toAbsolute: ringEnd)
-                    }
-                } catch {}
-                if !vadSamples.isEmpty {
-                    lastPreviewVADCheckEndIndex = ringEnd
-                    if !vad.hasSpeech(samples: vadSamples) { return }
-                }
-            }
+            let vadWindow = Array(samples.suffix(Int(min(Double(samples.count), 2.0 * sampleRate))))
+            if !vadWindow.isEmpty, !vad.hasSpeech(samples: vadWindow) { return }
         }
 
-        let normalizedSamples = normalizeSamples(samples)
         let lang = effectiveLanguage
-        let candidateEndIndex = audioBaseIndex + normalizedSamples.count
         let prompt = completedChunkTexts.last.map { String($0.suffix(100)) }
+        let normalizedSamples = normalizeSamples(samples)
+        let base = audioBaseIndex
+        let endIdx = candidateEndIndex
 
         isProcessing = true
         bridge.transcribeStreamingAsync(
@@ -1323,10 +1319,23 @@ class StreamingTranscriber {
             initialPrompt: prompt
         ) { [weak self] result in
             guard let self else { return }
-            defer { self.isProcessing = false }
-            guard let result else { return }
-            self.applyEagerOutcome(result: result, audioBaseIndex: audioBaseIndex,
-                candidateEndIndex: candidateEndIndex)
+            self.isProcessing = false
+            // Stop self-scheduling if the transcriber was stopped while this decode was in flight.
+            // Without this guard the in-flight completion callback re-enters runEagerStreamPass(),
+            // bypassing the heartbeat's isStopped check and causing the old transcriber to keep
+            // running after a new recording has started, leaking stale text into the new session.
+            guard !self.isStopped else { return }
+            if let result {
+                Logger.debug("Eager pass: \(result.words.count) words, logProb=\(String(format: "%.2f", result.averageLogProbability))", subsystem: .transcription)
+                self.applyEagerOutcome(result: result,
+                                       audioBaseIndex: base,
+                                       candidateEndIndex: endIdx)
+            } else {
+                Logger.debug("Eager pass: nil result (decode failed or lock timeout)", subsystem: .transcription)
+            }
+            // Self-schedule: start the next pass immediately without waiting for the
+            // 500ms heartbeat timer. The timer remains to restart the chain if it breaks.
+            self.runEagerStreamPass()
         }
     }
 
@@ -1335,7 +1344,7 @@ class StreamingTranscriber {
         audioBaseIndex: Int,
         candidateEndIndex: Int
     ) {
-        guard let engine = eagerEngine else { return }
+        guard var engine = eagerEngine else { return }
         let hypothesis = result.words.map { word -> EagerStreamWord in
             EagerStreamWord(
                 text: word.text, tokens: word.tokens,
@@ -1347,6 +1356,8 @@ class StreamingTranscriber {
         // Language is always locked for whisper.cpp eager (single-language model, fixed language).
         let outcome = engine.consume(hypothesis: hypothesis, audioBaseIndex: audioBaseIndex,
             languageIsLocked: true, lastCommittedIndex: lastTranscribedSampleIndex)
+        eagerEngine = engine
+        Logger.debug("Eager outcome: display=\(outcome.displayText.map { "'\($0.prefix(40))'" } ?? "nil"), held=\(outcome.wasHeld), commit=\(outcome.softCommit != nil)", subsystem: .transcription)
         if let commit = outcome.softCommit, !commit.text.isEmpty {
             completedChunkTexts.append(commit.text)
             onChunkCompleted?(TranscriptChunk(text: commit.text,
@@ -1451,8 +1462,6 @@ class StreamingTranscriber {
 
     /// Stop streaming and return the best transcription.
     func stop(skipCorrections: Bool = false) -> String {
-        Logger.debug("Stopping StreamingTranscriber...", subsystem: .transcription)
-
         isStopped = true
         vadScanTask?.cancel()
         vadScanTask = nil
@@ -1577,7 +1586,7 @@ class StreamingTranscriber {
     }
 
     private func clearAndReturn(_ result: String) -> String {
-        Logger.debug("StreamingTranscriber stopped (\(result.count) chars)", subsystem: .transcription)
+        Logger.event(.recStop, .transcription, ["chars": .int(result.count)])
         return result
     }
 
@@ -1585,8 +1594,6 @@ class StreamingTranscriber {
     /// loop as well as audio capture; otherwise it keeps decoding a frozen ring buffer.
     func cancelAsync() async {
         guard !isStopped else { return }
-        Logger.debug("Cancelling StreamingTranscriber without final pass...", subsystem: .transcription)
-
         stopGateLock.withLock { _isPreparingToStop = true }
         isStopped = true
         vadScanTask?.cancel()
@@ -1609,7 +1616,6 @@ class StreamingTranscriber {
             await wkBridge.cancelActiveTranscription()
         }
         #endif
-        Logger.debug("StreamingTranscriber cancelled", subsystem: .transcription)
     }
 
     /// Begin non-destructive stop work while AudioRecorder drains its final hardware
@@ -1708,13 +1714,11 @@ class StreamingTranscriber {
             await nemotronFeedTask?.value
             nemotronFeedTask = nil
             let durationSec = Double(totalSamplesReceived) / sampleRate
-            Logger.debug("[Nemotron] endSession — \(String(format: "%.1f", durationSec))s recorded, calling finish()", subsystem: .transcription)
             var text = await nemotron.endSession()
-            Logger.debug("[Nemotron] finish() returned \(text.count) chars", subsystem: .transcription)
             if text.isEmpty {
                 // finish() threw or returned nothing. Keep previewAccumulatedText so AppState's
                 // fallback (currentTranscription) can recover partial results from streaming.
-                Logger.warning("[Nemotron] finish() returned empty — partial text may be used as fallback", subsystem: .transcription)
+                Logger.event(.asrFail, .transcription, ["reason": .string("empty_finish")], level: .warning)
             } else {
                 previewAccumulatedText = ""
                 if !skipCorrections {
@@ -2354,12 +2358,12 @@ class StreamingTranscriber {
             do {
                 if AudioArchiveFormat.isAlreadyArchived(srcURL) {
                     try FileManager.default.copyItem(at: srcURL, to: url)
-                    Logger.debug("Recording copied to: \(url.lastPathComponent)", subsystem: .transcription)
+                    Logger.step(.recStop, .transcription, ["via": .string("copy")])
                     return true
                 }
                 // A session file left over from a pre-Opus build — encode it once on the way out.
                 try AudioArchiveFormat.transcode(from: srcURL, to: url)
-                Logger.debug("Legacy session file transcoded to: \(url.lastPathComponent)", subsystem: .transcription)
+                Logger.step(.recStop, .transcription, ["via": .string("transcode")])
                 return true
             } catch {
                 Logger.error("Failed to save recording from disk: \(error.localizedDescription)", subsystem: .transcription)
@@ -2404,7 +2408,7 @@ class StreamingTranscriber {
             let writer = try AudioArchiveFormat.makeWriter(at: url)
             try writer.write(buffer)
             writer.close()
-            Logger.debug("Recording saved (ring buffer) to: \(url.lastPathComponent)", subsystem: .transcription)
+            Logger.step(.recStop, .transcription, ["via": .string("ring_buffer")])
             return true
         } catch {
             Logger.error("Failed to save recording: \(error.localizedDescription)", subsystem: .transcription)

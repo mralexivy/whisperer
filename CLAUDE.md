@@ -52,16 +52,22 @@ When the user reports the HUD is stuck (e.g., "Listening… forever", "HUD won't
 
 ## Documentation
 
-Read these on demand — don't load all at once:
+**Read these with the Read tool when the task calls for it — do NOT use `@` imports here.**
+An `@` prefix loads the file into every session at launch; these total ~2,400 lines and are
+only relevant to a fraction of tasks. The Critical Rules above are the always-on subset.
 
-- Coding conventions, naming patterns, Swift idioms: @AGENTS.md
-- System architecture, state machine, design decisions: @ARCHITECTURE.md
-- UI design system (colors, typography, components, anti-patterns): @DESIGN.md
-- Product vision, UX principles, target users: @PRODUCT_SENSE.md
-- Active plans and tech debt: @PLANS.md
-- whisper.cpp C interop reference: @docs/references/whisper-cpp-integration.md
-- Language routing architecture and whisper.cpp detection API: @docs/references/language-routing.md
-- App Store submission checklist: @docs/exec-plans/app-store-submission.md
+| Read when | File |
+|---|---|
+| Writing/editing any Swift — naming, error handling, logging, memory | `AGENTS.md` |
+| Touching audio capture, the state machine, meetings, MCP, or storage | `ARCHITECTURE.md` |
+| Touching any SwiftUI/AppKit view, color, or font | `DESIGN.md` |
+| Deciding what a feature should do or how it should feel | `PRODUCT_SENSE.md` |
+| Picking up planned work or logging tech debt | `PLANS.md` |
+| Editing `WhisperBridge` or anything calling whisper.cpp C APIs | `docs/references/whisper-cpp-integration.md` |
+| Editing `LanguageRouter`, `ModelPool`, `ModelRouter`, `ScriptAnalyzer` | `docs/references/language-routing.md` |
+| Preparing a submission or touching `#if APP_STORE` paths | `docs/exec-plans/app-store-submission.md` |
+
+`ARCHITECTURE.md` is 900+ lines — jump to the relevant `##` section rather than reading it whole.
 
 ## Slash Commands
 

@@ -51,7 +51,7 @@ struct EagerOutcome {
 
 // MARK: - EagerStreamEngine
 
-final class EagerStreamEngine: @unchecked Sendable {
+struct EagerStreamEngine {
 
     // MARK: - Config
 
@@ -93,13 +93,7 @@ final class EagerStreamEngine: @unchecked Sendable {
         self.config = config
     }
 
-    // Explicit nonisolated deinit prevents Swift 6 from emitting
-    // swift_task_deinitOnExecutorImpl for this class when it's released from a
-    // @MainActor context (e.g., XCTestCase). The engine is pure computation on a
-    // serial queue and is safe to dealloc on any thread.
-    nonisolated deinit {}
-
-    func reset(at sampleIndex: Int) {
+    mutating func reset(at sampleIndex: Int) {
         confirmedWords.removeAll()
         previousHypothesis.removeAll()
         agreementStartIndex = sampleIndex
@@ -117,7 +111,7 @@ final class EagerStreamEngine: @unchecked Sendable {
     ///   - languageIsLocked: Whether the language router has settled on a language.
     ///     Confirmation and entropy-gate are gated on this; preview text still displays.
     ///   - lastCommittedIndex: `lastTranscribedSampleIndex` — for the soft-commit test.
-    func consume(
+    mutating func consume(
         hypothesis: [EagerStreamWord],
         audioBaseIndex: Int,
         languageIsLocked: Bool,

@@ -3443,7 +3443,9 @@ struct MCPSettingsView: View {
 struct DiagnosticsView: View {
     @State private var logFileSize: String = "..."
     @State private var verboseLogging: Bool = Logger.isVerbose
+    @State private var showTranscripts: Bool = UserDefaults.standard.bool(forKey: "logShowTranscripts")
     @State private var showDumpConfirmation: Bool = false
+    @State private var showCopyConfirmation: Bool = false
 
     private let diagnosticSubsystems: [LogSubsystem] = [.audio, .transcription, .textInjection, .model]
 
@@ -3468,6 +3470,27 @@ struct DiagnosticsView: View {
                     .labelsHidden()
                     .onChange(of: verboseLogging) { _, newValue in
                         Logger.isVerbose = newValue
+                    }
+            }
+
+            HStack {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Show transcript text in logs")
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundColor(MBColors.textPrimary)
+                    Text("Write spoken text to log file (off by default)")
+                        .font(.system(size: 11))
+                        .foregroundColor(MBColors.textSecondary)
+                }
+
+                Spacer()
+
+                Toggle("", isOn: $showTranscripts)
+                    .toggleStyle(.switch)
+                    .tint(MBColors.accent)
+                    .labelsHidden()
+                    .onChange(of: showTranscripts) { _, newValue in
+                        UserDefaults.standard.set(newValue, forKey: "logShowTranscripts")
                     }
             }
 
@@ -3512,6 +3535,31 @@ struct DiagnosticsView: View {
                     }
                     .buttonStyle(.plain).pointerOnHover()
                     #endif
+
+                    Button(action: {
+                        Task { @MainActor in
+                            let text = LogExtract.fromCurrentLog(count: 5)
+                            NSPasteboard.general.clearContents()
+                            NSPasteboard.general.setString(text.isEmpty ? "(no sessions in log)" : text, forType: .string)
+                            withAnimation(.easeInOut(duration: 0.2)) { showCopyConfirmation = true }
+                            try? await Task.sleep(for: .seconds(2))
+                            withAnimation(.easeInOut(duration: 0.2)) { showCopyConfirmation = false }
+                        }
+                    }) {
+                        HStack(spacing: 4) {
+                            Image(systemName: showCopyConfirmation ? "checkmark" : "doc.on.clipboard")
+                                .font(.system(size: 11))
+                            Text(showCopyConfirmation ? "Copied" : "Copy for AI")
+                                .font(.system(size: 11, weight: .medium))
+                                .lineLimit(1)
+                        }
+                        .foregroundColor(showCopyConfirmation ? .green : MBColors.textSecondary)
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 5)
+                        .background(MBColors.pill)
+                        .cornerRadius(6)
+                    }
+                    .buttonStyle(.plain).pointerOnHover()
 
                     Button(action: {
                         Logger.openLogInFinder()
