@@ -191,10 +191,13 @@ final class BatchedLLMGuardrailTests: XCTestCase {
             for width in [1, 8, 32] {
                 let texts = (0 ..< width).map { pool[$0 % pool.count] }
                 let probe = try await probeMemoryStages(processor, texts: texts, steps: 16)
+                // What projecting every position would have cost, kept in the table as the
+                // counterfactual: it is what these stages measured before `SelectivePrefillModel`,
+                // and it is why `prefillMBPerPosition` halved.
                 let logitsMB = Double(planner.vocabularySize) * 4 / 1_048_576
                 lines.append(String(
-                    format: "\n-- B=%d, prefix %d tok, suffix %d tok (one row of logits at fp32 "
-                    + "= %.0f MB, whole prefix = %.0f MB) --",
+                    format: "\n-- B=%d, prefix %d tok, suffix %d tok (logits avoided: %.0f MB/row, "
+                    + "%.0f MB across the prefix) --",
                     width, probe.prefixTokens, probe.maxSuffixTokens, logitsMB,
                     logitsMB * Double(probe.prefixTokens)))
                 lines.append("  stage           peak_MB   active_MB")

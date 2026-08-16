@@ -28,8 +28,11 @@
 //     (2 × 4 kv-heads × 256 head_dim × 2 B bf16 × 8 layers = 32,768 B). Small until sequences get
 //     long, and it grows *during* generation, so it must be budgeted against the output cap and
 //     not just the prompt.
-//  4. **Prefill logits** — `groupRows × promptTokens × 248320 × 2 B`, transient but by far the
-//     largest single allocation. This is the one that killed the machine.
+//  4. **Prefill activations** — ~0.85 MB per prefilled position, transient. This term used to be
+//     twice as large and dominate everything, because a prefill projected *every* position to the
+//     248320-wide vocabulary to read one of them: that is the allocation that killed the machine.
+//     `SelectivePrefillModel` (Vendor/mlx-swift-lm/.../BatchGenerate.swift) removed it, which is
+//     why the coefficient here is now the layer activations alone.
 //
 //  The planner's job is to keep (1)+(2)+(3)+(4) under a ceiling derived from what the machine
 //  actually has free right now, and to say plainly when it had to clamp.
@@ -108,14 +111,17 @@ struct BatchMemoryPlanner {
     /// Transient memory per prefilled *position*, in MB, regardless of how those positions are
     /// distributed across rows.
     ///
-    /// Measured at 1.72 MB from the warm-prefix pass — 1518 MB of peak above resident for 881
-    /// tokens at batch 1. It decomposes as one fp32 logits row (248320 × 4 B = 0.95 MB, since
-    /// prefill emits logits for every position even though only the last of each row is read) plus
-    /// ~0.77 MB of per-position layer activations.
+    /// Measured at 1.72 MB when a prefill projected every position to vocabulary: one fp32 logits
+    /// row (248320 × 4 B = 0.95 MB) plus ~0.77 MB of layer activations. `SelectivePrefillModel`
+    /// removed the logits row — `lm_head` now runs at one position per row — and re-measuring gave
+    /// 0.81 MB/position on the 881-token warm prefill and 0.76 at B=32, i.e. the activations alone,
+    /// as predicted.
     ///
-    /// Position count is the right unit: the same coefficient predicts the batched suffix prefill
-    /// at B=1 to within 2%, and over-predicts at B=8 and B=32 — over-prediction being the safe
-    /// direction for a guardrail.
+    /// 0.85 rather than the larger of the two: it over-projects every measured stage (B=1, B=8,
+    /// B=32 and the warm prefill) once the safety factor is applied, and over-projection is the
+    /// safe direction for a guardrail.
+    ///
+    /// Position count is the right unit — the same coefficient fits at every width.
     let prefillMBPerPosition: Double
 
     /// Vocabulary width. Retained for reporting the logits term explicitly; the projection uses
@@ -148,7 +154,7 @@ struct BatchMemoryPlanner {
         fixedRuntimeMB: 400,
         perRowStateMB: 32,
         perRowTokenKVBytes: 32_768,
-        prefillMBPerPosition: 1.72,
+        prefillMBPerPosition: 0.85,
         vocabularySize: 248_320,
         safetyFactor: 1.15,
         prefillHeadroomFraction: 0.5,

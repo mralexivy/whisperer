@@ -21,6 +21,21 @@ import MLX
 import MLXLMCommon
 import Tokenizers
 
+/// A model that can finish a prefill without projecting every position to vocabulary.
+///
+/// Whisperer local addition. Measured on Qwen3.5-4B at B=32 with a 128-token padded suffix, the
+/// prefill was 5.4 s of a 10.5 s batch — and ~99% of it was `lm_head` on positions nobody reads.
+/// A model that cannot do this still works; it just pays that cost, so the batch loop treats the
+/// capability as optional rather than requiring it of every `LLMModel`.
+public protocol SelectivePrefillModel {
+    /// Runs the forward pass over `inputs` (updating `cache`) and returns `[rows, 1, vocab]`,
+    /// where row `b`'s logits come from `positions[b]`.
+    func prefillLogits(_ inputs: MLXArray, cache: [KVCache]?, positions: [Int]) -> MLXArray
+}
+
+extension Qwen35TextModel: SelectivePrefillModel {}
+extension Qwen35Model: SelectivePrefillModel {}
+
 /// Stats collected during a batched generate call.
 public struct BatchStats {
     public init() {}
@@ -80,21 +95,24 @@ public struct BatchStats {
 ///     instead of one for the whole batch, and that overhead grows with exactly the B this
 ///     function is trying to make large.
 ///   - compactionThreshold: fraction of dead rows at which the batch is physically compacted.
-///     Measured on ragged real chunks at B=32: never compacting costs 59 tok/s against 111 at
-///     0.5, so this matters enormously — but 0.5, 0.25 and 0.1 land within 2% of each other, so
-///     the default is 0.25 and tuning it further is not worth a round.
+///     Measured on ragged real chunks at B=32, end to end: 55.0 tok/s never compacting, 58.8 at
+///     0.5, 58.9 at 0.25, 60.0 at 0.1 — reproduced to within 0.2% on a second run. Compacting at
+///     all is worth 9%; compacting eagerly is worth a further 2%, and the rewrite it costs never
+///     showed up. Hence 0.1.
 ///   - prefillPositionBudget: the largest `rows × promptLen` any single prefill pass may cover.
-///     A prefill returns logits for **every** position — `[rows, promptLen, 248320]` — even though
-///     exactly one position per row is ever read. At B=64 with a 256-token prompt that single
-///     intermediate is over 8 GB on a 32 GB machine, which was measured driving MLX peak memory to
-///     19.5 GB, the system load average to 64, and the machine into a reboot. Splitting the
-///     prefill bounds it, and the decode result is unchanged because rows never interact along the
-///     batch axis.
+///     Originally this bounded the `[rows, promptLen, 248320]` logits tensor a prefill used to
+///     return — over 8 GB at B=64 with a 256-token prompt, measured driving MLX peak memory to
+///     19.5 GB, the load average to 64, and the machine into a reboot. `SelectivePrefillModel`
+///     removed that tensor entirely, so what is left to bound is the per-position layer
+///     activations, ~0.77 MB each. Still worth bounding, an order of magnitude less urgent.
 ///
-///     Budgeting *positions* rather than rows is the whole point: the allocation is proportional
-///     to their product, so a fixed row group silently scales with prompt length and stops
-///     protecting anything on a long prompt. At the 1024 default the intermediate is
-///     `1024 × 248320 × 2 B ≈ 508 MB` regardless of how the rows and the length divide it.
+///     Budgeting *positions* rather than rows is the point: the allocation is proportional to
+///     their product, so a fixed row group silently scales with prompt length and stops protecting
+///     anything on a long prompt.
+///
+///     Splitting is free in output terms — rows never interact along the batch axis — but not in
+///     time: each group is a separate forward pass, and the groups are merged afterwards, which
+///     briefly holds two copies of the cache. `BatchMemoryPlanner` prices both.
 ///   - syncEvery: how many decode steps run before the sampled tokens are read back to the CPU.
 ///     The forward pass at B=32 costs 140 ms; the argmax and the `asArray` that follow it cost a
 ///     further 33 ms, and that 33 ms buys nothing except the ability to notice EOS. Sampling
@@ -114,7 +132,7 @@ public func generateBatchTokens(
     eosTokenIds: Set<Int>,
     repetitionPenalty: Float = 1.0,
     repetitionContextSize: Int = 64,
-    compactionThreshold: Double = 0.25,
+    compactionThreshold: Double = 0.10,
     prefillPositionBudget: Int = 1024,
     syncEvery: Int = 4,
     onToken: (_ row: Int, _ tokenId: Int) -> Bool
@@ -157,8 +175,8 @@ public func generateBatchTokens(
     // narrower groups instead of quietly allocating more.
     let groupSize = max(1, min(rows, prefillPositionBudget / max(maxLen, 1)))
     var groupCaches: [[any KVCache]] = []
+    /// One `[g, 1, vocab]` per prefill group, in row order.
     var lastLogits: [MLXArray] = []
-    lastLogits.reserveCapacity(rows)
 
     for groupStart in stride(from: 0, to: rows, by: groupSize) {
         let group = Array(groupStart ..< min(groupStart + groupSize, rows))
@@ -195,19 +213,27 @@ public func generateBatchTokens(
         }
 
         let prompt = MLXArray(flat).reshaped(group.count, maxLen)
-        let groupLogits = model(prompt, cache: groupCache)
 
         // Row `b`'s next-token distribution lives at its own last real token, `lengths[b] - 1`,
         // not at the end of the padded chunk — reading the last column would read a pad for every
         // row that was shorter than the longest one.
-        let picked = group.enumerated().map { slot, row in
-            groupLogits[slot, (lengths[row] - 1) ..< lengths[row], 0...]
+        let positions = group.map { lengths[$0] - 1 }
+        let picked: MLXArray
+        if let selective = model as? SelectivePrefillModel {
+            // The projection happens *after* the gather, so the `[g, maxLen, vocab]` intermediate
+            // is never built at all — see `SelectivePrefillModel`.
+            picked = selective.prefillLogits(prompt, cache: groupCache, positions: positions)
+        } else {
+            let groupLogits = model(prompt, cache: groupCache)
+            picked = stacked(positions.enumerated().map { slot, position in
+                groupLogits[slot, position ..< (position + 1), 0...]
+            }, axis: 0)
         }
-        // Forced here, inside the loop, so the group's full `[g, maxLen, vocab]` logits can be
-        // released before the next group allocates its own. Deferring this to one `eval` after
-        // the loop would hold every group's logits live at once and defeat the grouping.
+        // Forced here, inside the loop, so the group's intermediates can be released before the
+        // next group allocates its own. Deferring this to one `eval` after the loop would hold
+        // every group's live at once and defeat the grouping.
         eval(picked)
-        lastLogits.append(contentsOf: picked)
+        lastLogits.append(picked)
 
         // The recurrent caches are done with the padding the moment the prefill chunk is
         // consumed: the GatedDeltaNet kernel skips masked positions outright, so a pad leaves no
@@ -221,7 +247,10 @@ public func generateBatchTokens(
     }
 
     let cache = mergeBatchCaches(groupCaches)
-    var stepLogits = stacked(lastLogits, axis: 0)   // [rows, 1, vocab]
+    // Each entry is one group's `[g, 1, vocab]`, in row order, so concatenating along the row axis
+    // reassembles the batch.
+    var stepLogits = lastLogits.count == 1
+        ? lastLogits[0] : concatenated(lastLogits, axis: 0)   // [rows, 1, vocab]
 
     stats.prefillTime = -prefillStart.timeIntervalSinceNow
 

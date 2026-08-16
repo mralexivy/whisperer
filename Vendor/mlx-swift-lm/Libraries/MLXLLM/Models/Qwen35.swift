@@ -699,6 +699,26 @@ public class Qwen35TextModel: Module, LLMModel, KVCacheDimensionProvider {
         return out
     }
 
+    /// Prefill that projects to vocabulary at **one position per row** instead of all of them.
+    ///
+    /// Whisperer local patch. A prefill's job is to populate the cache and produce a single
+    /// next-token distribution per row, but `callAsFunction` applies `lm_head` to every position:
+    /// at 32 rows × 128 padded tokens that is a 4096 × 2560 × 248320 projection — ~2.6 TFLOP and a
+    /// 4 GB fp32 intermediate — of which 32 rows' worth is read and the other 99.2% is discarded.
+    /// Slicing the hidden state first makes the projection 32 × 2560 × 248320 instead.
+    ///
+    /// `positions[b]` is the index of row `b`'s last **real** token, so right-padded rows read
+    /// their own final token rather than a pad. Results are identical to slicing the full logits —
+    /// `lm_head` is position-wise, so projecting a gathered row cannot differ from gathering a
+    /// projected one beyond floating-point association, and the batched-correctness gate checks it.
+    public func prefillLogits(_ inputs: MLXArray, cache: [KVCache]?, positions: [Int]) -> MLXArray {
+        let hidden = model(inputs, cache: cache)                        // [B, L, H]
+        let index = MLXArray(positions.map(Int32.init)).reshaped(positions.count, 1, 1)
+        let gathered = takeAlong(hidden, index, axis: 1)                // [B, 1, H]
+        if let lmHead { return lmHead(gathered) }
+        return model.embedTokens.asLinear(gathered)
+    }
+
     /// Returns both the final logits and the pre-norm backbone hidden state in one forward pass.
     /// hiddenState is the pre-final-norm backbone output — what the MTP head expects as input.
     /// The MTP head applies its own preFCNormHidden; passing post-norm would double-normalize.
@@ -827,6 +847,11 @@ public class Qwen35Model: Module, LLMModel, KVCacheDimensionProvider {
 
     public func forwardWithHiddenState(_ inputs: MLXArray, cache: [KVCache]?) -> (logits: MLXArray, hiddenState: MLXArray) {
         languageModel.forwardWithHiddenState(inputs, cache: cache)
+    }
+
+    /// Whisperer local patch — see `Qwen35TextModel.prefillLogits`.
+    public func prefillLogits(_ inputs: MLXArray, cache: [KVCache]?, positions: [Int]) -> MLXArray {
+        languageModel.prefillLogits(inputs, cache: cache, positions: positions)
     }
 
     public func draftToken(hiddenState: MLXArray, tokenEmbedding: MLXArray, cache: [KVCache?]?) -> MLXArray? {

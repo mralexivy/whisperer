@@ -97,7 +97,7 @@ func runBatchedGeneration(
     maxTokens: Int,
     warmPrefix: Bool,
     repetitionPenalty: Float = 1.0,
-    compactionThreshold: Double = 0.5,
+    compactionThreshold: Double = 0.10,
     prefillPositionBudget: Int = 1024,
     syncEvery: Int = 4
 ) async throws -> BatchRunResult {
@@ -168,7 +168,15 @@ func runBatchedGeneration(
 
             let warm = model.newCache(parameters: nil)
             let prefix = MLXArray(probeA[..<prefixLength].map(Int32.init))[.newAxis]
-            eval(model(prefix, cache: warm))
+            // Only the cache matters here — the prefix's logits are thrown away, and this pass is
+            // ~880 positions long. Through `callAsFunction` that is 880 fp32 vocabulary rows, the
+            // single largest allocation in the whole run at 1.5 GB and the reason peak memory was
+            // 3859 MB at *every* batch width. `prefillLogits` projects one position instead.
+            if let selective = model as? SelectivePrefillModel {
+                eval(selective.prefillLogits(prefix, cache: warm, positions: [prefixLength - 1]))
+            } else {
+                eval(model(prefix, cache: warm))
+            }
 
             // Broadcast per group. The source `warm` cache is left untouched by
             // `broadcastWarmCache`, which is what makes it reusable across groups and batches.
@@ -516,7 +524,13 @@ func probeMemoryStages(
         stage("warmPrefill") {
             warm = model.newCache(parameters: nil)
             let prefix = MLXArray(full[0][..<prefixLength].map(Int32.init))[.newAxis]
-            eval(model(prefix, cache: warm))
+            // Matches what `runBatchedGeneration` does, or this stage would measure a warm prefill
+            // production no longer performs.
+            if let selective = model as? SelectivePrefillModel {
+                eval(selective.prefillLogits(prefix, cache: warm, positions: [prefixLength - 1]))
+            } else {
+                eval(model(prefix, cache: warm))
+            }
         }
 
         var cache: [any KVCache] = []
@@ -537,7 +551,13 @@ func probeMemoryStages(
                                                       count: maxLen - suffix.count))
             }
             let prompt = MLXArray(flat).reshaped(width, maxLen)
-            let logits = model(prompt, cache: cache)
+            let logits: MLXArray
+            if let selective = model as? SelectivePrefillModel {
+                logits = selective.prefillLogits(prompt, cache: cache,
+                                                 positions: suffixes.map { $0.count - 1 })
+            } else {
+                logits = model(prompt, cache: cache)
+            }
             let picked = argMax(logits[0..., -1, 0...], axis: -1)
             eval(picked)
             last = picked
