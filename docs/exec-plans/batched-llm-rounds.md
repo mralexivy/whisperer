@@ -110,3 +110,92 @@ end-to-end wall-clock on this workload.
 which is a change to the plan's premise: the quality corpus in
 `docs/knowledge/llm/criteria.md` cannot simply be assumed to carry over. It would have to
 be re-run, or batching restricted to equal-length rows.
+
+---
+
+## Round 4 — production wiring (scheduler + per-chunk path)
+
+`BatchedLLMScheduler` fires greedily on the next main-actor turn instead of holding a
+deadline, because round 0a's arrival distribution makes a deadline pure added latency. A
+width-1 batch is routed to the single-stream MTP path, so the sparse case cannot regress.
+Suites green: `BatchedLLMSchedulerTests` 7/7, `PerChunkLLMTests` 10/10,
+`BatchedLLMProductionPathTests` 5/5.
+
+## Round 5b — whole-text correction, split into batched segments
+
+`AIMode.correct` caps output at 256 tokens. On long dictation the single whole-text call
+therefore does not correct the text — it stops a fifth of the way in, and the app returns
+the truncated prefix or falls back to raw. So the baseline is **serial correction of the
+same segments**, with the single pass reported for reference only.
+
+M2 Pro / 32 GB, 5 longest loop-free real recordings, real `Correct` prompt. Percentages are
+words out over words in.
+
+| chars | segments | batched | serial segments | single pass (today) |
+|---|---|---|---|---|
+| 18169 | 102 | 71.4 s / 100% | 129.6 s / 99% | 15.7 s / 100% (uncorrected) |
+| 12645 | 72 | 87.0 s / 100% | 181.0 s / 84% | 22.4 s / 100% (uncorrected) |
+| 2998 | 15 | 17.4 s / 100% | 28.4 s / 99% | 11.4 s / 43% (truncated) |
+| 2080 | 7 | 12.7 s / 102% | 21.8 s / 101% | 10.6 s / 63% (truncated) |
+| 1645 | 5 | 9.6 s / 98% | 18.5 s / 96% | 10.2 s / 75% (truncated) |
+| **total** | | **198.1 s / 100%** | **379.3 s / 96%** | **70.2 s / 76%** |
+
+**1.92× over serial segments, and the first version of this path that returns a corrected
+long transcript at all.**
+
+Two bugs found by measuring rather than by reading:
+
+- **A fixed 30 s whole-batch deadline truncated the largest batches.** Rows past the
+  planner's slice width run *after* the earlier ones, so an 87-row batch is several
+  sequential generations sharing one budget: 45 s of work against a 30 s deadline, and
+  every row still live at that moment kept a half-finished sentence. It presented as
+  53–74% word retention — a batching correctness bug that was not one. Fixed by
+  `LLMPostProcessor.defaultTimeout(rowCount:)` = `max(30, 1.5 × rows)`, ~3.5× the measured
+  0.4 s/row.
+- **The retention metric penalised correct behaviour.** Rows collapsing to one word had
+  inputs that were whisper hallucination loops ("it's okay," ×40). The degeneration guard
+  collapsing those is right. Fixtures whose *input* loops are excluded and the exclusion
+  count is printed (2 of 19).
+
+One hypothesis was refuted by its own test: slice-to-slice warm-cache corruption. One
+multi-slice call and two separate calls returned identical retention, and
+`broadcastWarmCache` deep-copies and tiles per call. It was content, not slicing.
+
+## Round 6 — repeatability
+
+Five runs per width, on an otherwise idle machine.
+
+| B | median tok/s | p10 | p90 | spread | median end-to-end tok/s |
+|---|---|---|---|---|---|
+| 1 | 36.1 | 35.8 | 36.3 | 1% | 26.7 |
+| 16 | 73.4 | 73.2 | 73.4 | 0% | 45.0 |
+| 32 | 120.3 | 120.1 | 120.3 | 0% | 61.2 |
+
+Run-to-run spread ≤1% everywhere. The curve is a property of the hardware, not of the run.
+
+## Round 7 — real-recording wall clock (the user-visible gate)
+
+`BatchedLLMWallClockTests.testRealRecordingWallClock`. Chunks are fed to
+`ChunkLLMCoordinator` at their real audio-time offsets from the harvested corpus, and the
+clock that matters runs from the last chunk (key release) to `drain()` returning. Same
+loaded model, two passes per recording: straight single-stream, then through
+`BatchedLLMScheduler`.
+
+| chunks | audio | serial tail | batched tail | max batch width | words |
+|---|---|---|---|---|---|
+| 22 | 204 s | 2.36 s | 2.20 s | 3 | 261 / 261 |
+| 20 | 151 s | 1.29 s | 1.30 s | 2 | 310 / 310 |
+| 14 | 132 s | 0.83 s | 0.83 s | 1 | 372 / 372 |
+| 11 | 97 s | 1.26 s | 1.25 s | 1 | 256 / 256 |
+| 11 | 82 s | 0.48 s | 0.46 s | 1 | 175 / 175 |
+| 11 | 97 s | 0.87 s | 0.87 s | 1 | 233 / 233 |
+| **total** | | **7.1 s** | **6.9 s** | | |
+
+**1.03×. Parity, and parity is the correct result here.** Round 0a measured a 6.84 s median
+inter-arrival against a ~0.7 s correction, so almost nothing is ever outstanding at release
+— the max batch width the scheduler ever assembled on real timing was 3, and on four of six
+recordings it was 1. The plan's ≥3× gate for this path is unreachable *because of the
+workload*, not because of the implementation, and the plan says in that case the number is
+re-derived from measurement. It is asserted as "never slower" (>0.95×), which is what the
+width-1 → single-stream-MTP fallback exists to guarantee. Word counts are identical on
+every recording.

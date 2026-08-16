@@ -563,3 +563,38 @@ logit delta of exactly 0.0). Padded rows drift ≤0.28 in logit space — one bf
 step on logits of magnitude tens — which flips the greedy pick on the ~11% of real chunks
 where the top-two gap is small. Every observed flip was a comma or an article. Any plan
 that assumes "greedy is deterministic so batched == serial" is wrong on this hardware.
+
+### Where batching actually pays, measured end to end (2026-08-17)
+
+**The streaming per-chunk path gains nothing, and that is a property of speech.** Real
+recordings replayed at real arrival timing, release→text-ready: serial 7.1 s vs batched
+6.9 s over six recordings (1.03×). The scheduler's widest real batch was 3, and on four of
+six recordings every batch was width 1. With a 6.84 s median inter-arrival against a ~0.7 s
+correction there is simply nothing co-resident to coalesce. The value of wiring the
+scheduler into this path is that it *cannot* regress it (width 1 routes back to
+single-stream MTP), not that it speeds it up.
+
+**Whole-text correction is where the win is: 1.92× over serial segments** on the five
+longest real recordings, 198 s vs 379 s, with word retention 100% vs 96%.
+
+**And the bigger finding underneath it: the single whole-text pass was not correcting long
+dictation at all.** `AIMode.correct` caps output at 256 tokens, so on a 12,000-character
+transcript the model stops a fifth of the way through and the app returns the truncated
+prefix or falls back to raw — 76% of words across the sample, 43% on one. Splitting applies
+the cap per segment, so it stops binding. Any future measurement of "the whole-text path"
+must check what fraction of the input it actually returned before comparing times; a
+truncating baseline looks fast.
+
+**A whole-batch timeout must scale with row count.** Rows past the planner's slice width run
+sequentially, so one `processBatch` call with 87 rows is several generations sharing one
+deadline. A fixed 30 s budget silently truncated the largest batches and presented as
+53–74% word retention — indistinguishable from a batching correctness bug.
+`defaultTimeout(rowCount:)` = `max(30, 1.5 × rows)`.
+
+**Word-retention metrics need loop-free inputs.** Whisper hallucination loops ("it's okay,"
+×40) are collapsed by the degeneration guard, which is correct and scores as ~98% of words
+lost. Exclude fixtures whose *input* loops and print the exclusion count, or the metric
+measures the guard.
+
+**The throughput curve is stable to ≤1% run to run** (five runs per width, idle machine), so
+a single reading of it is trustworthy — unusual enough to be worth recording.
