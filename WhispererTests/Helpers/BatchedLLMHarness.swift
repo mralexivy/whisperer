@@ -97,7 +97,9 @@ func runBatchedGeneration(
     maxTokens: Int,
     warmPrefix: Bool,
     repetitionPenalty: Float = 1.0,
-    compactionThreshold: Double = 0.5
+    compactionThreshold: Double = 0.5,
+    prefillPositionBudget: Int = 1024,
+    syncEvery: Int = 4
 ) async throws -> BatchRunResult {
     guard let container = processor.modelContainer else { throw BatchedLLMHarnessError.notLoaded }
     guard !rows.isEmpty else { return BatchRunResult(texts: [], stats: BatchStats(), warmPrefixTokens: 0) }
@@ -140,7 +142,10 @@ func runBatchedGeneration(
             return
         }
 
-        let cache: [any KVCache]
+        // A factory rather than one cache: `generateBatchTokens` prefills in row groups to keep
+        // the `[rows, promptLen, vocab]` logits intermediate bounded, and each group needs its
+        // own cache of the right width.
+        let makeCache: (Int) -> [any KVCache]
         let suffixes: [[Int]]
 
         if warmPrefix {
@@ -165,13 +170,15 @@ func runBatchedGeneration(
             let prefix = MLXArray(probeA[..<prefixLength].map(Int32.init))[.newAxis]
             eval(model(prefix, cache: warm))
 
-            cache = broadcastWarmCache(warm, to: rows.count)
+            // Broadcast per group. The source `warm` cache is left untouched by
+            // `broadcastWarmCache`, which is what makes it reusable across groups and batches.
+            makeCache = { broadcastWarmCache(warm, to: $0) }
             suffixes = full.map { Array($0[prefixLength...]) }
             box.warmPrefixTokens = prefixLength
         } else {
             // A fresh cache takes its batch width from the first update, so nothing special is
             // needed here to make it B-wide.
-            cache = model.newCache(parameters: nil)
+            makeCache = { _ in model.newCache(parameters: nil) }
             suffixes = full
         }
 
@@ -184,12 +191,14 @@ func runBatchedGeneration(
         let stats = generateBatchTokens(
             model: model,
             tokenizer: tokenizer,
-            cache: cache,
+            makeCache: makeCache,
             promptSuffixes: suffixes,
             maxTokens: maxTokens,
             eosTokenIds: eosIds,
             repetitionPenalty: repetitionPenalty,
             compactionThreshold: compactionThreshold,
+            prefillPositionBudget: prefillPositionBudget,
+            syncEvery: syncEvery,
             onToken: { row, tokenId in
                 let piece = tokenizer.decode(tokens: [tokenId])
                 let before = charCounts[row]
@@ -275,6 +284,286 @@ func realChunkTexts(count: Int, corpus: ChunkStreamCorpus) -> [String] {
         }
     }
     return picked
+}
+
+// MARK: - Prompt shape
+
+/// Token counts for a batch, measured with the model's own tokenizer.
+struct PromptShape {
+    /// Tokens in the shared system prefix — prefilled once and broadcast, so it costs KV per row
+    /// but nothing in the batched prefill.
+    let systemPrefixTokens: Int
+    /// Longest per-row suffix. Right-padding makes every row this long, so this is what the
+    /// batched prefill actually runs.
+    let maxSuffixTokens: Int
+    /// Sum of unpadded suffixes, for reporting how much of the prefill is padding.
+    let totalSuffixTokens: Int
+}
+
+/// What `BatchMemoryPlanner` needs in order to plan a real batch.
+///
+/// Measured rather than estimated: the `Correct` system prompt is long enough that a
+/// chars/4 guess would be off by enough to make the memory projection meaningless, and the whole
+/// value of the projection is that it can be checked against what MLX reports.
+@MainActor
+func measurePromptShape(
+    _ processor: LLMPostProcessor, rows: [(system: String, user: String)]
+) async throws -> PromptShape {
+    guard let container = processor.modelContainer else { throw BatchedLLMHarnessError.notLoaded }
+    guard !rows.isEmpty else { return PromptShape(systemPrefixTokens: 0, maxSuffixTokens: 0, totalSuffixTokens: 0) }
+    let systemPrompt = rows[0].system
+    let users = rows.map(\.user)
+
+    final class ShapeBox: @unchecked Sendable {
+        var shape = PromptShape(systemPrefixTokens: 0, maxSuffixTokens: 0, totalSuffixTokens: 0)
+        var failure: String?
+    }
+    let box = ShapeBox()
+
+    try await container.perform { context in
+        func tokens(for user: String) throws -> [Int] {
+            try context.tokenizer.applyChatTemplate(
+                messages: [["role": "system", "content": systemPrompt],
+                           ["role": "user", "content": user]],
+                tools: nil, additionalContext: ["enable_thinking": false])
+        }
+        do {
+            let probeA = try tokens(for: ".")
+            let probeB = try tokens(for: "X")
+            var prefix = 0
+            while prefix < probeA.count, prefix < probeB.count, probeA[prefix] == probeB[prefix] {
+                prefix += 1
+            }
+            let suffixes = try users.map { try tokens(for: $0).count - prefix }
+            box.shape = PromptShape(
+                systemPrefixTokens: prefix,
+                maxSuffixTokens: suffixes.max() ?? 0,
+                totalSuffixTokens: suffixes.reduce(0, +))
+        } catch {
+            box.failure = "chat template failed: \(error)"
+        }
+    }
+    if let failure = box.failure { throw BatchedLLMHarnessError.internalFailure(failure) }
+    return box.shape
+}
+
+// MARK: - Raw kernel probe
+
+/// One point of the raw decode-kernel curve, with the decode loop's own overhead separated out.
+struct RawStepCost {
+    let batch: Int
+    /// ms per `model(y, cache:)` + `eval`. No tokenizer, no argmax, no value read back to the CPU.
+    /// This is the hardware's number and nothing else.
+    let kernelMs: Double
+    /// ms per step for the same forward pass *plus* the argmax and the `asArray` that greedy
+    /// decode needs in order to see whether a row hit EOS.
+    let withPickMs: Double
+    /// Peak `Memory.activeMemory` observed at this width, in MB.
+    let activeMB: Double
+}
+
+/// Times the decode step itself across batch widths, stripped of everything the decode loop wraps
+/// around it.
+///
+/// The reason this exists separately from the throughput sweep: an aggregate tok/s figure mixes
+/// the GPU kernel, the per-step GPU→CPU sync, the tokenizer, the degeneration guard, and Swift
+/// string appends. If that figure plateaus, the plateau could be any of them, and "the kernel is
+/// compute-bound" would be an assumption rather than a measurement. Here the only thing between
+/// two timer reads is the forward pass, so a flat curve means widening really is free and a linear
+/// one means the GPU is saturated — with no third explanation available.
+///
+/// - Parameter promptTokens: length of the per-row prefill. Held identical across rows so nothing
+///   is padded and the decode state is the same shape at every width.
+@MainActor
+func probeRawStepCost(
+    _ processor: LLMPostProcessor,
+    widths: [Int],
+    promptTokens: Int,
+    steps: Int
+) async throws -> [RawStepCost] {
+    guard let container = processor.modelContainer else { throw BatchedLLMHarnessError.notLoaded }
+    let box = RawStepBox()
+
+    try await container.perform { context in
+        guard let model = context.model as? any LLMModel else {
+            box.failure = "model is not an LLMModel"
+            return
+        }
+        // An arbitrary in-vocabulary id, reused for every position. Content is irrelevant: the
+        // cost of a decode step depends on the shapes and the cache offset, not on which tokens
+        // are in it, and using real text here would only add tokenizer time to a kernel probe.
+        let filler = Int32(1000)
+
+        for width in widths {
+            let cache = model.newCache(parameters: nil)
+            let prompt = MLXArray(Array(repeating: filler, count: width * promptTokens))
+                .reshaped(width, promptTokens)
+            eval(model(prompt, cache: cache))
+
+            let y = MLXArray(Array(repeating: filler, count: width)).reshaped(width, 1)
+
+            // Warm-up outside the timing: the first step at a shape Metal has not seen compiles
+            // and specialises kernels, and at these durations that would be most of the reading.
+            for _ in 0 ..< 3 { eval(model(y, cache: cache)) }
+
+            let kernelStart = Date()
+            for _ in 0 ..< steps { eval(model(y, cache: cache)) }
+            let kernelMs = -kernelStart.timeIntervalSinceNow * 1000 / Double(steps)
+
+            let pickStart = Date()
+            for _ in 0 ..< steps {
+                let logits = model(y, cache: cache)
+                _ = argMax(logits[0..., -1, 0...], axis: -1).asArray(Int32.self)
+            }
+            let withPickMs = -pickStart.timeIntervalSinceNow * 1000 / Double(steps)
+
+            box.points.append(RawStepCost(
+                batch: width, kernelMs: kernelMs, withPickMs: withPickMs,
+                activeMB: Double(Memory.activeMemory) / 1024 / 1024))
+        }
+    }
+
+    if let failure = box.failure { throw BatchedLLMHarnessError.incapableModel(failure) }
+    return box.points
+}
+
+private final class RawStepBox: @unchecked Sendable {
+    var points: [RawStepCost] = []
+    var failure: String?
+}
+
+// MARK: - Memory decomposition
+
+/// Peak and resident memory attributable to one stage of a batched generation.
+struct MemoryStage {
+    let name: String
+    /// MLX peak over this stage alone — the counter is reset at the start of each one, so the
+    /// figure is the stage's own high-water mark and not the run's.
+    let peakMB: Double
+    /// Resident memory once the stage has settled.
+    let activeMB: Double
+}
+
+/// Splits the memory cost of a batched run into the stages that allocate.
+///
+/// Curve-fitting a total against a formula is how a memory model ends up with a fudge constant
+/// that is wrong on the next machine. Each stage here is reset, run, and read separately, so the
+/// terms in `BatchMemoryPlanner` can be checked against the thing each one claims to describe:
+///
+///  - `weights` — what the loaded model costs before anything runs.
+///  - `warmPrefill` — the batch-1 pass over the shared system prefix. It is *not* part of the
+///    batched prefill, but it is part of the run's peak, and the planner initially ignored it.
+///  - `broadcast` — tiling that warm cache to `width` rows.
+///  - `batchPrefill` — the padded suffix pass, the term the position budget bounds.
+///  - `decode` — steady state.
+@MainActor
+func probeMemoryStages(
+    _ processor: LLMPostProcessor, texts: [String], steps: Int
+) async throws -> (stages: [MemoryStage], prefixTokens: Int, maxSuffixTokens: Int) {
+    guard let container = processor.modelContainer else { throw BatchedLLMHarnessError.notLoaded }
+    let rows = texts.map { correctPrompt(for: $0, fragment: true) }
+    let systemPrompt = rows[0].system
+    let width = texts.count
+
+    let box = StageBox()
+    try await container.perform { context in
+        guard let model = context.model as? any LLMModel else {
+            box.failure = "model is not an LLMModel"
+            return
+        }
+        func tokens(for user: String) throws -> [Int] {
+            try context.tokenizer.applyChatTemplate(
+                messages: [["role": "system", "content": systemPrompt],
+                           ["role": "user", "content": user]],
+                tools: nil, additionalContext: ["enable_thinking": false])
+        }
+
+        func stage(_ name: String, _ work: () -> Void) {
+            Memory.clearCache()
+            Memory.peakMemory = 0
+            work()
+            box.stages.append(MemoryStage(
+                name: name,
+                peakMB: Double(Memory.peakMemory) / 1_048_576,
+                activeMB: Double(Memory.activeMemory) / 1_048_576))
+        }
+
+        stage("weights") {}
+
+        let full: [[Int]]
+        let prefixLength: Int
+        do {
+            full = try rows.map { try tokens(for: $0.user) }
+            let probeA = try tokens(for: ".")
+            let probeB = try tokens(for: "X")
+            var length = 0
+            while length < probeA.count, length < probeB.count, probeA[length] == probeB[length] {
+                length += 1
+            }
+            prefixLength = length
+            box.prefixTokens = length
+            box.maxSuffixTokens = full.map { $0.count - length }.max() ?? 0
+        } catch {
+            box.failure = "chat template failed: \(error)"
+            return
+        }
+        guard prefixLength > 0, full.allSatisfy({ $0.count > prefixLength }) else {
+            box.failure = "degenerate system prefix (\(prefixLength) tokens)"
+            return
+        }
+
+        var warm: [any KVCache] = []
+        stage("warmPrefill") {
+            warm = model.newCache(parameters: nil)
+            let prefix = MLXArray(full[0][..<prefixLength].map(Int32.init))[.newAxis]
+            eval(model(prefix, cache: warm))
+        }
+
+        var cache: [any KVCache] = []
+        stage("broadcast") {
+            cache = broadcastWarmCache(warm, to: width)
+            eval(cache.flatMap { $0.state })
+        }
+
+        let suffixes = full.map { Array($0[prefixLength...]) }
+        let maxLen = suffixes.map(\.count).max() ?? 1
+        var last: MLXArray?
+        stage("batchPrefill") {
+            var flat = [Int32]()
+            flat.reserveCapacity(width * maxLen)
+            for suffix in suffixes {
+                flat.append(contentsOf: suffix.map(Int32.init))
+                flat.append(contentsOf: repeatElement(Int32(suffix[suffix.count - 1]),
+                                                      count: maxLen - suffix.count))
+            }
+            let prompt = MLXArray(flat).reshaped(width, maxLen)
+            let logits = model(prompt, cache: cache)
+            let picked = argMax(logits[0..., -1, 0...], axis: -1)
+            eval(picked)
+            last = picked
+        }
+
+        stage("decode") {
+            var y = last!.reshaped(width, 1)
+            for _ in 0 ..< steps {
+                let logits = model(y, cache: cache)
+                y = argMax(logits[0..., -1, 0...], axis: -1).reshaped(width, 1)
+                eval(y)
+            }
+        }
+    }
+
+    if let failure = box.failure { throw BatchedLLMHarnessError.incapableModel(failure) }
+    return (box.stages, box.prefixTokens, box.maxSuffixTokens)
+}
+
+/// Token shape observed by the most recent `probeMemoryStages` call, so a caller can report the
+/// stage table against the lengths that produced it.
+private final class StageBox: @unchecked Sendable {
+    var stages: [MemoryStage] = []
+    var prefixTokens = 0
+    var maxSuffixTokens = 0
+    var failure: String?
 }
 
 // MARK: - Logit-level comparison

@@ -225,6 +225,60 @@ final class BatchedLLMCorrectnessTests: XCTestCase {
         }
     }
 
+    // MARK: - 4. The two throughput optimisations are output-neutral
+
+    /// Grouped prefill and the deferred token readback are both pure performance changes, and both
+    /// are only worth having if that claim is checked rather than argued.
+    ///
+    /// - **Row-grouped prefill** splits the `[rows, promptLen, vocab]` logits intermediate — over
+    ///   8 GB at B=64 — into several smaller passes. Rows do not interact along the batch axis, so
+    ///   a group boundary must be invisible. If it is not, the group caches are being merged
+    ///   wrongly and the pad layout or the offsets are off.
+    /// - **`syncEvery > 1`** stops reading sampled tokens back to the CPU on every step, at the
+    ///   cost of a row overrunning its EOS by up to `syncEvery - 1` tokens. Those tokens are
+    ///   dropped, so the text must be unchanged; if it is not, the drop is happening in the wrong
+    ///   place.
+    ///
+    /// Byte-exact is the right gate here, unlike test 1: both sides of each comparison are batched
+    /// at the same width with the same padding, so there is no bf16 rounding difference to allow
+    /// for. Anything that differs is a bug in the optimisation.
+    func testGroupedPrefillAndDeferredSyncAreNeutral() async throws {
+        let corpus = try loadCorpus()
+        let texts = realChunkTexts(count: batchWidth, corpus: corpus)
+        try XCTSkipIf(texts.count < 4, "corpus has only \(texts.count) usable chunks")
+        let group = rows(for: texts)
+
+        try await withModel { processor in
+            // One prefill pass for the whole batch, one CPU readback per step: the original
+            // behaviour, and the reference for both comparisons.
+            let reference = try await runBatchedGeneration(
+                processor, rows: group, maxTokens: maxTokens, warmPrefix: true,
+                prefillPositionBudget: 1 << 20, syncEvery: 1)
+
+            let grouped = try await runBatchedGeneration(
+                processor, rows: group, maxTokens: maxTokens, warmPrefix: true,
+                prefillPositionBudget: 96, syncEvery: 1)
+            assertIdentical(grouped.texts, reference.texts, inputs: texts)
+
+            let deferred = try await runBatchedGeneration(
+                processor, rows: group, maxTokens: maxTokens, warmPrefix: true,
+                prefillPositionBudget: 1 << 20, syncEvery: 8)
+            assertIdentical(deferred.texts, reference.texts, inputs: texts)
+
+            // And both together, which is how they actually ship.
+            let both = try await runBatchedGeneration(
+                processor, rows: group, maxTokens: maxTokens, warmPrefix: true,
+                prefillPositionBudget: 96, syncEvery: 4)
+            assertIdentical(both.texts, reference.texts, inputs: texts)
+
+            print(String(format: "neutral: reference %.0f tok/s, grouped %.0f, deferred %.0f, "
+                         + "both %.0f (prefill %.0f ms → %.0f ms)",
+                         reference.stats.tokensPerSecond, grouped.stats.tokensPerSecond,
+                         deferred.stats.tokensPerSecond, both.stats.tokensPerSecond,
+                         reference.stats.prefillTime * 1000, both.stats.prefillTime * 1000))
+        }
+    }
+
     /// Which script most of the letters belong to. Only the three that matter here — anything else
     /// collapses to "other", because this is a data-loss detector, not a classifier.
     private func dominantScript(_ text: String) -> String {

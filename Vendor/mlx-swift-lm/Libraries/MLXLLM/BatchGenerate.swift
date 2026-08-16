@@ -68,9 +68,9 @@ public struct BatchStats {
 /// - Parameters:
 ///   - model: any `LLMModel`. Called through `callAsFunction(_:cache:)`, which returns logits.
 ///   - tokenizer: supplies the unknown-token id, matching `generateMTPTokens`.
-///   - cache: **already broadcast to `promptSuffixes.count` rows** — see `broadcastWarmCache`.
-///     Its current offset is treated as the shared warm prefix; only the per-row suffixes are
-///     prefilled here.
+///   - makeCache: produces a cache already broadcast to the requested number of rows — see
+///     `broadcastWarmCache`. A factory rather than a single cache because the prefill runs in
+///     row groups; see `prefillRowGroup`.
 ///   - promptSuffixes: per-row continuation tokens. Ragged is fine; they are right-padded
 ///     internally.
 ///   - maxTokens: per-row cap, not a total.
@@ -83,19 +83,40 @@ public struct BatchStats {
 ///     Measured on ragged real chunks at B=32: never compacting costs 59 tok/s against 111 at
 ///     0.5, so this matters enormously — but 0.5, 0.25 and 0.1 land within 2% of each other, so
 ///     the default is 0.25 and tuning it further is not worth a round.
+///   - prefillPositionBudget: the largest `rows × promptLen` any single prefill pass may cover.
+///     A prefill returns logits for **every** position — `[rows, promptLen, 248320]` — even though
+///     exactly one position per row is ever read. At B=64 with a 256-token prompt that single
+///     intermediate is over 8 GB on a 32 GB machine, which was measured driving MLX peak memory to
+///     19.5 GB, the system load average to 64, and the machine into a reboot. Splitting the
+///     prefill bounds it, and the decode result is unchanged because rows never interact along the
+///     batch axis.
+///
+///     Budgeting *positions* rather than rows is the whole point: the allocation is proportional
+///     to their product, so a fixed row group silently scales with prompt length and stops
+///     protecting anything on a long prompt. At the 1024 default the intermediate is
+///     `1024 × 248320 × 2 B ≈ 508 MB` regardless of how the rows and the length divide it.
+///   - syncEvery: how many decode steps run before the sampled tokens are read back to the CPU.
+///     The forward pass at B=32 costs 140 ms; the argmax and the `asArray` that follow it cost a
+///     further 33 ms, and that 33 ms buys nothing except the ability to notice EOS. Sampling
+///     straight into the next step's input keeps the whole loop on the GPU, and the readback then
+///     amortises over `syncEvery` steps. The cost is that a row can overrun its EOS by up to
+///     `syncEvery - 1` tokens, which are discarded — output is unaffected.
 ///   - onToken: `(row, tokenId)` in the caller's original row order, which does not change even
-///     after compaction. Return false to retire that row.
+///     after compaction. Return false to retire that row. **Not** called in lock-step with the
+///     GPU: tokens arrive in bursts of `syncEvery`.
 @discardableResult
 public func generateBatchTokens(
     model: any LLMModel,
     tokenizer: any Tokenizer,
-    cache: [any KVCache],
+    makeCache: (_ rows: Int) -> [any KVCache],
     promptSuffixes: [[Int]],
     maxTokens: Int,
     eosTokenIds: Set<Int>,
     repetitionPenalty: Float = 1.0,
     repetitionContextSize: Int = 64,
     compactionThreshold: Double = 0.25,
+    prefillPositionBudget: Int = 1024,
+    syncEvery: Int = 4,
     onToken: (_ row: Int, _ tokenId: Int) -> Bool
 ) -> BatchStats {
     var stats = BatchStats()
@@ -128,52 +149,79 @@ public func generateBatchTokens(
 
     let prefillStart = Date()
 
-    // Right-padded so every row's real tokens keep an intact causal window; the pads land after
-    // them, where a causal conv1d cannot see them. See the note on `BaseKVCache.rightPadding`
-    // for why left padding — what upstream mlx-lm does — is wrong for this model.
-    var flat = [Int32]()
-    flat.reserveCapacity(rows * maxLen)
-    for (row, tokens) in promptSuffixes.enumerated() {
-        flat.append(contentsOf: tokens.map(Int32.init))
-        // Padded with the row's own last token rather than a dedicated pad id: it is guaranteed
-        // in-vocabulary, and the pad columns are masked out of both the attention and the SSM,
-        // so the value is never read. A wrong id here would fault rather than degrade.
-        flat.append(contentsOf: repeatElement(Int32(tokens[tokens.count - 1]),
-                                              count: maxLen - lengths[row]))
-    }
-
     let isPadded = lengths.contains { $0 != maxLen }
-    if isPadded {
-        let padding = MLXArray(lengths.map { Int32(maxLen - $0) })
-        for c in cache {
-            guard let base = c as? BaseKVCache else { continue }
-            base.rightPadding = padding
-            // Absolute, and captured *before* the prefill advances the offset: the pads stay
-            // physically in the full-attention caches for the rest of the generation, so every
-            // later decode step needs to know where they are.
-            base.rightPaddingEnd = base.offset + maxLen
+    // Row groups, each prefilled by its own forward pass. Rows are independent along the batch
+    // axis — no attention or SSM state crosses rows — so grouping changes nothing about the
+    // result, only the size of the largest live intermediate.
+    // Derived from the budget and the actual padded length, so a long prompt automatically gets
+    // narrower groups instead of quietly allocating more.
+    let groupSize = max(1, min(rows, prefillPositionBudget / max(maxLen, 1)))
+    var groupCaches: [[any KVCache]] = []
+    var lastLogits: [MLXArray] = []
+    lastLogits.reserveCapacity(rows)
+
+    for groupStart in stride(from: 0, to: rows, by: groupSize) {
+        let group = Array(groupStart ..< min(groupStart + groupSize, rows))
+        let groupCache = makeCache(group.count)
+
+        // Right-padded so every row's real tokens keep an intact causal window; the pads land
+        // after them, where a causal conv1d cannot see them. See the note on
+        // `BaseKVCache.rightPadding` for why left padding — what upstream mlx-lm does — is wrong
+        // for this model. Padded to the *global* `maxLen` rather than the group's own, so every
+        // group leaves its cache at the same offset and the groups can be merged below.
+        var flat = [Int32]()
+        flat.reserveCapacity(group.count * maxLen)
+        for row in group {
+            let tokens = promptSuffixes[row]
+            flat.append(contentsOf: tokens.map(Int32.init))
+            // Padded with the row's own last token rather than a dedicated pad id: it is
+            // guaranteed in-vocabulary, and the pad columns are masked out of both the attention
+            // and the SSM, so the value is never read. A wrong id here would fault rather than
+            // degrade.
+            flat.append(contentsOf: repeatElement(Int32(tokens[tokens.count - 1]),
+                                                  count: maxLen - lengths[row]))
         }
+
+        if isPadded {
+            let padding = MLXArray(group.map { Int32(maxLen - lengths[$0]) })
+            for c in groupCache {
+                guard let base = c as? BaseKVCache else { continue }
+                base.rightPadding = padding
+                // Absolute, and captured *before* the prefill advances the offset: the pads stay
+                // physically in the full-attention caches for the rest of the generation, so
+                // every later decode step needs to know where they are.
+                base.rightPaddingEnd = base.offset + maxLen
+            }
+        }
+
+        let prompt = MLXArray(flat).reshaped(group.count, maxLen)
+        let groupLogits = model(prompt, cache: groupCache)
+
+        // Row `b`'s next-token distribution lives at its own last real token, `lengths[b] - 1`,
+        // not at the end of the padded chunk — reading the last column would read a pad for every
+        // row that was shorter than the longest one.
+        let picked = group.enumerated().map { slot, row in
+            groupLogits[slot, (lengths[row] - 1) ..< lengths[row], 0...]
+        }
+        // Forced here, inside the loop, so the group's full `[g, maxLen, vocab]` logits can be
+        // released before the next group allocates its own. Deferring this to one `eval` after
+        // the loop would hold every group's logits live at once and defeat the grouping.
+        eval(picked)
+        lastLogits.append(contentsOf: picked)
+
+        // The recurrent caches are done with the padding the moment the prefill chunk is
+        // consumed: the GatedDeltaNet kernel skips masked positions outright, so a pad leaves no
+        // trace in the SSM state, and the conv state was gathered per row inside the layer.
+        // Leaving `rightPadding` set on them would make `ArraysCache.makeMask` mask a decode
+        // chunk that has no padding. `KVCacheSimple` is the opposite case and must keep it.
+        for c in groupCache where c is ArraysCache {
+            (c as? BaseKVCache)?.rightPadding = nil
+        }
+        groupCaches.append(groupCache)
     }
 
-    let prompt = MLXArray(flat).reshaped(rows, maxLen)
-    let prefillLogits = model(prompt, cache: cache)
-
-    // Row `b`'s next-token distribution lives at its own last real token, `lengths[b] - 1`, not
-    // at the end of the padded chunk — reading the last column would read a pad for every row
-    // that was shorter than the longest one.
-    var stepLogits = stacked(
-        lengths.enumerated().map { prefillLogits[$0.offset, ($0.element - 1) ..< $0.element, 0...] },
-        axis: 0)   // [rows, 1, vocab]
-    eval(stepLogits)
-
-    // The recurrent caches are done with the padding the moment the prefill chunk is consumed:
-    // the GatedDeltaNet kernel skips masked positions outright, so a pad leaves no trace in the
-    // SSM state, and the conv state was gathered per row inside the layer. Leaving `rightPadding`
-    // set on them would make `ArraysCache.makeMask` mask a decode chunk that has no padding.
-    // `KVCacheSimple` is the opposite case and must keep it.
-    for c in cache where c is ArraysCache {
-        (c as? BaseKVCache)?.rightPadding = nil
-    }
+    let cache = mergeBatchCaches(groupCaches)
+    var stepLogits = stacked(lastLogits, axis: 0)   // [rows, 1, vocab]
 
     stats.prefillTime = -prefillStart.timeIntervalSinceNow
 
@@ -184,29 +232,32 @@ public func generateBatchTokens(
     /// Slot → the caller's row index. Diverges from identity after the first compaction.
     var slotRow = Array(0 ..< rows)
     var alive = [Bool](repeating: true, count: rows)
-    var current = [Int](repeating: 0, count: rows)
     var produced = [Int](repeating: 0, count: rows)
 
-    /// Greedy pick for every slot from `[slots, 1, vocab]`.
+    /// Greedy pick for every slot from `[slots, 1, vocab]`, returned **as an `MLXArray` still on
+    /// the GPU** so it can be reshaped straight into the next step's input.
     ///
-    /// The no-penalty path is one argmax and one sync for the whole batch. The penalty path is
-    /// per row because `RepetitionContext` masks a per-row set of token ids; it is correct but
-    /// it is the reason the penalty is off by default here.
-    func pick(_ logits: MLXArray) -> [Int] {
+    /// That is the whole point: the sampled token is the only thing the next forward pass needs,
+    /// and the GPU already has it. Reading it back to the CPU every step — which is what this
+    /// function used to do — costs a measured 33 ms per step at B=32 against a 140 ms forward
+    /// pass, i.e. 19% of decode, purely so the loop can notice EOS a few milliseconds earlier.
+    ///
+    /// The penalty path is the exception and stays on the CPU, because `RepetitionContext` masks
+    /// a per-row set of token ids. It is correct but it is why the penalty is off by default.
+    func sample(_ logits: MLXArray) -> MLXArray {
         if repetitions == nil {
-            return argMax(logits[0..., -1, 0...], axis: -1).asArray(Int32.self).map(Int.init)
+            return argMax(logits[0..., -1, 0...], axis: -1)
         }
-        return (0 ..< slotRow.count).map { slot in
+        return MLXArray((0 ..< slotRow.count).map { slot -> Int32 in
             let row = slotRow[slot]
             let rowLogits = logits[slot, -1, 0...].expandedDimensions(axes: [0])
-            return repetitions![row].process(logits: rowLogits).argMax().item(Int.self)
-        }
+            return Int32(repetitions![row].process(logits: rowLogits).argMax().item(Int.self))
+        })
     }
 
     /// Deliver one token and decide whether its row continues.
     func emit(slot: Int, token: Int) {
         let row = slotRow[slot]
-        current[slot] = token
 
         // EOS is not delivered, matching `generateMTPTokens` — the caller's text should not gain
         // a stray end marker just because it was produced in a batch.
@@ -224,10 +275,40 @@ public func generateBatchTokens(
         }
     }
 
-    let firstTokens = pick(stepLogits)
-    for slot in 0 ..< rows { emit(slot: slot, token: firstTokens[slot]) }
+    // The penalty path has to inspect every row's logits on the CPU anyway, so batching the
+    // readback would only add latency without removing a sync.
+    let burstSize = repetitions == nil ? max(1, syncEvery) : 1
 
-    while alive.contains(true), stats.steps < maxTokens {
+    /// Tokens for the position the GPU has not been asked about yet.
+    var next = sample(stepLogits)
+    asyncEval(next)
+
+    while true {
+        // Run a burst of steps with no CPU involvement at all. `asyncEval` keeps the queue fed
+        // rather than letting the graph pile up unevaluated.
+        var burst: [MLXArray] = []
+        burst.reserveCapacity(burstSize)
+        while burst.count < burstSize, stats.steps < maxTokens {
+            burst.append(next)
+            stats.steps += 1
+            guard stats.steps < maxTokens else { break }
+            next = sample(model(next.reshaped(next.dim(0), 1), cache: cache))
+            asyncEval(next)
+        }
+
+        // One readback for the whole burst.
+        eval(burst)
+        for tokens in burst {
+            let ids = tokens.asArray(Int32.self)
+            for slot in 0 ..< slotRow.count where alive[slot] {
+                emit(slot: slot, token: Int(ids[slot]))
+            }
+            // Tokens a row produced after its EOS are simply not delivered. They cost GPU time —
+            // up to `burstSize - 1` steps of it — but they cannot change the output.
+            if !alive.contains(true) { break }
+        }
+        guard alive.contains(true), stats.steps < maxTokens else { break }
+
         // Retire finished rows. Until this happens a dead row still costs full memory bandwidth
         // on every step, so one long straggler would otherwise make the batch as slow as B=1
         // while pretending to be wide. Deferred to a threshold because the compaction itself
@@ -247,27 +328,53 @@ public func generateBatchTokens(
                 }
             }
             slotRow = keep.map { slotRow[$0] }
-            current = keep.map { current[$0] }
             alive = keep.map { alive[$0] }
+            // The pending token vector is still full width and would no longer line up with the
+            // narrowed cache.
+            next = next[indices]
             stats.compactions += 1
-        }
-
-        // Dead slots that survived compaction are re-fed their own last token. Their output is
-        // discarded; the point is only to keep the batch rectangular until the next compaction.
-        let y = MLXArray(current.map(Int32.init)).reshaped(current.count, 1)
-        stepLogits = model(y, cache: cache)
-        // No `eval` here: `pick` ends in `asArray`, which forces evaluation anyway. Calling both
-        // costs a second GPU→CPU round trip on every step for nothing.
-        stats.steps += 1
-
-        let picked = pick(stepLogits)
-        for slot in 0 ..< slotRow.count where alive[slot] {
-            emit(slot: slot, token: picked[slot])
         }
     }
 
     stats.generateTime = -generateStart.timeIntervalSinceNow
     return stats
+}
+
+/// Whisperer local addition: join per-row-group caches into one batch-wide cache.
+///
+/// The groups were prefilled independently but to the same padded length, so every group's cache
+/// sits at the same offset and the only thing separating them is the batch axis. Concatenating
+/// along it produces exactly the cache a single wide prefill would have produced — rows never
+/// interact along that axis, which is what makes grouping a memory optimisation rather than a
+/// change of behaviour.
+private func mergeBatchCaches(_ groups: [[any KVCache]]) -> [any KVCache] {
+    guard let first = groups.first else { return [] }
+    guard groups.count > 1 else { return first }
+
+    return (0 ..< first.count).map { layer -> any KVCache in
+        let parts = groups.map { $0[layer] }
+        // The first group's cache object is reused as the merged one, so anything it already
+        // carries that is not part of `state` — `offset` on the recurrent caches, `rightPaddingEnd`
+        // — survives untouched and correct, since every group ran to the same offset.
+        var merged = parts[0]
+
+        let stateCount = merged.state.count
+        if stateCount > 0 {
+            merged.state = (0 ..< stateCount).map { index in
+                concatenated(parts.map { $0.state[index] }, axis: 0)
+            }
+        }
+        // The full-attention caches keep their pads for the rest of the run, so the pad layout
+        // has to be concatenated alongside the keys and values it describes. The recurrent caches
+        // cleared theirs at the end of their own prefill.
+        if let kv = merged as? KVCacheSimple {
+            let pads = parts.compactMap { ($0 as? BaseKVCache)?.rightPadding }
+            if pads.count == parts.count {
+                kv.rightPadding = concatenated(pads, axis: 0)
+            }
+        }
+        return merged
+    }
 }
 
 /// Whisperer local addition: tile a batch-1 warm cache across `rows`.
