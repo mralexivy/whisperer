@@ -524,6 +524,12 @@ class AppState: ObservableObject {
     // Per-chunk LLM correction coordinator
     private let chunkLLMCoordinator = ChunkLLMCoordinator()
 
+    // Batches greedy corrections that are in flight at the same moment. Rebuilt when the processor
+    // or the mode's repetition penalty changes, because both are baked into its runners.
+    private var llmBatchScheduler: BatchedLLMScheduler?
+    private weak var llmBatchSchedulerProcessor: LLMPostProcessor?
+    private var llmBatchSchedulerPenalty: Float = .nan
+
     // Long-record session state
     private var currentSessionID: UUID?
     private var idleSleepAssertion: IOPMAssertionID = 0
@@ -827,9 +833,9 @@ class AppState: ObservableObject {
 
         // Wire per-chunk LLM corrector. Uses applyLLMPostProcessing which guards on
         // llmEnabled, model loaded, and mode.supportsChunkProcessing before invoking the LLM.
-        chunkLLMCoordinator.corrector = { [weak self] text, contextTail in
+        chunkLLMCoordinator.corrector = { [weak self] text, fragment in
             guard let self else { return text }
-            return await self.applyLLMPostProcessing(text, contextTail: contextTail)
+            return await self.applyLLMPostProcessing(text, fragment: fragment)
         }
     }
 
@@ -1911,12 +1917,35 @@ class AppState: ObservableObject {
         return (systemPart, userMessage)
     }
 
+    /// The batching scheduler for this processor and penalty, created on first use.
+    ///
+    /// Rebuilt rather than reconfigured when either changes: the runners close over both, and a
+    /// scheduler holding a stale processor would generate against a model the app has since
+    /// unloaded. Any request still queued on the old scheduler is resumed with its own text.
+    private func batchScheduler(
+        for processor: LLMPostProcessor, repetitionPenalty: Float
+    ) -> BatchedLLMScheduler? {
+        if let existing = llmBatchScheduler,
+           llmBatchSchedulerProcessor === processor,
+           llmBatchSchedulerPenalty == repetitionPenalty {
+            return existing
+        }
+        llmBatchScheduler?.cancelAll()
+        let scheduler = BatchedLLMScheduler.forProcessor(
+            processor, repetitionPenalty: repetitionPenalty)
+        llmBatchScheduler = scheduler
+        llmBatchSchedulerProcessor = processor
+        llmBatchSchedulerPenalty = repetitionPenalty
+        return scheduler
+    }
+
     /// Apply LLM post-processing to transcribed text if enabled.
-    /// `contextTail`: non-nil signals this is a mid-stream chunk (fragment mode).
-    /// The value itself is NOT injected into the user message — doing so causes the model
-    /// to echo the context content into its output. Instead, a fragment-mode instruction
-    /// is added to the system prompt telling the model to preserve boundary capitalization.
-    private func applyLLMPostProcessing(_ text: String, contextTail: String? = nil) async -> String {
+    /// `fragment`: true for a mid-stream chunk. It adds a fragment-mode instruction to the system
+    /// prompt telling the model to preserve boundary capitalization and not to add terminal
+    /// punctuation. It used to be the previous chunk's corrected tail, but that string was never
+    /// injected anywhere — only its nil-ness was read — and keeping it forced the chunk
+    /// corrections to run one after another. See `ChunkLLMCoordinator`.
+    private func applyLLMPostProcessing(_ text: String, fragment: Bool = false) async -> String {
         guard llmEnabled, let processor = llmPostProcessor, processor.isModelLoaded else {
             return text
         }
@@ -1960,24 +1989,52 @@ class AppState: ObservableObject {
             // contextTail non-nil signals "fragment mode" (mid-stream chunk, not full text).
             // Inject only into the system prompt — never into the user message.
             // Injecting context into the user message causes the model to echo its content.
-            if contextTail != nil {
+            if fragment {
                 systemPrompt += "\n\nThis is a speech fragment from a continuous dictation stream — it may begin or end mid-sentence. Do NOT capitalize the first word unless the source already capitalizes it or it is a proper noun/acronym. Do NOT add terminal punctuation (.!?) at the end unless the source already contains it."
             }
             userMessage = baseUserMessage
 
             Logger.step(.asrStart, .transcription, ["mode": .string(mode.name), "in": .string(Logger.redact(precleanResult.text))])
 
-            var processed = try await processor.process(
-                text: precleanResult.text,
-                systemPrompt: systemPrompt,
-                userMessage: userMessage,
-                targetLanguage: mode.targetLanguage,
-                temperature: mode.temperature,
-                topP: mode.topP,
-                topK: mode.topK,
-                repetitionPenalty: mode.repetitionPenalty,
-                maxTokensCap: mode.maxTokensCap
-            )
+            // Greedy modes go through the batching scheduler; sampled ones do not.
+            //
+            // The batched decoder is greedy by construction, so routing a mode with
+            // `temperature > 0` through it would silently replace sampling with argmax — a change
+            // in output, not just in speed. Correct (temperature 0) is the mode that runs
+            // per-chunk and the one this exists for; Rewrite (0.25) keeps the sampled path.
+            //
+            // Scheduling a lone request costs one main-actor hop and then goes to the same
+            // single-stream `process` call, so nothing is lost when there is nothing to batch.
+            var processed: String
+            if mode.temperature == 0,
+               let scheduler = batchScheduler(for: processor,
+                                              repetitionPenalty: mode.repetitionPenalty) {
+                var instructions = systemPrompt
+                if let lang = mode.targetLanguage, !lang.isEmpty {
+                    // `process` appends this itself; the batch path takes finished instructions,
+                    // so the caller has to. Mismatching it would split the warm-prefix cache.
+                    instructions += " Translate to \(lang)."
+                }
+                processed = await scheduler.submit(
+                    LLMBatchRequest.make(
+                        text: precleanResult.text,
+                        userMessage: userMessage,
+                        targetLanguage: mode.targetLanguage,
+                        maxTokensCap: mode.maxTokensCap),
+                    instructions: instructions)
+            } else {
+                processed = try await processor.process(
+                    text: precleanResult.text,
+                    systemPrompt: systemPrompt,
+                    userMessage: userMessage,
+                    targetLanguage: mode.targetLanguage,
+                    temperature: mode.temperature,
+                    topP: mode.topP,
+                    topK: mode.topK,
+                    repetitionPenalty: mode.repetitionPenalty,
+                    maxTokensCap: mode.maxTokensCap
+                )
+            }
 
             // Strip any leaked structural tags — the LLM must never reproduce them
             // but occasionally does when context blocks are present.
@@ -2823,7 +2880,7 @@ class AppState: ObservableObject {
                 // Transformative modes or no chunks collected → existing full-text path.
                 let mode = AIModeManager.shared.postProcessMode
                 let processedText: String
-                if llmEnabled && mode.supportsChunkProcessing && !chunkLLMCoordinator.correctedChunks.isEmpty {
+                if llmEnabled && mode.supportsChunkProcessing && chunkLLMCoordinator.hasChunks {
                     processedText = await chunkLLMCoordinator.drain()
                 } else {
                     let listFormatted = await applyListFormatting(finalText)
@@ -3187,7 +3244,7 @@ class AppState: ObservableObject {
                 // Transformative modes or no chunks collected → existing full-text path.
                 let mode = AIModeManager.shared.postProcessMode
                 let processedText: String
-                if llmEnabled && mode.supportsChunkProcessing && !chunkLLMCoordinator.correctedChunks.isEmpty {
+                if llmEnabled && mode.supportsChunkProcessing && chunkLLMCoordinator.hasChunks {
                     processedText = await chunkLLMCoordinator.drain()
                 } else {
                     let listFormatted = await applyListFormatting(finalText)
@@ -3374,6 +3431,7 @@ class AppState: ObservableObject {
 
         streamingTranscriber = nil
         chunkLLMCoordinator.reset()  // Discard in-flight per-chunk corrections on watchdog force-idle
+        llmBatchScheduler?.cancelAll()  // …and release anyone waiting on a queued batch row
         liveTranscription = ""
         state = .idle
         HealthManager.shared.recordingStopped()
@@ -3509,6 +3567,7 @@ class AppState: ObservableObject {
             discardCurrentSession()
             streamingTranscriber = nil
             chunkLLMCoordinator.reset()  // Discard any in-flight per-chunk corrections
+            llmBatchScheduler?.cancelAll()
 
             // Reset state
             state = .idle

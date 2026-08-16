@@ -238,6 +238,58 @@ final class BatchedLLMProductionPathTests: XCTestCase {
         }
     }
 
+    // MARK: - 3b. What the shipping repetition penalty costs a batch
+
+    /// Production's `Correct` mode runs `repetitionPenalty: 1.05`, and `generateBatchTokens`
+    /// documents that a penalty above 1.0 forces the argmax to be taken row by row — one GPU→CPU
+    /// sync per row per step instead of one for the whole batch. That is overhead which grows with
+    /// exactly the B batching exists to raise, so the size of it decides whether the production
+    /// wiring can keep the penalty or has to justify dropping it.
+    ///
+    /// This reports rather than asserts a threshold: the number is the deliverable, and a machine
+    /// under different load will produce a different one. It fails only if the penalised batch is
+    /// slower than the serial path it replaces, which would make the wiring pointless.
+    func testRepetitionPenaltyCostAtBatchWidth() async throws {
+        let corpus = try loadCorpus()
+        let texts = realChunkTexts(count: batchWidth, corpus: corpus)
+        try XCTSkipIf(texts.count < 4, "corpus has only \(texts.count) usable chunks")
+
+        try await withModel { processor in
+            let prompts = texts.map { correctPrompt(for: $0, fragment: true) }
+            let instructions = prompts[0].system
+            let requests = zip(texts, prompts).map { text, prompt in
+                LLMBatchRequest.make(text: text, userMessage: prompt.user)
+            }
+            await processor.ensureWarmPrefix(for: instructions)
+            // Warm the graphs so the first measured run is not paying for specialisation.
+            _ = await processor.processBatch(requests: requests, instructions: instructions)
+
+            var timings: [(Float, Double, Int)] = []
+            for penalty in [Float(1.0), 1.05] {
+                let started = Date()
+                let results = await processor.processBatch(
+                    requests: requests, instructions: instructions, repetitionPenalty: penalty)
+                let seconds = -started.timeIntervalSince(Date())
+                let changed = zip(results, texts).filter { $0 != $1 }.count
+                timings.append((penalty, seconds, changed))
+            }
+
+            for (penalty, seconds, changed) in timings {
+                print(String(format: "repetitionPenalty %.2f — %.2f s for %d rows "
+                             + "(%.0f ms/row), %d rows changed",
+                             penalty, seconds, texts.count,
+                             seconds / Double(texts.count) * 1000, changed))
+            }
+            let plain = timings[0].1
+            let penalised = timings[1].1
+            print(String(format: "penalty overhead: %.0f%%", (penalised / plain - 1) * 100))
+            // The serial MTP path measured ~637 ms/row on this corpus; a penalised batch slower
+            // than that would mean the wiring costs the user time.
+            XCTAssertLessThan(penalised / Double(texts.count), 0.637,
+                              "penalised batch is slower per row than the serial MTP path")
+        }
+    }
+
     // MARK: - 4. Empty and degenerate inputs do not take the batch down
 
     /// Rows the streaming path can genuinely produce: a chunk that VAD clipped to nothing, one that

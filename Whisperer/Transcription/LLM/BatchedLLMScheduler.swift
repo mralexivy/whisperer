@@ -40,6 +40,11 @@ final class BatchedLLMScheduler {
     /// Largest batch to hand the runner in one call. The runner clamps further against memory via
     /// `BatchMemoryPlanner`; this is the scheduling bound, so that one pathological drain cannot
     /// hold a hundred rows' worth of continuations open behind a single generation.
+    ///
+    /// 32 because that is where the measured curve peaks — 59.5 tok/s end to end against 44.3 at
+    /// B=16 — and because past it the planner clamps to ~41 rows anyway and throughput falls back
+    /// to ~55. The streaming drain rarely reaches it (p90 = 11 chunks outstanding); the whole-text
+    /// splitter and meeting segments do.
     private let maxBatch: Int
     private let single: SingleRunner
     private let batch: BatchRunner
@@ -59,7 +64,7 @@ final class BatchedLLMScheduler {
     /// first question of any regression here, and the logs alone make it tedious to answer.
     private(set) var recentWidths: [Int] = []
 
-    init(maxBatch: Int = 16, single: @escaping SingleRunner, batch: @escaping BatchRunner) {
+    init(maxBatch: Int = 32, single: @escaping SingleRunner, batch: @escaping BatchRunner) {
         self.maxBatch = max(1, maxBatch)
         self.single = single
         self.batch = batch
@@ -172,7 +177,7 @@ extension BatchedLLMScheduler {
     /// both on the same `LLMPostProcessor` so they share one loaded model and one warm prefix.
     static func forProcessor(
         _ processor: LLMPostProcessor,
-        maxBatch: Int = 16,
+        maxBatch: Int = 32,
         repetitionPenalty: Float = 1.05
     ) -> BatchedLLMScheduler {
         BatchedLLMScheduler(
