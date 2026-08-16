@@ -16,45 +16,95 @@ import MachO
 
 enum StuckStateDumper {
 
+    /// Serial queue for the slow half of a dump (`/usr/bin/sample`, log extraction, file I/O).
+    /// These must NEVER run on the main thread: `sample` takes ~1.5s, which is itself long
+    /// enough to trip HealthManager's main-thread watchdog and trigger another dump — a
+    /// self-sustaining stall→dump→stall loop that added seconds to every recording stop.
+    private static let writeQueue = DispatchQueue(label: "com.ivy.whisperer.stalldump", qos: .utility)
+
+    /// Guards against stacking dumps. A dump in flight (or one written within the last
+    /// `minimumDumpInterval`) suppresses new triggers — repeat dumps of the same stall carry
+    /// no extra information and only prolong it.
+    private static let gateLock = NSLock()
+    private static var isDumping = false
+    private static var lastDumpAt: Date?
+    private static let minimumDumpInterval: TimeInterval = 10
+
     @MainActor
     static func dump(reason: String) {
         let now = Date()
+
+        gateLock.lock()
+        if isDumping || (lastDumpAt.map { now.timeIntervalSince($0) < minimumDumpInterval } ?? false) {
+            gateLock.unlock()
+            return
+        }
+        isDumping = true
+        lastDumpAt = now
+        gateLock.unlock()
+
         let isoFormatter = ISO8601DateFormatter()
         isoFormatter.formatOptions = [.withInternetDateTime]
         let timestamp = isoFormatter.string(from: now)
             .replacingOccurrences(of: ":", with: "-")
 
-        let logsDir = FileManager.default.homeDirectoryForCurrentUser
-            .appendingPathComponent("Library/Logs/Whisperer")
-        let historyDir = logsDir.appendingPathComponent("history")
-        try? FileManager.default.createDirectory(at: logsDir, withIntermediateDirectories: true)
-        try? FileManager.default.createDirectory(at: historyDir, withIntermediateDirectories: true)
+        // Main-thread half: sections that read @MainActor state (AppState, NSWindow, recorder).
+        // Cheap — all in-memory reads.
+        var header = ""
+        header += renderHeader(reason: reason, now: now, timestamp: timestamp)
+        header += renderSystemSnapshot()
+        header += renderComponentHealth()
+        header += renderHealthTimeline()
+        header += renderRingBuffer()
+        header += renderAppState()
+        header += renderAudioRecorder()
+        header += renderAudioDevices()
+        header += renderMemoryUsage()
+        header += renderAudioMuter()
+        header += renderWindows()
 
-        var output = ""
-        output += renderHeader(reason: reason, now: now, timestamp: timestamp)
-        output += renderSystemSnapshot()
-        output += renderComponentHealth()
-        output += renderHealthTimeline()
-        output += renderRingBuffer()
-        output += renderAppState()
-        output += renderAudioRecorder()
-        output += renderAudioDevices()
-        output += renderMemoryUsage()
-        output += renderAudioMuter()
-        output += renderWindows()
-        output += renderThreadSample()
-        output += renderRecentLogs()
+        // `/usr/bin/sample` walks every thread's stack, and to do that it repeatedly suspends
+        // the whole target process — including the whisper.cpp decode queue and the audio tap.
+        // Running it mid-recording therefore freezes the app it is meant to diagnose. Skip it
+        // while audio is in flight; every other section of the dump is captured either way.
+        let audioInFlight: Bool
+        switch AppState.shared.state {
+        case .recording, .stopping, .transcribing: audioInFlight = true
+        default: audioInFlight = false
+        }
 
-        // Always overwrite stall-latest.dump
-        let latestURL = logsDir.appendingPathComponent("stall-latest.dump")
-        try? output.write(to: latestURL, atomically: true, encoding: .utf8)
+        // Background half: thread sample + log extraction + disk writes.
+        // Sampling from here is also strictly better — the main thread is still wedged, so
+        // `sample` captures the blocking frame instead of capturing the dumper itself.
+        writeQueue.async {
+            defer {
+                gateLock.lock()
+                isDumping = false
+                gateLock.unlock()
+            }
 
-        // Also write to history/ and cap at 10 files
-        let historyURL = historyDir.appendingPathComponent("stall-\(timestamp).dump")
-        try? output.write(to: historyURL, atomically: true, encoding: .utf8)
-        pruneHistory(historyDir: historyDir, maxFiles: 10)
+            let logsDir = FileManager.default.homeDirectoryForCurrentUser
+                .appendingPathComponent("Library/Logs/Whisperer")
+            let historyDir = logsDir.appendingPathComponent("history")
+            try? FileManager.default.createDirectory(at: logsDir, withIntermediateDirectories: true)
+            try? FileManager.default.createDirectory(at: historyDir, withIntermediateDirectories: true)
 
-        Logger.error("Stall dump written: \(latestURL.path)", subsystem: .app)
+            let sampleSection = audioInFlight
+                ? "\n## Thread Sample\n\n_skipped: audio in flight — `sample` suspends every thread and would stall the recording_\n"
+                : renderThreadSample()
+            let output = header + sampleSection + renderRecentLogs()
+
+            // Always overwrite stall-latest.dump
+            let latestURL = logsDir.appendingPathComponent("stall-latest.dump")
+            try? output.write(to: latestURL, atomically: true, encoding: .utf8)
+
+            // Also write to history/ and cap at 10 files
+            let historyURL = historyDir.appendingPathComponent("stall-\(timestamp).dump")
+            try? output.write(to: historyURL, atomically: true, encoding: .utf8)
+            pruneHistory(historyDir: historyDir, maxFiles: 10)
+
+            Logger.error("Stall dump written: \(latestURL.path)", subsystem: .app)
+        }
     }
 
     // MARK: - History pruning
@@ -472,9 +522,19 @@ enum StuckStateDumper {
         task.standardError = Pipe()
         do {
             try task.run()
-            task.waitUntilExit()
         } catch {
             return "\n## Thread Sample\n\n_sample command failed: \(error.localizedDescription)_\n"
+        }
+
+        // Bounded wait — never an unbounded `waitUntilExit()`. `sample` occasionally wedges on a
+        // hung process, and this queue is shared by every subsequent dump.
+        let deadline = Date().addingTimeInterval(8)
+        while task.isRunning, Date() < deadline {
+            Thread.sleep(forTimeInterval: 0.05)
+        }
+        if task.isRunning {
+            task.terminate()
+            return "\n## Thread Sample\n\n_sample command timed out after 8s_\n"
         }
 
         let body = (try? String(contentsOf: sampleURL, encoding: .utf8)) ?? "_no output_"

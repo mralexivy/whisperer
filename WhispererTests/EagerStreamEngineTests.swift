@@ -68,7 +68,7 @@ final class EagerStreamEngineTests: XCTestCase {
             hypothesis: hyp,
             audioBaseIndex: 0,
             languageIsLocked: true,
-            lastCommittedIndex: 0
+            lastCommittedIndex: 0, windowEndIndex: .max
         )
         // No previousHypothesis → no confirmation, but display text should appear.
         XCTAssertNotNil(outcome.displayText)
@@ -87,7 +87,7 @@ final class EagerStreamEngineTests: XCTestCase {
 
         // Pass 1
         let hyp1 = sentence("the cat sat on the mat")
-        _ = engine.consume(hypothesis: hyp1, audioBaseIndex: 0, languageIsLocked: true, lastCommittedIndex: 0)
+        _ = engine.consume(hypothesis: hyp1, audioBaseIndex: 0, languageIsLocked: true, lastCommittedIndex: 0, windowEndIndex: .max)
 
         // Pass 2 — same prefix, one extra word
         let hyp2 = sentence("the cat sat on the mat and")
@@ -95,7 +95,7 @@ final class EagerStreamEngineTests: XCTestCase {
             hypothesis: hyp2,
             audioBaseIndex: 0,
             languageIsLocked: true,
-            lastCommittedIndex: 0
+            lastCommittedIndex: 0, windowEndIndex: .max
         )
 
         XCTAssertNotNil(outcome.displayText)
@@ -118,7 +118,7 @@ final class EagerStreamEngineTests: XCTestCase {
                 hypothesis: words,
                 audioBaseIndex: 0,
                 languageIsLocked: true,
-                lastCommittedIndex: 0
+                lastCommittedIndex: 0, windowEndIndex: .max
             )
             if let text = outcome.displayText {
                 let len = text.split(separator: " ").count
@@ -137,7 +137,7 @@ final class EagerStreamEngineTests: XCTestCase {
 
         // Pass 1 — establish a 5-word hypothesis
         let hyp1 = sentence("one two three four five")
-        _ = engine.consume(hypothesis: hyp1, audioBaseIndex: 0, languageIsLocked: true, lastCommittedIndex: 0)
+        _ = engine.consume(hypothesis: hyp1, audioBaseIndex: 0, languageIsLocked: true, lastCommittedIndex: 0, windowEndIndex: .max)
 
         // Pass 2 — completely different words (anchor = 0 < requiredAnchor = 2)
         let hyp2 = sentence("alpha beta gamma delta epsilon")
@@ -145,13 +145,39 @@ final class EagerStreamEngineTests: XCTestCase {
             hypothesis: hyp2,
             audioBaseIndex: 0,
             languageIsLocked: true,
-            lastCommittedIndex: 0
+            lastCommittedIndex: 0, windowEndIndex: .max
         )
 
         XCTAssertNil(outcome.displayText, "Unanchored revision should be held (nil displayText)")
         XCTAssertTrue(outcome.wasHeld, "wasHeld must be set on an anchor failure")
+        XCTAssertEqual(outcome.holdReason, .unanchoredSameStart,
+                       "the window start did not move, so this is real instability")
         // confirmedWords must not grow after holding
         XCTAssertTrue(engine.confirmedWords.isEmpty)
+    }
+
+    /// The other anchor failure: the boundary advanced, so the new window is cut at a different
+    /// sample and its first word is not comparable with the word it is scored against. Classified
+    /// apart from `unanchoredSameStart` because they need opposite treatment, and because the
+    /// profile could not otherwise tell which of the two is costing 40-50% of all passes.
+    func testAnchorLossRightAfterBoundaryMoveIsClassifiedSeparately() {
+        var engine = EagerStreamEngine()
+        engine.reset(at: 0)
+
+        // Pass 1 — confident enough for the entropy gate to confirm and move the boundary.
+        let hyp1 = sentence("one two three four five", p: 0.99)
+        _ = engine.consume(hypothesis: hyp1, audioBaseIndex: 0, languageIsLocked: true,
+                           lastCommittedIndex: 0, windowEndIndex: .max)
+        let movedTo = engine.agreementStartIndex
+        XCTAssertNotEqual(movedTo, 0, "precondition: the entropy gate must have moved the boundary")
+
+        // Pass 2 — decoded from the new, shorter window; nothing in common at the front.
+        let hyp2 = sentence("alpha beta gamma", startSec: 1.5)
+        let outcome = engine.consume(hypothesis: hyp2, audioBaseIndex: 0, languageIsLocked: true,
+                                     lastCommittedIndex: 0, windowEndIndex: .max)
+
+        XCTAssertTrue(outcome.wasHeld)
+        XCTAssertEqual(outcome.holdReason, .unanchoredAfterBoundaryMove)
     }
 
     // MARK: - Large retraction is held
@@ -162,7 +188,7 @@ final class EagerStreamEngineTests: XCTestCase {
 
         // Pass 1 — 8 words
         let hyp1 = sentence("a b c d e f g h")
-        _ = engine.consume(hypothesis: hyp1, audioBaseIndex: 0, languageIsLocked: true, lastCommittedIndex: 0)
+        _ = engine.consume(hypothesis: hyp1, audioBaseIndex: 0, languageIsLocked: true, lastCommittedIndex: 0, windowEndIndex: .max)
 
         // Pass 2 — only 2 words shared prefix, loses 6 = 8 - 2 words (> maxRetraction = 3)
         // Partial overlap so anchor check passes (common = 2 ≥ 2), but lostWords = 8 - 2 = 6 > 3
@@ -171,7 +197,7 @@ final class EagerStreamEngineTests: XCTestCase {
             hypothesis: hyp2,
             audioBaseIndex: 0,
             languageIsLocked: true,
-            lastCommittedIndex: 0
+            lastCommittedIndex: 0, windowEndIndex: .max
         )
 
         XCTAssertNil(outcome.displayText, "Large retraction (6 > maxRetraction=3) should be held")
@@ -186,7 +212,7 @@ final class EagerStreamEngineTests: XCTestCase {
 
         // Pass 1 — 4 words
         let hyp1 = sentence("hello there how are")
-        _ = engine.consume(hypothesis: hyp1, audioBaseIndex: 0, languageIsLocked: true, lastCommittedIndex: 0)
+        _ = engine.consume(hypothesis: hyp1, audioBaseIndex: 0, languageIsLocked: true, lastCommittedIndex: 0, windowEndIndex: .max)
 
         // Pass 2 — 2 words (≤ boundary=2) that are a full common prefix
         let hyp2 = sentence("hello there")
@@ -194,7 +220,7 @@ final class EagerStreamEngineTests: XCTestCase {
             hypothesis: hyp2,
             audioBaseIndex: 0,
             languageIsLocked: true,
-            lastCommittedIndex: 0
+            lastCommittedIndex: 0, windowEndIndex: .max
         )
 
         // confirmCount = hyp.count - 1 = 1 (only "hello")
@@ -214,7 +240,7 @@ final class EagerStreamEngineTests: XCTestCase {
                             startIndex: i * (sampleRate / 2), endIndex: i * (sampleRate / 2) + sampleRate / 4,
                             probability: 0.80)
         }
-        _ = engine.consume(hypothesis: hyp1, audioBaseIndex: 0, languageIsLocked: true, lastCommittedIndex: 0)
+        _ = engine.consume(hypothesis: hyp1, audioBaseIndex: 0, languageIsLocked: true, lastCommittedIndex: 0, windowEndIndex: .max)
 
         // Pass 2 — same 8 words + 4 more, all at p = 0.97.
         // Agreement phase confirms words[0..5] (commonCount=8, boundary=2).
@@ -230,7 +256,7 @@ final class EagerStreamEngineTests: XCTestCase {
             hypothesis: hyp2,
             audioBaseIndex: 0,
             languageIsLocked: true,
-            lastCommittedIndex: 0
+            lastCommittedIndex: 0, windowEndIndex: .max
         )
 
         XCTAssertNotNil(outcome.displayText)
@@ -252,7 +278,7 @@ final class EagerStreamEngineTests: XCTestCase {
         let hyp = (0..<n).map { i in
             word(" w\(i)", startSec: Double(i) * 0.5, endSec: Double(i) * 0.5 + 0.45, p: 0.97)
         }
-        _ = engine.consume(hypothesis: hyp, audioBaseIndex: 0, languageIsLocked: true, lastCommittedIndex: 0)
+        _ = engine.consume(hypothesis: hyp, audioBaseIndex: 0, languageIsLocked: true, lastCommittedIndex: 0, windowEndIndex: .max)
         // Entropy gate fires even on pass 1 for very-high-p words (no cross-window requirement).
         // What must hold: at most n - boundary words confirmed (the last `boundary` stay provisional).
         let afterPass1 = engine.confirmedWords.count
@@ -263,7 +289,7 @@ final class EagerStreamEngineTests: XCTestCase {
         let hyp2 = (0..<(n + 1)).map { i in
             word(" w\(i)", startSec: Double(i) * 0.5, endSec: Double(i) * 0.5 + 0.45, p: 0.97)
         }
-        _ = engine.consume(hypothesis: hyp2, audioBaseIndex: 0, languageIsLocked: true, lastCommittedIndex: 0)
+        _ = engine.consume(hypothesis: hyp2, audioBaseIndex: 0, languageIsLocked: true, lastCommittedIndex: 0, windowEndIndex: .max)
 
         // The last `boundary` words must NOT be in confirmedWords.
         let confirmedCount = engine.confirmedWords.count
@@ -286,7 +312,7 @@ final class EagerStreamEngineTests: XCTestCase {
         let hyp1 = (0..<10).map { i in
             EagerStreamWord(text: " w\(i)", tokens: [], startIndex: i * sampleRate / 2, endIndex: i * sampleRate / 2 + 7000, probability: 0.90)
         }
-        _ = engine.consume(hypothesis: hyp1, audioBaseIndex: 0, languageIsLocked: true, lastCommittedIndex: 0)
+        _ = engine.consume(hypothesis: hyp1, audioBaseIndex: 0, languageIsLocked: true, lastCommittedIndex: 0, windowEndIndex: .max)
 
         // Pass 2 — same words + extras, boundary lands past 6s
         let hyp2 = (0..<12).map { i in
@@ -296,7 +322,7 @@ final class EagerStreamEngineTests: XCTestCase {
             hypothesis: hyp2,
             audioBaseIndex: 0,
             languageIsLocked: true,
-            lastCommittedIndex: 0
+            lastCommittedIndex: 0, windowEndIndex: .max
         )
 
         // If agreementStartIndex > 6 * 16000, the soft-commit should fire.
@@ -323,7 +349,7 @@ final class EagerStreamEngineTests: XCTestCase {
         let hyp1 = (0..<15).map { i in
             EagerStreamWord(text: " word\(i)", tokens: [], startIndex: i * halfSec, endIndex: i * halfSec + halfSec - 100, probability: 0.90)
         }
-        _ = engine.consume(hypothesis: hyp1, audioBaseIndex: 0, languageIsLocked: true, lastCommittedIndex: 0)
+        _ = engine.consume(hypothesis: hyp1, audioBaseIndex: 0, languageIsLocked: true, lastCommittedIndex: 0, windowEndIndex: .max)
 
         let hyp2 = (0..<16).map { i in
             EagerStreamWord(text: " word\(i)", tokens: [], startIndex: i * halfSec, endIndex: i * halfSec + halfSec - 100, probability: 0.90)
@@ -332,7 +358,7 @@ final class EagerStreamEngineTests: XCTestCase {
             hypothesis: hyp2,
             audioBaseIndex: 0,
             languageIsLocked: true,
-            lastCommittedIndex: 0
+            lastCommittedIndex: 0, windowEndIndex: .max
         )
 
         if outcome.softCommit != nil {
@@ -349,14 +375,14 @@ final class EagerStreamEngineTests: XCTestCase {
         engine.reset(at: 0)
 
         let hyp1 = sentence("the cat sat on the mat")
-        _ = engine.consume(hypothesis: hyp1, audioBaseIndex: 0, languageIsLocked: false, lastCommittedIndex: 0)
+        _ = engine.consume(hypothesis: hyp1, audioBaseIndex: 0, languageIsLocked: false, lastCommittedIndex: 0, windowEndIndex: .max)
 
         let hyp2 = sentence("the cat sat on the mat and")
         let outcome = engine.consume(
             hypothesis: hyp2,
             audioBaseIndex: 0,
             languageIsLocked: false,
-            lastCommittedIndex: 0
+            lastCommittedIndex: 0, windowEndIndex: .max
         )
 
         // Display text still shown (preview keeps running)
@@ -383,7 +409,7 @@ final class EagerStreamEngineTests: XCTestCase {
             hypothesis: staleHyp,
             audioBaseIndex: 0,
             languageIsLocked: true,
-            lastCommittedIndex: 0
+            lastCommittedIndex: 0, windowEndIndex: .max
         )
 
         XCTAssertNil(outcome.displayText)
@@ -418,7 +444,7 @@ final class EagerStreamEngineTests: XCTestCase {
         engine.reset(at: 0)
 
         let hyp = sentence("some words here")
-        _ = engine.consume(hypothesis: hyp, audioBaseIndex: 0, languageIsLocked: true, lastCommittedIndex: 0)
+        _ = engine.consume(hypothesis: hyp, audioBaseIndex: 0, languageIsLocked: true, lastCommittedIndex: 0, windowEndIndex: .max)
 
         engine.reset(at: 100)
 
@@ -441,7 +467,7 @@ final class EagerStreamEngineTests: XCTestCase {
             let s = lastCommitted + i * (sampleRate / 4)
             hyp1.append(EagerStreamWord(text: " w\(i)", tokens: [], startIndex: s, endIndex: s + sampleRate / 4 - 100, probability: 0.90))
         }
-        _ = engine.consume(hypothesis: hyp1, audioBaseIndex: lastCommitted, languageIsLocked: true, lastCommittedIndex: lastCommitted)
+        _ = engine.consume(hypothesis: hyp1, audioBaseIndex: lastCommitted, languageIsLocked: true, lastCommittedIndex: lastCommitted, windowEndIndex: .max)
 
         var hyp2: [EagerStreamWord] = []
         for i in 0..<12 {
@@ -452,7 +478,7 @@ final class EagerStreamEngineTests: XCTestCase {
             hypothesis: hyp2,
             audioBaseIndex: lastCommitted,
             languageIsLocked: true,
-            lastCommittedIndex: lastCommitted
+            lastCommittedIndex: lastCommitted, windowEndIndex: .max
         )
 
         if let commit = outcome.softCommit {
@@ -472,14 +498,14 @@ final class EagerStreamEngineTests: XCTestCase {
         engine.reset(at: 0)
 
         let base = sentence("the quick brown fox")
-        _ = engine.consume(hypothesis: base, audioBaseIndex: 0, languageIsLocked: true, lastCommittedIndex: 0)
+        _ = engine.consume(hypothesis: base, audioBaseIndex: 0, languageIsLocked: true, lastCommittedIndex: 0, windowEndIndex: .max)
 
         let extended = sentence("the quick brown fox jumps")
         let outcome = engine.consume(
             hypothesis: extended,
             audioBaseIndex: 0,
             languageIsLocked: true,
-            lastCommittedIndex: 0
+            lastCommittedIndex: 0, windowEndIndex: .max
         )
 
         if let text = outcome.displayText {
@@ -494,5 +520,127 @@ final class EagerStreamEngineTests: XCTestCase {
                 )
             }
         }
+    }
+
+    // MARK: - Retraction guard vs. a shorter window
+
+    /// A window that got *shorter* is not a retraction, and must not be held.
+    ///
+    /// This is the common case on the capped eager path, not an edge case: the window is
+    /// `[agreementStart, +cap]`, so every soft-commit that jumps the boundary forward leaves less
+    /// than a cap's worth of unconfirmed audio behind it, and the next hypothesis covers less
+    /// audio and has fewer words. Comparing raw word counts scored that as a large retraction and
+    /// threw the decode away — measured at 35% of all passes over a full profile run, each one a
+    /// completed GPU decode discarded *and* a boundary left where it was.
+    func testShorterWindowIsNotTreatedAsRetraction() {
+        var engine = EagerStreamEngine()
+        engine.reset(at: 0)
+
+        // Pass 1 sees ten words over five seconds.
+        let wide = sentence("alpha bravo charlie delta echo foxtrot golf hotel india juliett")
+        _ = engine.consume(hypothesis: wide, audioBaseIndex: 0, languageIsLocked: true,
+                           lastCommittedIndex: 0, windowEndIndex: Int(5.0 * 16000))
+
+        // Pass 2's window ends after two seconds, so it can only contain the first four words.
+        // Seven fewer words than pass 1 — well past `maxRetraction` — but none were taken back.
+        let narrowEnd = Int(2.0 * 16000)
+        let narrow = Array(engine.previousHypothesis.prefix(4))
+        let outcome = engine.consume(hypothesis: narrow, audioBaseIndex: 0, languageIsLocked: true,
+                                     lastCommittedIndex: 0, windowEndIndex: narrowEnd)
+
+        XCTAssertFalse(outcome.wasHeld,
+                       "a shorter window was scored as a retraction; holdReason=\(String(describing: outcome.holdReason))")
+        XCTAssertNotNil(outcome.displayText)
+    }
+
+    /// The guard must still fire on a real retraction — same window, words genuinely gone.
+    func testGenuineRetractionInSameWindowIsStillHeld() {
+        var engine = EagerStreamEngine()
+        engine.reset(at: 0)
+
+        let windowEnd = Int(5.0 * 16000)
+        let wide = sentence("alpha bravo charlie delta echo foxtrot golf hotel india juliett")
+        _ = engine.consume(hypothesis: wide, audioBaseIndex: 0, languageIsLocked: true,
+                           lastCommittedIndex: 0, windowEndIndex: windowEnd)
+
+        // Same window end, decoder collapsed to four words. Those six are a true retraction.
+        let collapsed = Array(engine.previousHypothesis.prefix(4))
+        let outcome = engine.consume(hypothesis: collapsed, audioBaseIndex: 0, languageIsLocked: true,
+                                     lastCommittedIndex: 0, windowEndIndex: windowEnd)
+
+        XCTAssertTrue(outcome.wasHeld)
+        XCTAssertEqual(outcome.holdReason, .largeRetraction)
+    }
+
+    // MARK: - Repetition-loop guard
+
+    /// A decoder loop confirms the same short phrase pass after pass. The guard lets two
+    /// consecutive copies through — real speech does repeat itself — and drops the rest.
+    ///
+    /// Driven through `consume` rather than the private gate, because the loop only matters via
+    /// the path that actually confirms words.
+    func testDecoderRepetitionLoopIsSuppressedAfterTwoCopies() {
+        var engine = EagerStreamEngine()
+        engine.reset(at: 0)
+
+        // Nine copies of "i dont know", each with advancing timestamps — a stuck decoder gives
+        // its repeats new times, so a span test would never catch this.
+        let phrase = "i dont know"
+        var text = ""
+        for _ in 0..<9 { text += phrase + " " }
+        let hyp = sentence(text.trimmingCharacters(in: .whitespaces), p: 0.99)
+
+        // Entropy gate confirms everything but the boundary words in one pass. Nine copies span
+        // 13.5s, so the confirmed words leave via a soft-commit rather than staying in the buffer.
+        let outcome = engine.consume(hypothesis: hyp, audioBaseIndex: 0, languageIsLocked: true,
+                                     lastCommittedIndex: 0, windowEndIndex: .max)
+
+        let confirmed = ((outcome.softCommit?.text ?? "") + " " +
+                         engine.confirmedWords.map(\.text).joined())
+            .split(separator: " ").map(String.init)
+        let occurrences = confirmed.filter { $0 == "know" }.count
+        XCTAssertEqual(occurrences, 2, "two copies survive, the loop does not: \(confirmed)")
+        XCTAssertGreaterThan(engine.suppressedRepeatWords, 0)
+    }
+
+    /// The guard is a loop detector, not a duplicate-word filter. Speech that genuinely repeats
+    /// a word twice, or repeats a phrase later with other words in between, must survive.
+    func testGenuineRepeatedSpeechIsNotSuppressed() {
+        var engine = EagerStreamEngine()
+        engine.reset(at: 0)
+
+        let hyp = sentence("no no i said go left and then go left again", p: 0.99)
+        _ = engine.consume(hypothesis: hyp, audioBaseIndex: 0, languageIsLocked: true,
+                           lastCommittedIndex: 0, windowEndIndex: .max)
+
+        let confirmed = engine.confirmedWords.map { $0.text.trimmingCharacters(in: .whitespaces) }
+        XCTAssertEqual(confirmed.filter { $0 == "no" }.count, 2, "\(confirmed)")
+        XCTAssertEqual(confirmed.filter { $0 == "go" }.count, 2, "separated repeats: \(confirmed)")
+        XCTAssertEqual(engine.suppressedRepeatWords, 0)
+    }
+
+    /// A loop that straddles a soft-commit must not get a fresh count. `committedTail` exists
+    /// only for this case.
+    func testRepetitionCountSurvivesSoftCommit() {
+        var engine = EagerStreamEngine()
+        engine.reset(at: 0)
+
+        // First pass ends with two copies of the phrase and triggers a soft-commit (>6s of audio).
+        let first = sentence("alpha bravo charlie delta echo foxtrot golf hotel i dont know i dont know",
+                             p: 0.99)
+        let outcome = engine.consume(hypothesis: first, audioBaseIndex: 0, languageIsLocked: true,
+                                     lastCommittedIndex: 0, windowEndIndex: .max)
+        XCTAssertNotNil(outcome.softCommit, "precondition: the span must be long enough to commit")
+        XCTAssertTrue(engine.confirmedWords.isEmpty, "precondition: the commit cleared the buffer")
+
+        // The loop continues into the next window. Its third copy must still be refused.
+        let startSec = 0.5 * Double(first.count)
+        let second = sentence("i dont know i dont know", startSec: startSec, p: 0.99)
+        _ = engine.consume(hypothesis: second, audioBaseIndex: 0, languageIsLocked: true,
+                           lastCommittedIndex: 0, windowEndIndex: .max)
+
+        let confirmed = engine.confirmedWords.map { $0.text.trimmingCharacters(in: .whitespaces) }
+        XCTAssertFalse(confirmed.contains("know"),
+                       "two copies were already committed, so none may follow: \(confirmed)")
     }
 }

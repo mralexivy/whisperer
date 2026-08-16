@@ -88,3 +88,38 @@ component `healthy`, the Health Timeline empty, all audio devices alive. Read al
 could not run the run loop. Only `## Thread Sample`, produced by `MainThreadBacktrace`'s in-process
 unwind, named `MeetingEngines.runCleanup` and the ANE compile beneath it. See
 [../diagnostics/knowledge.md](../diagnostics/knowledge.md).
+
+### Isolated deinit + `SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor` aborts the test host (2026-08-16)
+
+**78 of the 79 crash reports** accumulated in `~/Library/Logs/Whisperer/crash.log` over three days
+are one stack, and it is not a bug in any of the classes it names:
+
+```
+___BUG_IN_CLIENT_OF_LIBMALLOC_POINTER_BEING_FREED_WAS_NOT_ALLOCATED
+swift::TaskLocal::StopLookupScope::~StopLookupScope()
+swift_task_deinitOnExecutorImpl
+<SomeClass>.__deallocating_deinit
+<a synchronous XCTest method>
+```
+
+The project sets `SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor` and `SWIFT_APPROACHABLE_CONCURRENCY
+= YES`, so every class is implicitly `@MainActor` and gets an **isolated deinit** — deallocation
+routes through `swift_task_deinitOnExecutor` to hop to the main actor. In this toolchain that path
+aborts when the object is released **outside any task**, which is precisely what a synchronous
+XCTest method is. The app never hits it because it always releases these objects from a
+main-actor context.
+
+The named class is simply whichever one deallocated first, which is why it looked like three
+different bugs: `EagerStreamEngine` (31 crashes, while it was still a class), `SafeLock` (6, and
+the one that killed a 20-minute corpus sweep twice), `VADSegmenter` (2). The `SafeLock` case was
+even written off in a source comment as "reads as a bug in the transcriber and is not one" — true,
+but the actual cause was one level further down.
+
+Fix: mark genuinely non-UI, non-actor-bound types `nonisolated` at the class declaration. Both
+`VADSegmenter` and `SafeLock` are pure computation / synchronisation over background threads, so
+main-actor isolation was never accurate in the first place — the crash just made the inaccuracy
+fatal. `nonisolated class VADSegmenter` turned a deterministic abort into a passing test.
+
+**Diagnostic value:** a `pointer being freed was not allocated` whose address is *identical across
+separate processes* (here `0x2b2ecadc0`) is not heap corruption. Real corruption produces varying
+addresses; a constant one points at the runtime freeing something it should not.

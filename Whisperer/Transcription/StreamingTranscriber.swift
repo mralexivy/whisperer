@@ -147,6 +147,76 @@ class StreamingTranscriber {
         }
     }
 
+    /// Admission control for eager passes: exactly one may be outstanding.
+    ///
+    /// `isProcessing` cannot do this job. Reading it and later setting it are two separate
+    /// locked operations, and `runEagerStreamPass` does real work between them — copying the
+    /// ring, running VAD over the whole window, normalising. Two callers reach that function
+    /// concurrently by design (the 150 ms heartbeat and the completion callback's
+    /// self-schedule), so both can observe `false` and both submit.
+    ///
+    /// Nothing drains the resulting backlog, so the error accumulates for the whole recording.
+    /// Measured on real recordings at a real-time feed: a 204s dictation reported a p50 pass
+    /// latency of 12.2s and a max of 28.5s on a window capped at 8s — arithmetically impossible
+    /// as decode time (155 passes × 12s ≫ 204s), because most of it was queue wait. The decode
+    /// itself never stopped costing ~1.4s. The live preview ran 179s behind the speaker and the
+    /// recording ended with no text at all.
+    ///
+    /// So the claim has to be taken atomically, before any of that work, and released on every
+    /// path out — including the early returns.
+    private let eagerPassLock = NSLock()
+    private var eagerPassInFlight = false
+
+    /// Incremental VAD gate state for the eager window.
+    ///
+    /// The gate asks "is there speech anywhere in the unconfirmed window", and the obvious
+    /// implementation — scan the window every tick — is quadratic in the worst case and pays that
+    /// worst case exactly when it hurts most. `hasSpeech` can return as soon as it finds a voiced
+    /// frame, so a window full of speech is cheap; a window that is mostly silence has to be
+    /// scanned to the end. That window is also the one pinned at the cap, because a boundary that
+    /// is not advancing is what let it grow there.
+    ///
+    /// Measured on `05011586` (204s, silence-heavy): the 150 ms heartbeat was actually ticking
+    /// every 565 ms — the scan was eating two ticks in three — and the recording produced 38
+    /// passes and 10 committed words in three and a half minutes, lagging live audio by 40s.
+    /// A dense-speech recording of the same length ticked at 140 ms as intended.
+    ///
+    /// So scan each sample once. The window's head only moves when a decode advances the
+    /// boundary, and everything before `scannedEnd` has already been examined, so a tick need
+    /// only look at the audio that arrived since the last one. A window already known to contain
+    /// speech needs no scan at all.
+    private var eagerVADWindowStart = -1
+    private var eagerVADScannedEnd = 0
+    private var eagerVADFoundSpeech = false
+
+    /// - Parameter samples: the window, starting at absolute index `start`.
+    private func eagerWindowHasSpeech(_ samples: [Float], start: Int, end: Int, vad: SileroVAD) -> Bool {
+        if start != eagerVADWindowStart {
+            eagerVADWindowStart = start
+            eagerVADScannedEnd = start
+            eagerVADFoundSpeech = false
+        }
+        if !eagerVADFoundSpeech {
+            let offset = max(0, eagerVADScannedEnd - start)
+            if offset < samples.count {
+                eagerVADFoundSpeech = vad.hasSpeech(samples: Array(samples[offset...]))
+            }
+        }
+        eagerVADScannedEnd = max(eagerVADScannedEnd, end)
+        return eagerVADFoundSpeech
+    }
+
+    private func claimEagerPass() -> Bool {
+        eagerPassLock.lock(); defer { eagerPassLock.unlock() }
+        if eagerPassInFlight { return false }
+        eagerPassInFlight = true
+        return true
+    }
+
+    private func releaseEagerPass() {
+        eagerPassLock.lock(); eagerPassInFlight = false; eagerPassLock.unlock()
+    }
+
     private var onTranscription: ((String) -> Void)?
     // Fires with ONLY the live preview tail (previewAccumulatedText), not the full accumulated display.
     // Used by MeetingSession to avoid echoing already-committed chunk text.
@@ -199,6 +269,9 @@ class StreamingTranscriber {
     private var lastPreviewedSampleIndex: Int = 0
     private var previewAccumulatedText: String = ""
     private var previewPassID: Int = 0
+    /// Word count of the last live string published on the eager path, within the current
+    /// soft-commit epoch. Guards live text against shrinking — see `applyEagerOutcome`.
+    private var lastPublishedEagerWordCount: Int = 0
     private var latestWhisperKitPreviewText: String = ""
     private var lastPreviewVADCheckEndIndex: Int = 0
     private var latestWhisperKitPreviewStartIndex: Int = 0
@@ -263,14 +336,166 @@ class StreamingTranscriber {
     /// and by MeetingSession to place transcript segments on the audio timeline.
     var onChunkCompleted: ((TranscriptChunk) -> Void)?
 
+    /// One eager decode pass, as measured. Exists so pass latency can be *measured against real
+    /// recordings* rather than extrapolated from a synthetic benchmark — the mistake that shipped
+    /// a window-sized `audio_ctx` tuned on 3–12s windows into a path whose windows are far
+    /// longer than that benchmark assumed, where it made the decoder loop. See
+    /// `EagerStreamProfileTests`.
+    struct EagerPassSample {
+        /// Length of the audio window handed to the decoder.
+        let windowSeconds: Double
+        /// How far this window's end sits behind the audio already captured. Non-zero only when
+        /// the window cap bit — the price paid for bounding `windowSeconds`.
+        let lagSeconds: Double
+        /// Wall-clock from submitting the decode to its completion callback.
+        let decodeMs: Double
+        /// Wall-clock since the previous pass completed — the live-preview cadence.
+        let sinceLastPassMs: Double
+        /// Words in the raw hypothesis. Whether any of them reached the screen is a separate
+        /// question — the test correlates this against the `onTranscription` display sequence.
+        let wordCount: Int
+        let averageLogProbability: Float
+    }
+
+    /// Test-only probe. nil in the app, so this costs one optional check per pass.
+    var onEagerPassMeasured: ((EagerPassSample) -> Void)?
+    private var lastEagerPassCompletedAt: CFAbsoluteTime?
+
+    /// Why a scheduled eager pass decided not to decode.
+    ///
+    /// Every one of these is a *permanent* stall risk once the window is capped: the window is
+    /// `[agreementStartIndex, +cap]`, and `agreementStartIndex` only ever advances inside
+    /// `EagerStreamEngine.consume`. A pass that returns before decoding therefore leaves the next
+    /// pass looking at byte-identical audio, and the heartbeat re-runs the same decision every
+    /// 150 ms forever. Before the cap existed the window ran to the live edge and so changed on
+    /// every tick, which hid this entirely.
+    enum EagerPassSkip: String {
+        case notEagerBackend
+        case stopped
+        /// A decode is already in flight.
+        case busy
+        case lockTimeout
+        /// Fewer than 0.5 s of unconfirmed audio.
+        case tooShort
+        /// No speech anywhere in the unconfirmed window, and the window reached the live edge —
+        /// everything spoken so far has been decoded and the speaker is not talking.
+        case silent
+        /// The window was capped and held nothing but silence; the boundary was seeked past it.
+        /// Unlike the others this one is self-clearing, because the next window is new audio.
+        case silentBacklog
+    }
+
+    /// Test-only probe, paired with `onEagerPassMeasured`. nil in the app.
+    var onEagerPassSkipped: ((EagerPassSkip) -> Void)?
+
+    /// Test-only probe for passes that decoded and were then discarded by the anchor/retraction
+    /// guard. Distinct from `onEagerPassSkipped`, which fires for passes that never decoded at
+    /// all — a hold has already paid the full GPU cost and additionally leaves the agreement
+    /// boundary where it was, so the next pass re-decodes nearly the same window.
+    var onEagerPassHeld: ((EagerHoldReason) -> Void)?
+
+    /// Test-only probe: a pass whose first unconfirmed word was the last confirmed word arriving
+    /// a second time. Candidate mechanism for the adjacent duplicates in final text; see
+    /// `EagerStreamEngine.leadingWordRepeatsConfirmedTail`. Reports only — nothing filters on it.
+    var onEagerRepeatedConfirmedTail: (() -> Void)?
+
     /// Effective language for transcription — driven by router or fallback to configured language
     var effectiveLanguage: TranscriptionLanguage {
         routeDecision?.lang ?? language
     }
 
-    private var usesEagerStream: Bool {
-        whisper is WhisperBridge
-    }
+    /// Whether this session drives the eager-agreement engine instead of VAD chunking plus a
+    /// separate tiny preview model.
+    ///
+    /// Reads the `whisperCppEagerStreaming` rollback flag, **defaulting to on** when the key is
+    /// absent — which is every real install, so shipping behaviour is the eager path exactly as
+    /// before. The flag is not dead weight left over from the rollout: `EagerStreamRegressionTests`
+    /// is an A/B in a single run and sets this key to produce its baseline arm. While this property
+    /// was a bare `whisper is WhisperBridge`, that gate ran the eager path in *both* arms and
+    /// compared it to itself — all ten fixtures reported `baseline=0.125 eager=0.125` and the three
+    /// accuracy gates could not fail by construction. Its structural invariants still meant
+    /// something; its comparisons did not.
+    ///
+    /// Resolved once in `init` rather than per read. Two reasons, and both rule out `lazy var`:
+    /// a flag that changed halfway through a recording would switch pipelines mid-stream, which is
+    /// the one behaviour neither path is written to survive; and this is read from the heartbeat's
+    /// detached task, where a `lazy` read is a *mutating* access to main-actor state and a
+    /// `let` of a `Sendable` type is not.
+    private let usesEagerStream: Bool
+
+    /// Longest audio window a single eager pass will decode.
+    ///
+    /// Set from measurement, not intuition — `EagerStreamProfileTests`, 536 passes over 12 real
+    /// recordings fed at wall-clock real time. Pass latency is flat in window length across the
+    /// whole capped range: p50 1350 ms at 0.5–1s, 1358 at 2–4s, 1366 at 4–6s, 1381 at 6–8s,
+    /// 1341 at the cap itself, with a corpus max of 1888 ms. The decoder dominates, the encoder
+    /// is noise, and so the cap costs nothing in latency while buying the most context per pass.
+    /// See `runEagerStreamPass` for why a cap is needed at all.
+    ///
+    /// Two earlier versions of this comment quoted a curve that broke sharply above 8s. That
+    /// curve came from a harness feeding audio at 8.5× real time, which let the decoder fall
+    /// arbitrarily far behind and then attributed the resulting queue wait to window length. The
+    /// break was queue backlog, not decode cost, and it disappeared entirely once admission
+    /// control landed. `EagerStreamWindowSweepTests` re-elects this value against real
+    /// recordings; the number above is only defensible for as long as that sweep keeps picking it.
+    ///
+    /// **Re-elected at 12s** by that sweep: 7 validated recordings × caps {4, 6, 8, 12, ∞} at
+    /// real-time feed, with the uncapped arm measured twice as a noise floor.
+    ///
+    /// | cap | p50 ms | mean lag | worst lag | worst pass | mean WER |
+    /// |-----|--------|----------|-----------|------------|----------|
+    /// | 4   | 1563   | 4.4s     | 9.4s      | 2158 ms    | 0.206    |
+    /// | 6   | 1576   | 0.6s     | 4.6s      | 1740 ms    | 0.186    |
+    /// | 8   | 1498   | 0.1s     | 2.6s      | 1722 ms    | 0.181    |
+    /// | 12  | 1357   | 0.0s     | 1.6s      | 1723 ms    | 0.198    |
+    /// | ∞   | 1411   | 0.0s     | 0.0s      | 3433 ms    | 0.215    |
+    ///
+    /// Read it by what the numbers can and cannot resolve. **p50 cannot**: the uncapped arm
+    /// repeated at 1411 and 1409, but cap 12 measured 1340 in one repeat and 1548 in the other,
+    /// so the ~200 ms spread between caps is machine state, not window length. That is the
+    /// expected result — with the ANE encoder the mel is padded to a fixed 30s whatever the
+    /// window, so shrinking the window only removes decoder tokens. **WER cannot either**: the
+    /// same fixture scored 0.136 and 0.245 across the two identical uncapped runs.
+    ///
+    /// What is monotonic, and therefore what decides it, is **lag** — how far behind live audio
+    /// the decode ran. Small caps do not make passes faster, they make each pass cover less, and
+    /// the window falls behind: 4.4s mean and 9.4s worst at cap 4. That is live text seconds
+    /// stale on a long recording, and WER on the final text cannot see it.
+    ///
+    /// 12 rather than ∞ because the mean window is only 4.4s even uncapped (the agreement
+    /// boundary keeps it short), so the cap almost never binds — but when it does, it is the
+    /// pathological case: the uncapped arm's worst single pass was 3433 ms against 1723 ms at
+    /// cap 12. It buys the tail bound for no measurable cost. 12 rather than 8 because 8 still
+    /// showed 2.6s of worst-case lag with no latency advantage to pay for it.
+    static let defaultEagerMaxWindowSeconds: Double = 12.0
+
+    /// Settable so `EagerStreamWindowSweepTests` can sweep it against real recordings — the
+    /// value above is only defensible for as long as a sweep keeps electing it. Nothing in the
+    /// app writes to it.
+    var eagerMaxWindowSeconds: Double = StreamingTranscriber.defaultEagerMaxWindowSeconds
+
+    /// Whether live text includes the speculative hypothesis tail, or only confirmed words.
+    ///
+    /// The tail is one pass ahead — roughly 1.4s of extra responsiveness — and it is the only
+    /// part of the string the decoder is still allowed to rewrite. Publishing it is why live text
+    /// is not append-only in practice: `EagerStreamProfileTests` counted 138 revisions across 12
+    /// real recordings, up to 41 on a single one.
+    ///
+    /// A word-count floor already blocks the tail from making the text *shorter*
+    /// (`lastPublishedEagerWordCount`), but that cannot see a same-length rewrite, which is the
+    /// common case. Only dropping the tail removes the class.
+    ///
+    /// Left settable rather than decided here because the trade is responsiveness against
+    /// stability and both sides are measurable. The profile runs it both ways.
+    var eagerPublishesSpeculativeTail: Bool = true
+
+    /// See `EagerStreamEngine.Config.skipsAnchorCheckAfterBoundaryMove`. Must be set before
+    /// `start()`, which is where the engine is built.
+    var eagerSkipsAnchorCheckAfterBoundaryMove: Bool = false
+
+    /// See `EagerStreamEngine.Config.suppressesRepetitionLoops`. Must be set before `start()`,
+    /// which is where the engine is built.
+    var eagerSuppressesRepetitionLoops: Bool = true
 
     /// Initialize with a pre-loaded backend
     init(
@@ -288,6 +513,12 @@ class StreamingTranscriber {
         nemotronBridge: (any AnyObject)? = nil  // NemotronBridge — typed as AnyObject to avoid #if at call sites
     ) {
         self.whisper = backend
+        self.usesEagerStream = {
+            guard backend is WhisperBridge else { return false }
+            let key = "whisperCppEagerStreaming"
+            guard UserDefaults.standard.object(forKey: key) != nil else { return true }
+            return UserDefaults.standard.bool(forKey: key)
+        }()
         self.vad = vad
         self.language = language
         self.initialPrompt = initialPrompt
@@ -354,6 +585,10 @@ class StreamingTranscriber {
         lastPreviewVADCheckEndIndex = feedbackSoundSamples
         previewAccumulatedText = ""
         previewPassID = 0
+        lastPublishedEagerWordCount = 0
+        eagerVADWindowStart = -1
+        eagerVADScannedEnd = 0
+        eagerVADFoundSpeech = false
         latestWhisperKitPreviewText = ""
         latestWhisperKitPreviewStartIndex = 0
         latestWhisperKitPreviewEndIndex = 0
@@ -375,7 +610,11 @@ class StreamingTranscriber {
         #else
         let needsEagerEngine = usesEagerStream
         #endif
-        eagerEngine = needsEagerEngine ? EagerStreamEngine() : nil
+        eagerEngine = needsEagerEngine
+            ? EagerStreamEngine(config: EagerStreamEngine.Config.default
+                .with(skipsAnchorCheckAfterBoundaryMove: eagerSkipsAnchorCheckAfterBoundaryMove,
+              suppressesRepetitionLoops: eagerSuppressesRepetitionLoops))
+            : nil
         eagerEngine?.reset(at: feedbackSoundSamples)
 
         // Nemotron path: preview is push-based; no VAD chunking needed.
@@ -433,12 +672,20 @@ class StreamingTranscriber {
 
         // Start preview after language detection resolves (state-machine gate)
         previewTask = Task.detached(priority: .userInitiated) { [weak self] in
-            // Wait for language detection or 5s timeout
-            for _ in 0..<50 {
-                try? await Task.sleep(nanoseconds: 100_000_000)  // 100ms poll
-                guard let self, !self.isStopped else { return }
-                if self.routeDecision != nil || self.modelPool == nil ||
-                    self.languageRouter == nil || self.modelRouter == nil { break }
+            // The eager stream decodes with `auto-detect` on every pass — whisper.cpp re-detects
+            // per window, so it needs no route decision to start. Waiting here would cost up to
+            // the full 5s timeout whenever detection stays undecided (three sub-threshold
+            // attempts leave routeDecision nil, and the gate then never opens), which reads as a
+            // dead live preview for the first five seconds of every recording. The gate exists
+            // for the tiny preview model, which must be told a language up front.
+            if self?.usesEagerStream != true {
+                // Wait for language detection or 5s timeout
+                for _ in 0..<50 {
+                    try? await Task.sleep(nanoseconds: 100_000_000)  // 100ms poll
+                    guard let self, !self.isStopped else { return }
+                    if self.routeDecision != nil || self.modelPool == nil ||
+                        self.languageRouter == nil || self.modelRouter == nil { break }
+                }
             }
 
             // WhisperKit is a batch decoder. Start the next timestamped pass promptly
@@ -1196,7 +1443,8 @@ class StreamingTranscriber {
             )
         }
         let outcome = engine.consume(hypothesis: hypothesis, audioBaseIndex: audioBaseIndex,
-            languageIsLocked: result.languageIsLocked, lastCommittedIndex: lastTranscribedSampleIndex)
+            languageIsLocked: result.languageIsLocked, lastCommittedIndex: lastTranscribedSampleIndex,
+            windowEndIndex: candidateEndIndex)
         eagerEngine = engine
         if let commit = outcome.softCommit, !commit.text.isEmpty {
             completedChunkTexts.append(commit.text)
@@ -1270,40 +1518,126 @@ class StreamingTranscriber {
     /// One live-preview pass for the whisper.cpp eager-streaming path.
     /// Called from `runLivePreviewPass` (as a heartbeat) and self-schedules from
     /// the decode callback so passes run back-to-back as fast as the model allows.
+    // Deliberately no `audio_ctx` here — the eager pass encodes the full 1500 frames.
+    //
+    // Shrinking it looked compelling in isolation: a `largeTurboQ5` pass costs 0.18s at ctx=256
+    // and 0.26s at 512 against 0.57s at 1500. Shipped at a fixed small value it made the decoder
+    // loop — live text came back as "Let me try to see it one one Let Let me", and that garbage
+    // then propagated into the next pass's `initial_prompt`.
+    //
+    // The reason is NOT that the windows are short. `EagerStreamProfileTests` measured 76 passes
+    // over 12 real recordings: 62 of them decode a window of 8s or more, and the very-long
+    // fixtures average 38–48s per window. The failure was a fixed `audio_ctx` applied to a window
+    // whose length varies by two orders of magnitude — mostly padding on the rare short window,
+    // and truncation on the common long one.
+    //
+    // Latency does scale with the window, steeply: under 8s a pass is a flat ~1.4–1.5s; at 8s+ it
+    // is p50 2.3s, p90 8.8s, max 13.2s. So a *window-proportional* `audio_ctx` is still on the
+    // table. It is not the first fix, because the windows should not be 38s in the first place —
+    // see the note on window growth in `runEagerStreamPass`. Reintroduce only with a fresh
+    // profile run showing both the latency win and no looping.
+
     private func runEagerStreamPass() {
-        guard let bridge = whisper as? WhisperBridge else { return }
-        guard !isStopped else { return }
-        // One decode at a time — prevents queue pile-up and keeps windows short.
-        guard !isProcessing else { return }
+        guard let bridge = whisper as? WhisperBridge else {
+            onEagerPassSkipped?(.notEagerBackend); return
+        }
+        guard !isStopped else { onEagerPassSkipped?(.stopped); return }
+
+        // One decode outstanding at a time. Claimed atomically before any work, because two
+        // callers race here — see `claimEagerPass`. Released on every path out; `handedOff`
+        // transfers ownership of the release to the completion callback.
+        guard claimEagerPass() else { onEagerPassSkipped?(.busy); return }
+        var handedOff = false
+        defer { if !handedOff { releaseEagerPass() } }
 
         var samples: [Float] = []
         var audioBaseIndex = 0
         var candidateEndIndex = 0
+        var liveEndIndex = 0
         do {
             try allSamplesLock.withLock {
                 let ringBase = ring.baseSampleIndex
                 let allSamples = ring.toArray()
                 let ringEnd = ringBase + allSamples.count
                 candidateEndIndex = ringEnd
+                liveEndIndex = ringEnd
 
                 // Clip to agreement boundary so we only decode unconfirmed audio.
                 // Smaller window = faster decode = more updates per second.
+                //
+                // Then CAP the window. Without a cap it runs away: the agreement boundary needs
+                // two consecutive passes to confirm anything, a pass over an 8s+ window costs
+                // p50 2.3s, and audio keeps arriving the whole time — so the window grows faster
+                // than agreement advances, which makes the next pass slower, which lets the
+                // window grow further. `EagerStreamProfileTests` measured the end state on real
+                // recordings: mean window 38s and 48s on the very-long fixtures, passes up to
+                // 13.2s, and half the speech never transcribed (WER 0.50). One 204s recording
+                // produced the two words "be different".
+                //
+                // The cap takes the HEAD of the unconfirmed region, not the tail. Tail-capping
+                // would be cheaper to reason about but silently discards the audio between the
+                // agreement boundary and the window start — those words are never decoded by any
+                // pass. Head-capping only delays them: this pass decodes `[agreementStart,
+                // agreementStart + cap]`, agreement advances into it, and the next pass picks up
+                // where it left off. Falling behind live audio is self-correcting because a
+                // capped pass consumes far more audio than it costs in wall-clock; falling behind
+                // permanently is not possible unless a single pass takes longer than the cap.
                 let agreementStart = max(eagerEngine?.agreementStartIndex ?? ringBase, ringBase)
                 let clipOffset = agreementStart - ringBase
-                samples = clipOffset < allSamples.count
+                let unconfirmed = clipOffset < allSamples.count
                     ? Array(allSamples[clipOffset...])
                     : allSamples
+                let cap = Int(eagerMaxWindowSeconds * sampleRate)
+                if unconfirmed.count > cap {
+                    samples = Array(unconfirmed.prefix(cap))
+                    // candidateEndIndex must describe the audio this pass actually decoded, not
+                    // the live end of the ring. It is what the stop path uses to decide whether
+                    // the preview already covers the tail; overstating it would reuse a
+                    // hypothesis that never saw the last seconds of speech and drop them.
+                    candidateEndIndex = agreementStart + cap
+                } else {
+                    samples = unconfirmed
+                }
                 audioBaseIndex = agreementStart
             }
-        } catch { return }
+        } catch { onEagerPassSkipped?(.lockTimeout); return }
 
         // Require at least 0.5s of audio in the unconfirmed window.
-        guard samples.count >= Int(0.5 * sampleRate) else { return }
+        guard samples.count >= Int(0.5 * sampleRate) else {
+            onEagerPassSkipped?(.tooShort); return
+        }
 
-        // VAD gate on the window we're about to decode — skip silent tails.
-        if let vad {
-            let vadWindow = Array(samples.suffix(Int(min(Double(samples.count), 2.0 * sampleRate))))
-            if !vadWindow.isEmpty, !vad.hasSpeech(samples: vadWindow) { return }
+        // VAD gate — keeps the main model off the GPU while nobody is talking.
+        //
+        // The question is about the *whole* unconfirmed window, not its tail. An earlier version
+        // gated on the last 2s, reasoning that silence there means the speaker has paused and
+        // there is nothing new to say. That is wrong, and measurably so: the window starts at the
+        // agreement boundary, so a pause routinely has several seconds of never-decoded speech
+        // sitting behind it. Gating on the tail refuses to decode that speech until the speaker
+        // happens to resume — and if they resume after the window has grown past the cap, the
+        // frozen window makes the refusal permanent. `EagerStreamProfileTests` measured both
+        // halves of that on the same fixture: `05011586`, 204s, 197 tail-gate skips against 12
+        // actual passes, final WER 0.938 — one clause out of a four-minute recording.
+        //
+        // Asking about the whole window costs nothing when the speaker really has stopped: the
+        // boundary keeps advancing as agreement confirms the backlog, the window shrinks, and the
+        // `tooShort` guard above takes over within a pass or two. That terminates on the audio
+        // being *decoded* rather than on it being ignored.
+        //
+        // The one case that still needs its own exit is a capped window holding nothing but
+        // silence. The window is then frozen at `[agreementStart, +cap]` and the boundary only
+        // moves as a *result* of a decode, so declining to decode it means presenting the
+        // identical window every 150 ms for the rest of the recording. Seek past it instead, so
+        // the next pass sees new audio.
+        if let vad, !eagerWindowHasSpeech(samples, start: audioBaseIndex,
+                                          end: candidateEndIndex, vad: vad) {
+            if candidateEndIndex < liveEndIndex {
+                eagerEngine?.seek(past: candidateEndIndex)
+                onEagerPassSkipped?(.silentBacklog)
+            } else {
+                onEagerPassSkipped?(.silent)
+            }
+            return
         }
 
         let lang = effectiveLanguage
@@ -1312,7 +1646,20 @@ class StreamingTranscriber {
         let base = audioBaseIndex
         let endIdx = candidateEndIndex
 
+        // Publish the in-flight window so stopAsync() can decide whether this decode is about
+        // to cover the tail — if so it waits a few ms for it rather than paying for a full
+        // tail decode of nearly the same audio.
+        activeWhisperKitPreviewStartIndex = lastTranscribedSampleIndex
+        activeWhisperKitPreviewEndIndex = endIdx
+
         isProcessing = true
+        handedOff = true
+        let passSubmittedAt = CFAbsoluteTimeGetCurrent()
+        let passWindowSeconds = Double(normalizedSamples.count) / sampleRate
+        // How far the decoded window ends behind the audio already captured. Zero before the cap
+        // existed (the window always ran to the live edge); the cap trades this lag for bounded
+        // pass latency, so it is the number that says whether the trade was worth making.
+        let passLagSeconds = Double(max(0, liveEndIndex - endIdx)) / sampleRate
         bridge.transcribeStreamingAsync(
             samples: normalizedSamples,
             language: lang,
@@ -1320,6 +1667,34 @@ class StreamingTranscriber {
         ) { [weak self] result in
             guard let self else { return }
             self.isProcessing = false
+            // Held until `applyEagerOutcome` has finished mutating the engine. Releasing at the
+            // top of this callback would let the heartbeat start the next pass concurrently with
+            // that mutation, and the engine is a plain struct with no locking of its own —
+            // `runEagerStreamPass` reads `agreementStartIndex` while `consume` is writing it.
+            //
+            // Released explicitly before the self-schedule below, since that call re-claims;
+            // the `defer` only covers the early returns.
+            var released = false
+            func releaseOnce() {
+                guard !released else { return }
+                released = true
+                self.releaseEagerPass()
+            }
+            defer { releaseOnce() }
+            if let probe = self.onEagerPassMeasured {
+                let now = CFAbsoluteTimeGetCurrent()
+                probe(EagerPassSample(
+                    windowSeconds: passWindowSeconds,
+                    lagSeconds: passLagSeconds,
+                    decodeMs: (now - passSubmittedAt) * 1000,
+                    sinceLastPassMs: self.lastEagerPassCompletedAt.map { (now - $0) * 1000 } ?? 0,
+                    wordCount: result?.words.count ?? 0,
+                    averageLogProbability: result?.averageLogProbability ?? 0
+                ))
+                self.lastEagerPassCompletedAt = now
+            }
+            self.activeWhisperKitPreviewStartIndex = 0
+            self.activeWhisperKitPreviewEndIndex = 0
             // Stop self-scheduling if the transcriber was stopped while this decode was in flight.
             // Without this guard the in-flight completion callback re-enters runEagerStreamPass(),
             // bypassing the heartbeat's isStopped check and causing the old transcriber to keep
@@ -1335,6 +1710,11 @@ class StreamingTranscriber {
             }
             // Self-schedule: start the next pass immediately without waiting for the
             // 500ms heartbeat timer. The timer remains to restart the chain if it breaks.
+            // Stop the chain once a stop is underway — the outcome above has already been
+            // applied, so stopAsync() has the freshest preview to reuse, and starting another
+            // decode here would only hold the ctxLock the stop path may need.
+            guard !self.isPreparingToStop else { return }
+            releaseOnce()
             self.runEagerStreamPass()
         }
     }
@@ -1355,36 +1735,103 @@ class StreamingTranscriber {
         }
         // Language is always locked for whisper.cpp eager (single-language model, fixed language).
         let outcome = engine.consume(hypothesis: hypothesis, audioBaseIndex: audioBaseIndex,
-            languageIsLocked: true, lastCommittedIndex: lastTranscribedSampleIndex)
+            languageIsLocked: true, lastCommittedIndex: lastTranscribedSampleIndex,
+            windowEndIndex: candidateEndIndex)
         eagerEngine = engine
+        if let reason = outcome.holdReason { onEagerPassHeld?(reason) }
+        if outcome.repeatedConfirmedTail { onEagerRepeatedConfirmedTail?() }
         Logger.debug("Eager outcome: display=\(outcome.displayText.map { "'\($0.prefix(40))'" } ?? "nil"), held=\(outcome.wasHeld), commit=\(outcome.softCommit != nil)", subsystem: .transcription)
         if let commit = outcome.softCommit, !commit.text.isEmpty {
-            completedChunkTexts.append(commit.text)
-            onChunkCompleted?(TranscriptChunk(text: commit.text,
-                start: Double(commit.startIndex) / sampleRate,
-                end: Double(commit.endIndex) / sampleRate,
-                recordedDuration: recordedDuration))
+            // Dedup against the previous chunk, as every other commit path here already does
+            // (`appendTailTranscription`, the VAD chunk path). This one appended raw, and the
+            // seam it left is visible in the A/B gate's final text: `Let's do ⟦Let's do this.⟧`,
+            // `if you know, but ⟦But⟧ data science`, `and like we ⟦We⟧ adjusted`. The engine
+            // deliberately re-decodes the boundary words in the next window — that is how
+            // LocalAgreement gets a second opinion on them — so the opening words of commit N+1
+            // legitimately repeat the closing words of commit N, and something has to drop one
+            // copy. Nothing did, on the one path where the repeat is by construction.
+            let committedText: String
+            if let previous = completedChunkTexts.last, !previous.isEmpty {
+                committedText = VADSegmenter.deduplicateOverlap(previousText: previous,
+                                                                newText: commit.text)
+            } else {
+                committedText = commit.text
+            }
+            if !committedText.isEmpty {
+                completedChunkTexts.append(committedText)
+                onChunkCompleted?(TranscriptChunk(text: committedText,
+                    start: Double(commit.startIndex) / sampleRate,
+                    end: Double(commit.endIndex) / sampleRate,
+                    recordedDuration: recordedDuration))
+            }
+            // The audio boundary advances either way: the text was either committed or was a
+            // duplicate of text already committed, and re-decoding it would only produce the
+            // duplicate again.
             lastTranscribedSampleIndex = commit.endIndex
             lastClaimedSampleIndex = commit.endIndex
             do { try allSamplesLock.withLock { ring.dropFront(toAbsoluteIndex: commit.endIndex) } }
             catch { Logger.warning("Eager stream (whisper.cpp) could not prune committed audio",
                 subsystem: .transcription) }
             lastPreviewVADCheckEndIndex = max(lastPreviewVADCheckEndIndex, commit.endIndex)
+            // A soft-commit empties `confirmedWords`, so the next display legitimately restarts
+            // from the unconfirmed tail. Reset the monotonicity floor with it.
+            lastPublishedEagerWordCount = 0
         }
         guard let displayText = outcome.displayText, !displayText.isEmpty else { return }
         guard !isHallucination(displayText) else { return }
+
+        // Live text must never shrink. `displayText` is `confirmedWords + hyp`, and the
+        // unconfirmed `hyp` is a fresh full-model decode of a *growing* window — whisper.cpp
+        // routinely returns fewer words for more audio (observed 8 → 6 → 4 across consecutive
+        // passes), so the raw string flickers and rewrites itself. That flicker is why the eager
+        // preview read worse than the old tiny-model preview, which was append-only by
+        // construction. Drop shrinking passes instead of publishing them: passes are ~0.6s apart,
+        // so the worst case is one stale frame, and the next pass that actually extends the text
+        // publishes normally. A shrunk hypothesis is also unfit to reuse at stop — it covers more
+        // audio with fewer words — so this returns before touching the reuse fields too.
+        let wordCount = displayText.split(separator: " ").count
+        guard wordCount >= lastPublishedEagerWordCount else {
+            Logger.debug("Eager pass dropped: \(wordCount) words would shrink live text from \(lastPublishedEagerWordCount)", subsystem: .transcription)
+            return
+        }
+        lastPublishedEagerWordCount = wordCount
+
+        // What goes on screen. `displayText` keeps the speculative tail and so can be rewritten;
+        // `confirmedText` cannot. See `eagerPublishesSpeculativeTail`.
+        //
+        // Only the screen is affected. Everything below still records `displayText`, because the
+        // stop path needs a hypothesis spanning the whole uncommitted region through
+        // `candidateEndIndex` — reusing a confirmed-only string there would silently drop the
+        // last words of the recording, which is the exact failure the tail decode exists to catch.
+        let publishedText = eagerPublishesSpeculativeTail
+            ? displayText
+            : (outcome.confirmedText ?? "")
+        guard !publishedText.isEmpty else { return }
+
+        // Record this pass as a reusable final result. `displayText` is `confirmedWords + hyp`
+        // (EagerStreamEngine), so it already spans the whole uncommitted region from
+        // lastTranscribedSampleIndex through candidateEndIndex — nothing is held back for a
+        // later pass. That is what lets canReuseEagerPreviewAtStop() skip the tail decode and
+        // makes the stop insert immediate. Language is always locked here (fixed-language model).
+        latestWhisperKitPreviewText = displayText
+        latestWhisperKitPreviewStartIndex = lastTranscribedSampleIndex
+        latestWhisperKitPreviewEndIndex = candidateEndIndex
+        latestWhisperKitPreviewAverageLogProbability = result.averageLogProbability
+        latestWhisperKitPreviewLanguageIsLocked = true
+        whisperKitPreviewAnchoredAtTailStart = true
+
         let passID = previewPassID &+ 1
         previewPassID = passID
         previewAccumulatedText = displayText
         lastPreviewedSampleIndex = candidateEndIndex
         var display = completedChunkTexts.joined(separator: " ")
         if !display.isEmpty { display += " " }
-        display += displayText
+        display += publishedText
         fullTranscription = display
         DispatchQueue.main.async { [weak self] in
             guard let self, self.previewPassID == passID else { return }
             self.onTranscription?(display)
-            self.onPreviewTail?(displayText)
+            self.onPreviewTail?(publishedText)
         }
         transcriptionProgressCounter &+= 1
     }
@@ -1680,6 +2127,59 @@ class StreamingTranscriber {
         }
         #endif
 
+        // whisper.cpp eager stream: same trade as WhisperKit above. The eager pass already
+        // decoded the full uncommitted region with the same model that the tail decode would
+        // use, so re-decoding it costs ~1s and returns the text we already have. Wait briefly
+        // for a decode that is about to land, then reuse it and skip the tail entirely.
+        if usesEagerStream {
+            var waitIterations = 0
+            let shouldWaitForPreview = shouldWaitForActiveEagerPreviewAtStop()
+            while shouldWaitForPreview, isProcessing, waitIterations < 60 {
+                try? await Task.sleep(nanoseconds: 10_000_000)
+                waitIterations += 1
+            }
+            if waitIterations > 0 {
+                Logger.debug("Eager stop waited \(waitIterations * 10)ms for active whisper.cpp decode", subsystem: .transcription)
+            }
+
+            if canReuseEagerPreviewAtStop() {
+                isStopped = true
+                pendingChunks.removeAll()
+                provisionalChunkText = ""
+                appendTailTranscription(latestWhisperKitPreviewText)
+                await drainInFlightEagerPass()
+                Logger.info("Eager stop reused high-confidence whisper.cpp preview", subsystem: .transcription)
+                return finalizeCompletedChunks(skipCorrections: skipCorrections)
+            }
+
+            // Reuse was rejected — normally because the key was released mid-word, so the gap
+            // after the last preview contains speech that must be decoded. Credit the preview
+            // anyway and advance the commit boundary to its end, so the tail decode below covers
+            // only that uncovered remainder (typically well under a second) instead of
+            // re-decoding everything back to the last 6s soft-commit.
+            if !latestWhisperKitPreviewText.isEmpty,
+               latestWhisperKitPreviewStartIndex <= lastTranscribedSampleIndex,
+               latestWhisperKitPreviewEndIndex > lastTranscribedSampleIndex,
+               whisperKitPreviewAnchoredAtTailStart,
+               let confidence = latestWhisperKitPreviewAverageLogProbability,
+               confidence >= -0.65 {
+                let skippedSeconds = Double(latestWhisperKitPreviewEndIndex - lastTranscribedSampleIndex) / sampleRate
+                appendTailTranscription(latestWhisperKitPreviewText,
+                                        endIndex: latestWhisperKitPreviewEndIndex)
+                lastTranscribedSampleIndex = latestWhisperKitPreviewEndIndex
+                lastClaimedSampleIndex = max(lastClaimedSampleIndex, latestWhisperKitPreviewEndIndex)
+                Logger.info(
+                    "Eager stop reused preview for \(String(format: "%.1f", skippedSeconds))s; tail decodes remainder only",
+                    subsystem: .transcription
+                )
+            }
+
+            // Reuse was rejected, so a tail decode follows. It shares the bridge with whatever
+            // eager pass is still running, so drain that first rather than queueing the tail
+            // behind a decode whose result is now worthless.
+            await drainInFlightEagerPass()
+        }
+
         isStopped = true
 
         // Abort in-flight chunk transcription on all backends
@@ -1778,12 +2278,54 @@ class StreamingTranscriber {
         }
     }
 
+    /// How far the newest preview may trail the end of captured audio and still be reusable.
+    ///
+    /// WhisperKit re-decodes every 40ms, so its preview is never more than a hair behind and
+    /// 0.40s is generous. whisper.cpp eager passes are a full-model decode of the unconfirmed
+    /// window — 0.5-1s apart — so the newest preview routinely trails by more than 0.40s and
+    /// that ceiling would reject nearly every V3 stop, falling back to the tail decode every
+    /// time. The speech check at each call site is the real safety net: a wider *silent* gap is
+    /// safe to discard, a gap containing speech is not, regardless of its length.
+    private var maximumUncoveredReuseSamples: Int {
+        Int((usesEagerStream ? 1.5 : 0.40) * sampleRate)
+    }
+
+    /// Wait for an eager pass that is still decoding to actually finish, after asking it to stop.
+    ///
+    /// `requestAbort()` is not a barrier — whisper.cpp only checks the abort callback between
+    /// decoder steps, so `whisper_full` keeps running for some tens of milliseconds after the
+    /// flag is set. The stop path used to set the flag and return, which left a decode live on
+    /// the bridge while the caller went on to tear this transcriber down and start the next
+    /// recording. A sweep of back-to-back fixtures aborted the process on a malloc free.
+    ///
+    /// The cost is not the latency it looks like: this only waits when a pass is genuinely in
+    /// flight, and an aborting decode returns in tens of ms rather than the ~1.4s a full pass
+    /// takes. The 400ms ceiling matches the in-flight-chunk drain below it.
+    ///
+    /// `resetAbort()` at the end matters as much as the wait — the flag is bridge state, and
+    /// leaving it set would make the *next* session's first decode return -9 immediately.
+    private func drainInFlightEagerPass() async {
+        whisper.requestAbort()
+        var waited = 0
+        while isProcessing, waited < 40 {
+            try? await Task.sleep(nanoseconds: 10_000_000)
+            waited += 1
+        }
+        if isProcessing {
+            Logger.warning("Eager pass still decoding after 400ms at stop, proceeding anyway",
+                           subsystem: .transcription)
+        } else if waited > 0 {
+            Logger.debug("Eager stop drained in-flight pass in \(waited * 10)ms", subsystem: .transcription)
+        }
+        whisper.resetAbort()
+    }
+
     private func shouldWaitForActiveEagerPreviewAtStop() -> Bool {
         guard activeWhisperKitPreviewEndIndex > 0,
               activeWhisperKitPreviewStartIndex <= lastTranscribedSampleIndex,
               let ringEnd = currentRingEndIndex() else { return false }
         let uncoveredSamples = max(0, ringEnd - activeWhisperKitPreviewEndIndex)
-        return uncoveredSamples <= Int(0.40 * sampleRate) &&
+        return uncoveredSamples <= maximumUncoveredReuseSamples &&
             !containsSpeech(from: activeWhisperKitPreviewEndIndex, until: ringEnd)
     }
 
@@ -1795,7 +2337,7 @@ class StreamingTranscriber {
 
         guard let ringEnd = currentRingEndIndex() else { return false }
 
-        let maximumUncoveredSamples = Int(0.40 * sampleRate)
+        let maximumUncoveredSamples = maximumUncoveredReuseSamples
         let uncoveredSamples = max(0, ringEnd - latestWhisperKitPreviewEndIndex)
         let coversUncommittedStart = latestWhisperKitPreviewStartIndex <= lastTranscribedSampleIndex
         let hasStrongConfidence = averageLogProbability >= -0.65
@@ -2150,7 +2692,20 @@ class StreamingTranscriber {
         return (normalizeSamples(tailChunk.samples), prompt)
     }
 
-    private func appendTailTranscription(_ result: String) {
+    /// Append a decoded span to the committed chunk list and publish it.
+    ///
+    /// - Parameter endIndex: absolute sample index this text runs to. Defaults to `nil`, meaning
+    ///   the end of the captured audio, which is right for the genuine tail — the tail is by
+    ///   definition everything not yet committed. It is *wrong* for the partial-reuse branch of
+    ///   the eager stop, which credits a preview covering only part of the remainder and then
+    ///   decodes the rest as a second chunk. Passing the default there stamped the preview chunk
+    ///   as `[lastCommitted, recordedDuration]` and the following tail as
+    ///   `[previewEnd, recordedDuration]`, so the two overlapped by everything between them.
+    ///   The regression gate caught this on four of eight fixtures once it was feeding correctly
+    ///   — `4.30s starts before prev end 19.97s`, where 4.3s is exactly the reuse boundary the
+    ///   log reports as "reused preview for 4.3s". Overlapping spans are what meeting transcript
+    ///   cards and scroll-to-timestamp read, so this was wrong on screen, not only in the test.
+    private func appendTailTranscription(_ result: String, endIndex: Int? = nil) {
         let text = result.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !text.isEmpty, !isHallucination(text) else { return }
 
@@ -2162,19 +2717,46 @@ class StreamingTranscriber {
         }
         guard !deduped.isEmpty else { return }
         completedChunkTexts.append(deduped)
-        // The tail is by definition everything not yet committed, so it spans from the
-        // last commit boundary to the end of the captured audio.
+        // Spans from the last commit boundary to `endIndex`, or to the end of the captured audio
+        // when the caller did not narrow it. Clamped below the recording end and above the start
+        // so a stale index can never produce an inverted span.
+        let startSeconds = Double(lastTranscribedSampleIndex) / sampleRate
+        let endSeconds = endIndex.map {
+            min(recordedDuration, max(startSeconds, Double($0) / sampleRate))
+        } ?? recordedDuration
         onChunkCompleted?(TranscriptChunk(
             text: deduped,
-            start: Double(lastTranscribedSampleIndex) / sampleRate,
-            end: recordedDuration,
+            start: startSeconds,
+            end: endSeconds,
             recordedDuration: recordedDuration
         ))
     }
 
     private func finalizeCompletedChunks(skipCorrections: Bool) -> String {
-        let rawText = completedChunkTexts.joined(separator: " ")
+        var rawText = completedChunkTexts.joined(separator: " ")
             .trimmingCharacters(in: .whitespacesAndNewlines)
+
+        // Never return empty while live text is on screen.
+        //
+        // On the eager path the committed chunks only exist once a soft-commit has fired, which
+        // needs the agreement boundary to run 6s past the last commit. A recording where that
+        // never happened — because the decoder fell behind, or the tail decode came back with
+        // nothing — reaches here with no chunks at all, and the user watches a screenful of live
+        // text vanish on key release. Measured: a 204s dictation that published 143 display
+        // updates returned the empty string (`EagerStreamProfileTests`, WER 1.000).
+        //
+        // `previewAccumulatedText` is the last full hypothesis — what is on screen, or a superset
+        // of it when `eagerPublishesSpeculativeTail` is off. Either way it is append-only, so falling
+        // back to it cannot duplicate anything already in `rawText` — this only runs when
+        // `rawText` is empty.
+        if rawText.isEmpty {
+            let live = previewAccumulatedText.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !live.isEmpty {
+                Logger.warning("No committed chunks at stop — falling back to live preview text (\(live.count) chars)",
+                               subsystem: .transcription)
+                rawText = live
+            }
+        }
         guard !rawText.isEmpty else { return clearAndReturn("") }
 
         var result = skipCorrections ? rawText : DictionaryManager.shared.correctText(rawText)

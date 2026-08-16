@@ -10,7 +10,19 @@
 import Foundation
 import Accelerate
 
-class VADSegmenter {
+// `nonisolated` deliberately, against the project-wide `SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor`.
+// This type is pure computation over sample buffers with no UI and no shared mutable state, and it
+// is called from the transcriber's background scan, so main-actor isolation was never accurate.
+//
+// It is also load-bearing for the test host. A `@MainActor` class gets an *isolated* deinit, so
+// `__deallocating_deinit` routes through `swift_task_deinitOnExecutor`, and in this toolchain that
+// path aborts with `pointer being freed was not allocated` inside
+// `TaskLocal::StopLookupScope::~StopLookupScope` when the object is released outside any task —
+// which is exactly what a synchronous XCTest method is. 78 of the 79 crash reports on disk are
+// this one stack, differing only in which class happened to deallocate first (`SafeLock`,
+// `EagerStreamEngine` while it was still a class, now this). The app never hits it because it
+// always releases these from a main-actor context; it killed a 20-minute corpus sweep twice.
+nonisolated class VADSegmenter {
 
     struct AudioChunk {
         let startSample: Int          // absolute index in full recording

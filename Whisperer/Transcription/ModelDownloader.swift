@@ -145,41 +145,19 @@ class ModelDownloader {
         return FileManager.default.fileExists(atPath: path.path, isDirectory: &isDir) && isDir.boolValue
     }
 
-    /// Download and unzip Core ML encoder for ANE acceleration
-    func ensureCoreMLEncoder(for model: WhisperModel) async throws {
-        guard !isCoreMLEncoderDownloaded(model) else { return }
-        guard let downloadURL = model.coreMLEncoderDownloadURL,
-              let dirName = model.coreMLEncoderDirectoryName else { return }
-
-        let zipPath = appSupportDir.appendingPathComponent("\(dirName).zip")
-        Logger.info("Downloading Core ML encoder for \(model.displayName)...", subsystem: .model)
-
-        // Download zip
-        let (tempURL, _) = try await URLSession.shared.download(from: downloadURL)
-        try FileManager.default.moveItem(at: tempURL, to: zipPath)
-
-        // Unzip
-        let destinationDir = appSupportDir
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/usr/bin/unzip")
-        process.arguments = ["-o", zipPath.path, "-d", destinationDir.path]
-        process.standardOutput = nil
-        process.standardError = nil
-        try process.run()
-        process.waitUntilExit()
-
-        guard process.terminationStatus == 0 else {
-            throw ModelDownloadError.invalidFileSize  // Reuse existing error
+    /// Delete a model's Core ML encoder and any half-downloaded zip left by an older build.
+    ///
+    /// The app deliberately runs whisper.cpp on the Metal encoder — see
+    /// `WhisperBridge.purgeCoreMLEncoder(besideModelAt:)` for the measurements. That purge already
+    /// runs on every model load; this covers the download directory's leftovers (`.mlmodelc.zip`,
+    /// `__MACOSX`) that never reach a load path.
+    func purgeCoreMLEncoderArtifacts(for model: WhisperModel) {
+        let fm = FileManager.default
+        if let path = coreMLEncoderPath(for: model) {
+            try? fm.removeItem(at: path)
+            try? fm.removeItem(at: appSupportDir.appendingPathComponent("\(path.lastPathComponent).zip"))
         }
-
-        // Clean up zip
-        try? FileManager.default.removeItem(at: zipPath)
-
-        // Clean up __MACOSX directory if created by unzip
-        let macosxDir = destinationDir.appendingPathComponent("__MACOSX")
-        try? FileManager.default.removeItem(at: macosxDir)
-
-        Logger.info("Core ML encoder installed for \(model.displayName)", subsystem: .model)
+        try? fm.removeItem(at: appSupportDir.appendingPathComponent("__MACOSX"))
     }
 
     /// Download a specific model with retry logic and file validation

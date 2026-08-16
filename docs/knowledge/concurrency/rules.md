@@ -25,3 +25,13 @@
 6. **A stall dump where every component is `healthy` and the timeline is empty means the main
    thread was blocked, not that nothing was wrong.** Go straight to `## Thread Sample`; the state
    sections describe a process that was, from each component's own point of view, fine.
+
+- **Mark non-UI classes `nonisolated` explicitly.** With `SWIFT_DEFAULT_ACTOR_ISOLATION =
+  MainActor`, a class that is really background-only still gets `@MainActor` and an isolated
+  deinit, which aborts the process when released outside a task (every synchronous XCTest method).
+  Pure computation and synchronisation primitives — segmenters, locks, parsers — take
+  `nonisolated` at the declaration.
+
+- **A malloc "pointer being freed was not allocated" at the *same address in different processes*
+  is not a data race.** Look at the frame below the free, not above it; a constant address means
+  the runtime, not the heap.

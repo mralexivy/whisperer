@@ -428,7 +428,65 @@ class WhisperBridge: TranscriptionBackend {
         }
     }
 
+    /// The path whisper.cpp will probe for a Core ML encoder, derived exactly the way
+    /// `whisper_get_coreml_path_encoder` does ([whisper.cpp:3327](whisper.cpp/src/whisper.cpp#L3327)):
+    /// drop the extension, drop a trailing `-qN_N` quantisation suffix, append
+    /// `-encoder.mlmodelc`. So `ggml-large-v3-turbo-q5_0.bin` → `ggml-large-v3-turbo-encoder.mlmodelc`.
+    static func coreMLEncoderProbePath(for modelPath: URL) -> URL {
+        var stem = modelPath.deletingPathExtension().lastPathComponent
+        if let dash = stem.range(of: "-", options: .backwards) {
+            let suffix = stem[dash.lowerBound...]
+            // "-q5_0", "-q8_0" — five characters, `q` then a digit then `_`.
+            if suffix.count == 5,
+               suffix[suffix.index(suffix.startIndex, offsetBy: 1)] == "q",
+               suffix[suffix.index(suffix.startIndex, offsetBy: 3)] == "_" {
+                stem = String(stem[stem.startIndex..<dash.lowerBound])
+            }
+        }
+        return modelPath.deletingLastPathComponent()
+            .appendingPathComponent("\(stem)-encoder.mlmodelc")
+    }
+
+    /// Remove any Core ML encoder sitting next to the weights, so `whisper_init_state` cannot
+    /// find one and falls back to the Metal encoder.
+    ///
+    /// The ANE encoder is not an optimisation here, it is a regression on every axis we measured:
+    ///
+    /// - **Load.** `whisper_init_state` compiles/loads it synchronously. Measured 79.4s for a
+    ///   Whisperer V3 preload with a 19s main-thread block inside `whisper_coreml_init`, and the
+    ///   ANE daemon frequently answers with `ANE model load has failed for on-device compiled
+    ///   macho. Must re-compile the E5 bundle.` — a recompile that recurs, not a one-time cost.
+    /// - **Streaming latency.** Benchmarked on `largeTurboQ5`: ANE is a flat ~0.57s per pass
+    ///   regardless of window length, because `whisper_coreml_encode` always builds a fixed-shape
+    ///   `MLMultiArray` from the full 1500-frame (30s) mel. Metal with a window-sized `audio_ctx`
+    ///   is 0.18s at 3s, 0.26s at 6s, 0.42s at 12s — up to 3.1× faster.
+    /// - **Mutual exclusivity.** That fixed shape means Core ML silently *ignores* `audio_ctx`, so
+    ///   the eager stream cannot have both. Metal is the only encoder that can be sized.
+    ///
+    /// The authoritative switch is at compile time: `libwhisper.a` is now built with
+    /// `WHISPER_COREML=OFF`, and `WHISPER_USE_COREML` / `-lwhisper.coreml` are gone from all three
+    /// Xcode configurations, so `whisper_init_state` has no Core ML branch to take at all. There
+    /// was no `cparams` opt-out to use instead — whisper.cpp decides purely on file presence, so
+    /// with the old library the only lever was the filesystem.
+    ///
+    /// This purge therefore exists for disk, not correctness: the encoders are dead weight
+    /// (1.2 GB for `largeTurboQ5`) and doing it at load covers every entry point — main model,
+    /// tiny preview/detector, meetings — including anything an older build installed.
+    private static func purgeCoreMLEncoder(besideModelAt modelPath: URL) {
+        let encoder = coreMLEncoderProbePath(for: modelPath)
+        var isDir: ObjCBool = false
+        guard FileManager.default.fileExists(atPath: encoder.path, isDirectory: &isDir), isDir.boolValue else { return }
+        do {
+            try FileManager.default.removeItem(at: encoder)
+            Logger.info("Removed Core ML encoder \(encoder.lastPathComponent) — whisper.cpp uses the Metal encoder", subsystem: .transcription)
+        } catch {
+            Logger.warning("Could not remove Core ML encoder \(encoder.lastPathComponent): \(error)", subsystem: .transcription)
+        }
+    }
+
     private func loadModel() throws {
+        WhisperBridge.purgeCoreMLEncoder(besideModelAt: modelPath)
+
         var cparams = whisper_context_default_params()
 
         cparams.use_gpu = useGPU
@@ -722,6 +780,29 @@ class WhisperBridge: TranscriptionBackend {
             return true
         }
 
+        // An abort reports itself through whichever stage happened to be running, so it has two
+        // return codes rather than one: -9 when the *decoder* loop notices the callback
+        // (whisper.cpp:7475), and -6 "failed to encode" when the *encoder* does
+        // (whisper.cpp:7037, via `whisper_encode_internal` returning false at :2455). Neither is
+        // distinguishable, by return code alone, from the genuine failure that shares it.
+        //
+        // It is not a failure when we are the ones who asked. Every stop that reuses a live eager
+        // preview calls `requestAbort()`, so counting these reaches `maxConsecutiveFailures` (2)
+        // after two stops in a row and frees the whisper context out from under a healthy GPU —
+        // the expensive cure for a disease the patient does not have. A corpus run caught the
+        // encoder half of this as `❌ Whisper transcription failed with code: -6 (failure 1/2)`
+        // logged one line after `Eager stop drained in-flight pass in 120ms`: the drain worked
+        // exactly as designed and was then recorded as a fault.
+        //
+        // Gated on `shouldAbort` and nothing else. Outside a stop the flag is clear, so a real
+        // -6/-9 still counts — this suppresses the codes only in the window where we asked for
+        // them, which is the only window in which they are ambiguous.
+        if result == -9 || result == -6, shouldAbort {
+            Logger.debug("Whisper decode aborted on request", subsystem: .transcription)
+            whisperCurrentOp = nil
+            return false
+        }
+
         consecutiveFailures += 1
         Logger.error("Whisper transcription failed with code: \(result) (failure \(consecutiveFailures)/\(maxConsecutiveFailures))", subsystem: .transcription)
 
@@ -933,7 +1014,22 @@ class WhisperBridge: TranscriptionBackend {
 
             // Merge BPE tokens into words. A new word begins when a token's text has a
             // leading space (the BPE word-boundary marker in all whisper vocab variants).
-            var wordText = ""
+            //
+            // Accumulated as **bytes**, decoded once per word — not `String(cString:)` per token.
+            // Whisper's vocabulary is byte-level BPE, so a token is a byte sequence and not
+            // necessarily valid UTF-8 on its own: a two-byte Hebrew or Cyrillic character is
+            // routinely split across two tokens. `String(cString:)` on the first half substitutes
+            // U+FFFD and *discards the bytes*, so concatenating the two Strings can never
+            // reconstitute the character. The damage is permanent one line after the C call.
+            //
+            // This only ever bit the eager path, because every other reader here goes through
+            // `whisper_full_get_segment_text`, which hands back a whole segment and therefore
+            // whole characters. The A/B gate showed it plainly: baseline
+            // `כן אבל עכשיו כל הקוורים בדאטאבריקס` against eager
+            // `כן אבל עכשיו כל כל הקווריס בדא\u{FFFD}\u{FFFD}א\u{FFFD}\u{FFFD}\u{FFFD}\u{FFFD}ס`
+            // — 0.175 → 0.325 WER on the one Hebrew fixture, the run's worst regression. It is
+            // invisible in English, where every token is ASCII.
+            var wordBytes: [UInt8] = []
             var wordT0: Int64 = -1
             var wordT1: Int64 = 0
             var wordIds: [Int] = []
@@ -942,15 +1038,23 @@ class WhisperBridge: TranscriptionBackend {
 
             for j in 0..<nTokens {
                 guard let rawPtr = whisper_full_get_token_text(ctx, i, j) else { continue }
-                let tokenText = String(cString: rawPtr)
-                // Skip special tokens: <|...|> timestamps/control tokens and [_BEG_]/[_TT_N] non-speech tokens
-                guard !tokenText.hasPrefix("<|"), !tokenText.hasPrefix("[_"), !tokenText.isEmpty else { continue }
+                let tokenBytes = UnsafeBufferPointer(start: rawPtr, count: strlen(rawPtr))
+                    .map { UInt8(bitPattern: $0) }
+                // Skip special tokens: <|...|> timestamps/control tokens and [_BEG_]/[_TT_N]
+                // non-speech tokens. Compared as bytes because the accumulator is bytes; both
+                // markers are ASCII, so this is the same test as the `hasPrefix` it replaces.
+                guard !tokenBytes.isEmpty,
+                      !(tokenBytes.count >= 2 && tokenBytes[0] == 0x3C && tokenBytes[1] == 0x7C),  // "<|"
+                      !(tokenBytes.count >= 2 && tokenBytes[0] == 0x5B && tokenBytes[1] == 0x5F)   // "[_"
+                else { continue }
 
                 let data = whisper_full_get_token_data(ctx, i, j)
 
-                // Word boundary: token starts with a space (BPE leading-space convention)
-                if tokenText.first == " ", !wordText.isEmpty {
+                // Word boundary: token starts with a space (BPE leading-space convention).
+                // A leading space is a single ASCII byte, so no character can straddle a flush.
+                if tokenBytes[0] == 0x20, !wordBytes.isEmpty {
                     // flush the accumulated word
+                    let wordText = String(decoding: wordBytes, as: UTF8.self)
                     let trimmed = wordText.trimmingCharacters(in: .whitespaces)
                     if !trimmed.isEmpty, wordT0 >= 0 {
                         let prob = wordProbCount > 0 ? wordProbSum / Float(wordProbCount) : 0.0
@@ -966,7 +1070,7 @@ class WhisperBridge: TranscriptionBackend {
                             logProbCount += 1
                         }
                     }
-                    wordText = ""
+                    wordBytes = []
                     wordIds = []
                     wordProbSum = 0.0
                     wordProbCount = 0
@@ -975,7 +1079,7 @@ class WhisperBridge: TranscriptionBackend {
 
                 if wordT0 < 0 { wordT0 = data.t0 }
                 wordT1 = data.t1
-                wordText += tokenText
+                wordBytes.append(contentsOf: tokenBytes)
                 wordIds.append(Int(data.id))
                 if data.p > 0 {
                     wordProbSum += data.p
@@ -984,6 +1088,7 @@ class WhisperBridge: TranscriptionBackend {
             }
 
             // flush last word in segment
+            let wordText = String(decoding: wordBytes, as: UTF8.self)
             let trimmed = wordText.trimmingCharacters(in: .whitespaces)
             if !trimmed.isEmpty, wordT0 >= 0 {
                 let prob = wordProbCount > 0 ? wordProbSum / Float(wordProbCount) : 0.0
@@ -1093,10 +1198,13 @@ class WhisperBridge: TranscriptionBackend {
                     Logger.debug("Freed corrupted context", subsystem: .transcription)
                 }
 
-                // Reload model
+                // Reload model. `useGPU`, not `true`: the preview/detector bridge is created
+                // CPU-only on purpose (Metal contention with the main model freezes the HUD),
+                // and a recovery that quietly promoted it to the GPU would reintroduce exactly
+                // that, with no log line saying so.
                 var cparams = whisper_context_default_params()
-                cparams.use_gpu = true
-                cparams.flash_attn = true
+                cparams.use_gpu = self.useGPU
+                cparams.flash_attn = self.useGPU && WhisperBridge.isAppleSilicon
 
                 self.ctx = whisper_init_from_file_with_params(
                     self.modelPath.path,

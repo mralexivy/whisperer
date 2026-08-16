@@ -162,7 +162,10 @@ enum HistoryTestLoader {
         defer { sqlite3_close(db) }
 
         let sql = """
-            SELECT ZID, ZDURATION, ZTRANSCRIPTION, ZWORDCOUNT, ZLANGUAGE,
+            -- hex(ZID): CoreData stores the UUID as a 16-byte blob. Reading it as text yields
+            -- mojibake, which turned every id column in the benchmark reports into garbage.
+            -- The meeting query above already does this; this one was missed.
+            SELECT hex(ZID), ZDURATION, ZTRANSCRIPTION, ZWORDCOUNT, ZLANGUAGE,
                    ZAUDIOFILEURL, ZAIENHANCEDTEXT, ZAIMODENAME
             FROM ZTRANSCRIPTIONENTITY
             WHERE ZISINPROGRESS = 0

@@ -23,7 +23,12 @@ enum SafeLockError: Error, LocalizedError {
 }
 
 /// Thread-safe lock wrapper with timeout protection
-final class SafeLock {
+// `nonisolated` for the same reason as `VADSegmenter` — see the note there. A lock whose entire
+// purpose is to be taken from whichever thread reaches it cannot meaningfully be main-actor
+// isolated, and the isolated deinit that `SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor` gives it
+// aborts the process when it is released off a task, which is how a corpus sweep died in
+// `SafeLock.deinit`.
+nonisolated final class SafeLock {
     private let lock = NSLock()
     private let defaultTimeout: TimeInterval
 

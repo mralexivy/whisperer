@@ -1181,13 +1181,14 @@ class AppState: ObservableObject {
         isLoadingWhisper = true
         let startTime = Date()
 
-        // Download Core ML encoder in background (for ANE acceleration)
-        Task.detached(priority: .utility) {
-            do {
-                try await ModelDownloader.shared.ensureCoreMLEncoder(for: model)
-            } catch {
-                Logger.debug("Core ML encoder not available for \(modelDisplayName): \(error)", subsystem: .model)
-            }
+        // No Core ML encoder download. whisper.cpp's ANE encoder costs a 19s main-thread block at
+        // load and is up to 3.1× slower per streaming pass than Metal with a sized `audio_ctx` —
+        // see `WhisperBridge.purgeCoreMLEncoder(besideModelAt:)`, which also deletes any encoder a
+        // previous build already installed. This sweeps the download leftovers that never reach a
+        // load path (the `.mlmodelc.zip`, `__MACOSX`), reclaiming a few hundred MB.
+        Task.detached(priority: .background) {
+            ModelDownloader.shared.purgeCoreMLEncoderArtifacts(for: model)
+            ModelDownloader.shared.purgeCoreMLEncoderArtifacts(for: .tiny)
         }
 
         whisperLoadTask = Task.detached(priority: .userInitiated) { [weak self] in

@@ -36,6 +36,7 @@ private struct ABResult {
     let werBaseline: Double
     let werEager: Double
     let script: String
+    let baselineResult: RunResult
     let eagerResult: RunResult
 }
 
@@ -54,7 +55,14 @@ final class EagerStreamRegressionTests: XCTestCase {
 
     // Maximum fixtures to include in a single A/B run — kept small to stay within
     // the 10-minute XCTest timeout while still exercising a representative corpus.
-    private static let maxFixtures = 10
+    private static let maxFixtures = 8
+
+    // Both arms feed at wall-clock real time (see `runFixture`), so a fixture costs roughly
+    // `2 × (durationSec + 7)` seconds of run time. Capping at 45s keeps the whole gate near ten
+    // minutes; without a cap the corpus's very-long recordings (200s+) alone would take that
+    // long twice over. Short and medium recordings are also where the boundary behaviour this
+    // gate checks is hardest — a long recording gives the eager path many passes to converge.
+    private static let maxFixtureSeconds: Double = 45
 
     override class func setUp() {
         super.setUp()
@@ -91,7 +99,11 @@ final class EagerStreamRegressionTests: XCTestCase {
     }
 
     private func fixturesWithAudio() throws -> [RecordingFixture] {
-        let withAudio = (Self.allFixtures ?? []).filter { $0.audioURL != nil }
+        let withAudio = (Self.allFixtures ?? []).filter {
+            $0.audioURL != nil
+                && !$0.transcript.trimmingCharacters(in: .whitespaces).isEmpty
+                && $0.durationSec <= Self.maxFixtureSeconds
+        }
         try XCTSkipIf(withAudio.isEmpty,
             "No fixtures with audio — build up recordings in the app then re-run")
         return Array(withAudio.prefix(Self.maxFixtures))
@@ -142,8 +154,8 @@ final class EagerStreamRegressionTests: XCTestCase {
                 continue
             }
 
-            let a = runFixtureSync(samples: samples, bridge: br, eagerEnabled: false)
-            let b = runFixtureSync(samples: samples, bridge: br, eagerEnabled: true)
+            let a = await runFixture(samples: samples, bridge: br, eagerEnabled: false)
+            let b = await runFixture(samples: samples, bridge: br, eagerEnabled: true)
 
             let wer_a = wordErrorRate(a.finalText, reference: fixture.transcript)
             let wer_b = wordErrorRate(b.finalText, reference: fixture.transcript)
@@ -159,8 +171,25 @@ final class EagerStreamRegressionTests: XCTestCase {
                 werBaseline: wer_a,
                 werEager: wer_b,
                 script: script,
+                baselineResult: a,
                 eagerResult: b
             ))
+
+            // A WER delta says a fixture got worse; it does not say how, and the how is what a
+            // fix has to act on. The first honest run of this gate regressed six of eight
+            // fixtures and the deltas alone could not distinguish a dropped tail from a
+            // duplicated boundary from a mistranscription — only that `chars=270` had become
+            // `chars=208`. Printing all three strings for regressed fixtures costs nothing and
+            // turns the next run into evidence instead of another round of inference.
+            if wer_b > wer_a + 0.01 {
+                Logger.debug("""
+                    [\(String(fixture.id.prefix(8)))] REGRESSED \
+                    \(String(format: "%.3f", wer_a)) → \(String(format: "%.3f", wer_b))
+                      ref      (\(fixture.transcript.count)c): \(fixture.transcript)
+                      baseline (\(a.finalText.count)c): \(a.finalText)
+                      eager    (\(b.finalText.count)c): \(b.finalText)
+                    """, subsystem: .transcription)
+            }
         }
 
         try XCTSkipIf(results.isEmpty, "No fixtures produced usable A/B pairs — check audio files")
@@ -169,16 +198,34 @@ final class EagerStreamRegressionTests: XCTestCase {
         assertStructuralInvariants(results)
     }
 
-    // MARK: - runFixture (synchronous to avoid async/Thread.sleep conflicts)
+    // MARK: - runFixture
 
     /// Run a single fixture through the whisper.cpp pipeline with the given flag state.
-    /// Uses the same synchronous pattern as ChunkPipelineFixTests to avoid Task/Thread.sleep
-    /// interaction issues in the test runner.
-    private func runFixtureSync(
+    ///
+    /// **Async, and paced against the wall clock, for the same two reasons `EagerStreamHarness`
+    /// is** — and this gate was neither until the numbers gave it away. Its first version fed
+    /// 1365 samples per `Thread.sleep(0.01)` from the XCTest method, which is the main thread.
+    /// `StreamingTranscriber` is `@MainActor`, so blocking there starves the queue that every
+    /// piece of the pipeline runs on: the eager heartbeat never fires, `scanAndProcessChunks`
+    /// never emits, and `onTranscription` is never delivered. All the text came from the final
+    /// `stop()` decoding the whole buffer in one pass, on *both* sides of the A/B.
+    ///
+    /// That is exactly what the run showed and what made it unfalsifiable: zero `Eager pass:`
+    /// lines and zero chunk emissions in the log, `rec.stop chars=222` against `chars=222`, and
+    /// all ten fixtures reporting `baseline` equal to `eager` to three decimals. The three
+    /// accuracy gates were comparing one tail decode to an identical tail decode. Restoring the
+    /// `whisperCppEagerStreaming` flag — which this method had also been silently ignoring — was
+    /// necessary but not sufficient; a flag cannot switch between two pipelines when neither is
+    /// running.
+    ///
+    /// `Task.sleep` suspends rather than blocks, so the main queue keeps draining. Pacing is
+    /// against a fixed start time rather than a constant per-chunk sleep so per-iteration
+    /// overhead cannot accumulate into a slow feed.
+    private func runFixture(
         samples: [Float],
         bridge: WhisperBridge,
         eagerEnabled: Bool
-    ) -> RunResult {
+    ) async -> RunResult {
         UserDefaults.standard.set(eagerEnabled, forKey: Self.eagerFlagKey)
         defer { UserDefaults.standard.removeObject(forKey: Self.eagerFlagKey) }
 
@@ -207,18 +254,26 @@ final class EagerStreamRegressionTests: XCTestCase {
             displaySequence.append(text)
         }
 
-        // Feed audio in real-time-like chunks (85ms / chunk at 16 kHz)
+        // Feed at the rate a microphone actually delivers: 1365 samples ≈ 85 ms at 16 kHz.
         let chunkSize = 1365
+        let chunkSeconds = Double(chunkSize) / 16000.0
+        var chunkIndex = 0
         for offset in stride(from: 0, to: samples.count, by: chunkSize) {
             let end = min(offset + chunkSize, samples.count)
             transcriber.addSamples(Array(samples[offset..<end]))
-            Thread.sleep(forTimeInterval: 0.01)
+            chunkIndex += 1
+            let remaining = feedStart + Double(chunkIndex) * chunkSeconds - CFAbsoluteTimeGetCurrent()
+            if remaining > 0 { try? await Task.sleep(nanoseconds: UInt64(remaining * 1_000_000_000)) }
         }
 
-        // Allow VAD scan + chunk transcription tasks to run
-        Thread.sleep(forTimeInterval: 5.0)
+        // Let the last in-flight pass land before stopping, so the eager arm is measured with the
+        // text it had actually published rather than mid-pass.
+        try? await Task.sleep(nanoseconds: 2_000_000_000)
 
-        let finalText = transcriber.stop()
+        // `stopAsync`, never the synchronous `stop()` — CLAUDE.md's rule, and it is load-bearing
+        // here: `stop()` returns while a pass is still in flight on the bridge queue, which then
+        // calls back into a transcriber this method has already released.
+        let finalText = await transcriber.stopAsync()
         return RunResult(
             finalText: finalText,
             chunkSpans: chunkSpans,

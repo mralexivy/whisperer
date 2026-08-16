@@ -212,6 +212,11 @@ enum WhisperModel: String, CaseIterable, Identifiable {
 
     /// Core ML encoder directory name that whisper.cpp looks for next to the .bin file.
     /// whisper.cpp strips quantization suffix (e.g., "-q5_0") automatically.
+    ///
+    /// The app no longer installs these — the ANE encoder blocks the main thread for ~19s at load
+    /// and is up to 3.1× slower per streaming pass than Metal with a sized `audio_ctx`, which it
+    /// also silently disables. `WhisperBridge.purgeCoreMLEncoder(besideModelAt:)` deletes any that
+    /// an older build left behind. This name is kept only so diagnostics can report presence.
     var coreMLEncoderDirectoryName: String? {
         switch self {
         case .tiny: return "ggml-tiny-encoder.mlmodelc"
@@ -225,13 +230,6 @@ enum WhisperModel: String, CaseIterable, Identifiable {
         case .distilSmallEn: return nil
         case .ivritLargeTurbo: return nil
         }
-    }
-
-    /// Download URL for the Core ML encoder zip
-    var coreMLEncoderDownloadURL: URL? {
-        guard let dirName = coreMLEncoderDirectoryName else { return nil }
-        let zipName = dirName.replacingOccurrences(of: ".mlmodelc", with: ".mlmodelc.zip")
-        return URL(string: "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/\(zipName)")
     }
 
     /// Whether this is an English-only model variant

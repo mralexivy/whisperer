@@ -102,6 +102,10 @@ actor NemotronBridge {
         await manager?.detectedLanguage()
     }
 
+    func isForcedPrefixEnabled() async -> Bool {
+        await manager?.forcedPrefixEnabled() ?? false
+    }
+
     func prepareForShutdown() {
         _isShuttingDown = true
         let mgr = manager

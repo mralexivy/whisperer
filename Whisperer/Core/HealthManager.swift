@@ -96,6 +96,11 @@ final class HealthManager {
     private static let warnThreshold: Duration   = .seconds(2)
     private static let criticalThreshold: Duration = .seconds(10)
     private static let maxBackoffDelay: Duration = .seconds(80)
+    /// Log a main-thread warning at 1.5s. A Debug-build whisper.cpp decode blocks main for ~1s
+    /// routinely, so the old 500ms bar fired on healthy recordings several times a minute.
+    private static let mainThreadWarnThreshold: Duration = .milliseconds(1500)
+    /// Write a full dump only past 3s — see the comment at the call site.
+    private static let mainThreadDumpThreshold: Duration = .seconds(3)
 
     private init() {}
 
@@ -396,7 +401,7 @@ final class HealthManager {
                 mainThreadLock.unlock()
                 return
             }
-            if elapsed > .milliseconds(500) && !alreadyAlerted {
+            if elapsed > Self.mainThreadWarnThreshold && !alreadyAlerted {
                 if let suppress = suppressStallUntil, now < suppress { return }
                 mainThreadLock.lock()
                 mainThreadAlertFired = true
@@ -414,7 +419,16 @@ final class HealthManager {
                     kind: .error,
                     metadata: ["elapsed": .double(elapsedSeconds(elapsed))]
                 )
-                triggerDump(reason: "Main thread unresponsive for \(elapsedStr)s")
+                // Only a *sustained* block is worth a dump. A sub-3s block is almost always a
+                // synchronous whisper.cpp decode or a Metal command-buffer wait — expected work,
+                // not a hang. Dumping on those was self-defeating: each dump runs `/usr/bin/sample`
+                // against a live task, which suspends every thread in the process to walk their
+                // stacks, so the "diagnostic" froze the app mid-transcription. The in-process
+                // `MainThreadBacktrace.capture` above already records the blocking frame for free
+                // and always runs.
+                if elapsed > Self.mainThreadDumpThreshold {
+                    triggerDump(reason: "Main thread unresponsive for \(elapsedStr)s")
+                }
             }
         }
     }
