@@ -72,7 +72,7 @@ final class ChunkLLMCoordinator {
         // A cancelled or failed slot falls back to the raw chunk rather than to nothing: dropping a
         // slot here would silently delete that part of the user's dictation.
         let corrected = results.enumerated().map { index, value in value ?? rawChunks[index] }
-        let repaired = repairSeams(corrected: corrected, raw: rawChunks)
+        let repaired = Self.repairSeams(corrected: corrected, raw: rawChunks)
         return repaired.filter { !$0.isEmpty }.joined(separator: " ")
     }
 
@@ -91,7 +91,10 @@ final class ChunkLLMCoordinator {
     /// 1. Terminal punct: remove LLM-added trailing .!? when the next chunk continues lowercase.
     /// 2. Capitalization: lowercase the first word of a chunk when whisper had it lowercase
     ///    and it's not a proper noun.
-    private func repairSeams(corrected: [String], raw: [String]) -> [String] {
+    /// `static` so the whole-text path, which splits a finished transcript into segments and
+    /// corrects them in parallel, can repair its seams with the same code rather than a second
+    /// implementation that drifts.
+    static func repairSeams(corrected: [String], raw: [String]) -> [String] {
         guard corrected.count > 1, corrected.count == raw.count else { return corrected }
         var result = corrected
         for i in 0..<(result.count - 1) {

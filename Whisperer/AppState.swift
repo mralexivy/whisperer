@@ -1917,6 +1917,46 @@ class AppState: ObservableObject {
         return (systemPart, userMessage)
     }
 
+    /// Whole-text post-processing, split into segments and corrected in parallel when that is worth
+    /// doing.
+    ///
+    /// The non-streaming path sends a finished transcript as one prompt, so a 5,000-character
+    /// recording is one long serial decode — and it is the case where the user is definitely
+    /// waiting, because there was no streaming correction happening while they spoke. Splitting on
+    /// sentence boundaries turns it into rows the scheduler can batch, and the same seam repair the
+    /// streaming path uses cleans up the joins.
+    ///
+    /// Falls back to a single call whenever splitting is not clearly right: short text, a
+    /// transformative or sampled mode, or a text with no usable boundary. Those are the cases where
+    /// a seam would cost more than the parallelism is worth.
+    private func applyLLMPostProcessingSegmented(_ text: String) async -> String {
+        let mode = AIModeManager.shared.postProcessMode
+        guard llmEnabled, let processor = llmPostProcessor, processor.isModelLoaded,
+              mode.supportsChunkProcessing, mode.temperature == 0,
+              text.count >= WholeTextSplitter.minimumSplitLength else {
+            return await applyLLMPostProcessing(text)
+        }
+        let segments = WholeTextSplitter.split(text)
+        guard segments.count > 1 else { return await applyLLMPostProcessing(text) }
+
+        Logger.debug("LLM whole-text: \(text.count) chars → \(segments.count) segments",
+                     subsystem: .transcription)
+        var corrected = [String](repeating: "", count: segments.count)
+        await withTaskGroup(of: (Int, String).self) { group in
+            for (index, segment) in segments.enumerated() {
+                group.addTask { @MainActor in
+                    // Fragment mode: a segment begins and ends mid-thought exactly as a streaming
+                    // chunk does, so it needs the same instruction not to re-capitalise or add
+                    // terminal punctuation at the cut.
+                    (index, await self.applyLLMPostProcessing(segment, fragment: true))
+                }
+            }
+            for await (index, result) in group { corrected[index] = result }
+        }
+        let repaired = ChunkLLMCoordinator.repairSeams(corrected: corrected, raw: segments)
+        return repaired.filter { !$0.isEmpty }.joined(separator: " ")
+    }
+
     /// The batching scheduler for this processor and penalty, created on first use.
     ///
     /// Rebuilt rather than reconfigured when either changes: the runners close over both, and a
@@ -2884,7 +2924,7 @@ class AppState: ObservableObject {
                     processedText = await chunkLLMCoordinator.drain()
                 } else {
                     let listFormatted = await applyListFormatting(finalText)
-                    processedText = await applyLLMPostProcessing(listFormatted)
+                    processedText = await applyLLMPostProcessingSegmented(listFormatted)
                 }
                 lastInAppTranscription = processedText
 
@@ -3248,7 +3288,7 @@ class AppState: ObservableObject {
                     processedText = await chunkLLMCoordinator.drain()
                 } else {
                     let listFormatted = await applyListFormatting(finalText)
-                    processedText = await applyLLMPostProcessing(listFormatted)
+                    processedText = await applyLLMPostProcessingSegmented(listFormatted)
                 }
                 let textToInsert = appendTrailingSpace ? processedText + " " : processedText
 

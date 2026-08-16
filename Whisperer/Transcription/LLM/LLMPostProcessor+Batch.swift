@@ -78,6 +78,23 @@ struct LLMBatchRequest {
 
 extension LLMPostProcessor {
 
+    /// Whole-batch time budget for `rowCount` rows.
+    ///
+    /// A fixed 30 s was the original default and it was wrong: rows beyond what fits in the
+    /// planner's slice run *after* the earlier ones, so a 100-row batch is several sequential
+    /// generations sharing one deadline. Measured on real long transcripts, an 87-row batch took
+    /// 45 s and a 72-row batch 31 s — both tripped the deadline, and every row still live at that
+    /// moment kept a half-finished sentence. That surfaced as the segmented whole-text path
+    /// returning 53–74% of the user's words, which looks like a batching correctness bug and is
+    /// not one.
+    ///
+    /// 1.5 s/row is ~3.5× the measured 0.4 s/row, so the deadline stays what it is meant to be —
+    /// a backstop against a wedged generation — rather than a cap on normal work. The 30 s floor
+    /// keeps small batches at the behaviour that is already measured.
+    nonisolated static func defaultTimeout(rowCount: Int) -> Double {
+        max(30, 1.5 * Double(rowCount))
+    }
+
     /// Corrects every request in one batched generation, returning results in the caller's order.
     ///
     /// Rows are split into slices no wider than `BatchMemoryPlanner` allows and the slices run one
@@ -94,13 +111,17 @@ extension LLMPostProcessor {
     ///     and costs most of the batching win, so callers that do not need it should leave it at 1.
     ///   - timeoutSeconds: whole-batch budget. On expiry every live row stops where it is and
     ///     keeps what it produced, matching the single-stream path's behaviour on timeout.
+    ///     `nil` derives it from the row count — see `defaultTimeout(rowCount:)`, which exists
+    ///     because a fixed budget silently truncated the largest batches.
     func processBatch(
         requests: [LLMBatchRequest],
         instructions: String,
         repetitionPenalty: Float = 1.0,
-        timeoutSeconds: Double = 30
+        timeoutSeconds: Double? = nil
     ) async -> [String] {
         guard !requests.isEmpty else { return [] }
+        let timeoutSeconds = timeoutSeconds ?? Self.defaultTimeout(rowCount: requests.count)
+
         guard let container = modelContainer, !instructions.isEmpty else {
             return requests.map(\.text)
         }
