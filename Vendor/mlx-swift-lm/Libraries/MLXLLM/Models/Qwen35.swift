@@ -257,7 +257,26 @@ final class Qwen35GatedDeltaNet: Module {
 
         let convInput = concatenated([convState, qkv], axis: 1)
         if let cache {
-            cache[0] = convInput[0..., (-(convKernelSize - 1))...]
+            // Whisperer local patch: in a right-padded batch the last `convKernelSize - 1`
+            // columns of `convInput` are pads for every row whose prompt was shorter than the
+            // longest one, so the plain tail slice below would save zeros as the conv state and
+            // the row's first few decoded tokens would convolve against them.
+            //
+            // Row `b`'s last real token sits at `convInput` index
+            // `(convKernelSize - 1) + S - rightPadding[b] - 1`, so the window it needs starts at
+            // `S - rightPadding[b]`. Gathered per row rather than sliced.
+            //
+            // Left padding would need no fixup here — and would instead corrupt the *outputs* of
+            // the first real tokens, which is not recoverable. See the note on
+            // `BaseKVCache.rightPadding` for why that trade decided the padding side.
+            if let rightPadding = cache.rightPadding {
+                let window = MLXArray(Int32(0) ..< Int32(convKernelSize - 1))[.newAxis]
+                let starts = (Int32(S) - rightPadding.asType(.int32))[0..., .newAxis]
+                let indices = (starts + window)[0..., 0..., .newAxis]
+                cache[0] = takeAlong(convInput, indices, axis: 1)
+            } else {
+                cache[0] = convInput[0..., (-(convKernelSize - 1))...]
+            }
         }
 
         let convOut = silu(conv1d(convInput))

@@ -325,7 +325,8 @@ func runEagerFixture(
     publishesSpeculativeTail: Bool = true,
     skipsAnchorCheckAfterBoundaryMove: Bool = false,
     suppressesRepetitionLoops: Bool = true,
-    realTime: Bool = true
+    realTime: Bool = true,
+    onChunkStamped: ((TranscriptChunk, Double) -> Void)? = nil
 ) async -> EagerRunResult {
     let sampleRate: Double = 16000
     // Golden reference, with the stored transcript only as a last resort — `loadEagerCorpus`
@@ -340,18 +341,28 @@ func runEagerFixture(
     let repeatCollector = EagerCounter()
 
     let transcriber = StreamingTranscriber(backend: bridge, vad: loadVAD(), language: .auto)
+    // Taken before the callbacks are wired rather than immediately before `start`, because
+    // `onChunkStamped` needs it inside a closure. The few microseconds of property assignment
+    // between here and the first sample are below the resolution of anything measured from it.
+    let feedStart = CFAbsoluteTimeGetCurrent()
     transcriber.eagerMaxWindowSeconds = capSeconds
     transcriber.eagerPublishesSpeculativeTail = publishesSpeculativeTail
     transcriber.eagerSkipsAnchorCheckAfterBoundaryMove = skipsAnchorCheckAfterBoundaryMove
     transcriber.eagerSuppressesRepetitionLoops = suppressesRepetitionLoops
     transcriber.onEagerPassMeasured = { [passCollector] in passCollector.record($0) }
     transcriber.onEagerPassSkipped = { [skipCollector] in skipCollector.record($0) }
-    transcriber.onChunkCompleted = { [chunkCollector] in chunkCollector.record($0.text) }
+    // `onChunkStamped` fires on the bridge queue, like every other probe here — a sink that
+    // accumulates must lock. It carries the whole chunk, not just its text, because
+    // `recordedDuration` is the audio-time arrival offset and is the number the batch scheduler
+    // is sized from; the wall-clock offset beside it is only there to prove the feed kept up.
+    transcriber.onChunkCompleted = { [chunkCollector] chunk in
+        chunkCollector.record(chunk.text)
+        onChunkStamped?(chunk, CFAbsoluteTimeGetCurrent() - feedStart)
+    }
     transcriber.onEagerPassHeld = { [holdCollector] in holdCollector.record($0) }
     transcriber.onEagerRepeatedConfirmedTail = { [repeatCollector] in repeatCollector.increment() }
 
     bridge.resetAbort()
-    let feedStart = CFAbsoluteTimeGetCurrent()
     transcriber.start { [displayCollector] text in displayCollector.record(text) }
 
     // Feed at the rate a microphone actually delivers.
