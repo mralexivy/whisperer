@@ -80,6 +80,9 @@ public struct BatchStats {
 ///     instead of one for the whole batch, and that overhead grows with exactly the B this
 ///     function is trying to make large.
 ///   - compactionThreshold: fraction of dead rows at which the batch is physically compacted.
+///     Measured on ragged real chunks at B=32: never compacting costs 59 tok/s against 111 at
+///     0.5, so this matters enormously — but 0.5, 0.25 and 0.1 land within 2% of each other, so
+///     the default is 0.25 and tuning it further is not worth a round.
 ///   - onToken: `(row, tokenId)` in the caller's original row order, which does not change even
 ///     after compaction. Return false to retire that row.
 @discardableResult
@@ -92,7 +95,7 @@ public func generateBatchTokens(
     eosTokenIds: Set<Int>,
     repetitionPenalty: Float = 1.0,
     repetitionContextSize: Int = 64,
-    compactionThreshold: Double = 0.5,
+    compactionThreshold: Double = 0.25,
     onToken: (_ row: Int, _ tokenId: Int) -> Bool
 ) -> BatchStats {
     var stats = BatchStats()
@@ -253,7 +256,8 @@ public func generateBatchTokens(
         // discarded; the point is only to keep the batch rectangular until the next compaction.
         let y = MLXArray(current.map(Int32.init)).reshaped(current.count, 1)
         stepLogits = model(y, cache: cache)
-        eval(stepLogits)
+        // No `eval` here: `pick` ends in `asArray`, which forces evaluation anyway. Calling both
+        // costs a second GPU→CPU round trip on every step for nothing.
         stats.steps += 1
 
         let picked = pick(stepLogits)

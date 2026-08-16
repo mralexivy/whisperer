@@ -527,3 +527,39 @@ score, not as a distinct signal it optimizes against.
 
 `STRUCT long` is 0.000 for every candidate on the 4B as well: 18 paragraph breaks in the
 reference across the 12 long-form cases, 0 produced. Same as the 1.5B. Closed on both.
+
+## Batched decode — measured ceiling on M2 Pro (2026-08-16)
+
+Full round-by-round tables: `docs/exec-plans/batched-llm-rounds.md`. The durable facts:
+
+**Batching a 4-bit model on Apple silicon is worth ~4.5×, not ~25×.** Measured on
+Qwen3.5-4B-MTP, M2 Pro/32 GB, real chunk text: 37.9 tok/s at B=1 → 172 tok/s at B=32.
+Beyond B≈32 throughput is flat to B=96 while ms/step grows linearly.
+
+**Why the usual "batching is nearly free" reasoning does not apply here.** It assumes
+decode stays memory-bandwidth-bound, which holds for fp16 weights. With 4-bit weights MLX
+switches above a small batch (the jump is visible between B=4 and B=8) from a narrow
+matvec to dequantise-then-GEMM, and the dequantisation is arithmetic a batch-1 step never
+pays. Decode is compute-bound from B≈8–16 onward. Expect the same shape for any quantised
+model on this class of GPU.
+
+**Prefill does not batch.** 341 tok/s at B=1 versus 274 tok/s at B=32 — a 150-token prefill
+already saturates the GPU. On short-prompt/short-output work like dictation correction
+prefill is roughly half of end-to-end wall-clock, so end-to-end gain is ~2.5–3× even where
+decode gains 4.5×.
+
+**Retiring finished rows is worth more than any other knob.** Ragged real chunks at B=32
+average 15 live rows out of 32. Never compacting: 58.7 tok/s. Compacting: 112 tok/s (1.9×).
+The threshold itself is worth 2% anywhere in 0.1–0.5.
+
+**Chunk arrivals are too sparse to batch mid-stream.** 295 real chunks: inter-arrival p50
+6.84s against a ~0.7s correction, only 18% of gaps ≤ 2s. Batching can only pay off at the
+drain after key release (p90 11 chunks outstanding), on whole-text splitting, and on
+meeting segments — never while the user is still speaking.
+
+**Right-padded batching is not bit-exact, and cannot be made so.** Unpadded rows are exact
+at any B (verified: identical-row B=8 == B=1, and the unpadded row of a ragged batch has a
+logit delta of exactly 0.0). Padded rows drift ≤0.28 in logit space — one bf16 rounding
+step on logits of magnitude tens — which flips the greedy pick on the ~11% of real chunks
+where the top-two gap is small. Every observed flip was a comma or an article. Any plan
+that assumes "greedy is deterministic so batched == serial" is wrong on this hardware.

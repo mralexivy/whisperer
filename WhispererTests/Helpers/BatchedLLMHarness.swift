@@ -96,7 +96,8 @@ func runBatchedGeneration(
     rows: [(system: String, user: String)],
     maxTokens: Int,
     warmPrefix: Bool,
-    repetitionPenalty: Float = 1.0
+    repetitionPenalty: Float = 1.0,
+    compactionThreshold: Double = 0.5
 ) async throws -> BatchRunResult {
     guard let container = processor.modelContainer else { throw BatchedLLMHarnessError.notLoaded }
     guard !rows.isEmpty else { return BatchRunResult(texts: [], stats: BatchStats(), warmPrefixTokens: 0) }
@@ -188,6 +189,7 @@ func runBatchedGeneration(
             maxTokens: maxTokens,
             eosTokenIds: eosIds,
             repetitionPenalty: repetitionPenalty,
+            compactionThreshold: compactionThreshold,
             onToken: { row, tokenId in
                 let piece = tokenizer.decode(tokens: [tokenId])
                 let before = charCounts[row]
@@ -273,4 +275,98 @@ func realChunkTexts(count: Int, corpus: ChunkStreamCorpus) -> [String] {
         }
     }
     return picked
+}
+
+// MARK: - Logit-level comparison
+
+/// How far one row's prefill logits move when the row is decoded inside a ragged batch instead of
+/// alone.
+struct RowLogitDelta {
+    let maxAbsDiff: Float
+    /// Gap between the top two logits at B=1. A `maxAbsDiff` well below this cannot flip the
+    /// greedy pick; a `maxAbsDiff` comparable to it explains an occasional flip without any bug.
+    let top2Gap: Float
+    let argmaxMatches: Bool
+}
+
+/// Compares the last-real-token prefill logits of each row, batched versus alone.
+///
+/// Text-level equality is a blunt instrument for this question: it only reports a difference once
+/// a near-tie has actually flipped, and it cannot say by how much. Logits say whether the batched
+/// path is reproducing the same arithmetic to within float noise or getting a materially different
+/// answer, which is the difference between "the hardware is not batch-invariant" and "the padding
+/// is wrong".
+@MainActor
+func compareRaggedPrefillLogits(
+    _ processor: LLMPostProcessor, texts: [String]
+) async throws -> [RowLogitDelta] {
+    guard let container = processor.modelContainer else { throw BatchedLLMHarnessError.notLoaded }
+    let rows = texts.map { correctPrompt(for: $0, fragment: true) }
+    let systemPrompt = rows[0].system
+
+    let box = LogitBox()
+    try await container.perform { context in
+        let tokenizer = context.tokenizer
+        guard let model = context.model as? any LLMModel else {
+            box.failure = "model is not an LLMModel"
+            return
+        }
+        let sequences: [[Int]]
+        do {
+            sequences = try rows.map { row in
+                try tokenizer.applyChatTemplate(
+                    messages: [["role": "system", "content": systemPrompt],
+                               ["role": "user", "content": row.user]],
+                    tools: nil, additionalContext: ["enable_thinking": false])
+            }
+        } catch {
+            box.failure = "chat template failed: \(error)"
+            return
+        }
+
+        // Batched, ragged, right-padded — the path under test.
+        let lengths = sequences.map(\.count)
+        let maxLen = lengths.max() ?? 0
+        var flat = [Int32]()
+        for (index, tokens) in sequences.enumerated() {
+            flat += tokens.map(Int32.init)
+            flat += repeatElement(Int32(tokens[tokens.count - 1]), count: maxLen - lengths[index])
+        }
+        let batchCache = model.newCache(parameters: nil)
+        if lengths.contains(where: { $0 != maxLen }) {
+            let padding = MLXArray(lengths.map { Int32(maxLen - $0) })
+            for c in batchCache {
+                guard let base = c as? BaseKVCache else { continue }
+                base.rightPadding = padding
+                base.rightPaddingEnd = base.offset + maxLen
+            }
+        }
+        let batched = model(MLXArray(flat).reshaped(sequences.count, maxLen), cache: batchCache)
+        eval(batched)
+
+        for (index, tokens) in sequences.enumerated() {
+            let soloCache = model.newCache(parameters: nil)
+            let solo = model(MLXArray(tokens.map(Int32.init))[.newAxis], cache: soloCache)
+            let soloRow = solo[0, tokens.count - 1, 0...]
+            let batchRow = batched[index, lengths[index] - 1, 0...]
+            eval(soloRow, batchRow)
+
+            let diff = abs(soloRow - batchRow).max().item(Float.self)
+            let soloTop = argMax(soloRow).item(Int.self)
+            let batchTop = argMax(batchRow).item(Int.self)
+            // Second-best at B=1: mask the winner and take the max again.
+            let sorted = MLX.sorted(soloRow)
+            let count = soloRow.dim(0)
+            let gap = (sorted[count - 1] - sorted[count - 2]).item(Float.self)
+            box.deltas.append(RowLogitDelta(
+                maxAbsDiff: diff, top2Gap: gap, argmaxMatches: soloTop == batchTop))
+        }
+    }
+    if let failure = box.failure { throw BatchedLLMHarnessError.incapableModel(failure) }
+    return box.deltas
+}
+
+private final class LogitBox: @unchecked Sendable {
+    var deltas: [RowLogitDelta] = []
+    var failure: String?
 }
