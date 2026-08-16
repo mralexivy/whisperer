@@ -53,7 +53,9 @@ struct LLMGenerationStats: Equatable {
 
 // MARK: - Degeneration guard
 
-private enum Degeneration {
+// Internal rather than file-private so the batched-decode benchmarks can apply the identical
+// guard per row. Reimplementing it there would mean measuring a different stopping rule.
+enum Degeneration {
     /// Longest cycle worth looking for. A looping clause is a handful of tokens; beyond
     /// that the repeats are more likely a real pattern (list items, parallel sentences).
     static let maxPeriod = 8
@@ -75,7 +77,7 @@ private enum Degeneration {
 ///
 /// Generic over the unit because the two decode paths see different things: the MTP path has
 /// token ids, `ChatSession` only hands out decoded string chunks.
-private struct DegenerationGuard<Unit: Equatable> {
+struct DegenerationGuard<Unit: Equatable> {
     private var units: [Unit] = []
     /// Output length (in characters) before the unit at the same index was appended.
     private var lengths: [Int] = []
@@ -120,7 +122,9 @@ class LLMPostProcessor: ObservableObject {
     /// app's behaviour reads it. Nil until the first generation completes; unchanged on timeout.
     @Published private(set) var lastGenerationStats: LLMGenerationStats?
 
-    private var modelContainer: ModelContainer?
+    /// `private(set)` rather than `private` so the batched-decode benchmarks can reach the model
+    /// directly. Writes stay here; `unloadModel` is still the only way to clear it.
+    private(set) var modelContainer: ModelContainer?
     private(set) var loadedVariant: LLMModelVariant?
 
     // Per-instructions KV caches — keyed on the full instructions string (system prompt + language).

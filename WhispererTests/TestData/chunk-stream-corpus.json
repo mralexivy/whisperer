@@ -1,0 +1,2533 @@
+{
+  "streams" : [
+    {
+      "bucket" : "short",
+      "chunks" : [
+        {
+          "audioOffsetSec" : 3.968,
+          "endSec" : 2.3034375,
+          "startSec" : 0.15,
+          "text" : "Today is beautiful day, beautiful moment.",
+          "wallOffsetSec" : 6.787410020828247
+        },
+        {
+          "audioOffsetSec" : 3.968,
+          "endSec" : 3.968,
+          "startSec" : 2.3034375,
+          "text" : "It's super, super fast.",
+          "wallOffsetSec" : 9.903331995010376
+        }
+      ],
+      "durationSec" : 3.968,
+      "language" : "en",
+      "recordingID" : "004a0565"
+    },
+    {
+      "bucket" : "short",
+      "chunks" : [
+        {
+          "audioOffsetSec" : 7.488,
+          "endSec" : 6.59,
+          "startSec" : 0.15,
+          "text" : "Find documents that I created about the KPIs of of data platform and tell me like what I",
+          "wallOffsetSec" : 10.14463198184967
+        },
+        {
+          "audioOffsetSec" : 7.488,
+          "endSec" : 7.488,
+          "startSec" : 6.59,
+          "text" : "suggested there.",
+          "wallOffsetSec" : 10.155197978019714
+        }
+      ],
+      "durationSec" : 7.488,
+      "language" : "auto",
+      "recordingID" : "00d1ab8e"
+    },
+    {
+      "bucket" : "short",
+      "chunks" : [
+        {
+          "audioOffsetSec" : 11.773125,
+          "endSec" : 10.3209375,
+          "startSec" : 0.15,
+          "text" : "No, what the hell did you do? I expected pop-up to be displayed with beautiful UI that we use across the app, premium UI and UX, and not the shit that you",
+          "wallOffsetSec" : 11.688156008720398
+        },
+        {
+          "audioOffsetSec" : 11.776,
+          "endSec" : 2.4550625,
+          "startSec" : 1,
+          "text" : "created like in line.",
+          "wallOffsetSec" : 16.61226499080658
+        }
+      ],
+      "durationSec" : 11.776,
+      "language" : "en",
+      "recordingID" : "00e1d2e0"
+    },
+    {
+      "bucket" : "short",
+      "chunks" : [
+        {
+          "audioOffsetSec" : 2.496,
+          "endSec" : 2.496,
+          "startSec" : 0.15,
+          "text" : "Hello, how are you doing today?",
+          "wallOffsetSec" : 7.237589001655579
+        }
+      ],
+      "durationSec" : 2.496,
+      "language" : "en",
+      "recordingID" : "00fd90cd"
+    },
+    {
+      "bucket" : "short",
+      "chunks" : [
+        {
+          "audioOffsetSec" : 9.728,
+          "endSec" : 8.53125,
+          "startSec" : 0.15,
+          "text" : "Again, what we need to do here is basically tell how fraud is our interface. So let's write",
+          "wallOffsetSec" : 12.546230912208557
+        },
+        {
+          "audioOffsetSec" : 9.728,
+          "endSec" : 9.728,
+          "startSec" : 8.53125,
+          "text" : "it in this fashion.",
+          "wallOffsetSec" : 16.32354497909546
+        }
+      ],
+      "durationSec" : 9.728,
+      "language" : "he",
+      "recordingID" : "0107bc2a"
+    },
+    {
+      "bucket" : "short",
+      "chunks" : [
+        {
+          "audioOffsetSec" : 3.776,
+          "endSec" : 3.776,
+          "startSec" : 0.15,
+          "text" : "we have made great progress",
+          "wallOffsetSec" : 6.541083097457886
+        }
+      ],
+      "durationSec" : 3.776,
+      "language" : "en",
+      "recordingID" : "0129efc7"
+    },
+    {
+      "bucket" : "short",
+      "chunks" : [
+        {
+          "audioOffsetSec" : 10.176,
+          "endSec" : 9.2990625,
+          "startSec" : 0.15,
+          "text" : "We want to create multiple actions. So action number one, create beautiful song. Action number two, build a beautiful list.",
+          "wallOffsetSec" : 10.977972030639648
+        }
+      ],
+      "durationSec" : 10.176,
+      "language" : "en",
+      "recordingID" : "0183d434"
+    },
+    {
+      "bucket" : "short",
+      "chunks" : [
+        {
+          "audioOffsetSec" : 3.968,
+          "endSec" : 3.968,
+          "startSec" : 0.15,
+          "text" : "It seems that transcription working really really fast and fascinating.",
+          "wallOffsetSec" : 7.489779949188232
+        }
+      ],
+      "durationSec" : 3.968,
+      "language" : "auto",
+      "recordingID" : "01b7f0a8"
+    },
+    {
+      "bucket" : "short",
+      "chunks" : [
+        {
+          "audioOffsetSec" : 7.36,
+          "endSec" : 7.36,
+          "startSec" : 0.15,
+          "text" : "Can we just migrate it to the new structure so it will be off post migration?",
+          "wallOffsetSec" : 10.438382029533386
+        },
+        {
+          "audioOffsetSec" : 7.36,
+          "endSec" : 7.36,
+          "startSec" : 0.15,
+          "text" : "Can we just migrate it to the new structure so it will be off post migration?",
+          "wallOffsetSec" : 13.169245958328247
+        }
+      ],
+      "durationSec" : 7.36,
+      "language" : "en",
+      "recordingID" : "023c4945"
+    },
+    {
+      "bucket" : "short",
+      "chunks" : [
+        {
+          "audioOffsetSec" : 10.56,
+          "endSec" : 8.53,
+          "startSec" : 0.15,
+          "text" : "We need to get it as much as close to",
+          "wallOffsetSec" : 11.152375936508179
+        },
+        {
+          "audioOffsetSec" : 10.56,
+          "endSec" : 8.53125,
+          "startSec" : 8.53,
+          "text" : "initial",
+          "wallOffsetSec" : 13.286895036697388
+        },
+        {
+          "audioOffsetSec" : 10.56,
+          "endSec" : 2.03,
+          "startSec" : 0.00125,
+          "text" : "need to make it close to",
+          "wallOffsetSec" : 14.829288959503174
+        }
+      ],
+      "durationSec" : 10.56,
+      "language" : "en",
+      "recordingID" : "025ae0b3"
+    },
+    {
+      "bucket" : "short",
+      "chunks" : [
+        {
+          "audioOffsetSec" : 10.176,
+          "endSec" : 10.176,
+          "startSec" : 0.15,
+          "text" : "I want to check if like hands-off free mode is working fine and it will be able to insert the text to the box after the transcription.",
+          "wallOffsetSec" : 11.668361067771912
+        }
+      ],
+      "durationSec" : 10.176,
+      "language" : "auto",
+      "recordingID" : "02a0b1ea"
+    },
+    {
+      "bucket" : "short",
+      "chunks" : [
+        {
+          "audioOffsetSec" : 7.678125,
+          "endSec" : 6.2278125,
+          "startSec" : 0.15,
+          "text" : "The beam is not displayed on pedigree papers and door-to-door cards.",
+          "wallOffsetSec" : 7.6014639139175415
+        },
+        {
+          "audioOffsetSec" : 11.2,
+          "endSec" : 11.2,
+          "startSec" : 6.2278125,
+          "text" : "Like why it displayed on all other cards and not displayed on those cards. Like fix this.",
+          "wallOffsetSec" : 14.13054096698761
+        },
+        {
+          "audioOffsetSec" : 11.2,
+          "endSec" : 5.9721875,
+          "startSec" : 1,
+          "text" : "Like why it displayed on all other cards and not displayed on those cards. Like fix this.",
+          "wallOffsetSec" : 16.810293912887573
+        }
+      ],
+      "durationSec" : 11.2,
+      "language" : "en",
+      "recordingID" : "02e7844d"
+    },
+    {
+      "bucket" : "short",
+      "chunks" : [
+        {
+          "audioOffsetSec" : 4.992,
+          "endSec" : 0.6825,
+          "startSec" : 0.15,
+          "text" : "Let's go.",
+          "wallOffsetSec" : 7.78245997428894
+        },
+        {
+          "audioOffsetSec" : 4.992,
+          "endSec" : 4.992,
+          "startSec" : 0.6825,
+          "text" : "Let me try one more time and see if it's working or it's the way it should work.",
+          "wallOffsetSec" : 11.051334977149963
+        }
+      ],
+      "durationSec" : 4.992,
+      "language" : "auto",
+      "recordingID" : "0301a50b"
+    },
+    {
+      "bucket" : "short",
+      "chunks" : [
+        {
+          "audioOffsetSec" : 12.544,
+          "endSec" : 10.21,
+          "startSec" : 0.15,
+          "text" : "To add additional context, the end goal that those KPIs will be tracked with some dashboard and we will see how they move and consider with every project",
+          "wallOffsetSec" : 13.520701050758362
+        },
+        {
+          "audioOffsetSec" : 12.544,
+          "endSec" : 12.1996875,
+          "startSec" : 10.21,
+          "text" : "how it going to affect the KPIs.",
+          "wallOffsetSec" : 14.873088955879211
+        }
+      ],
+      "durationSec" : 12.544,
+      "language" : "auto",
+      "recordingID" : "0339f651"
+    },
+    {
+      "bucket" : "short",
+      "chunks" : [
+        {
+          "audioOffsetSec" : 9.28,
+          "endSec" : 9.28,
+          "startSec" : 0.15,
+          "text" : "The idea that we quickly identify any issue in syntax and problems and if anything crashes. Do not waste precious time and cost.",
+          "wallOffsetSec" : 13.293729066848755
+        }
+      ],
+      "durationSec" : 9.28,
+      "language" : "auto",
+      "recordingID" : "0352a696"
+    },
+    {
+      "bucket" : "short",
+      "chunks" : [
+        {
+          "audioOffsetSec" : 2.368,
+          "endSec" : 2.368,
+          "startSec" : 0.15,
+          "text" : "I see long processing",
+          "wallOffsetSec" : 7.01497209072113
+        }
+      ],
+      "durationSec" : 2.368,
+      "language" : "auto",
+      "recordingID" : "035d2fbb"
+    },
+    {
+      "bucket" : "short",
+      "chunks" : [
+        {
+          "audioOffsetSec" : 6.784,
+          "endSec" : 0.6825,
+          "startSec" : 0.15,
+          "text" : "Let's see.",
+          "wallOffsetSec" : 9.501022934913635
+        },
+        {
+          "audioOffsetSec" : 6.784,
+          "endSec" : 6.784,
+          "startSec" : 0.6825,
+          "text" : "Let me say a nice sentence and you need to correct this sentence and write it in good shape.",
+          "wallOffsetSec" : 13.878185987472534
+        }
+      ],
+      "durationSec" : 6.784,
+      "language" : "he",
+      "recordingID" : "044196f4"
+    },
+    {
+      "bucket" : "short",
+      "chunks" : [
+        {
+          "audioOffsetSec" : 3.072,
+          "endSec" : 0.6825,
+          "startSec" : 0.15,
+          "text" : "I have a question.",
+          "wallOffsetSec" : 5.856621980667114
+        },
+        {
+          "audioOffsetSec" : 3.072,
+          "endSec" : 3.072,
+          "startSec" : 0.6825,
+          "text" : "How text tab is calculated?",
+          "wallOffsetSec" : 7.668866991996765
+        }
+      ],
+      "durationSec" : 3.072,
+      "language" : "he",
+      "recordingID" : "04460df0"
+    },
+    {
+      "bucket" : "short",
+      "chunks" : [
+        {
+          "audioOffsetSec" : 4.096,
+          "endSec" : 4.096,
+          "startSec" : 0.15,
+          "text" : "Yeah, this is very cool. Hashtag cool, hashtag fun.",
+          "wallOffsetSec" : 5.539981007575989
+        }
+      ],
+      "durationSec" : 4.096,
+      "language" : "auto",
+      "recordingID" : "04bd8806"
+    },
+    {
+      "bucket" : "short",
+      "chunks" : [
+        {
+          "audioOffsetSec" : 4.544,
+          "endSec" : 4.544,
+          "startSec" : 0.15,
+          "text" : "Let's just create a new branch. Please...",
+          "wallOffsetSec" : 8.104444980621338
+        }
+      ],
+      "durationSec" : 4.544,
+      "language" : "he",
+      "recordingID" : "05c878b6"
+    },
+    {
+      "bucket" : "medium",
+      "chunks" : [
+        {
+          "audioOffsetSec" : 13.138125,
+          "endSec" : 10.235625,
+          "startSec" : 0.15,
+          "text" : "So we want to create beautiful video when we... so user pressed on a fan button, so a fan should be pressed like on the first image that I attached.",
+          "wallOffsetSec" : 13.125959992408752
+        },
+        {
+          "audioOffsetSec" : 23.6315625,
+          "endSec" : 20.64375,
+          "startSec" : 10.235625,
+          "text" : "Then the hat is appearing, then the person is speaking and we see animation on the hat itself, it's moving, indicating like the speech.",
+          "wallOffsetSec" : 23.54883599281311
+        },
+        {
+          "audioOffsetSec" : 32.248125,
+          "endSec" : 30.7959375,
+          "startSec" : 20.64375,
+          "text" : "And then text is written inside the box. Like you have example of the text, text should be written, like typed in, like live transcription.",
+          "wallOffsetSec" : 32.221044063568115
+        },
+        {
+          "audioOffsetSec" : 42.624,
+          "endSec" : 41.0334375,
+          "startSec" : 30.7959375,
+          "text" : "And then user can press FNL, you should animate it on the keyboard, like to indicate like they can release, they can like enter to",
+          "wallOffsetSec" : 42.600095987319946
+        },
+        {
+          "audioOffsetSec" : 42.624,
+          "endSec" : 2.5905625,
+          "startSec" : 1,
+          "text" : "hands free mode",
+          "wallOffsetSec" : 46.66465604305267
+        }
+      ],
+      "durationSec" : 42.624,
+      "language" : "en",
+      "recordingID" : "00720393"
+    },
+    {
+      "bucket" : "medium",
+      "chunks" : [
+        {
+          "audioOffsetSec" : 13.138125,
+          "endSec" : 10.3209375,
+          "startSec" : 0.15,
+          "text" : "The stats here displayed something stupid which is not clear. Roadmap items. We only have 18 items, right? So this is like roadmap big projects.",
+          "wallOffsetSec" : 13.088835954666138
+        },
+        {
+          "audioOffsetSec" : 16.550625,
+          "endSec" : 13.9059375,
+          "startSec" : 10.3209375,
+          "text" : "But like in completed you show hundreds of items.",
+          "wallOffsetSec" : 16.48269498348236
+        },
+        {
+          "audioOffsetSec" : 24.256,
+          "endSec" : 11.3500625,
+          "startSec" : 1,
+          "text" : "It cannot be because it's more than like what is planned. You fucking idiot. It can be like you counting tasks or stories and not the projects.",
+          "wallOffsetSec" : 29.474076986312866
+        }
+      ],
+      "durationSec" : 24.256,
+      "language" : "en",
+      "recordingID" : "0099abc9"
+    },
+    {
+      "bucket" : "medium",
+      "chunks" : [
+        {
+          "audioOffsetSec" : 9.725625,
+          "endSec" : 7.26,
+          "startSec" : 0.15,
+          "text" : "I want to test it now, how So now the glow is super beautiful",
+          "wallOffsetSec" : 9.682812929153442
+        },
+        {
+          "audioOffsetSec" : 21.669375,
+          "endSec" : 16.31,
+          "startSec" : 7.26,
+          "text" : "I like the I like the icons, I like the and everything is being amazing so far",
+          "wallOffsetSec" : 21.62425994873047
+        },
+        {
+          "audioOffsetSec" : 29.4328125,
+          "endSec" : 24.92,
+          "startSec" : 16.31,
+          "text" : "it's beautiful design so let's try to stop it to see how it works in the",
+          "wallOffsetSec" : 29.397514939308167
+        },
+        {
+          "audioOffsetSec" : 37.376,
+          "endSec" : 31.33,
+          "startSec" : 24.92,
+          "text" : "software so now I'm going to pause the implementation and to see what's going on. Okay,",
+          "wallOffsetSec" : 37.84857892990112
+        },
+        {
+          "audioOffsetSec" : 37.376,
+          "endSec" : 35.14875,
+          "startSec" : 31.33,
+          "text" : "I'm continuing the transcription and I want to see the new text",
+          "wallOffsetSec" : 40.1255099773407
+        },
+        {
+          "audioOffsetSec" : 37.376,
+          "endSec" : 6.046,
+          "startSec" : 3.81875,
+          "text" : "is also appended.",
+          "wallOffsetSec" : 43.11092495918274
+        }
+      ],
+      "durationSec" : 37.376,
+      "language" : "he",
+      "recordingID" : "00baaf60"
+    },
+    {
+      "bucket" : "medium",
+      "chunks" : [
+        {
+          "audioOffsetSec" : 12.1996875,
+          "endSec" : 7.21,
+          "startSec" : 0.15,
+          "text" : "We did some design work around resizable so now it's quite better and",
+          "wallOffsetSec" : 12.192597031593323
+        },
+        {
+          "audioOffsetSec" : 20.986875,
+          "endSec" : 17.6,
+          "startSec" : 7.21,
+          "text" : "today basically it's a kind of app that is not not dynamically adaptable to different resolution",
+          "wallOffsetSec" : 20.951537013053894
+        },
+        {
+          "audioOffsetSec" : 27.8971875,
+          "endSec" : 24.72,
+          "startSec" : 17.6,
+          "text" : "so we need to create when we no matter what resolution we should able to see the",
+          "wallOffsetSec" : 27.826117992401123
+        },
+        {
+          "audioOffsetSec" : 37.366875,
+          "endSec" : 33.91,
+          "startSec" : 24.72,
+          "text" : "results clearly, visual able to query items, box set clearly, sidebar sidebar show height so we need it make adaptable based on",
+          "wallOffsetSec" : 37.32975995540619
+        },
+        {
+          "audioOffsetSec" : 41.6325,
+          "endSec" : 40.18,
+          "startSec" : 33.91,
+          "text" : "the resolution so it will maximize usage of the available space for the user",
+          "wallOffsetSec" : 41.555763959884644
+        },
+        {
+          "audioOffsetSec" : 42.304,
+          "endSec" : 40.1821875,
+          "startSec" : 40.18,
+          "text" : "so every",
+          "wallOffsetSec" : 44.999127984046936
+        },
+        {
+          "audioOffsetSec" : 42.304,
+          "endSec" : 2.124,
+          "startSec" : 0.0021875,
+          "text" : "user will get best user experience.",
+          "wallOffsetSec" : 46.94859302043915
+        }
+      ],
+      "durationSec" : 42.304,
+      "language" : "en",
+      "recordingID" : "00bf5f0e"
+    },
+    {
+      "bucket" : "medium",
+      "chunks" : [
+        {
+          "audioOffsetSec" : 10.066875,
+          "endSec" : 7.52,
+          "startSec" : 0.15,
+          "text" : "We need to implement multiple So feature number one, rebuilding shiny new UI. Feature",
+          "wallOffsetSec" : 10.003299951553345
+        },
+        {
+          "audioOffsetSec" : 15.808,
+          "endSec" : 13.53,
+          "startSec" : 7.52,
+          "text" : "We're building Nice, bacon feature number three, it clearly should",
+          "wallOffsetSec" : 18.112688064575195
+        },
+        {
+          "audioOffsetSec" : 15.808,
+          "endSec" : 15.808,
+          "startSec" : 13.53,
+          "text" : "improve performance.",
+          "wallOffsetSec" : 18.11533296108246
+        }
+      ],
+      "durationSec" : 15.808,
+      "language" : "en",
+      "recordingID" : "00c3a802"
+    },
+    {
+      "bucket" : "medium",
+      "chunks" : [
+        {
+          "audioOffsetSec" : 20.2190625,
+          "endSec" : 16.58,
+          "startSec" : 0.15,
+          "text" : "the most important thing we need We build, use Glynforzes to understand, search for Carapatti, Andre Carapatti, guides how we can make the agent self-learning. So everything",
+          "wallOffsetSec" : 20.14963400363922
+        },
+        {
+          "audioOffsetSec" : 28.665,
+          "endSec" : 25.61,
+          "startSec" : 16.58,
+          "text" : "the agent the agent will constantly learn my public messages. Like not in private channels, but my public messages",
+          "wallOffsetSec" : 28.60909402370453
+        },
+        {
+          "audioOffsetSec" : 34.295625,
+          "endSec" : 31.74,
+          "startSec" : 25.61,
+          "text" : "so it can and basically answer based on the public context. So we need to make it",
+          "wallOffsetSec" : 34.26354694366455
+        },
+        {
+          "audioOffsetSec" : 36.672,
+          "endSec" : 32.8453125,
+          "startSec" : 31.74,
+          "text" : "securely and make sure that",
+          "wallOffsetSec" : 39.361732006073
+        },
+        {
+          "audioOffsetSec" : 36.672,
+          "endSec" : 4.932,
+          "startSec" : 1.1053125,
+          "text" : "agents will always load. We need to see how it's best to deploy it.",
+          "wallOffsetSec" : 41.14737403392792
+        }
+      ],
+      "durationSec" : 36.672,
+      "language" : "en",
+      "recordingID" : "00ca32ca"
+    },
+    {
+      "bucket" : "medium",
+      "chunks" : [
+        {
+          "audioOffsetSec" : 11.5171875,
+          "endSec" : 6.41,
+          "startSec" : 0.15,
+          "text" : "I think you can use a BigQuery MCP to understand",
+          "wallOffsetSec" : 11.437533020973206
+        },
+        {
+          "audioOffsetSec" : 15.526875,
+          "endSec" : 12.45,
+          "startSec" : 6.41,
+          "text" : "what URL patterns do we have and extract them and make sure they are supported by the",
+          "wallOffsetSec" : 15.53161108493805
+        },
+        {
+          "audioOffsetSec" : 23.8021875,
+          "endSec" : 20.43,
+          "startSec" : 12.45,
+          "text" : "app the solution can We just ignore them, we need to support everything so instead use very MCP",
+          "wallOffsetSec" : 23.769854068756104
+        },
+        {
+          "audioOffsetSec" : 28.928,
+          "endSec" : 22.4371875,
+          "startSec" : 20.43,
+          "text" : "against social tables to understand the",
+          "wallOffsetSec" : 31.729948043823242
+        },
+        {
+          "audioOffsetSec" : 28.928,
+          "endSec" : 8.498,
+          "startSec" : 2.0071875,
+          "text" : "content and how it looks like, how URL looks like to part them correctly and update the plan to support this.",
+          "wallOffsetSec" : 33.52411198616028
+        }
+      ],
+      "durationSec" : 28.928,
+      "language" : "he",
+      "recordingID" : "01a790a9"
+    },
+    {
+      "bucket" : "medium",
+      "chunks" : [
+        {
+          "audioOffsetSec" : 11.8584375,
+          "endSec" : 6.6,
+          "startSec" : 0.15,
+          "text" : "Let's see the new buttons buttons that are here.",
+          "wallOffsetSec" : 11.831341028213501
+        },
+        {
+          "audioOffsetSec" : 17.233125,
+          "endSec" : 13.34,
+          "startSec" : 6.6,
+          "text" : "So basically The buttons also We picked",
+          "wallOffsetSec" : 17.22627604007721
+        },
+        {
+          "audioOffsetSec" : 24.058125,
+          "endSec" : 20.11,
+          "startSec" : 13.34,
+          "text" : "something So we want to try to display",
+          "wallOffsetSec" : 23.989350080490112
+        },
+        {
+          "audioOffsetSec" : 32.248125,
+          "endSec" : 26.24,
+          "startSec" : 20.11,
+          "text" : "the buttons and basically the",
+          "wallOffsetSec" : 32.1762011051178
+        },
+        {
+          "audioOffsetSec" : 37.6228125,
+          "endSec" : 33.95,
+          "startSec" : 26.24,
+          "text" : "button itself display something",
+          "wallOffsetSec" : 37.60448908805847
+        },
+        {
+          "audioOffsetSec" : 38.528,
+          "endSec" : 38.528,
+          "startSec" : 33.95,
+          "text" : "so this beautiful design",
+          "wallOffsetSec" : 41.27877604961395
+        }
+      ],
+      "durationSec" : 38.528,
+      "language" : "he",
+      "recordingID" : "01cd3ab4"
+    },
+    {
+      "bucket" : "medium",
+      "chunks" : [
+        {
+          "audioOffsetSec" : 8.8725,
+          "endSec" : 6.34,
+          "startSec" : 0.15,
+          "text" : "Я понимаю, как in blockers, what is YouTube Gemini? It's clear. What is GCP?",
+          "wallOffsetSec" : 8.827315092086792
+        },
+        {
+          "audioOffsetSec" : 18.5128125,
+          "endSec" : 14.38,
+          "startSec" : 6.34,
+          "text" : "GCP is not clear and closing the download is The code is clear, but we need to mention that we're running in Experimental mode. ACI",
+          "wallOffsetSec" : 18.513033032417297
+        },
+        {
+          "audioOffsetSec" : 22.4,
+          "endSec" : 21.64,
+          "startSec" : 14.38,
+          "text" : "environment like blocks retraining we need to download how it impacts because it's not clear. MLE deploy capacity is not",
+          "wallOffsetSec" : 24.054424047470093
+        },
+        {
+          "audioOffsetSec" : 22.4,
+          "endSec" : 22.4,
+          "startSec" : 21.64,
+          "text" : "clear, what do you mean?",
+          "wallOffsetSec" : 25.122563004493713
+        }
+      ],
+      "durationSec" : 22.4,
+      "language" : "en",
+      "recordingID" : "02a3dd95"
+    },
+    {
+      "bucket" : "medium",
+      "chunks" : [
+        {
+          "audioOffsetSec" : 13.820625,
+          "endSec" : 9.66,
+          "startSec" : 0.15,
+          "text" : "Давай проверим Давай проверим, насколько хорошо используется gpu то есть",
+          "wallOffsetSec" : 13.812968969345093
+        },
+        {
+          "audioOffsetSec" : 21.312,
+          "endSec" : 18.81,
+          "startSec" : 9.66,
+          "text" : "сейчас мы должны использовать gpu метод, чтобы писать эти слова. Давай посмотрим, насколько хорошо",
+          "wallOffsetSec" : 22.23016107082367
+        },
+        {
+          "audioOffsetSec" : 21.312,
+          "endSec" : 21.312,
+          "startSec" : 18.81,
+          "text" : "это работает, если если это застаивает или нет.",
+          "wallOffsetSec" : 23.89185607433319
+        }
+      ],
+      "durationSec" : 21.312,
+      "language" : "he",
+      "recordingID" : "02c4f68b"
+    },
+    {
+      "bucket" : "medium",
+      "chunks" : [
+        {
+          "audioOffsetSec" : 9.1284375,
+          "endSec" : 7.7634375,
+          "startSec" : 0.15,
+          "text" : "But my question, if I use GitNexus instead of those two tools, will I end up in the same savings?",
+          "wallOffsetSec" : 9.095955967903137
+        },
+        {
+          "audioOffsetSec" : 19.456,
+          "endSec" : 17.91375,
+          "startSec" : 7.7634375,
+          "text" : "Or, and maybe other benefits, which is fine, and then I can use one tool to replace both of them, or instead, like, it's still legitimate, like, to",
+          "wallOffsetSec" : 20.765795946121216
+        },
+        {
+          "audioOffsetSec" : 19.456,
+          "endSec" : 2.54225,
+          "startSec" : 1,
+          "text" : "combine them together.",
+          "wallOffsetSec" : 24.195603013038635
+        }
+      ],
+      "durationSec" : 19.456,
+      "language" : "en",
+      "recordingID" : "0322a66d"
+    },
+    {
+      "bucket" : "medium",
+      "chunks" : [
+        {
+          "audioOffsetSec" : 13.2234375,
+          "endSec" : 8.25,
+          "startSec" : 0.15,
+          "text" : "I want you to apply animate landing skill to React App. So in React App, we in many places",
+          "wallOffsetSec" : 13.182648062705994
+        },
+        {
+          "audioOffsetSec" : 16.576,
+          "endSec" : 14.5884375,
+          "startSec" : 8.25,
+          "text" : "have basic skill with zero animation, so we want to apply animate landing also to React",
+          "wallOffsetSec" : 18.716883063316345
+        },
+        {
+          "audioOffsetSec" : 16.576,
+          "endSec" : 8.326,
+          "startSec" : 6.3384375,
+          "text" : "to make it more beautiful",
+          "wallOffsetSec" : 20.05574905872345
+        }
+      ],
+      "durationSec" : 16.576,
+      "language" : "auto",
+      "recordingID" : "0334b63a"
+    },
+    {
+      "bucket" : "medium",
+      "chunks" : [
+        {
+          "audioOffsetSec" : 14.5884375,
+          "endSec" : 10.48,
+          "startSec" : 0.15,
+          "text" : "When I'm switching between in the meeting notes, I see the problem that the UI is not responsive and it's not great",
+          "wallOffsetSec" : 14.52806293964386
+        },
+        {
+          "audioOffsetSec" : 19.963125,
+          "endSec" : 17.22,
+          "startSec" : 10.48,
+          "text" : "performance overall. I see is not doing a",
+          "wallOffsetSec" : 19.906160950660706
+        },
+        {
+          "audioOffsetSec" : 26.788125,
+          "endSec" : 23.66,
+          "startSec" : 17.22,
+          "text" : "something is stuck like it's trying to load something and not performant and the performance is not the",
+          "wallOffsetSec" : 26.761775016784668
+        },
+        {
+          "audioOffsetSec" : 37.76,
+          "endSec" : 26.788125,
+          "startSec" : 23.66,
+          "text" : "best eventually it's able to switch but like the loading should be in",
+          "wallOffsetSec" : 40.14296102523804
+        },
+        {
+          "audioOffsetSec" : 37.76,
+          "endSec" : 14.1,
+          "startSec" : 3.128125,
+          "text" : "the same way.",
+          "wallOffsetSec" : 41.520434975624084
+        }
+      ],
+      "durationSec" : 37.76,
+      "language" : "auto",
+      "recordingID" : "04337a43"
+    },
+    {
+      "bucket" : "medium",
+      "chunks" : [
+        {
+          "audioOffsetSec" : 13.0528125,
+          "endSec" : 8.5,
+          "startSec" : 0.15,
+          "text" : "I I'm attaching you the context, build slide с лучшим премиумом, супер профессиональным, супер слегким, как вы",
+          "wallOffsetSec" : 13.033437013626099
+        },
+        {
+          "audioOffsetSec" : 18.304,
+          "endSec" : 9.804,
+          "startSec" : 0,
+          "text" : "имеете в виду, вы можете сделать пиксель-перфик, красиво и выживайте месседжение.",
+          "wallOffsetSec" : 22.252040028572083
+        }
+      ],
+      "durationSec" : 18.304,
+      "language" : "en",
+      "recordingID" : "047063af"
+    },
+    {
+      "bucket" : "medium",
+      "chunks" : [
+        {
+          "audioOffsetSec" : 13.2234375,
+          "endSec" : 7.4,
+          "startSec" : 0.15,
+          "text" : "I don't think you're doing this What we need is basically first try seven",
+          "wallOffsetSec" : 13.162779092788696
+        },
+        {
+          "audioOffsetSec" : 18.8540625,
+          "endSec" : 13.95,
+          "startSec" : 7.4,
+          "text" : "If it returns zero results then we're trying like 30 days and this is how we're",
+          "wallOffsetSec" : 18.80308210849762
+        },
+        {
+          "audioOffsetSec" : 24.57,
+          "endSec" : 21.15,
+          "startSec" : 13.95,
+          "text" : "growing progressively this is what called progressive so so we will pay the less money as possible",
+          "wallOffsetSec" : 24.500784993171692
+        },
+        {
+          "audioOffsetSec" : 28.672,
+          "endSec" : 24.57,
+          "startSec" : 21.15,
+          "text" : "for the query that's the logic we need like to be",
+          "wallOffsetSec" : 31.422689080238342
+        },
+        {
+          "audioOffsetSec" : 28.672,
+          "endSec" : 7.522,
+          "startSec" : 3.42,
+          "text" : "really smart so the query will be super efficient and super cheap",
+          "wallOffsetSec" : 32.894774079322815
+        }
+      ],
+      "durationSec" : 28.672,
+      "language" : "he",
+      "recordingID" : "0532a464"
+    },
+    {
+      "bucket" : "medium",
+      "chunks" : [
+        {
+          "audioOffsetSec" : 10.4934375,
+          "endSec" : 8.21,
+          "startSec" : 0.15,
+          "text" : "I think by design updating every one second it's faulty like we need to be shorter range i know that like fluid audio",
+          "wallOffsetSec" : 10.487825989723206
+        },
+        {
+          "audioOffsetSec" : 18.939375,
+          "endSec" : 16.36,
+          "startSec" : 8.21,
+          "text" : "has streaming mode and have models that updates every 120 milliseconds i think this is maybe",
+          "wallOffsetSec" : 18.94144892692566
+        },
+        {
+          "audioOffsetSec" : 20.096,
+          "endSec" : 20.096,
+          "startSec" : 16.36,
+          "text" : "but maybe we can do every 500 milliseconds",
+          "wallOffsetSec" : 22.880024909973145
+        }
+      ],
+      "durationSec" : 20.096,
+      "language" : "auto",
+      "recordingID" : "05a5b51d"
+    },
+    {
+      "bucket" : "medium",
+      "chunks" : [
+        {
+          "audioOffsetSec" : 12.9675,
+          "endSec" : 7.56,
+          "startSec" : 0.15,
+          "text" : "עדיין אני חושב שאין תמיכה טובה לעברית, כאשר עדיין",
+          "wallOffsetSec" : 12.971659064292908
+        },
+        {
+          "audioOffsetSec" : 18.76875,
+          "endSec" : 16.58,
+          "startSec" : 7.56,
+          "text" : "הטקסט לא מופיע תפיה כמו שצריך. לפעמים זה קצת תקוע, לפעמים זה לא",
+          "wallOffsetSec" : 18.690353989601135
+        },
+        {
+          "audioOffsetSec" : 25.5084375,
+          "endSec" : 22.69,
+          "startSec" : 16.58,
+          "text" : "אנחנו לא מצליחים אנחנו רוצים לייצר את הטקסט כמו שצריך. אנחנו רוצים שכל",
+          "wallOffsetSec" : 25.468644976615906
+        },
+        {
+          "audioOffsetSec" : 33.6984375,
+          "endSec" : 28.82,
+          "startSec" : 22.69,
+          "text" : "אנחנו ופקנו להוסיף תחת חצי",
+          "wallOffsetSec" : 33.6790189743042
+        },
+        {
+          "audioOffsetSec" : 37.76,
+          "endSec" : 37.76,
+          "startSec" : 28.82,
+          "text" : "שנייה ויותר מופיע כמו שצריך אבל עדיין",
+          "wallOffsetSec" : 40.47671699523926
+        }
+      ],
+      "durationSec" : 37.76,
+      "language" : "he",
+      "recordingID" : "0693515f"
+    },
+    {
+      "bucket" : "medium",
+      "chunks" : [
+        {
+          "audioOffsetSec" : 13.479375,
+          "endSec" : 10.40625,
+          "startSec" : 0.15,
+          "text" : "Interesting, I just noticed something I don't see in our app query that populates a text app Why I don't see it?",
+          "wallOffsetSec" : 13.430261015892029
+        },
+        {
+          "audioOffsetSec" : 23.375625,
+          "endSec" : 20.64375,
+          "startSec" : 10.40625,
+          "text" : "Like it's very strange I can see metadata, categories, impressions, audio, video, images But I don't see text why it's missing it's not shown in the SQL queries",
+          "wallOffsetSec" : 23.323467016220093
+        },
+        {
+          "audioOffsetSec" : 23.808,
+          "endSec" : 23.808,
+          "startSec" : 20.64375,
+          "text" : "Debugger at all We need to find root cost for this",
+          "wallOffsetSec" : 26.69036102294922
+        }
+      ],
+      "durationSec" : 23.808,
+      "language" : "he",
+      "recordingID" : "07afecbd"
+    },
+    {
+      "bucket" : "medium",
+      "chunks" : [
+        {
+          "audioOffsetSec" : 13.7353125,
+          "endSec" : 9.46,
+          "startSec" : 0.15,
+          "text" : "I want to challenge you a Isn't there a way because like we we are starting that output is muted to output it but like",
+          "wallOffsetSec" : 13.681064009666443
+        },
+        {
+          "audioOffsetSec" : 17.792,
+          "endSec" : 16.4653125,
+          "startSec" : 9.46,
+          "text" : "not recorded from the beginning because like your solution is like work around maybe we can avoid it from the start I want to check",
+          "wallOffsetSec" : 20.50885510444641
+        },
+        {
+          "audioOffsetSec" : 17.792,
+          "endSec" : 8.332,
+          "startSec" : 7.0053125,
+          "text" : "please check",
+          "wallOffsetSec" : 24.638628005981445
+        }
+      ],
+      "durationSec" : 17.792,
+      "language" : "he",
+      "recordingID" : "08985ab9"
+    },
+    {
+      "bucket" : "medium",
+      "chunks" : [
+        {
+          "audioOffsetSec" : 13.479375,
+          "endSec" : 10.40625,
+          "startSec" : 0.15,
+          "text" : "Let's say we want to record really, really long conversation. So we're going to speak with you about a lot of different topics and you're going to record it.",
+          "wallOffsetSec" : 13.472277045249939
+        },
+        {
+          "audioOffsetSec" : 23.375625,
+          "endSec" : 20.64375,
+          "startSec" : 10.40625,
+          "text" : "So basically what we are capable to do here is to record long, long speech. So, and we don't need to press any button and this can record any long",
+          "wallOffsetSec" : 23.370078086853027
+        },
+        {
+          "audioOffsetSec" : 32.5040625,
+          "endSec" : 30.88125,
+          "startSec" : 20.64375,
+          "text" : "sentence. Does it have speaker recognition? This does not have speaker recognition. We have like different model for speaker recognition but this is like nice and",
+          "wallOffsetSec" : 32.42455303668976
+        },
+        {
+          "audioOffsetSec" : 36.608,
+          "endSec" : 36.001875,
+          "startSec" : 30.88125,
+          "text" : "really capable LLM that can basically transcribe really really fast.",
+          "wallOffsetSec" : 38.4110050201416
+        }
+      ],
+      "durationSec" : 36.608,
+      "language" : "auto",
+      "recordingID" : "08bd493b"
+    },
+    {
+      "bucket" : "long",
+      "chunks" : [
+        {
+          "audioOffsetSec" : 12.9675,
+          "endSec" : 10.2375,
+          "startSec" : 0.15,
+          "text" : "how I expect it to work. So basically when we introducing, like people share a lot of HTML files",
+          "wallOffsetSec" : 12.942650079727173
+        },
+        {
+          "audioOffsetSec" : 20.475,
+          "endSec" : 17.4890625,
+          "startSec" : 10.2375,
+          "text" : "and don't know how to use lens. So I won't be able, so probably it's problematic",
+          "wallOffsetSec" : 20.410526037216187
+        },
+        {
+          "audioOffsetSec" : 30.4565625,
+          "endSec" : 27.64125,
+          "startSec" : 17.4890625,
+          "text" : "to take all of the channels and listen to them and upload automatically and create public link. I think this is like problematic",
+          "wallOffsetSec" : 30.382581114768982
+        },
+        {
+          "audioOffsetSec" : 39.3290625,
+          "endSec" : 37.9621875,
+          "startSec" : 27.64125,
+          "text" : "but what we can do is maybe like tag our lens up to do it in specific channel if we sold this",
+          "wallOffsetSec" : 39.29805910587311
+        },
+        {
+          "audioOffsetSec" : 49.9078125,
+          "endSec" : 48.114375,
+          "startSec" : 37.9621875,
+          "text" : "operation so I won't understand like possibility of the both options but I think for the first one we will need a lot of permissions which we're not going to",
+          "wallOffsetSec" : 49.871979117393494
+        },
+        {
+          "audioOffsetSec" : 61.5103125,
+          "endSec" : 58.4390625,
+          "startSec" : 48.114375,
+          "text" : "get because it's like listening to all the channels and like quite a sniffle like and not sure if it's allowed or not in the organization maybe we can confirm with Glyn",
+          "wallOffsetSec" : 61.42934000492096
+        },
+        {
+          "audioOffsetSec" : 71.7478125,
+          "endSec" : 68.761875,
+          "startSec" : 58.4390625,
+          "text" : "MCP to understand if it's something that allowed a Divi to do and if it's too interventive maybe we can just tag our bot so it will take the HTML",
+          "wallOffsetSec" : 71.69974911212921
+        },
+        {
+          "audioOffsetSec" : 80.6203125,
+          "endSec" : 78.9140625,
+          "startSec" : 68.761875,
+          "text" : "file that was attached, download it somehow and upload this public link based on identity of the user who basically created",
+          "wallOffsetSec" : 80.53880310058594
+        },
+        {
+          "audioOffsetSec" : 91.966875,
+          "endSec" : 89.1496875,
+          "startSec" : 78.9140625,
+          "text" : "this file. That way we will result a good user experience. Like there are small security concerns here maybe but like its user for origin",
+          "wallOffsetSec" : 91.9047030210495
+        },
+        {
+          "audioOffsetSec" : 96.8296875,
+          "endSec" : 95.379375,
+          "startSec" : 89.1496875,
+          "text" : "originally like created the file so I think it's pretty safe. We need to think how to pull this off",
+          "wallOffsetSec" : 96.79457306861877
+        },
+        {
+          "audioOffsetSec" : 97.024,
+          "endSec" : 2.644625,
+          "startSec" : 1,
+          "text" : "Let's examine this feature",
+          "wallOffsetSec" : 101.51922106742859
+        }
+      ],
+      "durationSec" : 97.024,
+      "language" : "en",
+      "recordingID" : "06ac4737"
+    },
+    {
+      "bucket" : "long",
+      "chunks" : [
+        {
+          "audioOffsetSec" : 8.019375,
+          "endSec" : 5.2040625,
+          "startSec" : 0.15,
+          "text" : "I want you to get much bigger set.",
+          "wallOffsetSec" : 7.9687570333480835
+        },
+        {
+          "audioOffsetSec" : 16.38,
+          "endSec" : 13.3940625,
+          "startSec" : 5.2040625,
+          "text" : "So currently we only took 50 validation result per platform. I want you to run",
+          "wallOffsetSec" : 16.325340032577515
+        },
+        {
+          "audioOffsetSec" : 19.280625,
+          "endSec" : 16.4653125,
+          "startSec" : 13.3940625,
+          "text" : "with at least a thousand per platform.",
+          "wallOffsetSec" : 19.272886991500854
+        },
+        {
+          "audioOffsetSec" : 22.86375,
+          "endSec" : 20.0484375,
+          "startSec" : 16.4653125,
+          "text" : "We need to find the issue.",
+          "wallOffsetSec" : 22.813225984573364
+        },
+        {
+          "audioOffsetSec" : 31.8215625,
+          "endSec" : 30.369375,
+          "startSec" : 20.0484375,
+          "text" : "We need to test on all platforms that we support today, including YouTube. You didn't test on YouTube, so you only tested on Meta, TikTok, Snapchat,",
+          "wallOffsetSec" : 31.74363899230957
+        },
+        {
+          "audioOffsetSec" : 37.9640625,
+          "endSec" : 36.4284375,
+          "startSec" : 30.369375,
+          "text" : "Reddit, but you also need YouTube and maybe we also missed other platforms.",
+          "wallOffsetSec" : 37.90919899940491
+        },
+        {
+          "audioOffsetSec" : 49.48125,
+          "endSec" : 46.749375,
+          "startSec" : 36.4284375,
+          "text" : "So I want you to check which platforms using LeanMCP we support today. Then I want you basically to rerun this test and see",
+          "wallOffsetSec" : 49.44161105155945
+        },
+        {
+          "audioOffsetSec" : 59.71875,
+          "endSec" : 56.986875,
+          "startSec" : 46.749375,
+          "text" : "that we extract enough frames and basically we at least good as like old KFE and we",
+          "wallOffsetSec" : 59.69889497756958
+        },
+        {
+          "audioOffsetSec" : 69.8709375,
+          "endSec" : 67.224375,
+          "startSec" : 56.986875,
+          "text" : "need like bit superior faster better performance so we need basically to test on more comprehensive set so please retrieve all the platforms",
+          "wallOffsetSec" : 69.85686504840851
+        },
+        {
+          "audioOffsetSec" : 78.82875,
+          "endSec" : 77.461875,
+          "startSec" : 67.224375,
+          "text" : "run big test and in the end I want like clear summary what we was able to achieve you can append this current message and the new message",
+          "wallOffsetSec" : 78.8211259841919
+        },
+        {
+          "audioOffsetSec" : 81.92,
+          "endSec" : 5.458125,
+          "startSec" : 1,
+          "text" : "basically let's see like what we've done",
+          "wallOffsetSec" : 86.26314306259155
+        }
+      ],
+      "durationSec" : 81.92,
+      "language" : "en",
+      "recordingID" : "07642168"
+    },
+    {
+      "bucket" : "long",
+      "chunks" : [
+        {
+          "audioOffsetSec" : 5.289375,
+          "endSec" : 3.6684375,
+          "startSec" : 0.15,
+          "text" : "Now we want to improve it further.",
+          "wallOffsetSec" : 5.237454056739807
+        },
+        {
+          "audioOffsetSec" : 16.8065625,
+          "endSec" : 13.9040625,
+          "startSec" : 3.6684375,
+          "text" : "Like the buttons on the HUD, we need to tell user what is the functionality they expect. So basically, we should",
+          "wallOffsetSec" : 16.742300987243652
+        },
+        {
+          "audioOffsetSec" : 26.95875,
+          "endSec" : 24.05625,
+          "startSec" : 13.9040625,
+          "text" : "when hovering on the buttons display really minimal toggle",
+          "wallOffsetSec" : 26.93894898891449
+        },
+        {
+          "audioOffsetSec" : 35.9165625,
+          "endSec" : 34.3790625,
+          "startSec" : 24.05625,
+          "text" : "text like what this button means so we need like display like little overlay beautiful like what is this button functionality to hint the user",
+          "wallOffsetSec" : 35.871922969818115
+        },
+        {
+          "audioOffsetSec" : 47.1778125,
+          "endSec" : 44.533125,
+          "startSec" : 34.3790625,
+          "text" : "like so he will know like how to use it and we should do the same for not only the half also live transcription maximize and minimize",
+          "wallOffsetSec" : 47.099583983421326
+        },
+        {
+          "audioOffsetSec" : 54.016,
+          "endSec" : 10.482875,
+          "startSec" : 1,
+          "text" : "like beautiful overlay minimal premium UI UX matching our overall design like we need to do it very carefully really beautifully",
+          "wallOffsetSec" : 59.15324401855469
+        }
+      ],
+      "durationSec" : 54.016,
+      "language" : "he",
+      "recordingID" : "08664bf5"
+    },
+    {
+      "bucket" : "long",
+      "chunks" : [
+        {
+          "audioOffsetSec" : 17.1478125,
+          "endSec" : 6.32,
+          "startSec" : 0.15,
+          "text" : "I will do few updates updates in this diagram which doesn't make sense to me. First of all,",
+          "wallOffsetSec" : 17.09161603450775
+        },
+        {
+          "audioOffsetSec" : 25.5084375,
+          "endSec" : 19.66,
+          "startSec" : 6.32,
+          "text" : "if we are already in we can use C-clip2 for our classification. We can also use it for our textual classifier. So again, like in online paths, we can compute this embedding we can compute",
+          "wallOffsetSec" : 25.485419988632202
+        },
+        {
+          "audioOffsetSec" : 28.494375,
+          "endSec" : 25.97,
+          "startSec" : 19.66,
+          "text" : "data on. We can save them in Delta already. We don't need additional",
+          "wallOffsetSec" : 28.464405059814453
+        },
+        {
+          "audioOffsetSec" : 35.9165625,
+          "endSec" : 32.16,
+          "startSec" : 25.97,
+          "text" : "to produce them. We can update TF, IDF used",
+          "wallOffsetSec" : 35.84943604469299
+        },
+        {
+          "audioOffsetSec" : 43.4240625,
+          "endSec" : 39.43,
+          "startSec" : 32.16,
+          "text" : "based on C-clip embeddings. my smarter architecture overall and also like LLM that you",
+          "wallOffsetSec" : 43.42033302783966
+        },
+        {
+          "audioOffsetSec" : 51.7846875,
+          "endSec" : 48.08,
+          "startSec" : 39.43,
+          "text" : "added, it's disconnected, I understand what needed. Also I don't understand what is track orchestrator, result match and response builder",
+          "wallOffsetSec" : 51.72355902194977
+        },
+        {
+          "audioOffsetSec" : 57.2446875,
+          "endSec" : 55.04,
+          "startSec" : 48.08,
+          "text" : "like that flow should not be by current system like Naboo outputs back to",
+          "wallOffsetSec" : 57.166133999824524
+        },
+        {
+          "audioOffsetSec" : 61.504,
+          "endSec" : 61.504,
+          "startSec" : 55.04,
+          "text" : "and Genesis builds and this system is something parallel So please update and redraw the diagram",
+          "wallOffsetSec" : 64.05914402008057
+        }
+      ],
+      "durationSec" : 61.504,
+      "language" : "en",
+      "recordingID" : "08cf5bca"
+    },
+    {
+      "bucket" : "long",
+      "chunks" : [
+        {
+          "audioOffsetSec" : 11.6878125,
+          "endSec" : 6.91,
+          "startSec" : 0.15,
+          "text" : "We need to test So basically Look also system prompt",
+          "wallOffsetSec" : 11.61372196674347
+        },
+        {
+          "audioOffsetSec" : 17.233125,
+          "endSec" : 15.78,
+          "startSec" : 6.91,
+          "text" : "and please Add new We will continue a custom mode with this prompt based on",
+          "wallOffsetSec" : 17.199129939079285
+        },
+        {
+          "audioOffsetSec" : 28.2384375,
+          "endSec" : 24.83,
+          "startSec" : 15.78,
+          "text" : "format should be understand whether this the model supports clean up",
+          "wallOffsetSec" : 28.233951926231384
+        },
+        {
+          "audioOffsetSec" : 35.7459375,
+          "endSec" : 32.44,
+          "startSec" : 24.83,
+          "text" : "the ports basically the multiple languages",
+          "wallOffsetSec" : 35.71904897689819
+        },
+        {
+          "audioOffsetSec" : 42.4003125,
+          "endSec" : 38.5,
+          "startSec" : 32.44,
+          "text" : "read the documentation carefully there we already have the",
+          "wallOffsetSec" : 42.38269901275635
+        },
+        {
+          "audioOffsetSec" : 48.79875,
+          "endSec" : 44.93,
+          "startSec" : 38.5,
+          "text" : "Elix enabled so basically it should be like simple integration but we need to check if it",
+          "wallOffsetSec" : 48.788694977760315
+        },
+        {
+          "audioOffsetSec" : 50.368,
+          "endSec" : 50.368,
+          "startSec" : 44.93,
+          "text" : "like multiple languages or only english so we need to be certain like what it does and what it doesn't",
+          "wallOffsetSec" : 53.153164982795715
+        }
+      ],
+      "durationSec" : 50.368,
+      "language" : "en",
+      "recordingID" : "08d648cb"
+    },
+    {
+      "bucket" : "long",
+      "chunks" : [
+        {
+          "audioOffsetSec" : 13.138125,
+          "endSec" : 10.3209375,
+          "startSec" : 0.15,
+          "text" : "Some issues that I noticed on mobile, but they happening not only on mobile. So on mobile relevant when I click menu,",
+          "wallOffsetSec" : 13.134883999824524
+        },
+        {
+          "audioOffsetSec" : 18.4275,
+          "endSec" : 15.868125,
+          "startSec" : 10.3209375,
+          "text" : "it displayed below the content.",
+          "wallOffsetSec" : 18.41923999786377
+        },
+        {
+          "audioOffsetSec" : 27.5559375,
+          "endSec" : 26.1909375,
+          "startSec" : 15.868125,
+          "text" : "So we fix this in regular menu for like desktop version but on mobile like sometimes like left menu displayed below. Also",
+          "wallOffsetSec" : 27.54108202457428
+        },
+        {
+          "audioOffsetSec" : 37.87875,
+          "endSec" : 36.4265625,
+          "startSec" : 26.1909375,
+          "text" : "when I click like hamburger button not always menu displayed immediately sometimes it takes a lot of time. Another",
+          "wallOffsetSec" : 37.79543197154999
+        },
+        {
+          "audioOffsetSec" : 48.2015625,
+          "endSec" : 46.580625,
+          "startSec" : 36.4265625,
+          "text" : "issue even when the menu is displayed like the button not so responsive I don't know why but when I click like change the language it's not too responsive",
+          "wallOffsetSec" : 48.15043103694916
+        },
+        {
+          "audioOffsetSec" : 58.35375,
+          "endSec" : 56.9015625,
+          "startSec" : 46.580625,
+          "text" : "it takes a lot of time to change the language like we have some performance issues there I don't understand like why it's working that way but it's not working perfectly",
+          "wallOffsetSec" : 58.282572984695435
+        },
+        {
+          "audioOffsetSec" : 68.5059375,
+          "endSec" : 67.1409375,
+          "startSec" : 56.9015625,
+          "text" : "also if I'll change the language it should propagate to all of the links but all of the hard links in inside the pages",
+          "wallOffsetSec" : 68.47897398471832
+        },
+        {
+          "audioOffsetSec" : 73.1128125,
+          "endSec" : 71.6625,
+          "startSec" : 67.1409375,
+          "text" : "leave to English pages and not",
+          "wallOffsetSec" : 73.04351198673248
+        },
+        {
+          "audioOffsetSec" : 81.9,
+          "endSec" : 80.4496875,
+          "startSec" : 71.6625,
+          "text" : "if I'll select another local so it doesn't pass in the links and we should fix all of the links so it will be passed correctly",
+          "wallOffsetSec" : 81.82357096672058
+        },
+        {
+          "audioOffsetSec" : 92.3934375,
+          "endSec" : 90.8578125,
+          "startSec" : 80.4496875,
+          "text" : "so mobile should be like super responsive version and it should be display everything nicely and in super responsive way",
+          "wallOffsetSec" : 92.33461105823517
+        },
+        {
+          "audioOffsetSec" : 97.152,
+          "endSec" : 97.152,
+          "startSec" : 90.8578125,
+          "text" : "so we need like to create a comprehensive plan like to fix all of this performance issue inside the mobile",
+          "wallOffsetSec" : 98.91961598396301
+        }
+      ],
+      "durationSec" : 97.152,
+      "language" : "en",
+      "recordingID" : "099c5e8c"
+    },
+    {
+      "bucket" : "long",
+      "chunks" : [
+        {
+          "audioOffsetSec" : 10.1521875,
+          "endSec" : 6.73,
+          "startSec" : 0.15,
+          "text" : "I think you I missed something important. How basically logic is structured, how to take existing",
+          "wallOffsetSec" : 10.14113700389862
+        },
+        {
+          "audioOffsetSec" : 15.6121875,
+          "endSec" : 13.2,
+          "startSec" : 6.73,
+          "text" : "and break it into features. I need you full guidance on important matter, so we don't have",
+          "wallOffsetSec" : 15.608751058578491
+        },
+        {
+          "audioOffsetSec" : 23.8021875,
+          "endSec" : 20.45,
+          "startSec" : 13.2,
+          "text" : "overblown files. the minimum rows it should have, how to split it. We don't have",
+          "wallOffsetSec" : 23.78589105606079
+        },
+        {
+          "audioOffsetSec" : 32.0775,
+          "endSec" : 28.91,
+          "startSec" : 20.45,
+          "text" : "like giant one component, we split into components. We create like features, folders. We build small files",
+          "wallOffsetSec" : 32.010517954826355
+        },
+        {
+          "audioOffsetSec" : 40.2675,
+          "endSec" : 36.89,
+          "startSec" : 28.91,
+          "text" : "that easy to understand and track and introduce. We are following our following our app structure. So everything, like",
+          "wallOffsetSec" : 40.271466970443726
+        },
+        {
+          "audioOffsetSec" : 48.4575,
+          "endSec" : 44.3,
+          "startSec" : 36.89,
+          "text" : "we have controllers, we have like the controllers are not",
+          "wallOffsetSec" : 48.39947199821472
+        },
+        {
+          "audioOffsetSec" : 55.3678125,
+          "endSec" : 51.73,
+          "startSec" : 44.3,
+          "text" : "blown with logic. Logic is stored separate, like we're exporting functionality correctly so it will be super",
+          "wallOffsetSec" : 55.308892011642456
+        },
+        {
+          "audioOffsetSec" : 62.278125,
+          "endSec" : 58.6699375,
+          "startSec" : 51.73,
+          "text" : "modular, super easy to extend I need your guidance bonus on frontend, react",
+          "wallOffsetSec" : 62.257912039756775
+        },
+        {
+          "audioOffsetSec" : 62.976,
+          "endSec" : 62.976,
+          "startSec" : 58.6699375,
+          "text" : "and backend Node.js, how to build it, server API.",
+          "wallOffsetSec" : 65.76508796215057
+        }
+      ],
+      "durationSec" : 62.976,
+      "language" : "en",
+      "recordingID" : "13a30c46"
+    },
+    {
+      "bucket" : "long",
+      "chunks" : [
+        {
+          "audioOffsetSec" : 13.2234375,
+          "endSec" : 6.43,
+          "startSec" : 0.15,
+          "text" : "Yes, please remove the validation PRC section entirely we're not going like to do validation",
+          "wallOffsetSec" : 13.210039973258972
+        },
+        {
+          "audioOffsetSec" : 21.669375,
+          "endSec" : 17.32,
+          "startSec" : 6.43,
+          "text" : "what we're going to do here is like this is complete white paper concept in the paper that we're delivering we should instead focus",
+          "wallOffsetSec" : 21.599857926368713
+        },
+        {
+          "audioOffsetSec" : 25.6790625,
+          "endSec" : 24.31,
+          "startSec" : 17.32,
+          "text" : "on validation and QA of the solution how it will work how we could test this",
+          "wallOffsetSec" : 25.651487946510315
+        },
+        {
+          "audioOffsetSec" : 35.2340625,
+          "endSec" : 32.77,
+          "startSec" : 24.31,
+          "text" : "that like our quality is good enough so that's so that's how I want you to",
+          "wallOffsetSec" : 35.21371400356293
+        },
+        {
+          "audioOffsetSec" : 42.0590625,
+          "endSec" : 40.69,
+          "startSec" : 32.77,
+          "text" : "so basically you indicated correctly that QA and testing procedures program it in a better way",
+          "wallOffsetSec" : 41.987221002578735
+        },
+        {
+          "audioOffsetSec" : 48.79875,
+          "endSec" : 46.83,
+          "startSec" : 40.69,
+          "text" : "to train classifier on synthetic data but maybe like to test",
+          "wallOffsetSec" : 48.77247095108032
+        },
+        {
+          "audioOffsetSec" : 58.4390625,
+          "endSec" : 54.43,
+          "startSec" : 46.83,
+          "text" : "later on we want like our suggestion is do it with auto-labeler, that's why we have auto-labeler integration. So I think",
+          "wallOffsetSec" : 58.388718008995056
+        },
+        {
+          "audioOffsetSec" : 66.714375,
+          "endSec" : 64.21,
+          "startSec" : 54.43,
+          "text" : "Peter is misleading us here So we need to structure that validation will be of the quality will be based on auto-labeler. So basically we're going to",
+          "wallOffsetSec" : 66.63852095603943
+        },
+        {
+          "audioOffsetSec" : 74.8190625,
+          "endSec" : 70.74,
+          "startSec" : 64.21,
+          "text" : "open AI API to validate try to validate the classification or any other classifiers",
+          "wallOffsetSec" : 74.771036028862
+        },
+        {
+          "audioOffsetSec" : 79.488,
+          "endSec" : 78.56,
+          "startSec" : 70.74,
+          "text" : "because we support it Synthetic data will be used only for training so we need to indicate it clearly in",
+          "wallOffsetSec" : 81.62815594673157
+        },
+        {
+          "audioOffsetSec" : 79.488,
+          "endSec" : 79.488,
+          "startSec" : 78.56,
+          "text" : "the document",
+          "wallOffsetSec" : 81.63834202289581
+        }
+      ],
+      "durationSec" : 79.488,
+      "language" : "ru",
+      "recordingID" : "1659e5f6"
+    },
+    {
+      "bucket" : "long",
+      "chunks" : [
+        {
+          "audioOffsetSec" : 10.92,
+          "endSec" : 7.4,
+          "startSec" : 0.15,
+          "text" : "בואו ננסה להדבר בעברית. אני רוצה להגיד משפט מאוד מורכב. ‫היום היה לנו מאוד",
+          "wallOffsetSec" : 10.884495973587036
+        },
+        {
+          "audioOffsetSec" : 16.550625,
+          "endSec" : 14.54,
+          "startSec" : 7.4,
+          "text" : "מעניין בעבודה. אנחנו בנינו מערכת סופר מורכבת. כאשר בנינו את המערכת",
+          "wallOffsetSec" : 16.47784399986267
+        },
+        {
+          "audioOffsetSec" : 24.8259375,
+          "endSec" : 22.13,
+          "startSec" : 14.54,
+          "text" : "אנחנו הסתמכנו על פיצ'רים מאוד מורכבים, מאוד חכמים ובעצם כאשר אנחנו ניסינו",
+          "wallOffsetSec" : 24.759026050567627
+        },
+        {
+          "audioOffsetSec" : 34.295625,
+          "endSec" : 29.7,
+          "startSec" : 22.13,
+          "text" : "להפיין אותה, אנחנו ראינו הופך אותה למאוד מורכבת",
+          "wallOffsetSec" : 34.26068305969238
+        },
+        {
+          "audioOffsetSec" : 45.1303125,
+          "endSec" : 41.49,
+          "startSec" : 29.7,
+          "text" : "ומאוד חכמה. כאשר היום השמש שהייתה זורחת בבוקר ביבי עדיין ראש ממשלה ועדיין אנחנו במלחמה",
+          "wallOffsetSec" : 45.08672308921814
+        },
+        {
+          "audioOffsetSec" : 57.5859375,
+          "endSec" : 52.8,
+          "startSec" : 41.49,
+          "text" : "מלחמה אמרן כאשר אנחנו מנסים וכאשר המחיר הזה אנחנו מנסים בעצם לפרוץ את הגבולות גזרה ולנצח",
+          "wallOffsetSec" : 57.582285046577454
+        },
+        {
+          "audioOffsetSec" : 61.888,
+          "endSec" : 59.03625,
+          "startSec" : 52.8,
+          "text" : "להפציץ ולהבין איך אנחנו יכולים להיות המנסים האורדולי",
+          "wallOffsetSec" : 64.62311601638794
+        },
+        {
+          "audioOffsetSec" : 61.888,
+          "endSec" : 9.088,
+          "startSec" : 6.23625,
+          "text" : "הולטימטיבים בקрав הזה",
+          "wallOffsetSec" : 67.12611699104309
+        }
+      ],
+      "durationSec" : 61.888,
+      "language" : "he",
+      "recordingID" : "17104a5f"
+    },
+    {
+      "bucket" : "long",
+      "chunks" : [
+        {
+          "audioOffsetSec" : 11.6878125,
+          "endSec" : 10.3228125,
+          "startSec" : 0.15,
+          "text" : "On the Next.js site, a landing, we have like dishes icons, but it's not real dish icons, it's some generated like",
+          "wallOffsetSec" : 11.671534061431885
+        },
+        {
+          "audioOffsetSec" : 23.375625,
+          "endSec" : 20.5584375,
+          "startSec" : 10.3228125,
+          "text" : "not good looking dishes. Now we have a lot of dishes images, let's match our dishes images thumbnail to show on next",
+          "wallOffsetSec" : 23.309328079223633
+        },
+        {
+          "audioOffsetSec" : 33.613125,
+          "endSec" : 30.7959375,
+          "startSec" : 20.5584375,
+          "text" : "site instead of like in homepage and landing instead of this ugly like images doesn't doesn't make sense. We want to select the most beautiful like Salomon",
+          "wallOffsetSec" : 33.5774199962616
+        },
+        {
+          "audioOffsetSec" : 42.5709375,
+          "endSec" : 41.11875,
+          "startSec" : 30.7959375,
+          "text" : "and others so it will be like really stunning looking and beautiful and let's say like use Thunnel so it will be super optimized if like the",
+          "wallOffsetSec" : 42.546396017074585
+        },
+        {
+          "audioOffsetSec" : 50.368,
+          "endSec" : 10.24925,
+          "startSec" : 1,
+          "text" : "static images maybe copy to public like the exact examples that we need to show them fast and optimized in webp format",
+          "wallOffsetSec" : 55.02823305130005
+        }
+      ],
+      "durationSec" : 50.368,
+      "language" : "auto",
+      "recordingID" : "1e029c69"
+    },
+    {
+      "bucket" : "long",
+      "chunks" : [
+        {
+          "audioOffsetSec" : 13.3940625,
+          "endSec" : 10.3209375,
+          "startSec" : 0.15,
+          "text" : "I am going to say very long sentence. We're going to speak in a couple of minutes and let's see in a couple of minutes how the text is appended in the box.",
+          "wallOffsetSec" : 13.320206046104431
+        },
+        {
+          "audioOffsetSec" : 23.375625,
+          "endSec" : 20.64375,
+          "startSec" : 10.3209375,
+          "text" : "So basically we should see the smart behavior constantly introducing new and new and new and new challenges. It's not all we should",
+          "wallOffsetSec" : 23.293768048286438
+        },
+        {
+          "audioOffsetSec" : 32.248125,
+          "endSec" : 30.883125,
+          "startSec" : 20.64375,
+          "text" : "be smart, invisible and impactful, but we will try to make it worth the money and it should work really, really fast.",
+          "wallOffsetSec" : 32.21925103664398
+        },
+        {
+          "audioOffsetSec" : 43.7653125,
+          "endSec" : 41.11875,
+          "startSec" : 30.883125,
+          "text" : "So let's try to see if WhisperKit is eager preview held unstable revision with this hybrid timestamps, which basically super nice",
+          "wallOffsetSec" : 43.6813440322876
+        },
+        {
+          "audioOffsetSec" : 47.168,
+          "endSec" : 7.04925,
+          "startSec" : 1,
+          "text" : "technology. It's long text and we should see if it's working really really fast now.",
+          "wallOffsetSec" : 51.95717108249664
+        }
+      ],
+      "durationSec" : 47.168,
+      "language" : "auto",
+      "recordingID" : "1e2769f2"
+    },
+    {
+      "bucket" : "long",
+      "chunks" : [
+        {
+          "audioOffsetSec" : 20.2190625,
+          "endSec" : 12.7,
+          "startSec" : 0.15,
+          "text" : "I'm not sure about like the the upload approach that you are mentioning we should upload all the time based on signed url this is our standard method in mcp in all of the places we must to",
+          "wallOffsetSec" : 20.157530069351196
+        },
+        {
+          "audioOffsetSec" : 25.764375,
+          "endSec" : 18.86,
+          "startSec" : 12.7,
+          "text" : "make sure like the pattern and tracing we can like do something unique",
+          "wallOffsetSec" : 25.730808973312378
+        },
+        {
+          "audioOffsetSec" : 31.05375,
+          "endSec" : 27.25,
+          "startSec" : 18.86,
+          "text" : "to avoid the to avoid the race condition based on the file name and the thread and the channel we can do it like smart combination to",
+          "wallOffsetSec" : 31.02158796787262
+        },
+        {
+          "audioOffsetSec" : 38.8171875,
+          "endSec" : 33.57,
+          "startSec" : 27.25,
+          "text" : "eliminate almost every every conflict or attach some like numbers",
+          "wallOffsetSec" : 38.78798305988312
+        },
+        {
+          "audioOffsetSec" : 43.68,
+          "endSec" : 40.35,
+          "startSec" : 33.57,
+          "text" : "daytime so it still will be readable easy slack but like smart like so we can handle",
+          "wallOffsetSec" : 43.677011013031006
+        },
+        {
+          "audioOffsetSec" : 53.405625,
+          "endSec" : 47.38,
+          "startSec" : 40.35,
+          "text" : "like the issues of if they are calling the next thing I'm not sure like we uploading based on like user identity",
+          "wallOffsetSec" : 53.36665606498718
+        },
+        {
+          "audioOffsetSec" : 59.904,
+          "endSec" : 55.78,
+          "startSec" : 47.38,
+          "text" : "who posts the message is this how we do it like because like they are already authenticated in Slack so it's pretty safe we need to do",
+          "wallOffsetSec" : 61.875216007232666
+        },
+        {
+          "audioOffsetSec" : 59.904,
+          "endSec" : 58.9509375,
+          "startSec" : 55.78,
+          "text" : "it smart but secure let's clarify this point because I'm not",
+          "wallOffsetSec" : 62.67400300502777
+        },
+        {
+          "audioOffsetSec" : 59.904,
+          "endSec" : 4.124,
+          "startSec" : 3.1709375,
+          "text" : "seeing this in the plan",
+          "wallOffsetSec" : 67.24700701236725
+        }
+      ],
+      "durationSec" : 59.904,
+      "language" : "en",
+      "recordingID" : "218f1b68"
+    },
+    {
+      "bucket" : "long",
+      "chunks" : [
+        {
+          "audioOffsetSec" : 12.8821875,
+          "endSec" : 8.05,
+          "startSec" : 0.15,
+          "text" : "We need to think this This is true because currently our structure is faulty to retrieve this complex dashboard information",
+          "wallOffsetSec" : 12.87989604473114
+        },
+        {
+          "audioOffsetSec" : 21.1575,
+          "endSec" : 18.41,
+          "startSec" : 8.05,
+          "text" : "and a lot of times we are getting slope or like generation agent assumptions we need like to better structure our code so there will be data sources",
+          "wallOffsetSec" : 21.082828998565674
+        },
+        {
+          "audioOffsetSec" : 29.2621875,
+          "endSec" : 24.6,
+          "startSec" : 18.41,
+          "text" : "are linked to and basically extract",
+          "wallOffsetSec" : 29.200594067573547
+        },
+        {
+          "audioOffsetSec" : 38.049375,
+          "endSec" : 32.48,
+          "startSec" : 24.6,
+          "text" : "the data. So think about data sources MCPs that they can query a lot of different stuff. Then we have",
+          "wallOffsetSec" : 38.03743302822113
+        },
+        {
+          "audioOffsetSec" : 48.8840625,
+          "endSec" : 42.14,
+          "startSec" : 32.48,
+          "text" : "a queries layer, pre-built queries that data sources and data sources. So we have multiple different",
+          "wallOffsetSec" : 48.84055209159851
+        },
+        {
+          "audioOffsetSec" : 60.230625,
+          "endSec" : 55.25,
+          "startSec" : 42.14,
+          "text" : "screens and sections and we need for every section fields the correct query. So with that in mind, understand how our dashboard is built, what we have today and why this structure is faulty",
+          "wallOffsetSec" : 60.17051899433136
+        },
+        {
+          "audioOffsetSec" : 67.1409375,
+          "endSec" : 63.61,
+          "startSec" : 55.25,
+          "text" : "and let's try based on what I depicted using using software engineering concepts to create something that can generate",
+          "wallOffsetSec" : 67.1108990907669
+        },
+        {
+          "audioOffsetSec" : 71.2359375,
+          "endSec" : 69.87,
+          "startSec" : 63.61,
+          "text" : "reliable dashboard that is verified a source of any",
+          "wallOffsetSec" : 71.15395903587341
+        },
+        {
+          "audioOffsetSec" : 83.328,
+          "endSec" : 81.9853125,
+          "startSec" : 69.87,
+          "text" : "display on the dashboard and if we need to fix something dashboard will be very easy for us. Dashboard will be super reliable and smart. Let's build it in a super smart, intelligent way so it will be",
+          "wallOffsetSec" : 86.03739404678345
+        },
+        {
+          "audioOffsetSec" : 83.328,
+          "endSec" : 13.458,
+          "startSec" : 12.1153125,
+          "text" : "easy to maintain",
+          "wallOffsetSec" : 89.39369010925293
+        }
+      ],
+      "durationSec" : 83.328,
+      "language" : "en",
+      "recordingID" : "22e146c8"
+    },
+    {
+      "bucket" : "long",
+      "chunks" : [
+        {
+          "audioOffsetSec" : 16.72125,
+          "endSec" : 10.15,
+          "startSec" : 0.15,
+          "text" : "Let's try this new premium live transcription design. So So basically, we need to see if this",
+          "wallOffsetSec" : 16.660147070884705
+        },
+        {
+          "audioOffsetSec" : 27.64125,
+          "endSec" : 20.78,
+          "startSec" : 10.15,
+          "text" : "good enough or not. So basically the tabs typed in very beautifully so we can get like the real experience. It's not bad, like it's",
+          "wallOffsetSec" : 27.592735052108765
+        },
+        {
+          "audioOffsetSec" : 30.37125,
+          "endSec" : 29,
+          "startSec" : 20.78,
+          "text" : "really beautiful. I think like it's good design and it's almost useful",
+          "wallOffsetSec" : 30.343568086624146
+        },
+        {
+          "audioOffsetSec" : 43.2534375,
+          "endSec" : 39.38,
+          "startSec" : 29,
+          "text" : "as we can see basically as we type in many so I think it should be displayed like very beautiful scroll",
+          "wallOffsetSec" : 43.17813205718994
+        },
+        {
+          "audioOffsetSec" : 47.616,
+          "endSec" : 46.4953125,
+          "startSec" : 39.38,
+          "text" : "so basically we should be able to understand what it's saying",
+          "wallOffsetSec" : 50.37251806259155
+        },
+        {
+          "audioOffsetSec" : 47.616,
+          "endSec" : 8.236,
+          "startSec" : 7.1153125,
+          "text" : "and",
+          "wallOffsetSec" : 53.33647906780243
+        }
+      ],
+      "durationSec" : 47.616,
+      "language" : "he",
+      "recordingID" : "282af7e0"
+    },
+    {
+      "bucket" : "long",
+      "chunks" : [
+        {
+          "audioOffsetSec" : 22.5225,
+          "endSec" : 14.15,
+          "startSec" : 0.15,
+          "text" : "I want you to use and and based on Glyn MCP, what I want you to do and when the user passed URL with media URL link, we should be automatically detect the best platform that suits",
+          "wallOffsetSec" : 22.509343028068542
+        },
+        {
+          "audioOffsetSec" : 25.423125,
+          "endSec" : 21.99,
+          "startSec" : 14.15,
+          "text" : "link. I want you to use a Glean MCP to understand the patterns of the all URLs that are possible, all the",
+          "wallOffsetSec" : 25.3435959815979
+        },
+        {
+          "audioOffsetSec" : 33.6984375,
+          "endSec" : 30.21,
+          "startSec" : 21.99,
+          "text" : "formats for all of So specifically search for each each platform, what the URL formats, so we can detect",
+          "wallOffsetSec" : 33.66696298122406
+        },
+        {
+          "audioOffsetSec" : 43.2534375,
+          "endSec" : 41.88,
+          "startSec" : 30.21,
+          "text" : "the platform so we can query the query efficiently. So we need to change the drop down and display a little notification",
+          "wallOffsetSec" : 43.2492790222168
+        },
+        {
+          "audioOffsetSec" : 52.723125,
+          "endSec" : 51.35,
+          "startSec" : 41.88,
+          "text" : "for for best UX, a premium UI that that we automatically selected the right platform from the user",
+          "wallOffsetSec" : 52.721457958221436
+        },
+        {
+          "audioOffsetSec" : 54.848,
+          "endSec" : 54.848,
+          "startSec" : 51.35,
+          "text" : "So that what we need to implement",
+          "wallOffsetSec" : 57.603127002716064
+        }
+      ],
+      "durationSec" : 54.848,
+      "language" : "he",
+      "recordingID" : "2a584cdc"
+    },
+    {
+      "bucket" : "very-long",
+      "chunks" : [
+        {
+          "audioOffsetSec" : 14.161875,
+          "endSec" : 11.57,
+          "startSec" : 0.15,
+          "text" : "I want you to dogs I have some an issue that I don't think it's completely",
+          "wallOffsetSec" : 14.135491013526917
+        },
+        {
+          "audioOffsetSec" : 22.351875,
+          "endSec" : 19.63,
+          "startSec" : 11.57,
+          "text" : "so let me take it further So first of all we are speaking I'm thinking that in Q1 we will do",
+          "wallOffsetSec" : 22.3214910030365
+        },
+        {
+          "audioOffsetSec" : 29.0915625,
+          "endSec" : 25.74,
+          "startSec" : 19.63,
+          "text" : "There can be It can be like multiple assumptions how it will work",
+          "wallOffsetSec" : 29.08557403087616
+        },
+        {
+          "audioOffsetSec" : 35.9165625,
+          "endSec" : 33.23,
+          "startSec" : 25.74,
+          "text" : "with English only text and then basically we will ask them to translate it",
+          "wallOffsetSec" : 35.84230899810791
+        },
+        {
+          "audioOffsetSec" : 42.5709375,
+          "endSec" : 40.2,
+          "startSec" : 33.23,
+          "text" : "so this is like the one then basically another thing",
+          "wallOffsetSec" : 42.55691301822662
+        },
+        {
+          "audioOffsetSec" : 49.3959375,
+          "endSec" : 46.86,
+          "startSec" : 40.2,
+          "text" : "We are saying we we've done Onyx and and we discussing how basically we output",
+          "wallOffsetSec" : 49.367141008377075
+        },
+        {
+          "audioOffsetSec" : 56.2209375,
+          "endSec" : 53,
+          "startSec" : 46.86,
+          "text" : "But the problem is like we think Triton and Onyx and",
+          "wallOffsetSec" : 56.15320003032684
+        },
+        {
+          "audioOffsetSec" : 62.960625,
+          "endSec" : 59.53,
+          "startSec" : 53,
+          "text" : "Modern Bird can work together we need to clarify this the flow of",
+          "wallOffsetSec" : 62.93313407897949
+        },
+        {
+          "audioOffsetSec" : 73.880625,
+          "endSec" : 70.86,
+          "startSec" : 59.53,
+          "text" : "employment then we are saying in many three places in ForensGraph x gRPC and stuff we didn't validate use Glyn MCP to validate",
+          "wallOffsetSec" : 73.87204909324646
+        },
+        {
+          "audioOffsetSec" : 81.3028125,
+          "endSec" : 76.94,
+          "startSec" : 70.86,
+          "text" : "how this should be basically implemented",
+          "wallOffsetSec" : 81.28983700275421
+        },
+        {
+          "audioOffsetSec" : 88.895625,
+          "endSec" : 86.12,
+          "startSec" : 76.94,
+          "text" : "in our implementation So basically if we know how to implement this correctly, then we should use",
+          "wallOffsetSec" : 88.82348299026489
+        },
+        {
+          "audioOffsetSec" : 94.8675,
+          "endSec" : 92.16,
+          "startSec" : 86.12,
+          "text" : "accordingly. Another basically",
+          "wallOffsetSec" : 94.81406509876251
+        },
+        {
+          "audioOffsetSec" : 101.6071875,
+          "endSec" : 98.96,
+          "startSec" : 92.16,
+          "text" : "is like how how this gRPC watch component will do it. We need to build",
+          "wallOffsetSec" : 101.54733002185822
+        },
+        {
+          "audioOffsetSec" : 121.996875,
+          "endSec" : 113.21,
+          "startSec" : 98.96,
+          "text" : "the component probably and how it will the ArchesTrate and the important thing we spoke that basically we're not if we are using single model why do we need graph maybe we can export it directly",
+          "wallOffsetSec" : 121.9807471036911
+        },
+        {
+          "audioOffsetSec" : 127.456875,
+          "endSec" : 122.21,
+          "startSec" : 113.21,
+          "text" : "so I think like we need to review this accordingly and think if we need a like graph at all or maybe graph",
+          "wallOffsetSec" : 127.45768404006958
+        },
+        {
+          "audioOffsetSec" : 130.2721875,
+          "endSec" : 128.9,
+          "startSec" : 122.21,
+          "text" : "it's a will be like in second version So V1 first version will include",
+          "wallOffsetSec" : 130.19416403770447
+        },
+        {
+          "audioOffsetSec" : 139.6565625,
+          "endSec" : 135.72,
+          "startSec" : 128.9,
+          "text" : "Onyx exposed Modern Bird and another version in V1 or maybe V2",
+          "wallOffsetSec" : 139.6012910604477
+        },
+        {
+          "audioOffsetSec" : 145.71375,
+          "endSec" : 142.12,
+          "startSec" : 135.72,
+          "text" : "will that will include basically the graph itself that can be extended by",
+          "wallOffsetSec" : 145.69529807567596
+        },
+        {
+          "audioOffsetSec" : 151.296,
+          "endSec" : 149.12625,
+          "startSec" : 142.12,
+          "text" : "the traditional models and then V3 will be like an image support. So maybe we need to update it, which makes",
+          "wallOffsetSec" : 153.65062606334686
+        },
+        {
+          "audioOffsetSec" : 151.296,
+          "endSec" : 9.176,
+          "startSec" : 7.00625,
+          "text" : "more sense that way.",
+          "wallOffsetSec" : 156.2465990781784
+        }
+      ],
+      "durationSec" : 151.296,
+      "language" : "en",
+      "recordingID" : "4cef75da"
+    },
+    {
+      "bucket" : "very-long",
+      "chunks" : [
+        {
+          "audioOffsetSec" : 16.1240625,
+          "endSec" : 6.34,
+          "startSec" : 0.15,
+          "text" : "Нет. Да, но это было до",
+          "wallOffsetSec" : 16.060235023498535
+        },
+        {
+          "audioOffsetSec" : 24.8259375,
+          "endSec" : 17.33,
+          "startSec" : 6.34,
+          "text" : "наших отношений. Хорошо. наших отношений. Хорошо. И после. Шутка.",
+          "wallOffsetSec" : 24.796415090560913
+        },
+        {
+          "audioOffsetSec" : 27.64125,
+          "endSec" : 24.41,
+          "startSec" : 17.33,
+          "text" : "Хорошо. Продолжим. Вы разочаровались в отношениях с Мариной",
+          "wallOffsetSec" : 27.621672987937927
+        },
+        {
+          "audioOffsetSec" : 37.2815625,
+          "endSec" : 30.44,
+          "startSec" : 24.41,
+          "text" : "после того, как она разбила Хрен с ним, с с этим геликом. Я больше за",
+          "wallOffsetSec" : 37.269018054008484
+        },
+        {
+          "audioOffsetSec" : 44.2771875,
+          "endSec" : 40.56,
+          "startSec" : 30.44,
+          "text" : "нее переживал. ищет. Хорошо, тогда после поездки в Таиланд? Наоборот, я после той",
+          "wallOffsetSec" : 44.246281027793884
+        },
+        {
+          "audioOffsetSec" : 54.088125,
+          "endSec" : 47.64,
+          "startSec" : 40.56,
+          "text" : "поездки. Еще больше убедился, что А что было не так",
+          "wallOffsetSec" : 54.067400097846985
+        },
+        {
+          "audioOffsetSec" : 65.6053125,
+          "endSec" : 59.9,
+          "startSec" : 47.64,
+          "text" : "в Марине? Может быть, плохо готовила? Мимоза Мимоза 10 из 10. Я уверен, если бы она еще что-то приготовила, это было бы точно так же вкусно.",
+          "wallOffsetSec" : 65.55615508556366
+        },
+        {
+          "audioOffsetSec" : 77.805,
+          "endSec" : 69.96,
+          "startSec" : 59.9,
+          "text" : "Ну Ну, что тогда? Секс? Я бы продлил. Чего? 150 из",
+          "wallOffsetSec" : 77.74741303920746
+        },
+        {
+          "audioOffsetSec" : 81.9,
+          "endSec" : 76.8,
+          "startSec" : 69.96,
+          "text" : "жизни. Ну, хорошо.",
+          "wallOffsetSec" : 81.89554107189178
+        },
+        {
+          "audioOffsetSec" : 88.895625,
+          "endSec" : 84.85,
+          "startSec" : 76.8,
+          "text" : "А А внешность? Ну... Девять с половиной. Я",
+          "wallOffsetSec" : 88.82369005680084
+        },
+        {
+          "audioOffsetSec" : 108.688125,
+          "endSec" : 99.13,
+          "startSec" : 84.85,
+          "text" : "сейчас ударю. Ну, дети... брови от папы. не знаю, а в этой комнате. Ну, что тогда было не",
+          "wallOffsetSec" : 108.6220440864563
+        },
+        {
+          "audioOffsetSec" : 122.5940625,
+          "endSec" : 113.15,
+          "startSec" : 99.13,
+          "text" : "такти? 10 декабря. в этой комнате. 10 декабря. Когда ты сказал, что беременна? Ну,",
+          "wallOffsetSec" : 122.54719007015228
+        },
+        {
+          "audioOffsetSec" : 125.750625,
+          "endSec" : 121.66,
+          "startSec" : 113.15,
+          "text" : "возможно, беременна. Я так обрадовался. Я даже слов не мог подобрать.",
+          "wallOffsetSec" : 125.7425479888916
+        },
+        {
+          "audioOffsetSec" : 139.4859375,
+          "endSec" : 132.78,
+          "startSec" : 121.66,
+          "text" : "И когда мы Я думал, смотрю Смотрю на тебя. Ты такая красивая, свободная,",
+          "wallOffsetSec" : 139.48599898815155
+        },
+        {
+          "audioOffsetSec" : 142.30125,
+          "endSec" : 139.45,
+          "startSec" : 132.78,
+          "text" : "талантливая. Ну, я вдруг понял, что тебе это",
+          "wallOffsetSec" : 142.2877470254898
+        },
+        {
+          "audioOffsetSec" : 151.6003125,
+          "endSec" : 147.4,
+          "startSec" : 139.45,
+          "text" : "не знаю. Что-то сломает тебя, твою карьеру, жизнь, а ребенок будет",
+          "wallOffsetSec" : 151.52236199378967
+        },
+        {
+          "audioOffsetSec" : 176.255625,
+          "endSec" : 164.87,
+          "startSec" : 147.4,
+          "text" : "когда тест отказался отрицательным. в течение дня. С и не будет. Так, так. С улыбкой взглянула.",
+          "wallOffsetSec" : 176.25714910030365
+        },
+        {
+          "audioOffsetSec" : 181.9715625,
+          "endSec" : 175.69,
+          "startSec" : 164.87,
+          "text" : "С радостью. С этого момента С этого момента все стало как не так. Я тоже помню 10",
+          "wallOffsetSec" : 181.94438707828522
+        },
+        {
+          "audioOffsetSec" : 190.3321875,
+          "endSec" : 186.1,
+          "startSec" : 175.69,
+          "text" : "декабря, Дим. Ну, Ну как-то по-другому. Когда сказала, что беременна,",
+          "wallOffsetSec" : 190.2569590806961
+        },
+        {
+          "audioOffsetSec" : 203.712,
+          "endSec" : 198.39,
+          "startSec" : 186.1,
+          "text" : "ты… ты прям закрылся. Ты ты просто не разговариваешь со мной весь вечер. Я подумала, что ты просто не готов стать отцом. Все твои друзья, мои подруги",
+          "wallOffsetSec" : 204.30134499073029
+        },
+        {
+          "audioOffsetSec" : 203.712,
+          "endSec" : 201.23,
+          "startSec" : 198.39,
+          "text" : "говорили, что ты как ребенок.",
+          "wallOffsetSec" : 206.5002830028534
+        },
+        {
+          "audioOffsetSec" : 203.712,
+          "endSec" : 5.322,
+          "startSec" : 2.84,
+          "text" : "Ты вообще себя видел, ты постоянно бухал.",
+          "wallOffsetSec" : 209.47109806537628
+        }
+      ],
+      "durationSec" : 203.712,
+      "language" : "he",
+      "recordingID" : "5f64f423"
+    },
+    {
+      "bucket" : "very-long",
+      "chunks" : [
+        {
+          "audioOffsetSec" : 14.2471875,
+          "endSec" : 7.25,
+          "startSec" : 0.15,
+          "text" : "Just to make sure you understand and we're showing the right thing. We want to show like what was the plan for",
+          "wallOffsetSec" : 14.192186951637268
+        },
+        {
+          "audioOffsetSec" : 20.3896875,
+          "endSec" : 16.97,
+          "startSec" : 7.25,
+          "text" : "specific quarter. We want to understand basically the timeline of the quarter that already was executed. If you are two months",
+          "wallOffsetSec" : 20.375931978225708
+        },
+        {
+          "audioOffsetSec" : 25.935,
+          "endSec" : 23.83,
+          "startSec" : 16.97,
+          "text" : "we are one month away. Specifically we want to understand what was delivered period of the",
+          "wallOffsetSec" : 25.85553205013275
+        },
+        {
+          "audioOffsetSec" : 35.5753125,
+          "endSec" : 32.42,
+          "startSec" : 23.83,
+          "text" : "So basically we are looking water but this is like my monthly So we're targeting for a month, right? So if like it's first month of the",
+          "wallOffsetSec" : 35.50823795795441
+        },
+        {
+          "audioOffsetSec" : 44.4478125,
+          "endSec" : 38.82,
+          "startSec" : 32.42,
+          "text" : "quarter then like, of course we didn't execute a lot. But like if it's like last month on the",
+          "wallOffsetSec" : 44.38568997383118
+        },
+        {
+          "audioOffsetSec" : 58.865625,
+          "endSec" : 50.69,
+          "startSec" : 38.82,
+          "text" : "quarter, two-thirds already been executed and then they're like progress of last month. So this should be like mindful. We should show the progress of the whole",
+          "wallOffsetSec" : 58.794890999794006
+        },
+        {
+          "audioOffsetSec" : 67.4821875,
+          "endSec" : 62.68,
+          "startSec" : 50.69,
+          "text" : "quarter. Like if it's like with some progress, but if it's like one third, two third of the quarter, like where we stand in the quarter and what's already was completed across the whole quarter. So",
+          "wallOffsetSec" : 67.41580998897552
+        },
+        {
+          "audioOffsetSec" : 79.7671875,
+          "endSec" : 77.4,
+          "startSec" : 62.68,
+          "text" : "completely different view. And also, what of the some important we're looking at the team, maybe how we show like the projects that were delivered and for every item of the quarter, we also",
+          "wallOffsetSec" : 79.74529504776001
+        },
+        {
+          "audioOffsetSec" : 87.01875,
+          "endSec" : 83.45,
+          "startSec" : 77.4,
+          "text" : "show like some smart have insights like what the projects that were delivered, where we stand",
+          "wallOffsetSec" : 86.93896698951721
+        },
+        {
+          "audioOffsetSec" : 104.593125,
+          "endSec" : 100.09,
+          "startSec" : 83.45,
+          "text" : "at the projects on on higher level. So of course there are a lot of data and we need to show it and we have a smart way to understand like overall execution, how teams are executed, what we are pushed, what we didn't push. I think we",
+          "wallOffsetSec" : 104.54830694198608
+        },
+        {
+          "audioOffsetSec" : 115.68375,
+          "endSec" : 107.26,
+          "startSec" : 100.09,
+          "text" : "have a review of the individual teams and the focus on the whole organization. So now you focus on the whole organization, but you",
+          "wallOffsetSec" : 115.63623404502869
+        },
+        {
+          "audioOffsetSec" : 122.50875,
+          "endSec" : 118.64,
+          "startSec" : 107.26,
+          "text" : "can see need the teams that are attached to it in the same repository and we need to be able to drill down to every individual team",
+          "wallOffsetSec" : 122.46235394477844
+        },
+        {
+          "audioOffsetSec" : 129.4190625,
+          "endSec" : 126.08,
+          "startSec" : 118.64,
+          "text" : "as well. So basically what I want to do is to take the whole manager hub and and push it inside of this screen",
+          "wallOffsetSec" : 129.39130902290344
+        },
+        {
+          "audioOffsetSec" : 132.352,
+          "endSec" : 132.234375,
+          "startSec" : 126.08,
+          "text" : "and view but in in a smart way, so we will see both on the higher level and individual",
+          "wallOffsetSec" : 134.91610598564148
+        }
+      ],
+      "durationSec" : 132.352,
+      "language" : "en",
+      "recordingID" : "9c9e386a"
+    }
+  ]
+}
