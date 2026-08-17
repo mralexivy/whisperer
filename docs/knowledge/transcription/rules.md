@@ -294,3 +294,28 @@
     against a translation of the input. Do **not** exclude them from metrics that never read the
     reference. Not excluding them read the Russian column as 0.6566 mean / 1.0000 median; excluding
     them, 0.0215 / 0.0000.
+
+33. **A Core ML compute unit is a correctness setting before it is a speed setting — measure
+    per-unit numeric fidelity against the same package run from Python before quoting either.**
+    `Tools/mmbert/export_coreml.py` benchmarked the mmBERT editor at `CPU_AND_NE` p50 1.27 ms
+    against `ALL`'s 7.3 ms, and the naive reading is "use the ANE". `MMBERTRuntimeTests
+    .testComputeUnitFidelityAgainstPython` then measured what that speed costs — worst per-logit
+    error against the identical `.mlpackage` executed by `coremltools`:
+
+        cpuAndGPU  0.0000   all  0.0000   cpuOnly  0.1406   cpuAndNeuralEngine  8.6455
+
+    8.6 logits is a different prediction, not a noisy one, and `thresholds.json` calibrates
+    decisions at 0.983–0.996 where it decides the outcome outright. The ANE p50 was therefore a
+    measurement of a wrong-answer path and must never be quoted as the editor's latency.
+    `MMBERTCoreMLRuntime` asks for `.cpuAndGPU` and not `.all`: `.all` merely *happens* not to
+    schedule the ANE for this graph today, and naming the exclusion is what stops a future OS
+    silently re-enabling it. On the correct backend the residual is 5e-06 across 848 logits and
+    end-to-end p50 is 12.5 ms / p95 13.5 ms for 19 words against a 100 ms budget — the correctness
+    choice is free. Note this is orthogonal to the whisper.cpp Core ML removal in CLAUDE.md: that
+    is about `audio_ctx` and fixed mel shapes, this is about ANE arithmetic on a BERT graph.
+
+34. **Read Core ML outputs through `MLMultiArray`'s `NSNumber` subscript, not
+    `dataPointer.assumingMemoryBound(to: Float32.self)`.** The exported graph is FP16, and the
+    dtype actually returned depends on the chosen compute unit. Reinterpreting half-precision
+    bytes as single precision does not crash — it returns plausibly-scaled garbage, which reads
+    as a badly-trained model rather than as a bug.

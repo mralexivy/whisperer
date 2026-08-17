@@ -40,6 +40,25 @@
   longest phrase, which is two words. If the structure is genuinely warranted, `nonisolated` on
   the node class is the alternative — but check that before writing it, not after the abort.
 
+- **When a test crashes, first ask which types its body *constructs*, not what it asserts.** The
+  isolated-deinit abort is selective in a way that looks like a logic bug: in
+  `LanguageDetectionTests` the four cases that built a `LanguageRouter` all died and the ones that
+  did not build one all passed, in the same class, sharing the same model and audio fixtures.
+  Diffing crashing against non-crashing tests for the allocation they don't share names the
+  offending class in one pass; `LanguageRouter` was pure scoring over a probability dictionary plus
+  a `UserDefaults` read, i.e. never main-actor in the first place, and `nonisolated final class`
+  fixed all four. Note the app never reproduced it — production releases the router from a
+  main-actor context — so "works in the app, crashes in tests" is evidence *for* this diagnosis,
+  not against it.
+
 - **A malloc "pointer being freed was not allocated" at the *same address in different processes*
   is not a data race.** Look at the frame below the free, not above it; a constant address means
   the runtime, not the heap.
+
+- **A `@MainActor` XCTest method that allocates any object must be `async`.** Same root cause as
+  the two rules above, seen from the test side: XCTest invokes a synchronous test through
+  `NSInvocation` on the main thread with no current `AsyncTask`, so the first isolated deinit in
+  that scope aborts in malloc before a single assertion runs. An `async` body runs inside a task
+  and the release is clean. The failure is indistinguishable from a crash in the code under test —
+  `MeetingPolishTests` lost two tests to it while the polisher they exercise was correct — so
+  confirm the shape with a bare `final class {}` probe before debugging anything else.
