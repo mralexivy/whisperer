@@ -61,3 +61,7 @@ reference/
 
 # Agent scratch worktrees (created by subagents with isolation: worktree)
 .claude/worktrees/
+
+# Python bytecode from Tools/ scripts
+__pycache__/
+*.pyc

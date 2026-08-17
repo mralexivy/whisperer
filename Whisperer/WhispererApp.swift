@@ -1817,6 +1817,10 @@ struct SettingsTabView: View {
     @ObservedObject var appState = AppState.shared
     @AppStorage("meetingDetectionEnabled") private var meetingDetectionEnabled: Bool = true
     @AppStorage("meetingPolishEnabled") private var meetingPolishEnabled: Bool = true
+    // Experimental fast polish. Defaults false — see `PolishFeatureFlags` for why "off" has
+    // to mean the exact shipped path rather than an approximation of it.
+    @AppStorage(PolishFeatureFlags.fastPolishKey) private var fastPolishEnabled: Bool = false
+    @AppStorage(PolishFeatureFlags.paragraphsKey) private var fastPolishParagraphsEnabled: Bool = false
     #if canImport(FluidAudio)
     @ObservedObject private var engines = MeetingEngines.shared
     #endif
@@ -2149,6 +2153,53 @@ struct SettingsTabView: View {
                 }
 
                 #if !APP_STORE
+                // Fast Polish — experimental, off by default.
+                //
+                // Hidden from App Store builds deliberately: this replaces a shipped behaviour
+                // and its per-language precision is still bounded by how much held-out data
+                // exists, so it is not something to put in front of a reviewer yet.
+                settingsCard(title: "Fast Polish (Experimental)", icon: "bolt.fill", color: .orange) {
+                    HStack {
+                        VStack(alignment: .leading, spacing: 3) {
+                            Text("Polish without the language model")
+                                .font(.system(size: 13, weight: .medium))
+                                .foregroundColor(MBColors.textPrimary)
+                            Text("Punctuation, casing and formatting from fast local rules instead of the 4B model. Measured on 400 of your recordings: fewer errors against a whole-file re-decode, and milliseconds instead of a model pass. Turn it off to restore the current behaviour exactly.")
+                                .font(.system(size: 11))
+                                .foregroundColor(MBColors.textSecondary)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+                        Spacer()
+                        Toggle("", isOn: $fastPolishEnabled)
+                            .toggleStyle(.switch)
+                            .tint(MBColors.accent)
+                            .labelsHidden()
+                    }
+
+                    if fastPolishEnabled {
+                        Divider()
+                            .background(MBColors.border)
+                            .padding(.vertical, 2)
+
+                        HStack {
+                            VStack(alignment: .leading, spacing: 3) {
+                                Text("Paragraph breaks")
+                                    .font(.system(size: 13, weight: .medium))
+                                    .foregroundColor(MBColors.textPrimary)
+                                Text("Splits long dictation into paragraphs at the pauses you actually took.")
+                                    .font(.system(size: 11))
+                                    .foregroundColor(MBColors.textSecondary)
+                                    .fixedSize(horizontal: false, vertical: true)
+                            }
+                            Spacer()
+                            Toggle("", isOn: $fastPolishParagraphsEnabled)
+                                .toggleStyle(.switch)
+                                .tint(MBColors.accent)
+                                .labelsHidden()
+                        }
+                    }
+                }
+
                 // Meeting Detection
                 settingsCard(title: "Meeting Detection", icon: "video.fill", color: .blue) {
                     HStack {

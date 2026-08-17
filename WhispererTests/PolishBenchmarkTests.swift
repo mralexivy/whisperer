@@ -158,6 +158,96 @@ final class PolishBenchmarkTests: XCTestCase {
         XCTAssertLessThan(p95, 10.0, "deterministic passes exceeded their 10 ms p95 budget")
     }
 
+    /// The trained editor over the whole corpus: what it costs, and what it would change.
+    ///
+    /// Separate from arm B because it is not part of arm B. `Calibration.uncalibrated`'s
+    /// `maximumConfidence` (0.98) sits below `ConfidenceGate.floor(for: .editorModel)` (0.99), so
+    /// every proposal this makes is discarded and arm B's text is identical with the editor and
+    /// without it. That is the intended state until per-language precision is measured at ≥99%,
+    /// and it is asserted here rather than assumed — a proposal that survived would mean an edit
+    /// class went auto-applying without the measurement that authorises it.
+    ///
+    /// What the run is *for* is the two numbers that decide whether M4 is affordable at all: the
+    /// real per-utterance cost of the encoder on this corpus, and the proposal rate it would
+    /// bring if calibrated. Both are measured on real transcripts of real length rather than on
+    /// the worked example.
+    func testEditorOverCorpus() async throws {
+        let fixtures = try loadCorpus()
+        guard let runtime = MMBERTCoreMLRuntime.makeIfAvailable() else {
+            throw XCTSkip("mmBERT artifacts absent — run Tools/mmbert/export_coreml.py")
+        }
+        try await runtime.load()
+        defer { Task { await runtime.unload() } }
+
+        let model = MMBERTEditingModel(runtime: runtime)
+        let gate = ConfidenceGate()
+        let context = EditContext(capabilities: [], pass: .authoritative)
+
+        var samples: [Double] = []
+        var tokens = 0
+        var proposals = 0
+        var survivors = 0
+        var byOperation: [String: Int] = [:]
+        var byLanguage: [String: (tokens: Int, proposals: Int)] = [:]
+
+        // Warm: the first prediction pays program load, and folding that into the p50 of a
+        // 400-sample distribution would misreport the steady-state cost by roughly its own value.
+        _ = await model.propose(TokenGraph.from(text: fixtures[0].transcript,
+                                                capabilities: []).tokens, context: context)
+
+        for fixture in fixtures {
+            var graph = TokenGraph.from(text: fixture.transcript, capabilities: [])
+            let counted = graph.tokens.filter { $0.kind != .whitespace }.count
+            guard counted > 0 else { continue }
+
+            let start = CFAbsoluteTimeGetCurrent()
+            let edits = await model.propose(graph.tokens, context: context)
+            samples.append((CFAbsoluteTimeGetCurrent() - start) * 1000)
+
+            let language = Self.detectedLanguage(of: fixture.transcript)
+            tokens += counted
+            proposals += edits.count
+            byLanguage[language, default: (0, 0)].tokens += counted
+            byLanguage[language, default: (0, 0)].proposals += edits.count
+            for edit in edits {
+                switch edit.operation {
+                case .keep:        byOperation["keep", default: 0] += 1
+                case .delete:      byOperation["delete", default: 0] += 1
+                case .replace:     byOperation["replace", default: 0] += 1
+                case .insertAfter: byOperation["insertAfter", default: 0] += 1
+                }
+            }
+            survivors += gate.apply(edits, to: &graph).count
+        }
+
+        print("""
+
+        ── mmBERT editor over the corpus ─────────────────────────────────────────
+        \(samples.count) utterances, \(tokens) non-whitespace tokens
+        editor_ms: p50 \(String(format: "%.2f", Self.percentile(samples, 0.50))), \
+        p95 \(String(format: "%.2f", Self.percentile(samples, 0.95))), \
+        max \(String(format: "%.2f", samples.max() ?? 0))
+        proposals: \(proposals) (\(String(format: "%.2f", 1000 * Double(proposals) / Double(tokens))) \
+        per 1000 tokens) — \(byOperation.sorted { $0.key < $1.key }
+            .map { "\($0.key) \($0.value)" }.joined(separator: ", "))
+        survived the gate: \(survivors) — 0 is the correct number until precision is measured
+        """)
+        for (language, counts) in byLanguage.sorted(by: { $0.key < $1.key }) {
+            print(String(format: "  %@ n=%d tokens, %d proposals (%.2f per 1000)",
+                         language, counts.tokens, counts.proposals,
+                         1000 * Double(counts.proposals) / Double(counts.tokens)))
+        }
+        print("──────────────────────────────────────────────────────────────────────────\n")
+
+        XCTAssertEqual(survivors, 0,
+                       "a model-sourced edit passed the gate; per-language precision has not "
+                        + "been measured at ≥0.99, so none may apply")
+        // The plan's M4 budget, measured on the shipping path rather than on `MLModel.prediction`
+        // alone — the Swift tokenizer is part of the cost.
+        XCTAssertLessThan(Self.percentile(samples, 0.95), 100.0,
+                          "editor p95 exceeds the plan's 100 ms budget")
+    }
+
     // MARK: - Reporting
 
     private func report(_ allRows: [Row], skippedNoGolden: Int, skippedNoArmA: Int, total: Int) {

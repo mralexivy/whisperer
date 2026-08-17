@@ -50,7 +50,9 @@ final class DeterministicPolisherTests: XCTestCase {
     func testEditsAreReported() {
         let result = polisher.polish(text: "um um hello  world")
         XCTAssertFalse(result.appliedEdits.isEmpty)
-        XCTAssertEqual(result.text, "hello world")
+        // Capitalized because `SentenceCaser` runs after the filler deletions — the opening word
+        // of an utterance is a sentence opening whichever word survived the cleanup.
+        XCTAssertEqual(result.text, "Hello world")
     }
 
     /// The bug the gate-simulated normalizer scratch exists to prevent: if the duplicate-word
@@ -59,6 +61,158 @@ final class DeterministicPolisherTests: XCTestCase {
     func testRefusedDeletionDoesNotFuseItsNeighbours() {
         let result = polisher.polish(text: "не не надо это делать")
         XCTAssertFalse(result.text.contains("нене"), result.text)
+    }
+
+    // MARK: - Phrase aliases are all-or-nothing
+
+    /// The shipped-lexicon bug. `("no sequel", "NoSQL")` is a two-token phrase whose first token
+    /// is in `ConfidenceGate.negations`, so the `.replace` was refused and both `.delete`s were
+    /// accepted — the transcript came back as the single word `no`, with the user's second word
+    /// gone and nothing in the log to say so.
+    ///
+    /// Before the fix this rendered `"no"`. The assertion is deliberately on the exact string:
+    /// the whole point is that a refused phrase leaves the input *untouched*, not merely
+    /// non-empty.
+    func testNegationRefusalDropsTheWholePhraseRatherThanHalfOfIt() {
+        let out = polisher.polish(text: "no sequel").text
+        // Both words present, in order, and only the sentence-initial capital changed. Asserting
+        // the exact string rather than `contains` is the point: "untouched" has to mean the tail
+        // survived, not merely that the output is non-empty.
+        XCTAssertEqual(out, "No sequel")
+        XCTAssertNotEqual(out.lowercased(), "no",
+                          "the alias engine deleted a word the gate would not let it replace")
+    }
+
+    /// The same shape, tripping a different guard. `numberViolation` refuses the `.delete` of a
+    /// token carrying digits, so a phrase alias whose tail is a number used to apply its
+    /// replacement and its whitespace deletion and leave the digits stranded — `the i 5 is here`
+    /// became `the iPhone5 is here`.
+    ///
+    /// Driven through `AliasEngine` + `ConfidenceGate` directly rather than the polisher, because
+    /// `ProtectionDetector` hard-protects anything containing a digit and would mask the guard
+    /// this is about.
+    func testNumberRefusalDropsTheWholePhraseRatherThanHalfOfIt() {
+        let engine = AliasEngine(entries: [DictionaryEntry(incorrectForm: "i 5",
+                                                           correctForm: "iPhone")],
+                                 includeShippedLexicon: false)
+        let gate = ConfidenceGate()
+        var graph = TokenGraph.from(text: "the i 5 is here")
+        let accepted = gate.apply(engine.proposals(for: graph, gate: gate), to: &graph)
+
+        XCTAssertEqual(graph.render(), "the i 5 is here")
+        XCTAssertTrue(accepted.isEmpty, "\(accepted.map(\.reason))")
+    }
+
+    /// The guard must not cost recall on phrases nothing objects to.
+    func testOrdinaryPhraseAliasesStillApply() {
+        XCTAssertEqual(polisher.polish(text: "ask chat gpt about git hub").text,
+                       "Ask ChatGPT about GitHub")
+    }
+
+    // MARK: - TokenGraph index map
+
+    /// `index(of:)` became a dictionary lookup. A stale map mis-targets an edit, which is worse
+    /// than the O(n) scan it replaced, so this applies a large mixed batch — replace, delete,
+    /// insert, interleaved — and compares against an independent list simulation. The expected
+    /// output is exactly what the linear scan produced.
+    func testLargeEditBatchTargetsTheSameTokensAsALinearScan() {
+        let text = (0..<200).map { "w\($0)" }.joined(separator: " ")
+        var graph = TokenGraph.from(text: text)
+        let ids = graph.tokens.map(\.id)
+
+        var referenceIDs: [TokenID?] = ids
+        var referenceText: [String] = graph.tokens.map(\.effectiveText)
+
+        for (offset, id) in ids.enumerated() {
+            let operation: EditOperation
+            switch offset % 4 {
+            case 0:  operation = .replace("X\(offset)")
+            case 1:  operation = .delete
+            case 2:  operation = .insertAfter("!")
+            default: continue
+            }
+            let edit = TranscriptEdit(target: id, operation: operation,
+                                      source: .normalization, confidence: 1.0,
+                                      reason: "batch \(offset)")
+            XCTAssertTrue(graph.apply(edit), "edit \(offset) did not find its target")
+
+            guard let position = referenceIDs.firstIndex(where: { $0 == id }) else {
+                XCTFail("reference lost \(id)")
+                continue
+            }
+            switch operation {
+            case .replace(let replacement): referenceText[position] = replacement
+            case .delete:
+                referenceIDs.remove(at: position)
+                referenceText.remove(at: position)
+            case .insertAfter(let inserted):
+                referenceIDs.insert(nil, at: position + 1)
+                referenceText.insert(inserted, at: position + 1)
+            case .keep: break
+            }
+        }
+
+        XCTAssertEqual(graph.render(), referenceText.joined())
+        for (position, token) in graph.tokens.enumerated() {
+            XCTAssertEqual(graph.index(of: token.id), position,
+                           "index map drifted at \(position)")
+        }
+    }
+
+    // MARK: - rawRanges invalidation
+
+    /// `rawRanges` is parallel to `tokens` **as built**. After a deletion the zip in
+    /// `tokenIDs(overlappingRawRange:)` pairs token *i* with the span of token *i+k*, so it
+    /// returned confidently wrong token IDs — which would have handed `ProtectionDetector` the
+    /// wrong span to hard-protect. Before the fix this returned the whitespace token that had
+    /// slid into `beta`'s slot; now the invariant is enforced rather than commented.
+    func testRawRangeLookupIsRefusedOnceTheGraphHasBeenEdited() {
+        var graph = TokenGraph.from(text: "alpha beta gamma")
+        let beta = graph.rawTranscript.range(of: "beta")!
+        let before = graph.tokenIDs(overlappingRawRange: beta)
+        XCTAssertEqual(before.count, 1)
+        XCTAssertEqual(graph.token(before[0])?.effectiveText, "beta")
+
+        XCTAssertTrue(graph.apply(TranscriptEdit(target: graph.tokens[0].id,
+                                                 operation: .delete,
+                                                 source: .normalization, confidence: 1.0,
+                                                 reason: "invalidate")))
+        XCTAssertEqual(graph.tokenIDs(overlappingRawRange: beta), [],
+                       "stale raw ranges must return nothing, not the wrong tokens")
+    }
+
+    // MARK: - ListFormatter offset basis
+
+    /// `precedingWord` derived a `String.Index` from a Character distance and an `NSRange`
+    /// length from the same number. They agree only when every grapheme is one UTF-16 unit —
+    /// and pointed Hebrew is not: `בְּ` is one Character and three UTF-16 units. The search range
+    /// was therefore truncated short of the marker, `matches.last` returned an *earlier*
+    /// occurrence of the preceding word, and the shared-prefix grouping mis-sliced every item.
+    ///
+    /// Before the fix this produced `["שלב:", "1. לְעַדְכֵּן שלב", "2. לבדוק שלב", "3. לכתוב"]`
+    /// — the marker word leaking into each item. The unpointed control below is what it should
+    /// have been all along, and pointing the text must not change it.
+    func testPointedHebrewMarkersAreClassifiedOnTheSameOffsetBasis() {
+        let pointed = "שלב ראשית לְעַדְכֵּן שלב שנית לבדוק שלב שלישית לכתוב"
+        let plain   = "שלב ראשית לעדכן שלב שנית לבדוק שלב שלישית לכתוב"
+
+        XCTAssertEqual(ListFormatter.format(pointed).components(separatedBy: "\n"),
+                       ["1. לְעַדְכֵּן", "2. לבדוק", "3. לכתוב"])
+        XCTAssertEqual(ListFormatter.format(plain).components(separatedBy: "\n"),
+                       ["1. לעדכן", "2. לבדוק", "3. לכתוב"])
+    }
+
+    /// Cyrillic is one UTF-16 unit per character, so this is a control rather than a repro: the
+    /// Russian markers must keep formatting exactly as before the offset change.
+    func testRussianMarkersAreUnaffectedByTheOffsetFix() {
+        XCTAssertEqual(
+            ListFormatter.format("во-первых, обновить базу. во-вторых, перезапустить сервис. "
+                                 + "в-третьих, проверить логи").components(separatedBy: "\n"),
+            ["1. Обновить базу", "2. Перезапустить сервис", "3. Проверить логи"])
+        XCTAssertEqual(
+            ListFormatter.format("номер один обновить базу. номер два перезапустить сервис")
+                .components(separatedBy: "\n"),
+            ["1. Обновить базу", "2. Перезапустить сервис"])
     }
 
     // MARK: - needsGenerativePass

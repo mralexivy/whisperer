@@ -40,7 +40,23 @@ struct TokenGraph: Sendable {
     /// Parallel to `tokens` as built. Not maintained across edits — it exists so text-based
     /// detectors (the protection patterns, which are regexes) can map a match back onto
     /// token IDs, and detection runs before any edit is applied.
+    ///
+    /// The invariant is enforced by `hasMutated` rather than documented: zipping a stale
+    /// `rawRanges` against a shortened `tokens` silently pairs token *i* with the range of token
+    /// *i+k*, which would hand `ProtectionDetector` the wrong span to hard-protect.
     private let rawRanges: [Range<String.Index>]
+
+    /// True once any edit has been applied. `rawRanges` is meaningless from that point on.
+    private var hasMutated = false
+
+    /// `tokens` index for each live `TokenID`.
+    ///
+    /// `index(of:)` is called once per edit from both `ConfidenceGate.judge` and `apply`, so a
+    /// linear scan made a polish pass O(tokens × edits) — quadratic on exactly the long
+    /// single-breath dictation that produces the most edits. Maintained on every mutation that
+    /// can move a token: replace does not, delete and insert renumber the suffix, which costs
+    /// the same order as the array shift they already pay for.
+    private var indexByID: [TokenID: Int]
 
     private var nextTokenValue: Int
 
@@ -136,6 +152,15 @@ struct TokenGraph: Sendable {
         self.rawTranscript = rawTranscript
         self.rawRanges = rawRanges
         self.nextTokenValue = nextTokenValue
+        var map: [TokenID: Int] = Dictionary(minimumCapacity: tokens.count)
+        for (index, token) in tokens.enumerated() { map[token.id] = index }
+        self.indexByID = map
+    }
+
+    /// Renumber `indexByID` for every token from `start` onward. Called after an insertion or a
+    /// removal, which are the only operations that move a token.
+    private mutating func reindex(from start: Int) {
+        for index in start..<tokens.count { indexByID[tokens[index].id] = index }
     }
 
     // MARK: - Rendering
@@ -149,8 +174,14 @@ struct TokenGraph: Sendable {
 
     // MARK: - Lookup
 
+    /// O(1). The identity check is not paranoia for its own sake: a stale map mis-targets an
+    /// edit, which is a worse failure than the linear scan this replaced, so a map that has
+    /// somehow drifted degrades to "target not found" rather than to "wrong token".
     func index(of id: TokenID) -> Int? {
-        tokens.firstIndex { $0.id == id }
+        guard let index = indexByID[id], index < tokens.count, tokens[index].id == id else {
+            return nil
+        }
+        return index
     }
 
     func token(_ id: TokenID) -> TranscriptToken? {
@@ -162,8 +193,16 @@ struct TokenGraph: Sendable {
     /// The bridge from text-based detectors to token addressing: the 13 protection patterns
     /// are regexes over text, and this is what turns a match into a set of tokens to mask.
     /// Valid only before edits are applied — detection runs first, which is when it is used.
+    /// After the first edit this returns nothing rather than something wrong: `rawRanges` no
+    /// longer lines up with `tokens`, so the zip below would pair each token with some other
+    /// token's span and hand the caller IDs it never asked about.
     func tokenIDs(overlappingRawRange range: Range<String.Index>) -> [TokenID] {
-        zip(tokens, rawRanges)
+        guard !hasMutated else {
+            Logger.error("tokenIDs(overlappingRawRange:) called after an edit — raw ranges no "
+                         + "longer address this graph; returning none", subsystem: .transcription)
+            return []
+        }
+        return zip(tokens, rawRanges)
             .filter { $0.1.overlaps(range) || ($0.1.isEmpty && range.contains($0.1.lowerBound)) }
             .map { $0.0.id }
     }
@@ -211,7 +250,9 @@ struct TokenGraph: Sendable {
         case .replace(let text):
             tokens[i].normalizedText = text
         case .delete:
+            indexByID.removeValue(forKey: tokens[i].id)
             tokens.remove(at: i)
+            reindex(from: i)
         case .insertAfter(let text):
             let inserted = TranscriptToken(id: TokenID(nextTokenValue),
                                            kind: Self.kind(ofSingle: text),
@@ -220,8 +261,10 @@ struct TokenGraph: Sendable {
                                            normalizedText: text)
             nextTokenValue += 1
             tokens.insert(inserted, at: i + 1)
+            reindex(from: i + 1)
         }
 
+        hasMutated = true
         appliedEdits.append(AppliedEdit(edit: edit, previousText: previous))
         return true
     }

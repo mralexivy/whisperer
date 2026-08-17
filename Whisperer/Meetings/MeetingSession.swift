@@ -47,6 +47,13 @@ class MeetingSession: ObservableObject {
     /// the conservative subset falls out of the pipeline rather than needing a second one. It
     /// matters that live and committed text agree: a filler the card drops but the tail keeps
     /// would flicker back into view every time the preview refreshed.
+    ///
+    /// This one stays on the main actor, unlike the batch pass in `applyEditor`. A property
+    /// setter cannot await, so hopping would mean the write lands some time after the caller
+    /// returns — and the preview is a *replacement*, not an append, so two 400 ms callbacks
+    /// completing out of order would show older text than the one before it. The work is one
+    /// utterance-sized graph, not a whole meeting, and it no longer pays the quadratic
+    /// `index(of:)` scan that made it grow with tail length.
     var livePreviewText: String {
         get { livePreviewStorage }
         set {
@@ -142,7 +149,11 @@ class MeetingSession: ObservableObject {
     }
 
     /// Mid-stream pass: every utterance as it arrives, and the live tail.
+    ///
+    /// Behind `PolishFeatureFlags` while it is experimental. Meetings shipped with no polishing at
+    /// all, so "off" here means returning the argument untouched — not a reduced pass.
     private func polishUtterance(_ text: String) -> String {
+        guard PolishFeatureFlags.isFastPolishEnabled else { return text }
         if utteranceEditor == nil { makeEditors() }
         guard let editor = utteranceEditor else { return text }
         let polished = editor.polish(text: text).text
@@ -153,10 +164,37 @@ class MeetingSession: ObservableObject {
 
     /// Authoritative pass: once per card, at the endpoint, with list reflow on.
     private func polishCard(_ text: String) -> String {
+        guard PolishFeatureFlags.isFastPolishEnabled else { return text }
         if cardEditor == nil { makeEditors() }
         guard let editor = cardEditor else { return text }
+        return Self.polishCard(text, with: editor)
+    }
+
+    /// The card pass with the editor handed in, so it can run off the main actor.
+    ///
+    /// Same rule as `polishUtterance`: an empty render would mean the editor deleted a whole
+    /// card, which it has no rule that can, but dropping speech is worth a guard.
+    private nonisolated static func polishCard(_ text: String,
+                                               with editor: DeterministicPolisher) -> String {
         let polished = editor.polish(text: text).text
         return polished.isEmpty ? text : polished
+    }
+
+    /// The batch card pass. Pure, so `applyEditor` can hand it to a detached task.
+    private nonisolated static func polishAll(_ segments: [MeetingSegment],
+                                              with editor: DeterministicPolisher)
+        -> (segments: [MeetingSegment], rewritten: Int) {
+        var working = segments
+        var rewritten = 0
+        for index in working.indices {
+            let original = working[index].text
+            let polished = polishCard(original, with: editor)
+            guard polished != original else { continue }
+            if working[index].rawText == nil { working[index].rawText = original }
+            working[index].text = polished
+            rewritten += 1
+        }
+        return (working, rewritten)
     }
 
     // MARK: - Start
@@ -416,17 +454,26 @@ class MeetingSession: ObservableObject {
     /// `rawText` follows the refiner's convention: filled with the pre-edit text only if nothing
     /// has claimed it yet, so the Polished/Original toggle keeps showing the true raw ASR rather
     /// than an intermediate.
+    ///
+    /// The polish itself runs **off** the main actor. This is the whole-transcript pass — every
+    /// segment of a finished meeting, hundreds of them, each a full protect/alias/normalize/
+    /// format cycle — and running it inline on `@MainActor` froze the UI for as long as it took.
+    /// `DeterministicPolisher` and `TokenGraph` are both `Sendable` and read nothing but their
+    /// argument, so the loop moves wholesale; only the write-back needs the actor, and this
+    /// function is already back on it after the `await`.
+    ///
+    /// The live per-utterance path stays on the main actor deliberately — see `livePreviewText`.
     private func applyEditor(to segments: [MeetingSegment], meetingID id: UUID) async -> [MeetingSegment] {
-        var working = segments
-        var rewritten = 0
-        for index in working.indices {
-            let original = working[index].text
-            let polished = polishCard(original)
-            guard polished != original, !polished.isEmpty else { continue }
-            if working[index].rawText == nil { working[index].rawText = original }
-            working[index].text = polished
-            rewritten += 1
-        }
+        guard PolishFeatureFlags.isFastPolishEnabled else { return segments }
+        if cardEditor == nil { makeEditors() }
+        guard let editor = cardEditor else { return segments }
+
+        let outcome = await Task.detached(priority: .utility) { [segments] in
+            Self.polishAll(segments, with: editor)
+        }.value
+
+        let working = outcome.segments
+        let rewritten = outcome.rewritten
         guard rewritten > 0 else { return segments }
 
         await MeetingManager.shared.updateSegments(meetingID: id, segments: working)

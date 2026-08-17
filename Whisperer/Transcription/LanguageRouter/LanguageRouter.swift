@@ -61,7 +61,16 @@ enum RoutingThresholds {
 
 // MARK: - LanguageRouter
 
-final class LanguageRouter {
+// `nonisolated` for the same reason as `VADSegmenter` and `SafeLock` — see the long note in
+// `VADSegmenter.swift`. This router is pure scoring over a probability dictionary plus a
+// `UserDefaults` read/write; it owns no UI and is driven from the transcriber's background
+// detection path, so the project-wide `SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor` was never
+// accurate for it. It also gave the class an *isolated* deinit, and releasing such an object
+// outside any Swift task — exactly what a synchronous XCTest method does — aborts in
+// `swift_task_deinitOnExecutor` with `pointer being freed was not allocated` inside
+// `TaskLocal::StopLookupScope::~StopLookupScope`. That crashed every `LanguageDetectionTests`
+// case that constructed a router.
+nonisolated final class LanguageRouter {
     let allowedLanguages: [TranscriptionLanguage]
     let primaryLanguage: TranscriptionLanguage?
     private(set) var state: RouterState = .undecided

@@ -43,20 +43,41 @@ struct DeterministicPolisher: Sendable {
     /// Whether to run `ListFormatter` on the rendered text. Off for mid-stream chunks, where an
     /// enumeration may straddle the cut.
     let formatsLists: Bool
+    /// Whether this text is a mid-stream fragment rather than a whole utterance.
+    ///
+    /// A fragment begins wherever the VAD cut, which may be the middle of a sentence the previous
+    /// chunk started — so its first word gets no sentence-initial capital and it gets no paragraph
+    /// breaks at all, both boundaries being artefacts of the cut rather than of the speech. This
+    /// is the same rule the fragment-mode LLM instruction states in prose at
+    /// `AppState.applyLLMPostProcessing`.
+    let isFragment: Bool
+    /// Whether `ParagraphSplitter` may insert breaks.
+    ///
+    /// Explicit rather than read from `PolishFeatureFlags` here, so a test constructing a polisher
+    /// directly gets a fixed pipeline instead of one that depends on the machine's preferences.
+    /// `forTranscript` is the seam that consults the flag.
+    let splitsParagraphs: Bool
 
     init(aliases: AliasEngine = AliasEngine(),
          gate: ConfidenceGate = ConfidenceGate(),
          dictionaryTerms: Set<String> = [],
-         formatsLists: Bool = true) {
+         formatsLists: Bool = true,
+         isFragment: Bool = false,
+         splitsParagraphs: Bool = true) {
         self.aliases = aliases
         self.gate = gate
         self.dictionaryTerms = dictionaryTerms
         self.formatsLists = formatsLists
+        self.isFragment = isFragment
+        self.splitsParagraphs = splitsParagraphs
     }
 
     // MARK: - Polishing
 
-    func polish(_ graph: TokenGraph) -> Result {
+    /// - Parameter pauses: inter-chunk silence, keyed by the whitespace token at each chunk
+    ///   boundary. Supplied by `polish(chunks:)`; empty for every caller that has only a string,
+    ///   in which case `ParagraphSplitter` falls back to its text-only rule.
+    func polish(_ graph: TokenGraph, pauses: ParagraphSplitter.Pauses = [:]) -> Result {
         var working = graph
         var applied: [TranscriptEdit] = []
 
@@ -68,11 +89,26 @@ struct DeterministicPolisher: Sendable {
         //    an opinion about, and `chat gpt → ChatGPT` collapses two words into one.
         applied += gate.apply(aliases.proposals(for: working), to: &working)
 
-        // 3. Normalization, gate-simulated on its own scratch so its whitespace pass sees the same
+        // 3. Spoken numbers before normalization, because a conversion deletes words and the
+        //    whitespace pass is what closes the gaps they leave.
+        applied += gate.apply(SpokenNumberConverter.proposals(for: working), to: &working)
+
+        // 4. Normalization, gate-simulated on its own scratch so its whitespace pass sees the same
         //    deletions the gate will actually accept.
         applied += gate.apply(TranscriptNormalizer.proposals(for: working, gate: gate), to: &working)
 
-        // 4. Structure last, on text. `ListFormatter` rewrites line by line and reorders nothing,
+        // 5. Sentence structure, after the text has settled: casing reads the sentence openings
+        //    and paragraph breaks read the gaps between them, and both would be computed against
+        //    the wrong tokens if a filler deletion were still pending.
+        applied += gate.apply(
+            SentenceCaser.proposals(for: working, capitalizesFirstWord: !isFragment),
+            to: &working)
+        if !isFragment, splitsParagraphs {
+            applied += gate.apply(ParagraphSplitter.proposals(for: working, pauses: pauses),
+                                  to: &working)
+        }
+
+        // 6. Structure last, on text. `ListFormatter` rewrites line by line and reorders nothing,
         //    so it has no token-level representation to preserve.
         let rendered = working.render()
         let text = formatsLists ? ListFormatter.format(rendered) : rendered
@@ -89,6 +125,66 @@ struct DeterministicPolisher: Sendable {
 
     func polish(words: [WhisperStreamWord]) -> Result {
         polish(TokenGraph.from(words: words))
+    }
+
+    // MARK: - Chunked input
+
+    /// One committed VAD chunk: its text and the audio span it was decoded from.
+    ///
+    /// `start` and `end` come from `TranscriptChunk`, which derives them from sample counts —
+    /// `sampleIndex / sampleRate` — and not from ASR word timings. That is why this works behind
+    /// Nemotron and meetings, where no per-word evidence exists at all.
+    struct Chunk: Sendable {
+        let text: String
+        let start: TimeInterval
+        let end: TimeInterval
+
+        init(text: String, start: TimeInterval, end: TimeInterval) {
+            self.text = text
+            self.start = start
+            self.end = end
+        }
+    }
+
+    /// Polish an utterance the caller still has in chunk form, using the silence between chunks
+    /// as the paragraph signal.
+    ///
+    /// The chunks are joined with a single space — the same join `HistoryManager.appendChunk` and
+    /// `StreamingTranscriber` already use, so the text is identical to what `polish(text:)` would
+    /// have received. The only thing the chunk form adds is *where* the joins are and how long the
+    /// speaker was silent at each, which is exactly the information a string cannot carry.
+    func polish(chunks: [Chunk]) -> Result {
+        let pieces = chunks.map { $0.text.trimmingCharacters(in: .whitespacesAndNewlines) }
+                           .filter { !$0.isEmpty }
+        guard pieces.count > 1 else {
+            return polish(text: pieces.first ?? "")
+        }
+
+        let text = pieces.joined(separator: " ")
+        let graph = TokenGraph.from(text: text)
+
+        // The join offsets, walked in the same order the pieces were joined. Each is the single
+        // space between two pieces, which is one whitespace token in the freshly built graph.
+        var pauses: ParagraphSplitter.Pauses = [:]
+        var cursor = text.startIndex
+        var previousEnd: TimeInterval?
+        for (offset, piece) in pieces.enumerated() {
+            let chunk = chunks.first { $0.text.trimmingCharacters(in: .whitespacesAndNewlines) == piece }
+            cursor = text.index(cursor, offsetBy: piece.count)
+            if offset + 1 < pieces.count {
+                let separator = cursor..<text.index(after: cursor)
+                if let id = graph.tokenIDs(overlappingRawRange: separator).first,
+                   let nextStart = chunks.dropFirst(offset + 1).first?.start,
+                   let end = chunk?.end ?? previousEnd,
+                   nextStart > end {
+                    pauses[id] = nextStart - end
+                }
+                cursor = separator.upperBound
+            }
+            previousEnd = chunk?.end ?? previousEnd
+        }
+
+        return polish(graph, pauses: pauses)
     }
 
     // MARK: - The remaining LLM job
@@ -162,12 +258,18 @@ extension DeterministicPolisher {
     /// - Parameter formatsLists: whether enumeration reflow runs. Off mid-stream, where a list
     ///   may straddle the cut, and off in dictation, whose call sites already ran
     ///   `applyListFormatting`; on at the meeting endpoint.
+    /// - Parameter splitsParagraphs: defaults to the user's setting, which is the whole point of
+    ///   the factory — both shipping callers get the same answer to the same question. Passed
+    ///   explicitly only by tests, which must not depend on the machine's preferences.
     static func forTranscript(dictionaryEntries: [DictionaryEntry],
-                              formatsLists: Bool) -> DeterministicPolisher {
+                              formatsLists: Bool,
+                              splitsParagraphs: Bool = PolishFeatureFlags.areParagraphsEnabled)
+        -> DeterministicPolisher {
         DeterministicPolisher(
             aliases: AliasEngine(entries: dictionaryEntries),
             dictionaryTerms: Set(dictionaryEntries.map(\.correctForm)),
-            formatsLists: formatsLists
+            formatsLists: formatsLists,
+            splitsParagraphs: splitsParagraphs
         )
     }
 }

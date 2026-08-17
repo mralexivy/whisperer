@@ -216,10 +216,25 @@ struct ListFormatter {
         let length = nsLower.length
         var markers: [Marker] = []
 
-        // Helper: find the word immediately before a marker position
+        // Helper: find the word immediately before a marker position.
+        //
+        // `offset` is a *Character* distance into `lower`, which is the basis every caller here
+        // works in. Two things used to be derived from it on a different basis and only agreed
+        // for text whose graphemes are one UTF-16 unit each:
+        //
+        //   - it indexed into `text` rather than `lower`, and
+        //   - it was passed straight to `NSRange`, whose length is in UTF-16 units.
+        //
+        // Pointed Hebrew is the counter-example that makes this reachable now that Hebrew
+        // markers exist: `בְּ` is one Character and three UTF-16 units, so the search range was
+        // truncated well short of the marker and `matches.last` returned some earlier
+        // occurrence of the word — or none — and the marker was mis-classified. Both values are
+        // now derived from the same String.Index.
         func precedingWord(before offset: Int) -> (word: String, start: String.Index)? {
-            guard offset > 0 else { return nil }
-            let before = String(text[text.startIndex..<text.index(text.startIndex, offsetBy: offset)])
+            guard offset > 0,
+                  let cut = lower.index(lower.startIndex, offsetBy: offset,
+                                        limitedBy: lower.endIndex) else { return nil }
+            let before = String(lower[lower.startIndex..<cut])
                 .trimmingCharacters(in: .whitespacesAndNewlines)
             let words = before.split(separator: " ")
             guard let last = words.last else { return nil }
@@ -228,7 +243,8 @@ struct ListFormatter {
 
             let pwLower = pw.lowercased()
             guard let regex = try? NSRegularExpression(pattern: "\\b\(NSRegularExpression.escapedPattern(for: pwLower))\\b", options: .caseInsensitive) else { return nil }
-            let matches = regex.matches(in: lower, range: NSRange(location: 0, length: offset))
+            let utf16Length = lower.utf16.distance(from: lower.utf16.startIndex, to: cut)
+            let matches = regex.matches(in: lower, range: NSRange(location: 0, length: utf16Length))
             guard let lastMatch = matches.last, let swiftRange = Range(lastMatch.range, in: lower) else { return nil }
             return (word: pwLower, start: swiftRange.lowerBound)
         }

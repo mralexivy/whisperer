@@ -1940,17 +1940,38 @@ class AppState: ObservableObject {
         // untouched — their output is not this text.
         //
         // List formatting is off here because both call sites already ran `applyListFormatting`.
+        //
+        // Behind `PolishFeatureFlags` while it is experimental. Off is not an approximation of the
+        // shipped path — it *is* the shipped path, `text.count <= 15` fast path included, because
+        // an A/B whose control drifted from what ships cannot attribute a bad result to an arm.
+        let isStrict = (mode.id == AIMode.correctModeId || mode.id == AIMode.grammarModeId)
         var input = text
-        if mode.id == AIMode.correctModeId || mode.id == AIMode.grammarModeId {
-            let polisher = DeterministicPolisher.forTranscript(
-                dictionaryEntries: DictionaryManager.shared.entries,
-                formatsLists: false)
-            let polished = polisher.polish(text: text)
-            input = polished.text
-            if !polished.needsGenerativePass {
-                Logger.debug("LLM skip: deterministic polish left nothing to generate "
-                             + "(\(polished.appliedEdits.count) edits)", subsystem: .transcription)
-                return polished.text
+        if PolishFeatureFlags.isFastPolishEnabled {
+            if isStrict {
+                let polisher = DeterministicPolisher.forTranscript(
+                    dictionaryEntries: DictionaryManager.shared.entries,
+                    formatsLists: false)
+                let polished = polisher.polish(text: text)
+                input = polished.text
+                Logger.debug("polish: \(PolishFeatureFlags.stateDescription), "
+                             + "\(polished.appliedEdits.count) edits", subsystem: .transcription)
+                if !polished.needsGenerativePass {
+                    Logger.debug("LLM skip: deterministic polish left nothing to generate "
+                                 + "(\(polished.appliedEdits.count) edits)", subsystem: .transcription)
+                    return polished.text
+                }
+            }
+        } else {
+            // Fast-path: skip LLM for very short, already-clean text in strict correction modes.
+            // Pre-cleaner handles filler removal and dedup; LLM adds no value for "OK." or "Yes."
+            if text.count <= 15 {
+                let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+                let firstUpper = trimmed.first?.isUppercase ?? false
+                let endsPunct = ".!?".contains(trimmed.last ?? Character(" "))
+                if firstUpper && endsPunct && isStrict {
+                    Logger.debug("LLM skip: short clean text (\(trimmed.count) chars)", subsystem: .transcription)
+                    return text
+                }
             }
         }
 

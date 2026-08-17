@@ -75,7 +75,8 @@ final class PolishLatencyBenchmarkTests: XCTestCase {
                   .map { "\($0.key)=\($0.value.count)" }.sorted().joined(separator: " "))
 
         let polisher = DeterministicPolisher.forTranscript(
-            dictionaryEntries: DictionaryManager.shared.entries, formatsLists: false)
+            dictionaryEntries: DictionaryManager.shared.entries, formatsLists: false,
+            splitsParagraphs: true)
         let config = LLMEditingModel.PromptConfig.correct
 
         var samples: [Sample] = []

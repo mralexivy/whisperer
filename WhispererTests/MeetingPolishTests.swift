@@ -20,6 +20,35 @@ import XCTest
 
 final class MeetingPolishTests: XCTestCase {
 
+    // MARK: - Arm selection
+
+    /// These tests measure arm B, so the experimental switch has to be on for the duration.
+    ///
+    /// `MeetingSession` consults `PolishFeatureFlags` at each seam, and with the flag off — which
+    /// is the shipped default and therefore what the test host starts with — meetings polish
+    /// nothing at all, which is exactly the shipped behaviour and exactly what these tests are not
+    /// about. Set here rather than inside the two tests that need it so the class describes which
+    /// arm it measures in one place, and restored in `tearDown` so a run cannot leave the
+    /// developer's own preferences flipped.
+    private var savedFastPolish: Any?
+    private var savedParagraphs: Any?
+
+    override func setUp() {
+        super.setUp()
+        let defaults = UserDefaults.standard
+        savedFastPolish = defaults.object(forKey: PolishFeatureFlags.fastPolishKey)
+        savedParagraphs = defaults.object(forKey: PolishFeatureFlags.paragraphsKey)
+        defaults.set(true, forKey: PolishFeatureFlags.fastPolishKey)
+        defaults.set(true, forKey: PolishFeatureFlags.paragraphsKey)
+    }
+
+    override func tearDown() {
+        let defaults = UserDefaults.standard
+        defaults.set(savedFastPolish, forKey: PolishFeatureFlags.fastPolishKey)
+        defaults.set(savedParagraphs, forKey: PolishFeatureFlags.paragraphsKey)
+        super.tearDown()
+    }
+
     // MARK: - Editors
 
     /// Exactly what `AppState.applyLLMPostProcessing` builds for a dictation utterance: the user
@@ -39,12 +68,14 @@ final class MeetingPolishTests: XCTestCase {
 
     /// What `MeetingSession` runs per utterance as chunks arrive.
     private func meetingUtteranceEditor(entries: [DictionaryEntry] = []) -> DeterministicPolisher {
-        DeterministicPolisher.forTranscript(dictionaryEntries: entries, formatsLists: false)
+        DeterministicPolisher.forTranscript(dictionaryEntries: entries, formatsLists: false,
+                                            splitsParagraphs: true)
     }
 
     /// What `MeetingSession` runs once per card, at the endpoint.
     private func meetingCardEditor(entries: [DictionaryEntry] = []) -> DeterministicPolisher {
-        DeterministicPolisher.forTranscript(dictionaryEntries: entries, formatsLists: true)
+        DeterministicPolisher.forTranscript(dictionaryEntries: entries, formatsLists: true,
+                                            splitsParagraphs: true)
     }
 
     // MARK: - Corpus
@@ -133,6 +164,20 @@ final class MeetingPolishTests: XCTestCase {
 
     // MARK: - The session actually calls it
 
+    // Both tests below are `async` for a reason that has nothing to do with what they assert: they
+    // are the only tests here that *allocate* a main-actor-isolated object, and this project builds
+    // with `SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor`, so every class is main-actor isolated and
+    // every `deinit` goes through `swift_task_deinitOnExecutorImpl`. On the current toolchain that
+    // runtime entry point corrupts the heap when it runs with no current `AsyncTask` — the
+    // `TaskLocal::StopLookupScope` it opens frees a pointer it never allocated, and the process
+    // dies with `malloc: pointer being freed was not allocated` before any assertion is reached.
+    // A synchronous `@MainActor` XCTest method is exactly that context: XCTest invokes it through
+    // `NSInvocation` on the main thread, outside any task. An `async` test body runs inside a task,
+    // the scope allocates and frees on the task allocator, and the release is clean. Verified with
+    // a bare `final class { }` holding no state — nothing about `MeetingSession` or the editor is
+    // involved, and every other `@MainActor` test in this suite is already `async` for the same
+    // reason. Do not make these synchronous again.
+
     /// The wiring, not the editor: a chunk handed to `MeetingSession.onNewChunk` must land in the
     /// open card already polished. Without this the parity tests above would pass over an editor
     /// meetings never invoke.
@@ -142,7 +187,7 @@ final class MeetingPolishTests: XCTestCase {
     /// teardown drops `isRecording` so the 2.5s silence flush this schedules bails out instead of
     /// committing a card for a meeting row that does not exist.
     @MainActor
-    func testMeetingChunkIsPolishedOnArrival() {
+    func testMeetingChunkIsPolishedOnArrival() async {
         let session = MeetingSession()
         let id = UUID()
         session.meetingID = id
@@ -167,7 +212,7 @@ final class MeetingPolishTests: XCTestCase {
     /// The live tail takes the same route. `AppState`'s preview callbacks assign it directly, so
     /// the polish has to live in the property rather than at the call site.
     @MainActor
-    func testLiveTailIsPolishedOnAssignment() {
+    func testLiveTailIsPolishedOnAssignment() async {
         let session = MeetingSession()
         let raw = "  and um then we  merge it  "
         session.livePreviewText = raw
@@ -223,7 +268,18 @@ final class MeetingPolishTests: XCTestCase {
         let card = meetingCardEditor()
         let transcript = "so the fix is in anthropics/whisperer we tag it v2.1.0 and deploy "
                        + "with docker run --rm -it after loadModel returns"
-        XCTAssertEqual(card.polish(text: transcript).text, transcript)
+
+        // The sentence-initial capital is expected and is not a protection failure: `so` is an
+        // ordinary token, and `SentenceCaser` capitalizing the opening word is the pass doing its
+        // job. What must survive untouched is every protected span, so that is what is asserted —
+        // an equality against the whole input would be asserting that the editor does nothing,
+        // which is a different and much weaker claim than the one this test is named for.
+        let polished = card.polish(text: transcript).text
+        XCTAssertEqual(polished, "So the fix is in anthropics/whisperer we tag it v2.1.0 and "
+                                 + "deploy with docker run --rm -it after loadModel returns")
+        for span in ["anthropics/whisperer", "v2.1.0", "docker run --rm -it", "loadModel"] {
+            XCTAssertTrue(polished.contains(span), "protected span '\(span)' did not survive")
+        }
     }
 
     /// Digits are hard-protected, so the strongest statement available over a real corpus is that

@@ -22,10 +22,24 @@
 //     high operation score. `ConfidenceGate` enforces the script rule again independently;
 //     doing it in both places means neither is the single point of failure.
 //
-//  **No weights exist.** Against `StubEditingRuntime` this type emits exactly zero edits, and
-//  that is a test. When weights do exist, every threshold below is a calibration slot to be
-//  measured per language per action at `ASRCapabilities = []` — not tuned until the output
-//  looks nice.
+//  **Weights exist; what applies is decided per language and per class, from a file.**
+//  `MMBERTCoreMLRuntime` carries the fine-tuned `mmBERT-small`, so this type proposes real
+//  edits. Which of them can *reach* the gate is `MMBERTCalibrationTable`, the measured
+//  precision of every (language, head, action) cell from `Tools/mmbert/CALIBRATION.md`. Three
+//  states, and the difference between them is the whole design:
+//
+//  - **certified** — the cell was measured and cleared the bar. Its measured threshold is the
+//    action floor, and the confidence reported to the gate is uncapped so it can clear its
+//    tier.
+//  - **forbidden** — the cell was measured and refused. **No proposal at all** for that
+//    (language, class). An unmeasured class must be unreachable, not merely unlikely, and a
+//    low-confidence proposal is only the latter.
+//  - **unmeasured** — the cell is absent (unknown language, or an action the calibration run
+//    never saw). The proposal is still produced, so the benchmark can count it, with its
+//    confidence capped below every floor `ConfidenceGate` can apply. Absence never means
+//    permitted.
+//
+//  Against `StubEditingRuntime` the count is still exactly zero, and that is still a test.
 //
 
 import Foundation
@@ -48,19 +62,25 @@ struct MMBERTEditingModel: EditingModel {
         /// Maximum tolerated P(drifted) / P(risky). Above this the edit is dropped whatever it
         /// scored elsewhere.
         let vetoCeiling: Float
-        /// Cap on the confidence reported to the gate.
+        /// Cap on the confidence reported to the gate for an **uncertified** edit — one whose
+        /// (language, class) cell is not in the table at all.
         ///
-        /// Below `ConfidenceGate.floor(for: .editorModel)` on purpose: until per-language,
-        /// per-action precision has actually been measured at ≥99%, a model-sourced edit must
-        /// not auto-apply. Raising this is the final step of calibration, not a shortcut past
-        /// it, and until then this type produces candidates for the benchmark to count.
-        let maximumConfidence: Float
+        /// Strictly below the lowest floor `ConfidenceGate` can produce (0.95, the cosmetic
+        /// tier), so an unmeasured cell cannot auto-apply by falling into a relaxed tier. That
+        /// relationship is the invariant, not the number:
+        /// `EditingModelTests.testUncertifiedCeilingSitsBelowEveryFloor` asserts it, and it is
+        /// what makes "absence never means permitted" true rather than merely intended.
+        let uncertifiedCeiling: Float
+        /// Measured precision per (language, head, action). The only thing that can make a
+        /// model-sourced edit reachable.
+        let table: MMBERTCalibrationTable
 
         static let uncalibrated = Calibration(keepBias: 2.0,
                                               errorFloor: 0.90,
                                               actionFloor: 0.95,
                                               vetoCeiling: 0.10,
-                                              maximumConfidence: 0.98)
+                                              uncertifiedCeiling: 0.94,
+                                              table: .measured)
     }
 
     // MARK: - State
@@ -103,7 +123,11 @@ struct MMBERTEditingModel: EditingModel {
                     return []
                 }
                 for (token, logits) in zip(slice, output.tokens) {
-                    if let edit = proposal(for: token, logits: logits) { edits.append(edit) }
+                    if let edit = proposal(for: token,
+                                           logits: logits,
+                                           language: context.language?.rawValue) {
+                        edits.append(edit)
+                    }
                 }
             } catch {
                 Logger.warning("Editing runtime failed: \(error.localizedDescription)",
@@ -124,12 +148,20 @@ struct MMBERTEditingModel: EditingModel {
     // MARK: - Tagging policy
 
     private func proposal(for token: TranscriptToken,
-                          logits: EditingTokenLogits) -> TranscriptEdit? {
+                          logits: EditingTokenLogits,
+                          language: String?) -> TranscriptEdit? {
         guard let errorLogits = logits.values(for: .error),
               let operationLogits = logits.values(for: .operation) else { return nil }
 
+        // The detection head's cell supplies a *threshold*, never permission. `error` is not an
+        // edit class — it is the "is anything wrong with this token" aggregate, and its precision
+        // is dominated by whichever class is most common rather than by the class being proposed,
+        // so `enabled` on it would say nothing about the edit at hand. Taking the maximum keeps a
+        // cell measured at a low operating point (he/error, 0.54) from *loosening* the default.
+        let errorCell = calibration.table.cell(language: language, head: .error, action: "ERROR")
+        let errorFloor = max(calibration.errorFloor, errorCell?.threshold ?? 0)
         let errorProbability = Self.softmax(errorLogits)[EditingErrorLabel.incorrect.rawValue]
-        guard errorProbability >= calibration.errorFloor else { return nil }
+        guard errorProbability >= errorFloor else { return nil }
 
         var biased = operationLogits
         biased[EditingOperationLabel.keep.rawValue] += calibration.keepBias
@@ -142,10 +174,13 @@ struct MMBERTEditingModel: EditingModel {
         if vetoed(logits, head: .language, label: EditingLanguageLabel.drifted.rawValue) { return nil }
         if vetoed(logits, head: .semanticRisk, label: EditingRiskLabel.risky.rawValue) { return nil }
 
-        guard let action = self.action(for: label, token: token, logits: logits) else { return nil }
+        guard let action = self.action(for: label,
+                                       token: token,
+                                       logits: logits,
+                                       language: language) else { return nil }
 
-        let confidence = min(calibration.maximumConfidence,
-                             errorProbability * operationProbabilities[choice] * action.probability)
+        let raw = errorProbability * operationProbabilities[choice] * action.probability
+        let confidence = action.certified ? raw : min(calibration.uncertifiedCeiling, raw)
 
         return TranscriptEdit(target: token.id,
                               operation: action.operation,
@@ -158,16 +193,39 @@ struct MMBERTEditingModel: EditingModel {
         let operation: EditOperation
         let probability: Float
         let description: String
+        /// Whether the (language, class) cell behind this action was measured *and* enabled.
+        /// An uncertified action still reaches the gate — capped below every floor — so the
+        /// benchmark can count what calibration would buy.
+        let certified: Bool
+    }
+
+    /// The floor this action's probability must clear, and whether clearing it certifies
+    /// anything. `nil` means the class is forbidden in this language and no proposal exists.
+    private func requirement(_ head: MMBERTCalibrationTable.Head,
+                             _ action: String,
+                             _ language: String?) -> (floor: Float, certified: Bool)? {
+        switch calibration.table.verdict(language: language, head: head, action: action) {
+        case .forbidden:
+            return nil
+        case .certified(let threshold):
+            // The measured operating point itself, not a maximum against `actionFloor`: the
+            // precision claim is attached to *that* threshold, and raising it would discard
+            // certified recall on the strength of a number nobody measured.
+            return (threshold, true)
+        case .unmeasured:
+            return (calibration.actionFloor, false)
+        }
     }
 
     /// Turn an operation label into the operation's actual content, from the head that owns it.
     ///
     /// The operation head says *that* something changes; it never says *what to*. Splitting it
-    /// this way is what makes "punctuation is shipped, casing is not yet" expressible as a
-    /// threshold on one head rather than as a retrained model.
+    /// this way is what makes "sentence-final periods are certified in English, commas are not"
+    /// expressible as a table lookup rather than as a retrained model.
     private func action(for label: EditingOperationLabel,
                         token: TranscriptToken,
-                        logits: EditingTokenLogits) -> Action? {
+                        logits: EditingTokenLogits,
+                        language: String?) -> Action? {
         switch label {
         case .keep:
             return nil
@@ -176,23 +234,27 @@ struct MMBERTEditingModel: EditingModel {
             // A delete is only ever a disfluency here. Deleting a token for an unstated reason
             // is the edit class that silently drops content, so the disfluency head has to
             // assert it independently.
-            guard let head = logits.values(for: .disfluency) else { return nil }
+            guard let head = logits.values(for: .disfluency),
+                  let rule = requirement(.disf, "DISF", language) else { return nil }
             let probabilities = Self.softmax(head)
             let drop = probabilities[EditingDisfluencyLabel.drop.rawValue]
-            guard drop >= calibration.actionFloor else { return nil }
+            guard drop >= rule.floor else { return nil }
             return Action(operation: .delete,
                           probability: drop,
-                          description: "drop disfluency '\(token.effectiveText)'")
+                          description: "drop disfluency '\(token.effectiveText)'",
+                          certified: rule.certified)
 
         case .insertAfter:
             guard let head = logits.values(for: .punctuation) else { return nil }
             let probabilities = Self.softmax(head)
             guard let index = Self.argmax(probabilities),
-                  probabilities[index] >= calibration.actionFloor,
-                  let mark = EditingPunctuationLabel(rawValue: index)?.mark else { return nil }
+                  let mark = EditingPunctuationLabel(rawValue: index)?.mark,
+                  let rule = requirement(.punct, mark, language),
+                  probabilities[index] >= rule.floor else { return nil }
             return Action(operation: .insertAfter(mark),
                           probability: probabilities[index],
-                          description: "insert '\(mark)' after '\(token.effectiveText)'")
+                          description: "insert '\(mark)' after '\(token.effectiveText)'",
+                          certified: rule.certified)
 
         case .replace:
             // The only replacement a tagger without an output vocabulary can make is a case
@@ -202,13 +264,15 @@ struct MMBERTEditingModel: EditingModel {
             let probabilities = Self.softmax(head)
             guard let index = Self.argmax(probabilities),
                   index != EditingCasingLabel.keep.rawValue,
-                  probabilities[index] >= calibration.actionFloor,
-                  let casing = EditingCasingLabel(rawValue: index) else { return nil }
+                  let casing = EditingCasingLabel(rawValue: index),
+                  let rule = requirement(.casing, casing.calibrationAction, language),
+                  probabilities[index] >= rule.floor else { return nil }
             let text = Self.applyCasing(casing, to: token.effectiveText)
             guard text != token.effectiveText else { return nil }
             return Action(operation: .replace(text),
                           probability: probabilities[index],
-                          description: "recase '\(token.effectiveText)' → '\(text)'")
+                          description: "recase '\(token.effectiveText)' → '\(text)'",
+                          certified: rule.certified)
         }
     }
 
@@ -264,4 +328,219 @@ struct MMBERTEditingModel: EditingModel {
         for index in 1..<values.count where values[index] > values[best] { best = index }
         return best
     }
+}
+
+// MARK: - Calibration action names
+
+private extension EditingCasingLabel {
+    /// The name `calibrate.py` gives this class. The Swift label space and the Python one are
+    /// two spellings of the same thing, and a lookup that silently missed would read as
+    /// "unmeasured" — which is safe but wrong, so the mapping is explicit and total.
+    var calibrationAction: String {
+        switch self {
+        case .keep:       return "NONE"
+        case .lower:      return "LOWER"
+        case .capitalize: return "CAP"
+        case .upper:      return "UPPER"
+        }
+    }
+}
+
+// MARK: - Measured precision
+
+/// Per-(language, head, action) precision, as measured by `Tools/mmbert/calibrate.py` and
+/// written to `Tools/mmbert/thresholds-calibrated.json`.
+///
+/// **Baked into the binary as a Swift literal rather than shipped as a bundle resource**, for
+/// two reasons. A new `.swift` file under `Whisperer/` is picked up automatically by the
+/// project's `PBXFileSystemSynchronizedRootGroup`; a new non-Swift resource needs a pbxproj
+/// edit, and a resource that was added to the repo but not to the target is missing only at
+/// runtime, on a user's machine. And the failure mode of a missing table is exactly the state
+/// this type calls `unmeasured` — proposals capped, nothing applied — which is *safe* but
+/// indistinguishable from "calibration ran and found nothing", i.e. a silent regression from an
+/// enabled cell back to a disabled one. A literal cannot go missing.
+///
+/// The cost of that choice is that the literal has to be regenerated when the JSON changes.
+/// `decode(from:)` is the schema-faithful loader that makes regeneration mechanical and lets a
+/// test read the JSON directly, and `EditingModelTests.testBakedTableIsNoLooserThanTheJSON`
+/// fails if the literal is ever more permissive than the file it claims to mirror.
+struct MMBERTCalibrationTable: Sendable {
+
+    /// The four heads `calibrate.py` reports. Spelled as the JSON spells them.
+    enum Head: String, Sendable, CaseIterable {
+        case error
+        case punct
+        case casing = "case"
+        case disf
+    }
+
+    struct Cell: Sendable, Equatable {
+        /// The operating point the cell was measured at. `nil` when the calibration run had no
+        /// data at all for the cell.
+        let threshold: Float?
+        /// Whether the cell cleared the release rule: point precision ≥ 0.99, support ≥ 30, and
+        /// a Clopper-Pearson 95% lower bound ≥ 0.99. Rule 3 is the one that does the work.
+        let enabled: Bool
+        let precision: Float?
+        let support: Int?
+        let precisionLCB95: Float?
+    }
+
+    /// What the table says about one (language, class).
+    enum Verdict: Sendable, Equatable {
+        /// Measured and cleared. `threshold` is the action floor for this class.
+        case certified(threshold: Float)
+        /// Measured and refused. No proposal of this class in this language, at any confidence.
+        case forbidden
+        /// Not in the table: unknown language, or an action the calibration run never saw.
+        case unmeasured
+    }
+
+    /// Keyed `"<language>/<head>/<action>"`, e.g. `"en/punct/."`.
+    let cells: [String: Cell]
+
+    init(cells: [String: Cell]) {
+        self.cells = cells
+    }
+
+    static func key(language: String, head: Head, action: String) -> String {
+        "\(language)/\(head.rawValue)/\(action)"
+    }
+
+    func cell(language: String?, head: Head, action: String) -> Cell? {
+        guard let language else { return nil }
+        return cells[Self.key(language: language, head: head, action: action)]
+    }
+
+    /// A missing cell is `unmeasured`, never `certified`. An `enabled` cell with no threshold is
+    /// `forbidden`, not certified-at-zero: a cell that claims to be open without naming an
+    /// operating point is a broken file, and a broken file must not open a class.
+    func verdict(language: String?, head: Head, action: String) -> Verdict {
+        guard let cell = cell(language: language, head: head, action: action) else {
+            return .unmeasured
+        }
+        guard cell.enabled, let threshold = cell.threshold else { return .forbidden }
+        return .certified(threshold: threshold)
+    }
+
+    // MARK: - Loading
+
+    enum LoadFailure: Error, LocalizedError {
+        case unsupportedSchema(Int)
+
+        var errorDescription: String? {
+            switch self {
+            case .unsupportedSchema(let version):
+                return "thresholds-calibrated.json is schema \(version); this build reads 2"
+            }
+        }
+    }
+
+    private struct Document: Decodable {
+        struct Cell: Decodable {
+            let language: String
+            let head: String
+            let action: String
+            let threshold: Float?
+            let precision: Float?
+            let support: Int?
+            let precisionLCB95: Float?
+            let enabled: Bool
+
+            enum CodingKeys: String, CodingKey {
+                case language, head, action, threshold, precision, support, enabled
+                case precisionLCB95 = "precision_lcb95"
+            }
+        }
+
+        let schema: Int
+        let cells: [String: Cell]
+    }
+
+    /// Decode `thresholds-calibrated.json`.
+    ///
+    /// The key is rebuilt from each cell's own `language`/`head`/`action` rather than trusted
+    /// from the dictionary key, so a file whose key and body disagree resolves to the body — the
+    /// side `calibrate.py` computes from.
+    static func decode(from data: Data) throws -> MMBERTCalibrationTable {
+        let document = try JSONDecoder().decode(Document.self, from: data)
+        guard document.schema == 2 else { throw LoadFailure.unsupportedSchema(document.schema) }
+
+        var cells: [String: Cell] = [:]
+        for entry in document.cells.values {
+            guard let head = Head(rawValue: entry.head) else { continue }
+            cells[key(language: entry.language, head: head, action: entry.action)] =
+                Cell(threshold: entry.threshold,
+                     enabled: entry.enabled,
+                     precision: entry.precision,
+                     support: entry.support,
+                     precisionLCB95: entry.precisionLCB95)
+        }
+        return MMBERTCalibrationTable(cells: cells)
+    }
+
+    /// No cells at all. Every class reads `unmeasured`: proposals are produced and capped, and
+    /// nothing applies. The behaviour a build with no calibration file would have.
+    static let empty = MMBERTCalibrationTable(cells: [:])
+
+    // MARK: - The measured table
+
+    /// Generated from `Tools/mmbert/thresholds-calibrated.json` (schema 2, gate 0.99,
+    /// min support 30, Clopper-Pearson one-sided 95% lower bound), calibrated on
+    /// `pooled_indomain` = `eval_real.jsonl` + `eval_synth.jsonl`.
+    ///
+    /// Every cell is `enabled: false` as of this generation, and the highest 95% lower bound any
+    /// of them reaches is 0.9693 (en/case ALL). Nothing about the code below assumes that: flip
+    /// a cell's `enabled` to `true` here and that class becomes reachable in that language, at
+    /// its own threshold, and nothing else changes.
+    static let measured = MMBERTCalibrationTable(cells: [
+        "en/error/ERROR": Cell(threshold: 0.999, enabled: false, precision: 1.0, support: 63, precisionLCB95: 0.953562),
+        "en/punct/ALL": Cell(threshold: 0.9955, enabled: false, precision: 0.968085, support: 94, precisionLCB95: 0.919579),
+        "en/punct/NONE": Cell(threshold: 0.3, enabled: false, precision: 1.0, support: 6, precisionLCB95: 0.606962),
+        "en/punct/.": Cell(threshold: 0.995, enabled: false, precision: 0.99115, support: 113, precisionLCB95: 0.958708),
+        "en/punct/,": Cell(threshold: 0.9865, enabled: false, precision: 0.714286, support: 35, precisionLCB95: 0.56374),
+        "en/punct/?": Cell(threshold: 0.995, enabled: false, precision: 0.4, support: 5, precisionLCB95: 0.07644),
+        "en/punct/!": Cell(threshold: 0.9915, enabled: false, precision: 1.0, support: 1, precisionLCB95: 0.05),
+        "en/punct/;": Cell(threshold: 0.79, enabled: false, precision: 0.125, support: 8, precisionLCB95: 0.006391),
+        "en/punct/:": Cell(threshold: 0.51, enabled: false, precision: 0.111111, support: 9, precisionLCB95: 0.005683),
+        "en/punct/…": Cell(threshold: 0.3, enabled: false, precision: 0.0, support: 2, precisionLCB95: 0.0),
+        "en/punct/—": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "en/case/ALL": Cell(threshold: 0.998, enabled: false, precision: 0.991071, support: 112, precisionLCB95: 0.958345),
+        "en/case/LOWER": Cell(threshold: 0.87, enabled: false, precision: 0.923077, support: 39, precisionLCB95: 0.81302),
+        "en/case/CAP": Cell(threshold: 0.998, enabled: false, precision: 0.990566, support: 106, precisionLCB95: 0.956029),
+        "en/case/UPPER": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "en/disf/DISF": Cell(threshold: 0.9975, enabled: false, precision: 1.0, support: 57, precisionLCB95: 0.948801),
+        "he/error/ERROR": Cell(threshold: 0.54, enabled: false, precision: 0.317073, support: 41, precisionLCB95: 0.198829),
+        "he/punct/ALL": Cell(threshold: 0.63, enabled: false, precision: 0.138889, support: 36, precisionLCB95: 0.056362),
+        "he/punct/NONE": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "he/punct/.": Cell(threshold: 0.9755, enabled: false, precision: 1.0, support: 1, precisionLCB95: 0.05),
+        "he/punct/,": Cell(threshold: 0.78, enabled: false, precision: 0.142857, support: 7, precisionLCB95: 0.007301),
+        "he/punct/?": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "he/punct/!": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "he/punct/;": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "he/punct/:": Cell(threshold: 0.3, enabled: false, precision: 0.0, support: 3, precisionLCB95: 0.0),
+        "he/punct/…": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "he/punct/—": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "he/case/ALL": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "he/case/LOWER": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "he/case/CAP": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "he/case/UPPER": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "he/disf/DISF": Cell(threshold: 0.9845, enabled: false, precision: 1.0, support: 5, precisionLCB95: 0.54928),
+        "ru/error/ERROR": Cell(threshold: 0.996, enabled: false, precision: 0.972222, support: 36, precisionLCB95: 0.874884),
+        "ru/punct/ALL": Cell(threshold: 0.9895, enabled: false, precision: 0.9375, support: 32, precisionLCB95: 0.816057),
+        "ru/punct/NONE": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "ru/punct/.": Cell(threshold: 0.78, enabled: false, precision: 0.852941, support: 34, precisionLCB95: 0.715351),
+        "ru/punct/,": Cell(threshold: 0.961, enabled: false, precision: 1.0, support: 34, precisionLCB95: 0.91566),
+        "ru/punct/?": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "ru/punct/!": Cell(threshold: 0.3, enabled: false, precision: 0.0, support: 1, precisionLCB95: 0.0),
+        "ru/punct/;": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "ru/punct/:": Cell(threshold: 0.3, enabled: false, precision: 0.0, support: 1, precisionLCB95: 0.0),
+        "ru/punct/…": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "ru/punct/—": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "ru/case/ALL": Cell(threshold: 0.55, enabled: false, precision: 1.0, support: 24, precisionLCB95: 0.882654),
+        "ru/case/LOWER": Cell(threshold: 0.3, enabled: false, precision: 1.0, support: 9, precisionLCB95: 0.716871),
+        "ru/case/CAP": Cell(threshold: 0.55, enabled: false, precision: 1.0, support: 16, precisionLCB95: 0.82925),
+        "ru/case/UPPER": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "ru/disf/DISF": Cell(threshold: 0.55, enabled: false, precision: 0.40625, support: 32, precisionLCB95: 0.259662),
+    ])
 }

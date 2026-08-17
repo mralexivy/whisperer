@@ -111,7 +111,27 @@ struct AliasEngine: Sendable {
     ///
     /// Emits but does not apply — the gate judges these like any other proposal, and a caller
     /// that wants the edit log to reflect what the gate rejected needs them separately.
-    func proposals(for graph: TokenGraph) -> [TranscriptEdit] {
+    ///
+    /// **A phrase is all-or-nothing.** A multi-word alias is expressed as one `.replace` plus one
+    /// `.delete` per remaining covered token, and those are independent edits once they leave
+    /// here: the gate judges each on its own and is free to accept some and refuse others.
+    /// `isEditable` below only screens the two structural guards (`.hard`, `.userFinal`); the
+    /// gate applies three more the table knows nothing about — negation, number and script. So
+    /// `no sequel → NoSQL` had its `.replace` refused as a negation while both `.delete`s were
+    /// accepted, and the user's transcript came back as the single word `no`. Half a phrase
+    /// substitution is not a missed correction, it is deleted speech.
+    ///
+    /// The remedy is the same one `TranscriptNormalizer.proposals(for:gate:)` already uses:
+    /// simulate the gate here, and emit nothing the gate would not take whole. Judging against
+    /// `graph` rather than a mutated scratch is exact, because no two phrases share a token —
+    /// `index` always advances past a match — so no earlier alias edit can change the verdict on
+    /// a later one.
+    ///
+    /// - Parameter gate: the gate that will judge these. Defaults to a stock `ConfidenceGate`
+    ///   rather than to `nil`, because the failure this guards against is silent and a caller
+    ///   that forgets to pass one must not be the caller that loses a word.
+    func proposals(for graph: TokenGraph,
+                   gate: ConfidenceGate = ConfidenceGate()) -> [TranscriptEdit] {
         var edits: [TranscriptEdit] = []
         var index = 0
 
@@ -126,14 +146,14 @@ struct AliasEngine: Sendable {
             // after it — including the spaces — is deleted, so `chat gpt` renders as `ChatGPT`
             // rather than `ChatGPT ` with a stranded gap.
             let covered = Array(index...match.endIndex)
-            edits.append(TranscriptEdit(
+            var phrase: [TranscriptEdit] = [TranscriptEdit(
                 target: graph.tokens[index].id,
                 operation: .replace(match.replacement),
                 source: .alias,
                 confidence: match.source.confidence,
-                reason: "alias(\(match.source)): \(graph.tokens[index].rawText) → \(match.replacement)"))
+                reason: "alias(\(match.source)): \(graph.tokens[index].rawText) → \(match.replacement)")]
             for position in covered.dropFirst() {
-                edits.append(TranscriptEdit(
+                phrase.append(TranscriptEdit(
                     target: graph.tokens[position].id,
                     operation: .delete,
                     source: .alias,
@@ -141,10 +161,31 @@ struct AliasEngine: Sendable {
                     reason: "alias(\(match.source)): absorbed into \(match.replacement)"))
             }
 
+            if let refusal = Self.firstRefusal(of: phrase, by: gate, in: graph) {
+                // Named, because a silently dropped alias is exactly the failure mode that
+                // produced the `no sequel → no` bug: nothing in the log said a word had gone.
+                let spelled = covered.map { graph.tokens[$0].effectiveText }.joined()
+                Logger.debug("Alias phrase dropped whole: \"\(spelled)\" → "
+                             + "\(match.replacement) — \(refusal)", subsystem: .transcription)
+                index += 1
+                continue
+            }
+
+            edits.append(contentsOf: phrase)
             index = match.endIndex + 1
         }
 
         return edits
+    }
+
+    /// The first gate refusal among `edits`, or `nil` if every one of them is accepted.
+    private static func firstRefusal(of edits: [TranscriptEdit],
+                                     by gate: ConfidenceGate,
+                                     in graph: TokenGraph) -> String? {
+        for edit in edits {
+            if case .keep(let reason) = gate.judge(edit, in: graph) { return reason }
+        }
+        return nil
     }
 
     /// Apply every alias proposal and hard-protect the results.
@@ -152,8 +193,8 @@ struct AliasEngine: Sendable {
     /// A canonical spelling that a later pass is free to "correct" was not worth substituting,
     /// so protection is part of the operation rather than a courtesy the caller must remember.
     @discardableResult
-    func apply(to graph: inout TokenGraph) -> Int {
-        let edits = proposals(for: graph)
+    func apply(to graph: inout TokenGraph, gate: ConfidenceGate = ConfidenceGate()) -> Int {
+        let edits = proposals(for: graph, gate: gate)
         var applied = 0
         var replaced: [TokenID] = []
         for edit in edits where graph.apply(edit) {
@@ -203,6 +244,9 @@ struct AliasEngine: Sendable {
     /// A phrase is substitutable only if *every* token it covers can be edited. Applying half a
     /// multi-word alias — the replacement lands, the delete is refused — would corrupt the text
     /// in a way no individual edit ever can.
+    ///
+    /// This screens the two *structural* guards only. The gate's semantic guards are simulated
+    /// in `proposals(for:gate:)`, because they need the edit and not just the token.
     private func isEditable(_ graph: TokenGraph, from start: Int, through end: Int) -> Bool {
         graph.tokens[start...end].allSatisfy {
             $0.protection != .hard && $0.lifecycle != .userFinal
