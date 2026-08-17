@@ -1929,16 +1929,30 @@ class AppState: ObservableObject {
         let mode = AIModeManager.shared.postProcessMode
         guard !mode.prompt.isEmpty else { return text }
 
-        // Fast-path: skip LLM for very short, already-clean text in strict correction modes.
-        // Pre-cleaner handles filler removal and dedup; LLM adds no value for "OK." or "Yes."
-        if text.count <= 15 {
-            let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
-            let firstUpper = trimmed.first?.isUppercase ?? false
-            let endsPunct = ".!?".contains(trimmed.last ?? Character(" "))
-            let isStrict = (mode.id == AIMode.correctModeId || mode.id == AIMode.grammarModeId)
-            if firstUpper && endsPunct && isStrict {
-                Logger.debug("LLM skip: short clean text (\(trimmed.count) chars)", subsystem: .transcription)
-                return text
+        // M2e: deterministic polish first, in strict correction modes only.
+        //
+        // Everything the Correct prompt does apart from punctuation and casing — fillers,
+        // duplicates, whitespace, aliases — now happens on the token graph, so the model is
+        // invoked only when a punctuation or casing judgement is genuinely left to make. This
+        // replaces the old `text.count <= 15` fast path: length was never the question, and a
+        // 200-character sentence that already reads as finished prose gained nothing from a 4B
+        // decode. Transformative modes (translate, summarize, rewrite) keep the previous path
+        // untouched — their output is not this text.
+        //
+        // List formatting is off here because both call sites already ran `applyListFormatting`.
+        var input = text
+        if mode.id == AIMode.correctModeId || mode.id == AIMode.grammarModeId {
+            let polisher = DeterministicPolisher(
+                aliases: AliasEngine(entries: DictionaryManager.shared.entries),
+                dictionaryTerms: Set(DictionaryManager.shared.entries.map(\.correctForm)),
+                formatsLists: false
+            )
+            let polished = polisher.polish(text: text)
+            input = polished.text
+            if !polished.needsGenerativePass {
+                Logger.debug("LLM skip: deterministic polish left nothing to generate "
+                             + "(\(polished.appliedEdits.count) edits)", subsystem: .transcription)
+                return polished.text
             }
         }
 
@@ -1947,7 +1961,7 @@ class AppState: ObservableObject {
 
         do {
             // Pre-clean: normalize, dedup, protect tokens
-            let precleanResult = TranscriptPreCleaner.preclean(text)
+            let precleanResult = TranscriptPreCleaner.preclean(input)
 
             // Split prompt into system prompt + user message with [INPUT] envelope.
             // When correcting a chunk, prepend the previous chunk's tail so the LLM
@@ -1998,11 +2012,13 @@ class AppState: ObservableObject {
                 return TranscriptPreCleaner.restorePlaceholders(precleanResult.text, precleanResult.placeholders)
             }
 
-            Logger.step(.asrDone, .transcription, ["mode": .string(mode.name), "in": .int(text.count), "out": .int(processed.count)])
+            Logger.step(.asrDone, .transcription, ["mode": .string(mode.name), "in": .int(input.count), "out": .int(processed.count)])
             return processed
         } catch {
+            // The deterministic result, not the raw one: every edit in it was gated, so it is
+            // strictly closer to the intended output than what the ASR emitted.
             Logger.error("LLM post-processing failed: \(error)", subsystem: .transcription)
-            return text
+            return input
         }
     }
 
