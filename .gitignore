@@ -58,3 +58,7 @@ reference/
 
 # Experiment result dumps written to the repo root by ChunkSizeExperimentTests
 /*.txt
+
+# Machine-local symlink some worktrees use to reach the prebuilt static whisper library.
+# `whisper.cpp/.gitignore` only ignores `build-*/`, which matches directories, not this link.
+whisper.cpp/build-static
