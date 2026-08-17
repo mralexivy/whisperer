@@ -32,6 +32,14 @@
   Pure computation and synchronisation primitives — segmenters, locks, parsers — take
   `nonisolated` at the declaration.
 
+- **Prefer a flat container to a recursively-owned node structure.** A trie, linked list or tree of
+  reference types deallocates as a cascade, and with `SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor`
+  every node has an isolated deinit — so one release runs the whole cascade through
+  `swift_task_deinitOnExecutorImpl` and aborts in malloc. `AliasEngine` hit exactly this and ships
+  a flat dictionary keyed by the folded phrase instead; the lookup it gives up is bounded by the
+  longest phrase, which is two words. If the structure is genuinely warranted, `nonisolated` on
+  the node class is the alternative — but check that before writing it, not after the abort.
+
 - **A malloc "pointer being freed was not allocated" at the *same address in different processes*
   is not a data race.** Look at the frame below the free, not above it; a constant address means
   the runtime, not the heap.

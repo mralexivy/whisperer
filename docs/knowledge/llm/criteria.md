@@ -16,12 +16,26 @@ The job is **repair, not rewriting**. Four error classes, all of which must be c
 | Class | Example |
 |---|---|
 | Spelling | `Dicitation` → `Dictation` |
-| ASR mishearing | `Plower` → `planner`, `rounds` → `routes`, `טורף` → `טוב` |
+| ASR mishearing | `Plower` → `planner`, `rounds` → `routes`, `הטקס` → `הטקסט` |
 | Grammar | agreement, articles, prepositions, broken verb forms |
 | Formatting | terminal punctuation, capitals, spoken marks (`dot slash` → `./`), digits |
 
 It must do this in **English, Hebrew and Russian**, which is the whole reason the corpus
 is balanced rather than the naturally English-heavy mix the history database contains.
+
+The Hebrew mishearing above used to be `טורף` → `טוב` ("predator" → "good"), and that was
+a bug in this document as much as in the prompt, not a style choice. The two words share
+only their first letter and are not acoustically confusable, so the pair was invented
+rather than observed: it demonstrated *semantic substitution*, which is precisely the
+language-drift behaviour §3.1 scores as a flat −1.0 disqualifier. An example that models
+the failure mode teaches the failure mode. It was replaced in M6 (at both sites in
+`AIMode.swift` — rule 7's inline list and the worked pair) with `הטקס` → `הטקסט`, an
+attested decode error: golden-set recording 93825790, where the whole-file decode
+produced `…מציגה את הטקס שלנו` and a streaming decode of the same audio got `הטקסט`
+right. The carrier sentence in the worked pair is that same recording, so the example is
+lifted from real audio the way every other example in the prompt is. General rule: an
+example must be an observed error, never a constructed one — if there is no recording
+behind it, it is a hypothesis about the model, not evidence.
 
 ## 2. The measurement
 

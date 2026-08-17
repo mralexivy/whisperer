@@ -91,6 +91,17 @@ def main() -> None:
                     help="sampling weight per SCRIPT -- he/ru are weighted up "
                          "because the release gate is per language")
     ap.add_argument("--head-weights", default="error=0.5,punct=1.0,case=1.0,disf=1.0")
+    # Memory and restartability. A first run died at step 250 of 7098 on
+    # "MPS backend out of memory (other allocations: 33.01 GiB)" — the other
+    # allocations were an xcodebuild running beside it. On a shared machine an
+    # hour of training must not be one allocation away from nothing, so: a
+    # smaller micro-batch with accumulation to hold the effective batch, a
+    # checkpoint every --ckpt-every steps, and a skip-and-continue on OOM.
+    ap.add_argument("--accum", type=int, default=1,
+                    help="micro-batches per optimizer step; effective batch = batch * accum")
+    ap.add_argument("--ckpt-every", type=int, default=250)
+    ap.add_argument("--resume", action="store_true",
+                    help="continue from <out>/checkpoint.pt if it exists")
     args = ap.parse_args()
 
     set_seed(args.seed)
@@ -163,11 +174,30 @@ def main() -> None:
         [{"params": enc_p, "lr": args.lr},
          {"params": head_p, "lr": args.head_lr}], weight_decay=0.01)
 
-    total_steps = int(len(dl) * args.epochs)
+    total_steps = int(len(dl) * args.epochs) // args.accum
     sched = get_cosine_schedule_with_warmup(
         opt, int(total_steps * args.warmup), total_steps)
     print(f"[train] device={device} steps={total_steps} "
-          f"batch={args.batch} len={args.max_len}", flush=True)
+          f"batch={args.batch}x{args.accum} len={args.max_len}", flush=True)
+
+    ckpt_path = out / "checkpoint.pt"
+    start_step = 0
+    if args.resume and ckpt_path.exists():
+        ck = torch.load(ckpt_path, map_location=device, weights_only=False)
+        model.load_state_dict(ck["state_dict"])
+        opt.load_state_dict(ck["opt"])
+        sched.load_state_dict(ck["sched"])
+        start_step = ck["step"]
+        print(f"[resume] from step {start_step}/{total_steps}", flush=True)
+
+    def save_checkpoint(step):
+        # Written beside then renamed: a checkpoint half-written when the next
+        # OOM lands is worse than no checkpoint, because --resume would load it.
+        tmp = ckpt_path.with_suffix(".tmp")
+        torch.save({"state_dict": model.state_dict(), "opt": opt.state_dict(),
+                    "sched": sched.state_dict(), "step": step,
+                    "args": vars(args)}, tmp)
+        tmp.replace(ckpt_path)
 
     def loss_fn(logits, batch):
         tot = 0.0
@@ -182,32 +212,63 @@ def main() -> None:
             tot = tot + hw.get(h, 1.0) * l
         return tot, parts
 
-    step = 0
+    step = start_step
+    micro = 0
+    oom_skips = 0
     t_start = time.time()
     log = []
     model.train()
     done = False
+    parts = {h: float("nan") for h in HEADS}
+    loss = torch.zeros(())
     for epoch in range(math.ceil(args.epochs)):
         if done:
             break
         for batch in dl:
-            b = {k: (v.to(device) if torch.is_tensor(v) else v)
-                 for k, v in batch.items()}
-            logits = model(b["input_ids"], b["attention_mask"],
-                           b["punct_state"], b["case_state"])
-            loss, parts = loss_fn(logits, b)
-            loss.backward()
+            try:
+                b = {k: (v.to(device) if torch.is_tensor(v) else v)
+                     for k, v in batch.items()}
+                logits = model(b["input_ids"], b["attention_mask"],
+                               b["punct_state"], b["case_state"])
+                loss, parts = loss_fn(logits, b)
+                (loss / args.accum).backward()
+            except RuntimeError as exc:
+                # Another process spiking is transient — drop this micro-batch,
+                # release what we can and keep going. Counted and reported, never
+                # silent: a run that quietly skipped a tenth of its data is not
+                # the run whose numbers get quoted.
+                if "out of memory" not in str(exc).lower():
+                    raise
+                oom_skips += 1
+                opt.zero_grad(set_to_none=True)
+                micro = 0
+                if hasattr(torch, "mps"):
+                    torch.mps.empty_cache()
+                print(f"[oom] skipped a micro-batch at step {step} "
+                      f"({oom_skips} total)", flush=True)
+                time.sleep(2.0)
+                continue
+
+            micro += 1
+            if micro < args.accum:
+                continue
+            micro = 0
             torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
             opt.step()
             sched.step()
             opt.zero_grad(set_to_none=True)
             step += 1
+            if step % args.ckpt_every == 0:
+                save_checkpoint(step)
             if step % 50 == 0:
                 el = time.time() - t_start
+                # Rate over steps taken *this process*, not since step 0 — after a
+                # --resume the two differ and the ETA would be nonsense.
+                rate = max((step - start_step) / el, 1e-6)
                 msg = (f"[{step}/{total_steps}] loss={float(loss):.4f} "
                        + " ".join(f"{h}={parts[h]:.3f}" for h in HEADS)
                        + f" lr={sched.get_last_lr()[0]:.2e} "
-                       f"{step / el:.2f} it/s eta={(total_steps - step) / max(step / el, 1e-6) / 60:.1f}m")
+                       f"{rate:.2f} it/s eta={(total_steps - step) / rate / 60:.1f}m")
                 print(msg, flush=True)
                 log.append({"step": step, "loss": float(loss), **parts})
             if step >= total_steps:
@@ -236,9 +297,11 @@ def main() -> None:
     tok.save_pretrained(out)
     (out / "train_log.json").write_text(json.dumps(
         {"log": log, "wall_seconds": wall, "steps": step,
+         "oom_skipped_micro_batches": oom_skips,
+         "resumed_from_step": start_step,
          "args": vars(args)}, indent=2))
-    print(f"[done] {step} steps in {wall / 60:.1f} min -> {out/'model.pt'}",
-          flush=True)
+    print(f"[done] {step} steps in {wall / 60:.1f} min, {oom_skips} OOM skips "
+          f"-> {out/'model.pt'}", flush=True)
 
 
 if __name__ == "__main__":

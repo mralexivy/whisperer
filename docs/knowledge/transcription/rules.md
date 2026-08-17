@@ -275,3 +275,22 @@
     argument. `DecodeStackUsageTests.testProtocolDispatchDoesNotRecurse` dispatches through the
     existential — the only shape that reproduces it, since a call on the concrete type binds
     statically to the `audioCtx:` overload.
+
+31. **A stored `language` field is a routing decision, never a language label — group by detected
+    script instead.** `ZLANGUAGE` and the `language` field `GoldenEntry` copies from it record
+    which model the audio was sent to. Measured on the corpus: 151 recordings declared `he`, of
+    which ~10 contain any Hebrew; the golden set's `he = 93` is ~10 real Hebrew and ~83 English
+    or Russian. Any per-language metric grouped by that field is mislabelled, and the per-language
+    release gates bind to exactly those figures. Use `ScriptAnalyzer.scriptFamilies(in:)`,
+    majority by word (`PolishBenchmarkTests.detectedLanguage(of:)`), and print the `n` on every
+    row — after correction, real Hebrew and Russian are a small enough fraction of this corpus to
+    be directional only. Second confirmation of the same defect; the first cost a whole
+    multilingual benchmark run.
+
+32. **A whole-file decode is not a language-stable reference for a streaming decode.** 22 of the
+    400 golden-set recordings land in a different language than the streaming decode of the same
+    audio (21 English → Russian, one → Bulgarian, one Russian → English). Detect it — compare the
+    detected script of reference and input — and exclude those rows from WER, which is meaningless
+    against a translation of the input. Do **not** exclude them from metrics that never read the
+    reference. Not excluding them read the Russian column as 0.6566 mean / 1.0000 median; excluding
+    them, 0.0215 / 0.0000.
