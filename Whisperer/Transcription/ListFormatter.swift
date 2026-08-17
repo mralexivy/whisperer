@@ -45,17 +45,55 @@ struct ListFormatter {
 
     // MARK: - Normalizer Maps
 
+    /// Ordinal list markers.
+    ///
+    /// The non-English entries are **discourse ordinals only** — the forms that exist to
+    /// enumerate and mean nothing else. The adjectival ordinals are deliberately absent in both
+    /// languages, because they are ordinary vocabulary there in a way `first` is not in English:
+    /// Hebrew `ראשון` / `שני` / `שלישי` are also Sunday / Monday / Tuesday, and Russian
+    /// `первый` / `второй` are everyday adjectives (`первый раз`). Matching those would fire on
+    /// `יום ראשון` and `второй раз`, and the false-positive guards below
+    /// (`falsePositivePrecedingWords`) are an English word list that would not catch it.
+    ///
+    /// Recall lost here is a list that stays a paragraph. Precision lost would be a sentence
+    /// shredded into bullets — the asymmetry the whole pipeline is built around.
     private static let ordinalMap: [String: Int] = [
+        // English
         "first": 1, "second": 2, "third": 3, "fourth": 4, "fifth": 5,
         "sixth": 6, "seventh": 7, "eighth": 8, "ninth": 9, "tenth": 10,
         "firstly": 1, "secondly": 2, "thirdly": 3, "fourthly": 4, "fifthly": 5,
-        "sixthly": 6, "seventhly": 7, "eighthly": 8, "ninthly": 9, "tenthly": 10
+        "sixthly": 6, "seventhly": 7, "eighthly": 8, "ninthly": 9, "tenthly": 10,
+        // Russian — the hyphenated enumerating forms. `во-первых` is never anything but
+        // "in the first place"; there is no adjectival reading to collide with.
+        "во-первых": 1, "во-вторых": 2, "в-третьих": 3, "в-четвёртых": 4, "в-четвертых": 4,
+        "в-пятых": 5, "в-шестых": 6, "в-седьмых": 7, "в-восьмых": 8, "в-девятых": 9,
+        "в-десятых": 10,
+        // Hebrew — the adverbial enumerating forms, likewise unambiguous.
+        "ראשית": 1, "שנית": 2, "שלישית": 3, "רביעית": 4, "חמישית": 5,
     ]
 
     private static let cardinalMap: [String: Int] = [
         "one": 1, "two": 2, "three": 3, "four": 4, "five": 5,
         "six": 6, "seven": 7, "eight": 8, "nine": 9, "ten": 10
     ]
+
+    /// Explicit "number *n*" markers, per language.
+    ///
+    /// Bare cardinals stay English-only for the same reason the adjectival ordinals do — `שתיים`
+    /// and `два` are counting words first and list markers second. Behind an explicit
+    /// `number` / `номер` / `מספר`, though, the ambiguity is gone: the speaker has said the word
+    /// "number" out loud, which is not something one does while merely counting.
+    private static let numberPhrases: [(phrase: String, index: Int)] = {
+        var phrases: [(String, Int)] = []
+        for (word, index) in cardinalMap { phrases.append(("number \(word)", index)) }
+        let russian = ["один", "два", "три", "четыре", "пять",
+                       "шесть", "семь", "восемь", "девять", "десять"]
+        for (offset, word) in russian.enumerated() { phrases.append(("номер \(word)", offset + 1)) }
+        let hebrew = ["אחת", "שתיים", "שלוש", "ארבע", "חמש",
+                      "שש", "שבע", "שמונה", "תשע", "עשר"]
+        for (offset, word) in hebrew.enumerated() { phrases.append(("מספר \(word)", offset + 1)) }
+        return phrases
+    }()
 
     private static let bulletTriggerPhrases: [[String]] = [
         ["bullet", "point"],
@@ -72,12 +110,25 @@ struct ListFormatter {
 
     /// Continuation words that extend a list started by ordinals/cardinals.
     /// Index -1 means "auto-increment from previous marker".
+    ///
+    /// Safer to extend than the ordinals: a continuation is only looked for once a real ordinal
+    /// or cardinal marker has already been found, and only at a clause boundary. Multi-word
+    /// entries work — each is matched as a literal, boundary-anchored pattern.
     private static let continuationWords: Set<String> = [
-        "next", "then", "finally", "last", "lastly"
+        // English
+        "next", "then", "finally", "last", "lastly",
+        // Russian
+        "затем", "потом", "далее", "наконец", "напоследок",
+        // Hebrew
+        "אחר כך", "לאחר מכן", "לבסוף", "ולבסוף", "בסוף",
     ]
 
     /// Words that get stripped from the end of extracted item text (filler/conjunctions)
-    private static let trailingFillerWords: Set<String> = ["uh", "um", "and", "but", "or", "so", "like", "well"]
+    private static let trailingFillerWords: Set<String> = [
+        "uh", "um", "and", "but", "or", "so", "like", "well",
+        "и", "но", "или", "эм", "ну",
+        "אמ", "וגם", "אבל", "או", "כאילו",
+    ]
 
     /// Noise words that Whisper puts before "number X" markers (mistranscriptions of list cues)
     private static let numberPhraseNoiseWords: Set<String> = [
@@ -88,7 +139,9 @@ struct ListFormatter {
     /// Filler words/phrases that appear between preamble and list (spoken hesitations)
     private static let preambleFillerWords: Set<String> = [
         "sorry", "okay", "ok", "uh", "um", "right", "anyway", "basically",
-        "so", "yeah", "actually", "wait", "well"
+        "so", "yeah", "actually", "wait", "well",
+        "извини", "извините", "ладно", "хорошо", "эм", "ну", "короче", "значит",
+        "סליחה", "אוקיי", "טוב", "אמ", "רגע", "בקיצור",
     ]
 
     /// Multi-word filler phrases stripped from preamble
@@ -181,8 +234,7 @@ struct ListFormatter {
         }
 
         // 1. "number X" phrases (highest priority — most explicit)
-        for (word, idx) in cardinalMap {
-            let phrase = "number \(word)"
+        for (phrase, idx) in numberPhrases {
             let pattern = "\\b\(NSRegularExpression.escapedPattern(for: phrase))\\b"
             guard let regex = try? NSRegularExpression(pattern: pattern, options: .caseInsensitive) else { continue }
             for match in regex.matches(in: lower, range: NSRange(location: 0, length: length)) {
@@ -193,7 +245,7 @@ struct ListFormatter {
             }
         }
         // "number 1", "number 2", etc.
-        if let regex = try? NSRegularExpression(pattern: #"\bnumber\s+(\d{1,2})\b"#, options: .caseInsensitive) {
+        if let regex = try? NSRegularExpression(pattern: #"\b(?:number|номер|מספר)\s+(\d{1,2})\b"#, options: .caseInsensitive) {
             for match in regex.matches(in: lower, range: NSRange(location: 0, length: length)) {
                 guard let range = Range(match.range, in: lower) else { continue }
                 let digitRange = match.range(at: 1)
