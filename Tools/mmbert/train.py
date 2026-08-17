@@ -225,6 +225,7 @@ def main() -> None:
         if done:
             break
         for batch in dl:
+            stepped = False
             try:
                 b = {k: (v.to(device) if torch.is_tensor(v) else v)
                      for k, v in batch.items()}
@@ -232,6 +233,20 @@ def main() -> None:
                                b["punct_state"], b["case_state"])
                 loss, parts = loss_fn(logits, b)
                 (loss / args.accum).backward()
+
+                micro += 1
+                if micro >= args.accum:
+                    micro = 0
+                    # Inside the guard: the second OOM landed in `opt.step()`, in Adam's
+                    # `exp_avg_sq.sqrt()`, not in the forward pass. A handler that covers only
+                    # forward/backward protects the cheap half and leaves the expensive half
+                    # to kill the run.
+                    torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
+                    opt.step()
+                    sched.step()
+                    opt.zero_grad(set_to_none=True)
+                    step += 1
+                    stepped = True
             except RuntimeError as exc:
                 # Another process spiking is transient — drop this micro-batch,
                 # release what we can and keep going. Counted and reported, never
@@ -249,15 +264,13 @@ def main() -> None:
                 time.sleep(2.0)
                 continue
 
-            micro += 1
-            if micro < args.accum:
+            if not stepped:
                 continue
-            micro = 0
-            torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
-            opt.step()
-            sched.step()
-            opt.zero_grad(set_to_none=True)
-            step += 1
+            # Periodic drain. Even with quantised shapes the MPS cache creeps, and it is
+            # cheaper to give it back every 200 steps than to discover the ceiling at step
+            # 6000 with 50 minutes invested.
+            if step % 200 == 0 and hasattr(torch, "mps"):
+                torch.mps.empty_cache()
             if step % args.ckpt_every == 0:
                 save_checkpoint(step)
             if step % 50 == 0:

@@ -33,7 +33,19 @@ class EditDataset(Dataset):
 
 
 def collate(batch, pad_id: int):
-    n = max(len(b["input_ids"]) for b in batch)
+    # Padded up to a multiple of 32 rather than to the batch's own longest row.
+    #
+    # MPS caches a distinct set of Metal buffers per tensor shape, and those buffers are
+    # counted as "other allocations" against the same watermark the tensor pool draws on.
+    # Length-grouped batching hands the loader a different sequence length nearly every
+    # step, so the cache grows without bound and training OOMs on a machine with plenty of
+    # free memory -- twice here, the second time with nothing else running, at
+    # "other allocations: 38.13 GiB" on a 32 GB machine. Quantising the length caps the
+    # number of live shapes at four (32/64/96/128). The wasted compute is a few percent;
+    # the run finishing is worth more than that.
+    longest = max(len(b["input_ids"]) for b in batch)
+    n = min(128, ((longest + 31) // 32) * 32)
+    n = max(n, longest)
     out = {}
 
     def pad(key, fill):
