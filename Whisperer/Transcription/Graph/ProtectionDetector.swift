@@ -68,7 +68,73 @@ enum ProtectionDetector {
     ///   candidate for correction, in any script.
     static func annotate(_ graph: inout TokenGraph, dictionaryTerms: Set<String> = []) {
         annotatePatternMatches(&graph)
+        annotateCommandHeads(&graph)
         annotateTokenShapes(&graph, dictionaryTerms: dictionaryTerms)
+    }
+
+    // MARK: - Command heads
+
+    /// A flag protects the words in front of it, not just itself.
+    ///
+    /// The `FLAG` pattern marks `--rm` and `-it`, but leaves `docker` bare — so the alias engine
+    /// sees an ordinary lowercase word it has a canonical spelling for and produces
+    /// `Docker run --rm -it`. The command word is the part of a command line that most looks like
+    /// prose, which is exactly why it needs the protection more than the flags do. This is also
+    /// the mechanism by which the shipped prompt's own `docker run --rm -it` example survives.
+    ///
+    /// Bounded at four words and stopped by any clause boundary: a flag says "a command ended
+    /// here", not "everything before this is code".
+    private static func annotateCommandHeads(_ graph: inout TokenGraph) {
+        let text = graph.rawTranscript
+        guard !text.isEmpty, let regex = flagRegex else { return }
+
+        for match in regex.matches(in: text, range: NSRange(text.startIndex..., in: text)) {
+            guard let flag = Range(match.range, in: text) else { continue }
+            // The flag itself too: the `FLAG` pattern is `--[a-z][-a-z]+`, which misses every
+            // single-dash short option — `-it`, `-la`, `-rf`.
+            let head = commandHead(before: flag.lowerBound, in: text) ?? flag.lowerBound
+            graph.protect(graph.tokenIDs(overlappingRawRange: head..<flag.upperBound), as: .hard)
+        }
+    }
+
+    /// `(?<![\w-])` keeps this off hyphenated words and off the second dash of `--rm`; `\w` is
+    /// Unicode-aware, so Hebrew `ה-server` is a hyphenated word rather than a flag.
+    private static let flagRegex = try? NSRegularExpression(
+        pattern: "(?<![\\w-])--?[a-zA-Z][-a-zA-Z0-9]*")
+
+    private static let maxCommandWords = 4
+
+    /// The start of the run of command-shaped words immediately preceding `index`, or `nil` if
+    /// the flag is not preceded by one.
+    private static func commandHead(before index: String.Index, in text: String) -> String.Index? {
+        var cursor = index
+        var start: String.Index?
+        var words = 0
+
+        while cursor > text.startIndex, words < maxCommandWords {
+            // Spaces only. A newline, or any punctuation, ends the command.
+            var probe = cursor
+            while probe > text.startIndex, text[text.index(before: probe)] == " " {
+                probe = text.index(before: probe)
+            }
+            // No space means the previous character is punctuation, which ends the command.
+            guard probe > text.startIndex, probe != cursor else { break }
+
+            var wordStart = probe
+            while wordStart > text.startIndex {
+                let previous = text.index(before: wordStart)
+                let character = text[previous]
+                guard character.isLetter || character.isNumber
+                        || "._-/".contains(character) else { break }
+                wordStart = previous
+            }
+            guard wordStart != probe else { break }
+
+            start = wordStart
+            cursor = wordStart
+            words += 1
+        }
+        return start
     }
 
     // MARK: - Pattern spans

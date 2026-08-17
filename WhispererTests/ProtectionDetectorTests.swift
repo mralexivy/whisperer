@@ -142,4 +142,34 @@ final class ProtectionDetectorTests: XCTestCase {
         XCTAssertLessThan(hardRate, 0.25, "hard protection is swallowing the corpus")
         XCTAssertLessThan(softRate, 0.25, "soft protection is swallowing the corpus")
     }
+
+    // MARK: - Command heads
+
+    /// The `FLAG` pattern alone leaves `docker` bare, and the alias engine then capitalises it
+    /// mid-command. The command word is the part of a command line that most resembles prose.
+    func testCommandWordBeforeAFlagIsProtected() {
+        assertHard("docker run --rm -it", in: "run docker run --rm -it to test")
+        assertHard("ls -la", in: "then ls -la and look")
+    }
+
+    /// A flag says "a command ended here", not "everything before it is code".
+    func testCommandHeadStopsAtAClauseBoundary() {
+        let graph = annotated("I checked the logs, then ran git commit -m to save it")
+        XCTAssertEqual(protection(of: "logs", in: graph), .ordinary)
+        XCTAssertEqual(protection(of: "git", in: graph), .hard)
+    }
+
+    func testHyphenatedWordsAreNotFlags() {
+        let graph = annotated("we need a well-known host and one more thing")
+        XCTAssertEqual(protection(of: "need", in: graph), .ordinary)
+        XCTAssertEqual(protection(of: "host", in: graph), .ordinary)
+    }
+
+    /// `ה-server` is a Hebrew definite article glued to a Latin word, not a short option — so the
+    /// words before it must stay editable.
+    func testHebrewPrefixedLatinWordIsNotAFlag() {
+        let graph = annotated("צריך להריץ מחדש את ה-server בבוקר")
+        XCTAssertEqual(protection(of: "להריץ", in: graph), .ordinary)
+        XCTAssertEqual(protection(of: "מחדש", in: graph), .ordinary)
+    }
 }

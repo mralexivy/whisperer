@@ -72,11 +72,21 @@ enum TranscriptNormalizer {
     /// looked at the original token sequence would never know they had become adjacent. Edits
     /// refused on the scratch copy — a hard span, a committed token — are dropped here rather
     /// than emitted, so the list a gate receives is exactly the list that would apply.
-    static func proposals(for graph: TokenGraph) -> [TranscriptEdit] {
+    ///
+    /// Pass `gate` whenever one will judge the result. The whitespace pass exists to close the
+    /// gap a deleted word leaves behind, so a scratch that applies a deletion the gate will later
+    /// refuse emits a space-removal with nothing to justify it — `не не надо` with the duplicate
+    /// refused as a negation would come back as `нене надо`. Simulating the gate on the scratch
+    /// keeps the two in step, and costs one extra judgement per proposal.
+    static func proposals(for graph: TokenGraph,
+                          gate: ConfidenceGate? = nil) -> [TranscriptEdit] {
         var scratch = graph
         var accepted: [TranscriptEdit] = []
         for pass in [fillerEdits, duplicateWordEdits, duplicatePunctuationEdits, whitespaceEdits] {
-            for edit in pass(scratch) where scratch.apply(edit) { accepted.append(edit) }
+            for edit in pass(scratch) {
+                if let gate, !gate.judge(edit, in: scratch).isAccepted { continue }
+                if scratch.apply(edit) { accepted.append(edit) }
+            }
         }
         return accepted
     }
