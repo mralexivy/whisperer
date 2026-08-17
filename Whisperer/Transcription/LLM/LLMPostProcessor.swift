@@ -53,7 +53,9 @@ struct LLMGenerationStats: Equatable {
 
 // MARK: - Degeneration guard
 
-private enum Degeneration {
+// Internal rather than file-private so the batched-decode benchmarks can apply the identical
+// guard per row. Reimplementing it there would mean measuring a different stopping rule.
+enum Degeneration {
     /// Longest cycle worth looking for. A looping clause is a handful of tokens; beyond
     /// that the repeats are more likely a real pattern (list items, parallel sentences).
     static let maxPeriod = 8
@@ -75,7 +77,7 @@ private enum Degeneration {
 ///
 /// Generic over the unit because the two decode paths see different things: the MTP path has
 /// token ids, `ChatSession` only hands out decoded string chunks.
-private struct DegenerationGuard<Unit: Equatable> {
+struct DegenerationGuard<Unit: Equatable> {
     private var units: [Unit] = []
     /// Output length (in characters) before the unit at the same index was appended.
     private var lengths: [Int] = []
@@ -120,7 +122,9 @@ class LLMPostProcessor: ObservableObject {
     /// app's behaviour reads it. Nil until the first generation completes; unchanged on timeout.
     @Published private(set) var lastGenerationStats: LLMGenerationStats?
 
-    private var modelContainer: ModelContainer?
+    /// `private(set)` rather than `private` so the batched-decode benchmarks can reach the model
+    /// directly. Writes stay here; `unloadModel` is still the only way to clear it.
+    private(set) var modelContainer: ModelContainer?
     private(set) var loadedVariant: LLMModelVariant?
 
     // Per-instructions KV caches — keyed on the full instructions string (system prompt + language).
@@ -457,6 +461,26 @@ class LLMPostProcessor: ObservableObject {
         }
     }
 
+    /// A private copy of the warm system-prefix cache, when one has been built for exactly these
+    /// instructions. Nil otherwise — the caller then prefills the whole prompt itself.
+    ///
+    /// Exists so the batched path (`processBatch`) can reuse the same warm prefix as `processMTP`
+    /// without the two of them sharing mutable cache state: the copy is the caller's, and the
+    /// original stays reusable. Reusing it is not an optimisation but a requirement — the `Correct`
+    /// system prefix is ~880 tokens, and re-prefilling it per row at B=16 would cost more than
+    /// batching saves.
+    func warmPrefixCopy(for instructions: String) -> (cache: [any KVCache], prefixLength: Int)? {
+        guard let warm = mtpWarmCache, instructions == mtpWarmInstructions else { return nil }
+        return (warm.map { $0.copy() }, mtpWarmPrefixLength)
+    }
+
+    /// Builds the warm prefix if it is missing, so the next batch can reuse it. Safe to call
+    /// repeatedly; `runMTPWarmup` no-ops when the cache is already current.
+    func ensureWarmPrefix(for instructions: String) async {
+        guard let container = modelContainer else { return }
+        await runMTPWarmup(container: container, instructions: instructions)
+    }
+
     // MARK: - Processing
 
     func process(
@@ -495,7 +519,7 @@ class LLMPostProcessor: ObservableObject {
         // Script-aware token estimation. English heuristic (charCount/4) underestimates
         // for Hebrew/Arabic (~2 chars/token) and CJK (~1 char/token), causing truncated output.
         let charCount = text.count
-        let isNonLatin = containsNonLatinScript(text)
+        let isNonLatin = Self.containsNonLatinScript(text)
         let charsPerToken: Int = isNonLatin ? 2 : 4
         let estimatedTokens = max(4, charCount / charsPerToken)
         let maxTokens: Int
@@ -887,7 +911,9 @@ class LLMPostProcessor: ObservableObject {
 
     /// Returns true if text contains Hebrew, Arabic, or CJK script characters.
     /// Used to select a tighter chars-per-token ratio for token budget estimation.
-    private func containsNonLatinScript(_ text: String) -> Bool {
+    /// `nonisolated static` so the batched path can size its rows the same way from inside the
+    /// off-main-actor container closure. Two copies of these ranges would drift.
+    nonisolated static func containsNonLatinScript(_ text: String) -> Bool {
         for scalar in text.unicodeScalars {
             let v = scalar.value
             if v >= 0x0590 && v <= 0x05FF { return true }  // Hebrew

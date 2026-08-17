@@ -257,7 +257,26 @@ final class Qwen35GatedDeltaNet: Module {
 
         let convInput = concatenated([convState, qkv], axis: 1)
         if let cache {
-            cache[0] = convInput[0..., (-(convKernelSize - 1))...]
+            // Whisperer local patch: in a right-padded batch the last `convKernelSize - 1`
+            // columns of `convInput` are pads for every row whose prompt was shorter than the
+            // longest one, so the plain tail slice below would save zeros as the conv state and
+            // the row's first few decoded tokens would convolve against them.
+            //
+            // Row `b`'s last real token sits at `convInput` index
+            // `(convKernelSize - 1) + S - rightPadding[b] - 1`, so the window it needs starts at
+            // `S - rightPadding[b]`. Gathered per row rather than sliced.
+            //
+            // Left padding would need no fixup here — and would instead corrupt the *outputs* of
+            // the first real tokens, which is not recoverable. See the note on
+            // `BaseKVCache.rightPadding` for why that trade decided the padding side.
+            if let rightPadding = cache.rightPadding {
+                let window = MLXArray(Int32(0) ..< Int32(convKernelSize - 1))[.newAxis]
+                let starts = (Int32(S) - rightPadding.asType(.int32))[0..., .newAxis]
+                let indices = (starts + window)[0..., 0..., .newAxis]
+                cache[0] = takeAlong(convInput, indices, axis: 1)
+            } else {
+                cache[0] = convInput[0..., (-(convKernelSize - 1))...]
+            }
         }
 
         let convOut = silu(conv1d(convInput))
@@ -680,6 +699,26 @@ public class Qwen35TextModel: Module, LLMModel, KVCacheDimensionProvider {
         return out
     }
 
+    /// Prefill that projects to vocabulary at **one position per row** instead of all of them.
+    ///
+    /// Whisperer local patch. A prefill's job is to populate the cache and produce a single
+    /// next-token distribution per row, but `callAsFunction` applies `lm_head` to every position:
+    /// at 32 rows × 128 padded tokens that is a 4096 × 2560 × 248320 projection — ~2.6 TFLOP and a
+    /// 4 GB fp32 intermediate — of which 32 rows' worth is read and the other 99.2% is discarded.
+    /// Slicing the hidden state first makes the projection 32 × 2560 × 248320 instead.
+    ///
+    /// `positions[b]` is the index of row `b`'s last **real** token, so right-padded rows read
+    /// their own final token rather than a pad. Results are identical to slicing the full logits —
+    /// `lm_head` is position-wise, so projecting a gathered row cannot differ from gathering a
+    /// projected one beyond floating-point association, and the batched-correctness gate checks it.
+    public func prefillLogits(_ inputs: MLXArray, cache: [KVCache]?, positions: [Int]) -> MLXArray {
+        let hidden = model(inputs, cache: cache)                        // [B, L, H]
+        let index = MLXArray(positions.map(Int32.init)).reshaped(positions.count, 1, 1)
+        let gathered = takeAlong(hidden, index, axis: 1)                // [B, 1, H]
+        if let lmHead { return lmHead(gathered) }
+        return model.embedTokens.asLinear(gathered)
+    }
+
     /// Returns both the final logits and the pre-norm backbone hidden state in one forward pass.
     /// hiddenState is the pre-final-norm backbone output — what the MTP head expects as input.
     /// The MTP head applies its own preFCNormHidden; passing post-norm would double-normalize.
@@ -808,6 +847,11 @@ public class Qwen35Model: Module, LLMModel, KVCacheDimensionProvider {
 
     public func forwardWithHiddenState(_ inputs: MLXArray, cache: [KVCache]?) -> (logits: MLXArray, hiddenState: MLXArray) {
         languageModel.forwardWithHiddenState(inputs, cache: cache)
+    }
+
+    /// Whisperer local patch — see `Qwen35TextModel.prefillLogits`.
+    public func prefillLogits(_ inputs: MLXArray, cache: [KVCache]?, positions: [Int]) -> MLXArray {
+        languageModel.prefillLogits(inputs, cache: cache, positions: positions)
     }
 
     public func draftToken(hiddenState: MLXArray, tokenEmbedding: MLXArray, cache: [KVCache?]?) -> MLXArray? {

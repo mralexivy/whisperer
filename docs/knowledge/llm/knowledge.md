@@ -527,3 +527,123 @@ score, not as a distinct signal it optimizes against.
 
 `STRUCT long` is 0.000 for every candidate on the 4B as well: 18 paragraph breaks in the
 reference across the 12 long-form cases, 0 produced. Same as the 1.5B. Closed on both.
+
+## Batched decode — measured ceiling on M2 Pro (2026-08-16)
+
+Full round-by-round tables: `docs/exec-plans/batched-llm-rounds.md`. The durable facts:
+
+**Batching a 4-bit model on Apple silicon is worth ~4.5×, not ~25×.** Measured on
+Qwen3.5-4B-MTP, M2 Pro/32 GB, real chunk text: 37.9 tok/s at B=1 → 172 tok/s at B=32.
+Beyond B≈32 throughput is flat to B=96 while ms/step grows linearly.
+
+**Why the usual "batching is nearly free" reasoning does not apply here.** It assumes
+decode stays memory-bandwidth-bound, which holds for fp16 weights. With 4-bit weights MLX
+switches above a small batch (the jump is visible between B=4 and B=8) from a narrow
+matvec to dequantise-then-GEMM, and the dequantisation is arithmetic a batch-1 step never
+pays. Decode is compute-bound from B≈8–16 onward. Expect the same shape for any quantised
+model on this class of GPU.
+
+**Prefill does not batch.** 341 tok/s at B=1 versus 274 tok/s at B=32 — a 150-token prefill
+already saturates the GPU. On short-prompt/short-output work like dictation correction
+prefill is roughly half of end-to-end wall-clock, so end-to-end gain is ~2.5–3× even where
+decode gains 4.5×.
+
+**Retiring finished rows is worth more than any other knob.** Ragged real chunks at B=32
+average 15 live rows out of 32. Never compacting: 58.7 tok/s. Compacting: 112 tok/s (1.9×).
+The threshold itself is worth 2% anywhere in 0.1–0.5.
+
+**Chunk arrivals are too sparse to batch mid-stream.** 295 real chunks: inter-arrival p50
+6.84s against a ~0.7s correction, only 18% of gaps ≤ 2s. Batching can only pay off at the
+drain after key release (p90 11 chunks outstanding), on whole-text splitting, and on
+meeting segments — never while the user is still speaking.
+
+**Right-padded batching is not bit-exact, and cannot be made so.** Unpadded rows are exact
+at any B (verified: identical-row B=8 == B=1, and the unpadded row of a ragged batch has a
+logit delta of exactly 0.0). Padded rows drift ≤0.28 in logit space — one bf16 rounding
+step on logits of magnitude tens — which flips the greedy pick on the ~11% of real chunks
+where the top-two gap is small. Every observed flip was a comma or an article. Any plan
+that assumes "greedy is deterministic so batched == serial" is wrong on this hardware.
+
+### Where batching actually pays, measured end to end (2026-08-17)
+
+**The streaming per-chunk path gains nothing, and that is a property of speech.** Real
+recordings replayed at real arrival timing, release→text-ready: serial 7.1 s vs batched
+6.9 s over six recordings (1.03×). The scheduler's widest real batch was 3, and on four of
+six recordings every batch was width 1. With a 6.84 s median inter-arrival against a ~0.7 s
+correction there is simply nothing co-resident to coalesce. The value of wiring the
+scheduler into this path is that it *cannot* regress it (width 1 routes back to
+single-stream MTP), not that it speeds it up.
+
+**Whole-text correction is where the win is: 1.92× over serial segments** on the five
+longest real recordings, 198 s vs 379 s, with word retention 100% vs 96%.
+
+**And the bigger finding underneath it: the single whole-text pass was not correcting long
+dictation at all.** `AIMode.correct` caps output at 256 tokens, so on a 12,000-character
+transcript the model stops a fifth of the way through and the app returns the truncated
+prefix or falls back to raw — 76% of words across the sample, 43% on one. Splitting applies
+the cap per segment, so it stops binding. Any future measurement of "the whole-text path"
+must check what fraction of the input it actually returned before comparing times; a
+truncating baseline looks fast.
+
+**A whole-batch timeout must scale with row count.** Rows past the planner's slice width run
+sequentially, so one `processBatch` call with 87 rows is several generations sharing one
+deadline. A fixed 30 s budget silently truncated the largest batches and presented as
+53–74% word retention — indistinguishable from a batching correctness bug.
+`defaultTimeout(rowCount:)` = `max(30, 1.5 × rows)`.
+
+**Word-retention metrics need loop-free inputs.** Whisper hallucination loops ("it's okay,"
+×40) are collapsed by the degeneration guard, which is correct and scores as ~98% of words
+lost. Exclude fixtures whose *input* loops and print the exclusion count, or the metric
+measures the guard.
+
+**The throughput curve is stable to ≤1% run to run** (five runs per width, idle machine), so
+a single reading of it is trustworthy — unusual enough to be worth recording.
+
+### Is another model simply faster? Gemma-4-E2B vs the shipped Qwen3.5-4B (2026-08-17)
+
+Cactus Compute publish `1294/64` prefill/decode for Gemma-4-E2B on an M3 Pro. That is one
+single-stream run, not aggregate throughput, and their page states "no speculative decode or
+MTP". Reproduced on this M2 Pro with **stock mlx-lm** and their MLX port
+(`Cactus-Compute/gemma-4-e2b-it-hybrid-mlx`), 1k prefill / 100 decode: **gemma 2083 / 78.6**
+against **Qwen3.5-4B 383 / 61.3**. Exceeding their published figure with the stock runtime
+means there is no runtime magic in the number — it is the model. Note also that their MLX
+port is ordinary affine 4-bit g64, not the proprietary quantisation the marketing describes.
+
+On **our** workload — the shipping `Correct` system prompt read out of `AIMode.swift`, 24
+real chunks from the corpus, `enable_thinking: false`, the app's own `maxTokens` estimator,
+and the warm system prefix the app actually uses:
+
+| | per chunk (median) | 24 chunks | e2e tok/s |
+|---|---|---|---|
+| gemma-4-e2b | 0.52 s | 12.3 s | 76.8 |
+| Qwen3.5-4B-MTP, plain decode | 0.90 s | 21.4 s | 45.2 |
+| Qwen3.5-4B-MTP, ×1.5 for MTP | ~0.60 s | ~14.3 s | — |
+
+**So: ~1.75× on plain decode, ~1.16× against the MTP path the app really runs.** Output
+quality on the sample is indistinguishable; both produce the same corrections. A 16% win does
+not pay for a model swap that, per the provenance comment in `AIMode.swift`, obliges a full
+re-run of the 100-case quality corpus, because prompt findings do not transfer between
+models.
+
+Three measurement traps, all of which produced confidently wrong numbers first:
+
+- **Benchmark the warm prefix or benchmark nothing.** Charging a full ~930-token prefill per
+  correction gave 3.22 s/chunk for Qwen and a 3.62× "win" for Gemma. The app prefills the
+  ~881-token system prompt once and reuses it, so that measured a configuration no user has —
+  and it happens to measure prefill speed, which is exactly the axis where the two models
+  differ most (5.4×). With the warm prefix, Qwen's 0.90 s lines up with the app's own ~0.77 s.
+- **`generate_step` computes one token ahead.** Breaking after its first yield leaves a
+  *sampled* token appended to the cache that was never in the prompt. Every later chunk then
+  decodes against a prefix one token off; Gemma responded with a line lifted out of the
+  prompt's own examples for all 24 inputs. Prefill a cache with a plain `model(ids, cache=)`
+  forward pass instead.
+- **Both models emit chain-of-thought unless `enable_thinking: false` is passed** — which
+  `LLMPostProcessor` does. Without it the reasoning eats the whole 256-token budget and the
+  timing measures the cap, not the task.
+
+Cloning a warm cache in Python needs `type(c).from_state(deep_copied_state, c.meta_state)`;
+state alone is not enough. `RotatingKVCache` (Gemma's sliding-window layers) is a ring buffer
+whose contents are meaningless without the `offset`/`_idx` in `meta_state`. Gemma's warm and
+cold outputs then still diverge by roughly one word in 200 — the ring buffer holds the same
+window in a different rotation, so the arithmetic differs slightly. Qwen's warm output is
+byte-identical to cold.

@@ -66,8 +66,30 @@ enum HistoryTestLoader {
             print("⚠️  HistoryTestLoader: No history.sqlite found at expected paths")
             return []
         }
-        return query(dbPath: dbPath, recordingsDir: recordingsDir, limit: maxCount)
+        return query(dbPath: dbPath, recordingsDir: recordingsDir, limit: maxCount,
+                     order: Self.nearTwentySecondsFirst)
     }
+
+    /// Longest recordings first.
+    ///
+    /// `loadFixtures` orders by distance from 20 s, which is the right sample for a
+    /// representative-dictation benchmark and the wrong one for anything about long text: at
+    /// `maxCount: 300` it never reaches a single recording over 45 s, so a caller filtering for the
+    /// long bucket silently gets nothing and skips. The whole-text splitter is only interesting on
+    /// exactly the rows that ordering excludes.
+    static func loadLongestFixtures(maxCount: Int = 20) -> [RecordingFixture] {
+        guard let (dbPath, recordingsDir) = findDatabase() else {
+            print("⚠️  HistoryTestLoader: No history.sqlite found at expected paths")
+            return []
+        }
+        return query(dbPath: dbPath, recordingsDir: recordingsDir, limit: maxCount,
+                     order: "CAST(ZDURATION AS REAL) DESC")
+    }
+
+    private static let nearTwentySecondsFirst = """
+        CASE WHEN ZAUDIOFILEURL IS NOT NULL THEN 0 ELSE 1 END ASC,
+                 ABS(CAST(ZDURATION AS REAL) - 20.0) ASC
+        """
 
     /// Loads real meetings from `ZMEETINGENTITY`, newest first, decoding the `segmentsJSON` blob.
     /// Rows whose blob fails to decode or holds no segments are skipped — an empty transcript
@@ -153,7 +175,8 @@ enum HistoryTestLoader {
         return nil
     }
 
-    private static func query(dbPath: String, recordingsDir: URL, limit: Int) -> [RecordingFixture] {
+    private static func query(dbPath: String, recordingsDir: URL, limit: Int,
+                              order: String) -> [RecordingFixture] {
         var db: OpaquePointer?
         guard sqlite3_open_v2(dbPath, &db, SQLITE_OPEN_READONLY, nil) == SQLITE_OK else {
             print("⚠️  HistoryTestLoader: Cannot open \(dbPath)")
@@ -172,8 +195,7 @@ enum HistoryTestLoader {
               AND ZTRANSCRIPTION IS NOT NULL
               AND length(ZTRANSCRIPTION) > 20
               AND (ZTARGETAPPNAME IS NULL OR ZTARGETAPPNAME != 'File Import')
-            ORDER BY CASE WHEN ZAUDIOFILEURL IS NOT NULL THEN 0 ELSE 1 END ASC,
-                     ABS(CAST(ZDURATION AS REAL) - 20.0) ASC
+            ORDER BY \(order)
             LIMIT ?;
             """
 

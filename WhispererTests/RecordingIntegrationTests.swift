@@ -91,11 +91,11 @@ final class RecordingIntegrationTests: XCTestCase {
     }
 
     /// Corrector closure that mirrors AppState.applyLLMPostProcessing.
-    private func makeCorrector(mode: AIMode, proc: LLMPostProcessor) -> (String, String?) async -> String {
+    private func makeCorrector(mode: AIMode, proc: LLMPostProcessor) -> (String, Bool) async -> String {
         let sys = systemPrompt(for: mode)
-        return { [mode, sys] text, contextTail in
+        return { [mode, sys] text, fragment in
             var sysPrompt = sys
-            if contextTail != nil {
+            if fragment {
                 sysPrompt += "\n\nThis is a speech fragment from a continuous dictation stream — it may begin or end mid-sentence. Do NOT capitalize the first word unless the source already capitalizes it or it is a proper noun/acronym. Do NOT add terminal punctuation (.!?) at the end unless the source already contains it."
             }
             let userMsg = "[INPUT]\n\(text)\n[/INPUT]"

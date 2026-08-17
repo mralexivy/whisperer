@@ -123,6 +123,42 @@ open class BaseKVCache: KVCache {
     public var offset: Int = 0
     public var maxSize: Int? { nil }
 
+    // MARK: - Whisperer local patch: batched decode with ragged prompts
+    //
+    // Rows in a batch share a warm system prefix but have user suffixes of different lengths.
+    // Each suffix is padded to the longest one so every row's generated tokens start at the same
+    // cache offset, which is what lets a single `[B, 1]` step decode all of them at once. The pad
+    // slots are physically in the cache and would otherwise be attended to, so they are masked.
+    //
+    // **Padding goes on the right, and that is not a free choice.** Upstream mlx-lm left-pads,
+    // which is correct for a pure-attention model. This one is hybrid: 24 of its 32 layers are
+    // GatedDeltaNet, which runs a causal `conv1d` over the sequence. Left padding inserts zeros
+    // between the warm prefix and the first real token, so the first `convKernelSize - 1` real
+    // tokens convolve against zeros instead of against the prefix, and the row's output stops
+    // matching what the serial path produces. Right padding leaves every real token's causal
+    // window intact and puts the zeros after it, where a causal conv cannot see them.
+    //
+    // Right padding costs one fixup in exchange: the conv state saved at the end of the prefill
+    // would be the trailing pads rather than the row's last real tokens. `Qwen35GatedDeltaNet`
+    // reads `rightPadding` to gather the correct per-row window. Without that fixup the first
+    // few decode tokens of every padded row are wrong.
+    //
+    // Lifetimes differ by cache kind, which is the easy thing to get wrong:
+    //  - `KVCacheSimple` (the 8 full-attention layers) keeps the pads in its keys/values for the
+    //    whole generation, so `rightPadding` must stay set until the batch is done.
+    //  - `MambaCache` (the 24 linear layers) is recurrent, and the Metal kernel skips masked
+    //    positions outright, so a pad leaves no trace in the SSM state. Its mask applies to the
+    //    prefill chunk only — `ArraysCache.makeMask(N:)` keys that on `N > 1`.
+
+    /// Per-row count of pad slots at the end of the prompt chunk, shape `[B]`, or nil when the
+    /// batch is unpadded (including every batch of one).
+    public var rightPadding: MLXArray?
+
+    /// Absolute cache position just past the pad run — the prompt chunk's end, shared by all
+    /// rows. Row `b`'s pads occupy `rightPaddingEnd - rightPadding[b] ..< rightPaddingEnd`.
+    public var rightPaddingEnd: Int = 0
+    // MARK: - end Whisperer local patch
+
     public func innerState() -> [MLXArray] { [] }
 
     open func update(keys: MLXArray, values: MLXArray) -> (MLXArray, MLXArray) {
@@ -160,6 +196,15 @@ open class BaseKVCache: KVCache {
     open func makeMask(
         n: Int, windowSize: Int?, returnArray: Bool
     ) -> MLXFast.ScaledDotProductAttentionMaskMode {
+        // Whisperer local patch: a padded batch always needs an explicit array mask, including
+        // at n == 1 — the pads sit in the cache and every decode step would otherwise attend to
+        // them. Checked before the n == 1 shortcut for exactly that reason.
+        if let rightPadding {
+            return .array(createRightPaddedCausalMask(
+                n: n, offset: offset, windowSize: windowSize,
+                rightPadding: rightPadding, paddingEnd: rightPaddingEnd))
+        }
+
         // For single token, no mask needed
         if n == 1 {
             return .none
@@ -196,6 +241,45 @@ public func createCausalMask(
     }
 
     return mask
+}
+
+/// Whisperer local patch: causal mask that also blanks a per-row run of padding slots.
+///
+/// Returns `[B, 1, n, offset + n]`, broadcastable over heads. A column `j` is visible to row `b`
+/// when it is causally allowed *and* is not one of that row's pads, where the pads occupy
+/// `paddingEnd - rightPadding[b] ..< paddingEnd`.
+///
+/// `createCausalMask`'s existing `lengths` parameter looks like it should cover this and does
+/// not: it expresses "row `b` is valid up to a per-row length", which is only the same thing
+/// when the padded chunk is the *whole* sequence. Here the sequence continues past the pads with
+/// the tokens the batch went on to generate, so the invalid region is an interior hole and has
+/// to be located from both sides.
+public func createRightPaddedCausalMask(
+    n: Int,
+    offset: Int,
+    windowSize: Int? = nil,
+    rightPadding: MLXArray,
+    paddingEnd: Int
+) -> MLXArray {
+    let total = offset + n
+    let rinds = MLXArray(Int32(0) ..< Int32(total))
+    let linds = offset != 0 ? MLXArray(Int32(offset) ..< Int32(total)) : rinds
+
+    var causal = linds[0..., .newAxis] .>= rinds[.newAxis]
+    if let windowSize {
+        causal = causal & (linds[0..., .newAxis] .< rinds[.newAxis] + windowSize)
+    }
+
+    // [1, 1, n, total] — heads broadcast.
+    let broadcastCausal = causal[.newAxis, .newAxis]
+
+    // [1, 1, 1, total] against [B, 1, 1, 1] → [B, 1, 1, total].
+    let columns = rinds[.newAxis, .newAxis, .newAxis, 0...]
+    let padEnd = MLXArray(Int32(paddingEnd))
+    let padStart = (padEnd - rightPadding.asType(.int32))[0..., .newAxis, .newAxis, .newAxis]
+    let notPad = (columns .< padStart) .|| (columns .>= padEnd)
+
+    return broadcastCausal & notPad
 }
 
 /// Create an attention mask matching mlx-lm's create_attention_mask helper.
@@ -433,7 +517,25 @@ public class KVCacheSimple: BaseKVCache, CustomDebugStringConvertible {
         if !s.isEmpty {
             new.state = s.map { $0[.ellipsis] }
         }
+        // Whisperer local patch: the pad layout is part of what makes the copied cache readable.
+        // Dropping it here produced a copy whose rows silently attended to their own padding.
+        new.rightPadding = self.rightPadding
+        new.rightPaddingEnd = self.rightPaddingEnd
         return new
+    }
+
+    /// Whisperer local patch: in-place filter to keep just the given rows, mirroring
+    /// `ArraysCache.filter(batchIndices:)`.
+    ///
+    /// Needed to retire rows that finished early. Without it a batch runs for as long as its
+    /// slowest row while every finished row still costs full memory bandwidth on every step.
+    ///
+    /// `rightPadding` is subset rather than cleared — unlike the recurrent caches, the pads are
+    /// still physically present in `keys`/`values` for the rows that survive.
+    public func filter(batchIndices: MLXArray) {
+        self.keys = self.keys?[batchIndices]
+        self.values = self.values?[batchIndices]
+        self.rightPadding = self.rightPadding?[batchIndices]
     }
 
     public var debugDescription: String {
@@ -1118,6 +1220,8 @@ public class ArraysCache: BaseKVCache {
         }
         new.offset = self.offset
         new.leftPadding = self.leftPadding
+        new.rightPadding = self.rightPadding          // Whisperer local patch
+        new.rightPaddingEnd = self.rightPaddingEnd    // Whisperer local patch
         return new
     }
 
@@ -1127,6 +1231,7 @@ public class ArraysCache: BaseKVCache {
             c?[batchIndices]
         }
         leftPadding = nil
+        rightPadding = nil                            // Whisperer local patch
     }
 
     /// In-place extend this cache with the other cache
@@ -1142,6 +1247,16 @@ public class ArraysCache: BaseKVCache {
 
     /// Create attention mask based on left padding
     public func makeMask(N: Int) -> MLXArray? {
+        // Whisperer local patch: right padding, checked first because a batch never uses both.
+        //
+        // `N > 1` rather than `cache[0] == nil`, because with a warm system prefix the cache is
+        // already populated when the padded user chunk arrives — the upstream test reads as "is
+        // this the prefill" and stops being true exactly when it matters. Decode steps carry no
+        // padding and correctly get no mask; a padded chunk is never one token, since padding
+        // only exists where lengths differ.
+        if N > 1, let rightPadding {
+            return MLXArray(0 ..< N) .< (Int32(N) - rightPadding.asType(.int32))[0..., .newAxis]
+        }
         if cache[0] == nil, let leftPadding = leftPadding {
             return MLXArray(0 ..< N) .>= leftPadding[0..., .newAxis]
         } else {
@@ -1164,6 +1279,8 @@ public class MambaCache: ArraysCache {
         }
         new.offset = self.offset
         new.leftPadding = self.leftPadding
+        new.rightPadding = self.rightPadding          // Whisperer local patch
+        new.rightPaddingEnd = self.rightPaddingEnd    // Whisperer local patch
         return new
     }
 }

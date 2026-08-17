@@ -113,27 +113,38 @@ final class PerChunkLLMTests: XCTestCase {
         )
     }
 
-    // MARK: 3 — Context tail propagates from chunk N to chunk N+1 (no model needed)
+    // MARK: 3 — Chunks are corrected concurrently, in fragment mode (no model needed)
 
-    func testCoordinatorContextPassing() async throws {
-        var receivedContexts: [String?] = []
+    /// This test used to assert that chunk N+1 received chunk N's corrected tail. It no longer
+    /// does, because nothing ever read that string: `applyLLMPostProcessing` checked only whether
+    /// it was nil, to switch on the fragment-mode system prompt. Keeping it forced the corrections
+    /// to run one after another, which is precisely what stops them from being batched.
+    ///
+    /// What replaces it is the contract that is actually depended on: every chunk is corrected in
+    /// fragment mode, and the corrections overlap in time.
+    func testCoordinatorCorrectsChunksConcurrentlyInFragmentMode() async throws {
+        var flags: [Bool] = []
+        var live = 0
+        var peakLive = 0
         let coordinator = ChunkLLMCoordinator()
-        coordinator.corrector = { text, ctx in
-            receivedContexts.append(ctx)
-            return text + "_done"   // corrected = original + "_done" (predictable suffix(100))
+        coordinator.corrector = { text, fragment in
+            flags.append(fragment)
+            live += 1
+            peakLive = max(peakLive, live)
+            try? await Task.sleep(for: .milliseconds(40))
+            live -= 1
+            return text + "_done"
         }
         coordinator.enqueue(chunkText: "hello world")
         coordinator.enqueue(chunkText: "how are you")
         coordinator.enqueue(chunkText: "doing today")
 
-        _ = await coordinator.drain()
+        let joined = await coordinator.drain()
 
-        XCTAssertEqual(receivedContexts.count, 3)
-        XCTAssertNil(receivedContexts[0], "First chunk has no previous context")
-        XCTAssertEqual(receivedContexts[1], "hello world_done",
-                       "Second chunk receives tail of first corrected chunk")
-        XCTAssertEqual(receivedContexts[2], "how are you_done",
-                       "Third chunk receives tail of second corrected chunk")
+        XCTAssertEqual(flags, [true, true, true], "every chunk must be corrected in fragment mode")
+        XCTAssertEqual(peakLive, 3, "corrections are still serialized — nothing can batch")
+        XCTAssertEqual(joined, "hello world_done how are you_done doing today_done",
+                       "concurrent corrections must still join in enqueue order")
     }
 
     // MARK: 4 — Reset clears state for next recording (no model needed)
