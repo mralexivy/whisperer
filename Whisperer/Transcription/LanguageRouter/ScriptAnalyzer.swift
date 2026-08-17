@@ -91,22 +91,11 @@ enum ScriptAnalyzer {
         var latinCount = 0
 
         for scalar in text.unicodeScalars {
-            let value = scalar.value
-
-            // Latin check (most common, inline for speed)
-            if (value >= 0x0041 && value <= 0x005A) ||
-               (value >= 0x0061 && value <= 0x007A) ||
-               (value >= 0x00C0 && value <= 0x024F) {
+            guard let family = self.family(of: scalar) else { continue }
+            if family == .latin {
                 latinCount += 1
-                continue
-            }
-
-            // Table lookup for other scripts
-            for (range, family) in scriptRanges {
-                if range.contains(value) {
-                    scriptCounts[family, default: 0] += 1
-                    break
-                }
+            } else {
+                scriptCounts[family, default: 0] += 1
             }
         }
 
@@ -158,5 +147,38 @@ enum ScriptAnalyzer {
         }
 
         return langScores
+    }
+
+    /// Every script family present in `text`, with no language mapping and no normalization.
+    ///
+    /// `dominantScript` answers "which language is this", which needs the shortlist and the
+    /// CJK disambiguation above. Protection needs the cruder question — "is this one token
+    /// written in more than one script, or in a script other than the rest of the utterance"
+    /// — and answering it through the language mapping would make a token's protection depend
+    /// on the user's enabled-language list, which is unrelated to whether it is safe to edit.
+    static func scriptFamilies(in text: String) -> Set<ScriptFamily> {
+        var families: Set<ScriptFamily> = []
+        for scalar in text.unicodeScalars {
+            if let family = family(of: scalar) { families.insert(family) }
+        }
+        return families
+    }
+
+    /// Script family of one scalar, or `nil` for digits, punctuation, whitespace and symbols —
+    /// which belong to no script and must not be counted as evidence for one.
+    private static func family(of scalar: Unicode.Scalar) -> ScriptFamily? {
+        let value = scalar.value
+
+        // Latin is by far the most common case, so it is checked before the table.
+        if (value >= 0x0041 && value <= 0x005A) ||
+           (value >= 0x0061 && value <= 0x007A) ||
+           (value >= 0x00C0 && value <= 0x024F) {
+            return .latin
+        }
+
+        for (range, family) in scriptRanges where range.contains(value) {
+            return family
+        }
+        return nil
     }
 }
