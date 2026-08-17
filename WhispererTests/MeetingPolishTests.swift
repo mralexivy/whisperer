@@ -1,0 +1,245 @@
+//
+//  MeetingPolishTests.swift
+//  WhispererTests
+//
+//  Milestone 3: one editor, two callers.
+//
+//  The claim under test is not "meetings are polished" — it is that meetings are polished by the
+//  *same* editor as dictation, invoked the same way, with no meeting-specific branch inside it.
+//  That is what makes the end-of-meeting critical path the last utterance plus artifact synthesis
+//  instead of a whole-transcript pass, and it is only sound because the editor reads no audio:
+//  meetings run on Nemotron, which supplies `ASRCapabilities = []`.
+//
+//  The tests that touch the user's own meetings skip rather than fail when the local database is
+//  absent — they are a check against real transcripts on this machine, not a CI gate. The parity
+//  tests above them are synthetic and always run.
+//
+
+import XCTest
+@testable import whisperer
+
+final class MeetingPolishTests: XCTestCase {
+
+    // MARK: - Editors
+
+    /// Exactly what `AppState.applyLLMPostProcessing` builds for a dictation utterance: the user
+    /// dictionary as the alias table, the same canonical spellings hard-protected, list reflow off
+    /// because its call sites already ran `applyListFormatting`.
+    ///
+    /// Written out longhand rather than routed through `forTranscript` on purpose. If the two ever
+    /// diverge, this literal is what notices — a test that called the factory twice would be
+    /// asserting that a function equals itself.
+    private func dictationEditor(entries: [DictionaryEntry] = []) -> DeterministicPolisher {
+        DeterministicPolisher(
+            aliases: AliasEngine(entries: entries),
+            dictionaryTerms: Set(entries.map(\.correctForm)),
+            formatsLists: false
+        )
+    }
+
+    /// What `MeetingSession` runs per utterance as chunks arrive.
+    private func meetingUtteranceEditor(entries: [DictionaryEntry] = []) -> DeterministicPolisher {
+        DeterministicPolisher.forTranscript(dictionaryEntries: entries, formatsLists: false)
+    }
+
+    /// What `MeetingSession` runs once per card, at the endpoint.
+    private func meetingCardEditor(entries: [DictionaryEntry] = []) -> DeterministicPolisher {
+        DeterministicPolisher.forTranscript(dictionaryEntries: entries, formatsLists: true)
+    }
+
+    // MARK: - Corpus
+
+    /// Utterance-shaped inputs covering what the two callers actually see: fillers, stutters,
+    /// dictionary aliases, protected spans, a non-Latin script, a spoken enumeration.
+    private let utterances = [
+        "okay um so we should uh ship the the release on friday",
+        "send the deployment to chat gpt and update postgress",
+        "check https://example.com/a_b then call loadModel on the v2.1.0 build",
+        "צריך להריץ את loadModel על ה-server",
+        "first update the docs second run the migration third tell the team",
+        "не не надо это делать",
+        "let's revisit budget 3.5 million next quarter",
+    ]
+
+    private func meetingFixtures() throws -> [MeetingFixture] {
+        let fixtures = HistoryTestLoader.loadMeetingFixtures(maxCount: 10)
+        try XCTSkipIf(fixtures.isEmpty, "No meetings in the local history database")
+        return fixtures
+    }
+
+    // MARK: - One editor, two callers
+
+    func testMeetingUtteranceAndDictationUtteranceProduceIdenticalOutput() {
+        let dictation = dictationEditor()
+        let meeting = meetingUtteranceEditor()
+
+        for utterance in utterances {
+            let fromDictation = dictation.polish(text: utterance)
+            let fromMeeting = meeting.polish(text: utterance)
+            XCTAssertEqual(fromMeeting.text, fromDictation.text, utterance)
+            XCTAssertEqual(fromMeeting.appliedEdits.count, fromDictation.appliedEdits.count, utterance)
+            // The LLM decision has to match too: a meeting that asked for a generative pass where
+            // dictation did not would be a second policy wearing the first one's name.
+            XCTAssertEqual(fromMeeting.needsGenerativePass, fromDictation.needsGenerativePass, utterance)
+        }
+    }
+
+    /// The same claim against the user's own meetings, segment by segment — real transcripts carry
+    /// disfluencies and spellings no synthetic string thinks to include.
+    func testRealMeetingSegmentsPolishIdenticallyForBothCallers() throws {
+        let fixtures = try meetingFixtures()
+        let dictation = dictationEditor()
+        let meeting = meetingUtteranceEditor()
+
+        var segmentCount = 0
+        for fixture in fixtures {
+            for segment in fixture.segments {
+                XCTAssertEqual(meeting.polish(text: segment.text).text,
+                               dictation.polish(text: segment.text).text,
+                               "\(fixture.id): \(segment.text.prefix(60))")
+                segmentCount += 1
+            }
+        }
+        XCTAssertGreaterThan(segmentCount, 0, "fixtures decoded but held no segments")
+    }
+
+    // MARK: - Streaming contract
+
+    /// Live/mid-stream versus authoritative. The two configurations differ in exactly one thing —
+    /// enumeration reflow — and `ListFormatter` is a pure function of the rendered text, so the
+    /// card pass must be the live pass with that function applied. Anything else means a second
+    /// editing policy has grown on the endpoint path.
+    func testLiveAndCardEditorsDifferOnlyInListReflow() {
+        let live = meetingUtteranceEditor()
+        let card = meetingCardEditor()
+
+        for utterance in utterances {
+            let liveText = live.polish(text: utterance).text
+            XCTAssertEqual(card.polish(text: utterance).text, ListFormatter.format(liveText), utterance)
+        }
+    }
+
+    /// The mid-stream half of the contract stated as a property: nothing the live pass does can
+    /// introduce a word. It deletes fillers, collapses whitespace and substitutes a spelling the
+    /// user typed — it never punctuates, respells from context, or writes grammar.
+    func testLivePassNeverInventsWords() {
+        let live = meetingUtteranceEditor()
+        for utterance in utterances {
+            let before = utterance.split(whereSeparator: \.isWhitespace).count
+            let after = live.polish(text: utterance).text.split(whereSeparator: \.isWhitespace).count
+            XCTAssertLessThanOrEqual(after, before, utterance)
+        }
+    }
+
+    // MARK: - The session actually calls it
+
+    /// The wiring, not the editor: a chunk handed to `MeetingSession.onNewChunk` must land in the
+    /// open card already polished. Without this the parity tests above would pass over an editor
+    /// meetings never invoke.
+    ///
+    /// Driven without a CoreData meeting behind it: `meetingID` is what `accumulate` guards on, and
+    /// with `isRecording` true and a four-second chunk nothing reaches the persistence path. The
+    /// teardown drops `isRecording` so the 2.5s silence flush this schedules bails out instead of
+    /// committing a card for a meeting row that does not exist.
+    @MainActor
+    func testMeetingChunkIsPolishedOnArrival() {
+        let session = MeetingSession()
+        let id = UUID()
+        session.meetingID = id
+        session.isRecording = true
+        defer {
+            session.isRecording = false
+            MeetingPendingStore.clear(meetingID: id)
+        }
+
+        let raw = "okay um so we should uh ship the the release on friday"
+        session.onNewChunk(text: raw, start: 0, end: 4)
+
+        // Snapshot taken here rather than before the chunk: `MeetingSession` builds its editors
+        // from `DictionaryManager.shared.entries`, which loads asynchronously at first access.
+        let expected = meetingUtteranceEditor(entries: DictionaryManager.shared.entries)
+            .polish(text: raw).text
+        XCTAssertEqual(session.currentSegmentText, expected)
+        XCTAssertNotEqual(session.currentSegmentText, raw, "the chunk reached the card unpolished")
+        XCTAssertFalse(session.currentSegmentText.contains(" um "), session.currentSegmentText)
+    }
+
+    /// The live tail takes the same route. `AppState`'s preview callbacks assign it directly, so
+    /// the polish has to live in the property rather than at the call site.
+    @MainActor
+    func testLiveTailIsPolishedOnAssignment() {
+        let session = MeetingSession()
+        let raw = "  and um then we  merge it  "
+        session.livePreviewText = raw
+
+        let expected = meetingUtteranceEditor(entries: DictionaryManager.shared.entries)
+            .polish(text: raw.trimmingCharacters(in: .whitespacesAndNewlines)).text
+        XCTAssertEqual(session.livePreviewText, expected)
+        XCTAssertFalse(session.livePreviewText.contains("um "), session.livePreviewText)
+        XCTAssertFalse(session.livePreviewText.contains("  "), "whitespace survived the live pass")
+
+        session.livePreviewText = ""
+        XCTAssertEqual(session.livePreviewText, "", "clearing the tail must not resurrect text")
+    }
+
+    // MARK: - ASRCapabilities = []
+
+    /// Meetings are the `[]` column. The editor must treat the absence of every acoustic signal as
+    /// nothing to consult — not as a missing input to fail on, and not as a reason to edit
+    /// differently — or the whole plan is wrong for the one backend it was written to cover.
+    func testEmptyCapabilitiesIsACleanNoOpNotAnError() {
+        let polisher = DeterministicPolisher()
+
+        for utterance in utterances {
+            let blind = polisher.polish(TokenGraph.from(text: utterance, capabilities: []))
+            let sighted = polisher.polish(TokenGraph.from(text: utterance, capabilities: .whisperCpp))
+
+            XCTAssertEqual(blind.text, sighted.text, utterance)
+            XCTAssertEqual(blind.appliedEdits.count, sighted.appliedEdits.count, utterance)
+            XCTAssertEqual(blind.needsGenerativePass, sighted.needsGenerativePass, utterance)
+            XCTAssertFalse(blind.text.isEmpty, "polishing produced nothing for: \(utterance)")
+        }
+    }
+
+    func testEmptyCapabilitiesIsACleanNoOpOnRealMeetings() throws {
+        let fixtures = try meetingFixtures()
+        let polisher = DeterministicPolisher()
+
+        for fixture in fixtures {
+            for segment in fixture.segments where !segment.text.isEmpty {
+                let blind = polisher.polish(TokenGraph.from(text: segment.text, capabilities: []))
+                let sighted = polisher.polish(TokenGraph.from(text: segment.text, capabilities: .whisperCpp))
+                XCTAssertEqual(blind.text, sighted.text, fixture.id)
+                XCTAssertFalse(blind.text.isEmpty, "\(fixture.id): a segment polished to nothing")
+            }
+        }
+    }
+
+    // MARK: - Protection
+
+    /// A meeting transcript is where protected spans are most likely to appear and least likely to
+    /// be noticed: nobody rereads an hour of notes to check that a repo path survived.
+    func testProtectedSpansSurviveAMeetingTranscript() {
+        let card = meetingCardEditor()
+        let transcript = "so the fix is in anthropics/whisperer we tag it v2.1.0 and deploy "
+                       + "with docker run --rm -it after loadModel returns"
+        XCTAssertEqual(card.polish(text: transcript).text, transcript)
+    }
+
+    /// Digits are hard-protected, so the strongest statement available over a real corpus is that
+    /// no meeting segment loses one. A dropped digit is the failure a reader cannot recover from —
+    /// a wrong date or a wrong number reads as fact.
+    func testRealMeetingSegmentsKeepEveryDigit() throws {
+        let fixtures = try meetingFixtures()
+        let card = meetingCardEditor()
+
+        for fixture in fixtures {
+            for segment in fixture.segments {
+                let before = segment.text.filter(\.isNumber)
+                guard !before.isEmpty else { continue }
+                let after = card.polish(text: segment.text).text.filter(\.isNumber)
+                XCTAssertEqual(after, before, "\(fixture.id): \(segment.text.prefix(60))")
+            }
+        }
+    }
+}

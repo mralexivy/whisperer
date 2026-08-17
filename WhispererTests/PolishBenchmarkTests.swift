@@ -32,6 +32,14 @@ final class PolishBenchmarkTests: XCTestCase {
         let id: String
         let language: String
         let bucket: String
+        /// The reference is written in a different script than the input.
+        ///
+        /// Not a polishing result and not scoreable: `goldenTranscript` is a whole-file decode
+        /// and the input is a streaming decode of the same audio, and on 22 of these 400
+        /// recordings the two landed in **different languages** — 21 English utterances whose
+        /// whole-file decode came back Russian, one the other way. WER against a translation of
+        /// yourself is ~1.0 by construction, on both arms, however good the polishing was.
+        let crossLanguageReference: Bool
         let werA: Double?
         let werB: Double
         let driftB: Bool
@@ -83,8 +91,11 @@ final class PolishBenchmarkTests: XCTestCase {
             if armA == nil { skippedNoArmA += 1 }
 
             rows.append(Row(id: fixture.id,
-                            language: fixture.language,
+                            language: Self.detectedLanguage(of: golden),
                             bucket: fixture.durationBucket,
+                            crossLanguageReference:
+                                Self.detectedLanguage(of: golden)
+                                    != Self.detectedLanguage(of: fixture.transcript),
                             werA: armA.map { Self.wordErrorRate(reference: golden, hypothesis: $0) },
                             werB: Self.wordErrorRate(reference: golden, hypothesis: polished.text),
                             driftB: Self.drifted(from: fixture.transcript, to: polished.text),
@@ -149,20 +160,29 @@ final class PolishBenchmarkTests: XCTestCase {
 
     // MARK: - Reporting
 
-    private func report(_ rows: [Row], skippedNoGolden: Int, skippedNoArmA: Int, total: Int) {
+    private func report(_ allRows: [Row], skippedNoGolden: Int, skippedNoArmA: Int, total: Int) {
+        // WER is reported over the rows whose reference is in the input's own language. Drift and
+        // preservation stay over every row — they compare input to output and never touch the
+        // reference, so a mistranslated reference cannot excuse damage.
+        let crossLanguage = allRows.filter(\.crossLanguageReference)
+        let rows = allRows.filter { !$0.crossLanguageReference }
+
         print("""
 
         ── Polish benchmark ──────────────────────────────────────────────────────
-        corpus: \(total) fixtures, \(rows.count) scored, \
+        corpus: \(total) fixtures, \(allRows.count) with a reference, \
         \(skippedNoGolden) without a golden reference, \(skippedNoArmA) without an arm-A output
         reference: goldenTranscript — same model, whole-file decode. Bounds damage, not accuracy.
+        WER over \(rows.count) rows; \(crossLanguage.count) excluded — the whole-file decode landed
+        in a different language than the streaming decode of the same audio, so the reference is a
+        translation of the input and scores ~1.0 on both arms regardless of polishing.
         """)
 
         // Verdict rule 3 is a *paired* comparison. Scoring arm A over the fixtures that have an
         // arm-A output and arm B over all of them would compare two different corpora and read
         // as a win or a loss depending only on which recordings happened to have AI enabled.
         print("lang / n / werA mean/median / werB mean/median  — paired subset only")
-        for language in ["en", "he", "ru", "ALL"] {
+        for language in ["en", "he", "ru", "mixed", "ALL"] {
             let group = (language == "ALL" ? rows : rows.filter { $0.language == language })
                 .filter { $0.werA != nil }
             guard !group.isEmpty else { continue }
@@ -173,7 +193,7 @@ final class PolishBenchmarkTests: XCTestCase {
         }
 
         print("lang / n / werB mean/median / llm_rate  — full scored corpus")
-        for language in ["en", "he", "ru", "ALL"] {
+        for language in ["en", "he", "ru", "mixed", "ALL"] {
             let group = language == "ALL" ? rows : rows.filter { $0.language == language }
             guard !group.isEmpty else { continue }
             print(String(format: "%@ n=%d  werB %.4f/%.4f  llm_rate %.3f",
@@ -194,10 +214,15 @@ final class PolishBenchmarkTests: XCTestCase {
                          Self.percentile(group.map(\.polishMs), 0.95)))
         }
 
+        // Over every row, including the excluded ones: these two never read the reference.
         print("""
-        drift: \(rows.filter(\.driftB).count)   \
-        preservation: \(String(format: "%.3f", Double(rows.filter(\.preservedB).count) / Double(rows.count)))
-        NOTE: ru is ~3% of this corpus — its column is directional, not conclusive.
+        drift: \(allRows.filter(\.driftB).count)   \
+        preservation: \(String(format: "%.3f",
+                               Double(allRows.filter(\.preservedB).count) / Double(allRows.count)))\
+         (over all \(allRows.count) rows — neither metric reads the reference)
+        NOTE: languages above are by DETECTED SCRIPT, not by the stored language field,\
+        which records the model routed to rather than the speech. Read the n on every row:\
+        real Hebrew and Russian are a small fraction of this corpus and are directional only.
         ──────────────────────────────────────────────────────────────────────────
 
         """)
@@ -233,6 +258,35 @@ final class PolishBenchmarkTests: XCTestCase {
             .split(whereSeparator: { $0.isWhitespace })
             .map { String($0.filter { $0.isLetter || $0.isNumber }) }
             .filter { !$0.isEmpty }
+    }
+
+    /// The language of a fixture, by the script its words are actually written in.
+    ///
+    /// **Not `fixture.language`.** That field is `ZLANGUAGE`, which records the model the audio
+    /// was routed to, not the speech it contains: it declares 151 Hebrew recordings of which only
+    /// 10 hold any Hebrew, and the golden set's `he = 93` is likewise ~10 real Hebrew and ~83
+    /// English or Russian speech that happened to go through the Hebrew model. Grouping by it
+    /// produces a "Hebrew" column measuring mostly English, which is worse than no column —
+    /// the per-language release gates bind to these figures.
+    ///
+    /// Majority by word, matching `ProtectionDetector.dominantFamily`, so one borrowed Latin
+    /// technical term cannot relabel a Hebrew utterance. `mixed` when nothing holds a majority.
+    static func detectedLanguage(of text: String) -> String {
+        var counts: [ScriptFamily: Int] = [:]
+        for word in text.split(whereSeparator: \.isWhitespace) {
+            let families = ScriptAnalyzer.scriptFamilies(in: String(word))
+            guard families.count == 1, let family = families.first else { continue }
+            counts[family, default: 0] += 1
+        }
+        let total = counts.values.reduce(0, +)
+        guard total > 0, let (family, count) = counts.max(by: { $0.value < $1.value }),
+              count * 2 > total else { return "mixed" }
+        switch family {
+        case .latin:    return "en"
+        case .cyrillic: return "ru"
+        case .hebrew:   return "he"
+        default:        return family.rawValue
+        }
     }
 
     /// A flat −1.0 disqualifier: the output must not be written in a script the input was not.

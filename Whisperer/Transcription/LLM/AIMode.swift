@@ -144,8 +144,9 @@ struct AIMode: Codable, Identifiable, Equatable {
             //      correction gets truncated mid-word. Bare "before:"/"after:" lines score higher
             //      (+0.478 vs +0.455) with zero echoes. Keep them out of delimiter shape.
             //   3. EVERY EXAMPLE IS LIFTED FROM A TRAIN CASE (lg_en5, lg_he0, he08, ru_s6, cd03,
-            //      cd01, he_s10), verified case by case, so the 64 held-out cases are not an
-            //      answer key — and holdout still leads every other candidate.
+            //      cd01, and the Hebrew mishearing pair), verified case by case, so the 64
+            //      held-out cases are not an answer key — and holdout still leads every other
+            //      candidate.
             //   4. NO ANTI-ECHO GUARD SENTENCE. Two variants that add one score +0.006 higher on
             //      holdout and give up 0.03-0.04 of Hebrew, which is the language that forced the
             //      last rewrite. With zero echo failures already, the guard buys nothing.
@@ -155,6 +156,22 @@ struct AIMode: Codable, Identifiable, Equatable {
             //
             // Rule 7 names specific mishearings on purpose. That was measured harmful on the
             // 1.5B and is not on this model — it is part of the leading candidate here.
+            //
+            // UNMEASURED CHANGE (M6) — the numbers above are from the run BEFORE it. The Hebrew
+            // mishearing was `טורף → טוב`, in rule 7's inline list and in the worked pair. Those
+            // two words are not acoustically confusable ("predator" vs "good"), so the example
+            // taught a semantic substitution rather than a mishearing repair — the exact drift
+            // this prompt is most exposed to. Replaced at BOTH sites with `הטקס → הטקסט`
+            // ("the ceremony" vs "the text"), an attested decode error: golden-set entry
+            // 93825790 ("…מציגה את הטקס שלנו"), whose streaming pass got `הטקסט` right.
+            // Carrier sentence is that same recording, so the pair is still lifted from real
+            // audio; it now also demonstrates rule 1 instead of ?-preservation, which the old
+            // pair's authored `?` was the only example of. Count and the bare before:/after:
+            // format are unchanged. PENDING the M0 harness re-run: holdout must not drop,
+            // Hebrew must stay within ~0.15 of en/ru, drift must be 0 — if it fails, delete the
+            // pair from both sites rather than restore `טורף`. Working notes:
+            // Tools/llm-eval/m6-hebrew-example.md. docs/knowledge/llm/criteria.md §1 still
+            // lists the old pair as its ASR-mishearing example and needs the same correction.
             prompt: """
             You repair voice-dictation transcripts. The text arrives between [INPUT] and [/INPUT]. Reply with that same text, errors fixed — nothing else: no preamble, no quotes, no notes. Your first word is the input's own first word.
 
@@ -167,7 +184,7 @@ struct AIMode: Codable, Identifiable, Equatable {
             4. Spoken punctuation becomes the mark: period/точка/נקודה → . comma/запятая/פסיק → , question mark → ? dash → - , dash dash → -- , dot → . , slash → / , dot slash → ./
             5. Missing comma before a word joining two full clauses: and, but, so, because / и, но, потому что / ו, אבל, כי.
             6. Spelled-out numbers → digits: three → 3, שלושה → 3, twenty four seven → 24/7.
-            7. A mangled term → its normal spelling (Dicitation → Dictation). A word that cannot mean anything where it stands → the word actually meant (Plower → planner, rounds → routes, טורף → טוב). Only that one word changes. Unsure? Leave it.
+            7. A mangled term → its normal spelling (Dicitation → Dictation). A word that cannot mean anything where it stands → the word actually meant (Plower → planner, rounds → routes, הטקס → הטקסט). Only that one word changes. Unsure? Leave it.
             8. Small words that are actually wrong: is/are, a/the, of/on/in, a broken verb form.
 
             Nothing else changes. Never reword, reorder, add or drop other words. No synonyms, no singular/plural or tense "improvements". Never split one sentence into two, never turn a comma into a period. Every correct stretch is copied through character for character.
@@ -183,8 +200,8 @@ struct AIMode: Codable, Identifiable, Equatable {
             before: אני רואה שעדיין יש תקורות, עדיין יש תקורות, והמודל של Dicitation לא מושלם
             after: אני רואה שעדיין יש תקורות, והמודל של Dictation לא מושלם.
 
-            before: בוא ננסה לדבר בעברית, אני רוצה לראות עד כמה טורף זה יכול לעבוד?
-            after: בוא ננסה לדבר בעברית, אני רוצה לראות עד כמה טוב זה יכול לעבוד?
+            before: בואו נדבר בעברית, אני רוצה לראות איך התוכנה מציגה את הטקס שלנו
+            after: בואו נדבר בעברית, אני רוצה לראות איך התוכנה מציגה את הטקסט שלנו.
 
             before: אנחנו צריכים שלושה שרתים שרצים עשרים וארבע שבע
             after: אנחנו צריכים 3 שרתים שרצים 24/7.

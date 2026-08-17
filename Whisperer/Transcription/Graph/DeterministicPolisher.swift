@@ -143,3 +143,31 @@ struct DeterministicPolisher: Sendable {
         return !first.isLowercase
     }
 }
+
+// MARK: - One editor, two callers
+
+extension DeterministicPolisher {
+
+    /// The editor as both callers configure it: the user's dictionary as the alias table, the
+    /// same terms hard-protected so no later pass can undo a correction the user made.
+    ///
+    /// The point of the factory is that "meetings run the same editor as dictation" is a fact
+    /// about one function rather than about two call sites that happen to agree today and drift
+    /// apart on the next edit to either. Both `MeetingSession` and
+    /// `AppState.applyLLMPostProcessing` call it.
+    ///
+    /// Takes the entries rather than reading `DictionaryManager.shared` so it stays off the main
+    /// actor and a test can build both callers' editors from the same dictionary.
+    ///
+    /// - Parameter formatsLists: whether enumeration reflow runs. Off mid-stream, where a list
+    ///   may straddle the cut, and off in dictation, whose call sites already ran
+    ///   `applyListFormatting`; on at the meeting endpoint.
+    static func forTranscript(dictionaryEntries: [DictionaryEntry],
+                              formatsLists: Bool) -> DeterministicPolisher {
+        DeterministicPolisher(
+            aliases: AliasEngine(entries: dictionaryEntries),
+            dictionaryTerms: Set(dictionaryEntries.map(\.correctForm)),
+            formatsLists: formatsLists
+        )
+    }
+}

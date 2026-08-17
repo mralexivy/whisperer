@@ -35,6 +35,20 @@ final class TranscriptNormalizerTests: XCTestCase {
         XCTAssertEqual(normalized("как бы всё готово"), "всё готово")
     }
 
+    /// An utterance that is nothing but fillers survives whole.
+    ///
+    /// Regression: segment 72 of a real meeting is the single word `כאילו`, and filler removal
+    /// emptied it — a timestamped, playable transcript row replaced by the empty string. Alone,
+    /// a discourse marker is the turn rather than noise inside one.
+    func testAnAllFillerUtteranceIsLeftAlone() {
+        XCTAssertEqual(normalized("כאילו"), "כאילו")
+        XCTAssertEqual(normalized("um"), "um")
+        XCTAssertEqual(normalized("uh um uh"), "uh um uh")
+        XCTAssertEqual(normalized("это самое"), "это самое")
+        // One content word is enough to make the rest noise again.
+        XCTAssertEqual(normalized("כאילו כן"), "כן")
+    }
+
     /// `like` stays. It is a content word far too often for any threshold to clear the
     /// 0.99-precision bar, and deleting it from `I like it` is the catastrophic direction.
     func testAmbiguousEnglishMarkerIsKept() {

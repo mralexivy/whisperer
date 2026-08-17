@@ -1942,11 +1942,9 @@ class AppState: ObservableObject {
         // List formatting is off here because both call sites already ran `applyListFormatting`.
         var input = text
         if mode.id == AIMode.correctModeId || mode.id == AIMode.grammarModeId {
-            let polisher = DeterministicPolisher(
-                aliases: AliasEngine(entries: DictionaryManager.shared.entries),
-                dictionaryTerms: Set(DictionaryManager.shared.entries.map(\.correctForm)),
-                formatsLists: false
-            )
+            let polisher = DeterministicPolisher.forTranscript(
+                dictionaryEntries: DictionaryManager.shared.entries,
+                formatsLists: false)
             let polished = polisher.polish(text: text)
             input = polished.text
             if !polished.needsGenerativePass {

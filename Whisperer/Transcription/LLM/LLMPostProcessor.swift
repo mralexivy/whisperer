@@ -472,7 +472,14 @@ class LLMPostProcessor: ObservableObject {
         outputTokensHint: Int? = nil,
         timeoutSecondsOverride: Double? = nil,
         throwOnFallback: Bool = false,
-        reuseWarmCache: Bool = true
+        reuseWarmCache: Bool = true,
+        // Accumulated output so far, handed out once per generated token. Exists so a caller
+        // that wants the *first* line of a long structured answer does not have to wait for the
+        // whole generation: the merged meeting artifact names the recording from its TITLE line
+        // while the summary underneath it is still decoding. Only the MTP path drives it — the
+        // ChatSession path is a fallback for non-MTP models, where the caller still gets the
+        // complete text from the return value.
+        onPartialText: (@Sendable (String) -> Void)? = nil
     ) async throws -> String {
         guard let container = modelContainer else {
             Logger.warning("LLM not loaded, returning original text", subsystem: .transcription)
@@ -534,7 +541,8 @@ class LLMPostProcessor: ObservableObject {
                 repetitionPenalty: repetitionPenalty,
                 timeoutSecondsOverride: timeoutSecondsOverride,
                 throwOnFallback: throwOnFallback,
-                reuseWarmCache: reuseWarmCache
+                reuseWarmCache: reuseWarmCache,
+                onPartialText: onPartialText
             )
             return mtpResult
         }
@@ -727,7 +735,8 @@ class LLMPostProcessor: ObservableObject {
         repetitionPenalty: Float = 1.0,
         timeoutSecondsOverride: Double? = nil,
         throwOnFallback: Bool = false,
-        reuseWarmCache: Bool = true
+        reuseWarmCache: Bool = true,
+        onPartialText: (@Sendable (String) -> Void)? = nil
     ) async throws -> String {
         let timeoutSeconds: Double = timeoutSecondsOverride ?? (charCount < 30 ? 5 : charCount < 200 ? 10 : 15)
         let mtpOutput = MTPOutput()
@@ -755,7 +764,7 @@ class LLMPostProcessor: ObservableObject {
         }
 
         // Build full prompt tokens + run MTP inside the container's serial lock.
-        try await container.perform { [mtpOutput, warmBox] context in
+        try await container.perform { [mtpOutput, warmBox, onPartialText] context in
             let tokenizer = context.tokenizer
             let messages: [Message] = [
                 ["role": "system", "content": instructions],
@@ -817,6 +826,10 @@ class LLMPostProcessor: ObservableObject {
                         mtpOutput.stop = true
                         return false
                     }
+                    // Handed the accumulated text rather than the piece: a caller looking for a
+                    // completed line cannot reassemble one from token fragments, and String is
+                    // copy-on-write so passing it costs a retain, not a copy of the output.
+                    onPartialText?(mtpOutput.text)
                     if let limit = outputCharLimit, mtpOutput.charCount > limit { return false }
                     return true
                 }

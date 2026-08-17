@@ -100,6 +100,17 @@ enum TranscriptNormalizer {
 
     // MARK: - Fillers
 
+    /// Deletions for every filler in the graph — **unless that is all of it**.
+    ///
+    /// An utterance whose every word is a filler is returned untouched. Found on a real meeting:
+    /// segment 72 of `EFF8E485…` is the single word `כאילו`, and deleting it turned a transcript
+    /// segment into the empty string. Two reasons that is the wrong answer rather than an edge
+    /// case. A segment is addressable — it has a timestamp, a speaker and an audio span that the
+    /// UI plays — so emptying one deletes a row rather than tidying it. And a word that is a
+    /// filler *between* other words is not necessarily one when it is the whole turn: `כאילו` or
+    /// `so` alone is an answer to a question, and the utterance carries no context to decide
+    /// otherwise. Precision over recall: leaving a filler in is annoying, deleting the user's
+    /// only word is data loss.
     private static func fillerEdits(_ graph: TokenGraph) -> [TranscriptEdit] {
         var edits: [TranscriptEdit] = []
         let words = wordPositions(in: graph)
@@ -124,6 +135,11 @@ enum TranscriptNormalizer {
                 edits.append(delete(token, source: .filler, confidence: 0.90, reason: "discourse filler: \(key)"))
             }
         }
+        // Counted by target rather than by edit: a phrase match emits one deletion per word, so
+        // comparing `edits.count` to `words.count` would miss nothing here but would start
+        // over-counting the moment a token could be targeted twice.
+        let doomed = Set(edits.map(\.target))
+        guard doomed.count < words.count else { return [] }
         return edits
     }
 
