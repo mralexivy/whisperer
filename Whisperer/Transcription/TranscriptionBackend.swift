@@ -147,25 +147,20 @@ extension TranscriptionBackend {
     func requestAbort() { }
     func resetAbort() { }
 
-    func transcribe(
-        samples: [Float],
-        initialPrompt: String? = nil,
-        language: TranscriptionLanguage = .auto,
-        singleSegment: Bool = false,
-        maxTokens: Int32 = 0
-    ) -> String {
-        transcribe(samples: samples, initialPrompt: initialPrompt, language: language, singleSegment: singleSegment, maxTokens: maxTokens)
-    }
-
-    func transcribeAsync(
-        samples: [Float],
-        initialPrompt: String? = nil,
-        language: TranscriptionLanguage = .auto,
-        singleSegment: Bool = false,
-        maxTokens: Int32 = 0,
-        completion: @escaping (String) -> Void
-    ) {
-        transcribeAsync(samples: samples, initialPrompt: initialPrompt, language: language, singleSegment: singleSegment, maxTokens: maxTokens, completion: completion)
+    // NOTE — do NOT add `transcribe`/`transcribeAsync` shims here just to supply default
+    // parameter values. A protocol-extension method whose signature matches a requirement
+    // *becomes* the witness for any conforming type that doesn't declare that exact
+    // signature, and a shim that forwards to itself then recurses until the thread's 512 KB
+    // stack hits its guard page — `EXC_BAD_ACCESS (code=2)` with no backtrace in the log.
+    //
+    // That is not hypothetical: adding `audioCtx:` to `WhisperBridge.transcribe` silently
+    // unwitnessed the requirement and every call through a `TranscriptionBackend`-typed
+    // reference crashed on the stop path (2026-08-17). With no shim, the same mistake is a
+    // compile error instead. Concrete backends keep their own default arguments; call sites
+    // holding the protocol type pass every argument explicitly.
+    func transcribe(samples: [Float]) -> String {
+        transcribe(samples: samples, initialPrompt: nil, language: .auto,
+                   singleSegment: false, maxTokens: 0)
     }
 }
 

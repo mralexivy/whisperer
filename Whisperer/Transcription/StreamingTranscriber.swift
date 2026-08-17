@@ -986,7 +986,8 @@ class StreamingTranscriber {
             samples: normalizedSamples,
             initialPrompt: prompt,
             language: effectiveLanguage,
-            singleSegment: true
+            singleSegment: true,
+            maxTokens: 0
         ) { [weak self] text in
             guard let self = self else { return }
 

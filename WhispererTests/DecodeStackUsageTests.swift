@@ -4,6 +4,16 @@
 //
 //  How much thread stack does a whisper.cpp decode actually consume?
 //
+//  RESOLVED 2026-08-17 — the `EXC_BAD_ACCESS (code=2)` this file was written to chase was NOT
+//  the decode. `TranscriptionBackend`'s extension carried a `transcribe(...)` shim whose
+//  signature matched the protocol requirement and which forwarded to itself. Adding `audioCtx:`
+//  to `WhisperBridge.transcribe` unwitnessed the requirement, the recursive shim became the
+//  witness, and every call through a `TranscriptionBackend`-typed reference recursed until it
+//  hit the 512 KB stack's guard page — which is exactly what a stack overflow looks like, hence
+//  this investigation. The measurement below stands and is worth keeping: it puts a real number
+//  on the decode's stack cost (~26 KB, 5% of a worker stack) so the next guard-page fault is
+//  not misattributed to whisper.cpp. `testProtocolDispatchDoesNotRecurse` guards the real bug.
+//
 //  Every non-main thread on macOS gets 512 KB: measured on 2026-08-17,
 //  `pthread_get_stacksize_np` returns 536576 for a libdispatch worker, a Swift concurrency
 //  cooperative-pool worker, and a default `Thread` alike. Only the main thread gets 8 MB.
@@ -102,6 +112,32 @@ final class DecodeStackUsageTests: XCTestCase {
                 + "(StreamingTranscriber.stopAsync -> Task.detached -> stop -> transcribeTail), "
                 + "so it can fault on the guard page as EXC_BAD_ACCESS(code=2)."
         )
+    }
+
+    // MARK: - Protocol dispatch
+
+    /// The actual 2026-08-17 crash, reproduced through the type that caused it.
+    ///
+    /// `WhisperBridge.transcribe` carries an extra `audioCtx:` parameter, so it does not match
+    /// the `TranscriptionBackend` requirement — a separate five-parameter witness supplies that.
+    /// If that witness is ever deleted, or a self-forwarding default is added back to the
+    /// protocol extension, this call recurses until the stack's guard page and the test host
+    /// dies with `EXC_BAD_ACCESS (code=2)` instead of failing. A crashed run IS the failure
+    /// signal here; there is no way to catch a guard-page fault from inside the process.
+    ///
+    /// Dispatch has to go through the existential — a call on the concrete type binds
+    /// statically to the `audioCtx:` overload and cannot reproduce the bug.
+    func testProtocolDispatchDoesNotRecurse() throws {
+        let backend: any TranscriptionBackend = try loadWhisperBridge()
+
+        // 0.5s of silence: enough to be a legitimate decode, cheap enough to be a unit test.
+        // The assertion is not about the text — it is that this call returns at all.
+        let samples = [Float](repeating: 0, count: 8000)
+        _ = backend.transcribe(samples: samples, initialPrompt: nil, language: .auto,
+                               singleSegment: false, maxTokens: 0)
+
+        // The single-argument convenience on the extension is the other shape that can recurse.
+        _ = backend.transcribe(samples: samples)
     }
 
     // MARK: - Measurement

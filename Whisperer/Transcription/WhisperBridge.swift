@@ -603,6 +603,9 @@ class WhisperBridge: TranscriptionBackend {
     ///     `audioCtxForSamples(samples.count)` to scale encoder cost to the audio actually
     ///     supplied — worth ~600ms on a short tail, where the fixed 30s encode dominates.
     /// - Returns: Transcribed text
+    ///
+    /// The `audioCtx:` parameter means this does NOT match the `TranscriptionBackend`
+    /// requirement — the five-parameter witness below exists for that, and must stay.
     func transcribe(samples: [Float], initialPrompt: String? = nil, language: TranscriptionLanguage = .auto, singleSegment: Bool = false, maxTokens: Int32 = 0, audioCtx: Int32 = 0) -> String {
         // Don't start new transcriptions if shutting down
         guard !isShuttingDown else {
@@ -632,6 +635,23 @@ class WhisperBridge: TranscriptionBackend {
         }
 
         return result
+    }
+
+    /// The `TranscriptionBackend.transcribe` witness, signature-for-signature.
+    ///
+    /// Without it the protocol requirement goes unwitnessed — Swift then silently binds it to
+    /// whatever the protocol extension offers, which is how the stop path came to recurse into
+    /// a guard-page `EXC_BAD_ACCESS` on 2026-08-17. The extension no longer carries a matching
+    /// shim, so removing this is now a compile error rather than a crash. Keep both in step.
+    func transcribe(
+        samples: [Float],
+        initialPrompt: String?,
+        language: TranscriptionLanguage,
+        singleSegment: Bool,
+        maxTokens: Int32
+    ) -> String {
+        transcribe(samples: samples, initialPrompt: initialPrompt, language: language,
+                   singleSegment: singleSegment, maxTokens: maxTokens, audioCtx: 0)
     }
 
     /// Perform the actual transcription (must be called with lock held)

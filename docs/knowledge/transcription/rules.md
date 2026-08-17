@@ -242,3 +242,36 @@
     **only** so the disproof stays compiled and runnable; no production path passes a non-zero
     value. The test asserts the negative — if it ever fails, the trade-off has genuinely changed
     and the question is worth reopening.
+
+30. **Never give a `TranscriptionBackend` protocol extension a method whose signature matches a
+    protocol requirement.** Swift treats such a member as the *default witness*: any conforming
+    type that does not declare that exact signature silently binds the requirement to it. If the
+    shim forwards to the same name — the obvious way to supply default parameter values a
+    protocol cannot declare — it forwards to itself, and every call through a
+    `TranscriptionBackend`-typed reference recurses until the thread's stack hits its guard page.
+
+    This shipped. `WhisperBridge.transcribe` gained an `audioCtx:` parameter for rule 29's
+    experiment, which made its signature stop matching
+    `transcribe(samples:initialPrompt:language:singleSegment:maxTokens:)`. The recursive
+    extension shim became the witness and the stop path died with
+    `EXC_BAD_ACCESS (code=2, address=0x16…)` on 2026-08-17. Adding a parameter with a default
+    value reads as source-compatible and is not: **for protocol conformance, a defaulted
+    parameter is still part of the signature.**
+
+    Two properties made it expensive to find, and both are worth recognising directly:
+    - **It presents as a stack overflow in the decode.** The fault address sits just below a page
+      boundary in the `0x16…` thread-stack range, the last log line is the one immediately before
+      the decode call, and the crash is on the stop path. Every signal points at `whisper_full`.
+      Measured decode stack usage is ~26 KB against a 512 KB worker stack (5%) —
+      `DecodeStackUsageTests` keeps that number on file so the next one is not misattributed.
+    - **There is no backtrace.** Under lldb the Mach exception is trapped before conversion to
+      SIGSEGV, so `CrashHandler`'s `signal()` handlers never run and macOS writes no `.ips`. The
+      Xcode thread pane is the only artifact that shows it — a column of identical
+      `TranscriptionBackend.transcribe` frames. **Look at the thread pane before theorising.**
+
+    The fix is structural, not a patch: the extension carries no matching shim, so an unwitnessed
+    requirement is a compile error (`type 'WhisperBridge' does not conform`). Convenience
+    defaults live on the concrete backends; callers holding the protocol type pass every
+    argument. `DecodeStackUsageTests.testProtocolDispatchDoesNotRecurse` dispatches through the
+    existential — the only shape that reproduces it, since a call on the concrete type binds
+    statically to the `audioCtx:` overload.

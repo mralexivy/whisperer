@@ -669,7 +669,8 @@ struct TranscriptionDetailView: View {
 
                 let promptWords = await AppState.shared.promptWordsString
                 let modelName = await AppState.shared.activeModelDisplayName
-                let rawText = bridge.transcribe(samples: samples, initialPrompt: promptWords, language: language)
+                let rawText = bridge.transcribe(samples: samples, initialPrompt: promptWords,
+                                                language: language, singleSegment: false, maxTokens: 0)
 
                 // Resolve language for history: detected language when auto, otherwise user selection
                 let recordedLanguage: String

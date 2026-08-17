@@ -204,7 +204,8 @@ class FileTranscriptionManager: ObservableObject {
                             samples: chunkData,
                             initialPrompt: combinedPrompt,
                             language: language,
-                            singleSegment: false
+                            singleSegment: false,
+                            maxTokens: 0
                         )
                     }.value
 
