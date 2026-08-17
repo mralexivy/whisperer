@@ -58,3 +58,6 @@ reference/
 
 # Experiment result dumps written to the repo root by ChunkSizeExperimentTests
 /*.txt
+
+# Agent scratch worktrees (created by subagents with isolation: worktree)
+.claude/worktrees/
