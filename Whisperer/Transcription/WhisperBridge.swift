@@ -7,6 +7,7 @@
 
 import CryptoKit
 import Foundation
+import os
 
 // MARK: - Transcription Language
 
@@ -296,30 +297,92 @@ class WhisperBridge: TranscriptionBackend {
 
     // Callbacks for chunked pipeline
     var onNewSegment: ((String) -> Void)?   // Live text from new_segment_callback
-    private(set) var shouldAbort = false     // Checked by abort_callback
-    private var lastSegmentTime: Date?       // For stuck detection
+    private struct AbortState {
+        /// The live flag `abort_callback` polls from whisper.cpp's decode thread.
+        var requested = false
+        /// Sticky for the duration of one `whisper_full` call. Set alongside `requested`, but
+        /// cleared only when a new operation begins — never by `resetAbort()`.
+        ///
+        /// This exists because the drain path gives up after 400 ms and calls `resetAbort()`
+        /// while the decode it asked to stop is still unwinding. That decode then returns its
+        /// abort code with `requested` already back to `false`, so result-handling read it as a
+        /// genuine decode failure; two in a row hit `maxConsecutiveFailures` and tore down a
+        /// perfectly healthy whisper context. A lock cannot fix that — the gap is between two
+        /// separate acquisitions, not inside one — so the question result-handling asks has to
+        /// change from "are we aborting *now*" to "did anyone ask during *this* operation".
+        var requestedDuringCurrentOp = false
+    }
 
-    func requestAbort() { shouldAbort = true }
-    func resetAbort() { shouldAbort = false; lastSegmentTime = nil }
+    /// Read from `abort_callback` on whisper.cpp's decode thread and written from the stop path
+    /// on another. A plain `Bool` was a genuine data race — not because a `Bool` can tear, but
+    /// because nothing established a happens-before edge, leaving the compiler free to reorder
+    /// or hoist the read out of the polling loop. Polled once per `whisper_decode_internal`
+    /// call (~1.6 ms), so an uncontended unfair lock costs nothing at this rate.
+    private let abortFlag = OSAllocatedUnfairLock(initialState: AbortState())
+    var shouldAbort: Bool { abortFlag.withLock { $0.requested } }
+    /// Whether an abort was requested at any point during the current operation. Use this, not
+    /// `shouldAbort`, when deciding whether a nonzero return code is our own doing.
+    private var abortRequestedDuringCurrentOp: Bool {
+        abortFlag.withLock { $0.requestedDuringCurrentOp }
+    }
+
+    func requestAbort() {
+        abortFlag.withLock { $0.requested = true; $0.requestedDuringCurrentOp = true }
+    }
+    func resetAbort() { abortFlag.withLock { $0.requested = false } }
+
+    /// Open a new abort epoch. Called immediately before each `whisper_full`, so a code returned
+    /// by the *previous* operation can never be attributed to this one. Seeds from `requested`
+    /// so an abort already pending at entry still counts.
+    private func beginAbortEpoch() {
+        abortFlag.withLock { $0.requestedDuringCurrentOp = $0.requested }
+    }
 
     // Transcription timeout (default 30 seconds, longer on Intel)
     var transcriptionTimeout: TimeInterval = 30.0
 
-    // Consecutive transcription failure tracking — auto-recover after 2 failures
-    private var consecutiveFailures = 0
     private let maxConsecutiveFailures = 2
 
     // Language detected during the last transcription (from whisper_full_lang_id)
     private(set) var lastDetectedLanguage: String?
 
-    // HealthReportable
-    private(set) var whisperProgressCounter: UInt64 = 0
-    private var whisperOperationID: UInt64 = 0
-    private var whisperOperationStart: ContinuousClock.Instant = .now
-    private var whisperOperationDeadline: ContinuousClock.Instant = .now
-    private var whisperCurrentOp: String? = nil
-    private var whisperSegmentCount: Int = 0
-    private var expectedSegmentCount: Int = 1
+    // MARK: HealthReportable state
+
+    /// Everything `healthState` reports, plus the failure counter that gates context recovery.
+    ///
+    /// These were plain stored properties, and every one of them is written from the whisper
+    /// decode thread — `new_segment_callback` fires synchronously inside `whisper_full` — while
+    /// `HealthManager` reads them from its own monitor queue. Two threads, no synchronization.
+    ///
+    /// `progressCounter` was the worst of them: `&+= 1` is a read-modify-write, and that counter
+    /// is the *only* signal HealthManager uses to distinguish "advancing" from "stalled". A lost
+    /// increment therefore reads as a stall on a bridge that is decoding perfectly, and a stall
+    /// verdict triggers a `/usr/bin/sample` dump that suspends every thread in the process.
+    private struct OpState {
+        var progressCounter: UInt64 = 0
+        var operationID: UInt64 = 0
+        var start: ContinuousClock.Instant = .now
+        var deadline: ContinuousClock.Instant = .now
+        var currentOp: String?
+        var segmentCount: Int = 0
+        var expectedSegmentCount: Int = 1
+        var consecutiveFailures: Int = 0
+    }
+
+    private let opState = OSAllocatedUnfairLock(initialState: OpState())
+
+    /// Open a new operation. Returns the freshly assigned id so the caller can log it.
+    private func beginOperation(named name: String, estimatedMs: Double, expectedSegments: Int) -> UInt64 {
+        opState.withLock {
+            $0.operationID &+= 1
+            $0.start = .now
+            $0.deadline = .now + .milliseconds(Int(estimatedMs * 2))
+            $0.currentOp = name
+            $0.segmentCount = 0
+            $0.expectedSegmentCount = expectedSegments
+            return $0.operationID
+        }
+    }
 
     // Threshold for filtering segments based on no_speech probability.
     // Segments with no_speech_prob above this are considered non-speech hallucinations.
@@ -536,8 +599,11 @@ class WhisperBridge: TranscriptionBackend {
     ///   - initialPrompt: Optional context from previous transcription to improve continuity
     ///   - language: Language for transcription (default: .auto for auto-detection)
     ///   - singleSegment: Force single-segment output (faster for short chunks)
+    ///   - audioCtx: mel-context override; 0 = the default full 1500 frames (30s). Pass
+    ///     `audioCtxForSamples(samples.count)` to scale encoder cost to the audio actually
+    ///     supplied — worth ~600ms on a short tail, where the fixed 30s encode dominates.
     /// - Returns: Transcribed text
-    func transcribe(samples: [Float], initialPrompt: String? = nil, language: TranscriptionLanguage = .auto, singleSegment: Bool = false, maxTokens: Int32 = 0) -> String {
+    func transcribe(samples: [Float], initialPrompt: String? = nil, language: TranscriptionLanguage = .auto, singleSegment: Bool = false, maxTokens: Int32 = 0, audioCtx: Int32 = 0) -> String {
         // Don't start new transcriptions if shutting down
         guard !isShuttingDown else {
             Logger.warning("Transcription skipped - WhisperBridge is shutting down", subsystem: .transcription)
@@ -555,7 +621,7 @@ class WhisperBridge: TranscriptionBackend {
         do {
             result = try ctxLock.withLock(timeout: lockTimeout) { [weak self] in
                 guard let self = self else { return "" }
-                return self.performTranscription(samples: samples, initialPrompt: initialPrompt, language: language, singleSegment: singleSegment, maxTokens: maxTokens)
+                return self.performTranscription(samples: samples, initialPrompt: initialPrompt, language: language, singleSegment: singleSegment, maxTokens: maxTokens, audioCtx: audioCtx)
             }
         } catch SafeLockError.timeout {
             Logger.error("Failed to acquire context lock within \(lockTimeout) seconds - possible deadlock", subsystem: .transcription)
@@ -569,7 +635,7 @@ class WhisperBridge: TranscriptionBackend {
     }
 
     /// Perform the actual transcription (must be called with lock held)
-    private func performTranscription(samples: [Float], initialPrompt: String? = nil, language: TranscriptionLanguage = .auto, singleSegment: Bool = false, maxTokens: Int32 = 0) -> String {
+    private func performTranscription(samples: [Float], initialPrompt: String? = nil, language: TranscriptionLanguage = .auto, singleSegment: Bool = false, maxTokens: Int32 = 0, audioCtx: Int32 = 0) -> String {
         guard let ctx = ctx else {
             Logger.warning("Whisper context is nil, cannot transcribe", subsystem: .transcription)
             return ""
@@ -577,15 +643,10 @@ class WhisperBridge: TranscriptionBackend {
         guard !samples.isEmpty else { return "" }
 
         // Track operation for HealthManager
-        let opID = whisperOperationID &+ 1
         let duration = Double(samples.count) / 16000.0
         let estimatedMs = duration * 1000.0 * (WhisperBridge.isAppleSilicon ? 0.15 : 0.5)
-        whisperOperationID = opID
-        whisperOperationStart = .now
-        whisperOperationDeadline = .now + .milliseconds(Int(estimatedMs * 2))
-        whisperCurrentOp = "transcribing"
-        whisperSegmentCount = 0
-        expectedSegmentCount = max(1, Int(duration / 2.0))
+        let opID = beginOperation(named: "transcribing", estimatedMs: estimatedMs,
+                                  expectedSegments: max(1, Int(duration / 2.0)))
         EventRingBuffer.shared.record(
             component: "WhisperBridge",
             operation: "transcribeStarted",
@@ -593,7 +654,8 @@ class WhisperBridge: TranscriptionBackend {
             metadata: ["op": .int(Int(opID)), "durationSec": .double(duration)]
         )
 
-        let wparams = makeFullParams(singleSegment: singleSegment, maxTokens: maxTokens, noTimestamps: true)
+        let wparams = makeFullParams(singleSegment: singleSegment, maxTokens: maxTokens, noTimestamps: true,
+                                     audioCtx: audioCtx)
         let result = runWhisperFull(ctx: ctx, samples: samples, params: wparams,
                                     initialPrompt: initialPrompt, language: language)
 
@@ -634,6 +696,42 @@ class WhisperBridge: TranscriptionBackend {
     // whisper keeps its segment timings. Everything else — the ~40-line params block,
     // the C-string lifetime dance around language/prompt, and the Metal-corruption
     // recovery path — is identical and lives here so the two cannot drift apart.
+
+    // MARK: - audio_ctx sizing
+
+    /// Full mel context: 1500 frames = 30s, i.e. one frame per 20ms of audio.
+    static let fullAudioCtx: Int32 = 1500
+
+    /// Smallest `audio_ctx` worth asking for. Below roughly this the encoder's receptive field
+    /// is so short that decode quality falls off sharply for no meaningful latency gain.
+    static let minimumAudioCtx: Int32 = 256
+
+    /// `audio_ctx` sized to `sampleCount`, or `fullAudioCtx` when that is no cheaper.
+    ///
+    /// **This must never truncate.** A fixed `audio_ctx` was tried on the eager preview path and
+    /// reverted (see the note above `runEagerStreamPass`): applied to windows whose length varied
+    /// by two orders of magnitude it truncated the long ones, the decoder looped, and the garbage
+    /// propagated into the next pass's `initial_prompt`. The failure was fixed-vs-varying, not
+    /// small-vs-large — so sizing *from the actual sample count*, with headroom, is the shape that
+    /// comment explicitly leaves on the table.
+    ///
+    /// Three defenses against that failure mode, in order:
+    /// 1. Frames are rounded **up** from the true duration, never down.
+    /// 2. A 25% + 128-frame headroom absorbs the encoder's convolutional receptive field and any
+    ///    internal padding, so the covered span strictly exceeds the audio handed in.
+    /// 3. The result is clamped to `fullAudioCtx`, so anything long simply gets today's behavior.
+    ///    There is no input for which this returns a value that covers less audio than exists.
+    static func audioCtxForSamples(_ sampleCount: Int, sampleRate: Double = 16000) -> Int32 {
+        guard sampleCount > 0 else { return fullAudioCtx }
+        let seconds = Double(sampleCount) / sampleRate
+        // 1500 frames / 30s = 50 frames per second.
+        let exact = (seconds * 50.0).rounded(.up)
+        let padded = exact * 1.25 + 128
+        // Round to a multiple of 64 to keep the mel tensor nicely aligned.
+        let aligned = (padded / 64.0).rounded(.up) * 64.0
+        guard aligned < Double(fullAudioCtx) else { return fullAudioCtx }
+        return max(minimumAudioCtx, Int32(aligned))
+    }
 
     /// Build the decode params. `noTimestamps: false` also implies multi-segment output,
     /// since a single forced segment carries a single useless span.
@@ -678,11 +776,14 @@ class WhisperBridge: TranscriptionBackend {
             wparams.new_segment_callback = { ctx, state, nNew, userData in
                 guard let userData = userData, let ctx = ctx else { return }
                 let bridge = Unmanaged<WhisperBridge>.fromOpaque(userData).takeUnretainedValue()
-                bridge.lastSegmentTime = Date()
-                bridge.whisperProgressCounter &+= 1
-                bridge.whisperSegmentCount += 1
-                // Extend deadline as progress arrives
-                bridge.whisperOperationDeadline = .now + .seconds(4)
+                // One acquisition for all three: the counter, the segment tally and the deadline
+                // extension are read together by `healthState`, so publishing them separately
+                // lets HealthManager see a bumped counter with a stale deadline.
+                bridge.opState.withLock {
+                    $0.progressCounter &+= 1
+                    $0.segmentCount += 1
+                    $0.deadline = .now + .seconds(4)   // progress arrived — push the deadline out
+                }
 
                 // Read the latest segments
                 let totalSegments = whisper_full_n_segments(ctx)
@@ -700,15 +801,37 @@ class WhisperBridge: TranscriptionBackend {
             wparams.new_segment_callback_user_data = userData
         }
 
-        if shouldAbort == false {
-            // Only set abort callback if we might want to abort
-            wparams.abort_callback = { userData -> Bool in
-                guard let userData = userData else { return false }
-                let bridge = Unmanaged<WhisperBridge>.fromOpaque(userData).takeUnretainedValue()
-                return bridge.shouldAbort
-            }
-            wparams.abort_callback_user_data = userData
+        // Installed unconditionally. This used to be gated on `shouldAbort == false`, described
+        // as "only set abort callback if we might want to abort" — which has the logic exactly
+        // backwards: a flag that is *already* set is the case where the callback is needed most,
+        // and skipping it made that decode uninterruptible for its full duration. The drain path
+        // (`StreamingTranscriber.drainInFlightEagerPass`) sets the flag and then waits, so any
+        // eager pass that built its params inside that window got no callback at all and ran to
+        // completion — which is what the drain was trying to prevent, and which then made the
+        // *next* stop's drain time out too.
+        wparams.abort_callback = { userData -> Bool in
+            guard let userData = userData else { return false }
+            let bridge = Unmanaged<WhisperBridge>.fromOpaque(userData).takeUnretainedValue()
+            return bridge.shouldAbort
         }
+        wparams.abort_callback_user_data = userData
+
+        // Abort *before* an encoder pass rather than after it. `abort_callback` is consulted
+        // once per `whisper_encode_internal`, at the very end (whisper.cpp:2455) — the
+        // `ggml_backend_sched_t` graph-compute overload (whisper.cpp:190-213) installs no ggml
+        // abort callback, so a running encode cannot be cut short. `encoder_begin_callback`
+        // (whisper.cpp:7033-7038) is checked before each window instead, so returning false
+        // skips the ~670 ms encode entirely instead of paying for it and discarding the result.
+        //
+        // It also `break`s the seek loop rather than returning -6, so `whisper_full` returns 0
+        // with the segments decoded so far — a clean partial result instead of an error code
+        // that has to be special-cased downstream.
+        wparams.encoder_begin_callback = { _, _, userData -> Bool in
+            guard let userData = userData else { return true }
+            let bridge = Unmanaged<WhisperBridge>.fromOpaque(userData).takeUnretainedValue()
+            return !bridge.shouldAbort
+        }
+        wparams.encoder_begin_callback_user_data = userData
 
         // Always start fresh — streaming mode re-transcribes ALL audio each call,
         // so carrying decoder state between calls degrades quality.
@@ -730,6 +853,11 @@ class WhisperBridge: TranscriptionBackend {
     private func runWhisperFull(ctx: OpaquePointer, samples: [Float], params: whisper_full_params,
                                 initialPrompt: String?, language: TranscriptionLanguage) -> Int32 {
         var wparams = params
+
+        // Open the abort epoch as late as possible — immediately before the call whose return
+        // code it will be used to interpret — so a code left over from the previous operation
+        // can never be attributed to this one.
+        beginAbortEpoch()
 
         if let prompt = initialPrompt, !prompt.isEmpty {
             Logger.debug("Initial prompt: '\(prompt.prefix(100))'", subsystem: .transcription)
@@ -775,16 +903,17 @@ class WhisperBridge: TranscriptionBackend {
     /// once the Metal context has failed enough times to be presumed corrupt.
     private func handleTranscriptionResult(_ result: Int32) -> Bool {
         guard result != 0 else {
-            consecutiveFailures = 0
-            whisperCurrentOp = nil
+            opState.withLock { $0.consecutiveFailures = 0; $0.currentOp = nil }
             return true
         }
 
-        // An abort reports itself through whichever stage happened to be running, so it has two
-        // return codes rather than one: -9 when the *decoder* loop notices the callback
-        // (whisper.cpp:7475), and -6 "failed to encode" when the *encoder* does
-        // (whisper.cpp:7037, via `whisper_encode_internal` returning false at :2455). Neither is
-        // distinguishable, by return code alone, from the genuine failure that shares it.
+        // An abort reports itself through whichever stage happened to be running, so it has
+        // *three* return codes rather than one: -6 "failed to encode" from the encoder
+        // (whisper.cpp:7037, via `whisper_encode_internal` returning false at :2455), -8 from
+        // the initial-prompt decode (whisper.cpp:7161), and -9 from the sampling decode
+        // (whisper.cpp:7475). None is distinguishable, by return code alone, from the genuine
+        // failure that shares it. -8 was missed originally: it runs for every seek window, so a
+        // stop landing on that step was counted as a real fault.
         //
         // It is not a failure when we are the ones who asked. Every stop that reuses a live eager
         // preview calls `requestAbort()`, so counting these reaches `maxConsecutiveFailures` (2)
@@ -794,27 +923,38 @@ class WhisperBridge: TranscriptionBackend {
         // logged one line after `Eager stop drained in-flight pass in 120ms`: the drain worked
         // exactly as designed and was then recorded as a fault.
         //
-        // Gated on `shouldAbort` and nothing else. Outside a stop the flag is clear, so a real
-        // -6/-9 still counts — this suppresses the codes only in the window where we asked for
-        // them, which is the only window in which they are ambiguous.
-        if result == -9 || result == -6, shouldAbort {
+        // Gated on the *epoch* flag, not on `shouldAbort`. The drain gives up after 400 ms and
+        // calls `resetAbort()` while the decode is still unwinding, so by the time its code
+        // arrives here `shouldAbort` has often already gone back to false and the suppression
+        // missed — reintroducing the exact failure this block exists to prevent, just less
+        // often and therefore harder to see. Outside a stop no one requested an abort during the
+        // operation, so a real -6/-8/-9 still counts.
+        if result == -9 || result == -8 || result == -6, abortRequestedDuringCurrentOp {
             Logger.debug("Whisper decode aborted on request", subsystem: .transcription)
-            whisperCurrentOp = nil
+            opState.withLock { $0.currentOp = nil }
             return false
         }
 
-        consecutiveFailures += 1
-        Logger.error("Whisper transcription failed with code: \(result) (failure \(consecutiveFailures)/\(maxConsecutiveFailures))", subsystem: .transcription)
+        // Increment and read back under one acquisition — a separate read could see another
+        // thread's value and either skip recovery on the second real failure or trigger it twice.
+        // `currentOp` is deliberately *not* cleared here (it is on the success and abort paths):
+        // a real failure should keep reporting an operation so `healthState`'s
+        // `consecutiveFailures > 0` branch can surface `.stalled` instead of a clean idle.
+        let failures = opState.withLock { state -> Int in
+            state.consecutiveFailures += 1
+            return state.consecutiveFailures
+        }
+        Logger.error("Whisper transcription failed with code: \(result) (failure \(failures)/\(maxConsecutiveFailures))", subsystem: .transcription)
 
         // After repeated failures (e.g., Metal encode errors), the GPU context
         // may be corrupted. Schedule async recovery to reload the model.
-        if consecutiveFailures >= maxConsecutiveFailures {
+        if failures >= maxConsecutiveFailures {
             Logger.warning("Consecutive failures reached \(maxConsecutiveFailures), scheduling context recovery", subsystem: .transcription)
             let bridge = self
             queue.async {
                 do {
                     try bridge.recoverContext()
-                    bridge.consecutiveFailures = 0
+                    bridge.opState.withLock { $0.consecutiveFailures = 0 }
                 } catch {
                     Logger.error("Auto-recovery failed: \(error.localizedDescription)", subsystem: .transcription)
                 }
@@ -873,15 +1013,10 @@ class WhisperBridge: TranscriptionBackend {
         guard !samples.isEmpty else { return [] }
 
         // Track operation for HealthManager
-        let opID = whisperOperationID &+ 1
         let duration = Double(samples.count) / 16000.0
         let estimatedMs = duration * 1000.0 * (WhisperBridge.isAppleSilicon ? 0.15 : 0.5)
-        whisperOperationID = opID
-        whisperOperationStart = .now
-        whisperOperationDeadline = .now + .milliseconds(Int(estimatedMs * 2))
-        whisperCurrentOp = "transcribing"
-        whisperSegmentCount = 0
-        expectedSegmentCount = max(1, Int(duration / 2.0))
+        _ = beginOperation(named: "transcribing", estimatedMs: estimatedMs,
+                           expectedSegments: max(1, Int(duration / 2.0)))
 
         let wparams = makeFullParams(singleSegment: false, maxTokens: 0, noTimestamps: false)
         let result = runWhisperFull(ctx: ctx, samples: samples, params: wparams,
@@ -1265,51 +1400,54 @@ extension WhisperBridge: HealthReportable {
     var componentName: String { "WhisperBridge" }
 
     var healthState: ComponentHealth {
-        let seq = whisperProgressCounter
+        // One acquisition, one snapshot. Reading the fields individually let the decode thread
+        // move the deadline between the `now < deadline` test and the `OperationInfo` that
+        // reports it, so a component could be judged against one deadline and dumped with
+        // another — the kind of inconsistency that makes a stall report unreadable.
+        let s = opState.withLock { $0 }
         let now = ContinuousClock.now
 
-        guard let opName = whisperCurrentOp else {
+        guard let opName = s.currentOp else {
             // Idle
             var h = ComponentHealth()
-            h.progress = ProgressInfo(sequence: seq, completedWork: 1.0, lastUpdate: now)
+            h.progress = ProgressInfo(sequence: s.progressCounter, completedWork: 1.0, lastUpdate: now)
             return h
         }
 
-        let elapsed = now - whisperOperationStart
-        let deadline = whisperOperationDeadline
-        let pct = expectedSegmentCount > 0
-            ? min(1.0, Double(whisperSegmentCount) / Double(expectedSegmentCount))
+        let elapsed = now - s.start
+        let pct = s.expectedSegmentCount > 0
+            ? min(1.0, Double(s.segmentCount) / Double(s.expectedSegmentCount))
             : 0.0
 
         let status: ComponentStatus
-        if now < deadline {
+        if now < s.deadline {
             status = .healthy
-        } else if whisperSegmentCount > 0 && now < deadline + .seconds(4) {
+        } else if s.segmentCount > 0 && now < s.deadline + .seconds(4) {
             status = .busy  // making progress but past initial estimate
-        } else if consecutiveFailures > 0 {
+        } else if s.consecutiveFailures > 0 {
             status = .stalled
-        } else if elapsed > .seconds(8) && whisperSegmentCount == 0 {
+        } else if elapsed > .seconds(8) && s.segmentCount == 0 {
             status = .stalled
         } else {
             status = .busy
         }
 
         let op = OperationInfo(
-            id: whisperOperationID,
+            id: s.operationID,
             name: opName,
-            started: whisperOperationStart,
-            deadline: deadline,
+            started: s.start,
+            deadline: s.deadline,
             queueBacklog: 0
         )
 
         var h = ComponentHealth()
         h.status = status
         h.operation = op
-        h.progress = ProgressInfo(sequence: seq, completedWork: pct, lastUpdate: now)
+        h.progress = ProgressInfo(sequence: s.progressCounter, completedWork: pct, lastUpdate: now)
         h.dependencies = []
         h.metadata = [
-            "segments": .int(whisperSegmentCount),
-            "failures": .int(consecutiveFailures)
+            "segments": .int(s.segmentCount),
+            "failures": .int(s.consecutiveFailures)
         ]
         return h
     }

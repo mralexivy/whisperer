@@ -33,11 +33,33 @@ private struct RunResult {
 
 private struct ABResult {
     let fixture: RecordingFixture
+    /// Median WER over `repeatCount` runs of each arm — never a single run. See `medianWER`.
     let werBaseline: Double
     let werEager: Double
+    /// max − min WER across this fixture's eager runs. Printed so a reader can see immediately
+    /// whether a delta is bigger than the fixture's own run-to-run spread.
+    let spreadBaseline: Double
+    let spreadEager: Double
     let script: String
-    let baselineResult: RunResult
-    let eagerResult: RunResult
+    let baselineResults: [RunResult]
+    let eagerResults: [RunResult]
+
+    /// The representative run for diagnostics. Both arrays are stored sorted by WER, so this is
+    /// the median run — not whichever repetition happened to go last.
+    var baselineResult: RunResult { baselineResults[baselineResults.count / 2] }
+    var eagerResult: RunResult { eagerResults[eagerResults.count / 2] }
+}
+
+/// Median rather than mean, because the failure this gate keeps hitting is one run in three
+/// collapsing (a dropped tail, a stalled boundary) and dragging an otherwise-representative
+/// number with it. A mean reports that as "somewhat worse everywhere", which is the wrong
+/// diagnosis; the median reports the typical run and leaves the outlier visible in the spread.
+private func medianWER(_ values: [Double]) -> Double {
+    guard !values.isEmpty else { return 0 }
+    let sorted = values.sorted()
+    return sorted.count % 2 == 1
+        ? sorted[sorted.count / 2]
+        : (sorted[sorted.count / 2 - 1] + sorted[sorted.count / 2]) / 2
 }
 
 // MARK: - EagerStreamRegressionTests
@@ -49,9 +71,9 @@ final class EagerStreamRegressionTests: XCTestCase {
     private static var sharedVAD: SileroVAD?
     private static var allFixtures: [RecordingFixture]?
 
-    // Feature flag UserDefaults key. When wired into StreamingTranscriber this key
-    // switches between the VAD-chunk path (false) and the eager-streaming path (true).
-    private static let eagerFlagKey = "whisperCppEagerStreaming"
+    // The arm is selected with `StreamingTranscriber(eagerStreamOverride:)`, never by writing
+    // the `whisperCppEagerStreaming` UserDefaults key — the test host shares the shipping app's
+    // preferences domain. See `runFixture`.
 
     // Maximum fixtures to include in a single A/B run — kept small to stay within
     // the 10-minute XCTest timeout while still exercising a representative corpus.
@@ -63,6 +85,14 @@ final class EagerStreamRegressionTests: XCTestCase {
     // long twice over. Short and medium recordings are also where the boundary behaviour this
     // gate checks is hardest — a long recording gives the eager path many passes to converge.
     private static let maxFixtureSeconds: Double = 45
+
+    // How many times each arm runs per fixture. Three is the smallest count that has a median,
+    // and the median is the only statistic that survives this gate's variance — see the comment
+    // in the fixture loop for the measurement that forced this. Cost is linear: the gate goes
+    // from roughly six minutes to eighteen. `EAGER_GATE_REPEATS=1` restores single-run speed for
+    // a quick structural check, but a single-run WER number must not be used to accept a change.
+    private static let repeatCount: Int =
+        ProcessInfo.processInfo.environment["EAGER_GATE_REPEATS"].flatMap(Int.init) ?? 3
 
     override class func setUp() {
         super.setUp()
@@ -99,13 +129,25 @@ final class EagerStreamRegressionTests: XCTestCase {
     }
 
     private func fixturesWithAudio() throws -> [RecordingFixture] {
+        // A fixture without a golden reference cannot be scored (see `GoldenSet`), so filter it
+        // out here rather than letting it consume one of the eight slots and then be skipped in
+        // the loop — that silently shrinks the corpus without saying so.
+        // `EAGER_ONLY_FIXTURE=b6250001` narrows the gate to one recording, the way the profile
+        // harness's variable of the same name does. A full run is six minutes and prints eight
+        // fixtures' diagnostics; investigating one seam does not need either.
+        let only = ProcessInfo.processInfo.environment["EAGER_ONLY_FIXTURE"]?.lowercased()
         let withAudio = (Self.allFixtures ?? []).filter {
             $0.audioURL != nil
-                && !$0.transcript.trimmingCharacters(in: .whitespaces).isEmpty
+                && GoldenSet.reference(for: $0.id) != nil
                 && $0.durationSec <= Self.maxFixtureSeconds
+                && (only == nil || $0.id.lowercased().hasPrefix(only!))
         }
+        try XCTSkipIf(GoldenSet.isEmpty,
+            "No golden set — run `python3 scripts/build-golden-set.py` first. Scoring against " +
+            "the app's own stored transcripts is circular and was removed.")
         try XCTSkipIf(withAudio.isEmpty,
-            "No fixtures with audio — build up recordings in the app then re-run")
+            "No fixtures with both audio and a golden reference — regenerate with " +
+            "`python3 scripts/build-golden-set.py`")
         return Array(withAudio.prefix(Self.maxFixtures))
     }
 
@@ -148,31 +190,78 @@ final class EagerStreamRegressionTests: XCTestCase {
 
         for fixture in fixtures {
             guard let audioURL = fixture.audioURL else { continue }
+            // Score against the full-file decode, never `fixture.transcript` — see `GoldenSet`.
+            // Skipped rather than falling back: a corpus where some rows are measured against a
+            // clean reference and others against the app's own streaming output has a mean that
+            // means nothing.
+            guard let reference = GoldenSet.reference(for: fixture.id) else {
+                Logger.warning("No golden reference for \(fixture.id.prefix(8)) — skipping. " +
+                               "Run scripts/build-golden-set.py.", subsystem: .transcription)
+                continue
+            }
             guard let samples = try? loadAudioSamples(from: audioURL) else {
                 Logger.warning("EagerStreamRegressionTests: could not load audio for \(fixture.id)",
                                subsystem: .transcription)
                 continue
             }
 
-            let a = await runFixture(samples: samples, bridge: br, eagerEnabled: false)
-            let b = await runFixture(samples: samples, bridge: br, eagerEnabled: true)
+            // Repeat both arms. A single run of each cannot support any conclusion this gate
+            // draws — measured directly, by running the identical binary over the identical
+            // corpus twice back to back: the eager arm moved on all eight fixtures and its
+            // corpus mean went 0.216 → 0.129, while the baseline arm reproduced exactly on five
+            // of eight. That 0.087 swing is larger than every fix previously measured here, so
+            // four consecutive single-run "improvements" (0.216 → 0.150 → 0.177 → 0.135 → 0.125)
+            // were indistinguishable from the arm resampling itself.
+            //
+            // The variance is not the harness being sloppy — it is the eager path being
+            // wall-clock scheduled. Each pass decodes from the agreement boundary to the live
+            // edge, so a decode that finishes 30 ms sooner sees a different window, agrees on a
+            // different word, and moves the boundary somewhere else for the rest of the
+            // recording. Feeding on a virtual clock would erase it, and would also erase the
+            // behaviour under test. Sampling it is the honest option.
+            var baselineRuns: [RunResult] = []
+            var eagerRuns: [RunResult] = []
+            var baselineWERs: [Double] = []
+            var eagerWERs: [Double] = []
+            for _ in 0..<Self.repeatCount {
+                let a = await runFixture(samples: samples, bridge: br, eagerEnabled: false)
+                let b = await runFixture(samples: samples, bridge: br, eagerEnabled: true)
+                baselineRuns.append(a)
+                eagerRuns.append(b)
+                baselineWERs.append(wordErrorRate(a.finalText, reference: reference))
+                eagerWERs.append(wordErrorRate(b.finalText, reference: reference))
+            }
 
-            let wer_a = wordErrorRate(a.finalText, reference: fixture.transcript)
-            let wer_b = wordErrorRate(b.finalText, reference: fixture.transcript)
-            let script = detectScript(fixture.transcript)
+            let wer_a = medianWER(baselineWERs)
+            let wer_b = medianWER(eagerWERs)
+            let spread_a = (baselineWERs.max() ?? 0) - (baselineWERs.min() ?? 0)
+            let spread_b = (eagerWERs.max() ?? 0) - (eagerWERs.min() ?? 0)
+            let script = detectScript(reference)
 
-            Logger.debug(String(format: "  [%@] WER: baseline=%.3f eager=%.3f | ref=%d words",
-                                String(fixture.id.prefix(8)), wer_a, wer_b,
-                                fixture.transcript.split(separator: " ").count),
+            // Order the stored runs by WER so `eagerResult` — what the diagnostics below print —
+            // is the median run rather than whichever one happened to go last.
+            let a = baselineRuns.sorted { wordErrorRate($0.finalText, reference: reference)
+                                        < wordErrorRate($1.finalText, reference: reference) }
+            let b = eagerRuns.sorted { wordErrorRate($0.finalText, reference: reference)
+                                     < wordErrorRate($1.finalText, reference: reference) }
+            let medianA = a[a.count / 2]
+            let medianB = b[b.count / 2]
+
+            Logger.debug(String(format:
+                "  [%@] WER median of %d: baseline=%.3f (spread %.3f) eager=%.3f (spread %.3f) | ref=%d words",
+                String(fixture.id.prefix(8)), Self.repeatCount, wer_a, spread_a, wer_b, spread_b,
+                reference.split(separator: " ").count),
                          subsystem: .transcription)
 
             results.append(ABResult(
                 fixture: fixture,
                 werBaseline: wer_a,
                 werEager: wer_b,
+                spreadBaseline: spread_a,
+                spreadEager: spread_b,
                 script: script,
-                baselineResult: a,
-                eagerResult: b
+                baselineResults: a,
+                eagerResults: b
             ))
 
             // A WER delta says a fixture got worse; it does not say how, and the how is what a
@@ -181,13 +270,20 @@ final class EagerStreamRegressionTests: XCTestCase {
             // duplicated boundary from a mistranscription — only that `chars=270` had become
             // `chars=208`. Printing all three strings for regressed fixtures costs nothing and
             // turns the next run into evidence instead of another round of inference.
-            if wer_b > wer_a + 0.01 {
+            // Only worth printing when the median regression clears this fixture's own eager
+            // spread. Below that, the "regression" is the arm resampling and the transcript
+            // pair underneath it is a coin flip, not evidence.
+            if wer_b > wer_a + 0.01, wer_b - wer_a > spread_b {
                 Logger.debug("""
                     [\(String(fixture.id.prefix(8)))] REGRESSED \
-                    \(String(format: "%.3f", wer_a)) → \(String(format: "%.3f", wer_b))
-                      ref      (\(fixture.transcript.count)c): \(fixture.transcript)
-                      baseline (\(a.finalText.count)c): \(a.finalText)
-                      eager    (\(b.finalText.count)c): \(b.finalText)
+                    \(String(format: "%.3f", wer_a)) → \(String(format: "%.3f", wer_b)) \
+                    (eager spread \(String(format: "%.3f", spread_b)))
+                      golden   (\(reference.count)c): \(reference)
+                      baseline (\(medianA.finalText.count)c): \(medianA.finalText)
+                      eager    (\(medianB.finalText.count)c): \(medianB.finalText)
+                      eager chunks:
+                    \(medianB.chunkSpans.map { String(format: "      [%.2f-%.2f] %@", $0.start, $0.end, $0.text) }
+                        .joined(separator: "\n"))
                     """, subsystem: .transcription)
             }
         }
@@ -226,9 +322,12 @@ final class EagerStreamRegressionTests: XCTestCase {
         bridge: WhisperBridge,
         eagerEnabled: Bool
     ) async -> RunResult {
-        UserDefaults.standard.set(eagerEnabled, forKey: Self.eagerFlagKey)
-        defer { UserDefaults.standard.removeObject(forKey: Self.eagerFlagKey) }
-
+        // Pass the arm in directly. This used to write `Self.eagerFlagKey` to
+        // `UserDefaults.standard` and clear it in a `defer` — but the test host shares the
+        // shipping app's preferences domain, so any run that was killed or crashed between the
+        // set and the defer left `whisperCppEagerStreaming = 0` in the user's real preferences.
+        // The app then launched with live preview silently dead, which is exactly what happened
+        // and cost a debugging session to find. A gate must not be able to break the product.
         var displaySequence: [String] = []
         var chunkSpans: [ChunkSpan] = []
         var firstWordLatencyMs: Double = -1
@@ -237,12 +336,22 @@ final class EagerStreamRegressionTests: XCTestCase {
         let transcriber = StreamingTranscriber(
             backend: bridge,
             vad: vad(),
-            language: .auto
+            language: .auto,
+            eagerStreamOverride: eagerEnabled
         )
 
         transcriber.onChunkCompleted = { chunk in
             chunkSpans.append(ChunkSpan(start: chunk.start, end: chunk.end, text: chunk.text))
         }
+
+        // Why a pass produced nothing is the diagnosis; that it produced nothing is only the
+        // symptom. A held pass keeps the boundary where it is and costs a decode, while a
+        // `silentBacklog` skip *seeks past* audio no pass ever decoded — the two look identical in
+        // the final WER and mean opposite things, so the gate counts them separately.
+        var holdCounts: [String: Int] = [:]
+        var skipCounts: [String: Int] = [:]
+        transcriber.onEagerPassHeld = { holdCounts["\($0)", default: 0] += 1 }
+        transcriber.onEagerPassSkipped = { skipCounts["\($0)", default: 0] += 1 }
 
         bridge.resetAbort()
         transcriber.start { [weak transcriber] text in
@@ -274,6 +383,12 @@ final class EagerStreamRegressionTests: XCTestCase {
         // here: `stop()` returns while a pass is still in flight on the bridge queue, which then
         // calls back into a transcriber this method has already released.
         let finalText = await transcriber.stopAsync()
+        if eagerEnabled {
+            let holds = holdCounts.sorted { $0.key < $1.key }.map { "\($0.key)=\($0.value)" }
+            let skips = skipCounts.sorted { $0.key < $1.key }.map { "\($0.key)=\($0.value)" }
+            Logger.debug("    eager holds: [\(holds.joined(separator: " "))] " +
+                         "skips: [\(skips.joined(separator: " "))]", subsystem: .transcription)
+        }
         return RunResult(
             finalText: finalText,
             chunkSpans: chunkSpans,
@@ -313,7 +428,9 @@ final class EagerStreamRegressionTests: XCTestCase {
                 "[\(label)] Catastrophic regression on fixture \(r.fixture.id): " +
                 "delta=\(String(format: "%.3f", delta))"
             )
-            if !r.fixture.transcript.isEmpty {
+            // The assertion message says "where baseline was non-empty", so test the baseline arm
+            // of this same run — not the stored transcript, which is a different decode entirely.
+            if !r.baselineResult.finalText.isEmpty {
                 XCTAssertFalse(
                     r.eagerResult.finalText.isEmpty,
                     "[\(label)] Empty output where baseline was non-empty: fixture \(r.fixture.id)"
@@ -358,27 +475,36 @@ final class EagerStreamRegressionTests: XCTestCase {
                 }
             }
 
-            // Invariant 2: Chunk spans are ordered, non-overlapping, and each has positive duration.
-            var prevEnd = -0.01
-            for span in b.chunkSpans {
-                XCTAssertGreaterThanOrEqual(
-                    span.start, prevEnd - 0.01,
-                    "Overlapping chunk spans in fixture \(id): " +
-                    "\(String(format: "%.2f", span.start))s starts before prev end \(String(format: "%.2f", prevEnd))s"
-                )
-                XCTAssertLessThan(
-                    span.start, span.end,
-                    "Zero or negative-duration span in fixture \(id): " +
-                    "[\(String(format: "%.2f", span.start)), \(String(format: "%.2f", span.end))]"
-                )
-                prevEnd = span.end
-            }
+            // Invariants 2 and 3 are asserted on EVERY repetition, not just the median run.
+            // Unlike WER these are pass/fail rather than noisy, so a violation that shows up in
+            // one run of three is a real defect that happens to need a particular interleaving —
+            // exactly the kind this path produces. Scoring only the median would hide it, and
+            // the span-overlap defect fixed earlier in this work appeared and disappeared between
+            // runs for precisely that reason.
+            for (rep, run) in r.eagerResults.enumerated() {
+                // Invariant 2: Chunk spans are ordered, non-overlapping, positive duration.
+                var prevEnd = -0.01
+                for span in run.chunkSpans {
+                    XCTAssertGreaterThanOrEqual(
+                        span.start, prevEnd - 0.01,
+                        "Overlapping chunk spans in fixture \(id) (rep \(rep)): " +
+                        "\(String(format: "%.2f", span.start))s starts before prev end \(String(format: "%.2f", prevEnd))s"
+                    )
+                    XCTAssertLessThan(
+                        span.start, span.end,
+                        "Zero or negative-duration span in fixture \(id) (rep \(rep)): " +
+                        "[\(String(format: "%.2f", span.start)), \(String(format: "%.2f", span.end))]"
+                    )
+                    prevEnd = span.end
+                }
 
-            // Invariant 3: No duplicated N-word boundary run in final text.
-            // A 4-word sequence must not repeat adjacently — this catches the degeneration
-            // loops that `DegenerationGuard` targets in LLM output and the overlap-dedup
-            // bugs that can produce "the cat sat the cat sat".
-            assertNoDuplicatedRun(in: r.eagerResult.finalText, fixtureID: id)
+                // Invariant 3: No duplicated N-word boundary run in final text.
+                // A 4-word sequence must not repeat adjacently — this catches the degeneration
+                // loops that `DegenerationGuard` targets in LLM output and the overlap-dedup
+                // bugs that can produce "the cat sat the cat sat".
+                assertNoDuplicatedRun(in: run.finalText, fixtureID: "\(id) (rep \(rep))")
+            }
+            _ = b
         }
 
         // Invariant 4: Multilingual strata hold — Hebrew and Cyrillic fixtures independently
@@ -437,29 +563,38 @@ final class EagerStreamRegressionTests: XCTestCase {
     private func printResultTable(_ results: [ABResult], label: String) {
         guard !results.isEmpty else { return }
 
-        print("\n── EagerStream A/B Regression Gate: \(label) ──")
-        print("╔═══════════╦════════╦════════╦═══════╦══════════╗")
-        print("║ Fixture   ║ Baseln ║  Eager ║ Delta ║ Script   ║")
-        print("╠═══════════╬════════╬════════╬═══════╬══════════╣")
+        print("\n── EagerStream A/B Regression Gate: \(label) " +
+              "(median of \(Self.repeatCount) runs per arm) ──")
+        print("╔═══════════╦════════╦════════╦════════╦════════╦═══════╦══════════╗")
+        print("║ Fixture   ║ Baseln ║ ±Bspr  ║  Eager ║ ±Espr  ║ Delta ║ Script   ║")
+        print("╠═══════════╬════════╬════════╬════════╬════════╬═══════╬══════════╣")
 
         var totalBaseline = 0.0
         var totalEager = 0.0
 
         for r in results {
             let delta = r.werEager - r.werBaseline
-            let marker = delta > 0.02 ? "⚠️" : (delta < -0.01 ? "✅" : "  ")
+            // A delta inside the eager arm's own spread is not a result. Mark it "~" rather than
+            // ⚠️/✅ so the table cannot be read as eight verdicts when it is really eight
+            // measurements, most of which are noise at this corpus size.
+            let resolvable = abs(delta) > r.spreadEager
+            let marker = !resolvable ? " ~" : (delta > 0.02 ? "⚠️" : (delta < -0.01 ? "✅" : "  "))
             let id = String(r.fixture.id.prefix(9)).padding(toLength: 9, withPad: " ", startingAt: 0)
-            print(String(format: "║ %@ ║  %.3f ║  %.3f ║ %+.3f ║ %-8@ ║%@",
-                         id, r.werBaseline, r.werEager, delta,
+            print(String(format: "║ %@ ║  %.3f ║  %.3f ║  %.3f ║  %.3f ║ %+.3f ║ %-8@ ║%@",
+                         id, r.werBaseline, r.spreadBaseline, r.werEager, r.spreadEager, delta,
                          String(r.script.prefix(8)), marker))
             totalBaseline += r.werBaseline
             totalEager += r.werEager
         }
 
         let n = Double(results.count)
-        print("╠═══════════╬════════╬════════╬═══════╬══════════╣")
-        print(String(format: "║ MEAN      ║  %.3f ║  %.3f ║ %+.3f ║          ║",
-                     totalBaseline / n, totalEager / n, (totalEager - totalBaseline) / n))
-        print("╚═══════════╩════════╩════════╩═══════╩══════════╝")
+        let meanSpreadB = results.map(\.spreadBaseline).reduce(0, +) / n
+        let meanSpreadE = results.map(\.spreadEager).reduce(0, +) / n
+        print("╠═══════════╬════════╬════════╬════════╬════════╬═══════╬══════════╣")
+        print(String(format: "║ MEAN      ║  %.3f ║  %.3f ║  %.3f ║  %.3f ║ %+.3f ║          ║",
+                     totalBaseline / n, meanSpreadB, totalEager / n, meanSpreadE,
+                     (totalEager - totalBaseline) / n))
+        print("╚═══════════╩════════╩════════╩════════╩════════╩═══════╩══════════╝")
+        print("~ = |delta| is inside this fixture's eager spread; not a resolvable difference.")
     }
 }

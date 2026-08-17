@@ -2314,8 +2314,20 @@ class AppState: ObservableObject {
         #endif
         if bridge is FluidAudioBridge { return bridge }
         // WhisperBridge uses eager streaming — the main model's rolling decode IS the preview.
-        // No separate tiny-model preview bridge needed; language detection still uses modelPool.previewBridge directly.
-        if bridge is WhisperBridge { return nil }
+        // No separate tiny-model preview bridge needed; language detection still uses
+        // modelPool.previewBridge directly.
+        //
+        // Unless the eager path is rolled back. Returning nil unconditionally made
+        // `whisperCppEagerStreaming = false` mean "no live preview at all" rather than "the old
+        // tiny-model preview": the flag disabled the new path without restoring the one it
+        // replaced, so a rollback — or a stale flag left behind by a killed test run — silently
+        // killed live text. Hand back the tiny bridge on that path, which is what it was.
+        if bridge is WhisperBridge {
+            let key = "whisperCppEagerStreaming"
+            let eagerOn = UserDefaults.standard.object(forKey: key) == nil
+                || UserDefaults.standard.bool(forKey: key)
+            return eagerOn ? nil : modelPool?.previewBridge
+        }
         return modelPool?.previewBridge
     }
 

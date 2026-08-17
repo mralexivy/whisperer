@@ -83,8 +83,8 @@ struct EagerOutcome {
     let wasHeld: Bool
     /// Which guard held it. `nil` unless `wasHeld`.
     let holdReason: EagerHoldReason?
-    /// Diagnostic: the leading hypothesis word repeated the last already-confirmed word over the
-    /// same audio. Changes no behaviour; see `leadingWordRepeatsConfirmedTail`.
+    /// The leading hypothesis words repeated the already-accounted-for tail over the same audio
+    /// and were dropped before anything else ran. See `confirmedTailOverlap`.
     let repeatedConfirmedTail: Bool
 }
 
@@ -123,6 +123,10 @@ struct EagerStreamEngine {
         /// than a similarity test. A flag so the profile can measure the cost of being wrong
         /// about genuinely repetitive speech against the loops it prevents.
         let suppressesRepetitionLoops: Bool
+        /// How far the *persisted* agreement boundary is held back behind the point the text
+        /// accounts for. See `advanceAgreement(to:)` — this is the margin that keeps a word whose
+        /// offset was reported late from being cut out of every subsequent window.
+        let boundaryTrailSamples: Int
 
         static let `default` = Config(
             boundaryWordCount: 2,
@@ -131,7 +135,23 @@ struct EagerStreamEngine {
             requiredAnchor: 2,
             maxRetraction: 3,
             skipsAnchorCheckAfterBoundaryMove: false,
-            suppressesRepetitionLoops: true
+            suppressesRepetitionLoops: true,
+            // Off. Tried at 0.25s (≈ one short word) to fix the late-offset word loss described in
+            // `advanceAgreement(to:)`, and measured on the three-repeat golden-set gate: it fixed
+            // the fixture it was designed for — `B6250001` 0.140 → 0.060, the hole that motivated
+            // it — and cost four others, `13B50271` 0.050 → 0.200, `8C0D8940` 0.143 → 0.314,
+            // `77D9DA6A` 0.070 → 0.116, `4237CC4A` 0.200 → 0.250. Corpus mean 0.109 → 0.193.
+            //
+            // That is a real result, not this gate's noise: the per-fixture spreads *fell* over
+            // the same run (mean eager spread 0.151 → 0.072), so the deltas clear their own error
+            // bars in a way almost nothing else measured here does.
+            //
+            // Reading: re-presenting seam audio to the decoder is not free. The words come back,
+            // but so does an unstable prefix, and re-agreeing on it costs more than the occasional
+            // dropped word it rescues. Recovering those words needs a mechanism that does not
+            // re-decode the seam — see the note in `advanceAgreement(to:)`. Kept as a knob rather
+            // than deleted so the next attempt starts from the measurement instead of the idea.
+            boundaryTrailSamples: 0
         )
 
         func with(skipsAnchorCheckAfterBoundaryMove: Bool? = nil,
@@ -142,7 +162,8 @@ struct EagerStreamEngine {
                    skipsAnchorCheckAfterBoundaryMove:
                        skipsAnchorCheckAfterBoundaryMove ?? self.skipsAnchorCheckAfterBoundaryMove,
                    suppressesRepetitionLoops:
-                       suppressesRepetitionLoops ?? self.suppressesRepetitionLoops)
+                       suppressesRepetitionLoops ?? self.suppressesRepetitionLoops,
+                   boundaryTrailSamples: boundaryTrailSamples)
         }
     }
 
@@ -168,6 +189,18 @@ struct EagerStreamEngine {
     /// Words the repetition guard refused to confirm this session. Diagnostic; see `confirm(_:)`.
     private(set) var suppressedRepeatWords = 0
 
+    /// Audio index through which the text is accounted for: the end of the last word this engine
+    /// either confirmed or deliberately suppressed as a repeat. The agreement boundary may never
+    /// advance past it — see `advanceAgreement(to:)`.
+    private var confirmedThroughIndex: Int?
+
+    /// The agreement boundary before the trailing margin is applied: the point the text genuinely
+    /// accounts for. `agreementStartIndex` is this minus `Config.boundaryTrailSamples`, and the
+    /// difference is audio deliberately re-decoded to survive imprecise word offsets. Kept
+    /// separately because within a pass the strict value is the correct filter — see
+    /// `advanceAgreement(to:)`.
+    private var strictBoundaryIndex: Int?
+
     /// The last few confirmed words carried across a soft-commit, so the repetition guard can
     /// still see the tail of the text it just handed off. Without it a loop that straddles a
     /// commit boundary restarts its count from zero and gets a fresh licence to repeat.
@@ -191,7 +224,62 @@ struct EagerStreamEngine {
         prefixTokens.removeAll()
         previousConsumeStart = nil
         committedTail.removeAll()
+        confirmedThroughIndex = nil
+        strictBoundaryIndex = sampleIndex
         suppressedRepeatWords = 0
+    }
+
+    /// Move the agreement boundary forward, refusing to step over audio no word accounts for.
+    ///
+    /// Every caller derives the new boundary from a *word's* `startIndex`, and that index comes
+    /// from whisper's token timestamps, which are approximate — `max_len = 1` splits a segment per
+    /// word and the onset it reports for the boundary word can land well after the offset of the
+    /// word before it. The boundary is also the start of the next decode window, so a late
+    /// timestamp does not merely mislabel a word: the span between the last accounted-for word and
+    /// the boundary is cut out of every future window and is never decoded by anything.
+    ///
+    /// Measured on the golden-set gate: `confirmed: "with"` at base 191680 followed by base 214400
+    /// — a 1.42s hole — and the words spoken in it ("the speech") are absent from the final text.
+    /// Same shape on two other regressing fixtures. Clamping to `confirmedThroughIndex` costs at
+    /// most a fraction of a second of re-decoded audio per pass, which the hypothesis filter and
+    /// the repetition guard already handle; the alternative loses words outright.
+    ///
+    /// Never moves backwards: a boundary word whose timestamp lands *before* the previous boundary
+    /// would otherwise re-present the same window forever.
+    ///
+    /// **Why clamping to the confirmed word's *end* is not enough on its own.** That end is also a
+    /// whisper timestamp, and it overshoots as readily as an onset undershoots. Measured on
+    /// `B6250001`, identically in all three repetitions of the gate: one pass confirmed
+    /// `…why Meta is` and reported `is` ending at ~6.02s; the next decode of the same audio placed
+    /// `and you extracting` at 5.82s. The words actually spoken in between — `not meeting. And` —
+    /// end before 6.02s, so the entry filter (`startIndex >= agreementStart`) discarded them
+    /// from that window and every window after it. They are absent from the final text while the
+    /// baseline arm keeps them, and that single hole is the whole +0.080 WER regression on the one
+    /// fixture whose delta exceeded its own spread.
+    ///
+    /// `boundaryTrailSamples` holds the persisted boundary back behind the accounted-for point so
+    /// those words stay inside the next window. **It is 0 by default — the idea was measured and
+    /// it lost.** It recovers the dropped words and costs more elsewhere than it saves; the
+    /// numbers are on `Config.default`. Read them before turning it back on.
+    ///
+    /// What the measurement says about a future fix: the loss is real and worth about 0.08 WER on
+    /// an affected fixture, but re-decoding the seam is the wrong way to buy it back, because the
+    /// re-presented prefix has to be re-agreed and that is less stable than the hole. A mechanism
+    /// that recovers the words *without* moving the decode window — carrying the previous pass's
+    /// unconfirmed tail forward as text rather than re-deriving it from audio — has not been tried.
+    ///
+    /// Returns the **strict** (untrailed) boundary. Callers filter *this pass's* hypothesis with
+    /// the return value, never with `agreementStartIndex`: the trailing boundary sits behind words
+    /// just confirmed, so filtering by it would leave them in `hyp` for the entropy gate to confirm
+    /// a second time — a duplicate manufactured inside a single pass.
+    @discardableResult
+    private mutating func advanceAgreement(to index: Int) -> Int {
+        let clamped = confirmedThroughIndex.map { min(index, $0) } ?? index
+        let strict = max(clamped, strictBoundaryIndex ?? clamped)
+        strictBoundaryIndex = strict
+        let trailed = max(strict - config.boundaryTrailSamples, 0)
+        agreementStartIndex = max(trailed, agreementStartIndex ?? trailed)
+        return strict
     }
 
     /// Move the agreement boundary forward over audio that will never be decoded.
@@ -210,6 +298,13 @@ struct EagerStreamEngine {
     mutating func seek(past sampleIndex: Int) {
         guard sampleIndex > agreementStartIndex ?? Int.min else { return }
         agreementStartIndex = sampleIndex
+        // No trailing margin here, unlike `advanceAgreement(to:)`: the margin exists to re-decode
+        // audio whose word offsets may be wrong, and this span was proven to contain no words.
+        strictBoundaryIndex = max(strictBoundaryIndex ?? sampleIndex, sampleIndex)
+        // The skipped span is accounted for — it was proven silent. Without this the clamp in
+        // `advanceAgreement(to:)` would keep measuring from a word before the skip and pin the
+        // boundary here for the rest of the recording.
+        confirmedThroughIndex = max(confirmedThroughIndex ?? sampleIndex, sampleIndex)
         previousHypothesis.removeAll()
         prefixTokens.removeAll()
     }
@@ -238,13 +333,39 @@ struct EagerStreamEngine {
         let boundaryMoved = previousConsumeStart != nil && previousConsumeStart != agreementStart
         previousConsumeStart = agreementStart
 
-        // Filter hypothesis to the unconfirmed region (past the agreement boundary)
-        var hyp = hypothesis.filter { $0.startIndex >= agreementStart }
+        // Filter the hypothesis to the unconfirmed region — by **overlap**, not onset.
+        //
+        // `endIndex > agreementStart`, not `startIndex >= agreementStart`. The caller opens each
+        // window `eagerSeamMarginSeconds` early, so the boundary word is re-decoded with left
+        // context; a `startIndex` filter throws that word away again and the boundary stops
+        // advancing. Measured on real dictation: with the `startIndex` filter, stop-time preview
+        // reuse fell to 0 of 3 and the median uncovered gap went 0.64s → 1.60s, past the 0.40s
+        // reuse ceiling, so every stop paid a full tail decode instead of pasting instantly.
+        //
+        // The cost: an overlap filter gives up the *structural* guarantee that a word whose audio
+        // is already accounted for cannot re-enter, so `confirmedTailOverlap` below is the only
+        // defense against a duplicate when the decoder renders the re-cut seam as different text.
+        // That is the trade the seam margin buys, and it is the one the measurement says to take —
+        // `confirmedTailOverlap` catches the common case, and a rare duplicated boundary word is
+        // a far smaller regression than every single stop paying an 856 ms tail decode.
+        var hyp = hypothesis.filter { $0.endIndex > agreementStart }
         guard !hyp.isEmpty else {
             return EagerOutcome(displayText: nil, confirmedText: nil, softCommit: nil,
                                 wasHeld: false, holdReason: nil, repeatedConfirmedTail: false)
         }
-        let repeatedConfirmedTail = leadingWordRepeatsConfirmedTail(hyp)
+        // Drop words this engine has already accounted for and is only seeing again because the
+        // seam was re-decoded. Done before the anchor guard so `previousHypothesis` is stored
+        // deduplicated too — otherwise the next window compares against a prefix that no longer
+        // exists and reads as an unanchored collapse.
+        let overlap = confirmedTailOverlap(hyp, boundary: agreementStart)
+        let repeatedConfirmedTail = overlap > 0
+        if overlap > 0 {
+            hyp.removeFirst(overlap)
+            guard !hyp.isEmpty else {
+                return EagerOutcome(displayText: nil, confirmedText: nil, softCommit: nil,
+                                    wasHeld: false, holdReason: nil, repeatedConfirmedTail: true)
+            }
+        }
 
         // ── Anchor / retraction guard ──────────────────────────────────────────────
         // A genuine correction aligns with the previous window on at least requiredAnchor
@@ -292,10 +413,10 @@ struct EagerStreamEngine {
                 let newlyConfirmed = Array(hyp.prefix(commonCount - boundary))
                 confirm(newlyConfirmed)
                 let boundarySlice = Array(hyp[(commonCount - boundary)..<commonCount])
-                agreementStartIndex = boundarySlice.first?.startIndex
+                var strict = strictBoundaryIndex ?? agreementStart
+                if let start = boundarySlice.first?.startIndex { strict = advanceAgreement(to: start) }
                 prefixTokens = boundarySlice.flatMap(\.tokens)
-                let nextStart = agreementStartIndex ?? agreementStart
-                hyp = hyp.filter { $0.startIndex >= nextStart }
+                hyp = hyp.filter { $0.startIndex >= strict }
             } else if commonCount == hyp.count, !hyp.isEmpty, hyp.count <= boundary {
                 // Short-tail: full agreement on a prefix smaller than boundaryWordCount.
                 // Confirm all but the last word to avoid stagnation at the recording tail.
@@ -304,9 +425,9 @@ struct EagerStreamEngine {
                     confirm(Array(hyp.prefix(confirmCount)))
                 }
                 let boundaryWord = hyp.last!
-                agreementStartIndex = boundaryWord.startIndex
+                let strict = advanceAgreement(to: boundaryWord.startIndex)
                 prefixTokens = boundaryWord.tokens
-                hyp = hyp.filter { $0.startIndex >= boundaryWord.startIndex }
+                hyp = hyp.filter { $0.startIndex >= strict }
             }
 
             // ── Entropy gate ───────────────────────────────────────────────────────
@@ -319,10 +440,9 @@ struct EagerStreamEngine {
                 }
                 if eagerCount > 0 {
                     confirm(Array(hyp.prefix(eagerCount)))
-                    let newStart = hyp[eagerCount].startIndex
-                    agreementStartIndex = newStart
+                    let strict = advanceAgreement(to: hyp[eagerCount].startIndex)
                     prefixTokens = Array(hyp.prefix(eagerCount)).suffix(2).flatMap(\.tokens)
-                    hyp = hyp.filter { $0.startIndex >= newStart }
+                    hyp = hyp.filter { $0.startIndex >= strict }
                 }
             }
         }
@@ -408,6 +528,10 @@ struct EagerStreamEngine {
     /// at zero in the common case. That is why it ships on.
     private mutating func confirm(_ words: [EagerStreamWord]) {
         for word in words {
+            // Advanced for suppressed words too: a dropped repeat is a decision about that audio,
+            // not a reason to decode it again. Leaving it behind would pin the boundary — see
+            // `advanceAgreement(to:)`.
+            confirmedThroughIndex = max(confirmedThroughIndex ?? word.endIndex, word.endIndex)
             confirmedWords.append(word)
             guard config.suppressesRepetitionLoops else { continue }
             if let runLength = trailingLoopRunLength() {
@@ -452,13 +576,50 @@ struct EagerStreamEngine {
     /// very" has two onsets a word apart, whereas the same word re-decoded sits within a few tens
     /// of milliseconds of where it already was. 0.3s is one short word.
     ///
-    /// Diagnostic only — this reports, it does not filter. Whether to act on it is a question for
-    /// the profile, not for a guess here.
-    func leadingWordRepeatsConfirmedTail(_ hyp: [EagerStreamWord]) -> Bool {
-        guard let last = confirmedWords.last, let first = hyp.first else { return false }
-        let text = normalizedText(last.text)
-        guard !text.isEmpty, text == normalizedText(first.text) else { return false }
-        return abs(first.startIndex - last.startIndex) < Int(0.30 * 16000)
+    /// The profile has since answered that question, so `consume` now drops the overlap rather
+    /// than only counting it. `advanceAgreement(to:)` clamps the boundary back to the end of the
+    /// last accounted-for word, which means the next window *deliberately* re-decodes the audio
+    /// around the seam — re-emitting the boundary words is no longer an occasional timestamp
+    /// accident but the expected case. Six of eight golden-set fixtures showed it in one run:
+    /// "Yes, but now ⟨Now⟩ you're targeting", "Let's do ⟨Let's do⟩ this", "because and like
+    /// writing ⟨writing⟩ it down".
+    ///
+    /// Returns how many leading hypothesis words repeat the accounted-for tail, 0 for none.
+    ///
+    /// Matching runs up to four words because the observed repeats are phrases, not single words —
+    /// a one-word test misses "Let's do | Let's do this" entirely, since the last confirmed word
+    /// ("do") and the first hypothesis word ("Let's") differ. It reads across `committedTail` so a
+    /// soft-commit in the middle of the seam does not hide the copy that was just handed off.
+    ///
+    /// Something has to separate this from genuinely repeated speech ("no no", "very very"), and
+    /// two things do. Either the repeat sits in the re-decoded run-up — it starts at or before the
+    /// agreement boundary, so its audio is by definition audio already accounted for — or it sits
+    /// within 0.3s of where the matching word already was, which is timestamp drift on a re-cut
+    /// window rather than a second utterance. A real repeat satisfies neither: it comes after the
+    /// boundary and a word-length or more later.
+    ///
+    /// The drift window is 0.3s and not 0.5s, which it was briefly widened to in the same change
+    /// that made this function *delete* rather than count. 0.5s is roughly two short words at
+    /// conversational rate, so it swallowed real speech: in "no, no, I didn't" with the second
+    /// "no" 0.35s after the first, the second "no" matched run 1, passed the drift test, and was
+    /// removed at the `removeFirst` below — deleted outright, ~170 lines before the repetition
+    /// guard that deliberately permits two consecutive repeats ever saw it. Worse, the shortened
+    /// hypothesis then failed the anchor check, so the pass was held too: one lost word *and* one
+    /// discarded decode, on an utterance shape people produce constantly.
+    func confirmedTailOverlap(_ hyp: [EagerStreamWord], boundary: Int) -> Int {
+        let tail = committedTail + confirmedWords
+        guard let first = hyp.first, !tail.isEmpty else { return 0 }
+        for run in stride(from: min(4, min(tail.count, hyp.count)), through: 1, by: -1) {
+            let previous = tail.suffix(run).map { normalizedText($0.text) }
+            let candidate = hyp.prefix(run).map { normalizedText($0.text) }
+            guard previous == candidate, !previous.contains(where: \.isEmpty) else { continue }
+            let anchor = tail[tail.count - run]
+            let isReDecodedRunUp = first.startIndex <= boundary
+            let isDrift = abs(first.startIndex - anchor.startIndex) < Int(0.50 * 16000)
+            guard isReDecodedRunUp || isDrift else { continue }
+            return run
+        }
+        return 0
     }
 
     /// Number of words from the start of `prev` that agree with `curr`, compared

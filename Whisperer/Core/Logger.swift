@@ -258,8 +258,8 @@ final class Logger {
 
     deinit {
         queue.sync {
-            fileHandle?.synchronizeFile()
-            fileHandle?.closeFile()
+            try? fileHandle?.synchronize()
+            try? fileHandle?.close()
         }
     }
 
@@ -585,14 +585,14 @@ final class Logger {
         }
 
         fileHandle = try? FileHandle(forWritingTo: logFileURL)
-        fileHandle?.seekToEndOfFile()
+        try? fileHandle?.seekToEnd()
 
         // The legend is written once per FILE, not once per launch — the old 6-line
         // startup banner cost 2,191 lines a day on its own. `app.boot` marks launches.
         let attrs = try? FileManager.default.attributesOfItem(atPath: logFileURL.path)
         let size = (attrs?[.size] as? Int) ?? 0
         if !existed || size == 0 {
-            fileHandle?.write(Data(Logger.legend.utf8))
+            try? fileHandle?.write(contentsOf: Data(Logger.legend.utf8))
         }
         anchorWritten = false
     }
@@ -619,13 +619,19 @@ final class Logger {
         }
 
         guard let data = text.data(using: .utf8) else { return }
-        fileHandle?.write(data)
+        // `write(contentsOf:)`, never `write(_:)`. The latter is the ObjC bridge and raises an
+        // uncatchable `NSFileHandleOperationException` when the volume is full — so a full disk
+        // used to kill the app from whatever thread happened to log next. That is especially bad
+        // here because the audio encode path logs its *own* ENOSPC failure, which meant the
+        // error handler built to survive a full disk was itself the thing that crashed.
+        // `try?`: a lost log line is the correct outcome, and throwing would recurse into logging.
+        try? fileHandle?.write(contentsOf: data)
     }
 
     /// Switch to a new daily log file
     private func rotateToDailyFile(date: String) {
-        fileHandle?.synchronizeFile()
-        fileHandle?.closeFile()
+        try? fileHandle?.synchronize()
+        try? fileHandle?.close()
         fileHandle = nil
 
         currentLogDate = date
@@ -689,7 +695,7 @@ final class Logger {
 
     func flush() {
         queue.sync {
-            fileHandle?.synchronizeFile()
+            try? fileHandle?.synchronize()
         }
     }
 

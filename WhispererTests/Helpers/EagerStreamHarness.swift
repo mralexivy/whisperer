@@ -264,6 +264,9 @@ func loadEagerCorpus(perBucket: [String: Int]) -> (fixtures: [EagerFixture], rej
     let only = ProcessInfo.processInfo.environment["EAGER_ONLY_FIXTURE"]?.lowercased()
     let all = HistoryTestLoader.loadFixtures(maxCount: 3000)
         .filter { $0.audioURL != nil && !$0.transcript.trimmingCharacters(in: .whitespaces).isEmpty }
+        // Scored runs need a golden reference; see `GoldenSet` for why the stored transcript is
+        // not one. A single-fixture investigation is exempt — it is read as a trace, not a score.
+        .filter { only != nil || GoldenSet.reference(for: $0.id) != nil }
         .filter { only == nil || $0.id.lowercased().hasPrefix(only!) }
 
     var loaded: [EagerFixture] = []
@@ -325,6 +328,10 @@ func runEagerFixture(
     realTime: Bool = true
 ) async -> EagerRunResult {
     let sampleRate: Double = 16000
+    // Golden reference, with the stored transcript only as a last resort — `loadEagerCorpus`
+    // already drops fixtures the golden set does not cover, so the fallback should never fire
+    // outside a single-fixture `EAGER_ONLY_FIXTURE` run, which is diagnostic rather than scored.
+    let reference = GoldenSet.reference(for: fixture.id) ?? fixture.transcript
     let passCollector = EagerPassCollector()
     let displayCollector = EagerDisplayCollector()
     let skipCollector = EagerSkipCollector()
@@ -421,11 +428,11 @@ func runEagerFixture(
         holds: holdCollector.snapshot(),
         repeatedConfirmedTails: repeatCollector.value,
         duplicateRuns: eagerAdjacentDuplicateRuns(in: finalText),
-        wer: wordErrorRate(finalText, reference: fixture.transcript),
+        wer: wordErrorRate(finalText, reference: reference),
         stopLatencyMs: stopLatencyMs,
         skips: skipCollector.snapshot(),
         finalText: finalText,
-        reference: fixture.transcript
+        reference: reference
     )
 }
 

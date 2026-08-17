@@ -394,9 +394,9 @@ class StreamingTranscriber {
     /// boundary where it was, so the next pass re-decodes nearly the same window.
     var onEagerPassHeld: ((EagerHoldReason) -> Void)?
 
-    /// Test-only probe: a pass whose first unconfirmed word was the last confirmed word arriving
-    /// a second time. Candidate mechanism for the adjacent duplicates in final text; see
-    /// `EagerStreamEngine.leadingWordRepeatsConfirmedTail`. Reports only — nothing filters on it.
+    /// Test-only probe: a pass whose leading words repeated the accounted-for tail and were
+    /// dropped. Counts how often the seam re-decode overlaps; see
+    /// `EagerStreamEngine.confirmedTailOverlap`, which now filters rather than only reporting.
     var onEagerRepeatedConfirmedTail: (() -> Void)?
 
     /// Effective language for transcription — driven by router or fallback to configured language
@@ -474,6 +474,40 @@ class StreamingTranscriber {
     /// app writes to it.
     var eagerMaxWindowSeconds: Double = StreamingTranscriber.defaultEagerMaxWindowSeconds
 
+    /// How far *before* the agreement boundary each window starts.
+    ///
+    /// The boundary is the reported onset of the first unconfirmed word, and cutting the audio
+    /// exactly there cuts that word in half: whisper's word onsets are approximate, and a few tens
+    /// of milliseconds late is enough to remove the consonant the decoder needs. The word is then
+    /// lost outright, because no later window ever starts before the boundary either. Traced on
+    /// `13B50271`: `confirmed: "I don't know if"` with `display: "…if you know"`, then the next
+    /// window opened at "you"'s onset and came back "know, but data science" — "you" is absent
+    /// from the final text.
+    ///
+    /// **Off (0) pending a real A/B, and it should stay off until one runs.** It was set to 0.2
+    /// on the strength of that one traced anecdote and never measured — it was *baseline* in the
+    /// run that condemned `EagerStreamEngine.boundaryTrailSamples` (corpus mean 0.109 was the
+    /// margin-on arm), so its own contribution has never been isolated. Meanwhile it is the same
+    /// act rule 25 in `docs/knowledge/transcription/rules.md` prohibits on measured evidence —
+    /// re-presenting seam audio to the decoder — and escaped that rule only by having a different
+    /// name.
+    ///
+    /// The claim that used to sit here, that "the re-decoded words are dropped again by
+    /// `EagerStreamEngine.confirmedTailOverlap`, so the margin costs decode time, not
+    /// duplicates", is false in both halves. `confirmedTailOverlap` drops a run-up word only on
+    /// an **exact** normalized text match, and the whole premise of the margin is that whisper
+    /// renders the re-cut seam *differently*. When it does — "want" coming back as "wanna" — the
+    /// word is not dropped, `commonPrefixCount` against the previous hypothesis collapses to 0,
+    /// the anchor guard holds the pass and a completed GPU decode is discarded; and because the
+    /// held pass still stores the polluted hypothesis, the following pass agrees with itself and
+    /// **confirms the duplicate**. Cost: a wasted decode *and* the duplicated boundary word the
+    /// docstring promised could not happen.
+    ///
+    /// The A/B that would settle it is three arms — 0.2, 0 with the `endIndex` entry filter, 0
+    /// with the `startIndex` filter — on the golden-set gate, reported with
+    /// `unanchoredAfterBoundaryMove` hold counts alongside WER.
+    var eagerSeamMarginSeconds: Double = 0.2
+
     /// Whether live text includes the speculative hypothesis tail, or only confirmed words.
     ///
     /// The tail is one pass ahead — roughly 1.4s of extra responsiveness — and it is the only
@@ -510,11 +544,19 @@ class StreamingTranscriber {
         languageRouter: LanguageRouter? = nil,
         modelRouter: ModelRouter? = nil,
         previewBridge: TranscriptionBackend? = nil,
-        nemotronBridge: (any AnyObject)? = nil  // NemotronBridge — typed as AnyObject to avoid #if at call sites
+        nemotronBridge: (any AnyObject)? = nil,  // NemotronBridge — typed as AnyObject to avoid #if at call sites
+        eagerStreamOverride: Bool? = nil
     ) {
         self.whisper = backend
         self.usesEagerStream = {
             guard backend is WhisperBridge else { return false }
+            // Tests pass the arm explicitly. They must NOT write the rollback flag to
+            // `UserDefaults.standard`, because the test host shares the shipping app's
+            // preferences domain: a gate run that was killed or crashed mid-fixture left
+            // `whisperCppEagerStreaming = 0` behind, and the app then launched with the eager
+            // path off *and* no tiny preview bridge (see `AppState.livePreviewBridge`) — live
+            // preview dead, with nothing in the log to say why.
+            if let eagerStreamOverride { return eagerStreamOverride }
             let key = "whisperCppEagerStreaming"
             guard UserDefaults.standard.object(forKey: key) != nil else { return true }
             return UserDefaults.standard.bool(forKey: key)
@@ -1582,7 +1624,12 @@ class StreamingTranscriber {
                 // where it left off. Falling behind live audio is self-correcting because a
                 // capped pass consumes far more audio than it costs in wall-clock; falling behind
                 // permanently is not possible unless a single pass takes longer than the cap.
-                let agreementStart = max(eagerEngine?.agreementStartIndex ?? ringBase, ringBase)
+                // Start a short run-up before the boundary so the first unconfirmed word is not
+                // cut in half — see `eagerSeamMarginSeconds`. The engine still filters the
+                // hypothesis against its own boundary, so the extra audio adds context, not text.
+                let boundary = max(eagerEngine?.agreementStartIndex ?? ringBase, ringBase)
+                let agreementStart = max(ringBase,
+                                         boundary - Int(eagerSeamMarginSeconds * sampleRate))
                 let clipOffset = agreementStart - ringBase
                 let unconfirmed = clipOffset < allSamples.count
                     ? Array(allSamples[clipOffset...])
@@ -1706,7 +1753,18 @@ class StreamingTranscriber {
                                        audioBaseIndex: base,
                                        candidateEndIndex: endIdx)
             } else {
-                Logger.debug("Eager pass: nil result (decode failed or lock timeout)", subsystem: .transcription)
+                // Distinguish the benign case. Every recording ends with one nil pass a few
+                // tens of ms before `Transcribing tail:` — the stop path takes `ctxLock` out
+                // from under the in-flight preview decode, which then times out on the lock.
+                // That is expected once per recording; reporting it as "decode failed" sent a
+                // debugging session looking for a decoder fault that was never there.
+                if self.isPreparingToStop {
+                    Logger.debug("Eager pass: cancelled by stop (ctxLock taken by tail decode)",
+                                 subsystem: .transcription)
+                } else {
+                    Logger.warning("Eager pass: nil result mid-recording (decode failed or lock timeout)",
+                                   subsystem: .transcription)
+                }
             }
             // Self-schedule: start the next pass immediately without waiting for the
             // 500ms heartbeat timer. The timer remains to restart the chain if it breaks.
@@ -1740,7 +1798,16 @@ class StreamingTranscriber {
         eagerEngine = engine
         if let reason = outcome.holdReason { onEagerPassHeld?(reason) }
         if outcome.repeatedConfirmedTail { onEagerRepeatedConfirmedTail?() }
-        Logger.debug("Eager outcome: display=\(outcome.displayText.map { "'\($0.prefix(40))'" } ?? "nil"), held=\(outcome.wasHeld), commit=\(outcome.softCommit != nil)", subsystem: .transcription)
+        // Full strings, not a 40-character prefix. Every seam defect this path has produced was
+        // diagnosed by reading consecutive outcomes against each other, and a prefix truncates
+        // exactly the end of the hypothesis — which is where the boundary, and the bug, live.
+        Logger.debug("""
+            Eager outcome: base=\(audioBaseIndex) end=\(candidateEndIndex) \
+            held=\(outcome.wasHeld)\(outcome.holdReason.map { "(\($0))" } ?? "") \
+            commit=\(outcome.softCommit.map { "[\($0.startIndex)-\($0.endIndex)] '\($0.text)'" } ?? "nil")
+              confirmed: \(outcome.confirmedText ?? "-")
+              display:   \(outcome.displayText ?? "-")
+            """, subsystem: .transcription)
         if let commit = outcome.softCommit, !commit.text.isEmpty {
             // Dedup against the previous chunk, as every other commit path here already does
             // (`appendTailTranscription`, the VAD chunk path). This one appended raw, and the
@@ -1984,6 +2051,18 @@ class StreamingTranscriber {
             return
         }
 
+        // On the eager path the preview has usually already been credited through its own end
+        // index, so what is left here is the sliver between that and key release — often a few
+        // hundred milliseconds of room tone. Whisper does not return nothing for that; it returns
+        // its training-set filler, and the regression gate caught it appended to the final text:
+        // "…like everything in the frame. ⟨And I'll see you in the frames.⟩" and "…how it's
+        // working ⟨you⟩". Energy alone does not screen it out — room tone has energy. Ask the VAD,
+        // which is the same question the eager pass gate asks before every decode.
+        if usesEagerStream, let vad, !vad.hasSpeech(samples: tailChunk.samples) {
+            Logger.debug("Eager tail has no speech, skipping", subsystem: .transcription)
+            return
+        }
+
         let tailDuration = Double(tailChunk.endSample - tailChunk.startSample) / sampleRate
         Logger.debug("Transcribing tail: \(String(format: "%.1f", tailDuration))s", subsystem: .transcription)
 
@@ -2005,6 +2084,26 @@ class StreamingTranscriber {
 
         // Synchronous transcription for the tail
         let normalizedSamples = normalizeSamples(tailChunk.samples)
+
+        // Deliberately NO `audio_ctx` here — the tail encodes the full 1500 frames.
+        //
+        // This was tried, measured, and reverted on 2026-08-17. The motivating observation was
+        // real: over five stops the tail decode cost ~687ms *flat*, 0.60s of audio costing 675ms
+        // and 3.30s costing 698ms, which looks exactly like a fixed 30s mel encode. It is not.
+        //
+        // `TailAudioCtxTests.testSizedTailMatchesFullContextTextAndIsFaster` decoded 32 real tail
+        // segments from history both ways. Sizing `audio_ctx` to the tail was **not faster at
+        // all** — median 897ms → 938ms, i.e. 5% *slower* — and it destroyed the transcript:
+        // mean WER 19.1 against the full-context output, individual tails as high as 147, which
+        // is the insertion-heavy decoder-looping signature already documented above
+        // `runEagerStreamPass`. The full-context arm ran first in every pair, so cold-cache bias
+        // favored the sized arm; it still lost.
+        //
+        // The conclusion that matters for whoever optimizes this next: the flat ~687ms is NOT
+        // encoder work, so shrinking the mel window cannot reclaim it. Look elsewhere — the
+        // decoder loop and Metal graph setup are the remaining candidates. `audioCtxForSamples`
+        // and the `audioCtx:` parameter are kept only so that test still compiles and runs as a
+        // standing disproof; nothing on the production path passes a non-zero value.
         let text = whisper.transcribe(
             samples: normalizedSamples,
             initialPrompt: prompt,
@@ -2022,10 +2121,16 @@ class StreamingTranscriber {
             }
             if !deduped.isEmpty {
                 completedChunkTexts.append(deduped)
+                // `finalizeTail` works in ring-relative coordinates — `tailRelIndex` above is
+                // `lastTranscribedSampleIndex - ringBase` — so the span it returns must be mapped
+                // back before it is published on the audio clock. Stamping it raw made the final
+                // chunk of every eager recording restart near zero and overlap everything before
+                // it (`3.92s starts before prev end 19.11s` in the regression gate); the ring is
+                // pruned at each soft-commit, so the error is exactly the audio already committed.
                 onChunkCompleted?(TranscriptChunk(
                     text: deduped,
-                    start: Double(tailChunk.startSample) / sampleRate,
-                    end: Double(tailChunk.endSample) / sampleRate,
+                    start: Double(ringBase + tailChunk.startSample) / sampleRate,
+                    end: Double(ringBase + tailChunk.endSample) / sampleRate,
                     recordedDuration: recordedDuration
                 ))
             }
@@ -2676,6 +2781,11 @@ class StreamingTranscriber {
         }
         guard hasEnergy(tailChunk.samples) else {
             Logger.debug("Tail audio has no energy, skipping", subsystem: .transcription)
+            return nil
+        }
+        // Same hallucinated-filler screen as `transcribeTail` — see the comment there.
+        if usesEagerStream, let vad, !vad.hasSpeech(samples: tailChunk.samples) {
+            Logger.debug("Eager tail has no speech, skipping", subsystem: .transcription)
             return nil
         }
 

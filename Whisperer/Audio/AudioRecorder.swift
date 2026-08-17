@@ -163,16 +163,49 @@ class AudioRecorder: NSObject {
 
     private(set) var lastEngineStartError: Error?
 
-    // MARK: - Disk write (Int16 16kHz mono CAF, parallel with Float32 callback)
+    // MARK: - Disk write (Ogg Opus, 16 kHz mono, parallel with Float32 callback)
 
-    private var sessionAudioFile: AVAudioFile?
+    /// Written through `AudioArchiveWriter`, not `AVAudioFile`. `AVAudioFile(forWriting:)` infers
+    /// the container from the path extension, and `makeSessionAudioURL()` hands it a `.opus` —
+    /// which no `AVAudioFile` settings dictionary can produce. Writing the session with
+    /// `int16Format.settings` therefore failed on *every* recording, and the `try?` around it
+    /// swallowed the reason, so the only trace was `rec.fail fail=session_file`. Result: no
+    /// session audio on disk since 2026-08-15 while history rows kept recording a
+    /// `sessionAudioURL` that pointed at a file which was never created.
+    ///
+    /// **Touched only on `sessionWriteQueue`.** `AudioArchiveWriter` is documented as not
+    /// thread-safe, and `close()` used to run on the caller's thread after a bare
+    /// `sessionWriteQueue.sync {}` — which orders against blocks *already enqueued* and nothing
+    /// more. A capture callback that had passed the `isRecording` check could still enqueue an
+    /// encode after that sync returned, running `write()` on the same `OGGEncoder` and
+    /// `FileHandle` the caller was closing. `stopRecording` mostly hid it behind a 200 ms drain;
+    /// the three recovery paths close with no drain at all.
+    ///
+    /// There is deliberately **no off-queue `sessionWriterOpen` mirror** of this. One was tried,
+    /// to let the capture callback skip the buffer copy when no session was open, and it was a
+    /// straightforward data race: there is no single "control thread" here. `openSessionWriter`
+    /// runs from `startRecordingInternal`, while `closeSessionWriter` runs from `stopRecording`,
+    /// from `discardSessionAudio` (reached from `abortWedgedStartup` on the 20 s timeout task,
+    /// which fires *while* `startRecordingInternal` is still running — that is its purpose), and
+    /// from three sites in `recoverAudioEngine`, itself spawned as an unstructured `Task` from
+    /// four places. Two unsynchronized writers and one reader on the CoreAudio tap thread.
+    /// Publishing the flag and the writer as independent variables also admits both stale
+    /// states, including an open writer nobody will close. The saving was one
+    /// `AVAudioPCMBuffer` allocation per callback; `isRecording` (`isRecordingLock`) is a
+    /// sufficient gate and the enqueued block re-checks the writer on the queue regardless.
+    private var sessionAudioWriter: AudioArchiveWriter?
     private(set) var sessionAudioURL: URL?
-    private let int16Format: AVAudioFormat = AVAudioFormat(
-        commonFormat: .pcmFormatInt16, sampleRate: 16000, channels: 1, interleaved: true)!
-    // Float32 format used for AVAudioPCMBuffer reconstruction in disk write
-    private let whisperFormat: AVAudioFormat = AVAudioFormat(
-        commonFormat: .pcmFormatFloat32, sampleRate: 16000, channels: 1, interleaved: false)!
+    /// The format the capture callback delivers, reused for `AVAudioPCMBuffer` reconstruction.
+    private let whisperFormat: AVAudioFormat = AudioArchiveFormat.pcmFormat
     private let sessionWriteQueue = DispatchQueue(label: "whisperer.sessionWrite", qos: .utility)
+    /// Frames encoded since the last forced flush. Touched only on `sessionWriteQueue`.
+    private var framesSinceFlush = 0
+    /// True once any audio has been encoded into the current session. Distinguishes "a start
+    /// that never produced sound" (safe to unlink) from "a live recording whose engine died"
+    /// (must be kept). Touched only on `sessionWriteQueue`.
+    private var sessionHasAudio = false
+    /// Flush every 5s so a crash costs the interval rather than the whole recording.
+    private let flushIntervalFrames = Int(AudioArchiveFormat.sampleRate * 5)
 
     // MARK: - Device monitoring
 
@@ -188,6 +221,11 @@ class AudioRecorder: NSObject {
         startMonitoringDefaultInputDevice()
     }
 
+    // No `closeSessionWriter()` here, deliberately. It does a `sessionWriteQueue.sync {}`, and
+    // an encode block's `guard let self` can hold the last strong reference — so deinit can run
+    // *on* `sessionWriteQueue`, and a `sync` back onto that serial queue would deadlock.
+    // A recorder released mid-recording is covered instead by `AudioArchiveWriter.deinit`,
+    // which finalizes the stream when the writer is dropped.
     deinit {
         stopAudioFlowWatchdog()
         stopMonitoringDevice()
@@ -323,15 +361,26 @@ class AudioRecorder: NSObject {
         let audioURL = tempDir.appendingPathComponent(fileName)
         currentURL = audioURL
 
-        // Open session CAF file for parallel disk write
-        let sessionURL = SessionStorage.makeSessionAudioURL()
-        sessionAudioURL = sessionURL
-        if let file = try? AVAudioFile(forWriting: sessionURL, settings: int16Format.settings) {
-            sessionAudioFile = file
-            Logger.step(.recStart, .audio, ["file": .string(sessionURL.lastPathComponent)])
-        } else {
-            Logger.event(.recFail, .audio, ["fail": .string("session_file")], level: .warning)
-            sessionAudioFile = nil
+        // Open the session audio file for parallel disk write. It is written in the archive
+        // format directly, so it *is* the archive — no transcode at stop.
+        //
+        // An already-open writer is kept, not replaced. `recoverAudioEngine` re-enters here to
+        // rebuild the engine mid-recording, and overwriting the writer there orphaned the
+        // pre-recovery file *unclosed* — so it lost its terminating page and its last flush
+        // interval, while `StreamingTranscriber.sessionAudioURL` (captured at start) still
+        // pointed at it. A successful device recovery silently truncated the recording and
+        // leaked the remainder into an unreferenced file. One recording is one Opus stream;
+        // the engine restarting underneath it is not a new session. Fresh starts and
+        // retry-after-failure both reach here with a nil writer, because every abort path
+        // funnels through `discardSessionAudio()`.
+        //
+        // Read on the queue: this is a strong class reference that `openSessionWriter` and
+        // `closeSessionWriter` store to from the queue, and `recoverAudioEngine`'s Task can be
+        // closing it while this runs. An unsynchronized read racing an ARC store can over-release.
+        if sessionWriteQueue.sync(execute: { sessionAudioWriter == nil }) {
+            let sessionURL = SessionStorage.makeSessionAudioURL()
+            sessionAudioURL = sessionURL
+            openSessionWriter(at: sessionURL)
         }
 
         lastAudioCallbackTime = nil
@@ -361,12 +410,17 @@ class AudioRecorder: NSObject {
             )
         } catch {
             lastEngineStartError = error
-            sessionAudioFile = nil
+            discardSessionAudio()
             throw error
         }
 
+        // Every abort below discards the session file. The generation checks used to just drop
+        // the reference, so a start cancelled mid-flight left an open encoder and a
+        // fraction-of-a-second .opus in Sessions/ that no record pointed at, surviving until
+        // the retention sweep.
         guard isGenerationCurrent(generation) else {
             await engineLifecycle.stopEngine()
+            discardSessionAudio()
             throw RecordingError.engineCleanedUp
         }
 
@@ -375,12 +429,13 @@ class AudioRecorder: NSObject {
         } catch {
             lastEngineStartError = error
             await engineLifecycle.stopEngine()
-            sessionAudioFile = nil
+            discardSessionAudio()
             throw error
         }
 
         guard isGenerationCurrent(generation) else {
             await engineLifecycle.stopEngine()
+            discardSessionAudio()
             throw RecordingError.engineCleanedUp
         }
 
@@ -389,7 +444,19 @@ class AudioRecorder: NSObject {
         let gen = await engineLifecycle.generation
 
         isRecording = true
-        recorderState = .recording(generation: gen)
+        // `generation`, not `gen`. These are two unrelated counters: `generation` is
+        // `AudioRecorder.currentGeneration` (bumped per start/stop), while `gen` is
+        // `AudioEngineLifecycle.generation` (bumped by `configure`, `stopEngine` *and*
+        // `replaceDeadEngine`). This state was stamped with the engine's, but the only consumer,
+        // `recoverAudioEngine`, unpacks it and feeds it to `isGenerationCurrent()`, which
+        // compares against `currentGeneration` — so the guard was only ever correct while the
+        // two counters happened to coincide. `replaceDeadEngine` bumps one and not the other,
+        // which means after a single successful recovery they are permanently skewed and every
+        // later recovery fails the check unconditionally: `isRecording = false`, writer closed,
+        // straight to `.idle` with no `onAudioFlowTimeout`. That silently defeated the
+        // keep-the-partial-recording behaviour documented on `discardSessionAudio`.
+        // `gen` stays in the log line below, where it is genuinely the engine's identity.
+        recorderState = .recording(generation: generation)
 
         if let devID = cachedEngineDeviceID {
             startMonitoringDevice(devID)
@@ -435,18 +502,47 @@ class AudioRecorder: NSObject {
 
         autoreleasepool { onStreamingSamples?(samples) }
 
-        // Disk write — reconstruct AVAudioPCMBuffer from [Float] for AVAudioFile
-        if sessionAudioFile != nil {
-            let frameCount = AVAudioFrameCount(samples.count)
-            if let buf = AVAudioPCMBuffer(pcmFormat: whisperFormat, frameCapacity: frameCount) {
-                buf.frameLength = frameCount
-                samples.withUnsafeBufferPointer { ptr in
-                    buf.floatChannelData!.pointee.initialize(from: ptr.baseAddress!, count: samples.count)
+        // Disk write — reconstruct AVAudioPCMBuffer from [Float] for the Opus encoder.
+        // Gated on `isRecording` (checked at the top of this function, under its own lock) rather
+        // than on a writer flag; the enqueued block is what actually decides, on the queue.
+        let frameCount = AVAudioFrameCount(samples.count)
+        if let buf = AVAudioPCMBuffer(pcmFormat: whisperFormat, frameCapacity: frameCount) {
+            buf.frameLength = frameCount
+            samples.withUnsafeBufferPointer { ptr in
+                buf.floatChannelData!.pointee.initialize(from: ptr.baseAddress!, count: samples.count)
+            }
+            let captured = buf
+            sessionWriteQueue.async { [weak self] in
+                guard let self, let writer = self.sessionAudioWriter else { return }
+                do {
+                    try writer.write(captured)
+                } catch {
+                    // Terminal, and reported exactly once. Retrying the next buffer used to be
+                    // the behaviour here, which is wrong twice over: the failed buffer's Ogg
+                    // pages are already out of the encoder, so a later success writes pages with
+                    // a gap in their sequence and produces an *undecodable* file rather than a
+                    // short one (see `AudioArchiveWriter.hasFailed`); and at ~12 buffers a second
+                    // it emitted a log line per buffer, against a whole-app budget of <400 a day.
+                    Logger.error("Session audio encode failed, session file abandoned: " +
+                                 "\(error.localizedDescription)", subsystem: .audio)
+                    // The writer is deliberately **kept**, not nil'd. `AudioArchiveWriter` has
+                    // already latched `hasFailed`, so every later `write`/`flush` is a silent
+                    // no-op and this branch cannot run twice — the log stays at one line.
+                    // Nil'ing it instead re-armed the `sessionAudioWriter == nil` test in
+                    // `startRecordingInternal`, so a device death after an encode failure sent
+                    // `recoverAudioEngine` down the cold-start branch and minted a *second*
+                    // session file. Nothing referenced the new one: `StreamingTranscriber`
+                    // captured the original URL at start, so save copied the old partial and
+                    // the delete-on-discard removed only the old path, leaving the new `.opus`
+                    // orphaned until the retention sweep. Keeping the writer keeps
+                    // "one recording is one Opus stream" true through recovery.
+                    return
                 }
-                let captured = buf
-                sessionWriteQueue.async { [weak self] in
-                    guard let self, let file = self.sessionAudioFile else { return }
-                    try? file.write(from: captured)
+                self.sessionHasAudio = true
+                self.framesSinceFlush += Int(captured.frameLength)
+                if self.framesSinceFlush >= self.flushIntervalFrames {
+                    self.framesSinceFlush = 0
+                    writer.flush()
                 }
             }
         }
@@ -494,9 +590,9 @@ class AudioRecorder: NSObject {
         // Short drain to let in-flight callbacks deliver last buffers
         try? await Task.sleep(nanoseconds: 200_000_000)
 
-        // Drain pending disk writes before closing the file
-        sessionWriteQueue.sync {}
-        sessionAudioFile = nil
+        // Drain pending encodes, then finalize the Ogg stream. Dropping the reference is not
+        // enough — `close()` writes the terminating page.
+        closeSessionWriter()
 
         stopAudioFlowWatchdog()
         stopMonitoringDevice()
@@ -513,13 +609,89 @@ class AudioRecorder: NSObject {
 
     var recordingURL: URL? { currentURL }
 
-    /// Discard an in-progress session file — called on failed/cancelled starts to prevent orphaned audio.
+    /// Close the session writer and unlink the file. Used only on failed-start paths: a start
+    /// that never reached `.recording` produced at most a fraction of a second of Opus and no
+    /// record refers to it, so leaving it behind is a leak the retention sweep has to mop up.
+    ///
+    /// Refuses to unlink once audio has actually been encoded. `recoverAudioEngine` restarts a
+    /// live recording through `startRecordingInternal`, so its abort paths reach here holding a
+    /// session that already contains everything captured before the device died — deleting it
+    /// would turn a recoverable glitch into total loss of the recording. Finalize and keep.
     private func discardSessionAudio() {
-        sessionWriteQueue.sync {}
-        sessionAudioFile = nil
+        // One `sync`, not two. Reading `sessionHasAudio` in a separate earlier block let an
+        // already-enqueued encode set it `true` in the gap, so `hadAudio` could come back stale
+        // `false` and the unlink below would delete a file that does contain audio — the exact
+        // total-loss outcome the doc comment above says this function refuses.
+        let hadAudio = sessionWriteQueue.sync { () -> Bool in
+            let had = sessionHasAudio
+            sessionAudioWriter?.close()
+            sessionAudioWriter = nil
+            return had
+        }
+        guard !hadAudio else { return }
         if let url = sessionAudioURL {
             try? FileManager.default.removeItem(at: url)
             sessionAudioURL = nil
+        }
+    }
+
+    /// Open the session writer. `framesSinceFlush` is reset on `sessionWriteQueue`, not here:
+    /// the field is read-modify-written by the encode block, and a caller-thread reset would be
+    /// an unsynchronized write racing it. In practice the queue is idle whenever this is called —
+    /// the recovery restart re-enters `startRecordingInternal` with a live writer and so never
+    /// reaches here — but the field's ownership rule is the queue and this honours it rather
+    /// than depending on that reachability argument staying true.
+    private func openSessionWriter(at url: URL) {
+        let opened: Bool = sessionWriteQueue.sync {
+            framesSinceFlush = 0
+            sessionHasAudio = false
+            do {
+                sessionAudioWriter = try AudioArchiveFormat.makeWriter(at: url)
+                Logger.step(.recStart, .audio, ["file": .string(url.lastPathComponent)])
+                return true
+            } catch {
+                // Carry the reason. The `try?` this replaces reported only `fail=session_file`,
+                // which is what made a 100%-reproducible failure look like ambient noise.
+                Logger.event(.recFail, .audio,
+                             ["fail": .string("session_file"),
+                              "err": .string(error.localizedDescription)],
+                             level: .warning)
+                sessionAudioWriter = nil
+                return false
+            }
+        }
+        guard !opened else { return }
+        // Leave nothing behind that the rest of the app can mistake for a recording. The URL is
+        // the more damaging half: `StreamingTranscriber` captures it at start and history stores
+        // it, so a non-nil URL with no writer is exactly the "row points at a file that was never
+        // created" state this whole path was rewritten to eliminate. `AudioArchiveWriter.init`
+        // unlinks after its own throws, so this is a backstop for the `createFile`-succeeded
+        // cases it cannot reach.
+        //
+        // Clearing the URL does cost something, and it is deliberate: `AppState.beginRecordingSession`
+        // bails on a nil `sessionAudioURL`, so no in-progress history row is opened and the
+        // watchdog's text-preservation path has nothing to finalize. That is the right trade —
+        // a row whose audio path does not exist corrupts playback and the library sweep for
+        // good, whereas the text still reaches history through the ordinary `saveTranscription`
+        // at stop. Only a crash mid-recording loses text, and only when the file could not be
+        // opened at all, which is already a failed recording.
+        try? FileManager.default.removeItem(at: url)
+        if sessionAudioURL == url { sessionAudioURL = nil }
+    }
+
+    /// Drain queued encodes, then finalize the session file.
+    ///
+    /// One `sync`, and `close()` runs *inside* it. The finalize must be ordered against every
+    /// `write()` on the same writer, and only being on the queue gives that — a drain followed
+    /// by an off-queue `close()` leaves the window described on `sessionAudioWriter`.
+    private func closeSessionWriter() {
+        // No off-queue `guard sessionAudioWriter != nil` short-circuit. Two callers genuinely
+        // race — `stopRecording` and a `recoverAudioEngine` Task can both reach here — and that
+        // guard was an unsynchronized read of a reference the queue stores to. `close()` and the
+        // nil assignment are both idempotent, so the loser of the race is a cheap no-op.
+        sessionWriteQueue.sync {
+            sessionAudioWriter?.close()
+            sessionAudioWriter = nil
         }
     }
 
@@ -533,6 +705,11 @@ class AudioRecorder: NSObject {
         if recoveryAttemptCount > maxRecoveryAttempts {
             Logger.event(.recFail, .audio, ["attempts": .int(maxRecoveryAttempts), "reason": .string("recovery_exhausted")], level: .error)
             isRecording = false
+            // Finalize whatever was captured before the engine died. This path used to return
+            // without closing, and `AppState`'s watchdog then called `stopRecording()`, which
+            // bails on `guard isRecording` — so nothing ever closed the writer. The partial
+            // recording was left unterminated and its filename was still written to history.
+            closeSessionWriter()
             recorderState = .idle
             cachedEngineDeviceID = nil
             DispatchQueue.main.async { [weak self] in self?.onAudioFlowTimeout?() }
@@ -554,6 +731,7 @@ class AudioRecorder: NSObject {
 
         guard isRecording, isGenerationCurrent(generation) else {
             isRecording = false
+            closeSessionWriter()
             recorderState = .idle
             return
         }
@@ -570,6 +748,9 @@ class AudioRecorder: NSObject {
         } catch {
             Logger.event(.recFail, .audio, ["recovery": .bool(true), "err": .string(error.localizedDescription)], level: .error)
             isRecording = false
+            // Keep what was captured before the device died — the restart failed, but the
+            // pre-recovery audio is still a valid recording and history will reference it.
+            closeSessionWriter()
             recorderState = .idle
             cachedEngineDeviceID = nil
             DispatchQueue.main.async { [weak self] in self?.onAudioFlowTimeout?() }

@@ -223,43 +223,73 @@ final class TranscriptionPipelineTests: XCTestCase {
 
     // MARK: - Abort Callback
 
-    /// Verify abort callback cancels transcription quickly
+    /// Verify the abort callback actually cuts a transcription short.
+    ///
+    /// Measured relative to an unaborted run of the *same* audio, not against a fixed
+    /// millisecond budget. The previous version transcribed 30s and asserted `< 3000ms`, which
+    /// could not fail for the right reason: 30s is a single whisper window, and a full
+    /// unaborted run of it measures ~900ms (encode 668ms + decode) — comfortably under the
+    /// bound whether abort worked or not. It failed only when something *else* in the test host
+    /// stole time, which is exactly what happened (`MeetingDiarizerService.warm()`, now guarded).
+    ///
+    /// 60s is the shortest input that spans two windows, and window count is the unit that
+    /// matters: `wparams.abort_callback` is polled per decoder token (~1.6ms) but only *once
+    /// per encoder pass*, because the `ggml_backend_sched_t` graph-compute overload
+    /// (`whisper.cpp/src/whisper.cpp:190-207`) installs no abort callback — so
+    /// `whisper_encode_internal` consults it a single time, at the end. Aborting mid-window
+    /// therefore cannot cut the encode that is already running; it can only stop the *next*
+    /// window from being encoded. A one-window input has no next window, so it has nothing for
+    /// abort to save.
     func testAbortCancelsTranscription() throws {
         let bridge = try loadWhisperBridge()
-        let audio = generateAudio(seconds: 30.0)
+        let audio = generateAudio(seconds: 60.0)
 
-        // Warmup
+        // Warm up so neither measurement pays first-decode cost.
+        bridge.resetAbort()
         _ = bridge.transcribe(
             samples: Array(audio.prefix(16000)),
             initialPrompt: nil, language: .english,
             singleSegment: false, maxTokens: 0
         )
 
-        // Start transcription and abort after 200ms
-        bridge.resetAbort()
-
-        let expectation = XCTestExpectation(description: "Transcription completed")
-        var transcriptionMs: Double = 0
-
-        DispatchQueue.global().async {
-            let start = CFAbsoluteTimeGetCurrent()
-            _ = bridge.transcribe(
-                samples: audio, initialPrompt: nil,
-                language: .english, singleSegment: false, maxTokens: 0
-            )
-            transcriptionMs = (CFAbsoluteTimeGetCurrent() - start) * 1000
-            expectation.fulfill()
+        func timeTranscribe(abortAfter: TimeInterval?) -> Double {
+            bridge.resetAbort()
+            let expectation = XCTestExpectation(description: "Transcription completed")
+            var elapsedMs: Double = 0
+            DispatchQueue.global().async {
+                let start = CFAbsoluteTimeGetCurrent()
+                _ = bridge.transcribe(
+                    samples: audio, initialPrompt: nil,
+                    language: .english, singleSegment: false, maxTokens: 0
+                )
+                elapsedMs = (CFAbsoluteTimeGetCurrent() - start) * 1000
+                expectation.fulfill()
+            }
+            if let abortAfter {
+                Thread.sleep(forTimeInterval: abortAfter)
+                bridge.requestAbort()
+            }
+            wait(for: [expectation], timeout: 60.0)
+            return elapsedMs
         }
 
-        // Abort after 200ms
-        Thread.sleep(forTimeInterval: 0.2)
-        bridge.requestAbort()
+        let unabortedMs = timeTranscribe(abortAfter: nil)
+        let abortedMs = timeTranscribe(abortAfter: 0.2)
+        bridge.resetAbort()
 
-        wait(for: [expectation], timeout: 5.0)
+        let detail = "aborted \(String(format: "%.0f", abortedMs))ms vs "
+            + "unaborted \(String(format: "%.0f", unabortedMs))ms"
 
-        // Aborted transcription should complete much faster than full 30s transcription
-        XCTAssertLessThan(transcriptionMs, 3000,
-            "Aborted transcription took \(String(format: "%.0f", transcriptionMs))ms — should abort quickly")
+        // The relative gate — the only one that can distinguish a working abort from a
+        // broken one, and immune to how fast the machine or how loaded the host is.
+        XCTAssertLessThan(abortedMs, unabortedMs * 0.6,
+                          "Abort saved little or no work: \(detail)")
+
+        // The absolute gate — abort must land within one encoder pass plus slack, so a
+        // regression to per-recording rather than per-window granularity is caught even if
+        // the unaborted run also happens to slow down. Encode measures ~670ms on this model.
+        XCTAssertLessThan(abortedMs, 2000,
+                          "Abort did not land within one encoder pass: \(detail)")
     }
 
     // MARK: - Helpers

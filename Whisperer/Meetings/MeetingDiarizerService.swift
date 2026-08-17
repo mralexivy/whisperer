@@ -109,6 +109,9 @@ final class MeetingDiarizerService: ObservableObject {
     /// Downloads the model if absent. Idempotent and safe to call on every launch —
     /// a cache hit resolves synchronously without touching the network.
     func prefetch() {
+        // The guard belongs here, not only on `warm()`. On a machine where the bundle is not
+        // cached this branch runs a network download instead, which `warm()`'s guard never sees.
+        if AppEnvironment.isRunningTests { return }
         guard prefetchTask == nil else { return }
         if Self.isModelCached() {
             isReady = true
@@ -173,6 +176,17 @@ final class MeetingDiarizerService: ObservableObject {
     /// Pays CoreML's one-time ANE specialization cost while nothing else is running, which is
     /// where it is cheapest, and hands the handle to `models` so no meeting ever has to load it.
     func warm() {
+        // Never warm inside the test host. Loading the Sortformer bundle costs ~4.4s of ANE
+        // specialization and pins the main thread ("Main thread unresponsive for 3.8s"), which
+        // is fine when the app is idle and ruinous inside a test process: it lands concurrently
+        // with whatever latency the suite is measuring. `testAbortCancelsTranscription` failed
+        // at 4156ms against a 3000ms budget purely because this warm-up covered its whole
+        // measurement window — the abort itself was working. Mirrors the guard
+        // `AppState.preloadModel()` already has for the same reason.
+        if AppEnvironment.isRunningTests {
+            Logger.info("Skipping Sortformer warm-up in test environment", subsystem: .model)
+            return
+        }
         guard !hasWarmed, warmTask == nil, models == nil, Self.isModelCached() else { return }
         hasWarmed = true
 

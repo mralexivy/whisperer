@@ -111,3 +111,134 @@
     the final `stop()` decoding the whole buffer at once — which is identical on both sides of an
     A/B and makes every gate unfailable. Use `Task.sleep` and pace against a fixed start time.
     Symptom to watch for: two arms reporting WER equal to three decimals.
+
+24. **The eager arm's WER is not reproducible run to run — never accept a change on one run.**
+    Measured directly: the identical binary over the identical eight-fixture corpus, run twice
+    back to back, moved the eager corpus mean 0.216 → 0.129 and changed the per-fixture WER on
+    all eight. The baseline (VAD-chunk) arm reproduced exactly on five of eight over the same
+    pair, so this is the eager path's variance specifically, not the harness's. Cause: eager
+    passes are wall-clock scheduled and each decodes from the agreement boundary to the live
+    audio edge, so a decode finishing 30 ms earlier sees a different window, agrees on a
+    different word, and relocates the boundary for the remainder of the recording — one timing
+    jitter propagates to the end.
+
+    Consequence: a sequence of single-run "improvements" is indistinguishable from resampling.
+    Four consecutive tuning runs here read 0.216 → 0.150 → 0.177 → 0.135 → 0.125 and none of
+    those steps is supported by the evidence. `EagerStreamRegressionTests` therefore runs each
+    arm `repeatCount` (3) times per fixture and gates on the **median**, printing each fixture's
+    spread beside its delta; a delta smaller than its own spread is marked `~` and means nothing.
+    Structural invariants are asserted on *every* repetition instead, because those are pass/fail
+    and a violation appearing in one run of three is a real interleaving-dependent defect.
+
+    Corollary: reducing this variance is itself a product goal. A dictation path whose output
+    changes by 0.1 WER between two runs of the same audio is unstable for the user, not merely
+    hard to measure.
+
+25. **Do not buy back a dropped seam word by re-decoding the seam.** Whisper's word *offsets*
+    overshoot as readily as its onsets undershoot, so clamping the agreement boundary to the end
+    of the last confirmed word still steps over the following word: measured on `B6250001`, a pass
+    reported `is` ending at 6.02s while the next decode of the same audio placed the next word at
+    5.82s, and the `not meeting. And` spoken in between was filtered out of that window and every
+    later one.
+
+    Holding the persisted boundary back behind the accounted-for point (`boundaryTrailSamples`,
+    tried at 0.25s) does recover those words — `B6250001` 0.140 → 0.060 — and loses more than it
+    gains everywhere else: `13B50271` 0.050 → 0.200, `8C0D8940` 0.143 → 0.314, corpus mean
+    0.109 → 0.193 on the three-repeat gate, with per-fixture spreads *falling* over the same run,
+    so the result clears its error bars.
+
+    Mechanism, and the part that generalizes: a word recovered from before the boundary lands
+    ahead of the previous hypothesis's first word, so `commonPrefixCount` collapses to 0 and the
+    anchor check discards the pass. `unanchoredAfterBoundaryMove` holds went from 1–2 per fixture
+    to 3–5. Each hold costs a full decode *and* freezes the boundary, so the cure spreads further
+    than the disease. Any future attempt has to satisfy the anchor check as well — most likely by
+    carrying the previous pass's unconfirmed tail forward as *text* rather than re-deriving it
+    from audio. Shipped at 0.
+
+26. **whisper.cpp abort granularity is one encoder pass, not one token — so any abort-latency
+    test must span ≥2 windows.** `wparams.abort_callback` is polled per decoder token (~1.6 ms),
+    but `whisper_encode_internal` consults it exactly once, at the end
+    (`whisper.cpp/src/whisper.cpp:2455`), because the `ggml_backend_sched_t` graph-compute
+    overload at `:190-207` installs no abort callback while the non-scheduled overload at
+    `:168-188` does. Aborting mid-window cannot stop the encode already running; it can only
+    stop the *next* window from being encoded. Measured on `largeTurboQ5`: encode 668 ms.
+
+    Consequence for tests. `testAbortCancelsTranscription` used to transcribe 30 s — a single
+    window — and assert `< 3000 ms`. A full *unaborted* run of that input is ~900 ms, so the
+    assertion held whether abort worked or not; the test could only ever fail for an unrelated
+    reason, and did. Rewritten to 60 s (two windows) with a relative gate against an unaborted
+    run of the same audio: measured **aborted 680 ms vs unaborted 1348 ms**, ratio 0.50 against a
+    0.60 bound, where a broken abort reads ~1.0. The absolute bound stays only as a second gate
+    on granularity regressing from per-window to per-recording.
+
+    Generalizes: when a latency bound is not derived from the mechanism's actual granularity, a
+    passing test is not evidence. Derive the bound, then check the margin by breaking the
+    assertion on purpose once and reading the real numbers.
+
+27. **Nothing in the app may load a model in the test host without an `XCTestConfigurationFilePath`
+    guard.** `MeetingDiarizerService.warm()` lacked one, so every test run paid a 4416 ms
+    Sortformer ANE specialization (`sortformer-warmup waited=19ms ran=4416ms`) plus
+    `Main thread unresponsive for 3.8s`, landing concurrently with whatever the suite was timing.
+    That, not the decoder, is what failed `testAbortCancelsTranscription` at 4156 ms against a
+    3000 ms budget. `AppState.preloadModel()` already had the guard; the diarizer was added later
+    and did not copy it.
+
+    The failure mode is nastier than a slow test: it is a *timing* test failing for a reason
+    entirely outside the code under test, which reads as a real regression and sends debugging in
+    the wrong direction. Any new warm-up, prefetch, or preload path needs the guard at the same
+    time it is written.
+
+28. **Core ML / ANE is gone from the whisper.cpp path — do not reason about ANE encode.** The
+    library was rebuilt `WHISPER_COREML=OFF` and the Xcode flags dropped on **2026-08-16**
+    (commit `620b12a`), because Core ML builds a fixed-shape `MLMultiArray` from the mel tensor,
+    which is incompatible with `audio_ctx` — the knob the eager streaming path needs to size the
+    encoder to the window. Verified across all three configurations: `project.pbxproj` defines no
+    `WHISPER_USE_COREML` and links no `-lwhisper.coreml`; the linked
+    `whisper.cpp/build-static/src/libwhisper.a` exports zero Core ML symbols on both slices; and
+    `CMakeCache.txt` records `WHISPER_COREML:BOOL=OFF`. `whisper_print_system_info` prints
+    `COREML = 0`. The barrier is compile-time and absolute — a runtime-downloaded `.mlmodelc`
+    cannot reintroduce it.
+
+    **The app does still link `CoreML.framework`**, in every configuration, for WhisperKit,
+    Parakeet and MLX, which are genuine Core ML/ANE consumers. "No Core ML" is a statement about
+    the whisper.cpp path only. A `grep -c "CoreML.framework"` on `project.pbxproj` returns 0 and
+    means nothing: the file stores it as `"-framework",` / `CoreML,` on separate lines. That
+    grep is what produced the wrong claim this rule replaces.
+
+    `whisper.cpp/build-coreml/`, `build-static-backup/` (which *does* contain
+    `libwhisper.coreml.a`) and `libwhisper.a.bak-nocoreml` are leftovers from the removal, not
+    what ships — checking for the existence of a Core ML artifact in the tree is not a valid test
+    for whether Core ML is linked. Check `LIBRARY_SEARCH_PATHS` and `nm` the archive it names.
+    CLAUDE.md asserted the opposite until 2026-08-16 and was corrected.
+
+29. **Do not size `audio_ctx` to the tail on the stop path — it is not faster and it corrupts the
+    transcript.** Measured 2026-08-17 over 32 real tail segments from history on `largeTurboQ5`
+    (`TailAudioCtxTests.testSizingTailAudioCtxIsNotViable`), sizing `audio_ctx` from the tail's
+    sample count against the full 1500-frame default:
+
+    | | full ctx (shipping) | sized ctx |
+    |---|---|---|
+    | median decode | 814–897 ms | 877–938 ms |
+    | mean WER vs full | — | **19.09** |
+    | tails diverging >0.15 WER | — | **31 / 32** |
+
+    Reproduced on two independent runs. Sizing was **5–8% slower**, not faster, and the
+    full-context arm ran first in every pair so cold-cache bias favored the sized arm and it
+    still lost. Accuracy collapsed in the insertion-heavy decoder-looping pattern already
+    recorded for the eager path — individual tails reached WER 147, i.e. ~148 words emitted
+    where full context emitted 1.
+
+    **The load-bearing inference, for whoever optimizes the stop path next:** the stop-path tail
+    decode costs a near-constant ~687 ms regardless of tail length (0.60 s of audio → 675 ms,
+    3.30 s → 698 ms). That flatness *looks* exactly like a fixed 30 s mel encode, and that is the
+    trap — shrinking the mel window does not reclaim any of it, which proves the cost is **not
+    encoder work**. Remaining candidates are the decoder loop and Metal graph setup. Do not spend
+    another cycle on `audio_ctx` here.
+
+    This generalizes rule 28's neighbour: the comment above `runEagerStreamPass` had already
+    recorded that a *fixed* `audio_ctx` made the decoder loop, and left *window-proportional*
+    `audio_ctx` "on the table". This measurement takes it off the table for the tail. The helper
+    `WhisperBridge.audioCtxForSamples` and the `transcribe(audioCtx:)` parameter are retained
+    **only** so the disproof stays compiled and runnable; no production path passes a non-zero
+    value. The test asserts the negative — if it ever fails, the trade-off has genuinely changed
+    and the question is worth reopening.

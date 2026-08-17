@@ -92,8 +92,12 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             Logger.debug("Receipt validation is disabled", subsystem: .app)
         }
 
-        // Install crash handlers first thing
-        CrashHandler.shared.install()
+        // Install crash handlers first thing — but never in a test host, where
+        // `NSSetUncaughtExceptionHandler` and the signal handlers intercept the faults XCTest
+        // needs to see, turning a clean test failure into a mangled one.
+        if !AppEnvironment.isRunningTests {
+            CrashHandler.shared.install()
+        }
 
         // Start health monitoring
         HealthManager.shared.startMonitoring()
@@ -152,7 +156,12 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         appState.soundPlayer = SoundPlayer()
         #if !APP_STORE
         appState.textSelectionService = TextSelectionService()
-        MeetingDetector.shared.start()
+        // Not in tests: the detector installs camera/mic monitors plus 1s and 5s polls, and on
+        // detection calls through to `MeetingEngines.prefetch()`. Recording tests turn the
+        // microphone on, so the suite would trip its own meeting detection.
+        if !AppEnvironment.isRunningTests {
+            MeetingDetector.shared.start()
+        }
         // Warm the speaker-diarization model on disk while the user is doing something
         // else. Gated on the same toggle MeetingDetector gates itself with, so users who
         // turned meetings off never pay for the download.
@@ -191,7 +200,10 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         #endif
 
         // MCP server
-        if appState.mcpEnabled {
+        // Not in tests. `start()` early-returns on `guard listener == nil`, so a launch-started
+        // server silently turns `MCPServerTests.setUp`'s own `start` into a no-op and leaves the
+        // tests polling a port nothing is listening on.
+        if appState.mcpEnabled, !AppEnvironment.isRunningTests {
             let port = appState.mcpPort
             Task { await WhispererMCPServer.shared.start(port: port) }
         }
@@ -254,7 +266,12 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         // Eagerly initialize DictionaryManager so its background loading
         // (CoreData fetch + SymSpell/PhoneticMatcher index build) completes
         // before the user's first recording, avoiding a text entry delay.
-        _ = DictionaryManager.shared
+        // Eager kick only outside tests — the type stays available, tests just get it lazily
+        // instead of paying a CoreData fetch plus a SymSpell/PhoneticMatcher index build on a
+        // background thread while timed transcription tests are running.
+        if !AppEnvironment.isRunningTests {
+            _ = DictionaryManager.shared
+        }
     }
 
     private func setupOverlay() {
@@ -283,7 +300,12 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         if onboardingDone {
             let selectedModel = await MainActor.run { appState.selectedModel }
             if !ModelDownloader.shared.isModelDownloaded(selectedModel) {
-                await appState.downloadModel(selectedModel)
+                // `preloadModel()` on the other branch is guarded against the test host; this
+                // branch was not, so a machine without the model on disk pulled a multi-GB
+                // download inside `xcodebuild test`.
+                if !AppEnvironment.isRunningTests {
+                    await appState.downloadModel(selectedModel)
+                }
             } else {
                 await MainActor.run {
                     self.appState.preloadModel()

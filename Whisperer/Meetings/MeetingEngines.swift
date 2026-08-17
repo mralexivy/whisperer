@@ -283,6 +283,17 @@ final class MeetingEngines: ObservableObject {
     /// Downloads and warms each engine that is not yet ready. Idempotent and safe to call
     /// on every app launch and on every meeting detection event.
     func prefetch() {
+        // Not from a test host. This warms all three engines: a Nemotron load, a model download
+        // followed by a blocking Core ML compile the cleanup path itself measures at ~40s, and
+        // an MLX LLM load/unload. It is reachable at launch *and* from meeting detection — and
+        // recording tests turn the microphone on, which is exactly what the detector watches, so
+        // a test suite can trigger it at an arbitrary moment. Same failure mode as the Sortformer
+        // warm-up that broke `testAbortCancelsTranscription`, three times over.
+        if AppEnvironment.isRunningTests {
+            Logger.info("Meeting engine prefetch skipped — test environment", subsystem: .model)
+            return
+        }
+
         // Speakers fully delegated to MeetingDiarizerService — it handles download + warm.
         MeetingDiarizerService.shared.prefetch()
 

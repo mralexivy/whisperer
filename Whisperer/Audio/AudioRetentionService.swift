@@ -104,6 +104,15 @@ final class AudioRetentionService {
     // MARK: - Sweep
 
     private func sweep(reason: String) async {
+        // Never sweep from a test host. The XCTest bundle runs inside `whisperer.app` under the
+        // real bundle id, so this deletes the *user's* transcriptions, meetings and audio —
+        // permanently, from a `xcodebuild test` run. Guarded at the sweep itself rather than at
+        // the three call sites (`start`'s timer, its defaults observer, `runLaunchSweep`) so no
+        // future entry point can reintroduce the hazard.
+        if AppEnvironment.isRunningTests {
+            Logger.info("Retention sweep (\(reason)) skipped — test environment", subsystem: .app)
+            return
+        }
         guard !isSweeping else { return }
 
         if let blocker = currentBlocker {

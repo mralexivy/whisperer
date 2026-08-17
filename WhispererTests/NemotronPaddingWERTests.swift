@@ -37,7 +37,11 @@ final class NemotronPaddingWERTests: XCTestCase {
         let fixtures = Array(all.filter {
             $0.audioURL != nil &&
             $0.durationSec <= 5.0 &&
-            $0.wordCount >= 2
+            $0.wordCount >= 2 &&
+            // Reference is the whisper.cpp full-file decode, not the app's stored output — see
+            // `GoldenSet`. On a ≤5s corpus a single dropped word moves WER by ~0.2, so a reference
+            // that itself dropped one would swamp the padding effect this test is measuring.
+            GoldenSet.reference(for: $0.id) != nil
         }.prefix(30))  // cap at 30 to keep test under ~5 minutes
         guard fixtures.count >= 5 else {
             throw XCTSkip(
@@ -72,13 +76,14 @@ final class NemotronPaddingWERTests: XCTestCase {
             await bridge.feed(samples: postPad)
             let resultWith = await bridge.endSession()
 
-            let wer0 = wordErrorRate(resultWithout, reference: fixture.transcript)
-            let wer1 = wordErrorRate(resultWith,    reference: fixture.transcript)
+            let reference = GoldenSet.reference(for: fixture.id) ?? fixture.transcript
+            let wer0 = wordErrorRate(resultWithout, reference: reference)
+            let wer1 = wordErrorRate(resultWith,    reference: reference)
             werWithout.append(wer0)
             werWith.append(wer1)
 
             print(String(format: "  [%.1fs lang=%@] ref: \"%@\"",
-                         fixture.durationSec, fixture.language, fixture.transcript))
+                         fixture.durationSec, fixture.language, reference))
             print(String(format: "           without(WER=%.2f): \"%@\"", wer0, resultWithout))
             print(String(format: "           with   (WER=%.2f): \"%@\"", wer1, resultWith))
             print()

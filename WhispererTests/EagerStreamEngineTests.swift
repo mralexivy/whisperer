@@ -400,10 +400,13 @@ final class EagerStreamEngineTests: XCTestCase {
         var engine = EagerStreamEngine()
         engine.reset(at: 5000)  // agreementStartIndex = 5000
 
-        // hypothesis words all start BEFORE the agreementStartIndex — all filtered out
+        // Every word ends before the boundary (5000 samples = 0.3125s), so none of them overlaps
+        // the unconfirmed region and all are filtered out. The test is overlap, not start: a word
+        // straddling the boundary is the boundary word itself and must survive — see the filter
+        // in `consume`.
         let staleHyp = [
-            word(" old", startSec: 0, endSec: 0.3),
-            word(" words", startSec: 0.3, endSec: 0.6)
+            word(" old", startSec: 0, endSec: 0.15),
+            word(" words", startSec: 0.15, endSec: 0.30)
         ]
         let outcome = engine.consume(
             hypothesis: staleHyp,
@@ -626,7 +629,12 @@ final class EagerStreamEngineTests: XCTestCase {
         engine.reset(at: 0)
 
         // First pass ends with two copies of the phrase and triggers a soft-commit (>6s of audio).
-        let first = sentence("alpha bravo charlie delta echo foxtrot golf hotel i dont know i dont know",
+        // The two leading fillers are margin, not decoration: `sentence` spaces words 0.5s apart
+        // with a 0.45s duration, and the agreement boundary is clamped to the end of the last
+        // confirmed word, so a span that clears 6s only by the 0.05s inter-word gap does not
+        // commit. This test is about the repetition count surviving a commit, not about where the
+        // threshold sits — so put the precondition comfortably past it.
+        let first = sentence("india juliett alpha bravo charlie delta echo foxtrot golf hotel i dont know i dont know",
                              p: 0.99)
         let outcome = engine.consume(hypothesis: first, audioBaseIndex: 0, languageIsLocked: true,
                                      lastCommittedIndex: 0, windowEndIndex: .max)
@@ -642,5 +650,89 @@ final class EagerStreamEngineTests: XCTestCase {
         let confirmed = engine.confirmedWords.map { $0.text.trimmingCharacters(in: .whitespaces) }
         XCTAssertFalse(confirmed.contains("know"),
                        "two copies were already committed, so none may follow: \(confirmed)")
+    }
+
+    // MARK: - Boundary trail (late word offsets)
+
+    /// The persisted boundary trails the confirmed text, so a word whose offset the *previous*
+    /// pass placed too early is still inside the next window.
+    ///
+    /// Regression test for the last resolvable WER regression in the golden-set gate. On
+    /// `B6250001`, a pass confirmed `…why Meta is` and reported `is` ending at ~6.02s, while the
+    /// next decode of that same audio placed the following word at 5.82s. `not meeting. And` lies
+    /// in between, so the `startIndex >= agreementStart` entry filter dropped it from that window and from
+    /// every later one — three words gone from the final text that the VAD-chunk arm keeps.
+    /// Clamping to the confirmed word's *end* does not help, because that end is the timestamp
+    /// that is wrong.
+    /// Note the explicit config: `boundaryTrailSamples` ships at 0 because trailing lost on the
+    /// corpus (see `EagerStreamEngine.Config.default`). The mechanism is still tested, so that if
+    /// a future fix switches it on it does what it claims rather than something adjacent.
+    func testBoundaryTrailsConfirmedTextSoLateOffsetsSurvive() {
+        let trail = Int(0.25 * 16000)
+        var engine = EagerStreamEngine(config: EagerStreamEngine.Config(
+            boundaryWordCount: config.boundaryWordCount,
+            singlePassThreshold: config.singlePassThreshold,
+            softCommitSamples: config.softCommitSamples,
+            requiredAnchor: config.requiredAnchor,
+            maxRetraction: config.maxRetraction,
+            skipsAnchorCheckAfterBoundaryMove: config.skipsAnchorCheckAfterBoundaryMove,
+            suppressesRepetitionLoops: config.suppressesRepetitionLoops,
+            boundaryTrailSamples: trail))
+        engine.reset(at: 0)
+
+        // Two identical passes: LocalAgreement confirms all but the last `boundaryWordCount` (2).
+        let hyp = sentence("alpha bravo charlie delta echo", p: 0.90)
+        _ = engine.consume(hypothesis: hyp, audioBaseIndex: 0, languageIsLocked: true,
+                           lastCommittedIndex: 0, windowEndIndex: .max)
+        _ = engine.consume(hypothesis: hyp, audioBaseIndex: 0, languageIsLocked: true,
+                           lastCommittedIndex: 0, windowEndIndex: .max)
+
+        // `charlie` is the last confirmed word; `sentence` ends it at 1.45s.
+        let confirmedEnd = Int(1.45 * 16000)
+        XCTAssertEqual(engine.agreementStartIndex, confirmedEnd - trail,
+                       "the boundary must sit one trailing margin behind the confirmed text")
+
+        // A word the next decode places entirely before the untrailed boundary — the shape that
+        // used to vanish. It must survive into the hypothesis and reach the display.
+        let late = [word(" not", startSec: 1.30, endSec: 1.42, p: 0.99),
+                    word(" meeting", startSec: 1.42, endSec: 1.60, p: 0.99),
+                    word(" delta", startSec: 1.60, endSec: 1.90, p: 0.99)]
+        let outcome = engine.consume(hypothesis: late, audioBaseIndex: 0, languageIsLocked: true,
+                                     lastCommittedIndex: 0, windowEndIndex: .max)
+
+        // Survival is asserted on the hypothesis, not on `displayText`, because this pass is
+        // *held*: recovering a word ahead of the previous hypothesis's first word shifts the whole
+        // prefix, `commonPrefixCount` drops to 0, and the anchor check reads that as a decoder
+        // collapse. A held pass stores its hypothesis and publishes nothing.
+        //
+        // That interaction is the measured cost of trailing, not an artifact of this test. Over
+        // the same corpus, turning the trail on raised `unanchoredAfterBoundaryMove` holds from
+        // 1–2 per fixture to 3–5 — each one a discarded decode that also freezes the boundary. So
+        // any future attempt to recover these words has to answer the anchor check too; buying the
+        // word back and then throwing the pass away is the failure mode, not the fix.
+        XCTAssertNil(outcome.displayText, "precondition: the recovered word unanchors this pass")
+        XCTAssertTrue(engine.previousHypothesis.contains { $0.text.contains("not") },
+                      "a word ending before the untrailed boundary was filtered out entirely: " +
+                      "\(engine.previousHypothesis.map(\.text))")
+    }
+
+    /// The trailing boundary must not cause a word to be confirmed twice inside one pass.
+    ///
+    /// The trail deliberately sits behind words that were just confirmed, so if the in-pass
+    /// hypothesis filters used it instead of the strict boundary, the entropy gate would see those
+    /// words again in the same `consume` and confirm them a second time.
+    func testBoundaryTrailDoesNotDuplicateWithinOnePass() {
+        var engine = EagerStreamEngine()
+        engine.reset(at: 0)
+
+        let hyp = sentence("alpha bravo charlie delta echo", p: 0.99)
+        _ = engine.consume(hypothesis: hyp, audioBaseIndex: 0, languageIsLocked: true,
+                           lastCommittedIndex: 0, windowEndIndex: .max)
+        _ = engine.consume(hypothesis: hyp, audioBaseIndex: 0, languageIsLocked: true,
+                           lastCommittedIndex: 0, windowEndIndex: .max)
+
+        let confirmed = engine.confirmedWords.map { $0.text.trimmingCharacters(in: .whitespaces) }
+        XCTAssertEqual(confirmed.count, Set(confirmed).count,
+                       "a word was confirmed twice in one pass: \(confirmed)")
     }
 }

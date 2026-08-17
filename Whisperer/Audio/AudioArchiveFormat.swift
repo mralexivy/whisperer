@@ -80,6 +80,16 @@ enum AudioArchiveFormat {
     /// Streams in fixed chunks — a 60-minute import must never be materialized as one
     /// `AVAudioPCMBuffer`. Used by the import path and by library migration.
     static func transcode(from source: URL, to destination: URL) throws {
+        // In-place transcode destroys the input and then deletes it. `AudioArchiveWriter.init`
+        // calls `createFile`, which *truncates* an existing path, and it does so after `input`
+        // is already open — so the reader would stream from a file that no longer has any
+        // bytes, the write would produce nothing, and both the writer's unlink-on-throw and the
+        // `succeeded` defer below would remove the user's only copy. `StreamingTranscriber`
+        // happens to guard this with its `isAlreadyArchived` check; nothing guarded it here.
+        guard source.standardizedFileURL != destination.standardizedFileURL else {
+            throw AudioArchiveError.unsupportedSource(source)
+        }
+
         let input: AVAudioFile
         do {
             input = try AVAudioFile(forReading: source)
@@ -181,18 +191,34 @@ enum AudioArchiveFormat {
 /// `sessionWriteQueue`, or a single transcode loop).
 final class AudioArchiveWriter {
 
-    private let url: URL
     private let encoder: OGGEncoder
     private let handle: FileHandle
     private var isClosed = false
     private var int16Scratch: [Int16] = []
 
-    init(url: URL) throws {
-        self.url = url
+    /// Sticky: once a write to disk fails, this writer is permanently dead.
+    ///
+    /// It has to be sticky because `encode(pcm:)` runs *before* the write and drains the
+    /// completed pages out of the encoder. A failed write therefore does not lose a buffer —
+    /// it loses a run of Ogg pages, and the next successful write lands pages whose sequence
+    /// numbers and granulepos skip. That is a desynced stream, not a short one, and
+    /// `AVAudioFile(forReading:)` either refuses it or decodes garbage. Retrying per buffer
+    /// (the recorder's encode block logs and returns) therefore turned a recording that stops
+    /// at the point of failure into a file that keeps growing and cannot be played at all —
+    /// while emitting ~12 error lines a second against a whole-app budget of <400 a day.
+    private(set) var hasFailed = false
 
+    init(url: URL) throws {
         guard FileManager.default.createFile(atPath: url.path, contents: nil) else {
             throw AudioArchiveError.cannotCreateFile(url)
         }
+
+        // Every throw below leaves the empty file `createFile` just made. Nobody owns it — the
+        // writer that would have closed it does not exist — so it sat in `Sessions/` as a
+        // zero-byte `.opus` until the retention sweep, and `transcode`'s `defer` cannot help
+        // because it is installed after this initializer returns.
+        var opened = false
+        defer { if !opened { try? FileManager.default.removeItem(at: url) } }
 
         // pcmRate must equal opusRate — the library refuses to resample. pcmBytesPerFrame
         // is 2 because the encoder takes interleaved Int16.
@@ -211,17 +237,38 @@ final class AudioArchiveWriter {
         }
 
         // `init` already queued OpusHead + OpusTags — write them out.
-        handle.write(encoder.bitstream(flush: true))
+        //
+        // `write(contentsOf:)`, not `write(_:)`: the latter is the ObjC bridge, which raises an
+        // *exception* rather than returning an error when the volume is full — uncatchable in
+        // Swift, so a full disk crashed the app mid-recording instead of losing the recording.
+        //
+        // Propagated, not `try?`. A swallowed failure here is the worst outcome available: the
+        // initializer returns *success* holding a file with no Opus header, the recorder accepts
+        // it as a live session, every subsequent buffer encodes into it, and nothing can ever
+        // decode the result. Throwing instead lets the `defer` above unlink it and the caller
+        // report a failed start. `isClosed` is set first so the `deinit` that follows a
+        // fully-initialized throw does not write to the handle the `defer` just unlinked.
+        do {
+            try handle.write(contentsOf: encoder.bitstream(flush: true))
+        } catch {
+            isClosed = true
+            throw AudioArchiveError.cannotCreateFile(url)
+        }
+        opened = true
     }
 
     deinit {
-        if !isClosed { try? handle.close() }
+        // Finalize rather than just closing the descriptor. Dropping a writer used to close the
+        // handle without emitting the terminating page, so a caller that forgot `close()` lost
+        // its last flush interval and left an unterminated Ogg stream — silent truncation
+        // instead of a loud failure. `close()` is idempotent, so this is free when it was.
+        close()
     }
 
     /// Encode one buffer of 16 kHz mono Float32. Partial Opus frames are cached inside the
     /// encoder, so buffer lengths need not align to the 20 ms frame.
     func write(_ buffer: AVAudioPCMBuffer) throws {
-        guard !isClosed else { return }
+        guard !isClosed, !hasFailed else { return }
         let frames = Int(buffer.frameLength)
         guard frames > 0, let source = buffer.floatChannelData?[0] else { return }
 
@@ -239,14 +286,31 @@ final class AudioArchiveWriter {
             Data(bytes: $0.baseAddress!, count: frames * MemoryLayout<Int16>.size)
         }
         try encoder.encode(pcm: pcm)
-        handle.write(encoder.bitstream(flush: false))
+        // Thrown once and then latched. See `hasFailed`: the pages for this buffer are already
+        // out of the encoder, so continuing would desync the stream rather than shorten it.
+        do {
+            try handle.write(contentsOf: encoder.bitstream(flush: false))
+        } catch {
+            hasFailed = true
+            throw error
+        }
     }
 
     /// Force out every completed packet. Called periodically during long recordings so a
     /// crash costs the flush interval rather than a whole page.
     func flush() {
-        guard !isClosed else { return }
-        handle.write(encoder.bitstream(flush: true))
+        guard !isClosed, !hasFailed else { return }
+        // Latches on failure exactly like `write` does, and for the same reason: `bitstream()`
+        // *drains* the encoder's page cache before this call can fail, so a swallowed error here
+        // loses that run of pages permanently and the next successful `write` appends across the
+        // gap — the desynced stream `hasFailed` exists to prevent. A plain `try?` looked safe
+        // because nothing throws out of `flush`, but it was the likelier of the two first
+        // failures on a full volume: the recorder flushes every 5 s regardless of write volume.
+        do {
+            try handle.write(contentsOf: encoder.bitstream(flush: true))
+        } catch {
+            hasFailed = true
+        }
     }
 
     /// Final flush and close. `OGGEncoder.endstream()` is `internal`, so the last packet
@@ -254,7 +318,13 @@ final class AudioArchiveWriter {
     func close() {
         guard !isClosed else { return }
         isClosed = true
-        handle.write(encoder.bitstream(flush: true))
+        // `try?` and not `try`: `close()` runs from `deinit`, which cannot throw or log usefully,
+        // and a failure here means the terminating page is lost — bad, but not worth trading for
+        // an uncatchable ObjC exception on the release path. Skipped entirely once `hasFailed`:
+        // a terminating page appended to an already-desynced stream buys nothing.
+        if !hasFailed {
+            try? handle.write(contentsOf: encoder.bitstream(flush: true))
+        }
         try? handle.close()
     }
 }

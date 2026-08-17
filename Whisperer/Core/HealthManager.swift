@@ -60,8 +60,22 @@ final class HealthManager {
     private let monitorQueue = DispatchQueue(label: "health.monitor", qos: .utility)
     private var timer: DispatchSourceTimer?
 
-    private var components: [ObjectIdentifier: HealthReportable] = [:]
-    private var componentNames: [ObjectIdentifier: String] = [:]
+    /// Weak, and deliberately so. This registry used to hold components strongly with no
+    /// `unregister` call anywhere in the app, so **every `StreamingTranscriber` ever created
+    /// stayed here for the life of the process** — leaked along with its ring buffer and eager
+    /// engine, and still polled once a second. That is where the duplicate name came from: not
+    /// two concurrent recordings, but twenty finished ones, all still named
+    /// "StreamingTranscriber". A torn-down instance also keeps whatever operation it was in the
+    /// middle of when it was released, so it eventually reports `.stalled` and drags the stall
+    /// reporter in after it.
+    ///
+    /// Weak references make correctness independent of call-site discipline: an owner that
+    /// forgets to unregister still drops out of the registry when it is deallocated. Dead entries
+    /// are pruned in `poll()`.
+    private struct WeakComponent {
+        weak var value: HealthReportable?
+    }
+    private var components: [ObjectIdentifier: WeakComponent] = [:]
 
     // Stall tracking per component
     private struct StallState {
@@ -71,7 +85,34 @@ final class HealthManager {
         var lastSequence: UInt64 = 0
         var lastStatus: ComponentStatus = .healthy
     }
-    private var stallStates: [String: StallState] = [:]
+
+    /// Keyed by instance identity — the same key `components` uses — **not** by
+    /// `componentName`.
+    ///
+    /// Name-keying made two live instances of one class share a single stall state, which is
+    /// routine here: a recording starts before the previous `StreamingTranscriber` has been
+    /// released, and the old one is the instance most likely to be stalled. Within a single
+    /// `poll()` the stalled instance wrote `alertedAt`/`nextAlertDelay`/`criticalDumpFired` and
+    /// the healthy one immediately replaced the whole struct with a fresh `StallState()` (its
+    /// `alertedAt != nil && seq != lastSequence` branch is satisfied by the sibling's write).
+    /// The 5s→80s backoff therefore never engaged: the ⚠️ Stall warning fired *every tick* —
+    /// 0.25s in `.watchful`, which a stall itself forces — and `criticalDumpFired` was cleared
+    /// each time, so `triggerDump` re-ran `/usr/bin/sample` repeatedly, suspending every thread
+    /// in the process. The same shared key also flipped `lastStatus` back and forth, appending a
+    /// spurious `stalled → healthy` pair to the timeline every tick until it hit its 500-entry
+    /// cap and evicted the history the dump exists to show.
+    ///
+    /// Identity keying makes all of that structurally impossible rather than patching one site.
+    /// `buildDependencyChain` stays name-based because `ComponentHealth.dependencies` is
+    /// `[String]` — declared by name, so the ambiguity there is inherent and handled separately.
+    ///
+    /// **Confined to `monitorQueue`.** Every access is on the poll queue, so the
+    /// read-modify-writes in the two handlers are atomic by construction. They used to read
+    /// unlocked and write under `lock` while `register()`/`recordingStarted()` wrote from the
+    /// main actor — a genuine `Dictionary` data race, and a lost update even when it did not
+    /// tear. Taking `lock` in the handlers instead is not an option: `handleStalledComponent`
+    /// calls `snapshot()`, which takes the same non-recursive `NSLock`.
+    private var stallStates: [ObjectIdentifier: StallState] = [:]
 
     // Health timeline — status-change events only
     private var timeline: [(offset: Double, component: String, from: ComponentStatus, to: ComponentStatus)] = []
@@ -106,14 +147,12 @@ final class HealthManager {
 
     // MARK: - Registration
 
+    /// No `stallStates` seeding here any more — the poll handlers default a missing entry, so
+    /// registration never touches state that lives on `monitorQueue`.
     func register(_ component: HealthReportable) {
         let key = ObjectIdentifier(component)
         lock.lock()
-        components[key] = component
-        componentNames[key] = component.componentName
-        if stallStates[component.componentName] == nil {
-            stallStates[component.componentName] = StallState()
-        }
+        components[key] = WeakComponent(value: component)
         lock.unlock()
     }
 
@@ -121,8 +160,8 @@ final class HealthManager {
         let key = ObjectIdentifier(component)
         lock.lock()
         components.removeValue(forKey: key)
-        componentNames.removeValue(forKey: key)
         lock.unlock()
+        monitorQueue.async { [weak self] in self?.stallStates.removeValue(forKey: key) }
     }
 
     // MARK: - Lifecycle
@@ -170,12 +209,9 @@ final class HealthManager {
         timelineStart = .now
         timeline.removeAll()
         timelineLock.unlock()
-        lock.lock()
-        // Reset stall states for all components
-        for name in stallStates.keys {
-            stallStates[name] = StallState()
-        }
-        lock.unlock()
+        // Reset stall states on the queue that owns them. Dropping the entries is the reset —
+        // the handlers default a missing key to a fresh `StallState()`.
+        monitorQueue.async { [weak self] in self?.stallStates.removeAll() }
         adjustPollingRate(.watchful)  // fast polling immediately when recording starts
     }
 
@@ -187,7 +223,9 @@ final class HealthManager {
 
     func snapshot() -> String {
         lock.lock()
-        let snapshot = components.values.map { ($0.componentName, $0.healthState) }
+        let snapshot = components.values.compactMap { box in
+            box.value.map { ($0.componentName, $0.healthState) }
+        }
         lock.unlock()
 
         var lines = ["## Component Health"]
@@ -226,33 +264,49 @@ final class HealthManager {
         checkMainThread()
 
         lock.lock()
-        let snapshot = components.values.map { c in (c.componentName, c.healthState) }
+        // Prune deallocated components before reading. Without this a released component's slot
+        // lingers until the next `register`.
+        var deadKeys: [ObjectIdentifier] = []
+        for (key, box) in components where box.value == nil {
+            components.removeValue(forKey: key)
+            deadKeys.append(key)
+        }
+        let entries = components.compactMap { key, box in
+            box.value.map { (key: key, name: $0.componentName, health: $0.healthState) }
+        }
         lock.unlock()
+
+        // Retire the dead instances' stall state too. It used to survive, so the next instance
+        // registered under the same name inherited a stranger's `alertedAt` and
+        // `criticalDumpFired`.
+        for key in deadKeys { stallStates.removeValue(forKey: key) }
 
         var anyStalled = false
         var anyBusy = false
 
-        for (name, health) in snapshot {
-            let prev = stallStates[name]?.lastStatus ?? .healthy
-            let current = health.status
+        // `buildDependencyChain` still wants (name, health) pairs.
+        let snapshot = entries.map { ($0.name, $0.health) }
+
+        for entry in entries {
+            let prev = stallStates[entry.key]?.lastStatus ?? .healthy
+            let current = entry.health.status
 
             // Record timeline transitions
             if current != prev {
-                recordTimelineTransition(component: name, from: prev, to: current)
-                lock.lock()
-                stallStates[name]?.lastStatus = current
-                lock.unlock()
+                recordTimelineTransition(component: entry.name, from: prev, to: current)
+                stallStates[entry.key, default: StallState()].lastStatus = current
             }
 
             switch current {
             case .healthy:
-                handleHealthyComponent(name: name, health: health)
+                handleHealthyComponent(key: entry.key, name: entry.name, health: entry.health)
             case .busy:
                 anyBusy = true
                 // Busy = working, just late — don't alarm
             case .stalled:
                 anyStalled = true
-                handleStalledComponent(name: name, health: health, allComponents: snapshot)
+                handleStalledComponent(key: entry.key, name: entry.name, health: entry.health,
+                                       allComponents: snapshot)
             }
         }
 
@@ -266,8 +320,8 @@ final class HealthManager {
         }
     }
 
-    private func handleHealthyComponent(name: String, health: ComponentHealth) {
-        guard var stall = stallStates[name] else { return }
+    private func handleHealthyComponent(key: ObjectIdentifier, name: String, health: ComponentHealth) {
+        var stall = stallStates[key] ?? StallState()
         let seq = health.progress.sequence
 
         if stall.alertedAt != nil && seq != stall.lastSequence {
@@ -280,22 +334,19 @@ final class HealthManager {
             }
             stall = StallState()
             stall.lastStatus = .healthy
-            lock.lock()
-            stallStates[name] = stall
-            lock.unlock()
+            stallStates[key] = stall
         } else {
-            lock.lock()
-            stallStates[name]?.lastSequence = seq
-            lock.unlock()
+            stallStates[key, default: StallState()].lastSequence = seq
         }
     }
 
     private func handleStalledComponent(
+        key: ObjectIdentifier,
         name: String,
         health: ComponentHealth,
         allComponents: [(String, ComponentHealth)]
     ) {
-        guard var stall = stallStates[name] else { return }
+        var stall = stallStates[key] ?? StallState()
         let now = ContinuousClock.now
 
         if let alertedAt = stall.alertedAt {
@@ -336,13 +387,21 @@ final class HealthManager {
             }
         }
 
-        lock.lock()
-        stallStates[name] = stall
-        lock.unlock()
+        stallStates[key] = stall
     }
 
     private func buildDependencyChain(stalled: String, allComponents: [(String, ComponentHealth)]) -> String {
-        let nameToHealth = Dictionary(uniqueKeysWithValues: allComponents)
+        // `uniquingKeysWith`, not `uniqueKeysWithValues`. The registry is keyed by
+        // `ObjectIdentifier`, so two live components may share a `componentName` — which is
+        // exactly what happens when a recording starts before the previous `StreamingTranscriber`
+        // has been released, and the old one is precisely the instance most likely to be stalled.
+        // `uniqueKeysWithValues` traps on that duplicate, so the diagnostic that exists to report
+        // a stall was instead crashing the app during one:
+        // `Fatal error: Duplicate values for key: 'StreamingTranscriber'`.
+        // Keep the stalled one when names collide — it is the subject of the report.
+        let nameToHealth = Dictionary(allComponents) { lhs, rhs in
+            rhs.status == .stalled ? rhs : lhs
+        }
         var chain: [String] = []
         var visited = Set<String>()
 
