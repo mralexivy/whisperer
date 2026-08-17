@@ -26,7 +26,7 @@ actor NemotronBridge {
 
     static func modelDirectory() -> URL {
         FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-            .appendingPathComponent("FluidAudio/Models/nemotron-speech-streaming-multilingual-0.6b/multilingual/\(chunkMs)ms")
+            .appendingPathComponent("FluidAudio/Models/nemotron-multilingual/multilingual/\(chunkMs)ms")
     }
 
     static func download(progressHandler: ProgressHandler? = nil) async throws {
