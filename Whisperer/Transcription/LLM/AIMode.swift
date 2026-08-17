@@ -170,8 +170,8 @@ struct AIMode: Codable, Identifiable, Equatable {
             // format are unchanged. PENDING the M0 harness re-run: holdout must not drop,
             // Hebrew must stay within ~0.15 of en/ru, drift must be 0 — if it fails, delete the
             // pair from both sites rather than restore `טורף`. Working notes:
-            // Tools/llm-eval/m6-hebrew-example.md. docs/knowledge/llm/criteria.md §1 still
-            // lists the old pair as its ASR-mishearing example and needs the same correction.
+            // Tools/llm-eval/m6-hebrew-example.md; docs/knowledge/llm/criteria.md §1 carries
+            // the same pair and the reasoning for the swap.
             prompt: """
             You repair voice-dictation transcripts. The text arrives between [INPUT] and [/INPUT]. Reply with that same text, errors fixed — nothing else: no preamble, no quotes, no notes. Your first word is the input's own first word.
 

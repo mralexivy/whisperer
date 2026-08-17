@@ -17,6 +17,29 @@
 import XCTest
 @testable import whisperer
 
+/// Test-side counterpart of `MeetingAIService.StreamingTitleWatcher`: lifts the first
+/// complete TITLE line out of the artifact stream and records how long it took to appear.
+///
+/// `@unchecked Sendable` for the reason the production watcher gives: both fields are
+/// written only from the MTP token callback, which runs on the model container's single
+/// serial queue, and read only after `process()` has returned and that queue is quiescent.
+///
+/// File scope rather than nested in the test class: a type nested inside a `@MainActor` type
+/// inherits that isolation, and `observe` is called from the token callback, which is not on
+/// the main actor.
+private final class StreamedTitleProbe: @unchecked Sendable {
+    private let started = Date()
+    private(set) var title: String?
+    private(set) var elapsedMs: Double?
+
+    func observe(_ partial: String) {
+        guard title == nil,
+              let raw = MeetingOverviewParser.firstCompleteTitle(in: partial) else { return }
+        title = raw
+        elapsedMs = Date().timeIntervalSince(started) * 1000
+    }
+}
+
 /// `@MainActor` on the class, not per method: `LLMPostProcessor` is main-actor isolated,
 /// so every call here would hop anyway, and hopping mid-measurement would land in the
 /// wall-clock numbers.
@@ -143,12 +166,25 @@ final class LLMModelComparisonTests: XCTestCase {
         // The stored ZDURATION can be 0 on a crash-recovered row; the segments always know.
         let duration = max(fixture.durationSec, fixture.segments.map(\.endTimestamp).max() ?? 0)
 
-        // --- Overview (prompt and budget resolved exactly as generateOverview does) ---
+        // --- Artifact: TITLE + TOPIC + OVERVIEW + DECISION / OPEN / NEXT / ACTION, one call ---
+        //
+        // Everything about this call is resolved through `MeetingAIService` rather than
+        // restated here: `overviewRequest` picks the prompt, the token hint and the timeout
+        // exactly as `generateOverview` does, so a prompt edit lands in the benchmark by
+        // itself. That indirection is not stylistic. The title used to be benchmarked against
+        // a verbatim copy of the old standalone title prompt kept in this file, and when
+        // Milestone 5 folded the title into this artifact the copy stayed — the suite went on
+        // reporting numbers for a prompt the app no longer sent. A literal cannot be kept in
+        // sync by anything except somebody noticing.
+        //
+        // There is no separate title case any more because there is no separate call: the
+        // title is the artifact's first line, judged with the rest of it in `judgeOverview`.
         let request = MeetingAIService.overviewRequest(transcriptWords: fixture.wordCount)
         let isNote = request.isNote
+        let titleProbe = StreamedTitleProbe()
         await measure(
             processor, workload: "meeting", model: model,
-            caseName: "overview-\(isNote ? "note" : "full")-\(tag)",
+            caseName: "artifact-\(isNote ? "note" : "full")-\(tag)",
             run: {
                 try await processor.process(
                     text:                   transcript,
@@ -160,39 +196,23 @@ final class LLMModelComparisonTests: XCTestCase {
                     outputTokensHint:       request.outputTokensHint,
                     timeoutSecondsOverride: request.timeoutSeconds,
                     throwOnFallback:        true,
-                    reuseWarmCache:         false
+                    reuseWarmCache:         false,
+                    onPartialText:          { titleProbe.observe($0) }
                 )
             },
             judge: { raw in judgeOverview(raw, isNote: isNote, duration: duration) }
         )
 
-        // --- Title ---
-        let plain = MeetingAIService.plainTranscript(fixture.segments)
-        if plain.count >= 40 {
-            let excerpt = MeetingAIService.headAndTail(plain, headChars: 1600, tailChars: 500)
-            await measure(
-                processor, workload: "meeting", model: model, caseName: "title-\(tag)",
-                run: {
-                    try await processor.process(
-                        text:                   excerpt,
-                        systemPrompt:           Self.titlePrompt,
-                        userMessage:            excerpt,
-                        temperature:            0.2,
-                        repetitionPenalty:      1.1,
-                        maxTokensCap:           48,
-                        outputTokensHint:       32,
-                        timeoutSecondsOverride: 25,
-                        throwOnFallback:        true,
-                        reuseWarmCache:         false
-                    )
-                },
-                judge: { raw in
-                    guard let title = MeetingAIService.sanitizeTitle(raw) else {
-                        return (false, "unusable title \"\(raw.prefix(40))\"")
-                    }
-                    return (title.count <= 70, title.count <= 70 ? "" : "title > 70 chars")
-                }
-            )
+        // Reported, not a row of its own: the title shares one generation with the summary, so
+        // giving it a row would add its wall time to a total that already contains it and hand
+        // the roll-up a 0 tok/s entry. What is worth reporting is *when* it arrived — the merge
+        // is only a win if the title still lands seconds before the summary finishes, which is
+        // the property `generateOverview`'s streaming path exists for. Non-MTP models never
+        // drive `onPartialText`, so "not streamed" there is expected, not a failure.
+        if let ms = titleProbe.elapsedMs, let title = titleProbe.title {
+            print("   title-\(tag) [\(model.rawValue)]: \"\(title)\" streamed at \(Int(ms))ms")
+        } else {
+            print("   title-\(tag) [\(model.rawValue)]: not streamed — read from the finished artifact")
         }
 
         // --- Ask AI (skip the BM25 branch: it builds a different, question-specific prompt) ---
@@ -361,6 +381,19 @@ final class LLMModelComparisonTests: XCTestCase {
         }
         guard !summary.overview.isEmpty else { return (false, "empty overview — raw: \"\(head)\"") }
 
+        // The same artifact names the recording, so an unusable TITLE is an artifact failure:
+        // since Milestone 5 there is no second call left to recover the name from, and the
+        // library row keeps its placeholder. Both parser rules are checked the way production
+        // checks them — `title(in:)` accepts only a *leading* TITLE, and `sanitizeTitle` is the
+        // gate `applyTitle` puts every candidate through before it reaches CoreData.
+        guard let rawTitle = MeetingOverviewParser.title(in: raw) else {
+            return (false, "artifact did not lead with a TITLE line — raw: \"\(head)\"")
+        }
+        guard let title = MeetingAIService.sanitizeTitle(rawTitle) else {
+            return (false, "unusable title \"\(rawTitle.prefix(40))\"")
+        }
+        guard title.count <= 70 else { return (false, "title > 70 chars: \"\(title)\"") }
+
         // Fabricated seconds are the failure the timestamped-transcript format exists to
         // prevent, so a citation outside the recording is a hard fail rather than a warning.
         let slack = duration + 30
@@ -430,21 +463,4 @@ final class LLMModelComparisonTests: XCTestCase {
             .max { $0.value < $1.value }?
             .key
     }
-
-    // MARK: - Prompts
-
-    /// Verbatim copy of the title prompt built inline in `MeetingAIService.generateTitle`.
-    /// The others are read from the service directly; this one is a local `let` there,
-    /// so a copy is the only way to benchmark the prompt the app actually sends.
-    private static let titlePrompt = """
-    You name voice recordings. Read the transcript and reply with a title for it.
-
-    RULES:
-    1. Reply with the title and nothing else. No quotes, no label, no explanation, no trailing period.
-    2. Between 3 and 7 words, on one line.
-    3. Name the actual subject matter. "Google AI course breakdown" is a good title. "Recording", "Meeting notes" and "Transcript" say nothing — never use them.
-    4. Do not begin with "Summary of", "Notes on", "Discussion about" or "A recording of".
-    5. Write the title in the language of the transcript.
-    6. Never use the characters < or >.
-    """
 }
