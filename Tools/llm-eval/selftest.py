@@ -31,7 +31,8 @@ def check(name: str, condition: bool, detail: str = "") -> None:
     print(f"  [{status}] {name}{('  — ' + detail) if detail else ''}")
 
 
-def case(cid, language, text_in, text_out, gold, kind="recovery", split="train"):
+def case(cid, language, text_in, text_out, gold, kind="recovery", split="train",
+         latency=None):
     return score_case(
         {
             "id": cid,
@@ -40,7 +41,7 @@ def case(cid, language, text_in, text_out, gold, kind="recovery", split="train")
             "kind": kind,
             "input": text_in,
             "gold": gold,
-            "outputs": {"A": {"text": text_out, "latencySec": None}},
+            "outputs": {"A": {"text": text_out, "latencySec": latency}},
         },
         "A",
     )
@@ -110,6 +111,38 @@ def main() -> None:
     check("majority-Latin Cyrillic gold: a real translation IS drift",
           "drift" in translated["gates"], str(translated["gates"]))
 
+    print("\ntimeout is a latency measurement; identity is only its fallback proxy")
+    # `output == input` means "timed out" ONLY when no latency was recorded. When the
+    # arm measured its own latency and it is inside the ladder, the ladder demonstrably
+    # did not expire, and the no-op is rule 4's "the default is to change nothing".
+    noop_measured = case("t-noop-fast", "en", IN_EN, IN_EN, GOLD_EN, latency=1.4)
+    check("an inside-budget no-op is NOT a timeout",
+          "timeout" not in noop_measured["gates"], str(noop_measured["gates"]))
+    check("...but it is still recorded as a no-op", noop_measured["noOp"])
+    slow = case("t-slow", "en", IN_EN, GOLD_EN, GOLD_EN, latency=99.0)
+    check("an over-budget latency IS a timeout even when the text changed",
+          "timeout" in slow["gates"], str(slow["gates"]))
+    check("the identity proxy still applies when latency is unrecorded",
+          "timeout" in noop["gates"], str(noop["gates"]))
+
+    print("\ndrift is not adjudicated on a truncated output")
+    # A Hebrew input whose tail carries Latin words, cut off before reaching them.
+    # The surviving prefix is correct Hebrew: that is truncation, not language drift.
+    gold_mixed = "אני רוצה לראות עד כמה טוב זה עובד עם expand collapse ועוד דברים כאלה בכלל"
+    in_mixed = "אני רוצה לראות עד כמה טוב זה עובד עם expand collapse ועוד דברים כאלה בכלל"
+    cut = case("t-cut", "he", in_mixed, "אני רוצה לראות עד", gold_mixed)
+    check("a truncated prefix is degeneration, not drift",
+          "degeneration" in cut["gates"] and "drift" not in cut["gates"], str(cut["gates"]))
+    check("the unjudgeable verdict is recorded, not silently dropped",
+          cut["driftUnjudgeable"] and cut["missingScripts"] == ["en"],
+          f"{cut['driftUnjudgeable']} {cut['missingScripts']}")
+    full_drift = case("t-full-drift", "he", in_mixed,
+                      "I want to see how well this works with expand collapse and such",
+                      gold_mixed)
+    check("a full-length answer in the wrong language IS still drift",
+          "drift" in full_drift["gates"] and full_drift["score"] == -1.0,
+          str(full_drift["gates"]))
+
     print("\npreservation (criteria.md §2)")
     clean = case("t-clean", "en", GOLD_EN, GOLD_EN, GOLD_EN, kind="preservation")
     check("untouched clean text scores 1.000 preservation", clean["rawScore"] == 1.0)
@@ -134,12 +167,14 @@ def main() -> None:
     skewed = [
         {"language": "en", "split": "train", "kind": "recovery", "score": 0.4,
          "precision": 0, "recall": 0, "f05": 0, "gates": [], "headroom": 0.5,
-         "contentRecovery": 0.0}
+         "contentRecovery": 0.0, "noOp": False, "driftUnjudgeable": False,
+         "latencySec": None}
         for _ in range(90)
     ] + [
         {"language": "ru", "split": "train", "kind": "recovery", "score": -0.8,
          "precision": 0, "recall": 0, "f05": 0, "gates": [], "headroom": 0.5,
-         "contentRecovery": 0.0}
+         "contentRecovery": 0.0, "noOp": False, "driftUnjudgeable": False,
+         "latencySec": None}
         for _ in range(10)
     ]
     summary = aggregate(skewed)["all"]

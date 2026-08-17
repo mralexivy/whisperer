@@ -83,11 +83,30 @@ def score_case(case: dict, arm: str) -> dict | None:
     # --- gates ------------------------------------------------------------
     gates: list[str] = []
 
+    # Length ratio is computed first: two gates below depend on it.
+    len_in = max(len(normalize(text_in)), 1)
+    ratio = len(normalize(text_out)) / len_in
+    truncated = ratio < DEGENERATION_MIN_RATIO
+
     # 1. Language drift, on script PRESENCE not majority (knowledge.md).
     #    "the gold contains Cyrillic, so the output must contain Cyrillic".
+    #
+    #    BUT presence is only judgeable on a COMPLETE output. A generation cut off
+    #    part-way through cannot be said to have "left the input's language"
+    #    (criteria.md §3.1) — it never reached the part of the sentence carrying the
+    #    other script. Measured here on case BA4FD46C: a Hebrew input whose tail
+    #    contains the Latin words `expand collapse`, truncated at 28% of input
+    #    length. The surviving prefix is entirely correct Hebrew, yet the gate
+    #    charged it the flat -1.0 for "losing" Latin it was cut off before emitting.
+    #    That is a truncation failure, which `degeneration` below already catches;
+    #    scoring it as drift too both double-counts and mislabels the cause. Drift is
+    #    therefore not adjudicated on a truncated output — the outcome is recorded as
+    #    `driftUnjudgeable` so the case is never silently treated as clean.
     gold_scripts = scripts_present(gold)
     out_scripts = scripts_present(text_out)
-    drifted = bool(gold_scripts) and not gold_scripts.issubset(out_scripts)
+    missing_scripts = gold_scripts - out_scripts if gold_scripts else set()
+    drift_unjudgeable = bool(missing_scripts) and truncated
+    drifted = bool(missing_scripts) and not truncated
     if drifted:
         gates.append("drift")
 
@@ -96,22 +115,35 @@ def score_case(case: dict, arm: str) -> dict | None:
         gates.append("echo")
 
     # 3. Timeout. `process()` silently returns the UNCORRECTED text when the ladder
-    #    expires, so an over-budget case is an invisible no-op in production. Two
-    #    ways to observe it: a recorded latency over budget, or an output identical
-    #    to the input. History records no latency, so only the second is checkable
-    #    here — and build_corpus.py has already dropped identical outputs, which
-    #    makes this gate structurally 0 on arm A. Reported, not hidden.
+    #    expires (criteria.md §3.3), so an over-budget case is an invisible no-op in
+    #    production.
+    #
+    #    The DIRECT observation is a recorded latency over budget. `output ==
+    #    input` is only a PROXY for it, and one that is valid solely when no latency
+    #    was recorded — the historical `ZAIENHANCEDTEXT` rows of arm A, where
+    #    build_corpus.py has already dropped identical outputs anyway.
+    #
+    #    Applying the proxy to a live arm that DID record its latency is a scorer
+    #    bug, and it fired: all 6-7 "timeouts" on arms B/C ran in 0.93-2.64s against
+    #    a 10-15s budget. Every one of them is the model correctly deciding the input
+    #    needed no change — rules.md rule 4, "the default is to change nothing" —
+    #    relabelled as a production failure. A measured, inside-budget latency is
+    #    positive evidence that the ladder did NOT expire, so it settles the question
+    #    and the proxy must not override it.
     latency = arm_data.get("latencySec")
     budget = timeout_budget(len(normalize(text_in)))
-    timed_out = (latency is not None and latency > budget) or (
-        normalize(text_out) == normalize(text_in)
-    )
+    if latency is not None:
+        timed_out = latency > budget
+    else:
+        timed_out = normalize(text_out) == normalize(text_in)
     if timed_out:
         gates.append("timeout")
 
+    # A no-op that is NOT a timeout is still worth counting: it is the "changed
+    # nothing" outcome, which scores a clean 0 recovery and is a legitimate result.
+    no_op = normalize(text_out) == normalize(text_in)
+
     # 4. Degeneration: output/input length ratio outside 0.4…2.5.
-    len_in = max(len(normalize(text_in)), 1)
-    ratio = len(normalize(text_out)) / len_in
     if not (DEGENERATION_MIN_RATIO <= ratio <= DEGENERATION_MAX_RATIO):
         gates.append("degeneration")
 
@@ -165,6 +197,11 @@ def score_case(case: dict, arm: str) -> dict | None:
         "simOutputGoldFolded": round(sim_out_folded, 6),
         "contentRecovery": round(content_recovery, 6),
         "gates": gates,
+        "driftUnjudgeable": drift_unjudgeable,
+        "missingScripts": sorted(missing_scripts),
+        "noOp": no_op,
+        "latencySec": latency,
+        "timeoutBudgetSec": budget,
         "lengthRatio": round(ratio, 4),
         "editsRequired": len(required),
         "editsMade": len(made),
@@ -221,6 +258,11 @@ def aggregate(scored: list[dict], languages=("en", "he", "ru")) -> dict:
                 gate: sum(1 for r in subset if gate in r["gates"])
                 for gate in ("drift", "echo", "timeout", "degeneration")
             },
+            "noOps": sum(1 for r in subset if r["noOp"]),
+            "driftUnjudgeable": sum(1 for r in subset if r["driftUnjudgeable"]),
+            "maxLatencySec": round(
+                max((r["latencySec"] for r in subset if r["latencySec"] is not None), default=0.0), 3
+            ),
         }
 
     return {
