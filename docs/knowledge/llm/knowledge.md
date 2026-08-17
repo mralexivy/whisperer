@@ -598,3 +598,52 @@ measures the guard.
 
 **The throughput curve is stable to ≤1% run to run** (five runs per width, idle machine), so
 a single reading of it is trustworthy — unusual enough to be worth recording.
+
+### Is another model simply faster? Gemma-4-E2B vs the shipped Qwen3.5-4B (2026-08-17)
+
+Cactus Compute publish `1294/64` prefill/decode for Gemma-4-E2B on an M3 Pro. That is one
+single-stream run, not aggregate throughput, and their page states "no speculative decode or
+MTP". Reproduced on this M2 Pro with **stock mlx-lm** and their MLX port
+(`Cactus-Compute/gemma-4-e2b-it-hybrid-mlx`), 1k prefill / 100 decode: **gemma 2083 / 78.6**
+against **Qwen3.5-4B 383 / 61.3**. Exceeding their published figure with the stock runtime
+means there is no runtime magic in the number — it is the model. Note also that their MLX
+port is ordinary affine 4-bit g64, not the proprietary quantisation the marketing describes.
+
+On **our** workload — the shipping `Correct` system prompt read out of `AIMode.swift`, 24
+real chunks from the corpus, `enable_thinking: false`, the app's own `maxTokens` estimator,
+and the warm system prefix the app actually uses:
+
+| | per chunk (median) | 24 chunks | e2e tok/s |
+|---|---|---|---|
+| gemma-4-e2b | 0.52 s | 12.3 s | 76.8 |
+| Qwen3.5-4B-MTP, plain decode | 0.90 s | 21.4 s | 45.2 |
+| Qwen3.5-4B-MTP, ×1.5 for MTP | ~0.60 s | ~14.3 s | — |
+
+**So: ~1.75× on plain decode, ~1.16× against the MTP path the app really runs.** Output
+quality on the sample is indistinguishable; both produce the same corrections. A 16% win does
+not pay for a model swap that, per the provenance comment in `AIMode.swift`, obliges a full
+re-run of the 100-case quality corpus, because prompt findings do not transfer between
+models.
+
+Three measurement traps, all of which produced confidently wrong numbers first:
+
+- **Benchmark the warm prefix or benchmark nothing.** Charging a full ~930-token prefill per
+  correction gave 3.22 s/chunk for Qwen and a 3.62× "win" for Gemma. The app prefills the
+  ~881-token system prompt once and reuses it, so that measured a configuration no user has —
+  and it happens to measure prefill speed, which is exactly the axis where the two models
+  differ most (5.4×). With the warm prefix, Qwen's 0.90 s lines up with the app's own ~0.77 s.
+- **`generate_step` computes one token ahead.** Breaking after its first yield leaves a
+  *sampled* token appended to the cache that was never in the prompt. Every later chunk then
+  decodes against a prefix one token off; Gemma responded with a line lifted out of the
+  prompt's own examples for all 24 inputs. Prefill a cache with a plain `model(ids, cache=)`
+  forward pass instead.
+- **Both models emit chain-of-thought unless `enable_thinking: false` is passed** — which
+  `LLMPostProcessor` does. Without it the reasoning eats the whole 256-token budget and the
+  timing measures the cap, not the task.
+
+Cloning a warm cache in Python needs `type(c).from_state(deep_copied_state, c.meta_state)`;
+state alone is not enough. `RotatingKVCache` (Gemma's sliding-window layers) is a ring buffer
+whose contents are meaningless without the `offset`/`_idx` in `meta_state`. Gemma's warm and
+cold outputs then still diverge by roughly one word in 200 — the ring buffer holds the same
+window in a different rotation, so the arithmetic differs slightly. Qwen's warm output is
+byte-identical to cold.
