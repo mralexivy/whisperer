@@ -46,3 +46,27 @@
 10. **Serialize GPU- and memory-heavy work on this machine.** No `xcodebuild` beside a training or
     benchmark run, and no two `xcodebuild`s from parallel agents. See
     [../build/rules.md](../build/rules.md).
+
+11. **When a rule is written about one arm and a different arm is what ships, score both and say
+    so.** Verdict rule 1 was written as "arm B p95 ≤ ⅓ of arm A". Arm B passes it by three orders
+    of magnitude (3.66 ms vs a 1102 ms bar) and the arm a merge actually ships — the hybrid, which
+    falls back to the LLM whenever the gate cannot finish — fails it at 3276 ms. Reporting only the
+    first would answer a question nobody is deciding; reporting only the second would silently
+    rewrite a rule fixed before the run. Report both, under distinct ids (`1` and `1s`).
+
+12. **A p95 belongs to whichever component owns the tail, not to the one being replaced.** With
+    `llm_rate` at 0.657 the 95th-percentile utterance is one of the two thirds that still reach the
+    4B, so the hybrid p95 *is* a 4B p95 and making the fast pass faster cannot move it. The p50 is
+    where a partial short-circuit shows up (1501 ms vs 1790 ms). Pick the statistic that can
+    respond to the change being measured, and report the other beside it.
+
+13. **A precision floor with a minimum support is a three-way outcome, not two.** Sentence casing
+    measured 1 of 7 correct on the golden reference — but 14 scoreable events against a floor that
+    needs 30 is `UNMEASURED`, not `FAIL`. Emitting the point estimate as a verdict would condemn a
+    pass on seven events. Carry the min-support check in the same place as the threshold check so
+    the distinction cannot be lost downstream.
+
+14. **State what the verdict is a verdict *about*.** "Merge behind an off-by-default flag" and
+    "make it the default" are different decisions with different evidence bars. The B4 harness
+    emits the recommendation and then a second line naming exactly what flipping the default would
+    additionally require. Conflating them is the cheapest way to overstate a result.
