@@ -36,7 +36,7 @@ from torch.utils.data import DataLoader, WeightedRandomSampler
 from transformers import AutoTokenizer, get_cosine_schedule_with_warmup
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from common import HEADS, HEAD_SIZES, IGNORE  # noqa: E402
+from common import HEADS, HEAD_SIZES, IGNORE, PUNCT2ID  # noqa: E402
 from data import EditDataset, collate  # noqa: E402
 from model import MMBERTEditingModel  # noqa: E402
 
@@ -47,6 +47,16 @@ def set_seed(s: int) -> None:
     random.seed(s)
     np.random.seed(s)
     torch.manual_seed(s)
+
+
+# Punctuation classes that the runtime refuses to auto-apply no matter what the
+# model says (CALIBRATION.md: comma insertion measures P = 0.672, and colons and
+# semicolons are inventions the teacher never wants). Up-weighting a class that
+# inference then discards buys nothing and costs precision on the classes that do
+# ship: the first run gave `!` 2.381, `;` 2.168 and `:` 2.016 against `.` 0.112 and
+# `,` 0.096, a 20x gradient towards exactly the three marks the model went on to
+# invent. Their weight is capped at the mean so rarity alone cannot promote them.
+EXCLUDED_PUNCT = (",", ";", ":", "!")
 
 
 def class_weights(ds, head: str, keep_weight: float, device) -> torch.Tensor:
@@ -65,6 +75,10 @@ def class_weights(ds, head: str, keep_weight: float, device) -> torch.Tensor:
         # trades away exactly the precision we are trying to protect.
         w[c] = math.sqrt(total / (f + 1)) if f else 1.0
     w = w / w.mean()
+    if head == "punct":
+        for mark in EXCLUDED_PUNCT:
+            i = PUNCT2ID[mark]
+            w[i] = min(float(w[i]), 1.0)
     # `error` and `disf` are binary with class 0 == "leave it alone".
     if head in ("error", "disf"):
         w[0] *= keep_weight

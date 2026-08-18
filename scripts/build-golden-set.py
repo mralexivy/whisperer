@@ -108,7 +108,7 @@ def find_cli():
     )
 
 
-def load_rows(row_limit):
+def load_rows(row_limit, any_model=False):
     """Rows from history that have both audio on disk and a stored transcript.
 
     Filters and ordering mirror `HistoryTestLoader.query` so the ids decoded here are the ids the
@@ -134,8 +134,13 @@ def load_rows(row_limit):
         "  AND length(ZTRANSCRIPTION) > 20 "
         "  AND ZAUDIOFILEURL IS NOT NULL "
         "  AND (ZTARGETAPPNAME IS NULL OR ZTARGETAPPNAME != 'File Import') "
-        "  AND ZMODELUSED IN ('Whisperer V3', 'Large V3 Turbo Q5', 'ggml-large-v3-turbo-q5_0.bin') "
-        "ORDER BY ABS(CAST(ZDURATION AS REAL) - 20.0) ASC "
+        # The model filter exists so the *streaming-regression* corpus compares one model against
+        # itself. A corpus built for editor **training** wants the opposite: every recording the
+        # user has, whatever engine first transcribed it, because the reference is this fresh
+        # whole-file decode and the stored transcript is not used as truth. `--any-model` lifts it.
+        + ("" if any_model else
+           "  AND ZMODELUSED IN ('Whisperer V3', 'Large V3 Turbo Q5', 'ggml-large-v3-turbo-q5_0.bin') ")
+        + "ORDER BY ABS(CAST(ZDURATION AS REAL) - 20.0) ASC "
         "LIMIT ?",
         (row_limit,),
     )
@@ -172,18 +177,27 @@ def main():
     # drops (missing audio file), without decoding a 2000-recording history for a gate that reads
     # eight of them.
     ap.add_argument("--rows", type=int, default=400, help="history rows to consider")
+    ap.add_argument("--out", default=OUT,
+                    help="where to write. Defaults to the committed test corpus; point it "
+                         "elsewhere to build a larger training corpus without moving the "
+                         "benchmark's reference under it")
+    ap.add_argument("--staging", default=STAGING, help="scratch directory for symlinks and .txt")
+    ap.add_argument("--cli", default=None, help="explicit whisper-cli path")
+    ap.add_argument("--any-model", action="store_true",
+                    help="include recordings first transcribed by any engine, not only V3")
     args = ap.parse_args()
 
-    cli = find_cli()
+    out_path, staging = args.out, args.staging
+    cli = args.cli or find_cli()
     if not os.path.exists(MODEL):
         sys.exit(f"Model not found: {MODEL}\nDownload Whisperer V3 in the app's Models tab first.")
 
     existing = {}
-    if os.path.exists(OUT) and not args.force:
-        with open(OUT) as fh:
+    if os.path.exists(out_path) and not args.force:
+        with open(out_path) as fh:
             existing = {e["id"]: e for e in json.load(fh)["entries"]}
 
-    rows = load_rows(args.rows)
+    rows = load_rows(args.rows, any_model=args.any_model)
     todo = [r for r in rows if r["id"] not in existing]
     if args.limit:
         todo = todo[: args.limit]
@@ -196,8 +210,8 @@ def main():
         print("Nothing to do.")
         return
 
-    shutil.rmtree(STAGING, ignore_errors=True)
-    os.makedirs(STAGING)
+    shutil.rmtree(staging, ignore_errors=True)
+    os.makedirs(staging)
 
     # Symlink rather than copy, and stage outside the app's support directory. whisper-cli writes
     # `<input>.txt` next to each input, so pointing it straight at Recordings/ would scatter
@@ -209,7 +223,7 @@ def main():
     staged = {}
     transcoded = 0
     for row in todo:
-        link = os.path.join(STAGING, f"{row['id']}.wav")
+        link = os.path.join(staging, f"{row['id']}.wav")
         if row["audioPath"].lower().endswith(".wav"):
             os.symlink(row["audioPath"], link)
         else:
@@ -254,8 +268,8 @@ def main():
         entries.append({**row, "goldenTranscript": golden})
 
     entries.sort(key=lambda e: e["id"])
-    os.makedirs(os.path.dirname(OUT), exist_ok=True)
-    with open(OUT, "w") as fh:
+    os.makedirs(os.path.dirname(out_path), exist_ok=True)
+    with open(out_path, "w") as fh:
         json.dump(
             {
                 "note": (
@@ -273,10 +287,10 @@ def main():
             indent=1,
         )
 
-    print(f"\nWrote {len(entries)} golden transcripts to {os.path.relpath(OUT, REPO)}")
+    print(f"\nWrote {len(entries)} golden transcripts to {os.path.relpath(out_path, REPO)}")
     if missing:
         print(f"{len(missing)} produced no text (silence or decode failure): {missing[:8]}")
-    shutil.rmtree(STAGING, ignore_errors=True)
+    shutil.rmtree(staging, ignore_errors=True)
 
 
 if __name__ == "__main__":

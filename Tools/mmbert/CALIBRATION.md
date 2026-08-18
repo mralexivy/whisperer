@@ -42,8 +42,28 @@ false positive.
 | `pooled_indomain_large` | `eval_real_large` + `eval_synth` | 623 | 64,091 | 573 / 16 / 34 |
 | `eval_wiki.jsonl` | held-out Wikipedia, synthetically corrupted | 7,500 | 716,853 | 2500 / 2500 / 2500 |
 
-Training used `train_real_large.jsonl` (411 pairs, en 393 / he 8 / ru 10) plus the earlier
-synthetic corpora. The real eval and real train sets are disjoint by document.
+**Correction (2026-08-18).** An earlier revision of this file said training used
+`train_real_large.jsonl` (411 pairs, en 393 / he 8 / ru 10) "plus the earlier synthetic
+corpora". That was wrong and every conclusion drawn from it has been re-marked below. The
+checkpoint is timestamped 19:24; `train_real_large.jsonl` was written at 21:56. **The model
+never saw those 411 pairs.** What it actually trained on, from `artifacts/train.log` and a
+row count of `artifacts/data/train.jsonl`:
+
+| source | rows | share |
+|---|---|---|
+| Wikipedia he / ru / en, synthetically corrupted | 163,337 | **95.9%** |
+| `db_clean` (history transcripts, synthetically corrupted) | 2,657 | 1.6% |
+| `golden` (whole-file decodes, synthetically corrupted) | 2,380 | 1.4% |
+| `teacher` (real raw-ASR → 4B pairs, upweighted ×6) | 2,022 | **1.2%** |
+
+170,396 rows, one epoch, 7,099 steps, val loss 0.3033. So the model was trained almost
+entirely to restore punctuation deleted from an encyclopedia, and then evaluated entirely on
+real speech. That mismatch *is* the gradient in the cross-check table below — wiki 0.993,
+synthetic in-domain 0.963, real ASR 0.800 — and it means **section 2's numbers measure the
+corpus, not `mmBERT-small`.** The corpus is being rebuilt from the recordings history alone
+(`build_corpus.py --wiki-en 0 --wiki-he 0 --wiki-ru 0 --golden artifacts/raw/history-golden.json`)
+and everything below will be re-measured against this same held-out `eval_real_large.jsonl`,
+which is pinned so the two runs are comparable.
 
 The shipped `artifacts/thresholds.json` was calibrated on `eval_wiki.jsonl`. **Wiki
 thresholds do not transfer** and are used here only as a cross-check.
@@ -104,8 +124,11 @@ Every remaining cell of the 48 is at `n = 0` or single digits. **Enabled: none.*
 Read the two failure modes separately, because they call for different work:
 
 - **Measured and short** (en/error, en/punct `.`, en/case CAP): enough events to judge, and
-  the judgement is that the model is not accurate enough. More data will not fix these;
-  a better model will.
+  the judgement is that *this checkpoint* is not accurate enough. The earlier revision said
+  "more data will not fix these; a better model will" — **retracted.** That inference assumed
+  the model had been trained on the 411 real pairs; it had not, and 95.9% of what it did see
+  was Wikipedia. Nothing here separates "mmBERT-small is too small" from "the corpus was the
+  wrong distribution", and the second explanation is the one the cross-check table supports.
 - **Not enough data** (everything Hebrew and Russian, and the rare English marks): 4 Hebrew
   and 10 Russian documents cannot measure anything. These are **unmeasured, not
   measured-and-bad** — do not quote he/disf P = 0.00 as a model property; it is one event.
@@ -160,8 +183,11 @@ recall means that is not a close call.
    being trained to imitate a teacher that is itself inconsistent on exactly the ambiguous
    cases where the model then fails.
 3. **A larger base model or longer training.** `mmBERT-small` at this data scale is the
-   cheapest hypothesis to falsify, and it has now been falsified for auto-apply. It is not
-   falsified for *suggestion* — a class that never auto-applies has no precision floor.
+   cheapest hypothesis to falsify. The earlier revision claimed it *had* been falsified for
+   auto-apply — **retracted**, for the reason in the correction at the top of this file. The
+   test that would falsify it has not been run yet: one epoch over a 95.9%-Wikipedia corpus,
+   with the 411 real pairs excluded by accident, does not test the architecture. The
+   history-only retrain is that test.
 
 Until one of those lands, `PolishFeatureFlags.editorKey` stays off, has no Settings UI, and
 `ConfidenceGate` refuses every model-sourced edit regardless of the flag. The seam, the

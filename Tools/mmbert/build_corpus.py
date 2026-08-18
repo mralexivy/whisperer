@@ -36,6 +36,7 @@ import random
 import re
 import sqlite3
 import sys
+import unicodedata
 from collections import Counter, defaultdict
 from pathlib import Path
 from typing import Dict, Iterable, List, Optional, Sequence, Tuple
@@ -87,6 +88,29 @@ CHAT_TOKENS = ["<|im_start|>", "<|im_end|>", "<|", "[INPUT]", "[/INPUT]",
 
 URL_RE = re.compile(r"https?://\S+|www\.\S+")
 DIGIT_RE = re.compile(r"\d+")
+
+ALL_FILLERS = set()
+for _v in FILLERS.values():
+    ALL_FILLERS |= set(_v)
+
+_WORDCHARS = re.compile(r"[^0-9a-zЀ-ԯ֐-׿]+")
+
+
+def norm_key(text: str, drop_fillers: bool = True) -> str:
+    """Case-, accent-, punctuation-insensitive letter sequence of `text`.
+
+    The single leakage key for the whole toolchain: `build_eval_large.py` splits
+    train from eval on it, and this file excludes the held-out documents on it.
+    Optionally drops filler words so that the synthetic corruptor's *inserted*
+    fillers cannot hide a leaked example.
+    """
+    t = unicodedata.normalize("NFD", text.lower())
+    t = "".join(c for c in t if unicodedata.category(c) != "Mn")
+    t = _WORDCHARS.sub(" ", t)
+    toks = t.split()
+    if drop_fillers:
+        toks = [w for w in toks if w not in ALL_FILLERS]
+    return " ".join(toks)
 
 
 # =========================================================================
@@ -462,9 +486,9 @@ def wiki_sentences(script: str, target: int, rng: random.Random,
     return out
 
 
-def golden_texts() -> List[Tuple[str, str, str]]:
+def golden_texts(path: Path = None) -> List[Tuple[str, str, str]]:
     """(clean_text, script, id) from the golden set, script-resolved."""
-    d = json.loads(GOLDEN.read_text())
+    d = json.loads((path or GOLDEN).read_text())
     out = []
     for e in d["entries"]:
         t = (e.get("goldenTranscript") or "").strip()
@@ -482,16 +506,70 @@ def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--out", default=str(HERE / "artifacts" / "data"))
     ap.add_argument("--seed", type=int, default=1234)
-    ap.add_argument("--wiki-en", type=int, default=70000)
-    ap.add_argument("--wiki-he", type=int, default=60000)
-    ap.add_argument("--wiki-ru", type=int, default=60000)
+    # Wikipedia is OFF by default, and that is a correction, not a preference.
+    # The first corpus was 163,337 wiki rows against 7,059 rows of the user's own
+    # recordings -- 95.9% encyclopedia -- and was then evaluated 100% on real ASR.
+    # The calibration gradient it produced (wiki 0.993 -> synthetic 0.963 -> real
+    # 0.800) is that mismatch measured, not a statement about mmBERT. Clean
+    # in-domain text now comes from --golden, which is a whole-file decode of the
+    # user's own audio. Pass a non-zero --wiki-* only to reproduce that old run.
+    ap.add_argument("--wiki-en", type=int, default=0)
+    ap.add_argument("--wiki-he", type=int, default=0)
+    ap.add_argument("--wiki-ru", type=int, default=0)
     ap.add_argument("--wiki-eval", type=int, default=1500)
+    ap.add_argument("--golden", default=str(GOLDEN),
+                    help="golden-set JSON supplying in-domain clean text. Point at "
+                         "artifacts/raw/history-golden.json for the whole recordings "
+                         "history rather than the 400-entry benchmark corpus")
     ap.add_argument("--indomain-repeats", type=int, default=8,
                     help="how many differently-corrupted copies of each "
                          "in-domain clean utterance to emit")
     ap.add_argument("--teacher-repeat", type=int, default=6,
                     help="upweighting factor for real teacher pairs")
+    ap.add_argument("--extra-train", action="append", default=[],
+                    help="jsonl of already-labelled real pairs to fold into train "
+                         "(e.g. data/train_real_large.jsonl, built by "
+                         "build_eval_large.py under the strict alignment audit). "
+                         "Repeatable.")
+    ap.add_argument("--extra-train-repeat", type=int, default=6,
+                    help="upweighting factor for --extra-train rows")
+    ap.add_argument("--holdout", action="append", default=[],
+                    help="jsonl of held-out examples (e.g. data/eval_real_large.jsonl). "
+                         "Any clean text whose norm_key matches one of them is kept out "
+                         "of the corruption pool, so the held-out reference cannot reach "
+                         "training as a synthetic target. Repeatable.")
     args = ap.parse_args()
+
+    # Held-out keys, read before anything is built. Growing the clean-text pool to
+    # the whole recordings history means the eval pairs' *reference* side is now a
+    # candidate seed for synthetic corruption -- which would train the model on the
+    # answer to its own eval. One key per pair covers both sides: `norm_key` strips
+    # case, punctuation and fillers, which is precisely the set of differences a
+    # usable teacher pair is allowed to have, so input and reference hash alike.
+    holdout_keys: set = set()
+    if args.holdout:
+        # Deferred so the module-level import in build_eval_large (which imports
+        # this file) does not become a cycle. By the time main() runs, this
+        # module is fully initialised and the import is free.
+        from build_eval_large import render_target
+    for hp in args.holdout:
+        p = Path(hp)
+        if not p.exists():
+            print(f"[holdout] missing, skipped: {p}")
+            continue
+        n = 0
+        with p.open() as f:
+            for line in f:
+                d = json.loads(line)
+                holdout_keys.add(norm_key(" ".join(d["words"])))
+                # ...and the reference side. The two hash alike for a pair whose
+                # only differences are case, punctuation and fillers, but the
+                # audit tolerates up to 10% lexical drift, and a pair sitting in
+                # that 10% would otherwise slip its reference into the clean pool.
+                holdout_keys.add(norm_key(render_target(d)))
+                n += 1
+        print(f"[holdout] {p.name}: {n} examples -> {len(holdout_keys)} cumulative keys")
+    holdout_keys.discard("")
 
     rng = random.Random(args.seed)
     out = Path(args.out)
@@ -517,6 +595,10 @@ def main() -> None:
 
     # ---------- 2. teacher ----------
     teacher, reasons = build_teacher_set(rows)
+    if holdout_keys:
+        before = len(teacher)
+        teacher = [e for e in teacher if norm_key(" ".join(e.words)) not in holdout_keys]
+        print(f"[teacher] {before - len(teacher)} pairs withheld (in --holdout)")
     print("[teacher] filter report:", dict(reasons.most_common()))
     print("[teacher] kept", len(teacher), "by script",
           dict(Counter(e.script for e in teacher)))
@@ -541,7 +623,7 @@ def main() -> None:
     # 3a. in-domain clean text: golden-set golden transcripts. The eval holdout
     #     is stratified BY SCRIPT (the file's `language` field is unreliable --
     #     it says he=93 but only 16 entries actually contain Hebrew script).
-    gold = [g for g in golden_texts() if g[1] in ("en", "he", "ru")]
+    gold = [g for g in golden_texts(Path(args.golden)) if g[1] in ("en", "he", "ru")]
     gold_by_sc = defaultdict(list)
     for g in gold:
         gold_by_sc[g[1]].append(g)
@@ -550,8 +632,14 @@ def main() -> None:
         lst = sorted(lst, key=lambda x: x[2])
         rng.shuffle(lst)
         gold_eval_ids |= {i for _, _, i in lst[: max(3, int(0.25 * len(lst)))]}
+    n_gold_held = 0
     for t, sc, gid in gold:
+        if norm_key(t) in holdout_keys:
+            n_gold_held += 1
+            continue
         clean.append((t, sc, "golden_eval" if gid in gold_eval_ids else "golden"))
+    if n_gold_held:
+        print(f"[clean] {n_gold_held} golden transcripts withheld (in --holdout)")
 
     # 3b. in-domain clean text: the teacher's polished outputs from the TRAIN
     #     split only (they are well-formed text; corrupting them gives in-domain
@@ -566,6 +654,8 @@ def main() -> None:
             continue
         if " ".join(w.raw for w in tokenize_words(raw)) in eval_keys:
             continue
+        if norm_key(pol) in holdout_keys or norm_key(raw) in holdout_keys:
+            continue
         sc = detect_script(pol)
         if sc in ("en", "he", "ru"):
             clean.append((pol, sc, "db_clean"))
@@ -578,6 +668,8 @@ def main() -> None:
     #     `wiki_eval` utterances of each language are held out -- this is the
     #     only he/ru eval set with enough volume to bound a 99% precision gate.
     for sc, n in (("he", args.wiki_he), ("ru", args.wiki_ru), ("en", args.wiki_en)):
+        if n <= 0:
+            continue
         got = wiki_sentences(sc, n + args.wiki_eval,
                              random.Random(args.seed + SCRIPT_SALT[sc]))
         print(f"[clean] wiki {sc}: {len(got)}")
@@ -612,6 +704,28 @@ def main() -> None:
 
     # ---------- 5. teacher upweighting ----------
     train += teacher_train * args.teacher_repeat
+
+    # 5b. externally-labelled real pairs (the strict-audit set). These are the
+    #     highest-value rows in the corpus -- real ASR text on the input side,
+    #     scored by the same alignment audit as eval -- so they are folded in at
+    #     the same upweight as the teacher pairs, minus anything held out.
+    for xp in args.extra_train:
+        p = Path(xp)
+        if not p.exists():
+            print(f"[extra] missing, skipped: {p}")
+            continue
+        got, skipped = [], 0
+        with p.open() as f:
+            for line in f:
+                d = json.loads(line)
+                if norm_key(" ".join(d["words"])) in holdout_keys:
+                    skipped += 1
+                    continue
+                got.append(Example.from_json(d))
+        train += got * args.extra_train_repeat
+        print(f"[extra] {p.name}: +{len(got)} pairs x{args.extra_train_repeat} "
+              f"({skipped} withheld) scripts={dict(Counter(e.script for e in got))}")
+
     rng.shuffle(train)
 
     def dump(name: str, xs: Sequence[Example]) -> None:

@@ -94,30 +94,11 @@ from common import (  # noqa: E402
 REPO = HERE.parent.parent
 LLM_EVAL_CORPUS = REPO / "Tools" / "llm-eval" / "corpus.json"
 
-ALL_FILLERS = set()
-for _v in BC.FILLERS.values():
-    ALL_FILLERS |= set(_v)
-
-_WORDCHARS = re.compile(r"[^0-9a-zЀ-ԯ֐-׿]+")
-
-
-# --------------------------------------------------------------------------
-# normalisation / hashing
-# --------------------------------------------------------------------------
-
-def norm_key(text: str, drop_fillers: bool = True) -> str:
-    """Case-, accent-, punctuation-insensitive letter sequence of `text`.
-
-    Optionally drops filler words so that the synthetic corruptor's *inserted*
-    fillers cannot hide a leaked example.
-    """
-    t = unicodedata.normalize("NFD", text.lower())
-    t = "".join(c for c in t if unicodedata.category(c) != "Mn")
-    t = _WORDCHARS.sub(" ", t)
-    toks = t.split()
-    if drop_fillers:
-        toks = [w for w in toks if w not in ALL_FILLERS]
-    return " ".join(toks)
+# `norm_key` lives in build_corpus so that the corpus builder can exclude the
+# held-out documents using the *same* key this script splits on. Two copies of a
+# leakage key that drift apart is a silent leak.
+ALL_FILLERS = BC.ALL_FILLERS
+norm_key = BC.norm_key
 
 
 def render_target(ex: dict) -> str:
@@ -166,11 +147,11 @@ def leakage_keys(data_dir: Path, files=("train.jsonl", "val.jsonl")) -> set:
 # candidate collection
 # --------------------------------------------------------------------------
 
-def collect_candidates() -> List[Tuple[str, str, str]]:
+def collect_candidates(golden_path=None) -> List[Tuple[str, str, str]]:
     """(source_tag, asr_text, reference_text). READ ONLY on every source."""
     out: List[Tuple[str, str, str]] = []
 
-    g = json.loads(Path(BC.GOLDEN).read_text())
+    g = json.loads(Path(golden_path or BC.GOLDEN).read_text())
     for e in g["entries"]:
         a = (e.get("storedTranscript") or "").strip()
         b = (e.get("goldenTranscript") or "").strip()
@@ -261,6 +242,12 @@ def main() -> None:
     ap.add_argument("--out-eval", default="eval_real_large.jsonl")
     ap.add_argument("--out-train", default="train_real_large.jsonl")
     ap.add_argument("--report", default=str(HERE / "artifacts" / "eval_real_large_report.json"))
+    ap.add_argument("--golden", default=None,
+                    help="golden-set JSON to mine (default: the 400-entry benchmark "
+                         "corpus). Point at artifacts/raw/history-golden.json to mine "
+                         "the whole recordings history")
+    ap.add_argument("--min-eval", type=int, default=300,
+                    help="floor on eval pairs per script before any go to train")
     ap.add_argument("--max-lex-frac", type=float, default=0.10)
     ap.add_argument("--min-ratio", type=float, default=0.90)
     ap.add_argument("--train-frac", type=float, default=0.0,
@@ -276,9 +263,23 @@ def main() -> None:
     out_dir.mkdir(parents=True, exist_ok=True)
     rng = random.Random(args.seed)
 
+    # The 326-pair holdout that every published calibration number was measured on.
+    # Growing the candidate pool reshuffles the split, so any pair that was eval
+    # before is pinned to eval now -- otherwise a retrain would be scored on pairs
+    # it had just been trained on, and the comparison against CALIBRATION.md would
+    # be against a different set under the same name.
+    pinned_eval = set()
+    prev_eval = out_dir / args.out_eval
+    if prev_eval.exists():
+        with prev_eval.open() as f:
+            for line in f:
+                pinned_eval.add(norm_key(" ".join(json.loads(line)["words"])))
+        print(f"[pin] {len(pinned_eval)} pairs pinned to eval from the existing "
+              f"{args.out_eval}")
+
     leak = leakage_keys(data_dir)
 
-    cands = collect_candidates()
+    cands = collect_candidates(args.golden)
     print("[collect] raw candidate pairs:", len(cands),
           dict(Counter(s for s, _, _ in cands).most_common()))
 
@@ -366,12 +367,27 @@ def main() -> None:
     for ex, src in kept:
         by_sc[ex.script].append((ex, src))
     eval_set, train_set = [], []
+    repinned = 0
     for sc, lst in by_sc.items():
         lst = sorted(lst, key=lambda x: " ".join(x[0].words))
         rng.shuffle(lst)
-        k = 0 if sc != "en" else int(round(args.train_frac * len(lst)))
+        # Pinned pairs are lifted out before the split so the previous holdout
+        # survives a pool that has grown by an order of magnitude.
+        pinned = [x for x in lst if norm_key(" ".join(x[0].words)) in pinned_eval]
+        lst = [x for x in lst if norm_key(" ".join(x[0].words)) not in pinned_eval]
+        repinned += len(pinned)
+        # he/ru used to be excluded from the train split entirely, to give two
+        # tiny languages every pair they had for eval. With the pool grown from
+        # the whole recordings history the constraint reverses: he had SIX real
+        # training documents, which is why every he cell came back unmeasured.
+        # Split every script now, but never take a script's eval below --min-eval.
+        room = max(0, len(lst) + len(pinned) - args.min_eval)
+        k = min(int(round(args.train_frac * len(lst))), room)
         train_set += lst[:k]
-        eval_set += lst[k:]
+        eval_set += lst[k:] + pinned
+    if pinned_eval:
+        print(f"[pin] {repinned} of {len(pinned_eval)} pinned pairs re-found and "
+              f"forced into eval")
     # Pairs excluded from eval for LEAKAGE are still valid training data.
     train_set += leaked_train
 
