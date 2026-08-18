@@ -380,13 +380,13 @@ final class PolishBenchmarkTests: XCTestCase {
     }
 
     /// A flat −1.0 disqualifier: the output must not be written in a script the input was not.
-    private static func drifted(from input: String, to output: String) -> Bool {
+    static func drifted(from input: String, to output: String) -> Bool {
         !ScriptAnalyzer.scriptFamilies(in: output)
             .isSubset(of: ScriptAnalyzer.scriptFamilies(in: input))
     }
 
     /// Every digit run and every URL in the input survives into the output.
-    private static func preservesTokens(of input: String, in output: String) -> Bool {
+    static func preservesTokens(of input: String, in output: String) -> Bool {
         let digits = input.split(whereSeparator: { !$0.isNumber }).map(String.init)
         for run in digits where !output.contains(run) { return false }
         for word in input.split(whereSeparator: \.isWhitespace)
@@ -397,7 +397,7 @@ final class PolishBenchmarkTests: XCTestCase {
     /// Full whisper.cpp evidence over identical text, so the only difference between the two
     /// graphs is the evidence. Probabilities alternate near-zero and near-one: a gate that read
     /// them would diverge on nearly every fixture rather than subtly.
-    private static func syntheticWords(for text: String) -> [WhisperStreamWord] {
+    static func syntheticWords(for text: String) -> [WhisperStreamWord] {
         var words: [WhisperStreamWord] = []
         var start = 0.0
         for (offset, piece) in text.split(separator: " ", omittingEmptySubsequences: false).enumerated() {
@@ -423,7 +423,7 @@ final class PolishBenchmarkTests: XCTestCase {
         percentile(values, 0.50)
     }
 
-    private static func percentile(_ values: [Double], _ fraction: Double) -> Double {
+    static func percentile(_ values: [Double], _ fraction: Double) -> Double {
         guard !values.isEmpty else { return .nan }
         let sorted = values.sorted()
         let index = min(sorted.count - 1, Int((Double(sorted.count - 1) * fraction).rounded()))

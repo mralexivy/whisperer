@@ -4,7 +4,7 @@ Branch `feat/deterministic-polish`, worktree `.claude/worktrees/polish-bench`, b
 `d635a2a`. **Not merged.** Everything below is measured on this machine against the user's own
 400-recording corpus; nothing is extrapolated.
 
-**One-line status:** the non-generative polishing path is built, wired, tested and shipped
+**One-line status:** the non-generative polishing path is built, wired, tested, benchmarked end to end (B4, 2026-08-18) and shipped
 behind an off-by-default experimental toggle. It is faster than the 4B by three orders of
 magnitude and scores better on WER. The mmBERT editor that was supposed to sit on top of it is
 **muted**, on measurement, and has no UI.
@@ -73,6 +73,8 @@ be refused by no pass and by no model.
 | WER vs golden reference — mean | 0.188 | **0.073** |
 | WER vs golden reference — median | 0.140 | **0.050** |
 | `polish_ms` p95 | a 4B prefill + decode | **2.41 ms** |
+| end-to-end polish p95, 180 interleaved measurements | **3358 ms** | **2.85 ms** (arm B) · **3298 ms** (hybrid) |
+| end-to-end polish p50 | 1862 ms | **1.86 ms** (arm B) · 1564 ms (hybrid) |
 | `llm_rate` (dictation) | 1.000 | **0.636** |
 | `drift` (script/language changed) | — | **0** |
 | `preservation` (numbers, URLs, identifiers) | — | **1.000** |
@@ -102,15 +104,60 @@ about one function, not about two call sites that happen to agree today.
 
 ---
 
+## 3a. B4 — the consolidated verdict run
+
+`WhispererTests/PolishVerdictTests.testMergeVerdict` runs quality, engine independence, edit
+precision and latency in **one process over one corpus**, scores the eight rules that were fixed
+before the run, and emits one line. Executed 2026-08-18, 561 s, 400 fixtures + 180 interleaved
+latency measurements:
+
+```
+VERDICT: RECOMMEND MERGE behind the off-by-default flag, NOT as a default-on replacement
+         — rule 1s fails (the ⅓-of-arm-A bar on the hybrid, which is the arm a merge ships).
+           No disqualifier fails. Rules 4 and 5 unmeasured.
+```
+
+| rule | | result |
+|---|---|---|
+| 1 | arm B p95 ≤ arm A p95 ÷ 3 — *as written* | **PASS** — 3.66 ms vs a 1102.5 ms bar |
+| 1s | the same bar on the **hybrid**, which is what ships | **FAIL** — 3276.5 ms; the p95 is a 4B decode |
+| 2 | drift 0, preservation 1.000, retractions 0 | **PASS** — 0, 0, 0 |
+| 3 | WER_B ≤ WER_A + 0.01, mean and median, per language | **PASS** — en n=115 0.178→0.070, he n=2, ru n=1 |
+| 4 | recovery ≥ arm A − 0.05 | **UNMEASURED** — the harness fails its own baseline |
+| 5 | edit precision ≥ 0.99 per auto-applied class | **UNMEASURED** — 14 scoreable events, floor needs 30 |
+| 6 | the `[]` capability column meets 1–5 alone | **PASS** — 0/400 divergences |
+| 7 | `llm_rate` strictly below arm A | **PASS** — 0.657 vs 1.000 |
+| 8 | `peak_rss` not higher than arm A | **PASS** — 55 MB vs 2510 MB resident |
+
+Two of these deserve reading properly rather than as a score.
+
+**Rule 1s is the whole reason this is not proposed as on-by-default.** It is not a quality
+failure; it is arithmetic. With `llm_rate` at 0.657 the 95th-percentile utterance is one of the
+66% that still reaches the 4B, so the hybrid p95 is a 4B p95 and no amount of making the
+deterministic pass faster moves it. What moves it is `llm_rate → 0`, which is M4, which has no
+weights worth shipping. The p50 does move — 1501 ms hybrid against 1790 ms control — because the
+third of utterances the gate finishes outright become free.
+
+**Rule 5 is unmeasured for a scorer reason, not a model reason.** The pipeline inserts no
+sentence-terminating punctuation at all (that is precisely the job left to the generative pass),
+so the period class has zero events; and sentence casing produced only 14 scoreable edits across
+286 golden-matched fixtures, because whisper already capitalises most sentence openings. 14 events
+cannot certify 0.99 — the tier floor is 30 — so it is reported as unmeasured rather than as the
+1-of-7 point estimate the scoreable subset happens to give.
+
+---
+
 ## 4. What is not yet claimed
 
-- **Verdict rule 1** — `endSpeech→output_ms` p95 in arm B ≤ ⅓ of arm A — is asserted by
-  `PolishLatencyBenchmarkTests` on the **hybrid** arm, which is what a merge today would ship
-  (deterministic first, 4B only when `needsGenerativePass`). Arm B alone would be the M4 promise,
-  and M4 has no weights worth shipping.
-- **The full B4 interleaved verdict run has not been executed end to end**, so there is no
-  `VERDICT: RECOMMEND MERGE` line yet. The component numbers above are real; the single
-  consolidated run that marks each of the eight verdict rules pass/fail is outstanding.
+- **Verdict rule 1 passes as written and fails as shipped, and both are reported.** The rule is
+  written about arm B, and arm B measures 2.85 ms against a 1119 ms bar — three orders of
+  magnitude. But a merge today ships the **hybrid** (deterministic first, 4B only when
+  `needsGenerativePass`), and the hybrid measures **3298 ms p95**, because with `llm_rate` at 0.70
+  the p95 *is* a 4B decode. Reaching that bar in the shipping configuration means driving
+  `llm_rate` toward 0, which is M4, and M4 has no weights worth shipping. This is the single
+  reason the flag is not proposed as on-by-default.
+- Hybrid p50 is 1564 ms against arm A's 1862 ms: the 30% of utterances the gate finishes outright
+  are free, and the rest cost what they always cost.
 - **The M6 Hebrew-example question is unsettled.** Both arms score ≈ −0.43 against a documented
   +0.478 baseline, which means the `Tools/llm-eval` harness is not reproducing its own baseline
   and its absolute numbers must not be quoted. Arm C_m6 is worse than B_pre_m6 on both balanced
@@ -173,8 +220,8 @@ Meetings pick the same switch up: with it off they polish nothing, exactly as th
 
 ## 7. Open work, in priority order
 
-1. Run B4 — the interleaved A/B verdict pass over the 400 fixtures, ≥3 repeats — and produce the
-   single `VERDICT:` line with all eight rules marked.
+1. **Drive `llm_rate` down.** It is the only thing standing between the current result and a
+   default-on recommendation, and it is what rule 1s measures. 0.657 today.
 2. Fix the `Tools/llm-eval` harness so it reproduces its documented +0.478 baseline; until then
    M6 cannot be decided.
 3. Bulk teacher-label the history corpus and retrain. 312 English / 4 Hebrew / 10 Russian
