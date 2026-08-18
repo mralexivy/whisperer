@@ -234,7 +234,8 @@ final class EditingModelTests: XCTestCase {
 
         let gate = ConfidenceGate(language: .english)
         let g = graph("deploy the service")
-        // en/case ALL: P = 1.0000, 0 wrong out of 96, LCB95 0.9693 — the highest measured.
+        // Casing is the cosmetic tier: 0.96 clears its gate. (What the *model* measures on real
+        // ASR — en/case ALL P = 0.9149, LCB95 0.8517 — is why no cell is enabled to reach here.)
         XCTAssertEqual(gate.judge(modelEdit("deploy", in: g, .replace("Deploy"), 0.96), in: g),
                        .accept)
         XCTAssertFalse(gate.judge(modelEdit("deploy", in: g, .replace("Destroy"), 0.96),
@@ -462,9 +463,9 @@ final class EditingModelTests: XCTestCase {
         let url = URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent()
             .deletingLastPathComponent()
-            .appendingPathComponent("Tools/mmbert/thresholds-calibrated.json")
+            .appendingPathComponent("Tools/mmbert/thresholds-calibrated-history.json")
         guard FileManager.default.fileExists(atPath: url.path) else {
-            throw XCTSkip("thresholds-calibrated.json absent")
+            throw XCTSkip("thresholds-calibrated-history.json absent")
         }
         let measured = try MMBERTCalibrationTable.decode(from: Data(contentsOf: url))
         XCTAssertFalse(measured.cells.isEmpty, "the file decoded to nothing")

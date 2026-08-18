@@ -4,6 +4,10 @@
 every edit class, and it is muted because the model is not precise enough on real speech —
 not because the confidence bound is fussy.**
 
+**Update 2026-08-18 — the corpus was rebuilt from the recordings history and the model retrained.
+It got substantially better and the verdict did not change.** Section 2a below is the current
+result; section 2 is kept as the superseded wiki-corpus run it is compared against.
+
 The earlier version of this file (86 held-out real pairs) reported en/punct `.` at
 P = 1.0000 and en/case at P = 1.0000 and concluded "good, but the sample is too small to
 certify". Recalibrating on **326** held-out real pairs — roughly four times the evidence —
@@ -92,7 +96,73 @@ A cell is ENABLED at the threshold maximising recall subject to
 
 ---
 
-## 2. Primary result — `eval_real_large.jsonl`, best operating point per cell
+## 2a. CURRENT result — history-only corpus, `artifacts/model-history`
+
+Reproduce with `./run_history_retrain.sh`. Logs: `artifacts/{build_eval_large,build_corpus_history,
+train_history,calibrate_history}.log`. Thresholds: `thresholds-calibrated-history.json`.
+
+What changed, and only this:
+
+| | wiki run (superseded) | history run (current) |
+|---|---|---|
+| Wikipedia rows in train | 163,337 (95.9%) | **0** |
+| train rows | 170,396 | 21,836 (en 18,910 / ru 2,290 / he 636) |
+| source of clean text | Wikipedia + 2,621 golden-set decodes | **all 2,621 history recordings, decoded whole-file** (3,253 s) |
+| real ASR→teacher pairs in train | 0 (excluded by accident) | 909, upweighted ×6 |
+| epochs / val loss | 1 / 0.3033 | 2 / **0.1053** |
+| holdout | 326 real pairs | **783** real pairs (279 of the 326 re-pinned) |
+
+Primary split `eval_real_large.jsonl` — 783 examples, 93,509 labelled positions:
+
+| lang | cell | tier | thr | P (was) | **P (now)** | LCB95 | n | FP | enabled |
+|---|---|---|---|---|---|---|---|---|---|
+| en | error (any edit) | meaning 0.99 | 0.9955 | 0.800 | **0.9169** | 0.8895 | 373 | 31 | **NO** |
+| en | punct `.` | cosmetic 0.95 | 0.9975 | 0.919 | **0.9200** | 0.8837 | 225 | 18 | **NO** |
+| en | case CAP | cosmetic 0.95 | 0.9640 | 0.430 | **0.8430** | 0.7782 | 121 | 19 | **NO** |
+| en | case LOWER | cosmetic 0.95 | 0.3000 | 0.500 | **0.9268** | 0.8607 | 82 | 6 | **NO** — n < 120 |
+| en | disf | disfluency 0.97 | 0.3000 | 0.430 | 0.3373 | 0.2765 | 166 | 110 | **NO** — regressed |
+| en | punct `,` | excluded | 0.9785 | 0.672 | 0.7093 | 0.6183 | 86 | 25 | excluded by construction |
+| en | punct `;` / `:` | excluded | — | — | 0.000 / 0.000 | — | 1 / 1 | 1 / 1 | excluded by construction |
+| ru | error | meaning 0.99 | 0.3000 | 0.667 (n 15) | **0.8058** | 0.7305 | 103 | 20 | **NO** — n < 300 |
+| ru | punct `.` | cosmetic 0.95 | 0.3000 | 0.667 (n 6) | **0.8857** | 0.7573 | 35 | 4 | **NO** — n < 120 |
+| he | error | meaning 0.99 | 0.3000 | 0.636 (n 11) | 0.6000 | 0.5106 | 95 | 38 | **NO** — n < 300 |
+| he | punct `.` | cosmetic 0.95 | 0.3000 | 1.000 (n 3) | 0.5909 | 0.4559 | 44 | 18 | **NO** — n < 120 |
+
+**0 of 48 enabled**, same as before.
+
+Three findings worth keeping:
+
+1. **The Wikipedia corpus was the dominant defect, and fixing it was not sufficient.** en/case CAP
+   nearly doubled (0.430 → 0.843) and en/error gained 12 points. The earlier note "nothing here
+   separates *mmBERT-small is too small* from *the corpus was the wrong distribution*" is now
+   answered: it was substantially the corpus. But the gate is a 95% **lower bound**, and the best
+   English cell sits at LCB 0.8895 against a 0.99 floor, 0.8837 against a 0.95 floor. Not close.
+2. **en/disfluency regressed** (0.430 → 0.337, 110 FP of 166). More in-domain data made it worse,
+   which points at the label rather than the model: the 4B teacher is inconsistent about which
+   fillers to delete, so the head is fitting teacher noise. Disfluency deletion should be dropped
+   from the model and left to the deterministic filler pass, which is rule-based and measurable.
+3. **Hebrew and Russian remain unmeasured, and retraining cannot fix that.** The entire recordings
+   history holds 123 Hebrew and 172 Russian recordings by script. That yields he/error n = 95 and
+   ru/error n = 103 against a 300-event `meaning` floor. The bottleneck is now audio, not labels.
+
+Cross-check on the other splits (same checkpoint) — the real/synthetic gradient survives the
+corpus fix and is the reason only the real column may enable a cell:
+
+| cell | real_large (primary) | synthetic_indomain | pooled_indomain_large |
+|---|---|---|---|
+| en/error | P 0.9169 · n 373 | P 0.9710 · n 1550 | P 0.9645 · n 1802 |
+| en/punct `.` | P 0.9200 · n 225 | P 0.9624 · n 452 | P 0.9537 · n 540 |
+| en/case CAP | P 0.8430 · n 121 | P 0.9646 · n 847 — **would ship** | P 0.9540 · n 968 |
+| en/disf | P 0.3373 · n 166 | P 0.9871 · n 310 — **would ship** | — |
+
+The two cells that "ship" on the synthetic split are exactly the trap: synthetic corruption is the
+inverse of the training objective, so that column measures memorisation of the corruptor. There is
+no `eval_wiki` column any more — the history corpus contains no Wikipedia, so the split is empty
+(0 examples), which is itself the confirmation that the data bug is fixed.
+
+---
+
+## 2. Superseded — wiki-corpus run, `eval_real_large.jsonl` (326 pairs), best operating point per cell
 
 `n` is proposals at the selected threshold, `FP` wrong edits, `LCB` the 95% lower bound,
 `nmax` the most proposals the cell offers at any threshold.

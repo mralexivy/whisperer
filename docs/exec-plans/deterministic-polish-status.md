@@ -176,23 +176,41 @@ disfluency), exported to Core ML at three fixed shapes (`MMBERTEditing_{32,64,12
 142 MB each, not bundled), and runs at p50 18.7 ms / p95 26.0 ms through
 `MMBERTCoreMLRuntime`. On the corpus it produced 272 proposals and **0** survived the gate.
 
-Calibration on 326 held-out real ASR → teacher pairs — roughly four times the earlier evidence —
-gives **0 of 48 cells enabled**:
+It was trained twice. The first corpus was **95.9% Wikipedia** — a data bug, since the point of the
+model is real speech. The second was rebuilt from the recordings history alone: all 2,621
+recordings decoded whole-file (3,253 s), zero Wikipedia rows, 21,836 training rows, 2 epochs, val
+loss 0.1053. Both checkpoints were calibrated against held-out real ASR → teacher pairs.
 
-| cell | tier | P | n | FP |
-|---|---|---|---|---|
-| en / error (any edit) | meaning 0.99 | **0.800** | 320 | 64 |
-| en / punct `.` | cosmetic 0.95 | **0.919** | 124 | 10 |
-| en / case CAP | cosmetic 0.95 | **0.430** | 121 | 69 |
-| en / disfluency | disfluency 0.97 | **0.430** | 156 | 89 |
-| he, ru — everything | — | unmeasured | 0–15 | — |
+The retrain is a large, real improvement — and it still enables **0 of 48 cells**:
 
-These are point estimates below their gates, not confidence-bound near-misses. The earlier
-P = 1.0000 readings on an 86-pair split were small-sample artefacts and have been retracted;
-risk-tiering the floors (0.99 meaning / 0.97 disfluency / 0.95 cosmetic, replacing the flat 0.99)
-does not rescue any cell. Comma, colon and semicolon insertion are excluded by construction —
-comma insertion measures P = 0.672, and the model invents semicolons and colons the teacher never
-wants.
+| cell | tier | P (wiki corpus, n=326 holdout) | P (history corpus, n=783 holdout) | LCB95 | n | FP | ships |
+|---|---|---|---|---|---|---|---|
+| en / error (any edit) | meaning 0.99 | 0.800 | **0.9169** | 0.8895 | 373 | 31 | no |
+| en / punct `.` | cosmetic 0.95 | 0.919 | **0.9200** | 0.8837 | 225 | 18 | no |
+| en / case CAP | cosmetic 0.95 | 0.430 | **0.8430** | 0.7782 | 121 | 19 | no |
+| en / case LOWER | cosmetic 0.95 | 0.500 | **0.9268** | 0.8607 | 82 | 6 | no — n < 120 |
+| en / disfluency | disfluency 0.97 | 0.430 | 0.3373 | 0.2765 | 166 | 110 | no |
+| ru / error | meaning 0.99 | 0.667 (n 15) | 0.8058 | 0.7305 | 103 | 20 | no — n < 300 |
+| he / error | meaning 0.99 | 0.636 (n 11) | 0.6000 | 0.5106 | 95 | 38 | no — n < 300 |
+
+Reading it honestly: en/case CAP nearly doubled (0.43 → 0.84) and en/error gained 12 points, which
+confirms the Wikipedia corpus was the dominant defect. But the gate is a Clopper-Pearson **95%
+lower bound**, and the best English cell reaches LCB 0.8895 against a 0.99 floor and 0.8837 against
+a 0.95 floor. Nothing is within reach of enabling. Two cells got *worse*: en/disfluency (0.43 →
+0.34 — the teacher's filler labels are inconsistent, so the head is fitting noise) and he/error.
+
+Hebrew and Russian are still **unmeasured, not measured-and-bad**: the entire history contains 123
+Hebrew and 172 Russian recordings, so he/error has n = 95 and ru/error n = 103 against a 300-event
+`meaning` floor. No amount of re-training fixes that — it needs more non-English recordings.
+
+The synthetic in-domain split, by contrast, *does* enable two cells (en/case CAP P 0.9646 n 847,
+en/disf P 0.9871 n 310). That divergence is the same lesson as the Wikipedia bug: **only the real
+ASR column may enable a cell.** Comma, colon and semicolon insertion remain excluded by
+construction — comma insertion measures P = 0.709 on real text, and the model still invents
+semicolons and colons the teacher never wants (22 and 13 proposals against 5 and 7 gold).
+
+Comparability caveat: the new holdout re-pins **279 of the previous 326** pairs and adds to them
+(783 total). The two columns above are therefore closely related but not the identical set.
 
 So the outcomes the model was meant to deliver — punctuation, casing, paragraph splitting,
 formatting — are delivered **deterministically** instead, by `SentenceCaser`,
@@ -224,9 +242,10 @@ Meetings pick the same switch up: with it off they polish nothing, exactly as th
    default-on recommendation, and it is what rule 1s measures. 0.657 today.
 2. Fix the `Tools/llm-eval` harness so it reproduces its documented +0.478 baseline; until then
    M6 cannot be decided.
-3. Bulk teacher-label the history corpus and retrain. 312 English / 4 Hebrew / 10 Russian
-   held-out documents is enough to condemn English and not enough to say anything about the
-   other two.
+3. ~~Bulk teacher-label the history corpus and retrain.~~ **Done (2026-08-18).** All 2,621
+   recordings decoded, Wikipedia removed, retrained, recalibrated. English precision improved
+   substantially; 0 of 48 cells still enable. See §5. The remaining lever for the editor is
+   **more non-English audio**, not more training on what exists.
 4. Consider the editor as a **suggestion** surface rather than an auto-apply one — a class that
    never auto-applies has no precision floor to clear.
 
