@@ -4,8 +4,8 @@ Branch `feat/deterministic-polish`, worktree `.claude/worktrees/polish-bench`, b
 `d635a2a`. **Not merged.** Everything below is measured on this machine against the user's own
 400-recording corpus; nothing is extrapolated.
 
-**One-line status:** the non-generative polishing path is built, wired, tested, benchmarked end to end (B4, 2026-08-18) and shipped
-behind an off-by-default experimental toggle. It is faster than the 4B by three orders of
+**One-line status:** the non-generative polishing path is built, wired, tested, benchmarked end
+to end (B4, 2026-08-18) and shipped behind an off-by-default experimental toggle. It is faster than the 4B by three orders of
 magnitude and scores better on WER. The mmBERT editor that was supposed to sit on top of it is
 **muted**, on measurement, and has no UI.
 
@@ -75,7 +75,7 @@ be refused by no pass and by no model.
 | `polish_ms` p95 | a 4B prefill + decode | **2.41 ms** |
 | end-to-end polish p95, 180 interleaved measurements | **3358 ms** | **2.85 ms** (arm B) · **3298 ms** (hybrid) |
 | end-to-end polish p50 | 1862 ms | **1.86 ms** (arm B) · 1564 ms (hybrid) |
-| `llm_rate` (dictation) | 1.000 | **0.636** |
+| `llm_rate` (dictation) | 1.000 | **0.657** |
 | `drift` (script/language changed) | — | **0** |
 | `preservation` (numbers, URLs, identifiers) | — | **1.000** |
 | capability-tier divergence, full vs `[]` | — | **0 of 400** |
@@ -95,7 +95,7 @@ audio, which is why.
 **The LLM short-circuit is now a content predicate, not a length one.** `text.count <= 15` was
 never the right question: a 200-character sentence that already reads as finished prose gained
 nothing from a 4B decode, and a 12-character fragment that needed punctuation was skipped for
-being short. Replacing it dropped the dictation LLM rate to ~64% before any model work.
+being short. Replacing it dropped the dictation LLM rate to ~66% before any model work.
 
 **One editor, two callers.** `DeterministicPolisher.forTranscript` is the single factory both
 dictation and meetings call, and `MeetingPolishTests` asserts the two produce identical output on
