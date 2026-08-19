@@ -1,0 +1,727 @@
+{
+  "purpose": "recovery (rule 4)",
+  "gates": "Gated on b_script, c_multiset, d_headroom, e_length. The headroom gate is what makes the recovery denominator meaningful and is not negotiable for this metric.",
+  "provenance": "LLM-authored from raw `storedTranscript` rows in the local recordings history, verified by check_authored_gold.py and by an independent semantic reviewer. This is not human truth. It is adequate for comparing two arms against the same reference and for nothing else — no absolute claim may be made from a figure computed on it.",
+  "reportingFloor": 20,
+  "composition": {
+    "en": 88,
+    "he": 11,
+    "ru": 3
+  },
+  "cases": [
+    {
+      "id": "2882AB6043BC408A826CCC4666389547",
+      "language": "en",
+      "batch": "batch-en-00.json",
+      "input": "Kamet push redeploy Go API check that everything is working that like their build is working everything is progres",
+      "gold": "Kamet push, redeploy Go API. Check that everything is working, that their build is working, everything is progres..."
+    },
+    {
+      "id": "93E560FC511C41BC87E3F138EFDBDA35",
+      "language": "en",
+      "batch": "batch-en-00.json",
+      "input": "No, try like with this, like what you created is piece of shit It's nothing To Do with image that I shared with you",
+      "gold": "No, try like with this. Like what you created is a piece of shit. It's nothing to do with the image that I shared with you."
+    },
+    {
+      "id": "9F22B3A3F1484229BB286FC2135E11F0",
+      "language": "en",
+      "batch": "batch-en-01.json",
+      "input": "I asked to like add additional line so the hat should be like with",
+      "gold": "I asked to add additional line so the hat should be like with."
+    },
+    {
+      "id": "3A461AF009EA460A87DCF2959D5E7DE6",
+      "language": "en",
+      "batch": "batch-en-01.json",
+      "input": "I also want to add like the steps that we are doing so like to create like the change the text like generate checking dishes matching your goals and things like this.",
+      "gold": "I also want to add the steps that we are doing so to create, like, the change the text, like, generate checking dishes matching your goals and things like this."
+    },
+    {
+      "id": "955CF87FDD2E49D29D73E7E16CC13BFA",
+      "language": "en",
+      "batch": "batch-en-02.json",
+      "input": "Then clot code from step six I think like we should move it.",
+      "gold": "Then clot code from step six, I think we should move it."
+    },
+    {
+      "id": "B84F35A87DF544BEA58ED800DC43D539",
+      "language": "en",
+      "batch": "batch-en-02.json",
+      "input": "We need to return result for all the platforms I don't know like what is the better approach like in fix 2 like we need fix 1 definitely in fix 2 I don't know like if we need like To Do union of the tables like I want you to use ATLAN MCP and GLEAN MCP to determine what is the correct approach and suggest me a fix",
+      "gold": "We need to return result for all the platforms. I don't know what is the better approach. Like in fix 2, we need fix 1 definitely. In fix 2, I don't know if we need to do a union of the tables. I want you to use ATLAN MCP and GLEAN MCP to determine what is the correct approach and suggest me a fix."
+    },
+    {
+      "id": "E776337AE4AD4F8DB9EA775CFC6E16AE",
+      "language": "en",
+      "batch": "batch-en-02.json",
+      "input": "I need the clarification what this report should include, how it should be structured, like how much high level we should. I need like detailed instruction, how this report should be generated.",
+      "gold": "I need clarification what this report should include, how it should be structured, how much high level we should. I need detailed instruction, how this report should be generated."
+    },
+    {
+      "id": "F4D6DC7462494D03A371DAE820A8E4A8",
+      "language": "en",
+      "batch": "batch-en-02.json",
+      "input": "Not good all animation that you added, they like really, really bad performance on web audit's super slow. It feels like it's super stupid audit's really slow animations I don't know what you added like you destroyed all of our implementation please re check implementation it should be smooth it should be blazing fast performance like we did on the land",
+      "gold": "Not good: all animation that you added, they really, really bad performance on web. Audit's super slow. It feels like it's super stupid. Audit's really slow animations. I don't know what you added. You destroyed all of our implementation. Please re-check implementation. It should be smooth. It should be blazing fast performance like we did on the land."
+    },
+    {
+      "id": "00720393CF074BE699C81A13D927E8FA",
+      "language": "en",
+      "batch": "batch-en-02.json",
+      "input": "So we want to create beautiful video when we... so user pressed on a fan button so a fan should be pressed like on the first image that I attached then the hat is appearing then the person is speaking and we see animation on the hat itself it's moving indicating like the speech and then text is written inside the box like you have example of the text text should be written like typed in like live transcription and then user can press F and L you should animate it on the keyboard like to indicate like they can release a yeah like enter to a hands free mode",
+      "gold": "So we want to create beautiful video when we... so user pressed on a fan button. So a fan should be pressed like on the first image that I attached, then the hat is appearing, then the person is speaking, and we see animation on the hat itself. It's moving, indicating the speech. And then text is written inside the box. You have example of the text. Text should be written like typed in, like live transcription. And then user can press F and L. You should animate it on the keyboard like to indicate they can release a yeah, like enter to a hands-free mode."
+    },
+    {
+      "id": "05011586377F43C58869FDF825B7B19D",
+      "language": "en",
+      "batch": "batch-en-04.json",
+      "input": "Okay, I want to show you why this experience is really, really, really off and what it needs to to be fixed. So first bug is basically All right, I'm going to continue my speaking, so So I'm giving a speech for for two minutes and and I still captured changed my voice. I'm not sure why it's not different it It should be",
+      "gold": "Okay, I want to show you why this experience is really, really, really off and what it needs to be fixed. So first bug is basically all right, I'm going to continue my speaking. So I'm giving a speech for two minutes and I still captured changed my voice. I'm not sure why it's not different. It should be."
+    },
+    {
+      "id": "628A259563C441D095B2839F73B39639",
+      "language": "en",
+      "batch": "batch-en-05.json",
+      "input": "I need you to style logo like this fully transparent the logo should instead what is in this example be Poodle Toy I repeat and the name should be",
+      "gold": "I need you to style the logo like this, fully transparent. The logo should instead what is in this example be Poodle Toy. I repeat, and the name should be..."
+    },
+    {
+      "id": "9ECC4A10D0A04EB4A51CCDA15C45B1EF",
+      "language": "en",
+      "batch": "batch-en-05.json",
+      "input": "Something terribly wrong, nothing is working, everything is ignored, like location is wrong, the drawing looks like piece of shit",
+      "gold": "Something terribly wrong. Nothing is working. Everything is ignored. Like, location is wrong. The drawing looks like a piece of shit."
+    },
+    {
+      "id": "BD494C88D95F4926ABAA138C031FD78B",
+      "language": "en",
+      "batch": "batch-en-05.json",
+      "input": "I remind you, we are classification team We should not tell like what are issues We should only post the suggestions or update the blockers will be more clear",
+      "gold": "I remind you, we are the classification team. We should not tell like what are issues. We should only post the suggestions or update. The blockers will be more clear."
+    },
+    {
+      "id": "95B95837CA8848B29AB27D3F17FB7C29",
+      "language": "he",
+      "batch": "batch-he-00.json",
+      "input": "בסדר, מה עוזר לך? אני גם לא קיבלתי קידום וזה כאילו וכמו שגם המון אנשים אחרים",
+      "gold": "בסדר, מה עוזר לך? אני גם לא קיבלתי קידום וזה וכמו שגם המון אנשים אחרים."
+    },
+    {
+      "id": "D7DE9B593D9A4102A3AE4F4A3D43972A",
+      "language": "he",
+      "batch": "batch-he-00.json",
+      "input": "בואי ננסה להגיד לו משפט בעברית ולראות כאילו כמה טובו יכול לעבוד בעברית",
+      "gold": "בואי ננסה להגיד לו משפט בעברית ולראות כמה טובו יכול לעבוד בעברית."
+    },
+    {
+      "id": "84627EF42EFC41568FB476901ACF1F22",
+      "language": "he",
+      "batch": "batch-he-01.json",
+      "input": "אני לוחץ כדי להגיד איזה משהו הדבר הזה רושם את זה אני יכול גם לעבור לhandsfree mode ובסופו של דבר, כאילו כל דבר שאני אעשה, כאילו הוא",
+      "gold": "אני לוחץ כדי להגיד איזה משהו. הדבר הזה רושם את זה. אני יכול גם לעבור לhandsfree mode, ובסופו של דבר, כל דבר שאני אעשה, הוא"
+    },
+    {
+      "id": "9382579052EE479E9EB6AD7ED6A0A2F7",
+      "language": "he",
+      "batch": "batch-he-01.json",
+      "input": "בואו נדבר בעברית, אני רוצה לראות איך התוכנה מציגה את הטקסט שלנו, אז היום היה יום מאוד יפה בעצם אנחנו רצינו להראות שהיום אה... הסקרול הוא",
+      "gold": "בואו נדבר בעברית, אני רוצה לראות איך התוכנה מציגה את הטקסט שלנו. אז היום היה יום מאוד יפה, בעצם אנחנו רצינו להראות שהיום הסקרול הוא"
+    },
+    {
+      "id": "97F3B49523F54667A4C116A97E88ABDA",
+      "language": "ru",
+      "batch": "batch-ru-00.json",
+      "input": "Но это тоже в языке, и это это очень хорошо. И это, как бы, Килинг Фичер, что я хотел.",
+      "gold": "Но это тоже в языке, и это очень хорошо. И это Килинг Фичер, что я хотел."
+    },
+    {
+      "id": "D57D6561A4874A5EBAEC538806281DD4",
+      "language": "ru",
+      "batch": "batch-ru-00.json",
+      "input": "Dabei Dabei pass modern может работать, если я скажу очень длинный текст",
+      "gold": "Dabei pass modern может работать, если я скажу очень длинный текст."
+    },
+    {
+      "id": "08BB7910287B473480BC06D65EF4A4AA",
+      "language": "en",
+      "batch": "batch2-en-00.json",
+      "input": "No, the quality doesn't match the hat that I basically gave you",
+      "gold": "No, the quality doesn't match the hat that I gave you."
+    },
+    {
+      "id": "37C2334DE7084487B129BD168F83C68F",
+      "language": "en",
+      "batch": "batch2-en-00.json",
+      "input": "Let's try to see if it's now working much faster. I'm going to say long sentence. And to see how basically system supports it.",
+      "gold": "Let's try to see if it's now working much faster. I'm going to say long sentence. And to see how system supports it."
+    },
+    {
+      "id": "5F7FE368A3224DFCBB0ED7F76B0426B0",
+      "language": "en",
+      "batch": "batch2-en-01.json",
+      "input": "This is sample recording. So basically let me try first to record some sample text to see if it's working or not working.",
+      "gold": "This is sample recording. So let me try first to record some sample text to see if it's working or not working."
+    },
+    {
+      "id": "6DD94A2C09284A8B8980CF54857BAA95",
+      "language": "en",
+      "batch": "batch2-en-01.json",
+      "input": "And not the stupid files that you created like we should place this in Contentful",
+      "gold": "And not the stupid files that you created, we should place this in Contentful."
+    },
+    {
+      "id": "8B8382BAE2AA4D1FB61FA2758E2CC733",
+      "language": "en",
+      "batch": "batch2-en-01.json",
+      "input": "In this example, please explain me like what the query is responsible to populate text tab",
+      "gold": "In this example, please explain me what the query is responsible to populate text tab."
+    },
+    {
+      "id": "9EC8DF19895A4C8B91ED40DE5EF4AC8C",
+      "language": "en",
+      "batch": "batch2-en-01.json",
+      "input": "This is too basic, we need premium Like think what top designer would create",
+      "gold": "This is too basic, we need premium. Think what top designer would create."
+    },
+    {
+      "id": "A1D9C39511BD42FA9AEEE7E1246FE3F8",
+      "language": "en",
+      "batch": "batch2-en-01.json",
+      "input": "Why the fuck you wasted so much space? I ask you like move it a bit",
+      "gold": "Why the fuck you wasted so much space? I ask you move it a bit."
+    },
+    {
+      "id": "D52954DEEF144ECDBACDE4A5C98D603C",
+      "language": "en",
+      "batch": "batch2-en-02.json",
+      "input": "Use like you converting from mp4 you fucking shit I asked you to convert from fucking webm",
+      "gold": "Use you converting from mp4, you fucking shit, I asked you to convert from fucking webm."
+    },
+    {
+      "id": "0EFD3482512145F697C480E1E65A7C75",
+      "language": "en",
+      "batch": "batch2-en-02.json",
+      "input": "Actually, I like the previous one. I don't think like 3d button is the best Let's keep the previous one. I wanted a bit polishing",
+      "gold": "Actually, I like the previous one. I don't think 3d button is the best. Let's keep the previous one. I wanted a bit polishing."
+    },
+    {
+      "id": "1B2AE9D7B92D41299AB74F60208E2CA0",
+      "language": "en",
+      "batch": "batch2-en-02.json",
+      "input": "Help me to reason about if this is indeed the case that like most of Amazon Kinesis is redundant and basically we are replacing it by Naboo like why how we can create maybe two squads that are better aligned because you left like the squads to be contained by the people that we have but basically we can do something smarter, something efficient, something 2026 AI era.",
+      "gold": "Help me to reason about if this is indeed the case that most of Amazon Kinesis is redundant and we are replacing it by Naboo, why, how we can create maybe two squads that are better aligned because you left the squads to be contained by the people that we have, but we can do something smarter, something efficient, something 2026 AI era."
+    },
+    {
+      "id": "267863CCF4AA4CBF949C04737B842E53",
+      "language": "en",
+      "batch": "batch2-en-02.json",
+      "input": "No, I need like both of the same project. They are now consolidating the same project. Please give me the name, the description of both of them. Like what is the purpose of this project?",
+      "gold": "No, I need both of the same project. They are now consolidating the same project. Please give me the name, the description of both of them. What is the purpose of this project?"
+    },
+    {
+      "id": "3D7376171BE04BCA9455385E63DB887F",
+      "language": "en",
+      "batch": "batch2-en-03.json",
+      "input": "Okay, let's try to to speak now and see if the transcription should should appear nicely. So So I'm going to say multiple things I don't know if the transcription will appear appear or not, but I should see the indication that basically the new segment is created",
+      "gold": "Okay, let's try to speak now and see if the transcription should appear nicely. So I'm going to say multiple things, I don't know if the transcription will appear or not, but I should see the indication that the new segment is created."
+    },
+    {
+      "id": "507A5D8B49AF45D58D6BF14F0A2D33D2",
+      "language": "en",
+      "batch": "batch2-en-03.json",
+      "input": "The introduced dry one to catch his issues, but you idiot created different paths so it's not doesn't test anything you fucking asshole asshole asshole asshole asshole",
+      "gold": "The introduced dry one to catch his issues, but you idiot created different paths so it's not doesn't test anything you fucking asshole."
+    },
+    {
+      "id": "680FA9A69BB1469D81C02CAEF9722574",
+      "language": "en",
+      "batch": "batch2-en-03.json",
+      "input": "The most important thing that you forgot I ask you to convert marketing site to Next.js So like it will have SEO",
+      "gold": "The most important thing that you forgot, I ask you to convert marketing site to Next.js, so it will have SEO."
+    },
+    {
+      "id": "6FFD97112F5B44A1BFA550B11A0126D3",
+      "language": "en",
+      "batch": "batch2-en-03.json",
+      "input": "Please check all other angels video, audio, how we added them scan true like all the commits understand how we added them what we did because like some of them using Databricks some of them like text maybe not using Databricks our skill will be more comprehensive so it definitely will work next time focus only on the information crucial to adding new engine",
+      "gold": "Please check all other angels video, audio, how we added them, scan true all the commits, understand how we added them, what we did, because some of them using Databricks, some of them like text, maybe not using Databricks, our skill will be more comprehensive so it definitely will work next time, focus only on the information crucial to adding new engine."
+    },
+    {
+      "id": "82E942D9FC6F4E4896FB01E98BE475D5",
+      "language": "en",
+      "batch": "batch2-en-03.json",
+      "input": "This is nice, working really, really well. I want to test basically an ultra fast model that is capable to only work on English but it should be like super reliable and fast.",
+      "gold": "This is nice, working really, really well. I want to test an ultra fast model that is capable to only work on English but it should be super reliable and fast."
+    },
+    {
+      "id": "8EB0944845124E7F8F66DDB940C47DE7",
+      "language": "en",
+      "batch": "batch2-en-03.json",
+      "input": "I think you're confusing here like multiple things like Q2 OKR it's they're only for Q2 it's not what we're going to focus for the whole year like generally speaking like our current focus in this upcoming Q is to optimize the pipeline creation so it will take us less time as classification team to add additional pipeline",
+      "gold": "I think you're confusing here multiple things like Q2 OKR, it's they're only for Q2, it's not what we're going to focus for the whole year, generally speaking our current focus in this upcoming Q is to optimize the pipeline creation so it will take us less time as classification team to add additional pipeline."
+    },
+    {
+      "id": "97201CBF8365401E940C2D8912C319BD",
+      "language": "en",
+      "batch": "batch2-en-04.json",
+      "input": "See how ugly it displays, fix it. It should be displayed like with some Apache Arrow like to the card that we have in so it will be like should be in the middle. Fucking fix it.",
+      "gold": "See how ugly it displays, fix it. It should be displayed with some Apache Arrow to the card that we have in so it will be should be in the middle. Fucking fix it."
+    },
+    {
+      "id": "A4600B34E01C445C964730DB7D014952",
+      "language": "en",
+      "batch": "batch2-en-04.json",
+      "input": "I need to understand how the metrics are working now so basically we're going to type the metrics and we want to see how the metrics are typed in and in the box so today we're going to experience for the latency and see and understand how it's compared so basically we need to calculate the time it takes to understand the way down",
+      "gold": "I need to understand how the metrics are working now, so we're going to type the metrics and we want to see how the metrics are typed in and in the box, so today we're going to experience for the latency and see and understand how it's compared, so we need to calculate the time it takes to understand the way down."
+    },
+    {
+      "id": "B728A35C87DE429F875B8A8129AA4F97",
+      "language": "en",
+      "batch": "batch2-en-04.json",
+      "input": "Also, let's make sure because like we have feature based like project structure we need to make sure we adding test to every feature and not centralized test. This is much smarter so every like a feature will be tested and some shared logic will be tested like in shared test folder so we need to audit in smart way as well.",
+      "gold": "Also, let's make sure, because we have feature based project structure, we need to make sure we adding test to every feature and not centralized test. This is much smarter, so every feature will be tested and some shared logic will be tested in shared test folder, so we need to audit in smart way as well."
+    },
+    {
+      "id": "BB8E4EFAE6EC4163AF2E8837142EF6A2",
+      "language": "en",
+      "batch": "batch3-mixed-03.json",
+      "input": "Look at this loading, please. It's nice, but it's truly basic and we need better UI UX. So we need like better animation, like better UX and UI in general, more premium look, more colors, maybe like more fancy. It, it should like really look stunning, super stunning. So let's make a plan to improve it.",
+      "gold": "Look at this loading, please. It's nice, but it's truly basic and we need better UI UX. So we need better animation, better UX and UI in general, more premium look, more colors, maybe more fancy. It should really look stunning, super stunning. So let's make a plan to improve it."
+    },
+    {
+      "id": "BF84298EFC2C4A818DF0B685C3603EEB",
+      "language": "en",
+      "batch": "batch2-en-04.json",
+      "input": "I'm not sure if we need ClientLip, yes or not and like for what it will be useful. Maybe it can be useful. Like we need to think this through. I don't have a different answer. Like I care that like the schema will be like exact and like user need to honor it, but I see like what we can do is like the sleep is like the chat implementation kinda so it will enforce the schema and make the calls to LLLM.",
+      "gold": "I'm not sure if we need ClientLip, yes or not and for what it will be useful. Maybe it can be useful. We need to think this through. I don't have a different answer. I care that the schema will be exact and user need to honor it, but I see what we can do is the sleep is the chat implementation kinda so it will enforce the schema and make the calls to LLLM."
+    },
+    {
+      "id": "CE2BCE1466924B7798B3E3C00F1D671B",
+      "language": "en",
+      "batch": "batch2-en-04.json",
+      "input": "Yes, the memory continues to grow, so based on the engine switch we still have basically problems with the leak and also last preview is still leaking, we are not reusing it or not freeing it up accordingly",
+      "gold": "Yes, the memory continues to grow, so based on the engine switch we still have problems with the leak and also last preview is still leaking, we are not reusing it or not freeing it up accordingly."
+    },
+    {
+      "id": "D375E7115D5840FF9929FE089186F8C5",
+      "language": "en",
+      "batch": "batch2-en-04.json",
+      "input": "Fix those issues image should like use the whole container like scale it appropriately also like beneath the image like a first container does not show text it should show text start button move it on top of the image bottom corner so everything should be light and look beautifully",
+      "gold": "Fix those issues, image should use the whole container, scale it appropriately, also beneath the image, a first container does not show text, it should show text, start button move it on top of the image bottom corner, so everything should be light and look beautifully."
+    },
+    {
+      "id": "EA84C133A92E4E6EBC7DF6527CA27ADB",
+      "language": "en",
+      "batch": "batch2-en-04.json",
+      "input": "I don't have exact number, like you are professional, you are best like in the class, we have segment of 30 seconds, like estimate like when we need to fetch them low, after 20, 50, I don't show.",
+      "gold": "I don't have exact number, you are professional, you are best in the class, we have segment of 30 seconds, estimate when we need to fetch them low, after 20, 50, I don't show."
+    },
+    {
+      "id": "F036927411984D84843F0B6925BD73BC",
+      "language": "en",
+      "batch": "batch2-en-04.json",
+      "input": "Please do like a examination with glean and see we need to run it properly so I expect next time when I run it get results that I asked",
+      "gold": "Please do an examination with glean and see we need to run it properly, so I expect next time when I run it get results that I asked."
+    },
+    {
+      "id": "0482D892923E43C7A0E7B2548A9AB1DC",
+      "language": "en",
+      "batch": "batch2-en-05.json",
+      "input": "So I don't know if we need this SDK protocol or like the agent enrichment. Let's brainstorm it. What is the easiest approach like to integrate this? Because I thought the JavaScript library, it can prepare the data that chat expects, like we would integrate with any other third-party solution, but maybe like the skill can like make sure like providing the correct, extract the correct topics and metrics and everything. That our pipeline that we have in this content intelligence dashboard and backend doesn't catch and maybe it can like we can provide skill how it can be like generated. For it.",
+      "gold": "So I don't know if we need this SDK protocol or the agent enrichment. Let's brainstorm it. What is the easiest approach to integrate this? Because I thought the JavaScript library, it can prepare the data that chat expects, we would integrate with any other third-party solution, but maybe the skill can make sure providing the correct, extract the correct topics and metrics and everything. That our pipeline that we have in this content intelligence dashboard and backend doesn't catch and maybe it can we can provide skill how it can be generated. For it."
+    },
+    {
+      "id": "08BD493BFDC04909B7E06CC5E9D44E25",
+      "language": "en",
+      "batch": "batch2-en-05.json",
+      "input": "We called really, really long conversation, so we're going to speak with you about a lot of different topics, and you're going to record it. So basically what we are capable To Do here is to record long, long speech so and we don't need to press any button, and this can record any long sentence, and we also speak a recognition. This does not have speaker recognition we have like different model for speaker recognition, but this is like nice and really capable LLM that can basically transcribe really, really fast",
+      "gold": "We called really, really long conversation, so we're going to speak with you about a lot of different topics, and you're going to record it. So what we are capable to do here is to record long, long speech so and we don't need to press any button, and this can record any long sentence, and we also speak a recognition. This does not have speaker recognition we have different model for speaker recognition, but this is nice and really capable LLM that can transcribe really, really fast."
+    },
+    {
+      "id": "0FF07500FF4C4556A913FEE3B9970BAF",
+      "language": "en",
+      "batch": "batch2-en-05.json",
+      "input": "Let's try one more time. So we want to write like the long sentence and the long sentence still doing transcribe it doesn't show us like the full sequence so it's still stuck and before implementation workmogs looted and now it's not the same thing it's kind of implemented in really really really bad way because like the walls is not outputted with the correct sequence so basically I don't know if it's better or not better",
+      "gold": "Let's try one more time. So we want to write the long sentence and the long sentence still doing transcribe it doesn't show us the full sequence so it's still stuck and before implementation workmogs looted and now it's not the same thing it's kind of implemented in really really really bad way because the walls is not outputted with the correct sequence so I don't know if it's better or not better."
+    },
+    {
+      "id": "1275C52B722342B390C3F6762A42AEC3",
+      "language": "en",
+      "batch": "batch2-en-05.json",
+      "input": "Now I want you basically to perform other tests. Now when we grow in this RPS, maybe we Django beyond the VU12 and basically we can reach higher RPS with more load. Also you're not monitoring NVDAQ saturation and this is most important feature. The NVDAQ saturation, the NVIDIA SM usage and VRAM usage. for a",
+      "gold": "Now I want you to perform other tests. Now when we grow in this RPS, maybe we Django beyond the VU12 and we can reach higher RPS with more load. Also you're not monitoring NVDAQ saturation and this is most important feature. The NVDAQ saturation, the NVIDIA SM usage and VRAM usage. For a"
+    },
+    {
+      "id": "1A82EBF8A91A4635BD9426AE91339F10",
+      "language": "en",
+      "batch": "batch2-en-05.json",
+      "input": "I still get a lot of stacking when UI is rendered. So when I speaking and basically trying to say complex sentence, it trying to fail on me and I don't understand why UI is getting blocked. But not always it's happening. Sometimes it's smooth, it's Prefect, it's amazing, but sometimes it also doesn't look good and basically doesn't perform too well.",
+      "gold": "I still get a lot of stacking when UI is rendered. So when I speaking and trying to say complex sentence, it trying to fail on me and I don't understand why UI is getting blocked. But not always it's happening. Sometimes it's smooth, it's Prefect, it's amazing, but sometimes it also doesn't look good and doesn't perform too well."
+    },
+    {
+      "id": "24461FFA716A4C4CA658159D42ACFCBF",
+      "language": "en",
+      "batch": "batch2-en-05.json",
+      "input": "Like look how basically to structure code DRY and other principles. How? To write high efficient code, minimal working without over complications like see how to structure files imagine that you are architect in full-stack application how will you structure the app that will have most efficient structure and the wheel will be like super reliable and easy to extend and how to break existing functionality and guide me please how To Do it.",
+      "gold": "Look how to structure code DRY and other principles. How? To write high efficient code, minimal working without over complications, see how to structure files. Imagine that you are architect in full-stack application, how will you structure the app that will have most efficient structure and the wheel will be super reliable and easy to extend and how to break existing functionality and guide me please how to do it."
+    },
+    {
+      "id": "29AFC9D24A254C43BE4355148689CF4C",
+      "language": "en",
+      "batch": "batch2-en-05.json",
+      "input": "Guys, I need your assistance with something. I'm trying to fix this social URL debugger app, which basically currently have SA account deployed to classification store prod project. But the problem is that like organization level wide we have quota on how much data this Every user can query and GCP doesn't distinguish between a real user and the SA account user So it means that basically organization level which is like 10 terabytes per day enforcement is enforced for everything audit breaks the app so I need somehow to fix this",
+      "gold": "Guys, I need your assistance with something. I'm trying to fix this social URL debugger app, which currently have SA account deployed to classification store prod project. But the problem is that organization level wide we have quota on how much data this every user can query and GCP doesn't distinguish between a real user and the SA account user. So it means that organization level which is 10 terabytes per day enforcement is enforced for everything, audit breaks the app so I need somehow to fix this."
+    },
+    {
+      "id": "2E8CE34F1BFC46A89AEF5056A52A203C",
+      "language": "en",
+      "batch": "batch2-en-05.json",
+      "input": "I noticed some issue on the website because the file is pretty large when we serve it and then basically it takes time it to load and First of all we don't see nothing and then only video is displayed so let's do something smart like the video tag should support poster so let's see that this poster is the same sign as we render the video we will render the poster and then the video will play while it's loaded so basically like we implement it in smartlay with lazy load so first the poster will be displayed and after the video will play so the user will always see something so first he will see image and then it will come to live",
+      "gold": "I noticed some issue on the website because the file is pretty large when we serve it and then it takes time it to load and first of all we don't see nothing and then only video is displayed. So let's do something smart, the video tag should support poster, so let's see that this poster is the same sign as we render the video, we will render the poster and then the video will play while it's loaded, so we implement it in smartlay with lazy load so first the poster will be displayed and after the video will play so the user will always see something, so first he will see image and then it will come to live."
+    },
+    {
+      "id": "3963D23AC9F942B8A8A208EEB206A7E8",
+      "language": "en",
+      "batch": "batch2-en-05.json",
+      "input": "Okay, let's try this new transcription mechanism. We We should see it one more time as as I speak, so I I should be able like to speak really nicely and when the meeting meeting is starting, I should see different blocks so So I'm going to like to speak for for 30 seconds, and these 30 seconds it should She'll show me my speech and when the speech is created I should be able to speak nicely as we speak so the new section I don't understand what's going on new section is not appeared the app is completely broken",
+      "gold": "Okay, let's try this new transcription mechanism. We should see it one more time as I speak, so I should be able to speak really nicely and when the meeting is starting, I should see different blocks so I'm going to like to speak for 30 seconds, and these 30 seconds it should she'll show me my speech and when the speech is created I should be able to speak nicely as we speak so the new section I don't understand what's going on new section is not appeared the app is completely broken."
+    },
+    {
+      "id": "5310B708DB17491ABA06DF48F9D59924",
+      "language": "en",
+      "batch": "batch2-en-05.json",
+      "input": "Let's see if this live preview is working now. Let's see if we can see the behavior consistent here and how fine it is working so basically I'm not sure if this behavior is working good or it's not working good. So basically before we upgrade it worked really really nice, but now I'm not sure.",
+      "gold": "Let's see if this live preview is working now. Let's see if we can see the behavior consistent here and how fine it is working so I'm not sure if this behavior is working good or it's not working good. So before we upgrade it worked really really nice, but now I'm not sure."
+    },
+    {
+      "id": "5A00867EF6E8479E9B52B057CACF2C53",
+      "language": "en",
+      "batch": "batch2-en-05.json",
+      "input": "that I thought about is maybe we can introduce some kind of files of embedding that we can embed like periodically our messages and basically we can host maybe our app in Kubernetes introducing GitLab CI/CD. Let's think where the app should be hosted, how best to access via application. So it will be best if the app will be deployed, I think, and I thought about like Gemini how it used like index files like that it stored in GCS to accommodate knowledge. That way I think it can be very, very useful So let's think about this too How to create winning assistant to achieve my goal and my goal is basically to plan and create this kind of assistant that will incorporate my knowledge so it will be really useful for my teams and day-to-day communication",
+      "gold": "That I thought about is maybe we can introduce some kind of files of embedding that we can embed periodically our messages and we can host maybe our app in Kubernetes introducing GitLab CI/CD. Let's think where the app should be hosted, how best to access via application. So it will be best if the app will be deployed, I think, and I thought about Gemini how it used index files that it stored in GCS to accommodate knowledge. That way I think it can be very, very useful. So let's think about this too. How to create winning assistant to achieve my goal and my goal is to plan and create this kind of assistant that will incorporate my knowledge so it will be really useful for my teams and day-to-day communication."
+    },
+    {
+      "id": "655CBAFCD6CD48C28F5358399188CACC",
+      "language": "en",
+      "batch": "batch2-en-06.json",
+      "input": "I don't like this team This team is not looking good We need like Polish dark team I ask you premium dark team What the shit you created I don't know It doesn't match our overall experience The bar left bar is like still blue It should be dark also like black So the same pattern, same everything but dark black The whole content shows black not grey so it's not polish theme Like the lights not looking great I ask you like polished premium design you created a shitty slope",
+      "gold": "I don't like this team. This team is not looking good. We need Polish dark team. I ask you premium dark team. What the shit you created? I don't know. It doesn't match our overall experience. The bar left bar is still blue. It should be dark also black. So the same pattern, same everything but dark black. The whole content shows black not grey so it's not polish theme. The lights not looking great. I ask you polished premium design, you created a shitty slope."
+    },
+    {
+      "id": "6B9451EA5F274D80887C7060AF1EFAA3",
+      "language": "en",
+      "batch": "batch2-en-06.json",
+      "input": "I want to see the quality of the new model also the speed when we using the large model instead so the large model should be more precise audit should be better displaying the text so I want to understand like the experience how basically the experience can work and how basically we can delete this experience or unleash this experience to the people so basically let me try to see how basically this thing behaves and see if it improves or not improves in the given moment. So basically, if you unleash the button, the experience should stay the same.",
+      "gold": "I want to see the quality of the new model also the speed when we using the large model instead, so the large model should be more precise, audit should be better displaying the text. So I want to understand the experience how the experience can work and how we can delete this experience or unleash this experience to the people. So let me try to see how this thing behaves and see if it improves or not improves in the given moment. So if you unleash the button, the experience should stay the same."
+    },
+    {
+      "id": "734DD679151F41958177B3081210F238",
+      "language": "en",
+      "batch": "batch2-en-06.json",
+      "input": "Let me see basically if tooltip is working now. Yeah, the tooltip is perfected. But I think like what you did, you changed the position of the heart. It's a very good thing. Let's not measure. I want to see if I can do it in the smart way I'm not going to be a good guy I think I have a mom B***h E*****y screenshot E******",
+      "gold": "Let me see if tooltip is working now. Yeah, the tooltip is perfected. But I think what you did, you changed the position of the heart. It's a very good thing. Let's not measure. I want to see if I can do it in the smart way. I'm not going to be a good guy. I think I have a mom. B***h. E*****y screenshot. E******."
+    },
+    {
+      "id": "8F10E450684C4D1BB30E8BEF932ACF3F",
+      "language": "en",
+      "batch": "batch2-en-06.json",
+      "input": "Currently the doc states that basically we have two teams one is basically going to deprecate Amazon Kinesis and one going basically to create a new system, new components. This is basically conversion evolve naming maybe not the best because it gives that one team is basically going to be legacy team and one team going to be like new innovative team building new ACI teachers. And we don't want that. What we want in practice is, of course, to deprecate components and replace them by the new components, but we want two teams basically develop stuff, create a new functionality. So we need basically the structure of the dog that way that now the team will be legacy, boss will be responsible of the whole scope but of course some of them have better practice in Amazon Kinesis, some of them have better focus at Naboo and we need somehow to use it to create like small transition that will make sense.",
+      "gold": "Currently the doc states that we have two teams, one is going to deprecate Amazon Kinesis and one going to create a new system, new components. This is conversion evolve naming maybe not the best because it gives that one team is going to be legacy team and one team going to be new innovative team building new ACI teachers. And we don't want that. What we want in practice is, of course, to deprecate components and replace them by the new components, but we want two teams develop stuff, create a new functionality. So we need the structure of the dog that way that now the team will be legacy, boss will be responsible of the whole scope but of course some of them have better practice in Amazon Kinesis, some of them have better focus at Naboo and we need somehow to use it to create small transition that will make sense."
+    },
+    {
+      "id": "92007AEC07F345FCAEC1A2DF43B8102B",
+      "language": "en",
+      "batch": "batch2-en-06.json",
+      "input": "Django JJuust st making going to create extendable structure just like in travel project so wow react components wow design separation of concerns wow everything like like architect would like design it and we will going to create co structure with our monorepo that both contains like our web app and the marketing site Next.js so it will be extendable following the patterns of the travel project",
+      "gold": "Django JJuust st making going to create extendable structure just like in travel project so wow react components wow design separation of concerns wow everything architect would design it and we will going to create co structure with our monorepo that both contains our web app and the marketing site Next.js so it will be extendable following the patterns of the travel project."
+    },
+    {
+      "id": "A430C24EADD3474E8F7E19E66175A4C3",
+      "language": "en",
+      "batch": "batch2-en-06.json",
+      "input": "I don't know but it seems that I think like the engine should always happen first and then basically other things should happen like the Amazon Kinesis happening next but maybe it will be delaying ingestion specific on the engine side or on Amazon Kinesis side so maybe we should pad like in both directions so first like the priority we should extract date from category run this date and then minus one day and then plus one day maybe that way it will be even more reliable maybe we should think it that way",
+      "gold": "I don't know but it seems that I think the engine should always happen first and then other things should happen the Amazon Kinesis happening next but maybe it will be delaying ingestion specific on the engine side or on Amazon Kinesis side so maybe we should pad in both directions so first the priority we should extract date from category run this date and then minus one day and then plus one day maybe that way it will be even more reliable maybe we should think it that way."
+    },
+    {
+      "id": "B1EAF1B46CB54F119F85B5C80A2A8635",
+      "language": "en",
+      "batch": "batch2-en-06.json",
+      "input": "Please look deeply into conversation. I need you different views on the problem and how to sightseed the problem. What one side suggests, what another side thinks. About this suggestion and why things are not possible to the way basically that RDF is displayed. So basically I want you in detail to display me two different sites. One about like Argentic and how everything with agent can be really really fast and orchestrated. Another site what actually exists today and how it works and why Argentic is not the solution. Be detailed, give examples based on the conversation, catch all the context. I need full details of the situation.",
+      "gold": "Please look deeply into conversation. I need you different views on the problem and how to sightseed the problem. What one side suggests, what another side thinks. About this suggestion and why things are not possible to the way that RDF is displayed. So I want you in detail to display me two different sites. One about Argentic and how everything with agent can be really fast and orchestrated. Another site what actually exists today and how it works and why Argentic is not the solution. Be detailed, give examples based on the conversation, catch all the context. I need full details of the situation."
+    },
+    {
+      "id": "C08DF8695888422797F2B9AA7AEB0FEC",
+      "language": "en",
+      "batch": "batch2-en-06.json",
+      "input": "Also, I don't like this approach of specifying like two-phase because like if it didn't it was not found using this date range then basically it's on user like to change and the dates what we can do in the drop down we can enter by default and create progressive mode and progressive mode will first scan seven days then 30 days then 90 days so it will increase proportionally and will stop if like 90 days is not found but that will be best balance so I think it's much better approach that like doing a moving the filter at all there should be always filter we should never scan the full table",
+      "gold": "Also, I don't like this approach of specifying two-phase because if it didn't it was not found using this date range then it's on user to change and the dates what we can do in the drop down we can enter by default and create progressive mode and progressive mode will first scan seven days then 30 days then 90 days so it will increase proportionally and will stop if 90 days is not found but that will be best balance so I think it's much better approach that doing a moving the filter at all there should be always filter we should never scan the full table."
+    },
+    {
+      "id": "D1FBBC6342084FBFB75794DCF286B5D0",
+      "language": "en",
+      "batch": "batch2-en-07.json",
+      "input": "We need preview to work smoothly, like real preview, so it's really should like type in really, really fast, and again, I don't understand like why suddenly I see non-related stuff in my live transcription, which the words that I'm not saying at all, they somehow triggered. I see some garbage thrown into live preview and then it disappears and like the text replaces. I see some strange behavior which I need you to fix and also when I un-press like I expect like immediate text insertion but like processing takes time",
+      "gold": "We need preview to work smoothly, real preview, so it's really should type in really, really fast, and again, I don't understand why suddenly I see non-related stuff in my live transcription, which the words that I'm not saying at all, they somehow triggered. I see some garbage thrown into live preview and then it disappears and the text replaces. I see some strange behavior which I need you to fix and also when I un-press I expect immediate text insertion but processing takes time."
+    },
+    {
+      "id": "DC62E25F2C8B41B0A2064A709681FAAC",
+      "language": "en",
+      "batch": "batch2-en-07.json",
+      "input": "Let me see what is the experience like today So basically I'm saying long text and basically I'm expect that like to see this live transcription as I speak but this transcription not always reliable so I need to understand how it going to be outputted so I will know that basically the text is correct Please let me to enter the text in the best reliable way so the output will always show it nicely and in a basically Prefect position you hello you",
+      "gold": "Let me see what is the experience like today. So I'm saying long text and I'm expect that to see this live transcription as I speak but this transcription not always reliable so I need to understand how it going to be outputted so I will know that the text is correct. Please let me to enter the text in the best reliable way so the output will always show it nicely and in a Prefect position. You hello you."
+    },
+    {
+      "id": "EBBC2755A740434996A1D92DFE50FB0C",
+      "language": "en",
+      "batch": "batch2-en-07.json",
+      "input": "Ok, so let's do this. Let's leave it. Let's drop the default QAN 0.6 billion parameters and let's rename it to Visperer V3 so basically I want to hide like the exact model that we are using in our plan and let's make it default so and let's indicate a whisper V3 English so to say that it's only supported in English",
+      "gold": "Ok, so let's do this. Let's leave it. Let's drop the default QAN 0.6 billion parameters and let's rename it to Visperer V3 so I want to hide the exact model that we are using in our plan and let's make it default so and let's indicate a whisper V3 English so to say that it's only supported in English."
+    },
+    {
+      "id": "F4C172A9A98E457BAB4C5A21FA4B4604",
+      "language": "en",
+      "batch": "batch2-en-07.json",
+      "input": "I want you to check like the old commits and see that basically on past commits history that we have we fixed all of the permutation and issues. So first of all, the time that we like injected wrong text or like the transcription audio LLM like App Store like UI issues all the issues that we fixed like speed performance I want to have dedicated agent and I want to learn from all of the mistakes that we did till now",
+      "gold": "I want you to check the old commits and see that on past commits history that we have we fixed all of the permutation and issues. So first of all, the time that we injected wrong text or the transcription audio LLM App Store UI issues all the issues that we fixed speed performance I want to have dedicated agent and I want to learn from all of the mistakes that we did till now."
+    },
+    {
+      "id": "F90CA478826147B286B79BE968F510F3",
+      "language": "en",
+      "batch": "batch2-en-07.json",
+      "input": "We need to create ourselves this new mechanism, this advanced mechanism that we are talking about. So basically, we need to implement this advanced streaming with this current Whisper Kit engine that exists in Pro version. Let's build it because if they was able to build it, we should be able to build it. Of course we should be close to Nemetron as possible, we should be accurate, like really, really accurate, but really, really fast. We need super smart implementation, cutting edge, everything that you learn, everything that you know, like you are architecting, like OpenAI, you're like one of the team members who created WhisperKit, like professional, who needs to implement this really, really fast, really, really smart cutting edge, smart, but like a currency and per performance is your key goal.",
+      "gold": "We need to create ourselves this new mechanism, this advanced mechanism that we are talking about. So we need to implement this advanced streaming with this current Whisper Kit engine that exists in Pro version. Let's build it because if they was able to build it, we should be able to build it. Of course we should be close to Nemetron as possible, we should be accurate, really, really accurate, but really, really fast. We need super smart implementation, cutting edge, everything that you learn, everything that you know, you are architecting, OpenAI, you're one of the team members who created WhisperKit, professional, who needs to implement this really, really fast, really, really smart cutting edge, smart, but a currency and per performance is your key goal."
+    },
+    {
+      "id": "61B42775F6E744D38B8E41CFC3C9A0F8",
+      "language": "he",
+      "batch": "batch2-he-01.json",
+      "input": "יש את התמלול הזה בעברית וזה כאילו המודל הכי טוב בעברית שקיים בכלל שלימדו אותו אי פעם אז הוא מבין הכי טוב וגם הטקסט מתאסף פה דרך אגב גם פה זה כאילו קיבל פיצ'רים חדשים זה כאילו יודע לגדול ולהציג יותר טקסט בלייב טרנסקריפשן עד רמה מסוימת אז הוא בעצם מראה לך מה הוא כותב וגם כשאני עוזב פה",
+      "gold": "יש את התמלול הזה בעברית וזה המודל הכי טוב בעברית שקיים בכלל שלימדו אותו אי פעם, אז הוא מבין הכי טוב וגם הטקסט מתאסף פה. דרך אגב, גם פה זה קיבל פיצ'רים חדשים, זה יודע לגדול ולהציג יותר טקסט בלייב טרנסקריפשן עד רמה מסוימת, אז הוא בעצם מראה לך מה הוא כותב וגם כשאני עוזב פה."
+    },
+    {
+      "id": "7BB79BFDA5524CF58633FDB2DD8C1413",
+      "language": "he",
+      "batch": "batch2-he-01.json",
+      "input": "ככה שהוא מקליט את הטקסט ואתה יכול ללחוץ על L ועכשיו הוא כאילו מאזין לכל הפגישה והוא מצטט אותה ואחרי זה הוא גם עושה פולישינג עם LLM כלומר ואני לא יוצא לאינטרס לאינטרנט בכלל אני כאילו לקהלי רץ בתוך המחודה עם privacy מלא כאילו וזה נחמד, זה גם מבין בעברית בשונה מג'מיני ויכול לסכם לך ואתה מקבל סיכום",
+      "gold": "ככה שהוא מקליט את הטקסט ואתה יכול ללחוץ על L ועכשיו הוא מאזין לכל הפגישה והוא מצטט אותה ואחרי זה הוא גם עושה פולישינג עם LLM כלומר ואני לא יוצא לאינטרס לאינטרנט בכלל, אני לקהלי רץ בתוך המחודה עם privacy מלא וזה נחמד, זה גם מבין בעברית בשונה מג'מיני ויכול לסכם לך ואתה מקבל סיכום."
+    },
+    {
+      "id": "BA4FD46C510B4C83B509BDA1A4890A42",
+      "language": "he",
+      "batch": "batch3-mixed-03.json",
+      "input": "אז הוא יודע את האפליקציה ושוב פעם יש לך גם כל מיני אופציות שאתה יכול כאילו ללחוץ ככה ואז הוא הבין את הווי שלך ואתה גם יכול לראות יוטיוב יותר טקסט ופחות טקסט ככל שאתה תדבר יותר אז כאילו הטקסט יופיע ואז אתה יכול לעשות expand collapse כן אתה יכול לראות, אתה יכול להחליף מודלים, אתה יכול כאילו לשלוט על הפרומטים",
+      "gold": "אז הוא יודע את האפליקציה, ושוב פעם יש לך גם כל מיני אופציות שאתה יכול ללחוץ ככה. ואז הוא הבין את הווי שלך, ואתה גם יכול לראות יוטיוב — יותר טקסט ופחות טקסט. ככל שאתה תדבר יותר, אז הטקסט יופיע, ואז אתה יכול לעשות expand collapse. כן, אתה יכול לראות, אתה יכול להחליף מודלים, אתה יכול לשלוט על הפרומטים."
+    },
+    {
+      "id": "F5A4D71DDEC74600AB39734951C3EC45",
+      "language": "he",
+      "batch": "batch2-he-01.json",
+      "input": "עכשיו אני כאילו יכול לדבר בעברית והדבר הזה אפילו עושה live transcription בעברית כי לוקח לו קצת זמן להבין את השפה שאנחנו מדברים אבל אחרי שאנחנו מדברים את השפה אז הוא מתחיל לעשות output לטקסט וזה כאילו ממש ממש מגניב ואז עשיתי expand collapse כאילו הוספתי פה עוד כל מיני פיצ'רים שאתה יכול לעשות פאוט אתה יכול גם להקליט פגישות בזום כאילו כל מיני דברים מאוד חמודים",
+      "gold": "עכשיו אני יכול לדבר בעברית והדבר הזה אפילו עושה live transcription בעברית, כי לוקח לו קצת זמן להבין את השפה שאנחנו מדברים. אבל אחרי שאנחנו מדברים את השפה אז הוא מתחיל לעשות output לטקסט, וזה ממש ממש מגניב. ואז עשיתי expand collapse, הוספתי פה עוד כל מיני פיצ'רים שאתה יכול לעשות. פאוט, אתה יכול גם להקליט פגישות בזום, כל מיני דברים מאוד חמודים."
+    },
+    {
+      "id": "993292A9B3624856B1E00D18B8D1B317",
+      "language": "he",
+      "batch": "batch2-he-02.json",
+      "input": "שככה אתה מפעיל אותו, אתה מתחיל לדבר, ואז יש את האל, שזה כאילו חיינספרי, ואז אתה יכול כאילו לדבר ככה, להשאיר את זה פתוח. כן, אבל אם אתה צריך, בסופו של דבר... בסופו של דבר לשמוע את המיטינג, אז יש לך את הכפתור הזה לעשות Unmute, כאילו. ואז ה-output voice, או כאילו גם יקשיב ל-output voice אם יש output voice. וגם למה שאני אומר, אז זה מוט, וגם אתה יכול לעצור באמצע, נגיד אם אתה לא רוצה שיקלם, ואז אתה יכול להמשיך, ואז הוא כאילו ממשיך. אז יש פה כאילו מיליון, כן, יש פה מיליון.",
+      "gold": "שככה אתה מפעיל אותו, אתה מתחיל לדבר, ואז יש את האל, שזה חיינספרי, ואז אתה יכול לדבר ככה, להשאיר את זה פתוח. כן, אבל אם אתה צריך, בסופו של דבר... בסופו של דבר לשמוע את המיטינג, אז יש לך את הכפתור הזה לעשות Unmute. ואז ה-output voice, או גם יקשיב ל-output voice אם יש output voice. וגם למה שאני אומר, אז זה מוט, וגם אתה יכול לעצור באמצע, נגיד אם אתה לא רוצה שיקלם, ואז אתה יכול להמשיך, ואז הוא ממשיך. אז יש פה מיליון, כן, יש פה מיליון."
+    },
+    {
+      "id": "92F8A6DFD8CD4B91844D784BCDE4F3BF",
+      "language": "he",
+      "batch": "batch2-he-02.json",
+      "input": "אני חושב שהיתרון הכי גדול שם זה שיש טיסת אלעל שיוצאת ואחרי זה עם פינר וגם הזמנים הם בסדר ועדיין כאילו המחיר הוא תכלס 900 ומשהו דולר כל שער שבדקתי הייתה עצות יותר גרועות עם לופטנזה ואחרים בתכלס כאילו זה עולה האופי לעוד יותר כסף.",
+      "gold": "אני חושב שהיתרון הכי גדול שם זה שיש טיסת אלעל שיוצאת ואחרי זה עם פינר וגם הזמנים הם בסדר ועדיין המחיר הוא תכלס 900 ומשהו דולר כל שער שבדקתי הייתה עצות יותר גרועות עם לופטנזה ואחרים בתכלס זה עולה האופי לעוד יותר כסף."
+    },
+    {
+      "id": "AD965B1A8AA94D2690ACCDD28E8D10E4",
+      "language": "he",
+      "batch": "batch2-he-02.json",
+      "input": "אז תראה, אז אני יכול אלף כל כאילו לעשות את זה חנס פרי לחלוטין וכאשר אני מדבר יש פה גם המודים עכשיו שהם כאילו מבינים בעברית ואתה רואה איזה כאילו גם כותב בכל שפה וגם מבין אותי בעברית שאני כותב ויש פה גם קצת כפתורים אתה יכול לעצור באמצע אתה יכול גם to capture עכשיו meeting אוטומטי שזה יתמלל לך כל פגישה או כאילו גם יכול אם אני לוחץ על זה גם הוא ישמע מה אתה אומר",
+      "gold": "אז תראה, אז אני יכול אלף כל לעשות את זה חנס פרי לחלוטין וכאשר אני מדבר יש פה גם המודים עכשיו שהם מבינים בעברית ואתה רואה איזה גם כותב בכל שפה וגם מבין אותי בעברית שאני כותב ויש פה גם קצת כפתורים. אתה יכול לעצור באמצע, אתה יכול גם to capture עכשיו meeting אוטומטי שזה יתמלל לך כל פגישה, או גם יכול אם אני לוחץ על זה גם הוא ישמע מה אתה אומר."
+    },
+    {
+      "id": "20D6BF69F277465194B4B2CD952C3346",
+      "language": "ru",
+      "batch": "batch2-ru-01.json",
+      "input": "давай посмотрим как это работает на русском языке я говорю очень большое длинное предложение я жду чтобы текст он",
+      "gold": "Давай посмотрим, как это работает на русском языке. Я говорю очень большое длинное предложение, я жду, чтобы текст он..."
+    },
+    {
+      "id": "1C1EEC0A13B644FE9C22692ADAE98D78",
+      "language": "en",
+      "batch": "batch3-mixed-00.json",
+      "input": "This looks beautiful, but the colors like there are not enough colors. It doesn't look like truly premium UI. Like I happy with UX. I like it. It's good, but UI need to be improved. It should be like super sleek. Wow. Wow effect.",
+      "gold": "This looks beautiful, but the colors there are not enough colors. It doesn't look like truly premium UI. I happy with UX. I like it. It's good, but UI need to be improved. It should be super sleek. Wow. Wow effect."
+    },
+    {
+      "id": "27F4F6B21AEA43809EF65B87FA0368C2",
+      "language": "en",
+      "batch": "batch3-mixed-00.json",
+      "input": "What's strange to me in this analysis is that like we added to all production tables entity id so I'm not sure like I follow why when we like change logs and other tables if they have index by entity id which was introduced isn't used and why it's so costly why we need clustering if we have index",
+      "gold": "What's strange to me in this analysis is that we added to all production tables entity id so I'm not sure I follow why when we change logs and other tables if they have index by entity id which was introduced isn't used and why it's so costly why we need clustering if we have index."
+    },
+    {
+      "id": "3A5959FC8F34401D82597C2999A4839F",
+      "language": "en",
+      "batch": "batch3-mixed-01.json",
+      "input": "Is there any else workhouse that is available that basically can be used for interactive queries? that we can use or some serverless that we can use that is available to query msmle",
+      "gold": "Is there any else workhouse that is available that can be used for interactive queries? That we can use or some serverless that we can use that is available to query msmle."
+    },
+    {
+      "id": "3B4EEDB129ED4F99930DF2A6E0AF17FC",
+      "language": "en",
+      "batch": "batch3-mixed-01.json",
+      "input": "My app is basically what it's doing. It's generating transcription from the text and based on this transcription basically we are polishing with LLM using when so maybe I can replace with this model audit will be faster",
+      "gold": "My app is what it's doing. It's generating transcription from the text and based on this transcription we are polishing with LLM using when so maybe I can replace with this model audit will be faster."
+    },
+    {
+      "id": "41A9C484C2C04A9FBF591409C41A65A1",
+      "language": "en",
+      "batch": "batch3-mixed-01.json",
+      "input": "Is there any indication on the table itself or somehow smart filtering that we can do to allow social categories because I don't like these hard coded approaches because if something change it can miss stuff so it should be like really like clever way To Do it and simple way To Do it",
+      "gold": "Is there any indication on the table itself or somehow smart filtering that we can do to allow social categories because I don't like these hard coded approaches because if something change it can miss stuff so it should be really clever way to do it and simple way to do it."
+    },
+    {
+      "id": "46736D738707461780E15558955512FB",
+      "language": "en",
+      "batch": "batch3-mixed-01.json",
+      "input": "What the hell did you fix? I asked you like to increase the height Like I asked you to build like best UX, UI premium look and you did shit Like how it's supposed to work like I asked you to create amazing user experience",
+      "gold": "What the hell did you fix? I asked you to increase the height. I asked you to build best UX, UI premium look and you did shit. How it's supposed to work like I asked you to create amazing user experience."
+    },
+    {
+      "id": "68CD8135CFDF4D93B99D6A99F18E692F",
+      "language": "en",
+      "batch": "batch3-mixed-02.json",
+      "input": "I think like what we need is basically something else so we first want to show like the modality the cost per meter per million per modality is great we also want to show like monthly cost and share from like the whole total but we need like best representation of it like those bars are just confusing",
+      "gold": "I think what we need is something else, so we first want to show the modality, the cost per meter per million per modality is great, we also want to show monthly cost and share from the whole total, but we need the best representation of it — those bars are just confusing."
+    },
+    {
+      "id": "6D7433DE073145CFAAE920CCE50C3AD0",
+      "language": "en",
+      "batch": "batch3-mixed-02.json",
+      "input": "I think much better representation will be to show like modality and then basically monthly cost daily cost and understand like amount per million but like we need",
+      "gold": "I think a much better representation will be to show modality and then monthly cost, daily cost, and understand the amount per million, but we need."
+    },
+    {
+      "id": "78FA19E1470D4AA0A95620BD63ABECFF",
+      "language": "en",
+      "batch": "batch3-mixed-02.json",
+      "input": "Maybe better solution is like to fetch everything and then like only to filter by default for social categories so that way I think if user wants additional categories he can check them in the Dropbox",
+      "gold": "Maybe a better solution is to fetch everything and then only to filter by default for social categories, so that way I think if a user wants additional categories he can check them in the Dropbox."
+    },
+    {
+      "id": "791ABBFA4B3D4C3CBE0821065191152F",
+      "language": "en",
+      "batch": "batch3-mixed-02.json",
+      "input": "Tell me why locally I don't see a when I run npn run dev the output of the debug when we change like using the script like it's not displaying in my terminal I attach you the screen so you can see what's happening",
+      "gold": "Tell me why locally I don't see a when I run npn run dev the output of the debug when we change using the script, it's not displaying in my terminal. I attach you the screen so you can see what's happening."
+    },
+    {
+      "id": "7A94B3F53E9C4E8AB25D616B5584CF1B",
+      "language": "en",
+      "batch": "batch3-mixed-02.json",
+      "input": "Just to verify, what we want is basically apply date filter based on the user choice and if it's end, in addition, add another mode that is called basically a progressive that will work as you described.",
+      "gold": "Just to verify, what we want is apply date filter based on the user choice and if it's end, in addition, add another mode that is called a progressive that will work as you described."
+    },
+    {
+      "id": "7BA9E34A255F4A5FAAEBBFCAAE6A57A8",
+      "language": "en",
+      "batch": "batch3-mixed-02.json",
+      "input": "Also maybe small clarification, I think current metadata tab should be renamed to Overview or item overview or something and then the text should be probably called metadata because Like",
+      "gold": "Also maybe small clarification, I think the current metadata tab should be renamed to Overview or item overview or something, and then the text should be probably called metadata because."
+    },
+    {
+      "id": "833B59793A1544EDBDD94B3A9BA51DD3",
+      "language": "en",
+      "batch": "batch3-mixed-02.json",
+      "input": "Every tab should show basically its own data. So we have metadata which should be shown only in metadata tab. We have text which will be shown only in text. I also want to give you like the research below. Let's make a plan how to fix this properly.",
+      "gold": "Every tab should show its own data. So we have metadata which should be shown only in metadata tab. We have text which will be shown only in text. I also want to give you the research below. Let's make a plan how to fix this properly."
+    },
+    {
+      "id": "8AFB6829EAC24F3C83AE0109D9C76DED",
+      "language": "en",
+      "batch": "batch3-mixed-02.json",
+      "input": "So now it's working spectacular way it should be much faster it should hear us out and display whatever we should basically hear first and basically after we hear it out it should be probably better display and understand the nuances",
+      "gold": "So now it's working spectacular way, it should be much faster, it should hear us out and display whatever we should hear first, and after we hear it out it should be probably better display and understand the nuances."
+    },
+    {
+      "id": "A0F42F841FB749D39E3435704AB9F4EB",
+      "language": "en",
+      "batch": "batch3-mixed-02.json",
+      "input": "So preferable way of operation is that basically we will have some thing like formulas and queries and we calculate based on formulas and queries and not like some mock data.",
+      "gold": "So preferable way of operation is that we will have some thing like formulas and queries and we calculate based on formulas and queries and not like some mock data."
+    },
+    {
+      "id": "A41055FC54834FD18C90FE6E46A4BEA6",
+      "language": "en",
+      "batch": "batch3-mixed-02.json",
+      "input": "So basically, maybe we can summarize the above with the issues that we see today and why it's happening and we not even use all engines for let's break it down per platform to understand it and also like with XIFOR and others",
+      "gold": "So maybe we can summarize the above with the issues that we see today and why it's happening and we not even use all engines for — let's break it down per platform to understand it — and also with XIFOR and others."
+    },
+    {
+      "id": "A67D31A0553F4AACA4EDC83351FB3CA4",
+      "language": "en",
+      "batch": "batch3-mixed-02.json",
+      "input": "In Categories tab let's fix this UI issue Why final category and basically the risk is together Let's call it without final category just category so it will have enough space and let's fix the both column combined to one",
+      "gold": "In Categories tab, let's fix this UI issue. Why final category and the risk is together? Let's call it without final category, just category, so it will have enough space, and let's fix the both column combined to one."
+    },
+    {
+      "id": "AD042BD3105C4F45B40179A7A664D5B6",
+      "language": "en",
+      "batch": "batch3-mixed-03.json",
+      "input": "This explanation contains many, like, unnecessary details, like normal and fast priority cues, etc. Like we Basically what we're doing here is we're creating like interfaces of the team so we need to be more concise and clear.",
+      "gold": "This explanation contains many, unnecessary details, like normal and fast priority cues, etc. We what we're doing here is we're creating interfaces of the team, so we need to be more concise and clear."
+    },
+    {
+      "id": "B45743122D1C48FC8D7CF5C701714D69",
+      "language": "en",
+      "batch": "batch3-mixed-03.json",
+      "input": "No, but that doesn't make sense that only a hundred dollar per day Is used as OPEX because like this project are used for training of all our models we're running compute there like it can be that it's only this and do we use like a soltenant nodes in this pool for a ACI offline pipeline I need like full understanding of this",
+      "gold": "No, but that doesn't make sense that only a hundred dollar per day is used as OPEX because this project are used for training of all our models, we're running compute there, it can be that it's only this, and do we use a soltenant nodes in this pool for a ACI offline pipeline? I need full understanding of this."
+    },
+    {
+      "id": "B573E653AE954FBDAEBF3A5CAC2C2671",
+      "language": "en",
+      "batch": "batch3-mixed-03.json",
+      "input": "No, can you display me the timing like for every entry, for every place? I want like the like we displayed for previously for my nine I will give you the format",
+      "gold": "No, can you display me the timing for every entry, for every place? I want the we displayed for previously for my nine. I will give you the format."
+    },
+    {
+      "id": "B939EC98234B4974A44908C104A833E1",
+      "language": "en",
+      "batch": "batch3-mixed-03.json",
+      "input": "We need To Do it in smart way, we need to measure. We not only need like to make a change, we need basically to check every suggestion and see how fast we can improve the speed and make it faster. So basically what I want you To Do is to check every claim and only if it's faster we should accept it.",
+      "gold": "We need to do it in smart way, we need to measure. We not only need to make a change, we need to check every suggestion and see how fast we can improve the speed and make it faster. So what I want you to do is to check every claim and only if it's faster, we should accept it."
+    },
+    {
+      "id": "CE6BB6EF3738473E9B9C28C073AD889E",
+      "language": "en",
+      "batch": "batch3-mixed-03.json",
+      "input": "The LLM should work much faster now so we're going to say a very complex sentence and basically LLM will help us to structure this in best shape possible So we know that like this is long conversation and based on the long conversation we need like to create a new optimized a sentence so this sentence should be displayed nicely",
+      "gold": "The LLM should work much faster now, so we're going to say a very complex sentence and LLM will help us to structure this in best shape possible. So we know that this is long conversation and based on the long conversation, we need to create a new optimized a sentence, so this sentence should be displayed nicely."
+    },
+    {
+      "id": "E9CCCB93E930453B818CC541A7E692B3",
+      "language": "en",
+      "batch": "batch3-mixed-04.json",
+      "input": "Let's implement this performance fix because what we want is basically we introduce this MTP for speedup so we need the speedup to work we need it to work reliably and fast we need super fast correction",
+      "gold": "Let's implement this performance fix because what we want is we introduce this MTP for speedup, so we need the speedup to work. We need it to work reliably and fast. We need super fast correction."
+    },
+    {
+      "id": "F18D3DC7A6A44464810750E15E5BCE5E",
+      "language": "en",
+      "batch": "batch3-mixed-04.json",
+      "input": "I think what you did is basically you adapted this to any desktop but let's adapt also to be responsive for any mobile device so any mobile device should be also supported we should make a comprehensive fix so it will support any resolution possible and show best way possible what we have",
+      "gold": "I think what you did is you adapted this to any desktop, but let's adapt also to be responsive for any mobile device. So any mobile device should be also supported. We should make a comprehensive fix so it will support any resolution possible and show best way possible what we have."
+    },
+    {
+      "id": "FF422B3CF6824064A2B9FF1E7AC204BC",
+      "language": "en",
+      "batch": "batch3-mixed-04.json",
+      "input": "What is the maximum date range for all of the platforms? So basically look all of the platforms I want to understand Maybe we should fine-tune the progressive scan to include more data based on the maximum range that exists per platform",
+      "gold": "What is the maximum date range for all of the platforms? So look all of the platforms, I want to understand. Maybe we should fine-tune the progressive scan to include more data based on the maximum range that exists per platform."
+    }
+  ]
+}

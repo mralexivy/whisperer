@@ -1,0 +1,92 @@
+[
+ {
+  "id": "9C9E386A9E8346B0B5BBB8B46EDA0131",
+  "language": "en",
+  "durationSec": 132.3826875,
+  "input": "Just to make sure you understand and we're showing the right thing. We want to show like what was the plan for specific quarter we want to understand basically the timeline of the quarter that already was executed. If we are two months away, if we are one month away. Specifically, we want to understand what was delivered during this period of the report. So basically, we are looking on the quarter, but this is like my monthly report. So we are targeting, for example, we are looking for a month, right? So if like it's first month of the quarter, then like, of course we didn't execute a lot, but like if it's like last month on the quarter, so two tiers already been executed and then they're like progress of last month. So this should be like mindful, we should show the progress of the whole quarter. Like if it's like with some progress, but if it's like one third, two third of the quarter, like where we stand in the quarter and what's already was completed across the whole quarter. So it's a completely different view. And also what of the some important deliverables. So look at the team maybe how we show like the projects that were delivered and for every item of the quarter we also should show like some smart insights like what the projects that are delivered where we stand at the projects on higher level. So of course there are a lot of data and we need to show it smart way to understand like overall execution, how teams are executed, what we are pushed, what we didn't push. I think we need like both of the view of the individual teams and the full organization. So now you focus on the full organization, but you can see like the teams that are attached to it in the same repository and we need like to be able to drill down to every individual team as well. So basically what I want To Do is to take the whole manager hub and push it inside of this screen and view but in smart way so we will see both on the higher level and individual teams"
+ },
+ {
+  "id": "A4477508798343E1B2CB261ABC9E1423",
+  "language": "en",
+  "durationSec": 256.56025,
+  "input": "I want to tell you what missing in current dog. So in this dog that you created we are missing the scope so I really like the structure of executive summary. I really, but then we need like the scope that we have in previous version. And then I really like the technical implementation. It will be nice to add some diagram how the proposed solution look like. Use Excalidraw or some other diagram method to put in the doc. That is available for you. So we'll see. But I really liked how you did the technical implementation section, high level design, class cluster operation, data egress validation. I would call it like a security and privacy using the old tools, but you edit them perfectly. Then and you we need a Yeah We need a then elaboration about like technical solution how basically content classification will work about like how the classifiers are structured so the propose look use Glean to look how like Asana the box POC is structured and suggest the same a similar approach basically using like light or chest ration of inference graphs with JPC that like support batching. Please explain solution like this. Please address the policy change like we did. The advertisement facing reporting but write it as basically our recommended application Also in the doc you mention v1 and v2 but you are not explaining what is v2 so we need to explain that in v1 it's only text and v2 it's basically image we need like to tell which models will participate how it will work is it like model per category like multiple models verify it with glim what is feasible how basically inference will be orchestrated what a technology it will use to deploy it like Onyx or Triton or something else Use Glean to verify what we use today explain that it's Lean solution, it's not involving Apache Kafka for efficiency talk about batching and that batching will be on the seller on the service level and do correct resource allocation. Don't guess, check if it's Glean real data about our classifiers today to propose solutions. And tell about like how quality is measured, how retraining will work. Mention that like training currently is outside of the cluster, but it later on will be maybe on the cluster itself. Please you need to mention that we will create like also like special models, like in proper section mentioned that we will create like conversation AI models specifically for OpenAI, so we will train specifically new models for them. Then talk about validation POC, like what should happen. And like improve the dog structure. We need professional dog use humanized skill. Don't use any lines in the dog. It should be simple. Elegant English concise, but with all necessary technical details, easy to grasp and understand. So it should be like professional work like it created by like super professional architect. It should be like from one standpoint high level without like super small details, easy to grasp. But it should contain like all necessary information that we can share."
+ },
+ {
+  "id": "B5E43185BDF342A490A52FACF93B79CD",
+  "language": "en",
+  "durationSec": 141.1881875,
+  "input": "Ok, second Peter suggests basically do a quite different integration. So in technical section we can suggest like two different approaches. One approach when we deliver like package classifier to OpenAI. Basically, this is a fundamentally like the approach we want to test based on the privacy governments, great taste testing and timeline. Basically I want you to adapt like QA testing suggestions that Peter did like across all the approaches. But this is not MVP and not POC. This is basically like initial implementation that we need to finish. So this is like one option in technical implementation. We can note that there is multiple delivery options. One is basically we are delivering them like package classifier. The limitation is that based on this approach, like we cannot run the pipeline and we may need like inference graph, maybe like later on we're going to add images and we too and we cannot basically and then the training inside the cluster so we cannot basically make it efficient this way and count on them to every time to update the quality when the content change it will be like high burden on OpenAI team and we need to indicate why the solution have limitations. Basically this is how our account approach works that we are managing full VPC. So let's indicate in technical document or in technical section that we have basically two approaches that's possible like every one of them has pros and cons but second approach like our current approach which is like the second approach is like more robust and while it's at complexity to Divi it's easier to adapt to an oOpenAIand it's basically giving us something competitive that we are not giving our classifiers and telling them you can use whatever we are basically scaling it up we are doing the operation we are improving it it's it's it's it leaves a competitive mode at Divi more so let's indicate it's clearly in the document"
+ },
+ {
+  "id": "CA5239BDC69E4F6EA209F6A4053D62A2",
+  "language": "en",
+  "durationSec": 133.1831875,
+  "input": "Please check latest changes that we did basically for our implementation on testing like extraction of the frames like latest commit that we pushed I think they are fundamental problem like we tried like different platforms have different resolution it have different FPS but instead of matching rules per platform which is one of the solution I think better solution is to match them like the case like the resolution the FPS so we can always extract like necessary amount of frames I want you to use Glyn MCP so to understand like what needs to be done and how old key FE with CPU works per platform and how our new key FE works in GPU and find the best way maybe to improve current implementation that we can match all of the platform specifics. So basically based on FPS we will know how to adapt our code To Do best extraction. So I think this is much smarter solution from what we have now and I want you to like to research and research this idea. So with all these LKFE will be superior. So please use the Databricks MCP to extract relevant data for local datasets, extract basically from Glyn all the information necessary for basically how it should extract the latest commits with the boundaries we created and let's create a plan how we can adapt based on video specific the codec the FPS the everything and maybe we can set some rules so it's So it will work across all platforms specifically for YouTube and others when in YouTube like it's one FPS so like we need to be in a very creative and smart how we create these rules so always the outcome will be best and then I want you to use tilt with all those local data sets that you will obtain to test this approach and against current baseline that we currently have and see if it's superior and write a detailed message why it's better"
+ },
+ {
+  "id": "D327CF0AA96148FC92E7DC081E342641",
+  "language": "en",
+  "durationSec": 119.1744375,
+  "input": "This live transcription experience pretty good so I can say a lot of text and basically my word appears as I speak they typed in very quickly but they are not perfected in the way basically that is appropriate for this long text I think now I will begin a new sentence I want to see how basically this new sentence is typed in as I speak so basically when I catch my speech it should be instantly translated and basically you Thank you"
+ },
+ {
+  "id": "DF9423EB19714546A7DB7F6A550A780F",
+  "language": "en",
+  "durationSec": 152.49525,
+  "input": "We have created meeting notes screen so in meeting note screen basically what we have is is we detect automatically when When meeting starts, we can press the button and when we press the the button automatically what what should happen is that we're doing live transcription in in a period when then basically either it's maximum 30 seconds or basically Basically, a user stop talking and there is silence. That's how we know how to or split like the long transcription into to to to to different pieces and parts and basically our UI I already should should support this. And so what I expect expect to happen and we need like to wire it, that when we're doing meeting recording what's happening in that screen of meeting notes in live we see transcription is a pending based on our UI and based on stops like like we splitting it to different segments and every segment should have like duration time it should have like the speaker, speaker, we don't know how to detect it right now, but let's put some placeholder, some like name and then we basically could edit this name and edit. Also, in overview session when the meeting is stopped, we want to use a current LLM integration integration, MTP version of LLM that that basically will create the summary so overview is basically the summary so this is the current scope we should be able also like to delete meetings into transcript script, in the workspace we have meeting note screen that It should accommodate it. Everything, like, including the audio, should be there. So we should put it in place and that's what we need to implement and wire fully so it will be fully working feature"
+ },
+ {
+  "id": "E61FDF75EC1E48388C6CE04A48094DF5",
+  "language": "en",
+  "durationSec": 161.6009375,
+  "input": "Please look this report We trying to match old KFE that uses CPU and basically this KFE which uses CPU extracts much more frames than our current basically GPU implementation which I think extracts much better so I think like our quality of instruction much better but what we see especially if you will see like the summary as longer as video gets like less frame we extract compared like to original KFA so maybe and we did minimum and maximum CAP but maybe by doing that we introduce some regression some problem because we extract much less frames that we needed to extract So I want you To Do deep review, launch multiple agents and examine how did we support minimum-maximum based on the platform and see the insight you can get from this report. Don't assume things. Ask me clarification question. So why we... like extracting more frames can make more sense is because that way basically we can run the visual classifiers and get policy titles assignment. And here what I see, I see that our version didn't get assignment and like the baseline version which is Alt-Kfee got the assignment and I suspect but the frames are very similar so I don't understand why it can be this way so I want you to examine the report deeply try to understand some insights and to have a clue maybe we have a bit problem in our implementation or something that you can suggest and then let's think about improvement plan which also it will be great if we will do something to check this tilt to understand the differences and stuff like this. So I basically cut the candidate frames is basically this implementation which you currently have. Baseline is the old KFE. So based on this, I want you to scan the code, use code graph, understand what we have now and what is the difference and then let's do like the planning on improvement too much and the superior quality targeting also different lengths of the video again I remind you that we process until seven and a half minutes but many videos are 30 seconds on average but there are also long videos so we need to match them accordingly"
+ },
+ {
+  "id": "00C3A80250F04FB8A2AD7527DB4C55EF",
+  "language": "en",
+  "durationSec": 15.809875,
+  "input": "We need to implement multiple features. So feature number one, rebuilding shiny new UI. Feature number two, rebuilding nice backend. Feature number three, it's clearly should improve performance."
+ },
+ {
+  "id": "221CE4F04D4B4D348E6D8466F8C2D2C9",
+  "language": "en",
+  "durationSec": 13.008125,
+  "input": "Also, make sure that our site when published won't be affected by this because otherwise will be broken. So please analyze the change that we are making only like effect locally and won't fuck our production deployment."
+ },
+ {
+  "id": "40763A5F12FF45F6915B969081A7D109",
+  "language": "en",
+  "durationSec": 26.9168125,
+  "input": "Let's see how does it work today. So basically we want to see basically the transcription appearing and how this transcription is basically reappears today. So it should display the text really nicely. And basically they should perform"
+ },
+ {
+  "id": "628A259563C441D095B2839F73B39639",
+  "language": "en",
+  "durationSec": 15.7098125,
+  "input": "I need you to style logo like this fully transparent the logo should instead what is in this example be Poodle Toy I repeat and the name should be"
+ },
+ {
+  "id": "7DA18B0A86464284B182F5A0537DB520",
+  "language": "en",
+  "durationSec": 18.81175,
+  "input": "But then it's issue with auto detect It's the same platform Facebook Reels CDR and Facebook Reels ACDR It's the same fucking platform, you fucking idiot Then you need To Do union somehow or like to think how to fix it so we can get results from both of the platforms"
+ },
+ {
+  "id": "9ECC4A10D0A04EB4A51CCDA15C45B1EF",
+  "language": "en",
+  "durationSec": 10.1063125,
+  "input": "Something terribly wrong, nothing is working, everything is ignored, like location is wrong, the drawing looks like piece of shit"
+ },
+ {
+  "id": "BD494C88D95F4926ABAA138C031FD78B",
+  "language": "en",
+  "durationSec": 11.207,
+  "input": "I remind you, we are classification team We should not tell like what are issues We should only post the suggestions or update the blockers will be more clear"
+ },
+ {
+  "id": "DFF4A42DBA694CEC99EE243E16A89774",
+  "language": "en",
+  "durationSec": 13.9086875,
+  "input": "Let me try this test one more time. So basically I'm going to enhance free mode. Now I will press disable and mute and then I can unmute it. Let's see if it outputs the text."
+ }
+]

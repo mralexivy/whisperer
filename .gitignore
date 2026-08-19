@@ -65,3 +65,6 @@ reference/
 # Python bytecode from Tools/ scripts
 __pycache__/
 *.pyc
+
+# Pre-gold mmBERT data snapshot — local backup, not history
+Tools/mmbert/data.backup-pre-gold/

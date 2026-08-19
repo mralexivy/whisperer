@@ -1,0 +1,375 @@
+{
+  "arm" : "D_deterministic",
+  "note" : "polish(text:) — NOT polish(chunks:). The history persists chunk texts without sample spans, so no acoustic pause evidence exists for these ids and SentenceTerminator sees none. Boundary recall here is a lower bound on what ships.",
+  "outputs" : {
+    "0BEF7336DA5440D6A5A16C1DE473A608" : {
+      "latencySec" : 0.0023469924926757812,
+      "text" : "Somehow, the connection to database became very slow and even basic queries takes a lot of time. We need to understand why this is the case and correct it. So basically I need you details what Databricks we use and why it became so slow."
+    },
+    "0DC16613CD4D45B1987A43F993EABB5E" : {
+      "latencySec" : 0.0024930238723754883,
+      "text" : "Please use Glean MCP to validate the platform names because maybe we display platform names and the service item redactor support and other names. So we need to fully match them and we need to check against our app and what this API actually support. Use Glimp."
+    },
+    "1B2AE9D7B92D41299AB74F60208E2CA0" : {
+      "latencySec" : 0.0034680366516113281,
+      "text" : "Help me to reason about if this is indeed the case that like most of Amazon Kinesis is redundant and basically we are replacing it by Naboo like why how we can create maybe two squads that are better aligned because you left like the squads to be contained by the people that we have but basically we can do something smarter, something efficient, something 2026 AI era."
+    },
+    "1C1EEC0A13B644FE9C22692ADAE98D78" : {
+      "latencySec" : 0.0021510124206542969,
+      "text" : "This looks beautiful, but the colors like there are not enough colors. It doesn't look like truly premium UI. Like I happy with UX. I like it. It's good, but UI need to be improved. It should be like super sleek. Wow. Wow effect."
+    },
+    "1E92E9945C214BABBC461909930945CB" : {
+      "latencySec" : 0.0027419328689575195,
+      "text" : "This is way weird to me because like how it got access to full video it's impossible because we are doing the cut of the video to 400 50 seconds which is seven and a half minutes it's impossible what you are saying like it's not real root cause I you are lying."
+    },
+    "2BA26A066F9547F3A3BD9BB9F846C0D9" : {
+      "latencySec" : 0.0023139715194702148,
+      "text" : "This looks awful. This looks awful. It's nothing that like the style that I shared with you. Like nothing like animation looks ugly. All the implementation is shit and ugly. Like UI is terrible. Not think premium. Not think like what I guided you through."
+    },
+    "3A5959FC8F34401D82597C2999A4839F" : {
+      "latencySec" : 0.001891016960144043,
+      "text" : "Is there any else workhouse that is available that basically can be used for interactive queries? That we can use or some serverless that we can use that is available to query msmle."
+    },
+    "3B4EEDB129ED4F99930DF2A6E0AF17FC" : {
+      "latencySec" : 0.0033739805221557617,
+      "text" : "My app is basically what it's doing. It's generating transcription from the text and based on this transcription basically we are polishing with LLM using when so maybe I can replace with this model audit will be faster."
+    },
+    "3CF25F32122F4528B33FA7983E924982" : {
+      "latencySec" : 0.003661036491394043,
+      "text" : "Also, I think it will be very helpful if you review our commit. Many times look for commit messenger when we fix such issues. So maybe it will help us to determine which files we need to touch to determine and easily fix them. Like what was the problems like the debug sessions that we did. You can understand it based on the commits.\n\nSo it will help you to write down efficient skill."
+    },
+    "3E523B61B57A463BAF4FD13B623B4C2C" : {
+      "latencySec" : 0.0026029348373413086,
+      "text" : "I need you more. You missed a lot of changes that we made when you created me a changelog We did much more things, please examine the code in those commits that we did and from the beginning of creation of this branch I need all the details changes."
+    },
+    "04A18B06D3C14855B29CA44583542DE4" : {
+      "latencySec" : 0.0031579732894897461,
+      "text" : "It seems that for long sentence which we're going Tauri now we're going to see if it's working or not working so probably if a the live transcription display it properly we would have it spectacular in the sense that it will work fine but we will need to test it out to show and see what is the difference if this long transcription."
+    },
+    "5A39AADED95A477C946ADFEDED6160CA" : {
+      "latencySec" : 0.0020499229431152344,
+      "text" : "We will need to run the boat in parallel. Yeah, but the merge logic is what I care about. We'll find the best option to make sure quality without any regression and we'll give you the analysis. Okay. Great."
+    },
+    "5A1603143F72459AA587C9AA94B4F9C7" : {
+      "latencySec" : 0.0027040243148803711,
+      "text" : "I want you to query using local nfiles I want you to query gcs to find this fucking file and check where it exists and what is the issue with database why it's pointing wrong and I want you to fix it really understand that our fix will work and validate that it will work."
+    },
+    "5D85F987652A439C9D20C556BD4EF8A8" : {
+      "latencySec" : 0.0026249885559082031,
+      "text" : "Let's do the plan, but I don't want to create additional reservation. I want to reuse measurement reservation that we already have, so to not waste additional budget. So let's update the Terraform and plan how we can reuse it and what should I do to add my SA account."
+    },
+    "5ED12D1460D64DD78C1BFABD0B62F5DB" : {
+      "latencySec" : 0.0023120641708374023,
+      "text" : "Now not only the assignment evaluate the full interview and give me concise feedback regarding the assignment itself and how the candidate answered the questions and whether we should hire this candidate yes or no with clear verdict at the end."
+    },
+    "6A7C2FE6626949D7A06C32077AEEB764" : {
+      "latencySec" : 0.001999974250793457,
+      "text" : "Every time that we starting planning mode in the new session I want you to go to main branch pull the latest changes then create a new branch a new feature branch for it following the pattern."
+    },
+    "6D7433DE073145CFAAE920CCE50C3AD0" : {
+      "latencySec" : 0.0016859769821166992,
+      "text" : "I think much better representation will be to show like modality and then basically monthly cost daily cost and understand like amount per million but like we need."
+    },
+    "6E2D55EB0A9543B9B902694ACA85C627" : {
+      "latencySec" : 0.0020509958267211914,
+      "text" : "Please execute multiple agents in parallel to implement this plan fully and the fastest we can and reliable, parallelize as much as possible. As much as you can to make it like super efficient the implementation."
+    },
+    "7A94B3F53E9C4E8AB25D616B5584CF1B" : {
+      "latencySec" : 0.0020029544830322266,
+      "text" : "Just to verify, what we want is basically apply date filter based on the user choice and if it's end, in addition, add another mode that is called basically a progressive that will work as you described."
+    },
+    "07AFECBD64FE43998E90B1262AADC0CC" : {
+      "latencySec" : 0.0030800104141235352,
+      "text" : "Interesting, I just noticed something I don't see in our app query that populates a text tab why I don't see it like it's very strange I can see metadata categories impressions audio video images but I don't see text why it's missing it's not shown in the SQL queries debugger at all we need to find root cause for this."
+    },
+    "7BA9E34A255F4A5FAAEBBFCAAE6A57A8" : {
+      "latencySec" : 0.0018079280853271484,
+      "text" : "Also maybe small clarification, I think current metadata tab should be renamed to Overview or item overview or something and then the text should be probably called metadata because Like."
+    },
+    "7DA18B0A86464284B182F5A0537DB520" : {
+      "latencySec" : 0.0025900602340698242,
+      "text" : "But then it's issue with auto detect It's the same platform Facebook Reels CDR and Facebook Reels ACDR It's the same fucking platform, you fucking idiot Then you need To Do union somehow or like to think how to fix it so we can get results from both of the platforms."
+    },
+    "8AFB6829EAC24F3C83AE0109D9C76DED" : {
+      "latencySec" : 0.0023380517959594727,
+      "text" : "So now it's working spectacular way it should be much faster it should hear us out and display whatever we should basically hear first and basically after we hear it out it should be probably better display and understand the nuances."
+    },
+    "8B247FDA2BE8414593DE4B617842D06B" : {
+      "latencySec" : 0.0029129981994628906,
+      "text" : "No, you did it too short. It's not clear now. I wanted you to explicitly say by platforms why ACI WONTFIX the problem and we need like to add more engines audit means it will increase the cost but here's the suggestion what we can do and potential outcome and we need to sync with the team on our focus."
+    },
+    "12CF2018A58B469BA6D3453E0B9A97B1" : {
+      "latencySec" : 0.002013087272644043,
+      "text" : "כל הסושל אינטגרישנס שלנו בסדר? בסוף אופנסלט אחראים על ה-9 אז כן, כל האגריגציה של הליסט, כל הלוגיקה הזאת נשארת בצד שלהם. אנחנו, וזה חשוב שתהיה את ההפרדה הזאת. בסוף אנחנו?"
+    },
+    "13F712C5F0E54790BDD1D56BA1B31263" : {
+      "latencySec" : 0.0018290281295776367,
+      "text" : "I need you to create super professional looking slides for the above document keep design professional and sleek modern wow user experience I want you to create the slides in canvas."
+    },
+    "14F69591C5E7439594DD426DCD3A77DA" : {
+      "latencySec" : 0.0032470226287841797,
+      "text" : "After you identify the failures, I want you to see the src code and see why our application working while we see on background these errors. Because it's not clear why we are getting failures while our application is working. We have retry mechanism, but I don't understand like what causing. Are we using wrong syntax or something? What is the issue in our code?"
+    },
+    "25D0FECD77F34D7CB2A642D641A7732C" : {
+      "latencySec" : 0.0025299787521362305,
+      "text" : "Please validate what LAD is saying is true or not true and what is action item for me what LAD wants. So first of all I want to understand if the claim is true If the claim is valid I want to also check what needs to be done here."
+    },
+    "25F34E7D7F34412B94A419DC7B97402E" : {
+      "latencySec" : 0.0027370452880859375,
+      "text" : "In fraud, you forgot about fraud labs. Now fraud labs for def fraud research is the same group. So I want you to research and improve KPIs based on this and also look like what we already have in the spreadsheet whether it should be improved in the same guidance."
+    },
+    "27F4F6B21AEA43809EF65B87FA0368C2" : {
+      "latencySec" : 0.0028990507125854492,
+      "text" : "What's strange to me in this analysis is that like we added to all production tables entity id so I'm not sure like I follow why when we like change logs and other tables if they have index by entity id which was introduced isn't used and why it's so costly why we need clustering if we have index."
+    },
+    "30CA04CC2CCD4C728C5C31A1D65D97A8" : {
+      "latencySec" : 0.0020540952682495117,
+      "text" : "Please look on the report below Some of the issue are addressed already in pending commits Some of the issue we need to handle and they are not fixed so please read it and try to improve our plan."
+    },
+    "30E61504E52C43C4BFBABE236D88819E" : {
+      "latencySec" : 0.0033419132232666016,
+      "text" : "No, now we added labels in SQL queries debug tab They are not represent correctly I see only two queries executed whether there should be three one for audio tab and for image and one for video In fact the only one query executed for visual why is this the case and also we don't see result for image tab something is broken here."
+    },
+    "32CC812704DA4137A42D0914D578545F" : {
+      "latencySec" : 0.0022490024566650391,
+      "text" : "Also, please look at their SQL query stack should be always populated, should be always populated if no results are found. And I think we have a bug because we need to find the result for this platform. Something is definitely wrong here."
+    },
+    "40C20309187E4A199213865798D06765" : {
+      "latencySec" : 0.0031360387802124023,
+      "text" : "Please remember that based on my understanding if item classified without categories we don't have a row and we don't have override button so we need special handling for such cases and probably display it somewhere else or if it show no categories like we need like to handle all the possible options so we need To Do something smart here."
+    },
+    "41A9C484C2C04A9FBF591409C41A65A1" : {
+      "latencySec" : 0.0028439760208129883,
+      "text" : "Is there any indication on the table itself or somehow smart filtering that we can do to allow social categories because I don't like these hard coded approaches because if something change it can miss stuff so it should be like really like clever way To Do it and simple way To Do it."
+    },
+    "45BE8178DA8247B6B3D83A6D420E9C4F" : {
+      "latencySec" : 0.0025219917297363281,
+      "text" : "We need to deep dive who created this facts table and basically or facts dataset and repart native table. We need to understand who use it like you search all conversation history what you can find the queries like who created it in terraform how it was created."
+    },
+    "48ED0D6EA7C2458C8E8C32D676F63ED0" : {
+      "latencySec" : 0.001277923583984375,
+      "text" : "Let's do technical implementation how we can support this HIDNM API in social URL debugger. Please write implementation plan."
+    },
+    "68CD8135CFDF4D93B99D6A99F18E692F" : {
+      "latencySec" : 0.0030059814453125,
+      "text" : "I think like what we need is basically something else so we first want to show like the modality the cost per meter per million per modality is great we also want to show like monthly cost and share from like the whole total but we need like best representation of it like those bars are just confusing."
+    },
+    "78FA19E1470D4AA0A95620BD63ABECFF" : {
+      "latencySec" : 0.0020079612731933594,
+      "text" : "Maybe better solution is like to fetch everything and then like only to filter by default for social categories so that way I think if user wants additional categories he can check them in the Dropbox."
+    },
+    "98BDBF02DB2E4819A30C114F5A06546D" : {
+      "latencySec" : 0.0021429061889648438,
+      "text" : "I need you to construct me this report for data platform team and for MLE team responsible that cluster with all the events that happened. So I won't like to post this and discuss in a measurement data platform support."
+    },
+    "226C745315384A9DB5535AFAC835ED02" : {
+      "latencySec" : 0.0027239322662353516,
+      "text" : "Wait, you confusing something on Prod When I click on Edit I see Create Override Window And I don't see nothing there First I saw loading but nothing is displayed The GET doesn't work Maybe like the call is succeeding Maybe it shows something Verify we are lucky logs What's going on?"
+    },
+    "312C2C2679B845FDB13FE527D5785095" : {
+      "latencySec" : 0.0022629499435424805,
+      "text" : "It's interesting why hard animation became so awful and while the text is not very good shape maybe it's better, maybe it's worse I don't see it happening but something isn't right We need to understand why it's not performing so well."
+    },
+    "383F9519B3DF4B8B890877BECD4B5E47" : {
+      "latencySec" : 0.0019350051879882812,
+      "text" : "おやすみなさい хорошая девочка отличница Такая Алена нам нужна Может подружиться, всякнуть вместе, она его по урокам подтянет Наконец-то у Лёшки твоих ошибок по-русскому не будет, втсядзя."
+    },
+    "478AA63AAE8C4CA8B33DB445D1F19C33" : {
+      "latencySec" : 0.0025299787521362305,
+      "text" : "I don't understand why you say it is preferred Like for my use case using Firestore should be better because it's not manageable it's like a Lightware setup the only thing I need somehow to set up it in Terraform how can I do it?"
+    },
+    "586B21522D584331A8FE8CE2855F0AE5" : {
+      "latencySec" : 0.0019819736480712891,
+      "text" : "After changes are complete validate with final review all the changes. If they are valid please commit and deploy whatever needs to be deployed webapp via commit and their functions if you're doing the changes."
+    },
+    "623C108859AC4D4FBCC696EDE98D2BC5" : {
+      "latencySec" : 0.0025299787521362305,
+      "text" : "Please use exactly the same design and style me editable slides in react Maintain the design clarity Make sure it's pixel Prefect Every component, everything Clearly delivering the message and idea Don't skip KISS But use every like stick it exactly to the PDF attached."
+    },
+    "791ABBFA4B3D4C3CBE0821065191152F" : {
+      "latencySec" : 0.0022519826889038086,
+      "text" : "Tell me why locally I don't see a when I run npn run dev the output of the debug when we change like using the script like it's not displaying in my terminal I attach you the screen so you can see what's happening."
+    },
+    "833B59793A1544EDBDD94B3A9BA51DD3" : {
+      "latencySec" : 0.0025010108947753906,
+      "text" : "Every tab should show basically its own data. So we have metadata which should be shown only in metadata tab. We have text which will be shown only in text. I also want to give you like the research below. Let's make a plan how to fix this properly."
+    },
+    "952D487D3CE54B9D930D986F3D27F77F" : {
+      "latencySec" : 0.0022820234298706055,
+      "text" : "Autocomplete worked perfectly before we done latest changes in this session. So before it, it worked perfectly in all trip generation. See git history how it worked and we need to fix it now inside the small filter box. So we should have it."
+    },
+    "959C40126DB8410397A35817AEAED9D4" : {
+      "latencySec" : 0.0024099349975585938,
+      "text" : "Actually, let me audit for you But remember, I saw some discussions that you're planning to add permissions If you do this, it will break the app So please be mindful to this and ping me or classification dev when you plan to add permissions."
+    },
+    "2528BF4F6CD74CDCB943CD89C7B1EB7A" : {
+      "latencySec" : 0.0033730268478393555,
+      "text" : "We need to rewrite our doc basically based on the feedback provided here. So first of all read the feedback here. I don't want you to assume anything. I want you to make sure that you understand like what we are talking about here and ask me clarification questions on things that are not clear. But here's the question I ask and here's the product input."
+    },
+    "4105A19D410A429DBA3493BFF3F16022" : {
+      "latencySec" : 0.0018479824066162109,
+      "text" : "Currently, the popup for creating the overrides doesn't, like the height, it's minimal and we don't have scroll. So it's not intuitive and seems broken. We need to fix this immediately."
+    },
+    "33864F847F7A415CBD14B8819D38F152" : {
+      "latencySec" : 0.0031640529632568359,
+      "text" : "Okay, let's create our new reservation. As you suggested, I need detailed plan how To Do it. And also, in order to create it, I need you to estimate the cost.\n\nSo basically I need you to tell me how exactly To Do it step by step and project the cost for our reservation so performance will be good enough."
+    },
+    "46736D738707461780E15558955512FB" : {
+      "latencySec" : 0.0023630857467651367,
+      "text" : "What the hell did you fix? I asked you like to increase the height Like I asked you to build like best UX, UI premium look and you did shit Like how it's supposed to work like I asked you to create amazing user experience."
+    },
+    "047063AFF6EA47529B0597EE08E2D2A2" : {
+      "latencySec" : 0.0024620294570922852,
+      "text" : "I'm attaching you the context, build slide with the best premium look, like super professional, super slick, like you have now the full context, rebuild the full slides, more visualization, more beautiful UI. We need to make it pixel Prefect, beautiful and deliver the message clearly."
+    },
+    "4309685B6FE94C17AB573B6A9E697B5B" : {
+      "latencySec" : 0.0023080110549926758,
+      "text" : "Please validate the below plan and again like the progressive scan is not the issue that's how our app use it for consistency but what I need you like that we always will match pattern to always return the data this is more important."
+    },
+    "A0F42F841FB749D39E3435704AB9F4EB" : {
+      "latencySec" : 0.0017480850219726562,
+      "text" : "So preferable way of operation is that basically we will have some thing like formulas and queries and we calculate based on formulas and queries and not like some mock data."
+    },
+    "A35F4F0AF80C409A8E1530BCA4819195" : {
+      "latencySec" : 0.0030089616775512695,
+      "text" : "Analyze this result yourself, like you giving me a slope. Like check latest session that we created, this gives even less tickets. I don't see like full tickets by team. I don't see per team per month what I ask. I see like this dumb summary with some samples of the ticket. Ticket note everything so you didn't audit it like expected."
+    },
+    "A67D31A0553F4AACA4EDC83351FB3CA4" : {
+      "latencySec" : 0.0023840665817260742,
+      "text" : "In Categories tab let's fix this UI issue Why final category and basically the risk is together Let's call it without final category just category so it will have enough space and let's fix the both column combined to one."
+    },
+    "A898B9E3332B4B6CB02228B5084E9B38" : {
+      "latencySec" : 0.0023959875106811523,
+      "text" : "Choose which classification you want to use in the merger, right? Because in some, like if we set the items to both, right? Data science and ontology. On the transcription side, right? And wget classification, from data science, then we don't need to use the ontology."
+    },
+    "A41055FC54834FD18C90FE6E46A4BEA6" : {
+      "latencySec" : 0.0022230148315429688,
+      "text" : "So basically, maybe we can summarize the above with the issues that we see today and why it's happening and we not even use all engines for let's break it down per platform to understand it and also like with XIFOR and others."
+    },
+    "AD042BD3105C4F45B40179A7A664D5B6" : {
+      "latencySec" : 0.0020979642868041992,
+      "text" : "This explanation contains many, like, unnecessary details, like normal and fast priority cues, etc. Like we Basically what we're doing here is we're creating like interfaces of the team so we need to be more concise and clear."
+    },
+    "AF4E64AFD1DA460D9E3F754121CA9B9B" : {
+      "latencySec" : 0.0035250186920166016,
+      "text" : "Let me just say that progressive scan, even if it scan more data than exists, it's okay because like we did it cross-platform for all of the platforms and then scanning by ID, we actually scanning more days for consistency and that's fine. So basically even if we just scanning it and data exists for less days, it's okay. It should not cause any failure.\n\nSo I wouldn't invest in it."
+    },
+    "B573E653AE954FBDAEBF3A5CAC2C2671" : {
+      "latencySec" : 0.0018239021301269531,
+      "text" : "No, can you display me the timing like for every entry, for every place? I want like the like we displayed for previously for my nine I will give you the format."
+    },
+    "B939EC98234B4974A44908C104A833E1" : {
+      "latencySec" : 0.0029569864273071289,
+      "text" : "We need To Do it in smart way, we need to measure. We not only need like to make a change, we need basically to check every suggestion and see how fast we can improve the speed and make it faster. So basically what I want you To Do is to check every claim and only if it's faster we should accept it."
+    },
+    "B6250001F7F94B44B6DE3C80F7846840" : {
+      "latencySec" : 0.0026350021362304688,
+      "text" : "Yes, but now you like targeting the other side I don't understand why meta is not meeting and you extracting too much frame like hundreds frame is like 20 frame I need you to match the boundaries of the old KFE and not like a output like everything in the frames."
+    },
+    "B45743122D1C48FC8D7CF5C701714D69" : {
+      "latencySec" : 0.0030759572982788086,
+      "text" : "No, but that doesn't make sense that only a hundred dollar per day Is used as OPEX because like this project are used for training of all our models we're running compute there like it can be that it's only this and do we use like a soltenant nodes in this pool for a ACI offline pipeline I need like full understanding of this."
+    },
+    "BA4FD46C510B4C83B509BDA1A4890A42" : {
+      "latencySec" : 0.0037940740585327148,
+      "text" : "אז הוא יודע את האפליקציה ושוב פעם יש לך גם כל מיני אופציות שאתה יכול ללחוץ ככה ואז הוא הבין את הווי שלך ואתה גם יכול לראות יוטיוב יותר טקסט ופחות טקסט ככל שאתה תדבר יותר אז הטקסט יופיע ואז אתה יכול לעשות expand collapse כן אתה יכול לראות, אתה יכול להחליף מודלים, אתה יכול לשלוט על הפרומטים."
+    },
+    "BA11F73BFFF94147BDA773A34B9FF4A5" : {
+      "latencySec" : 0.0019739866256713867,
+      "text" : "The correct fix is not to remove meta in stream, you fucking idiot The correct fix is show all platforms which match the fucking url You understand me, you idiot All platforms that match in url."
+    },
+    "BB8E4EFAE6EC4163AF2E8837142EF6A2" : {
+      "latencySec" : 0.0026309490203857422,
+      "text" : "Look at this loading, please. It's nice, but it's truly basic and we need better UI UX. So we need like better animation, like better UX and UI in general, more premium look, more colors, maybe like more fancy. It, it should like really look stunning, super stunning. So let's make a plan to improve it."
+    },
+    "CB1FBD1A12D1430096DD238D5F5F9610" : {
+      "latencySec" : 0.0029919147491455078,
+      "text" : "Check something regarding BSF and BRF Use Glyn to check what currently is running because I think like in the past something worked in Amazon Kinesis and not at MLE engine so maybe BRF implementation that you found is only partial we need to understand BSF BRF fully flow and see whether our plan makes sense use Glean to verify."
+    },
+    "CD49A7FD196A46708F7533960D9403A6" : {
+      "latencySec" : 0.002490997314453125,
+      "text" : "Data documents that we created together with the security team input. And also it's a slim that containing all the data. Also use the feedback below that we need to update our solution and technical proposal accordingly. How it will work based on the what described below."
+    },
+    "CE6BB6EF3738473E9B9C28C073AD889E" : {
+      "latencySec" : 0.0030699968338012695,
+      "text" : "The LLM should work much faster now so we're going to say a very complex sentence and basically LLM will help us to structure this in best shape possible So we know that like this is long conversation and based on the long conversation we need like to create a new optimized a sentence so this sentence should be displayed nicely."
+    },
+    "CE66E51612224C6AAC8551DEA56F41FF" : {
+      "latencySec" : 0.0033600330352783203,
+      "text" : "Why on metadata text there is no expand collapsed and view full text like you have added in audio tab for example? The behavior should be consistent like all tabs like when we have long text we should not show it because otherwise like the row will be too long so we should have like long text behavior the same for all the tabs please fix this."
+    },
+    "D5E1A5B1E1654C3AB887A926A4A5F0D9" : {
+      "latencySec" : 0.0024360418319702148,
+      "text" : "This is not a bad problem progression. I don't know like the data shall be turned in 45 days So I want to test with progressive but again the issue is not the filter the issue the query that you validated doesn't work anymore what's happened?"
+    },
+    "D47E82DB88B4498BB526DFC5C789B305" : {
+      "latencySec" : 0.0022730827331542969,
+      "text" : "You need to make sure the approach will work with MCP Write Python scripts, write anything How smartly process the data You also got reference repo from it. They doing it somehow. Why it's shard that we will support it? I need working report now."
+    },
+    "D93556B539164CE699E7E9BBCE9E4736" : {
+      "latencySec" : 0.0015490055084228516,
+      "text" : "Okay, please commit and locally, only commit locally, descriptive, separate commit if it's different features. Don't use special ASCII characters, only local commit descriptive."
+    },
+    "DB16EA8047954579A66CB2552DCC3D72" : {
+      "latencySec" : 0.0028280019760131836,
+      "text" : "Então, por favor, target todas as plataformas e não só as plataformas que você escreveu Use Glyn MCP para entender todas as plataformas disponíveis e seu contexto e, basicamente, obtém enough sample para todas as plataformas e executamos o teste, a garantir que o fixe é compreensivo."
+    },
+    "DBA7F19E234E4C56ACF6D1D4FEFCFDF9" : {
+      "latencySec" : 0.0026400089263916016,
+      "text" : "I think we need to change framing because ACI also will balance between the engines and quality and then it's not how it should be framed. It's not accurate. So we need to reframe this, giving that ACI of course can solve this, but we can do action items now to solve it today."
+    },
+    "E1DEF7C4E9A5440A9EE61800DB4E41A8" : {
+      "latencySec" : 0.0029979944229125977,
+      "text" : "One of the most important things during this split was not to break UI and the functionality and I already noticed some changes like I'm giving one example but I think there are much more examples when you broke actual UI and how it looks like and we should not allow this because currently it's in failed state."
+    },
+    "E9CCCB93E930453B818CC541A7E692B3" : {
+      "latencySec" : 0.0020340681076049805,
+      "text" : "Let's implement this performance fix because what we want is basically we introduce this MTP for speedup so we need the speedup to work we need it to work reliably and fast we need super fast correction."
+    },
+    "E9F0AD43D1DF416F9DB446FBADFCBBE0" : {
+      "latencySec" : 0.0023710727691650391,
+      "text" : "After you completing all the changes, please validate them accordingly with tests and then create MR rebate the branch because we pushed it before and merged it before and then select to Ceph for approval and the value and monitor the deployment to production."
+    },
+    "E15E92DBBCD748BC849153689B837D22" : {
+      "latencySec" : 0.0020889043807983398,
+      "text" : "I understand what's going on We execute categories prefetching now on staging And probably we have issue where there's a staging account that doesn't have this reservation we should skip staging probably so it will PaaS."
+    },
+    "E863AFBDA8214FE38C32CCB6428F036C" : {
+      "latencySec" : 0.0033600330352783203,
+      "text" : "Wait, I'm not sure I'm following. We're only using this service principal account to query production. So I don't understand like how other environments like are related. We are not querying them from this app. Confirm this also with the code. Like we are only deploying to production only using production.\n\nI don't understand why the queries are failing. Give me the reasons why queries fails."
+    },
+    "EA34AA64B101405A908314A2D5F5FB03" : {
+      "latencySec" : 0.0026640892028808594,
+      "text" : "Wait, something wrong here. Currently I see in the text tab, two things, I see two sources, social and Databricks, while previously it was always Databricks. And now in the text column I actually see the metadata while we have the metadata tab. So something is off."
+    },
+    "EC2CF592997844A297B0AC251C7B2259" : {
+      "latencySec" : 0.0025889873504638672,
+      "text" : "You did not use the style that I provided I asked you To Do exactly how it appears in PDF And you did not follow my instructions You need to redo the work and make it look exactly with rich graphics the same make it clear with graphics no text."
+    },
+    "EC32C30F91AC4404BFDB8998746E2643" : {
+      "latencySec" : 0.0025579929351806641,
+      "text" : "Mobile interface looks very off, I think you didn't adapt it. Properly for mobile interfaces it looks ugly, it looks cutoff, autocomplete doesn't work when I select the destination filter so you didn't port it correctly you need to fix this also regarding whisper I have special instructions."
+    },
+    "F6F57FA120EC484790BEE33D80248FBA" : {
+      "latencySec" : 0.0024009943008422852,
+      "text" : "I want you to understand use Glean MCP use Glean MCP to verify what should be the correct case when requiring the platform when we should use one table when we should use another table that what I asked you To Do in the plan."
+    },
+    "F18D3DC7A6A44464810750E15E5BCE5E" : {
+      "latencySec" : 0.0027849674224853516,
+      "text" : "I think what you did is basically you adapted this to any desktop but let's adapt also to be responsive for any mobile device so any mobile device should be also supported we should make a comprehensive fix so it will support any resolution possible and show best way possible what we have."
+    },
+    "F3953E2F875A4293B3164BE2446D06D7" : {
+      "latencySec" : 0.0034520626068115234,
+      "text" : "I want big loading as before with the animation like around the like imagine it's like an orbit and we need like icons flying around the orbit like Databricks and the BigQuery I don't like how the stab is displayed we should not display this like this it should be like other way around maybe like entirely drop it and replace with something else."
+    },
+    "FA07325F3359497DBE5EF7174A657B2C" : {
+      "latencySec" : 0.0024540424346923828,
+      "text" : "I want you to make it shorter and rewrite it with:\n- S make it short and concise now it's too blotted I also want to add you additional information but I need like\n- S short interview feedback and why we are not continuing"
+    },
+    "FF422B3CF6824064A2B9FF1E7AC204BC" : {
+      "latencySec" : 0.0023039579391479492,
+      "text" : "What is the maximum date range for all of the platforms? So basically look all of the platforms I want to understand Maybe we should fine-tune the progressive scan to include more data based on the maximum range that exists per platform."
+    }
+  },
+  "source" : "DeterministicPolisher.polish(text:) over corpus.json inputs"
+}

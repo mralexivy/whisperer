@@ -67,8 +67,15 @@ final class MeetingPolishTests: XCTestCase {
     }
 
     /// What `MeetingSession` runs per utterance as chunks arrive.
+    ///
+    /// `terminatesUtteranceEnd: false` mirrors `MeetingSession.rebuildEditors` exactly. A meeting
+    /// utterance ends where the VAD cut, not where the speaker stopped, and the per-utterance text
+    /// is accumulated into the card — so terminating here would stamp a period at every chunk
+    /// boundary in the meeting whatever the speaker did. The card pass, which holds the pause map,
+    /// is what closes the last sentence.
     private func meetingUtteranceEditor(entries: [DictionaryEntry] = []) -> DeterministicPolisher {
         DeterministicPolisher.forTranscript(dictionaryEntries: entries, formatsLists: false,
+                                            terminatesUtteranceEnd: false,
                                             splitsParagraphs: true)
     }
 
@@ -76,6 +83,22 @@ final class MeetingPolishTests: XCTestCase {
     private func meetingCardEditor(entries: [DictionaryEntry] = []) -> DeterministicPolisher {
         DeterministicPolisher.forTranscript(dictionaryEntries: entries, formatsLists: true,
                                             splitsParagraphs: true)
+    }
+
+    /// The one intentional difference between the dictation utterance pass and the meeting one.
+    ///
+    /// It is a *configuration* difference, not a second editing policy: the same pipeline reads
+    /// `terminatesUtteranceEnd` and declines to close the final sentence for meetings, for the
+    /// reason spelled out on `meetingUtteranceEditor`. Everything before that final mark must still
+    /// be character-identical, and that is the claim worth defending — asserting plain equality
+    /// would now be asserting that meetings terminate utterances they have no evidence about.
+    private func assertDiffersOnlyByTheFinalStop(meeting: String,
+                                                 dictation: String,
+                                                 _ message: String,
+                                                 file: StaticString = #filePath,
+                                                 line: UInt = #line) {
+        guard dictation != meeting else { return }
+        XCTAssertEqual(dictation, meeting + ".", message, file: file, line: line)
     }
 
     // MARK: - Corpus
@@ -107,11 +130,24 @@ final class MeetingPolishTests: XCTestCase {
         for utterance in utterances {
             let fromDictation = dictation.polish(text: utterance)
             let fromMeeting = meeting.polish(text: utterance)
-            XCTAssertEqual(fromMeeting.text, fromDictation.text, utterance)
-            XCTAssertEqual(fromMeeting.appliedEdits.count, fromDictation.appliedEdits.count, utterance)
-            // The LLM decision has to match too: a meeting that asked for a generative pass where
-            // dictation did not would be a second policy wearing the first one's name.
-            XCTAssertEqual(fromMeeting.needsGenerativePass, fromDictation.needsGenerativePass, utterance)
+            assertDiffersOnlyByTheFinalStop(meeting: fromMeeting.text,
+                                            dictation: fromDictation.text, utterance)
+            // Same slack on the edit log, and no more: the terminator is at most one edit.
+            XCTAssertTrue((fromDictation.appliedEdits.count - fromMeeting.appliedEdits.count) == 0
+                          || (fromDictation.appliedEdits.count - fromMeeting.appliedEdits.count) == 1,
+                          "\(utterance): \(fromMeeting.appliedEdits.count) vs "
+                          + "\(fromDictation.appliedEdits.count)")
+            // The residual decision has to match too: a meeting that asked for a generative pass
+            // where dictation did not would be a second policy wearing the first one's name. Asked
+            // of the *terminating* configuration, because `needsGenerativePass` fires on a missing
+            // terminal mark and the meeting utterance is unterminated by design — its own flag is
+            // true by construction and says nothing. Nothing reads it on the meetings path; it is
+            // diagnostic on the dictation path alone (`AppState.applyLLMPostProcessing`).
+            let terminating = DeterministicPolisher.forTranscript(dictionaryEntries: [],
+                                                                  formatsLists: false,
+                                                                  splitsParagraphs: true)
+            XCTAssertEqual(terminating.polish(text: utterance).needsGenerativePass,
+                           fromDictation.needsGenerativePass, utterance)
         }
     }
 
@@ -125,9 +161,10 @@ final class MeetingPolishTests: XCTestCase {
         var segmentCount = 0
         for fixture in fixtures {
             for segment in fixture.segments {
-                XCTAssertEqual(meeting.polish(text: segment.text).text,
-                               dictation.polish(text: segment.text).text,
-                               "\(fixture.id): \(segment.text.prefix(60))")
+                assertDiffersOnlyByTheFinalStop(
+                    meeting: meeting.polish(text: segment.text).text,
+                    dictation: dictation.polish(text: segment.text).text,
+                    "\(fixture.id): \(segment.text.prefix(60))")
                 segmentCount += 1
             }
         }
@@ -136,17 +173,28 @@ final class MeetingPolishTests: XCTestCase {
 
     // MARK: - Streaming contract
 
-    /// Live/mid-stream versus authoritative. The two configurations differ in exactly one thing —
-    /// enumeration reflow — and `ListFormatter` is a pure function of the rendered text, so the
-    /// card pass must be the live pass with that function applied. Anything else means a second
-    /// editing policy has grown on the endpoint path.
-    func testLiveAndCardEditorsDifferOnlyInListReflow() {
+    /// Live/mid-stream versus authoritative. The two configurations differ in exactly two things —
+    /// enumeration reflow and whether the final sentence may be closed — and both are declared
+    /// flags on the same pipeline rather than branches inside it. `ListFormatter` is a pure
+    /// function of the rendered text, so with the terminator flag held equal the card pass must be
+    /// the live pass with that function applied. Anything else means a second editing policy has
+    /// grown on the endpoint path.
+    func testLiveAndCardEditorsDifferOnlyInListReflowAndTheFinalStop() {
         let live = meetingUtteranceEditor()
         let card = meetingCardEditor()
+        // The live editor with the card's answer to the one other question, so this test measures
+        // reflow alone and the terminator is measured by the assertion below it.
+        let liveTerminating = DeterministicPolisher.forTranscript(dictionaryEntries: [],
+                                                                  formatsLists: false,
+                                                                  splitsParagraphs: true)
 
         for utterance in utterances {
-            let liveText = live.polish(text: utterance).text
-            XCTAssertEqual(card.polish(text: utterance).text, ListFormatter.format(liveText), utterance)
+            XCTAssertEqual(card.polish(text: utterance).text,
+                           ListFormatter.format(liveTerminating.polish(text: utterance).text),
+                           utterance)
+            assertDiffersOnlyByTheFinalStop(meeting: live.polish(text: utterance).text,
+                                            dictation: liveTerminating.polish(text: utterance).text,
+                                            utterance)
         }
     }
 
@@ -274,9 +322,11 @@ final class MeetingPolishTests: XCTestCase {
         // job. What must survive untouched is every protected span, so that is what is asserted —
         // an equality against the whole input would be asserting that the editor does nothing,
         // which is a different and much weaker claim than the one this test is named for.
+        // The trailing period is `SentenceTerminator` closing a whole card at the endpoint, which
+        // is the same category of expected edit as the opening capital: structure, not content.
         let polished = card.polish(text: transcript).text
         XCTAssertEqual(polished, "So the fix is in anthropics/whisperer we tag it v2.1.0 and "
-                                 + "deploy with docker run --rm -it after loadModel returns")
+                                 + "deploy with docker run --rm -it after loadModel returns.")
         for span in ["anthropics/whisperer", "v2.1.0", "docker run --rm -it", "loadModel"] {
             XCTAssertTrue(polished.contains(span), "protected span '\(span)' did not survive")
         }

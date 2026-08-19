@@ -1,0 +1,92 @@
+[
+ {
+  "id": "08CF5BCA2F2942E4BA5890B1A5CCBE4C",
+  "language": "en",
+  "durationSec": 61.5384375,
+  "input": "I will do few updates in this diagram which doesn't make sense to me First of all, if we are already in Naboo using C-clip2 for our classification we can also use it for our textual classifier So again, like in online PaaS we can compute this embedding and later on we can save them in Delta already We don't need additional like Apache Kafka to produce them BERT, like to be used based on C-clip embeddings. This is my smarter architecture overall and also like LLM that you added. I don't, it's disconnected. I understand why I need it. Also I don't understand what is Rack Orchestrator, ResultMatch and ResponseBuilder. Like that flow should not be affected by current system. Like Naboo outputs back to Amazon Kinesis and Amazon Kinesis builds a response and this system is something parallel. they can resolve the diagram."
+ },
+ {
+  "id": "13A30C4607244224B94F859A50CBC990",
+  "language": "en",
+  "durationSec": 63.039375,
+  "input": "I think you missed something important How basically logic is structured? How to take existing app and break it into features? I need you full guidance? We don't have overblown files. So file, like how much minimum rows it should have, how to split it. We don't have like giant one component, we split it into components. We create like features, folders. We build small files that easy to understand and track and introduce. We are following our logic, we are following our app structure. So everything like we have controllers, we have routes, like the controllers are not blown with logic. Logic is stored separate. Like we are exporting for China, So it will be super modular, super easy to extend our app. I need your guidance both on frontend, react and backend, Node.js. How to build it, server API."
+ },
+ {
+  "id": "1E7692584891455186642B53AE82AE2D",
+  "language": "en",
+  "durationSec": 42.9268125,
+  "input": "This is not bad but we need to adjust it. First of all, the hat should appear a bit above the keyboard itself. Now it's below the window, but like there is space between the hat and the keyboard itself. Also the whole area of live transcription and the hat have some background which is different from the whole screen background. We should remove this background. So the hat should be like only the shape of the hat. left was good Let's adjust it."
+ },
+ {
+  "id": "2A584CDC54AC4606913661CDAD9BE54C",
+  "language": "en",
+  "durationSec": 55.034375,
+  "input": "I want you to use Glyn MCP and based on Glyn MCP what I want you To Do and when the user passed URL with media URL link we should be automatically detect the best platform that suit the link I want you to use a Glyn MCP to understand the patterns of the all URLs that are possible, all the formats for all of the platforms so specifically search for each platform what the URL format so we can detect automatically the platform so we can query efficiently so we need to change the drop down and display a little notification for the user or a little indicator for best UX, a premium UI that we automatically selected the right platform from the user based on his URL. So that what we need to implement."
+ },
+ {
+  "id": "34BD640A91894F9183C974D80875DA11",
+  "language": "en",
+  "durationSec": 30.81925,
+  "input": "Just to make sure you added the right thing. What I expect is that using this dump I will be able to find all these audio issues, audio devices connection, audio device problems so we can finally fix them and understand the root cause because we're failing To Do so. Also all the memory usage of other LLM post LLM like this dump should help us understand everything all the memory usage and all the problems making sure like the dump is correct"
+ },
+ {
+  "id": "42DC214866C74E3380D86FCB6B7ED9DD",
+  "language": "en",
+  "durationSec": 43.7273125,
+  "input": "Given this context, I want you to instrument current MLE offline and how things work based on the context and code and everything that you can capture during the conversations. I want you to check against these claims and I want you to come to conclusion with richer context how things are really implemented today what is dynamic what is not dynamic what is agent what is not to agent please be truthful every fact that you're saying you need to triple check and confirm that everything is indeed as you say and you're not making things up do not assume do not make things up it's really important this is like your first goal it's a basically to give truthful information only"
+ },
+ {
+  "id": "52C94634805540E79F09B770CBA4B469",
+  "language": "en",
+  "durationSec": 56.8355,
+  "input": "We have option to retrancribe in workspace history and now we want to add ability when the user retrancribes so he can pick up the language he want to use for this retrancribe. So especially whisper models supports also translation and we can basically if language was detected correctly fix this and basically translate the user desired language. So both Yeah. We can fix incorrectly detected language and also we can fix a translate if user wish to translate to another language. We need a best user experience, best UI, premium look, how to handle this, how to restructure the screen. So build full plan how to accomplish this in best manner. So it will be super intuitive for the user and will look perfectly premium UI."
+ },
+ {
+  "id": "5AAE12CACE714B66BE7E426B06881DC3",
+  "language": "en",
+  "durationSec": 78.3489375,
+  "input": "One thing that I want to make sure, first, App Store compliance. Second thing that I want to make sure, that basically we don't want external LLM. We want local LLM. We already have LLM integration, so we should use local LLM because our app is offline. It should not use any of other services, for that matter. So this is like super crucial and important. Because it should stay free, no charge. So we need this. Also, basically, we must ensure that we're adding appropriate UI features and not just backend implementation. So settings, the new screens, you should see how basically we have it in our app audit should stay. No redundant stuff. So please modify the plan according to this. Also, like statistics, and widgets, maybe we missed something, but maybe like reference app has something that we don't have. So let's add the statistic, word per minute. Let's see how we calculate stuff. Maybe we have bugs and the implementation is more correct. So please check all of those moments."
+ },
+ {
+  "id": "656ECE19DB2C4CF7B562DB7038206E2E",
+  "language": "en",
+  "durationSec": 30.5190625,
+  "input": "Now let's adjust the HUD HUD and the live transcription position it should appear on top of the VS Code window at the bottom. So above the keyboard let's make some space when the window is starting to rendering that where we should display the HUD and the live transcription with position absolute."
+ },
+ {
+  "id": "718CDCA20516422EBEC8AB6BFFF7C528",
+  "language": "en",
+  "durationSec": 46.02875,
+  "input": "I need you to compare multiple paths for me so please I need to understand how Amazon Kinesis Knex to Naboo and basically how Nim processed the models I need to understand the whole flow from social integration they send Traefik to Amazon Kinesis what Amazon Kinesis does what pipelines it has, what platform it supports how it connKnexNaboo which models and endpoints Naboo exposes today how it's all connected like how it's compare like compute embeddings and stuff I need you like to understand the whole flow and detailed list me in MD file so it will be very clear a path"
+ },
+ {
+  "id": "7BDBFAF3AC4041F786C0E6B3E4E0AA20",
+  "language": "en",
+  "durationSec": 43.62725,
+  "input": "But it's not clear for me how the skill that we're going to create will connect, for example, to this dashboard idea that we have pipeline and pipeline generates like relation between metrics and stuff. Maybe other dashboards won't have the same standardized way, but we still want to use it So it should be like extendable, optional and should work in any case. It's also not clear to me how like from all the JSON data will be sent only portions that we need to get the answers it's not clear how it will be like bulletproof solution so I think like details missing there."
+ },
+ {
+  "id": "8A31AB5D3A0B42F7929B86A14C0F19BF",
+  "language": "en",
+  "durationSec": 36.622875,
+  "input": "Like all the KPI calculation are formulas, we need them to calculate KPI, so they are our recipe instruction how to calculate KPI's But rather than that, in any place we should not mention mock data because we should BASE our report on real-life data that we are fetching, so everything is based on the calculation everything not like built from the real data real insight not any mock or like outdated data we can make a sample make assumptions in specific places but it's not mock it's like assumption in order to make calculation"
+ },
+ {
+  "id": "94DB1FD9C1E347A7B1E91D407DB80250",
+  "language": "en",
+  "durationSec": 53.23325,
+  "input": "I think the performance is still not great we still need to fix the HUD HUD is stuck many times you didn't fix it I need you to see the implementation that we previously had with live transcription I don't understand nothing should be running on UI thread I don't understand why everything is stuck suddenly and with Parakeet we also had like the Whisper working in the background the same way and nothing caused the stack so we passing like the data from streaming like to the UI audit cause stuck it doesn't make sense find root cause conduct deep analysis like find the root cause and fix it eliminated it should be smooth experience like we can't afford this to stack"
+ },
+ {
+  "id": "A24ACEA779DD4C158809611C7C72A8CF",
+  "language": "en",
+  "durationSec": 47.3295625,
+  "input": "This is live transcription now Now it should be have much better shape So it takes some delay until we see the results But after this initial delay the text is not appearing in the box audit should appear in the box So we should have type in experience So basically now it's quite better But still it's quite off problem. With current implementation because Today if I'll try to edit the text Thank you"
+ },
+ {
+  "id": "AE91DB224F494E69B2D86DD16A15D624",
+  "language": "en",
+  "durationSec": 34.621625,
+  "input": "We have v2 and we don't have v1 because first we had problem uploading files directly into the folder so it was uploaded externally to the folder and you can confirm this with event and then we pushed the fixed and migration and migration probably partially work and that could yet create another issue and now we have like the v2 and we cannot upload new versions because the user doesn't see them because artifact is not found something definitely wrong here understand the whole timeline and root cause confirm with log confirm with everything we need totally fix this"
+ }
+]

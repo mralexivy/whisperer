@@ -13,13 +13,18 @@ Usage:  python3 Tools/llm-eval/selftest.py
 
 from __future__ import annotations
 
+import collections
+import json
 import os
+import pathlib
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-from common import edit_ops, f_beta, sim, split_bucket  # noqa: E402
+from common import edit_ops, f_beta, filler_strip, script_of, sim, split_bucket  # noqa: E402
 from score import aggregate, score_case  # noqa: E402
+
+HERE = pathlib.Path(__file__).resolve().parent
 
 FAILURES: list[str] = []
 
@@ -192,6 +197,220 @@ def main() -> None:
     check("split is deterministic", split_bucket("ABC") == split_bucket("ABC"))
     check("split lands near the documented 48/112 train fraction",
           abs(fraction - 48 / 112) < 0.05, f"train fraction={fraction:.3f}")
+
+    print("\nscript_of() — same logic as sample_authoring_batches.py")
+    check("script_of: Latin text → en", script_of("hello world") == "en",
+          script_of("hello world"))
+    # Majority-Cyrillic text: must have more Cyrillic than Latin characters.
+    # "мы используем Redis для очереди" → 23 Cyrillic, 5 Latin (Redis) → Cyrillic wins.
+    _ru_text = "мы используем Redis для очереди"
+    check("script_of: majority-Cyrillic text → ru",
+          script_of(_ru_text) == "ru",
+          f"result={script_of(_ru_text)!r} (text={_ru_text!r})")
+    check("script_of: Hebrew text → he",
+          script_of("אני רוצה לראות") == "he",
+          script_of("אני רוצה לראות"))
+    check("script_of: empty → other", script_of("") == "other", script_of(""))
+    # Majority Latin in a Cyrillic context: more Latin chars → en.
+    # "run docker Ѐ" repeated: "run docker " = 9 Latin chars, "Ѐ" = 1 Cyrillic → Latin wins.
+    # For Cyrillic to win we need more Cyrillic than Latin.
+    _cyrillic_majority = "мы мы мы мы мы run"  # 10 Cyrillic, 3 Latin
+    check("script_of: majority wins (more Cyrillic than Latin → ru)",
+          script_of(_cyrillic_majority) == "ru",
+          f"result={script_of(_cyrillic_majority)!r} (text={_cyrillic_majority!r})")
+
+    print("\nfiller_strip() and authored-gold unit checks (synthetic)")
+    # Verify filler_strip removes declared fillers and preserves content.
+    stripped = filler_strip("um so i think we should uh ship this")
+    check("filler_strip removes 'um' and 'uh'",
+          "um" not in stripped.split() and "uh" not in stripped.split(),
+          stripped)
+    check("filler_strip preserves content words",
+          "think" in stripped.split() and "ship" in stripped.split(),
+          stripped)
+
+    # Synthetic corpus entries that exercise the three gold authoring constraints:
+    # (1) script identity, (2) content-word similarity after filler strip, (3) headroom.
+    _GOLD_CASES: list[dict] = [
+        {
+            "id": "synth-en-ok",
+            "language": "en",
+            "durationSec": 5.0,
+            "input": "um so i think we should uh ship this tomorrow",
+            "gold": "So I think we should ship this tomorrow.",
+        },
+        {
+            "id": "synth-ru-ok",
+            "language": "ru",
+            "durationSec": 5.0,
+            "input": "ну мы используем редис для очереди но он иногда падает",
+            "gold": "Мы используем Redis для очереди, но он иногда падает.",
+        },
+        {
+            "id": "synth-he-ok",
+            "language": "he",
+            "durationSec": 5.0,
+            "input": "אה אני רוצה לראות עד כמה טוב זה יכול לעבוד",
+            "gold": "אני רוצה לראות עד כמה טוב זה יכול לעבוד.",
+        },
+    ]
+
+    def _check_gold_case(c: dict) -> None:
+        cid = c["id"]
+        text_in, gold = c["input"], c["gold"]
+        script_in = script_of(text_in)
+        script_gold = script_of(gold)
+        check(
+            f"synth {cid}: script identity (input={script_in}, gold={script_gold})",
+            script_in == script_gold,
+            f"input script={script_in}  gold script={script_gold}",
+        )
+        content_sim = sim(filler_strip(text_in), filler_strip(gold))
+        check(
+            f"synth {cid}: content-word similarity >= 0.70 after filler strip",
+            content_sim >= 0.70,
+            f"sim={content_sim:.3f}",
+        )
+        headroom = 1.0 - sim(text_in, gold)
+        check(
+            f"synth {cid}: headroom 1-sim(input,gold) >= 0.05",
+            headroom >= 0.05,
+            f"headroom={headroom:.4f}",
+        )
+
+    for _c in _GOLD_CASES:
+        _check_gold_case(_c)
+
+    # Also check that a bad case fails the constraints (verifies the checks fire).
+    _same = {
+        "id": "synth-same", "language": "en", "durationSec": 5.0,
+        "input": "hello world",
+        "gold": "hello world",   # identical → headroom 0, should fail constraint 3
+    }
+    _headroom_same = 1.0 - sim(_same["input"], _same["gold"])
+    check(
+        "synth sanity: identical input/gold has headroom < 0.05 (verifies check fires)",
+        _headroom_same < 0.05,
+        f"headroom={_headroom_same:.4f}",
+    )
+    _drifted = {
+        "id": "synth-drift", "language": "en", "durationSec": 5.0,
+        "input": "hello world how are you today",
+        "gold": "שלום עולם",  # Hebrew gold for English input — script mismatch
+    }
+    check(
+        "synth sanity: Hebrew gold for English input fails script identity",
+        script_of(_drifted["input"]) != script_of(_drifted["gold"]),
+        f"input={script_of(_drifted['input'])} gold={script_of(_drifted['gold'])}",
+    )
+
+    # There are two authored corpora, and each is checked against the gates *it* claims —
+    # not against one merged gate set. `assemble_gold.py` emits them from the same material
+    # for two different metrics: the recovery corpus is headroom-gated because recovery
+    # divides by that headroom, and the punctuation corpus deliberately is not, because a gold
+    # whose only difference from its input is punctuation is the ideal boundary reference
+    # rather than a defective one. Applying the headroom gate to both was what made this block
+    # exit 1 on nine cases that were doing exactly what their corpus asks of them.
+    _AUTHORING_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "authoring")
+    _TERMINATORS = set(".!?׃…")
+
+    for _name, _needs_headroom, _needs_boundary in (
+        ("gold-corpus.json", True, False),
+        ("gold-corpus-punctuation.json", False, True),
+    ):
+        print(f"\nauthored-gold corpus constraints ({_name} if present)")
+        _path = os.path.join(_AUTHORING_DIR, _name)
+        if not os.path.exists(_path):
+            print(f"  SKIP — {_path} not found; "
+                  f"run the authoring pipeline to produce it, then re-run selftest.")
+            continue
+
+        with open(_path, encoding="utf-8") as _fh:
+            _cases = json.load(_fh).get("cases", [])
+        print(f"  loaded {len(_cases)} cases from {_name}")
+
+        _n_fail_script = _n_fail_content = _n_fail_headroom = _n_fail_boundary = 0
+        for _c in _cases:
+            _cid = _c["id"]
+            _in, _gld = _c["input"], _c["gold"]
+            _s_in, _s_gld = script_of(_in), script_of(_gld)
+            if _s_in != _s_gld:
+                _n_fail_script += 1
+                FAILURES.append(f"{_name} {_cid}: script mismatch input={_s_in} gold={_s_gld}")
+
+            _csim = sim(filler_strip(_in), filler_strip(_gld))
+            if _csim < 0.70:
+                _n_fail_content += 1
+                FAILURES.append(
+                    f"{_name} {_cid}: content-word sim={_csim:.3f} < 0.70 after filler strip"
+                )
+
+            if _needs_headroom:
+                _hdroom = 1.0 - sim(_in, _gld)
+                if _hdroom < 0.05:
+                    _n_fail_headroom += 1
+                    FAILURES.append(
+                        f"{_name} {_cid}: headroom={_hdroom:.4f} < 0.05 "
+                        f"(nothing to recover toward)"
+                    )
+
+            if _needs_boundary and not any(_ch in _TERMINATORS for _ch in _gld):
+                # A boundary reference with no boundary in it contributes nothing but a zero
+                # denominator to the F1, so its presence in this corpus is itself the defect.
+                _n_fail_boundary += 1
+                FAILURES.append(f"{_name} {_cid}: gold carries no sentence terminator")
+
+        check(f"{_name}: script identity for all {len(_cases)} cases",
+              _n_fail_script == 0, f"{_n_fail_script} violation(s)")
+        check(f"{_name}: content-word similarity >= 0.70 for all {len(_cases)} cases",
+              _n_fail_content == 0, f"{_n_fail_content} violation(s)")
+        if _needs_headroom:
+            check(f"{_name}: headroom >= 0.05 for all {len(_cases)} cases",
+                  _n_fail_headroom == 0, f"{_n_fail_headroom} violation(s)")
+        if _needs_boundary:
+            check(f"{_name}: >= 1 sentence terminator in all {len(_cases)} golds",
+                  _n_fail_boundary == 0, f"{_n_fail_boundary} violation(s)")
+
+    # --- chunk corpus -------------------------------------------------------
+    #
+    # `chunk-corpus.json` is the only source of chunk timings any test has, and it is generated
+    # once by a GPU run and then committed — so a corruption in it would be invisible and would
+    # silently mis-score every interior-boundary measurement made afterwards. These checks are
+    # structural only: they cannot say the spans are *right*, just that they are spans.
+    _corpus_path = HERE / "chunk-corpus.json"
+    if _corpus_path.exists():
+        _corpus = json.loads(_corpus_path.read_text())
+        _records = _corpus["records"]
+        check("chunk corpus: non-empty", len(_records) > 0, f"{len(_records)} record(s)")
+
+        _bad_order = _overlap = _no_reference = 0
+        _joins = 0
+        for _record in _records:
+            _chunks = _record["chunks"]
+            _joins += max(0, len(_chunks) - 1)
+            for _chunk in _chunks:
+                if _chunk["end"] < _chunk["start"]:
+                    _bad_order += 1
+            for _left, _right in zip(_chunks, _chunks[1:]):
+                # Consecutive chunks must not overlap: the pause at a join is `next.start -
+                # current.end`, so an overlap makes it negative and `SentenceTerminator` would be
+                # asked about a silence that ran backwards.
+                if _right["start"] < _left["end"]:
+                    _overlap += 1
+            if not _record["goldenTranscript"].strip() and not _record.get("hasAuthoredGold"):
+                _no_reference += 1
+
+        check(f"chunk corpus: end >= start in all {len(_records)} records",
+              _bad_order == 0, f"{_bad_order} chunk(s) with end < start")
+        check("chunk corpus: consecutive chunks do not overlap",
+              _overlap == 0, f"{_overlap} overlapping join(s)")
+        check("chunk corpus: every record has at least one reference",
+              _no_reference == 0, f"{_no_reference} record(s) with neither")
+        check("chunk corpus: has joins to measure", _joins > 0, f"{_joins} join(s)")
+
+        _scripts = collections.Counter(_r["script"] for _r in _records)
+        print(f"  chunk corpus: {len(_records)} records, {_joins} joins, "
+              + ", ".join(f"{_k} {_v}" for _k, _v in sorted(_scripts.items())))
 
     print()
     if FAILURES:

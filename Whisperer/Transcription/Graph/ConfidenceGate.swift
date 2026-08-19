@@ -65,6 +65,13 @@ struct ConfidenceGate: Sendable {
         case .filler:         return 0.85
         case .normalization:  return 0.90
         case .listFormatting: return 0.90
+        // The cosmetic tier, reached by the source rather than by `editClass`: this source emits
+        // exactly one operation — inserting `.` — so what the edit can do is fixed at the source
+        // and 0.95 is the same bar `floor(for:operation:originalText:language:)` sets for a
+        // cosmetic edit from the model. Higher than `.normalization` because a mark the speaker
+        // did not pause for is visible, and lower than an inferred source because a measured
+        // silence is evidence rather than a guess.
+        case .acousticBoundary: return 0.95
         case .editorModel:    return 0.99
         case .llm:            return 0.99
         }
@@ -182,7 +189,13 @@ struct ConfidenceGate: Sendable {
     /// Whether a source asserts a rule someone wrote down, or guesses.
     static func isStated(_ source: EditSource) -> Bool {
         switch source {
-        case .alias, .filler, .normalization, .listFormatting: return true
+        // `.acousticBoundary` is stated, not inferred: the rule is "a measured silence ends a
+        // sentence", written down in `SentenceTerminator`, and the silence is a number our own VAD
+        // produced rather than a model's opinion about prosody. The practical consequence is that
+        // it may close a sentence after a soft-protected token — a suspected name is a very
+        // ordinary last word of a sentence, and refusing there would cost recall for no
+        // corresponding risk, since the only operation this source emits is inserting `.`.
+        case .alias, .filler, .normalization, .listFormatting, .acousticBoundary: return true
         case .editorModel, .llm: return false
         }
     }

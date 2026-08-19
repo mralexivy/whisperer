@@ -1,0 +1,62 @@
+[
+ {
+  "id": "C934532D424646659052B24AD1B90F2E",
+  "language": "en",
+  "durationSec": 34.02125,
+  "input": "Why do we still have like huge gap I don't understand why we have so huge gap still based on the visualization tool for some videos I'd see huge gap isn't it because like the frame like SBD doesn't work or what if SBD works we don't need like this coverage and I see the coverage almost linear meaning like it's it's somehow like it's extracted in the same times it's very strange explain this to me how it's possible"
+ },
+ {
+  "id": "D1FBBC6342084FBFB75794DCF286B5D0",
+  "language": "en",
+  "durationSec": 34.82175,
+  "input": "We need preview to work smoothly, like real preview, so it's really should like type in really, really fast, and again, I don't understand like why suddenly I see non-related stuff in my live transcription, which the words that I'm not saying at all, they somehow triggered. I see some garbage thrown into live preview and then it disappears and like the text replaces. I see some strange behavior which I need you to fix and also when I un-press like I expect like immediate text insertion but like processing takes time"
+ },
+ {
+  "id": "D613455F077F43C999A71592E6F39306",
+  "language": "en",
+  "durationSec": 34.02125,
+  "input": "Some data also doesn't make sense. I want you again to use reference project to see how we're fetching data for MLE online. It cannot be like the only active task of three tasks and you're saying like three is active and two epic is active but like I think there are much more stories or epics active right now Amazon IAM different choice I think like you've showed me slope numbers we need to DoubleVerify double check what's going on real status and then understand what needs to be fixed and how exactly it should be fixed because it doesn't make sense"
+ },
+ {
+  "id": "DC62E25F2C8B41B0A2064A709681FAAC",
+  "language": "en",
+  "durationSec": 59.837375,
+  "input": "Let me see what is the experience like today So basically I'm saying long text and basically I'm expect that like to see this live transcription as I speak but this transcription not always reliable so I need to understand how it going to be outputted so I will know that basically the text is correct Please let me to enter the text in the best reliable way so the output will always show it nicely and in a basically Prefect position you hello you"
+ },
+ {
+  "id": "E3E5765598344D1DB08F3F0CD277D897",
+  "language": "en",
+  "durationSec": 64.240125,
+  "input": "Please revalidate all the changes with Bulletproof Planner Agent and the final review. We must be sure that we didn't introduce any issues. Then what I want you To Do, use our skill for GitLab to create MR after you validating this browser MCP and checking that all scenarios like Shared in Folder, Edit, Artifact and Edit Mode, etc. Everything that supported in both MCPs, Slack, we have holistic, we fix this across everything and then use GitLab to create MR, wait five minutes and then check in the MR that created the feedback of security like Code Review agent, sorry for the Code Review agent and from Code Review agent fix everything that needs to be fixed, validate against our final review, the fixed suggestion and then send the message to"
+ },
+ {
+  "id": "E90279FF0D8F4EF78004EA0828C2F005",
+  "language": "en",
+  "durationSec": 72.9455625,
+  "input": "What I want you To Do is basically create a skill. This is basically item indicating that sometimes our tool is not returning correct values for the items. We want to build a cloud skill using skill creator so we will be able to debug such issues easily inside the app and understand if this is our app problem or is this is a problem in the test itself. So not always the feedback is correct. We need to test it again the app and the implementation maybe and find the root cause. So we need to create skills that will help us to debug such issue. So every time we drop an item and basically depict the problem, the skill will help us to debug and find the root cause. Why it's bad? Maybe we need some infrastructure to execute it to be able to output the queries to check what's wrong and find it easily. I want you to deeply review our application. And our logic, other skills that may help you like to pinpoint the problem and create a skill that will assist us in debugging and resolving such issues. We really, really, really, really. Really fast."
+ },
+ {
+  "id": "EBBC2755A740434996A1D92DFE50FB0C",
+  "language": "en",
+  "durationSec": 35.422125,
+  "input": "Ok, so let's do this. Let's leave it. Let's drop the default QAN 0.6 billion parameters and let's rename it to Visperer V3 so basically I want to hide like the exact model that we are using in our plan and let's make it default so and let's indicate a whisper V3 English so to say that it's only supported in English"
+ },
+ {
+  "id": "F07B670C09C14857AEEFBE460385D3D6",
+  "language": "en",
+  "durationSec": 77.848625,
+  "input": "We need to design proper plan how to improve live transcription so I will try to tell you what's happening so basically somehow live transcription remembers the previous text or previous language and many times if I use it second time when the state is not passed in then I get wrong language and then it understands this and replaces to the correct language then also the issue how words is appearing inside the box, it jumping, I expect it to behave like live dictation. So basically the new words appears with some kind of nice animation so they are typed in, I expect typed in animation for every word instead some piece some pieces are jumping some pieces are replaced and I get very ugly user experience where we expect our app deliver premium experience So it will be seamless very smooth a Prefect UI Prefect UX, but we can get this please tell me a like lunch 10 agents and they create winning plan. However, we can introduce this feature so it will work perfectly."
+ },
+ {
+  "id": "F4C172A9A98E457BAB4C5A21FA4B4604",
+  "language": "en",
+  "durationSec": 32.8205,
+  "input": "I want you to check like the old commits and see that basically on past commits history that we have we fixed all of the permutation and issues. So first of all, the time that we like injected wrong text or like the transcription audio LLM like App Store like UI issues all the issues that we fixed like speed performance I want to have dedicated agent and I want to learn from all of the mistakes that we did till now"
+ },
+ {
+  "id": "F90CA478826147B286B79BE968F510F3",
+  "language": "en",
+  "durationSec": 53.033125,
+  "input": "We need to create ourselves this new mechanism, this advanced mechanism that we are talking about. So basically, we need to implement this advanced streaming with this current Whisper Kit engine that exists in Pro version. Let's build it because if they was able to build it, we should be able to build it. Of course we should be close to Nemetron as possible, we should be accurate, like really, really accurate, but really, really fast. We need super smart implementation, cutting edge, everything that you learn, everything that you know, like you are architecting, like OpenAI, you're like one of the team members who created WhisperKit, like professional, who needs to implement this really, really fast, really, really smart cutting edge, smart, but like a currency and per performance is your key goal."
+ }
+]

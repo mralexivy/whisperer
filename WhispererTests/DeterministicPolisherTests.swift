@@ -44,7 +44,12 @@ final class DeterministicPolisherTests: XCTestCase {
     /// Latin identifier inside a Hebrew sentence is unprotected today.
     func testLatinIdentifierInsideHebrewIsProtected() {
         let input = "צריך להריץ את loadModel על ה-server"
-        XCTAssertEqual(polisher.polish(text: input).text, input)
+        // Terminated, because `SentenceTerminator` is script-independent: the end-of-utterance
+        // rule reads the last word, not the alphabet it is written in. A per-script gate was
+        // tried here on 2026-08-19 and reverted — it cost Hebrew boundary F1 0.742 → 0.412 to
+        // remove three wrong periods. See `PolishVerdictTests` rule 3b.
+        XCTAssertEqual(polisher.polish(text: input).text, input + ".")
+        XCTAssertTrue(polisher.polish(text: input).text.contains("loadModel"))
     }
 
     func testEditsAreReported() {
@@ -106,7 +111,7 @@ final class DeterministicPolisherTests: XCTestCase {
     /// The guard must not cost recall on phrases nothing objects to.
     func testOrdinaryPhraseAliasesStillApply() {
         XCTAssertEqual(polisher.polish(text: "ask chat gpt about git hub").text,
-                       "Ask ChatGPT about GitHub")
+                       "Ask ChatGPT about GitHub.")
     }
 
     // MARK: - TokenGraph index map

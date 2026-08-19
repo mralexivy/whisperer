@@ -68,6 +68,54 @@ def scripts_present(text: str, min_chars: int = 3) -> set[str]:
     return {s for s, n in counts.items() if n >= min_chars}
 
 
+def script_of(text: str) -> str:
+    """Dominant script of *text* by character-count majority.
+
+    Exact replica of the logic in ``sample_authoring_batches.py``, using the same
+    character ranges so language grouping in the gold-scoring path is consistent
+    with batch selection.  Returns ``"he"``, ``"ru"``, ``"en"``, or ``"other"``.
+
+    Distinct from ``dominant_script()`` (which uses regexes covering a wider set of
+    combining characters) so the two functions stay aligned with their respective
+    call sites: ``dominant_script`` for corpus/gate logic, ``script_of`` for the
+    authored-gold path.
+    """
+    hebrew = sum(1 for c in text if "֐" <= c <= "׿")
+    cyrillic = sum(1 for c in text if "Ѐ" <= c <= "ӿ")
+    latin = sum(1 for c in text if c.isascii() and c.isalpha())
+    top = max(hebrew, cyrillic, latin)
+    if top == 0:
+        return "other"
+    if top == hebrew:
+        return "he"
+    return "ru" if top == cyrillic else "en"
+
+
+# ---------------------------------------------------------------------------
+# Filler-word stripping — for the authored-gold authoring-constraint checks.
+# Single-word entries only; multi-word fillers ("you know", "I mean", "как бы")
+# are intentionally excluded to avoid stripping legitimate content words.
+# ---------------------------------------------------------------------------
+
+FILLERS = frozenset({
+    # English
+    "um", "uh", "basically",
+    # Russian
+    "ну", "э", "типа", "вот",
+    # Hebrew
+    "אה", "אמ", "כאילו", "יעני",
+})
+
+
+def filler_strip(text: str) -> str:
+    """Return *text* with single-word ASR filler tokens removed (case-insensitive).
+
+    Uses ``fold()`` so the result is lowercased and punctuation-stripped — suitable
+    only for constraint checks, not for display.
+    """
+    return " ".join(w for w in fold(text).split() if w not in FILLERS)
+
+
 def dominant_script(text: str) -> str:
     """The language label for reporting.
 

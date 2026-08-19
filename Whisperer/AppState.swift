@@ -94,6 +94,15 @@ class AppState: ObservableObject {
     @Published var liveTranscription: String = ""  // Live transcription during recording
     @Published var recordingSessionID: UUID = UUID()  // Forces SwiftUI state reset between recordings
 
+    /// The committed VAD chunks of the recording in progress, kept so the polisher can read the
+    /// silence between them.
+    ///
+    /// A string cannot carry where the speaker stopped, and that is the one signal that says where
+    /// a sentence ended. The chunks are already produced for history persistence; this only retains
+    /// them until the endpoint. Cleared at every recording start — see `committedChunks(matching:)`
+    /// for why a stale or divergent set is discarded rather than used.
+    private var committedChunks: [DeterministicPolisher.Chunk] = []
+
     // Latest committed transcript for macOS Services provider
     private(set) var lastTranscribedText: String = ""
     private(set) var lastTranscriptionDate: Date?
@@ -1911,6 +1920,43 @@ class AppState: ObservableObject {
         return (systemPart, userMessage)
     }
 
+    /// Keep a committed chunk for the endpoint polish.
+    ///
+    /// `start` and `end` come from `TranscriptChunk`, which derives them from sample counts, not
+    /// from ASR word timings — so this signal exists identically behind every backend, including
+    /// the ones that emit no per-word evidence at all.
+    private func retainForPolish(_ chunk: TranscriptChunk) {
+        committedChunks.append(DeterministicPolisher.Chunk(text: chunk.text,
+                                                           start: chunk.start,
+                                                           end: chunk.end))
+    }
+
+    /// The retained chunks, but only when they still describe `text`.
+    ///
+    /// `stopAsync` joins the committed chunks and *then* applies dictionary correction and filler
+    /// removal, and `applyListFormatting` may reflow the result — so what reaches the polisher is
+    /// not always the join. When the two diverge the pause map would be keyed to whitespace tokens
+    /// that no longer sit where the joins were, and a mis-keyed pause is worse than no pause: it
+    /// ends a sentence in the middle of one. So this returns nil and the caller polishes the plain
+    /// string, losing the acoustic signal rather than misusing it.
+    ///
+    /// Sorted by start because the chunks are appended from a callback whose main-actor hops are
+    /// not ordered against each other. If the sort disagrees with how the text was assembled, the
+    /// equality check below rejects the set anyway.
+    private func committedChunks(matching text: String) -> [DeterministicPolisher.Chunk]? {
+        let ordered = committedChunks.sorted { $0.start < $1.start }
+        let pieces = ordered.map { $0.text.trimmingCharacters(in: .whitespacesAndNewlines) }
+                            .filter { !$0.isEmpty }
+        guard pieces.count > 1 else { return nil }
+        guard Self.whitespaceCollapsed(pieces.joined(separator: " "))
+                == Self.whitespaceCollapsed(text) else { return nil }
+        return ordered
+    }
+
+    private static func whitespaceCollapsed(_ text: String) -> String {
+        text.split(whereSeparator: \.isWhitespace).joined(separator: " ")
+    }
+
     /// Apply LLM post-processing to transcribed text if enabled.
     /// `contextTail`: non-nil signals this is a mid-stream chunk (fragment mode).
     /// The value itself is NOT injected into the user message — doing so causes the model
@@ -1929,15 +1975,18 @@ class AppState: ObservableObject {
         let mode = AIModeManager.shared.postProcessMode
         guard !mode.prompt.isEmpty else { return text }
 
-        // M2e: deterministic polish first, in strict correction modes only.
+        // Deterministic polish *instead of* the model, in strict correction modes only.
         //
-        // Everything the Correct prompt does apart from punctuation and casing — fillers,
-        // duplicates, whitespace, aliases — now happens on the token graph, so the model is
-        // invoked only when a punctuation or casing judgement is genuinely left to make. This
-        // replaces the old `text.count <= 15` fast path: length was never the question, and a
-        // 200-character sentence that already reads as finished prose gained nothing from a 4B
-        // decode. Transformative modes (translate, summarize, rewrite) keep the previous path
-        // untouched — their output is not this text.
+        // Everything the Correct prompt does — fillers, duplicates, whitespace, aliases, casing,
+        // and now sentence punctuation from the pauses in the speech itself — happens on the token
+        // graph. So the strict path is non-generative end to end: no wording is invented, every
+        // change is one gated edit, and the utterance is finished in single-digit milliseconds
+        // rather than seconds. This also replaces the old `text.count <= 15` fast path; length was
+        // never the question.
+        //
+        // Transformative modes (translate, summarize, rewrite) keep the previous path untouched —
+        // their output is genuinely new wording, which is the one job that needs a generative
+        // model. The 4B does not unload; it leaves the dictation latency path.
         //
         // List formatting is off here because both call sites already ran `applyListFormatting`.
         //
@@ -1945,21 +1994,36 @@ class AppState: ObservableObject {
         // shipped path — it *is* the shipped path, `text.count <= 15` fast path included, because
         // an A/B whose control drifted from what ships cannot attribute a bad result to an arm.
         let isStrict = (mode.id == AIMode.correctModeId || mode.id == AIMode.grammarModeId)
-        var input = text
+        let input = text
         if PolishFeatureFlags.isFastPolishEnabled {
             if isStrict {
                 let polisher = DeterministicPolisher.forTranscript(
                     dictionaryEntries: DictionaryManager.shared.entries,
                     formatsLists: false)
-                let polished = polisher.polish(text: text)
-                input = polished.text
+                // Chunks when they are still an honest description of this text, the string
+                // otherwise. The chunk form is what carries the silence between them, and silence
+                // is the only evidence of a sentence boundary that survives every backend.
+                let chunks = contextTail == nil ? committedChunks(matching: text) : nil
+                let polished = chunks.map { polisher.polish(chunks: $0) }
+                    ?? polisher.polish(text: text)
                 Logger.debug("polish: \(PolishFeatureFlags.stateDescription), "
-                             + "\(polished.appliedEdits.count) edits", subsystem: .transcription)
-                if !polished.needsGenerativePass {
-                    Logger.debug("LLM skip: deterministic polish left nothing to generate "
-                                 + "(\(polished.appliedEdits.count) edits)", subsystem: .transcription)
-                    return polished.text
-                }
+                             + "\(polished.appliedEdits.count) edits, "
+                             + "\(chunks?.count ?? 0) chunks", subsystem: .transcription)
+
+                // Arm B: the deterministic path is terminal in strict correction modes. The 4B is
+                // not consulted at all, which is the whole point — a decode the user waits ~1.8s
+                // for, to adjust punctuation the pipeline has already restored from the pauses in
+                // their own speech, is a cost with no matching benefit.
+                //
+                // `needsGenerativePass` stays computed and logged rather than deleted. It was the
+                // control flow; now it is the diagnostic that says how often the deterministic
+                // output still looks unfinished, which is the number that would justify bringing
+                // the fallback back. A predicate that stops being observable the moment it stops
+                // being load-bearing is how a regression hides.
+                Logger.debug("LLM skip: deterministic polish is terminal "
+                             + "(\(polished.appliedEdits.count) edits, "
+                             + "residual=\(polished.needsGenerativePass))", subsystem: .transcription)
+                return polished.text
             }
         } else {
             // Fast-path: skip LLM for very short, already-clean text in strict correction modes.
@@ -2506,6 +2570,7 @@ class AppState: ObservableObject {
         state = .recording(startTime: Date())
         liveTranscription = ""
         recordingSessionID = UUID()  // Force SwiftUI state reset
+        committedChunks = []
         isLiveTranscriptionRTL = selectedLanguage.isRTL
         isOutputAudioMuted = muteOtherAudioDuringRecording  // Initialize runtime toggle from setting
         lastAmplitudeUpdateTime = nil  // Reset audio-progress watchdog
@@ -2627,6 +2692,7 @@ class AppState: ObservableObject {
                     guard let id = self.currentSessionID else { return }
                     let chunkText = chunk.text
                     Task { await HistoryManager.shared.appendChunk(sessionID: id, chunkText: chunkText, totalDuration: chunk.recordedDuration) }
+                    self.retainForPolish(chunk)
                     Task { @MainActor [weak self] in
                         guard let self, self.llmEnabled else { return }
                         let mode = AIModeManager.shared.postProcessMode
@@ -2950,6 +3016,7 @@ class AppState: ObservableObject {
         liveTranscription = ""
         chunkLLMCoordinator.reset()  // Clear any leftover state from previous recording
         recordingSessionID = UUID()
+        committedChunks = []
         isOutputAudioMuted = muteOtherAudioDuringRecording  // Initialize runtime toggle from setting
         lastAmplitudeUpdateTime = nil  // Reset audio-progress watchdog
         lastNonSilentAmplitudeTime = nil
@@ -3002,6 +3069,7 @@ class AppState: ObservableObject {
                     guard let id = self.currentSessionID else { return }
                     let chunkText = chunk.text
                     Task { await HistoryManager.shared.appendChunk(sessionID: id, chunkText: chunkText, totalDuration: chunk.recordedDuration) }
+                    self.retainForPolish(chunk)
                     Task { @MainActor [weak self] in
                         guard let self, self.llmEnabled else { return }
                         let mode = AIModeManager.shared.postProcessMode

@@ -1,0 +1,52 @@
+[
+ {
+  "path": "Tools/llm-eval/authoring/batch-en-00.json",
+  "language": "en",
+  "count": 15
+ },
+ {
+  "path": "Tools/llm-eval/authoring/batch-en-01.json",
+  "language": "en",
+  "count": 15
+ },
+ {
+  "path": "Tools/llm-eval/authoring/batch-en-02.json",
+  "language": "en",
+  "count": 15
+ },
+ {
+  "path": "Tools/llm-eval/authoring/batch-en-03.json",
+  "language": "en",
+  "count": 15
+ },
+ {
+  "path": "Tools/llm-eval/authoring/batch-en-04.json",
+  "language": "en",
+  "count": 15
+ },
+ {
+  "path": "Tools/llm-eval/authoring/batch-en-05.json",
+  "language": "en",
+  "count": 15
+ },
+ {
+  "path": "Tools/llm-eval/authoring/batch-he-00.json",
+  "language": "he",
+  "count": 15
+ },
+ {
+  "path": "Tools/llm-eval/authoring/batch-he-01.json",
+  "language": "he",
+  "count": 15
+ },
+ {
+  "path": "Tools/llm-eval/authoring/batch-ru-00.json",
+  "language": "ru",
+  "count": 15
+ },
+ {
+  "path": "Tools/llm-eval/authoring/batch-ru-01.json",
+  "language": "ru",
+  "count": 15
+ }
+]

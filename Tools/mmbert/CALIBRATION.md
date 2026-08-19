@@ -4,8 +4,14 @@
 every edit class, and it is muted because the model is not precise enough on real speech —
 not because the confidence bound is fussy.**
 
+**Update 2026-08-18 (second) — an independently authored reference corpus was built to replace
+the teacher-derived one, and 135 of its 149 cases failed its own mechanical checks. The retrain
+ran anyway; it is still 0 of 48.** Section **2b** is the current result. Section 2a is the
+history-corpus run it supersedes, section 2 the wiki-corpus run before that. **2a's headline
+0.8895 and 2b's 0.8199 were measured on different holdouts** — see 2b, "The holdout changed".
+
 **Update 2026-08-18 — the corpus was rebuilt from the recordings history and the model retrained.
-It got substantially better and the verdict did not change.** Section 2a below is the current
+It got substantially better and the verdict did not change.** Section 2a below is that
 result; section 2 is kept as the superseded wiki-corpus run it is compared against.
 
 The earlier version of this file (86 held-out real pairs) reported en/punct `.` at
@@ -96,7 +102,180 @@ A cell is ENABLED at the threshold maximising recall subject to
 
 ---
 
-## 2a. CURRENT result — history-only corpus, `artifacts/model-history`
+## 2b. CURRENT result — 2026-08-18, authored-gold attempt, `artifacts/model-gold`
+
+**0 of 48 cells enabled. Best English lower bound 0.8199 (en/error), against a 0.99 floor.**
+The previous run's best English bound was 0.8895. **The two numbers are not comparable** — the
+holdout changed underneath the run, and the reason it changed is the most useful thing this
+run produced. Read the caveat before quoting either figure.
+
+Reproduce with `./run_gold_retrain.sh` (new; `run_history_retrain.sh` and all of section 2a's
+outputs are untouched). Logs: `artifacts/{build_eval_large_gold,build_gold_split,
+build_corpus_gold,leak_check_gold,train_gold,calibrate_gold}.log`. Thresholds:
+`thresholds-calibrated-gold.json`. Seeds: build_eval_large 20260817, build_gold_split 20260818,
+build_corpus 1234, train 1234.
+
+### What this run set out to test
+
+Section 2a's finding was that the corpus was the dominant defect and fixing it was not
+sufficient. The next suspect was the *supervision*: every label in section 2a, on both the
+train and the eval side, was distilled from the shipped Qwen-4B teacher. A student and its
+teacher share their mistakes, so a teacher-derived reference cannot see the errors that
+matter — it flatters precision in exactly the direction that then fails the gate. The plan was
+to replace the calibration reference with an independently authored corpus
+(`Tools/llm-eval/authoring/gold-corpus.json`) and fold the remainder into training.
+
+### Why the authored corpus could not serve as the reference
+
+It was authored, mechanically checked, and **135 of its 149 cases failed its own checks**:
+
+| check | cases failed |
+|---|---|
+| `c_multiset` — content words changed (paraphrase, the one thing forbidden) | 96 |
+| `d_headroom` — gold within 5% of the input, i.e. nothing to score | 73 |
+| `e_length` | 3 |
+| `b_script` | 1 |
+
+14 cases survived at the time this chain ran (en 4 / he 5 / ru 5); the corpus was later
+re-authored up to 21. `build_gold_split.py` kept 13 of the 14 under the same alignment audit
+`build_eval_large.py` applies, and split them by case id, 70/30, stratified by language:
+**10 calibration / 3 train**, `[assert] id-disjoint OK, text-disjoint OK`. Ten cases and 643
+words cannot certify anything — the largest cell it offers is en/error at n = 24 against a
+300-event floor. It was scored anyway and is reported below as `authored_reference_holdout`,
+as a null result, not as a measurement. **The primary split reverted to
+`eval_real_large.jsonl`.** The 3 training cases (36 rows of 23,448, 0.15%) are in the
+checkpoint and are too few to have moved it either way.
+
+The failure mode is worth recording: asking an LLM to produce a punctuation-only reference
+yields a paraphrase two times out of three, and the mechanical checks that catch this are the
+reason the corpus is honest rather than the reason it is small.
+
+### The holdout changed, and the pin did not hold
+
+`build_eval_large.py` re-pins the previous holdout so that successive retrains are scored on
+the same set. **It did not work, and it cannot.** Leaked pairs are routed to `leaked_train`
+and `continue`d *before* the pin logic runs, so once section 2a's corpus absorbed the whole
+recordings history, 1,854 candidates were correctly classified as already-fine-tuned-on and
+left the eval pool regardless of being pinned. Only **522 of 783** pinned pairs were re-found.
+
+| | history run (2a) | gold run (2b) |
+|---|---|---|
+| eval_real_large | 783 pairs, 93,509 labelled positions | **555 pairs** (en 463 / ru 54 / he 38), 14,128 words |
+| pinned pairs re-found | — | 522 of 783 |
+
+Scoring this checkpoint on 2a's 783-pair file was checked and **refused**:
+`check_gold_leak.py` reports **266 of its 805 keys present in `train.jsonl`**. There is no
+clean way to reproduce the 0.8895 measurement against this checkpoint. `0.8895 → 0.8199` is
+therefore a change of ruler as much as a change of model, and no claim of regression or
+improvement should be read into it.
+
+### Training
+
+23,448 rows (en 20,302 / ru 2,381 / he 765), 136 val rows, 2 epochs, 1,464 steps, 9.0 min,
+0 OOM skips. **Val loss 0.0866** (2a: 0.1053). Sources: `golden` 12,666, `gold_wholefile`
+6,696, `db_clean` 2,166, `teacher` 1,656, `teacher_correct` 228, `authored_gold` 36.
+Leak check before training: `no holdout key appears in training data`.
+
+### Primary split `eval_real_large.jsonl` — 555 pairs
+
+Every cell, threshold selected to maximise recall subject to its tier's LCB and support floor.
+`n` = proposals at that threshold, `nmax` = the most the cell offers at any threshold.
+
+| lang | cell | tier | thr | P | **LCB95** | n | FP | nmax | 0.99 floor | enabled |
+|---|---|---|---|---|---|---|---|---|---|---|
+| en | error (any edit) | meaning 0.99 | 0.9910 | 0.8558 | **0.8199** | 326 | 47 | 937 | no | **NO** |
+| en | punct `.` | cosmetic 0.95 | 0.9975 | 0.8725 | 0.8185 | 149 | 19 | 442 | no | **NO** |
+| en | case CAP | cosmetic 0.95 | 0.8500 | 0.6532 | 0.5767 | 124 | 43 | 172 | no | **NO** |
+| en | case LOWER | cosmetic 0.95 | 0.3000 | 0.8095 | 0.6825 | 42 | 8 | 42 | no | **NO** — n < 120 |
+| en | disf | disfluency 0.97 | 0.3000 | 0.2703 | 0.1869 | 74 | 54 | 74 | no | **NO** |
+| en | punct `?` | cosmetic 0.95 | 0.3000 | 0.5294 | 0.3108 | 17 | 8 | 17 | no | **NO** — n |
+| en | punct `!` | cosmetic 0.95 | 0.3000 | 0.7000 | 0.3934 | 10 | 3 | 10 | no | **NO** — n |
+| en | punct `…` | cosmetic 0.95 | 0.3000 | 0.2000 | 0.0102 | 5 | 4 | 5 | no | **NO** — n |
+| en | punct NONE | meaning 0.99 | 0.3000 | 0.3750 | 0.1111 | 8 | 5 | 8 | no | **NO** — n |
+| en | punct `,` | excluded | 0.9745 | 0.5373 | 0.4300 | 67 | 31 | 204 | no | excluded by construction |
+| en | punct `;` / `:` | excluded | 0.3000 | 0.000 / 0.000 | 0.0 / 0.0 | 1 / 1 | 1 / 1 | 1 / 1 | no | excluded by construction |
+| en | punct ALL / case ALL | aggregate | 0.9992 / 0.9850 | 0.9000 / 0.7895 | 0.8204 / 0.6813 | 70 / 57 | 7 / 12 | 688 / 214 | no | never enabled |
+| en | case UPPER | cosmetic 0.95 | — | — | — | 0 | 0 | 0 | — | **NO** — no proposals |
+| he | error | meaning 0.99 | 0.3000 | 0.2500 | 0.1371 | 36 | 27 | 36 | no | **NO** — n < 300 |
+| he | punct `.` | cosmetic 0.95 | 0.3000 | 0.4000 | 0.2171 | 20 | 12 | 20 | no | **NO** — n < 120 |
+| he | punct NONE | meaning 0.99 | 0.3000 | 0.6087 | 0.4168 | 23 | 9 | 23 | no | **NO** — n < 300 |
+| he | punct `,` / `?` | excluded / cosmetic | 0.3000 | 0.000 / 0.000 | 0.0 / 0.0 | 4 / 1 | 4 / 1 | 4 / 1 | no | **NO** |
+| he | case (all) | — | 0.3000 | 0.0000 | 0.0 | 2 | 2 | 2 | no | **NO** — Hebrew is caseless; runtime no-op |
+| he | disf | disfluency 0.97 | — | — | — | 0 | 0 | 0 | — | **NO** — no proposals |
+| ru | error | meaning 0.99 | 0.3000 | 0.8333 | 0.7440 | 72 | 12 | 72 | no | **NO** — n < 300 |
+| ru | punct `.` | cosmetic 0.95 | 0.3000 | 0.8378 | 0.7048 | 37 | 6 | 37 | no | **NO** — n < 120 |
+| ru | punct NONE | meaning 0.99 | 0.3000 | 0.4000 | 0.0764 | 5 | 3 | 5 | no | **NO** — n |
+| ru | punct `…` | cosmetic 0.95 | 0.3000 | 1.0000 | 0.0500 | 1 | 0 | 1 | no | **NO** — one event, not a measurement |
+| ru | punct `,` | excluded | 0.9200 | 0.8571 | 0.6146 | 14 | 2 | 17 | no | excluded by construction |
+| ru | punct ALL / case ALL | aggregate | 0.9992 / 0.3000 | 1.0000 / 0.8750 | 0.8384 / 0.6562 | 17 / 16 | 0 / 2 | 60 / 16 | no | never enabled |
+| ru | case CAP | cosmetic 0.95 | 0.3000 | 0.8750 | 0.6562 | 16 | 2 | 16 | no | **NO** — n < 120 |
+| ru | case LOWER | cosmetic 0.95 | — | — | — | 0 | 0 | 4 gold | — | **NO** — no proposals |
+| ru | disf | disfluency 0.97 | 0.3000 | 0.0000 | 0.0 | 1 | 1 | 1 | no | **NO** — one event |
+
+**0 of 48 enabled.** No cell in any language reaches a 0.99 lower bound; no cell reaches its
+own (looser) tier gate either. The best English point estimate is 0.8558 and the best English
+lower bound 0.8199. `ru/punct ALL` shows P = 1.0000 at n = 17 — that is 17 events, LCB 0.8384,
+and it is an aggregate cell that is never enabled. It is in the table so that nobody finds it
+later and mistakes it for a result.
+
+### The authored holdout, reported as the null result it is
+
+10 cases, 643 words. Largest cell en/error n = 24. Nothing here is a measurement; it is
+recorded so the next attempt knows what 10 cases buys.
+
+| lang | cell | thr | P | LCB95 | n | FP |
+|---|---|---|---|---|---|---|
+| en | error | 0.3000 | 0.6667 | 0.4786 | 24 | 8 |
+| en | punct `.` | 0.3000 | 0.6667 | 0.3449 | 9 | 3 |
+| en | case CAP | 0.3000 | 0.8000 | 0.3426 | 5 | 1 |
+| he | error | 0.3000 | 0.9412 | 0.7499 | 17 | 1 |
+| he | punct `.` | 0.3000 | 1.0000 | 0.6518 | 7 | 0 |
+| ru | error | 0.3000 | 0.5789 | 0.3681 | 19 | 8 |
+| ru | punct `.` | 0.3000 | 0.2857 | 0.0534 | 7 | 5 |
+
+### Cross-check — the real/synthetic gradient is unchanged
+
+| cell | real_large (primary) | eval_synth | pooled_indomain_large |
+|---|---|---|---|
+| en/error | P 0.8558 · n 326 | P 0.9746 · n 1220 | P 0.9669 · n 1360 |
+| en/punct `.` | P 0.8725 · n 149 | P 0.9600 · n 899 | P 0.9520 · n 604 |
+| en/case CAP | P 0.6532 · n 124 | P 0.9635 · n 740 | P 0.9664 · n 715 |
+| en/disf | P 0.2703 · n 74 | P 0.9870 · n 230 | P 0.9827 · n 231 |
+
+Three cells "enable" on `eval_synth` (en/case LOWER, en/case CAP, ru/punct `.`) and two on
+`pooled_indomain_large`. **None of them ships.** Synthetic corruption is the inverse of the
+training objective, so that column measures how well the model inverts the corruptor — the
+same trap section 2a documented, still set, still baited by the same cells. Only the real
+column may enable anything.
+
+### Verdict
+
+**The editor stays muted. Nothing changed that would justify unmuting it.**
+
+What this run does establish:
+
+1. **The teacher-noise hypothesis is untested, not refuted.** The instrument built to test it —
+   an independent authored reference — survived 14 of 149 cases and is 30× too small to
+   calibrate against. The hypothesis from section 2a's finding 2 (the disfluency head is
+   fitting teacher noise) stands unexamined; en/disf got worse again, 0.3373 → 0.2703.
+2. **en/case CAP regressed hard**, 0.8430 → 0.6532. On a changed holdout, so it is suggestive
+   rather than conclusive — but it is the second run in a row where a cell moved several tens
+   of points between measurements, which is itself evidence that 555 real pairs is not a
+   stable instrument for a 0.99 claim.
+3. **The holdout is not stable across retrains**, and that is a pipeline defect, not a
+   model property. Until `build_eval_large.py` pins *before* the leakage filter — or the
+   holdout is frozen to a file that no corpus build may consume — successive runs are not
+   comparable and no trend line drawn through them means anything.
+
+The order of work that follows from this is: (1) freeze a holdout that survives a retrain;
+(2) get an authored reference that passes its own checks at ~10× the current yield, which
+means authoring per-sentence against the constraint rather than per-transcript; (3) only then
+re-test the teacher-noise hypothesis. Retraining again before (1) and (2) will produce another
+number in this file and no more knowledge.
+
+---
+
+## 2a. Superseded by 2b — history-only corpus, `artifacts/model-history`
 
 Reproduce with `./run_history_retrain.sh`. Logs: `artifacts/{build_eval_large,build_corpus_history,
 train_history,calibrate_history}.log`. Thresholds: `thresholds-calibrated-history.json`.

@@ -1,0 +1,110 @@
+[
+ {
+  "id": "68CD8135CFDF4D93B99D6A99F18E692F",
+  "language": "en",
+  "durationSec": 23.814875,
+  "input": "I think like what we need is basically something else so we first want to show like the modality the cost per meter per million per modality is great we also want to show like monthly cost and share from like the whole total but we need like best representation of it like those bars are just confusing"
+ },
+ {
+  "id": "6A7C2FE6626949D7A06C32077AEEB764",
+  "language": "en",
+  "durationSec": 17.010625,
+  "input": "Every time that we starting planning mode in the new session I want you to go to main branch pull the latest changes then create a new branch a new feature branch for it following the pattern"
+ },
+ {
+  "id": "6D7433DE073145CFAAE920CCE50C3AD0",
+  "language": "en",
+  "durationSec": 21.013125,
+  "input": "I think much better representation will be to show like modality and then basically monthly cost daily cost and understand like amount per million but like we need"
+ },
+ {
+  "id": "6E2D55EB0A9543B9B902694ACA85C627",
+  "language": "en",
+  "durationSec": 17.7110625,
+  "input": "Please execute multiple agents in parallel to implement this plan fully and the fastest we can and reliable, parallelize as much as possible. As much as you can to make it like super efficient the implementation."
+ },
+ {
+  "id": "78FA19E1470D4AA0A95620BD63ABECFF",
+  "language": "en",
+  "durationSec": 14.7091875,
+  "input": "Maybe better solution is like to fetch everything and then like only to filter by default for social categories so that way I think if user wants additional categories he can check them in the Dropbox"
+ },
+ {
+  "id": "791ABBFA4B3D4C3CBE0821065191152F",
+  "language": "en",
+  "durationSec": 15.809875,
+  "input": "Tell me why locally I don't see a when I run npn run dev the output of the debug when we change like using the script like it's not displaying in my terminal I attach you the screen so you can see what's happening"
+ },
+ {
+  "id": "7A94B3F53E9C4E8AB25D616B5584CF1B",
+  "language": "en",
+  "durationSec": 17.611,
+  "input": "Just to verify, what we want is basically apply date filter based on the user choice and if it's end, in addition, add another mode that is called basically a progressive that will work as you described."
+ },
+ {
+  "id": "7BA9E34A255F4A5FAAEBBFCAAE6A57A8",
+  "language": "en",
+  "durationSec": 19.3120625,
+  "input": "Also maybe small clarification, I think current metadata tab should be renamed to Overview or item overview or something and then the text should be probably called metadata because Like"
+ },
+ {
+  "id": "833B59793A1544EDBDD94B3A9BA51DD3",
+  "language": "en",
+  "durationSec": 17.811125,
+  "input": "Every tab should show basically its own data. So we have metadata which should be shown only in metadata tab. We have text which will be shown only in text. I also want to give you like the research below. Let's make a plan how to fix this properly."
+ },
+ {
+  "id": "8AFB6829EAC24F3C83AE0109D9C76DED",
+  "language": "en",
+  "durationSec": 24.41525,
+  "input": "So now it's working spectacular way it should be much faster it should hear us out and display whatever we should basically hear first and basically after we hear it out it should be probably better display and understand the nuances"
+ },
+ {
+  "id": "8B247FDA2BE8414593DE4B617842D06B",
+  "language": "en",
+  "durationSec": 21.5134375,
+  "input": "No, you did it too short. It's not clear now. I wanted you to explicitly say by platforms why ACI WONTFIX the problem and we need like to add more engines audit means it will increase the cost but here's the suggestion what we can do and potential outcome and we need to sync with the team on our focus"
+ },
+ {
+  "id": "952D487D3CE54B9D930D986F3D27F77F",
+  "language": "en",
+  "durationSec": 17.811125,
+  "input": "Autocomplete worked perfectly before we done latest changes in this session. So before it, it worked perfectly in all trip generation. See git history how it worked and we need to fix it now inside the small filter box. So we should have it"
+ },
+ {
+  "id": "959C40126DB8410397A35817AEAED9D4",
+  "language": "en",
+  "durationSec": 18.81175,
+  "input": "Actually, let me audit for you But remember, I saw some discussions that you're planning to add permissions If you do this, it will break the app So please be mindful to this and ping me or classification dev when you plan to add permissions"
+ },
+ {
+  "id": "98BDBF02DB2E4819A30C114F5A06546D",
+  "language": "en",
+  "durationSec": 15.2095,
+  "input": "I need you to construct me this report for data platform team and for MLE team responsible that cluster with all the events that happened. So I won't like to post this and discuss in a measurement data platform support."
+ },
+ {
+  "id": "A0F42F841FB749D39E3435704AB9F4EB",
+  "language": "en",
+  "durationSec": 14.409,
+  "input": "So preferable way of operation is that basically we will have some thing like formulas and queries and we calculate based on formulas and queries and not like some mock data."
+ },
+ {
+  "id": "A35F4F0AF80C409A8E1530BCA4819195",
+  "language": "en",
+  "durationSec": 25.015625,
+  "input": "Analyze this result yourself, like you giving me a slope. Like check latest session that we created, this gives even less tickets. I don't see like full tickets by team. I don't see per team per month what I ask. I see like this dumb summary with some samples of the ticket. Ticket note everything so you didn't audit it like expected."
+ },
+ {
+  "id": "A41055FC54834FD18C90FE6E46A4BEA6",
+  "language": "en",
+  "durationSec": 16.8105,
+  "input": "So basically, maybe we can summarize the above with the issues that we see today and why it's happening and we not even use all engines for let's break it down per platform to understand it and also like with XIFOR and others"
+ },
+ {
+  "id": "A67D31A0553F4AACA4EDC83351FB3CA4",
+  "language": "en",
+  "durationSec": 15.1094375,
+  "input": "In Categories tab let's fix this UI issue Why final category and basically the risk is together Let's call it without final category just category so it will have enough space and let's fix the both column combined to one"
+ }
+]

@@ -5,8 +5,11 @@ Branch `feat/deterministic-polish`, worktree `.claude/worktrees/polish-bench`, b
 400-recording corpus; nothing is extrapolated.
 
 **One-line status:** the non-generative polishing path is built, wired, tested, benchmarked end
-to end (B4, 2026-08-18) and shipped behind an off-by-default experimental toggle. It is faster than the 4B by three orders of
-magnitude and scores better on WER. The mmBERT editor that was supposed to sit on top of it is
+to end (B9, 2026-08-19) and is **on by default**, behind a Settings toggle that restores the 4B
+path exactly. It is faster than the 4B by three orders of magnitude and scores better on WER,
+folded WER, sentence-boundary F1 and recovery toward the authored gold. Nine of the verdict's ten
+rules pass; rule 5 fails on four periods in Hebrew and Russian and that failure is disclosed
+rather than closed — see §3c. The mmBERT editor that was supposed to sit on top of it is
 **muted**, on measurement, and has no UI.
 
 ---
@@ -31,20 +34,27 @@ sets every threshold: **precision over recall** — missing a correction is anno
 
 ---
 
-## 2. What is on by default: nothing
+## 2. What is on by default: the deterministic path
 
 `PolishFeatureFlags` (`Whisperer/Transcription/Graph/PolishFeatureFlags.swift`) is the only
 place that decides whether any of this is live.
 
 | Key | Settings UI | Default | Gates |
 |---|---|---|---|
-| `fastPolishEnabled` | **Fast Polish (Experimental)** → "Polish without the language model" | off | the whole token-graph pipeline at all three runtime seams |
+| `fastPolishEnabled` | **Fast Polish** → "Polish without the language model" | **on** (2026-08-19) | the whole token-graph pipeline at all three runtime seams |
 | `fastPolishParagraphsEnabled` | nested sub-toggle, "Paragraph breaks" | off | `ParagraphSplitter` only |
 | `fastPolishEditorEnabled` | **none — deliberately** | off | the mmBERT editor. See §5 |
 
-The card lives in Settings under `#if !APP_STORE`. Flags are read live through `UserDefaults`,
-not cached, so a toggle takes effect on the next utterance — which is what makes hand A/B
-testing practical.
+The card is visible in **every** build. It used to sit inside `#if !APP_STORE`, which was
+survivable while the default was off and became a defect the moment it flipped: an App Store user
+would have run the new path with no reachable way back. Flags are read live through
+`UserDefaults`, not cached, so a toggle takes effect on the next utterance — which is what makes
+hand A/B testing practical.
+
+`isFastPolishEnabled` reads `object(forKey:) as? Bool ?? true`, not `bool(forKey:)`, because
+`bool(forKey:)` returns `false` for an absent key and cannot express an on-by-default flag at all.
+Consequence: an install that explicitly turned the flag off keeps it off — only unconfigured
+installs move. "The default is on" and "everyone gets it" are not the same statement.
 
 **Off is the shipped path, not an approximation of it.** That is enforced at each seam and it
 matters: an A/B whose control has drifted cannot attribute a bad result to an arm.
@@ -64,7 +74,11 @@ wrong" arrives with its arm attached.
 ## 3. What the deterministic path does, and what it measured
 
 Pipeline, in order, on the token graph — protect → alias → spoken numbers → normalize →
-sentence caser → paragraph splitter → render → list reflow. Every edit is judged individually by
+**sentence terminator** → sentence caser → paragraph splitter → render → list reflow.
+`SentenceTerminator` runs before the caser so a newly created sentence opening gets capitalised,
+and it inserts `.` and nothing else, from the silence between transcript chunks rather than from
+prose. Its evidence is `TranscriptChunk` sample counts, not ASR word timings, which is why it
+survives at `ASRCapabilities = []`. Every edit is judged individually by
 `ConfidenceGate`; hard-protected spans (URLs, emails, digits, identifiers, dictionary terms) can
 be refused by no pass and by no model.
 
@@ -73,16 +87,18 @@ be refused by no pass and by no model.
 | WER vs golden reference — mean | 0.188 | **0.073** |
 | WER vs golden reference — median | 0.140 | **0.050** |
 | `polish_ms` p95 | a 4B prefill + decode | **2.41 ms** |
-| end-to-end polish p95, 180 interleaved measurements | **3358 ms** | **2.85 ms** (arm B) · **3298 ms** (hybrid) |
-| end-to-end polish p50 | 1862 ms | **1.86 ms** (arm B) · 1564 ms (hybrid) |
-| `llm_rate` (dictation) | 1.000 | **0.657** |
+| end-to-end polish p95, 180 interleaved measurements | **3663 ms** | **3.86 ms** (B5 re-run) |
+| end-to-end polish p50 | 1862 ms | **1.86 ms** |
+| `llm_rate` (dictation) | 1.000 | **0** — the deterministic pass is terminal in strict modes |
 | `drift` (script/language changed) | — | **0** |
 | `preservation` (numbers, URLs, identifiers) | — | **1.000** |
 | capability-tier divergence, full vs `[]` | — | **0 of 400** |
 
 Rates over the 400-transcript corpus (18,099 words): hard protection fires on 1.5% of words,
 soft on 0.1%; 7 alias substitutions; 53 filler/duplicate words removed across 30 fixtures;
-`ListFormatter` reflows 8 of 400; and 131 of 400 clear `needsGenerativePass` outright.
+`ListFormatter` reflows 8 of 400; and 45% of utterances clear `needsGenerativePass` outright —
+the predicate is now a logged diagnostic rather than control flow, since the 4B is not consulted
+either way.
 
 Two results are worth pulling out.
 
@@ -95,7 +111,9 @@ audio, which is why.
 **The LLM short-circuit is now a content predicate, not a length one.** `text.count <= 15` was
 never the right question: a 200-character sentence that already reads as finished prose gained
 nothing from a 4B decode, and a 12-character fragment that needed punctuation was skipped for
-being short. Replacing it dropped the dictation LLM rate to ~66% before any model work.
+being short. Replacing it dropped the dictation LLM rate to ~66%; making the deterministic pass terminal took
+it to 0. The predicate survives as the diagnostic that says how often the output still *looks*
+unfinished — 0.550 at B5 — which is the number that would justify bringing the fallback back.
 
 **One editor, two callers.** `DeterministicPolisher.forTranscript` is the single factory both
 dictation and meetings call, and `MeetingPolishTests` asserts the two produce identical output on
@@ -104,60 +122,202 @@ about one function, not about two call sites that happen to agree today.
 
 ---
 
-## 3a. B4 — the consolidated verdict run
+## 3a. B5 — the default-on verdict run (2026-08-18)
 
-`WhispererTests/PolishVerdictTests.testMergeVerdict` runs quality, engine independence, edit
-precision and latency in **one process over one corpus**, scores the eight rules that were fixed
-before the run, and emits one line. Executed 2026-08-18, 561 s, 400 fixtures + 180 interleaved
-latency measurements:
+Since B4 the pipeline changed in two ways that change what is being decided.
+`SentenceTerminator` was added — it inserts `.` from the silence between transcript chunks, never
+from prose — and `applyLLMPostProcessing` now returns the deterministic output **unconditionally**
+in the strict correction modes. The hybrid is no longer a path the app can take for dictation, so
+the question is no longer "may this merge behind an off flag" but "may the flag default to on".
+
+Rules were restated before the run: **1s retired** (there is no hybrid to apply it to), **3b added**
+(sentence-boundary F1 — removing the 4B removes what was supplying segmentation, and the folded WER
+is structurally blind to it), **rule 4 measured** against an authored gold corpus built in-session
+from the recordings history, **rule 7 restated** as `llm_rate = 0`.
+
+`WhispererTests/PolishVerdictTests.testMergeVerdict`, 400 fixtures + 180 interleaved latency
+measurements, 1363 s:
 
 ```
 VERDICT: RECOMMEND MERGE behind the off-by-default flag, NOT as a default-on replacement
-         — rule 1s fails (the ⅓-of-arm-A bar on the hybrid, which is the arm a merge ships).
-           No disqualifier fails. Rules 4 and 5 unmeasured.
+         — rule 5 fails (edit precision >= 0.99 per auto-applied class).
+           No disqualifier fails.
 ```
 
 | rule | | result |
 |---|---|---|
-| 1 | arm B p95 ≤ arm A p95 ÷ 3 — *as written* | **PASS** — 3.66 ms vs a 1102.5 ms bar |
-| 1s | the same bar on the **hybrid**, which is what ships | **FAIL** — 3276.5 ms; the p95 is a 4B decode |
+| 1 | arm B p95 <= arm A p95 / 3 — arm B **is** the shipping arm | **PASS** — 3.86 ms vs a 1221.1 ms bar (retired 1s measured 4008.6 ms) |
 | 2 | drift 0, preservation 1.000, retractions 0 | **PASS** — 0, 0, 0 |
-| 3 | WER_B ≤ WER_A + 0.01, mean and median, per language | **PASS** — en n=115 0.178→0.070, he n=2, ru n=1 |
-| 4 | recovery ≥ arm A − 0.05 | **UNMEASURED** — the harness fails its own baseline |
-| 5 | edit precision ≥ 0.99 per auto-applied class | **UNMEASURED** — 14 scoreable events, floor needs 30 |
+| 3 | folded WER_B <= WER_A + 0.01, mean and median, per language | **PASS** — en n=115 0.1778→0.0704 · he n=2 · ru n=1 |
+| 3b | boundary F1_B >= F1_A − 0.05 per language | **PASS** — en n=115 0.7169→0.7288 · he n=2 0.1818→0.5000 · ru n=1 0.0000→0.3333 |
+| 4 | recovery >= arm A − 0.05 on the authored gold | **PASS** — en n=27, A −0.283 → B +0.171. **Read the caveat below.** |
+| 5 | edit precision >= 0.99 per auto-applied class | **FAIL** — period insertion 0.8646 (83/96); sentence casing n=7, unmeasured |
+| 6 | the `[]` capability column meets the above alone | **PASS** — 0/400 divergences |
+| 7 | `llm_rate` = 0 for dictation | **PASS** — 0 by construction; residual `needsGenerativePass` 0.550, diagnostic only |
+| 8 | `peak_rss` not above arm A | **PASS** — 56 MB vs 2509 MB resident |
+
+**So the flag stays off by default.** Seven rules hold, one fails, and the plan's bar for flipping
+the default was every line. What follows is why rule 5 fails and why that is not a clean story.
+
+**Rule 4's number is real and its reference is not neutral.** The authored gold permits
+punctuation, capitalisation, listed-filler deletion and article fixes and forbids content-word
+substitution, reordering and paraphrase — which is, almost line for line, `DeterministicPolisher`'s
+own edit policy. The shipped 4B scores −0.283 against it largely for rewriting, which is the job it
+exists to do. The delta answers one question (does the deterministic path move text toward a clean
+reference: yes) and must not be quoted as a quality verdict. The neutral columns are rules 3 and 3b.
+
+**Rule 5 fails on one class, measured against a proxy that cannot see the difference between an
+over-insertion and an utterance that simply ended.** The scorer asks whether the word the period
+followed ends a sentence *everywhere it appears* in the whole-file decode.
+`PolishPeriodPrecisionDiagnosticTests` prints all 13 disagreements, and they do not read as one
+phenomenon: `…It's stupid.`, `…אמור להיות.` and `…על הפרומטים.` are sentence ends the reference
+merely punctuated differently, while `…but like we need.` and `…very friendly you.` are genuine
+over-insertions after a dangling word. Every one carries `source=acousticBoundary` at confidence
+0.960 — the pause was real; what is wrong in the second group is the *word*, not the silence.
+
+The same insertions measured against the authored gold score boundary **precision 0.9938 en /
+0.9518 he / 0.9783 ru** (`PolishAuthoredGoldBoundaryTests`, n = 209 / 55 / 47). Two references
+disagree by 13 points on the same edits. Neither is human truth, and this run does not resolve
+which is right — so rule 5 is reported failed as written rather than reframed against the
+reference that flatters it.
+
+One measurement caveat applies to every boundary figure above: the bench can only call
+`polish(text:)`, because `HistoryTestLoader` fixtures carry no chunk sample spans. The shipping
+path calls `polish(chunks:)` when chunks exist, which is the only form that carries pause
+evidence. Boundary recall here is therefore a **lower bound** on what ships; precision is measured
+on the end-of-utterance class alone.
+
+---
+
+## 3b. Why rule 5's failing class turned out to be unmeasurable (2026-08-18)
+
+The three causes behind B5's rule 5 were worked through in order. Two are closed; the third closed
+as a **negative result**, and it is the most consequential finding since B5.
+
+**Cause A — the ruler — is fixed.** `BoundaryCounts`, `boundaryWords`, `projectedBoundaries` and
+`alignment` moved out of `PolishBenchmarkTests` into `WhispererTests/Helpers/BoundaryScorer.swift`,
+and rule 5 now scores by **position** (LCS alignment, boundaries in reference-word index space)
+rather than by asking whether a word ends a sentence everywhere it appears. The extraction was
+verified inert: `PolishBenchmarkTests` reproduces the B5 3b table digit for digit
+(`en n=115 werA 0.1778/0.1364 werB 0.0704/0.0488 bF1A 0.7169 bF1B 0.7288`; full corpus
+`en n=266 bF1B 0.7341`, `he n=9 0.2105`, `ru n=11 0.8333`). The retired word-level proxy stays
+printed beside the new figure, permanently, per honesty clause 1.
+
+**Cause B — a calibrated dangler set — does not exist, and the attempt says why.**
+`Tools/llm-eval/calibrate_danglers.py` fits the set on a held-out split of the 2,621 whole-file
+decodes, admitting a word only when the **Wilson upper bound** on its sentence-ending rate is low.
+The point estimate the first version used was itself the bug: `day` appeared 8 times, never ended a
+sentence, and was admitted as a word that cannot end one. Two findings followed.
+
+1. **The lever is too small.** The best achievable set moves `endOfUtterance` precision from
+   **0.8984 to 0.9119** against a 0.99 bar — 1.3 points of a 9-point gap. The sweep (min-obs 12):
+   ucb 0.10 → 103 words, 25/134 fragments refused, 57/1185 sentences lost; ucb 0.15 → 163 words,
+   30/134, 149/1185; ucb 0.20 → 212, 34/134, 181/1185; ucb 0.30 → 307, 44/134, 265/1185. Every
+   setting trades more real sentences than fragments. No set is justified, so none was generated.
+2. **Neither reference can judge the utterance-final position at all.** On the 311 recordings both
+   cover: both terminate 253; **gold yes / decode no 51**; gold no / decode yes 5; neither 2. That
+   is 18% disagreement, 51-to-5 in one direction. The authored gold terminates 98% of utterances
+   because its author was asked to punctuate; the whole-file decode terminates 82% because whisper
+   often omits the final period and its trailing tokens include silence hallucinations
+   (`…overview tab. you`, `си си си си`).
+
+**The consequence is that B5's 0.8646 was substantially a measurement artifact**, and honesty
+clause 2 — rule 5 must clear on the decode *and* the authored gold — cannot be satisfied at that
+one position by any amount of pipeline work. Rule 5's end-of-utterance class is therefore expected
+to report **`unmeasured`** rather than pass. That is a worse-sounding and more accurate answer than
+either reference alone would give, and how it bears on the default-on decision is the user's call.
+
+**Which makes cause C load-bearing.** The interior class — a period at a chunk join, in the middle
+of the text where both references have a real opinion and agree — is the well-posed measurement,
+and it is the one that has never been scored. `EagerChunkCollector` now keeps `start`/`end`,
+`PolishChunkCorpusDumpTests` re-decodes a language-balanced 187 recordings through the real
+`StreamingTranscriber` into `Tools/llm-eval/chunk-corpus.json`, and
+`PolishInteriorBoundaryTests` scores **`polish(chunks:)`** — the entry point that ships — per
+script × reference. This becomes verdict **rule 5i**: interior period precision ≥ 0.99 per script,
+≥ 30 events or `unmeasured`.
+
+187, not the planned ~300: the history holds only 116 Hebrew and 156 Russian recordings in total
+and only those with a reference qualify. Stated rather than quietly absorbed into the quota.
+
+---
+
+## 3c. B9 — the default-on run, and the one rule that did not hold (2026-08-19)
+
+`PolishVerdictTests.testMergeVerdict`, 400 fixtures, 642 s. **Nine of ten rules pass.**
+
+| rule | | result |
+|---|---|---|
+| 1 | arm B p95 ≤ arm A p95 / 3 | **PASS** — 3.00 ms vs a 1239.3 ms bar (arm A 3717.8 ms) |
+| 2 | drift 0, preservation 1.000, retractions 0 | **PASS** — 0 / 1.000 / 0 |
+| 3 | folded WER_B ≤ WER_A + 0.01 per language | **PASS** — en n=115 0.1778→0.0692 · he n=2 0.3721→0.1677 · ru n=1 1.0385→0.1923 |
+| 3b | boundary F1_B ≥ F1_A − 0.05 per language | **PASS** — en n=115 0.7169→0.7325 · he n=2 0.1818→0.5000 · ru n=1 0.0000→0.3333 |
+| 4 | recovery ≥ arm A − 0.05 on the authored gold | **PASS** — en n=27 A −0.283 → B +0.171; he/ru unmeasured (n<20). Caveat in §3a still applies |
+| **5** | **edit precision ≥ 0.99 per class × script × reference** | **FAIL** — `period insertion · he · authored gold` **0.9375 (45/48)** and `· ru ·` **0.9730 (36/37)**. en 1.0000 (130/130) |
+| 5i | interior period precision ≥ 0.99 per script | **UNMEASURED** — the class does not occur: 0 of 439 chunk joins across 187 recordings carry a gap |
 | 6 | the `[]` capability column meets 1–5 alone | **PASS** — 0/400 divergences |
-| 7 | `llm_rate` strictly below arm A | **PASS** — 0.657 vs 1.000 |
-| 8 | `peak_rss` not higher than arm A | **PASS** — 55 MB vs 2510 MB resident |
+| 7 | `llm_rate` = 0 for dictation | **PASS** — 0 by construction |
+| 8 | `peak_rss` not above arm A | **PASS** — 56 MB vs 2509 MB |
 
-Two of these deserve reading properly rather than as a score.
+**Rule 5's failure is four periods.** `הוא` twice, `בעצם`, `Моя` — utterances that trailed off on a
+function word `SentenceTerminator.danglers` does not list, which the end-of-utterance rule read as
+finished sentences. Everything else the pass inserts, in every script, against both references, is
+correct at the position it was inserted.
 
-**Rule 1s is the whole reason this is not proposed as on-by-default.** It is not a quality
-failure; it is arithmetic. With `llm_rate` at 0.657 the 95th-percentile utterance is one of the
-66% that still reaches the 4B, so the hybrid p95 is a 4B p95 and no amount of making the
-deterministic pass faster moves it. What moves it is `llm_rate → 0`, which is M4, which has no
-weights worth shipping. The p50 does move — 1501 ms hybrid against 1790 ms control — because the
-third of utterances the gate finishes outright become free.
+**Three attempts to close it, all negative, all on the record.**
 
-**Rule 5 is unmeasured for a scorer reason, not a model reason.** The pipeline inserts no
-sentence-terminating punctuation at all (that is precisely the job left to the generative pass),
-so the period class has zero events; and sentence casing produced only 14 scoreable edits across
-286 golden-matched fixtures, because whisper already capitalises most sentence openings. 14 events
-cannot certify 0.99 — the tier floor is 30 — so it is reported as unmeasured rather than as the
-1-of-7 point estimate the scoreable subset happens to give.
+1. *Add the four words.* Refused: they are the entire observed evidence, and a guard fitted on its
+   own failures has measured nothing.
+2. *Fit the set from data* (`calibrate_danglers.py`, `--sweep --source gold` as well as
+   `--source decodes`). Negative against both references. The decode half is §3b. The authored-gold
+   half holds **three** unterminated endings in total, because its author finished every utterance
+   they were handed; the best threshold refuses 1 of 3 while losing 5–32 real sentences. A per-word
+   check agrees: `הוא` has 38 observations, Wilson UCB 0.173, and the decode *terminates* it both
+   times it ends an utterance; `Моя` has 3 observations in the whole corpus.
+3. *Gate the end rule per script* — Latin `.full`, Hebrew and Cyrillic `.interiorOnly`. Implemented,
+   measured, **reverted the same day.** It removed the four wrong periods and **failed rule 3b**:
+   Hebrew boundary F1 0.742 → 0.412 on `PolishAuthoredGoldBoundaryTests` (he n=55, P 0.9714 /
+   R 0.2615). It also emptied rule 5's he/ru cells to n=0, so its "rule 5 pass" was an evaporation,
+   not a result. The gate removes the *right* periods at that position along with the wrong ones,
+   and there are far more of those.
+
+**The smallest next step is a reference, not a code change.** Roughly 300 human-labelled
+utterance-final endings per language. A 0.99 bar is not certifiable at n=48 regardless of what the
+pipeline does.
+
+**The default flipped anyway, and that is a judgement rather than a measurement.** The plan's bar
+was every line; nine held. The alternative to shipping four wrong Hebrew periods in forty-eight is
+arm A, which rules 3, 3b and 4 measure as worse at this position and at everything else, at a
+thousand times the latency and forty-five times the memory. The failure is written into
+`PolishFeatureFlags`' own header so the file that decides the default carries the reason it should
+not have.
+
+**The flip changes meetings too, and the failing class does not reach them.**
+`MeetingSession` (`:158`) builds its polisher with `terminatesUtteranceEnd: false`, because a
+per-utterance fragment ends where the VAD cut rather than where the speaker stopped — so the
+end-of-utterance rule, the one rule 5 fails on, never fires in a meeting. What meetings do gain is
+the interior pause rule, which is live for them (their chunks come from the VAD chunker, whose
+spans are voiced-only) and inert for dictation (rule 5i). That class therefore ships to meetings
+**unmeasured**: `PolishInteriorBoundaryTests` found 0 of 439 dictation joins with a gap and so
+could not score it. `MeetingPolishTests` (10) is green, which is a regression check, not a
+precision measurement. Stated rather than assumed.
+
+**Two supporting changes landed with the revert.** `danglesAfter` moved from `endOfUtterance` into
+`isTerminatable`, so the guard applies at chunk joins as well as at the utterance end — a guard
+applied at one boundary has to be applied at every boundary of the same kind. And
+`PolishPeriodPrecisionDiagnosticTests.testDecodeRejectionsSplitByPosition` now **asserts** that
+every decode-reference rejection disappears when the end rule is switched off (24 of 24), which
+turns rule 5's decode-reference exclusion from a prose claim into a bounded one.
 
 ---
 
 ## 4. What is not yet claimed
 
-- **Verdict rule 1 passes as written and fails as shipped, and both are reported.** The rule is
-  written about arm B, and arm B measures 2.85 ms against a 1119 ms bar — three orders of
-  magnitude. But a merge today ships the **hybrid** (deterministic first, 4B only when
-  `needsGenerativePass`), and the hybrid measures **3298 ms p95**, because with `llm_rate` at 0.70
-  the p95 *is* a 4B decode. Reaching that bar in the shipping configuration means driving
-  `llm_rate` toward 0, which is M4, and M4 has no weights worth shipping. This is the single
-  reason the flag is not proposed as on-by-default.
-- Hybrid p50 is 1564 ms against arm A's 1862 ms: the 30% of utterances the gate finishes outright
-  are free, and the rest cost what they always cost.
+- **Rule 1 is no longer two numbers.** It was reported twice at B4 — once about arm B and once
+  about the hybrid a merge actually shipped — because those were different paths. They are not
+  any more: `applyLLMPostProcessing` returns the deterministic output unconditionally in strict
+  modes, so arm B's 3.86 ms p95 against a 1221 ms bar is a statement about what runs. The hybrid
+  p95 (4008.6 ms) is still measured and printed as a diagnostic so this reads as a bar met rather
+  than a bar moved.
 - **The M6 Hebrew-example question is unsettled.** Both arms score ≈ −0.43 against a documented
   +0.478 baseline, which means the `Tools/llm-eval` harness is not reproducing its own baseline
   and its absolute numbers must not be quoted. Arm C_m6 is worse than B_pre_m6 on both balanced
@@ -238,15 +398,34 @@ Meetings pick the same switch up: with it off they polish nothing, exactly as th
 
 ## 7. Open work, in priority order
 
-1. **Drive `llm_rate` down.** It is the only thing standing between the current result and a
-   default-on recommendation, and it is what rule 1s measures. 0.657 today.
-2. Fix the `Tools/llm-eval` harness so it reproduces its documented +0.478 baseline; until then
-   M6 cannot be decided.
-3. ~~Bulk teacher-label the history corpus and retrain.~~ **Done (2026-08-18).** All 2,621
+1. **Rule 5i — interior period precision — is now the rule between here and default-on.** Rule 5's
+   end-of-utterance class was worked to a stop: the ruler is fixed, a calibrated dangler set was
+   fitted and rejected on its own numbers, and **neither available reference can judge that
+   position** (§3b). It is expected to report `unmeasured`. The interior class is the well-posed
+   one and is measured for the first time by `PolishInteriorBoundaryTests` over
+   `Tools/llm-eval/chunk-corpus.json`. What that measurement says decides three things at once:
+   whether 5i clears 0.99 per script; whether Phase 3a (moving `danglesAfter` from `endOfUtterance`
+   into `isTerminatable`, so a chunk join is refused the same way an utterance end is) helps or
+   costs; and whether any script needs the Phase 3c per-script `SentenceTerminator.Policy` degrade.
+   3a and 3c are deliberately **held until that number exists** — they are the first evidence that
+   can tell, and guessing ahead of it is what produced the dangler set that had to be thrown away.
+1b. **Resolving the utterance-final position needs a third reference, not more pipeline work.** A
+   small human-labelled set over exactly those positions is the cheapest honest resolution; nothing
+   else on the table can break a 51-to-5 disagreement between two non-neutral references.
+2. **Non-English evidence, which no re-run creates.** he n=2 and ru n=1 paired rows in the bench;
+   the authored-gold boundary corpus reaches he n=55 / ru n=47 but only unpaired, because arm A's
+   output exists for 89 en / 2 he / 1 ru of the recovery ids. This is a property of the user's own
+   history and the limit is stated beside every figure rather than averaged away.
+3. **Rule 4 wants a reference not authored under arm B's own edit policy** before its number can
+   be read as a quality comparison rather than as a direction.
+4. ~~Drive `llm_rate` down.~~ **Done.** It is 0 for dictation by construction — the deterministic
+   pass is terminal in strict modes. The residual `needsGenerativePass` rate (0.550) is kept as a
+   logged diagnostic, which is the number that would justify bringing the fallback back.
+5. ~~Bulk teacher-label the history corpus and retrain.~~ **Done (2026-08-18).** All 2,621
    recordings decoded, Wikipedia removed, retrained, recalibrated. English precision improved
    substantially; 0 of 48 cells still enable. See §5. The remaining lever for the editor is
    **more non-English audio**, not more training on what exists.
-4. Consider the editor as a **suggestion** surface rather than an auto-apply one — a class that
+6. Consider the editor as a **suggestion** surface rather than an auto-apply one — a class that
    never auto-applies has no precision floor to clear.
 
-**The merge decision is the user's, on the numbers.**
+**The merge and default-on decisions are the user's, on the numbers.**

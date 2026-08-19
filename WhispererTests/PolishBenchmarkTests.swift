@@ -42,6 +42,11 @@ final class PolishBenchmarkTests: XCTestCase {
         let crossLanguageReference: Bool
         let werA: Double?
         let werB: Double
+        /// Boundary counts, not a per-row F1. A ratio over the two or three sentences in one
+        /// 20-second utterance is 0, 0.5 or 1 and its mean is noise; summing the counts first and
+        /// dividing once per language is the same metric measured where it has a denominator.
+        let boundaryA: BoundaryCounts?
+        let boundaryB: BoundaryCounts
         let driftB: Bool
         let preservedB: Bool
         let invokedLLM: Bool
@@ -68,7 +73,12 @@ final class PolishBenchmarkTests: XCTestCase {
 
     func testQualityArmAVersusArmB() throws {
         let fixtures = try loadCorpus()
-        let polisher = DeterministicPolisher()
+        // Shipping dictation's configuration, not the initialiser's defaults — see the note in
+        // `PolishVerdictTests`. The bare initialiser turns list reflow and paragraph splitting on;
+        // `AppState.swift:2000` turns the first off and the second follows an off-by-default flag.
+        let polisher = DeterministicPolisher.forTranscript(dictionaryEntries: [],
+                                                           formatsLists: false,
+                                                           splitsParagraphs: false)
 
         var rows: [Row] = []
         var skippedNoGolden = 0
@@ -98,6 +108,11 @@ final class PolishBenchmarkTests: XCTestCase {
                                     != Self.detectedLanguage(of: fixture.transcript),
                             werA: armA.map { Self.wordErrorRate(reference: golden, hypothesis: $0) },
                             werB: Self.wordErrorRate(reference: golden, hypothesis: polished.text),
+                            boundaryA: armA.map {
+                                Self.boundaryCounts(reference: golden, hypothesis: $0)
+                            },
+                            boundaryB: Self.boundaryCounts(reference: golden,
+                                                           hypothesis: polished.text),
                             driftB: Self.drifted(from: fixture.transcript, to: polished.text),
                             preservedB: Self.preservesTokens(of: fixture.transcript, in: polished.text),
                             invokedLLM: polished.needsGenerativePass,
@@ -119,7 +134,12 @@ final class PolishBenchmarkTests: XCTestCase {
     /// `ASRCapabilities = []`, which is the Nemotron and meetings case.
     func testQualityIsIdenticalAtZeroCapability() throws {
         let fixtures = try loadCorpus()
-        let polisher = DeterministicPolisher()
+        // Shipping dictation's configuration, not the initialiser's defaults — see the note in
+        // `PolishVerdictTests`. The bare initialiser turns list reflow and paragraph splitting on;
+        // `AppState.swift:2000` turns the first off and the second follows an off-by-default flag.
+        let polisher = DeterministicPolisher.forTranscript(dictionaryEntries: [],
+                                                           formatsLists: false,
+                                                           splitsParagraphs: false)
 
         var divergences = 0
         for fixture in fixtures {
@@ -139,7 +159,12 @@ final class PolishBenchmarkTests: XCTestCase {
     /// pressure on the very measurement it is meant to inform. It is a separate run.
     func testDeterministicLatency() throws {
         let fixtures = try loadCorpus()
-        let polisher = DeterministicPolisher()
+        // Shipping dictation's configuration, not the initialiser's defaults — see the note in
+        // `PolishVerdictTests`. The bare initialiser turns list reflow and paragraph splitting on;
+        // `AppState.swift:2000` turns the first off and the second follows an off-by-default flag.
+        let polisher = DeterministicPolisher.forTranscript(dictionaryEntries: [],
+                                                           formatsLists: false,
+                                                           splitsParagraphs: false)
 
         var samples: [Double] = []
         for _ in 0..<3 {
@@ -266,30 +291,59 @@ final class PolishBenchmarkTests: XCTestCase {
         WER over \(rows.count) rows; \(crossLanguage.count) excluded — the whole-file decode landed
         in a different language than the streaming decode of the same audio, so the reference is a
         translation of the input and scores ~1.0 on both arms regardless of polishing.
+        boundary F1 is the punctuation column WER cannot be: WER folds terminators away by design,
+        so a run-on output scores the same as a segmented one. `unmeasured` means the denominator
+        was empty, not that the score was zero.
         """)
 
         // Verdict rule 3 is a *paired* comparison. Scoring arm A over the fixtures that have an
         // arm-A output and arm B over all of them would compare two different corpora and read
         // as a win or a loss depending only on which recordings happened to have AI enabled.
-        print("lang / n / werA mean/median / werB mean/median  — paired subset only")
+        print("lang / n / werA mean/median / werB mean/median / boundary F1  "
+            + "— paired subset only")
         for language in ["en", "he", "ru", "mixed", "ALL"] {
             let group = (language == "ALL" ? rows : rows.filter { $0.language == language })
                 .filter { $0.werA != nil }
             guard !group.isEmpty else { continue }
-            print(String(format: "%@ n=%d  werA %.4f/%.4f  werB %.4f/%.4f",
+            print(String(format: "%@ n=%d  werA %.4f/%.4f  werB %.4f/%.4f  bF1A %@  bF1B %@",
                          language, group.count,
                          Self.mean(group.compactMap(\.werA)), Self.median(group.compactMap(\.werA)),
-                         Self.mean(group.map(\.werB)), Self.median(group.map(\.werB))))
+                         Self.mean(group.map(\.werB)), Self.median(group.map(\.werB)),
+                         Self.formatted(group.compactMap(\.boundaryA).summed.f1),
+                         Self.formatted(group.map(\.boundaryB).summed.f1)))
         }
 
-        print("lang / n / werB mean/median / llm_rate  — full scored corpus")
+        // The F1 above without the counts it came from is unauditable, and precision and recall
+        // fail in opposite directions that the harmonic mean hides: an arm that emits no
+        // terminator at all and one that ends every clause both read as "low F1".
+        print("boundary counts (ref, hyp, matched) and P/R on the same paired subset")
+        for language in ["en", "he", "ru", "mixed", "ALL"] {
+            let group = (language == "ALL" ? rows : rows.filter { $0.language == language })
+                .filter { $0.werA != nil }
+            guard !group.isEmpty else { continue }
+            let armA = group.compactMap(\.boundaryA).summed
+            let armB = group.map(\.boundaryB).summed
+            print(String(format: "  %@ n=%d  A ref=%d hyp=%d matched=%d P %@ R %@  |  "
+                            + "B ref=%d hyp=%d matched=%d P %@ R %@",
+                         language, group.count,
+                         armA.reference, armA.hypothesis, armA.matched,
+                         Self.formatted(armA.precision), Self.formatted(armA.recall),
+                         armB.reference, armB.hypothesis, armB.matched,
+                         Self.formatted(armB.precision), Self.formatted(armB.recall)))
+        }
+
+        print("lang / n / werB mean/median / llm_rate / boundary F1  — full scored corpus")
         for language in ["en", "he", "ru", "mixed", "ALL"] {
             let group = language == "ALL" ? rows : rows.filter { $0.language == language }
             guard !group.isEmpty else { continue }
-            print(String(format: "%@ n=%d  werB %.4f/%.4f  llm_rate %.3f",
+            let boundary = group.map(\.boundaryB).summed
+            print(String(format: "%@ n=%d  werB %.4f/%.4f  llm_rate %.3f  bF1B %@ "
+                            + "(ref=%d hyp=%d matched=%d)",
                          language, group.count,
                          Self.mean(group.map(\.werB)), Self.median(group.map(\.werB)),
-                         Double(group.filter(\.invokedLLM).count) / Double(group.count)))
+                         Double(group.filter(\.invokedLLM).count) / Double(group.count),
+                         Self.formatted(boundary.f1),
+                         boundary.reference, boundary.hypothesis, boundary.matched))
         }
 
         // `HistoryTestLoader` orders by `ABS(ZDURATION - 20.0)`, so a 400-fixture corpus is
@@ -348,6 +402,27 @@ final class PolishBenchmarkTests: XCTestCase {
             .split(whereSeparator: { $0.isWhitespace })
             .map { String($0.filter { $0.isLetter || $0.isNumber }) }
             .filter { !$0.isEmpty }
+    }
+
+    // MARK: - Sentence boundaries
+
+    /// Boundary scoring lives in `BoundaryScorer` so rule 3b here and rule 5 in
+    /// `PolishVerdictTests` cannot drift apart about what a correct boundary is. It used to live
+    /// in this file, and rule 5 used a word-level proxy instead of reaching for it — which is how
+    /// the same insertions came to be scored 0.8646 in one test and 0.9938 in another.
+    ///
+    /// These two names are kept because several call sites already spell them this way; both
+    /// forward verbatim, so the 3b table must reproduce digit for digit after the move.
+    typealias BoundaryCounts = BoundaryScorer.Counts
+
+    static func boundaryCounts(reference: String, hypothesis: String) -> BoundaryCounts {
+        BoundaryScorer.counts(reference: reference, hypothesis: hypothesis)
+    }
+
+
+    /// `unmeasured`, not `0.0000`. See `BoundaryCounts.precision`.
+    private static func formatted(_ value: Double?) -> String {
+        value.map { String(format: "%.4f", $0) } ?? "unmeasured"
     }
 
     /// The language of a fixture, by the script its words are actually written in.
@@ -428,5 +503,12 @@ final class PolishBenchmarkTests: XCTestCase {
         let sorted = values.sorted()
         let index = min(sorted.count - 1, Int((Double(sorted.count - 1) * fraction).rounded()))
         return sorted[index]
+    }
+}
+
+private extension Sequence where Element == PolishBenchmarkTests.BoundaryCounts {
+    /// Micro-averaging: one division per language group, over its own summed denominators.
+    var summed: PolishBenchmarkTests.BoundaryCounts {
+        reduce(PolishBenchmarkTests.BoundaryCounts(), +)
     }
 }

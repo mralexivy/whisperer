@@ -33,6 +33,7 @@ from common import (  # noqa: E402
     fold,
     mean,
     normalize,
+    script_of,
     scripts_present,
     sim,
 )
@@ -311,6 +312,164 @@ def invocation_rate(corpus: dict) -> dict:
     }
 
 
+# ---------------------------------------------------------------------------
+# Authored-gold scoring path — selected by --gold.
+# Replaces the corpus-embedded gold (a same-model decode, median headroom 0.038)
+# with an authored reference.  Language grouping uses script_of() over the text,
+# never the declared field.  Old invocations (no --gold) are unchanged.
+# ---------------------------------------------------------------------------
+
+_MIN_N_MEASURED = 20  # below this, per-language figures are unmeasured
+
+
+def _gold_composition(scored: list[dict]) -> dict:
+    """Composition summary for the intersection that was actually scored."""
+    by_lang: dict[str, int] = {}
+    by_split: dict[str, int] = {}
+    by_kind: dict[str, int] = {}
+    by_lang_split: dict[str, int] = {}
+    for row in scored:
+        lang, split, kind = row["language"], row["split"], row["kind"]
+        by_lang[lang] = by_lang.get(lang, 0) + 1
+        by_split[split] = by_split.get(split, 0) + 1
+        by_kind[kind] = by_kind.get(kind, 0) + 1
+        key = f"{lang}:{split}"
+        by_lang_split[key] = by_lang_split.get(key, 0) + 1
+    return {
+        "byLanguage": by_lang,
+        "bySplit": by_split,
+        "byKind": by_kind,
+        "byLanguageSplit": by_lang_split,
+        "note": "language grouping by Unicode script_of(input), not declared field",
+    }
+
+
+def score_against_gold(corpus: dict, gold_corpus: dict, arm: str) -> list[dict]:
+    """Score cases where arm output exists AND an authored gold reference is available.
+
+    Intersection is by case id.  For each matched case:
+      - ``case["gold"]`` is replaced with the authored reference.
+      - ``case["language"]`` is replaced with ``script_of(input)`` so the per-
+        language means in ``aggregate()`` reflect script, not the declared field.
+
+    Cases absent from the gold corpus are silently skipped (they cannot be scored
+    against an authored reference).  Cases absent from the arm are also skipped.
+    """
+    gold_index = {c["id"]: c["gold"] for c in gold_corpus["cases"]}
+    scored: list[dict] = []
+    for case in corpus["cases"]:
+        authored_gold = gold_index.get(case["id"])
+        if authored_gold is None:
+            continue
+        if case["outputs"].get(arm) is None:
+            continue
+        # Shadow gold and language — do not mutate the original dict.
+        modified = dict(case)
+        modified["gold"] = authored_gold
+        modified["language"] = script_of(case["input"])
+        row = score_case(modified, arm)
+        if row is not None:
+            scored.append(row)
+    return scored
+
+
+def _fmt_measured(value, n: int, width: int = 8, places: int = 3) -> str:
+    """Format a per-language figure, replacing point estimates when n is too small."""
+    if value is None:
+        return "—".rjust(width)
+    if n < _MIN_N_MEASURED:
+        return f"unmeasured(n={n})".rjust(width)
+    return f"{value:+.{places}f}".rjust(width)
+
+
+def print_gold_summary(scored: list[dict], arm: str, gold_path: str) -> None:
+    """Print recovery summary for the authored-gold path.
+
+    Every figure carries its n.  Per-language figures with n < 20 are labelled
+    ``unmeasured`` rather than shown as a point estimate.
+    """
+    if not scored:
+        print(f"authored-gold: no cases scored for arm {arm} (intersection is empty)")
+        return
+
+    summary = aggregate(scored)
+    block = summary["all"]
+    holdout_block = summary["holdout"]
+
+    print(f"\nAUTHORED-GOLD SCORING   gold={gold_path}")
+    print(f"arm: {arm}   n_intersection={block['n']}   "
+          f"(language grouped by Unicode script of input text)")
+    print(f"  note: per-language figures with n < {_MIN_N_MEASURED} are labelled unmeasured")
+    print()
+
+    for scope, sb in (("all", block), ("holdout", holdout_block)):
+        n_total = sb["n"]
+        balanced = sb["balanced"]
+        balanced_str = (
+            f"{balanced:+.4f}" if balanced is not None else "—"
+        )
+        print(f"{scope.upper()}  n={n_total}   balanced={balanced_str}  "
+              f"rawMean={sb['rawMean']:+.4f}" if sb["rawMean"] is not None
+              else f"{scope.upper()}  n={n_total}   balanced={balanced_str}  rawMean=—"
+        )
+        print(f"  {'lang':<5} {'n':>5}  {'recovery':>20}  {'content':>20}  "
+              f"{'medHeadroom':>12}  {'drift':>5}  {'gated':>5}")
+        print("  " + "-" * 75)
+        for lang in ("en", "he", "ru"):
+            per = sb["perLanguage"][lang]
+            n = per["n"]
+            if n == 0:
+                print(f"  {lang:<5} {n:>5}  {'—':>20}  {'—':>20}  {'—':>12}  {'—':>5}  {'—':>5}")
+                continue
+            rec_str = _fmt_measured(per["mean"], n, width=20)
+            con_str = _fmt_measured(per["contentRecovery"], n, width=20)
+            head_str = (
+                f"{per['medianHeadroom']:>12.4f}"
+                if n >= _MIN_N_MEASURED else f"{'unmeasured':>12}"
+            )
+            print(f"  {lang:<5} {n:>5}  {rec_str}  {con_str}  {head_str}  "
+                  f"{per['drift']:>5}  {per['gated']:>5}")
+        print(f"  gates: {sb['gates']}   noOps={sb['noOps']}")
+        print()
+
+
+def merge_extra_arm(corpus: dict, dump_path: str) -> None:
+    """Attach a Swift-produced arm dump to the in-memory corpus.
+
+    The deterministic arm's output cannot be read out of the history the way arm A's can — it
+    is computed by `DeterministicPolisher`, so it has to arrive from the Swift side. Merging in
+    memory rather than writing it into `corpus.json` keeps that file what it is: a record of
+    what the shipped model actually returned for these recordings, which is the one thing here
+    that cannot be regenerated.
+
+    Ids in the dump that are not in the corpus are ignored — the dump is keyed by whatever the
+    test was pointed at, and a superset is not an error. Ids in the corpus with no dump entry
+    keep `None` for this arm and are skipped by the scorer, as any missing arm output is.
+    """
+    with open(dump_path, encoding="utf-8") as handle:
+        dump = json.load(handle)
+
+    arm = dump["arm"]
+    outputs = dump["outputs"]
+    attached = 0
+    for case in corpus["cases"]:
+        entry = outputs.get(case["id"])
+        if entry is None:
+            continue
+        # The corpus stores each arm as a record, not a bare string — `score_case` reads
+        # `arm_data["text"]` and `arm_data.get("latencySec")`. Writing the string directly is
+        # what made the scorer raise `string indices must be integers`; the shape is the
+        # contract, so it is constructed here rather than assumed.
+        case["outputs"][arm] = {
+            "text": entry["text"],
+            "latencySec": entry.get("latencySec"),
+            "capabilityTier": dump.get("capabilityTier", "full"),
+            "source": dump.get("source", dump_path),
+        }
+        attached += 1
+    print(f"merged arm {arm} from {dump_path}: {attached}/{len(corpus['cases'])} cases")
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--corpus", default=os.path.join(HERE, "corpus.json"))
@@ -321,11 +480,80 @@ def main() -> None:
         default=os.path.join(HERE, "raw"),
         help="rule 11: every raw output is written here, one file per case",
     )
+    parser.add_argument(
+        "--gold",
+        default=None,
+        metavar="GOLD_CORPUS",
+        help=(
+            "path to an authored gold corpus (e.g. Tools/llm-eval/authoring/gold-corpus.json). "
+            "When present, recovery is scored against the authored reference instead of the "
+            "same-model decode embedded in corpus.json. Language grouping switches to "
+            "script_of(input). Old invocations without --gold are unchanged."
+        ),
+    )
+    parser.add_argument(
+        "--extra-arm",
+        default=None,
+        metavar="ARM_DUMP",
+        help=(
+            "path to an arm dump written by a Swift test (e.g. arm-D_deterministic.json, from "
+            "WhispererTests/PolishCorpusDumpTests). Its outputs are merged into the corpus in "
+            "memory under its declared arm name so --arm can select it. corpus.json is never "
+            "rewritten: it is the record of what the shipped LLM returned and nothing computed "
+            "later belongs in it."
+        ),
+    )
     args = parser.parse_args()
 
     with open(args.corpus, encoding="utf-8") as handle:
         corpus = json.load(handle)
 
+    if args.extra_arm is not None:
+        merge_extra_arm(corpus, args.extra_arm)
+
+    # ------------------------------------------------------------------
+    # Authored-gold path  (--gold supplied)
+    # ------------------------------------------------------------------
+    if args.gold is not None:
+        with open(args.gold, encoding="utf-8") as handle:
+            gold_corpus = json.load(handle)
+
+        scored = score_against_gold(corpus, gold_corpus, args.arm)
+
+        raw_dir = os.path.join(args.raw_dir, f"{args.arm}-authored-gold")
+        os.makedirs(raw_dir, exist_ok=True)
+        for row in scored:
+            with open(os.path.join(raw_dir, f"{row['id']}.json"), "w",
+                      encoding="utf-8") as handle:
+                json.dump(row, handle, ensure_ascii=False, indent=2)
+
+        result = {
+            "arm": args.arm,
+            "goldCorpus": args.gold,
+            "corpus": args.corpus,
+            "database": corpus["database"],
+            "capabilityTier": "full",
+            "similarity": "normalized character-level edit similarity (see common.sim)",
+            "languageGrouping": "script_of(input) — Unicode script, not declared field",
+            "goldSource": "authored",
+            "composition": _gold_composition(scored),
+            "invocationRate": invocation_rate(corpus),
+            "summary": aggregate(scored),
+            "cases": scored,
+            "rawOutputDir": raw_dir,
+        }
+
+        out_path = args.out or os.path.join(HERE, f"results-{args.arm}-authored-gold.json")
+        with open(out_path, "w", encoding="utf-8") as handle:
+            json.dump(result, handle, ensure_ascii=False, indent=2)
+
+        print_gold_summary(scored, args.arm, args.gold)
+        print(f"wrote {out_path} and {len(scored)} raw outputs to {raw_dir}")
+        return
+
+    # ------------------------------------------------------------------
+    # Standard path  (no --gold)
+    # ------------------------------------------------------------------
     scored = [row for row in (score_case(c, args.arm) for c in corpus["cases"]) if row]
 
     # rule 11 — save every raw output. Re-scoring is then free; re-running is not.

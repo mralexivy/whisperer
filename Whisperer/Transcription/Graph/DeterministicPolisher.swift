@@ -51,6 +51,14 @@ struct DeterministicPolisher: Sendable {
     /// is the same rule the fragment-mode LLM instruction states in prose at
     /// `AppState.applyLLMPostProcessing`.
     let isFragment: Bool
+    /// Whether `SentenceTerminator` may close the sentence at the end of the text.
+    ///
+    /// Separate from `isFragment` because the two questions come apart. A meeting utterance is not
+    /// a fragment — it wants sentence-initial capitals and it is a whole VAD chunk — but its *end*
+    /// is a chunk boundary in the middle of a card, and whether the speaker finished a sentence
+    /// there is only knowable from the silence that follows, which the next chunk carries. So the
+    /// per-utterance pass declines to terminate and the card pass, which has the pause map, does it.
+    let terminatesUtteranceEnd: Bool
     /// Whether `ParagraphSplitter` may insert breaks.
     ///
     /// Explicit rather than read from `PolishFeatureFlags` here, so a test constructing a polisher
@@ -63,12 +71,14 @@ struct DeterministicPolisher: Sendable {
          dictionaryTerms: Set<String> = [],
          formatsLists: Bool = true,
          isFragment: Bool = false,
+         terminatesUtteranceEnd: Bool = true,
          splitsParagraphs: Bool = true) {
         self.aliases = aliases
         self.gate = gate
         self.dictionaryTerms = dictionaryTerms
         self.formatsLists = formatsLists
         self.isFragment = isFragment
+        self.terminatesUtteranceEnd = terminatesUtteranceEnd
         self.splitsParagraphs = splitsParagraphs
     }
 
@@ -97,7 +107,16 @@ struct DeterministicPolisher: Sendable {
         //    deletions the gate will actually accept.
         applied += gate.apply(TranscriptNormalizer.proposals(for: working, gate: gate), to: &working)
 
-        // 5. Sentence structure, after the text has settled: casing reads the sentence openings
+        // 5. Sentence boundaries, from the silence between chunks. Before the caser on purpose: a
+        //    period this pass inserts creates a sentence opening, and the caser is what capitalises
+        //    it. Reversed, every boundary found here would ship lowercase.
+        applied += gate.apply(
+            SentenceTerminator.proposals(for: working,
+                                         pauses: pauses,
+                                         terminatesEnd: !isFragment && terminatesUtteranceEnd),
+            to: &working)
+
+        // 6. Sentence structure, after the text has settled: casing reads the sentence openings
         //    and paragraph breaks read the gaps between them, and both would be computed against
         //    the wrong tokens if a filler deletion were still pending.
         applied += gate.apply(
@@ -108,7 +127,7 @@ struct DeterministicPolisher: Sendable {
                                   to: &working)
         }
 
-        // 6. Structure last, on text. `ListFormatter` rewrites line by line and reorders nothing,
+        // 7. Structure last, on text. `ListFormatter` rewrites line by line and reorders nothing,
         //    so it has no token-level representation to preserve.
         let rendered = working.render()
         let text = formatsLists ? ListFormatter.format(rendered) : rendered
@@ -154,34 +173,35 @@ struct DeterministicPolisher: Sendable {
     /// have received. The only thing the chunk form adds is *where* the joins are and how long the
     /// speaker was silent at each, which is exactly the information a string cannot carry.
     func polish(chunks: [Chunk]) -> Result {
-        let pieces = chunks.map { $0.text.trimmingCharacters(in: .whitespacesAndNewlines) }
-                           .filter { !$0.isEmpty }
-        guard pieces.count > 1 else {
-            return polish(text: pieces.first ?? "")
+        // Carry the whole chunk through the filter, not just its text. Matching a piece back to its
+        // chunk by text looks equivalent and is not: two chunks with identical text — "yeah",
+        // "okay", a repeated word — both resolve to the first, and every pause after the duplicate
+        // is then measured against the wrong span.
+        let kept = chunks.compactMap { chunk -> Chunk? in
+            let text = chunk.text.trimmingCharacters(in: .whitespacesAndNewlines)
+            return text.isEmpty ? nil : Chunk(text: text, start: chunk.start, end: chunk.end)
+        }
+        guard kept.count > 1 else {
+            return polish(text: kept.first?.text ?? "")
         }
 
-        let text = pieces.joined(separator: " ")
+        let text = kept.map(\.text).joined(separator: " ")
         let graph = TokenGraph.from(text: text)
 
         // The join offsets, walked in the same order the pieces were joined. Each is the single
         // space between two pieces, which is one whitespace token in the freshly built graph.
         var pauses: ParagraphSplitter.Pauses = [:]
         var cursor = text.startIndex
-        var previousEnd: TimeInterval?
-        for (offset, piece) in pieces.enumerated() {
-            let chunk = chunks.first { $0.text.trimmingCharacters(in: .whitespacesAndNewlines) == piece }
-            cursor = text.index(cursor, offsetBy: piece.count)
-            if offset + 1 < pieces.count {
-                let separator = cursor..<text.index(after: cursor)
-                if let id = graph.tokenIDs(overlappingRawRange: separator).first,
-                   let nextStart = chunks.dropFirst(offset + 1).first?.start,
-                   let end = chunk?.end ?? previousEnd,
-                   nextStart > end {
-                    pauses[id] = nextStart - end
-                }
-                cursor = separator.upperBound
+        for (offset, chunk) in kept.enumerated() {
+            cursor = text.index(cursor, offsetBy: chunk.text.count)
+            guard offset + 1 < kept.count else { break }
+
+            let separator = cursor..<text.index(after: cursor)
+            let nextStart = kept[offset + 1].start
+            if let id = graph.tokenIDs(overlappingRawRange: separator).first, nextStart > chunk.end {
+                pauses[id] = nextStart - chunk.end
             }
-            previousEnd = chunk?.end ?? previousEnd
+            cursor = separator.upperBound
         }
 
         return polish(graph, pauses: pauses)
@@ -261,14 +281,19 @@ extension DeterministicPolisher {
     /// - Parameter splitsParagraphs: defaults to the user's setting, which is the whole point of
     ///   the factory — both shipping callers get the same answer to the same question. Passed
     ///   explicitly only by tests, which must not depend on the machine's preferences.
+    /// - Parameter terminatesUtteranceEnd: whether the final sentence may be closed. False only for
+    ///   the meetings per-utterance pass, whose text ends at a chunk cut rather than at a speaker's
+    ///   full stop.
     static func forTranscript(dictionaryEntries: [DictionaryEntry],
                               formatsLists: Bool,
+                              terminatesUtteranceEnd: Bool = true,
                               splitsParagraphs: Bool = PolishFeatureFlags.areParagraphsEnabled)
         -> DeterministicPolisher {
         DeterministicPolisher(
             aliases: AliasEngine(entries: dictionaryEntries),
             dictionaryTerms: Set(dictionaryEntries.map(\.correctForm)),
             formatsLists: formatsLists,
+            terminatesUtteranceEnd: terminatesUtteranceEnd,
             splitsParagraphs: splitsParagraphs
         )
     }

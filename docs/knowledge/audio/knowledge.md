@@ -292,3 +292,31 @@ That bug was load-bearing: attempt 1 of 3 threw `engineCleanedUp` while leaving
 recorder was the bogus immediate timeout. Fixing the `try?` alone would have made the wedge
 permanent — the generation-stamped cleanup `defer` at the top of `startRecording` had to land in
 the same change.
+
+### `whisper_vad_free` double-frees under repeated short-chunk detection (2026-08-18)
+
+Decoding 187 recordings back to back through `StreamingTranscriber` crashes the process reliably —
+twice at recording 78, then at 20, then repeatedly — always with the same signature:
+
+```
+whisper_vad_detect_speech: chunk_len: 416 < n_window: 512
+...
+[SileroVAD.swift:238] D aud ~ Silero VAD context freed
+whisperer(546,0x1ee17ec40) malloc: *** error for object 0x29a4b2dc0: pointer being freed was not allocated
+```
+
+The fault is inside `whisper_vad_free` in vendored whisper.cpp, reached from `SileroVAD.deinit`
+(`SileroVAD.swift:232-240`) — not in Swift, and not in the test that surfaced it. The preceding
+`chunk_len: 416 < n_window: 512` line is the suspicious part: a sub-window chunk takes a different
+path through `whisper_vad_detect_speech`, and the context it leaves behind is what fails to free.
+
+**Why it has not been seen in normal use.** A `SileroVAD` is constructed and torn down per chunk,
+so the crash is a per-teardown probability. One dictation is a handful of teardowns; a sequential
+187-recording decode is thousands, and the tail catches up. Whether the same corruption silently
+damages the heap in shorter sessions without tripping the allocator is **not established** — that
+would need a run under Address Sanitizer, which has not been done.
+
+**Consequence for any long batch run:** it must be resumable. `PolishChunkCorpusDumpTests` flushes
+every record to disk as it decodes and skips ids already present, and the resume loop must be
+driven from the shell — xcodebuild relaunches the host after a crash but **never re-runs the test
+that crashed**, so an in-xcodebuild retry silently reports "Executed 0 tests" and exits 0.

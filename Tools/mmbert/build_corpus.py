@@ -533,6 +533,14 @@ def main() -> None:
                          "Repeatable.")
     ap.add_argument("--extra-train-repeat", type=int, default=6,
                     help="upweighting factor for --extra-train rows")
+    ap.add_argument("--extra-train-weighted", action="append", default=[],
+                    metavar="PATH:REPEAT",
+                    help="like --extra-train but with a PER-FILE upweight, e.g. "
+                         "data/gold_train.jsonl:12. Needed because the authored "
+                         "reference pairs and the teacher-distilled pairs do not "
+                         "deserve the same weight: one is authored under a strict "
+                         "no-paraphrase constraint, the other is a 4B's own output. "
+                         "Repeatable.")
     ap.add_argument("--holdout", action="append", default=[],
                     help="jsonl of held-out examples (e.g. data/eval_real_large.jsonl). "
                          "Any clean text whose norm_key matches one of them is kept out "
@@ -709,7 +717,13 @@ def main() -> None:
     #     highest-value rows in the corpus -- real ASR text on the input side,
     #     scored by the same alignment audit as eval -- so they are folded in at
     #     the same upweight as the teacher pairs, minus anything held out.
-    for xp in args.extra_train:
+    extra_specs = [(xp, args.extra_train_repeat) for xp in args.extra_train]
+    for spec in args.extra_train_weighted:
+        path_s, _, rep_s = spec.rpartition(":")
+        if not path_s:
+            raise SystemExit(f"--extra-train-weighted wants PATH:REPEAT, got {spec!r}")
+        extra_specs.append((path_s, int(rep_s)))
+    for xp, repeat in extra_specs:
         p = Path(xp)
         if not p.exists():
             print(f"[extra] missing, skipped: {p}")
@@ -722,8 +736,8 @@ def main() -> None:
                     skipped += 1
                     continue
                 got.append(Example.from_json(d))
-        train += got * args.extra_train_repeat
-        print(f"[extra] {p.name}: +{len(got)} pairs x{args.extra_train_repeat} "
+        train += got * repeat
+        print(f"[extra] {p.name}: +{len(got)} pairs x{repeat} "
               f"({skipped} withheld) scripts={dict(Counter(e.script for e in got))}")
 
     rng.shuffle(train)

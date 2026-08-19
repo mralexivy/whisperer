@@ -453,7 +453,22 @@ def main() -> None:
     ap.add_argument("--max-len", type=int, default=128)
     ap.add_argument("--min-support", type=int, default=MIN_SUPPORT)
     ap.add_argument("--cache-only", action="store_true")
+    ap.add_argument("--extra-split", action="append", default=[],
+                    metavar="FILE.jsonl[=description]",
+                    help="an additional held-out split to score, searched in the "
+                         "same DATA_DIRS as the built-in ones. Added so the "
+                         "LLM-authored reference corpus (eval_gold.jsonl) can be "
+                         "made --primary: every cell published so far was "
+                         "calibrated against pairs whose reference side came from "
+                         "the same teacher the model was distilled from, which "
+                         "cannot detect a mistake the teacher and the student "
+                         "share. Repeatable.")
     args = ap.parse_args()
+
+    # Registered BEFORE run_inference, which iterates SPLITS.
+    for spec in args.extra_split:
+        fn, _, desc = spec.partition("=")
+        SPLITS[fn] = desc or f"extra split {fn}"
 
     cache = Path(args.cache)
     if args.cache_only and cache.exists():

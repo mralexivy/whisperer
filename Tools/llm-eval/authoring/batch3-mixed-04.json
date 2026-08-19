@@ -1,0 +1,86 @@
+[
+ {
+  "id": "DBA7F19E234E4C56ACF6D1D4FEFCFDF9",
+  "language": "en",
+  "durationSec": 22.81425,
+  "input": "I think we need to change framing because ACI also will balance between the engines and quality and then it's not how it should be framed. It's not accurate. So we need to reframe this, giving that ACI of course can solve this, but we can do action items now to solve it today."
+ },
+ {
+  "id": "E15E92DBBCD748BC849153689B837D22",
+  "language": "en",
+  "durationSec": 17.410875,
+  "input": "I understand what's going on We execute categories prefetching now on staging And probably we have issue where there's a staging account that doesn't have this reservation we should skip staging probably so it will PaaS"
+ },
+ {
+  "id": "E1DEF7C4E9A5440A9EE61800DB4E41A8",
+  "language": "en",
+  "durationSec": 21.5134375,
+  "input": "One of the most important things during this split was not to break UI and the functionality and I already noticed some changes like I'm giving one example but I think there are much more examples when you broke actual UI and how it looks like and we should not allow this because currently it's in failed state."
+ },
+ {
+  "id": "E863AFBDA8214FE38C32CCB6428F036C",
+  "language": "en",
+  "durationSec": 23.61475,
+  "input": "Wait, I'm not sure I'm following. We're only using this service principal account to query production. So I don't understand like how other environments like are related. We are not querying them from this app. Confirm this also with the code. Like we are only deploying to production only using production. I don't understand why the queries are failing. Give me the reasons why queries fails."
+ },
+ {
+  "id": "E9CCCB93E930453B818CC541A7E692B3",
+  "language": "en",
+  "durationSec": 15.009375,
+  "input": "Let's implement this performance fix because what we want is basically we introduce this MTP for speedup so we need the speedup to work we need it to work reliably and fast we need super fast correction"
+ },
+ {
+  "id": "E9F0AD43D1DF416F9DB446FBADFCBBE0",
+  "language": "en",
+  "durationSec": 22.5140625,
+  "input": "After you completing all the changes, please validate them accordingly with tests and then create MR rebate the branch because we pushed it before and merged it before and then select to Ceph for approval and the value and monitor the deployment to production."
+ },
+ {
+  "id": "EA34AA64B101405A908314A2D5F5FB03",
+  "language": "en",
+  "durationSec": 23.014375,
+  "input": "Wait, something wrong here. Currently I see in the text tab, two things, I see two sources, social and Databricks, while previously it was always Databricks. And now in the text column I actually see the metadata while we have the metadata tab. So something is off."
+ },
+ {
+  "id": "EC2CF592997844A297B0AC251C7B2259",
+  "language": "en",
+  "durationSec": 18.211375,
+  "input": "You did not use the style that I provided I asked you To Do exactly how it appears in PDF And you did not follow my instructions You need to redo the work and make it look exactly with rich graphics the same make it clear with graphics no text"
+ },
+ {
+  "id": "EC32C30F91AC4404BFDB8998746E2643",
+  "language": "en",
+  "durationSec": 23.014375,
+  "input": "Mobile interface looks very off, I think you didn't adapt it. Properly for mobile interfaces it looks ugly, it looks cutoff, autocomplete doesn't work when I select the destination filter so you didn't port it correctly you need to fix this also regarding whisper I have special instructions"
+ },
+ {
+  "id": "F18D3DC7A6A44464810750E15E5BCE5E",
+  "language": "en",
+  "durationSec": 17.5109375,
+  "input": "I think what you did is basically you adapted this to any desktop but let's adapt also to be responsive for any mobile device so any mobile device should be also supported we should make a comprehensive fix so it will support any resolution possible and show best way possible what we have"
+ },
+ {
+  "id": "F3953E2F875A4293B3164BE2446D06D7",
+  "language": "en",
+  "durationSec": 24.215125,
+  "input": "I want big loading as before with the animation like around the like imagine it's it's like an orbit and we need like icons flying around the orbit like Databricks and the BigQuery I don't like how the stab is displayed we should not display this like this it should be like other way around maybe like entirely drop it and replace with something else"
+ },
+ {
+  "id": "F6F57FA120EC484790BEE33D80248FBA",
+  "language": "en",
+  "durationSec": 15.2095,
+  "input": "I want you to understand use Glean MCP use Glean MCP to verify what should be the correct case when requiring the platform when we should use one table when we should use another table that what I asked you To Do in the plan"
+ },
+ {
+  "id": "FA07325F3359497DBE5EF7174A657B2C",
+  "language": "en",
+  "durationSec": 18.5115625,
+  "input": "I want you to make it shorter and rewrite it with bullet points make it short and concise now it's too blotted I also want to add you additional information but I need like bullet points short interview feedback and why we are not continuing"
+ },
+ {
+  "id": "FF422B3CF6824064A2B9FF1E7AC204BC",
+  "language": "en",
+  "durationSec": 18.01125,
+  "input": "What is the maximum date range for all of the platforms? So basically look all of the platforms I want to understand Maybe we should fine-tune the progressive scan to include more data based on the maximum range that exists per platform"
+ }
+]

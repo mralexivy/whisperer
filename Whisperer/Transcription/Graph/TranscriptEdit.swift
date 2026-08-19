@@ -37,6 +37,7 @@ enum EditSource: String, Sendable {
     case normalization   // whitespace, duplicate punctuation, adjacent-word dedupe
     case filler          // disfluency removal
     case listFormatting  // ListFormatter
+    case acousticBoundary // SentenceTerminator — a pause measured by our own VAD, not by the ASR
     case editorModel     // the discriminative tagger (mmBERT, once trained)
     case llm             // the generative fallback, diffed back into edits
 }

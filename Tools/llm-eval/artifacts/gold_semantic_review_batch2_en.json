@@ -1,0 +1,29 @@
+{
+  "reviewed": 100,
+  "flagged": [
+    {
+      "id": "C5AACF14B80445438D2FD0F4E21221BA",
+      "batch": "batch2-en-02",
+      "category": "over_deletion",
+      "input_span": "create like this DDL updates",
+      "gold_span": "create this DDL updates",
+      "why": "'like this' is a comparative/demonstrative phrase meaning 'DDL updates like these', not a discourse-filler 'like'. Deleting 'like' changes 'create [something like] this DDL updates' to 'create this DDL updates', altering the comparison to a direct reference. AUTHORING.md permits 'like' deletion only when used as a filler; this is prepositional/comparative use."
+    },
+    {
+      "id": "13B50271F7FC4CE2906DAA8A16604D6F",
+      "batch": "batch2-en-02",
+      "category": "over_deletion",
+      "input_span": "if it changing like this, like scaling",
+      "gold_span": "if it changing this, scaling",
+      "why": "Both deleted 'like' tokens are comparative/demonstrative, not fillers. 'changing like this' means 'changing in this manner' (adverbial comparative); removing 'like' turns it into 'changing this', which means something different ('changing this thing'). 'like scaling' introduces scaling as an illustrative example (comparative), not a filler pause. AUTHORING.md forbids deleting 'like' when it is a preposition or comparative."
+    },
+    {
+      "id": "00E1D2E0BF62493C9EB76DA12AE8B726",
+      "batch": "batch2-en-02",
+      "category": "over_deletion",
+      "input_span": "the shit that you created, like inline",
+      "gold_span": "the shit that you created, inline",
+      "why": "'like inline' is comparative: the speaker is characterising what was created as being of the inline variety, contrasting it with the expected pop-up UI. 'like' here functions as a preposition ('similar to / in the manner of inline'), not a filler. Removing it changes the intended contrast. AUTHORING.md only allows deletion of 'like' when it is a pure filler with no semantic load."
+    }
+  ]
+}

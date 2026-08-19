@@ -75,17 +75,30 @@ final class EagerDisplayCollector {
 }
 
 /// Thread-safe collector for soft-committed chunks. Fires on the bridge queue like the others.
+///
+/// Keeps the whole `TranscriptChunk`, not just its text. The spans are the only acoustic evidence
+/// `SentenceTerminator` ever sees — the pause at a join is `next.start - current.end`, derived
+/// from sample counts rather than from ASR word timings, which is what makes that pass work
+/// behind Nemotron and in meetings. The history database persists chunk *texts* alone
+/// (`HistoryManager.swift:81-92`), so re-decoding real audio through this harness is the only way
+/// any benchmark can exercise the interior boundary rule at all; dropping `start`/`end` here was
+/// what left the shipping edit class unmeasured.
 final class EagerChunkCollector {
     private let lock = NSLock()
-    private var texts: [String] = []
+    private var chunks: [TranscriptChunk] = []
 
-    func record(_ text: String) {
-        lock.lock(); texts.append(text); lock.unlock()
+    func record(_ chunk: TranscriptChunk) {
+        lock.lock(); chunks.append(chunk); lock.unlock()
     }
 
     func snapshot() -> (count: Int, words: Int) {
         lock.lock(); defer { lock.unlock() }
-        return (texts.count, texts.reduce(0) { $0 + $1.split(separator: " ").count })
+        return (chunks.count, chunks.reduce(0) { $0 + $1.text.split(separator: " ").count })
+    }
+
+    func recorded() -> [TranscriptChunk] {
+        lock.lock(); defer { lock.unlock() }
+        return chunks
     }
 }
 
@@ -203,6 +216,11 @@ struct EagerRunResult {
     /// fixture this exists to classify.
     let chunkCount: Int
     let chunkWords: Int
+    /// The soft-committed chunks themselves, with their sample-derived spans. Carried so a caller
+    /// can hand them to `DeterministicPolisher.polish(chunks:)` — the shipping entry point, whose
+    /// interior boundary rule no benchmark could reach while the history's chunk texts were the
+    /// only source available.
+    let chunks: [TranscriptChunk]
     /// Passes discarded by the agreement guard, keyed by `EagerHoldReason`.
     let holds: [String: Int]
     /// Passes where the first unconfirmed word repeated the last confirmed one over the same
@@ -256,8 +274,20 @@ typealias EagerFixture = (fixture: RecordingFixture, samples: [Float])
 /// that describes audio the file does not contain is, because it makes WER meaningless rather than
 /// merely bad.
 ///
-/// - Parameter perBucket: how many fixtures to keep from each duration bucket.
-func loadEagerCorpus(perBucket: [String: Int]) -> (fixtures: [EagerFixture], rejected: [String]) {
+/// - Parameter perBucket: how many fixtures to keep from each quota group.
+/// - Parameter quotaKey: what a quota group *is*. Defaults to the duration bucket, which is what
+///   the latency sweeps stratify on. A caller that needs language balance passes a key combining
+///   script and bucket — script read from the transcript, never from `fixture.language`, which is
+///   decoder state and is wrong often enough to unbalance the corpus it was used to balance.
+/// - Parameter isEligible: which fixtures may be scored at all. Defaults to "the golden set covers
+///   it", which is right for the WER sweeps — `GoldenSet` is their only reference. It is wrong for
+///   a caller scoring against the authored gold instead: the golden set holds 266 English
+///   recordings against 9 Hebrew and 11 Russian, so that default silently starves exactly the two
+///   scripts a language-balanced corpus is being built to measure.
+func loadEagerCorpus(perBucket: [String: Int],
+                     quotaKey: ((RecordingFixture) -> String)? = nil,
+                     isEligible: ((RecordingFixture) -> Bool)? = nil)
+-> (fixtures: [EagerFixture], rejected: [String]) {
     // `EAGER_ONLY_FIXTURE=5f64f423` narrows a 20-minute corpus run to the one recording under
     // investigation. Matching on the id prefix is what the report already prints, so a suspect row
     // can be re-run by copying its first column. Unset in every normal run, including CI.
@@ -266,7 +296,7 @@ func loadEagerCorpus(perBucket: [String: Int]) -> (fixtures: [EagerFixture], rej
         .filter { $0.audioURL != nil && !$0.transcript.trimmingCharacters(in: .whitespaces).isEmpty }
         // Scored runs need a golden reference; see `GoldenSet` for why the stored transcript is
         // not one. A single-fixture investigation is exempt — it is read as a trace, not a score.
-        .filter { only != nil || GoldenSet.reference(for: $0.id) != nil }
+        .filter { only != nil || (isEligible ?? { GoldenSet.reference(for: $0.id) != nil })($0) }
         .filter { only == nil || $0.id.lowercased().hasPrefix(only!) }
 
     var loaded: [EagerFixture] = []
@@ -296,11 +326,11 @@ func loadEagerCorpus(perBucket: [String: Int]) -> (fixtures: [EagerFixture], rej
             aiEnhancedText: fixture.aiEnhancedText, aiModeName: fixture.aiModeName,
             language: fixture.language, audioURL: fixture.audioURL, wordCount: fixture.wordCount)
 
-        let bucket = corrected.durationBucket
-        // The per-bucket quota is what stratifies a normal run; a single-fixture run has already
-        // said exactly what it wants, so honouring the quota would just discard it.
-        guard only != nil || counts[bucket, default: 0] < (perBucket[bucket] ?? 0) else { continue }
-        counts[bucket] = counts[bucket, default: 0] + 1
+        let group = quotaKey?(corrected) ?? corrected.durationBucket
+        // The quota is what stratifies a normal run; a single-fixture run has already said exactly
+        // what it wants, so honouring the quota would just discard it.
+        guard only != nil || counts[group, default: 0] < (perBucket[group] ?? 0) else { continue }
+        counts[group] = counts[group, default: 0] + 1
         loaded.append((corrected, samples))
     }
 
@@ -346,7 +376,7 @@ func runEagerFixture(
     transcriber.eagerSuppressesRepetitionLoops = suppressesRepetitionLoops
     transcriber.onEagerPassMeasured = { [passCollector] in passCollector.record($0) }
     transcriber.onEagerPassSkipped = { [skipCollector] in skipCollector.record($0) }
-    transcriber.onChunkCompleted = { [chunkCollector] in chunkCollector.record($0.text) }
+    transcriber.onChunkCompleted = { [chunkCollector] in chunkCollector.record($0) }
     transcriber.onEagerPassHeld = { [holdCollector] in holdCollector.record($0) }
     transcriber.onEagerRepeatedConfirmedTail = { [repeatCollector] in repeatCollector.increment() }
 
@@ -425,6 +455,7 @@ func runEagerFixture(
         suppressesRepetitionLoops: suppressesRepetitionLoops,
         chunkCount: chunkCollector.snapshot().count,
         chunkWords: chunkCollector.snapshot().words,
+        chunks: chunkCollector.recorded(),
         holds: holdCollector.snapshot(),
         repeatedConfirmedTails: repeatCollector.value,
         duplicateRuns: eagerAdjacentDuplicateRuns(in: finalText),

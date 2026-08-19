@@ -73,3 +73,32 @@
     short fragments that needed punctuation and paid a 4B decode for long text that was already
     finished prose. `DeterministicPolisher.needsGenerativePass` asks whether a punctuation or
     casing judgement is actually left; 131 of 400 real transcripts clear it outright.
+
+14. **A precision-gated model cannot supply completeness — pair it with a source that is
+    high-precision by construction.** The retrained mmBERT `en/punct .` cell has recall 0.2895 at
+    its precision-optimal threshold: 207 of 715 gold periods. That is not a training failure to be
+    fixed with more data, it is what a 0.99 precision floor *costs*, and any model tuned to clear
+    that floor will leave most boundaries unmarked. So completeness has to come from somewhere the
+    precision is structural rather than tuned. For sentence ends that source is the measured pause:
+    `SentenceTerminator` inserts `.` where our own VAD recorded ≥0.7 s of silence, which is evidence
+    the speaker stopped rather than an opinion about prosody. Before it, 38.2% of utterances had no
+    terminal mark *and* an interior run of more than twenty unpunctuated words.
+
+15. **Derive acoustic evidence from sample counts, never from ASR word timings.** `TranscriptChunk`
+    spans are `sampleIndex / sampleRate`, so they exist identically at `ASRCapabilities = []` —
+    which is what lets the same pass run behind Nemotron and in meetings instead of degrading to a
+    text-only fallback there. A pass that reads `TranscriptToken.audioStart` has quietly become
+    engine-dependent, and the full-vs-`[]` parity test is what catches it.
+
+16. **When a pause map might not describe the text, discard it — do not approximate.** The map is
+    keyed by the whitespace token at each chunk join, so it is only valid if the chunks still join
+    to exactly the text being polished. `stopAsync` applies dictionary correction and filler removal
+    *after* joining, a card is often committed as a prefix with a remainder carried forward, and the
+    tail dedupe rewrites the text outright. In all three the join-equality check fails and the
+    caller polishes the plain string. Losing the acoustic signal costs one missing period; a
+    mis-keyed pause ends a sentence in the middle of one.
+
+17. **Separate "is this a fragment" from "may the last sentence be closed".** They come apart at the
+    meetings seam: a VAD chunk wants sentence-initial capitals (not a fragment) but its *end* is a
+    cut whose finality is only knowable from the silence the next chunk carries. Overloading
+    `isFragment` for both would have cost meetings their capitalisation to buy correct termination.
