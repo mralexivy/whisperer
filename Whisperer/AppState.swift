@@ -840,8 +840,9 @@ class AppState: ObservableObject {
         // Start monitoring audio device changes (for UI device picker only)
         audioDeviceManager.startMonitoring()
 
-        // Wire per-chunk LLM corrector. Uses applyLLMPostProcessing which guards on
-        // llmEnabled, model loaded, and mode.supportsChunkProcessing before invoking the LLM.
+        // Wire per-chunk LLM corrector. Uses applyLLMPostProcessing, which guards on llmEnabled and
+        // model loaded before invoking the LLM; the enqueue sites guard on
+        // mode.supportsChunkProcessing and on arm B owning the mode.
         chunkLLMCoordinator.corrector = { [weak self] text, fragment in
             guard let self else { return text }
             return await self.applyLLMPostProcessing(text, fragment: fragment)
@@ -2073,18 +2074,28 @@ class AppState: ObservableObject {
     /// punctuation. It used to be the previous chunk's corrected tail, but that string was never
     /// injected anywhere — only its nil-ness was read — and keeping it forced the chunk
     /// corrections to run one after another. See `ChunkLLMCoordinator`.
-    private func applyLLMPostProcessing(_ text: String, fragment: Bool = false) async -> String {
-        guard llmEnabled, let processor = llmPostProcessor, processor.isModelLoaded else {
-            return text
-        }
+    /// Whether the current post-process mode is handled by the deterministic path rather than the
+    /// model.
+    ///
+    /// Read by the two stop paths before they choose between the per-chunk coordinator and the
+    /// whole-text path. The coordinator corrects each chunk in isolation with `fragment: true`,
+    /// which for arm B is the wrong shape twice over: it suppresses the utterance-final period at
+    /// every cut, and passing chunks one at a time discards the silence between them, which is the
+    /// only sentence-boundary evidence the deterministic pass has. It is the same reasoning that
+    /// put the short-circuit at the top of `applyLLMPostProcessingSegmented`.
+    private var deterministicPolishHandlesPostProcessing: Bool {
+        guard PolishFeatureFlags.isFastPolishEnabled else { return false }
+        let id = AIModeManager.shared.postProcessMode.id
+        return id == AIMode.correctModeId || id == AIMode.grammarModeId
+    }
 
+    private func applyLLMPostProcessing(_ text: String, fragment: Bool = false) async -> String {
         // Skip AI post-processing if text has no real word content (silence/hallucination leak)
         guard text.contains(where: { $0.isLetter }) else {
             return text
         }
 
         let mode = AIModeManager.shared.postProcessMode
-        guard !mode.prompt.isEmpty else { return text }
 
         // Deterministic polish *instead of* the model, in strict correction modes only.
         //
@@ -2101,52 +2112,70 @@ class AppState: ObservableObject {
         //
         // List formatting is off here because both call sites already ran `applyListFormatting`.
         //
-        // Behind `PolishFeatureFlags` while it is experimental. Off is not an approximation of the
-        // shipped path — it *is* the shipped path, `text.count <= 15` fast path included, because
-        // an A/B whose control drifted from what ships cannot attribute a bad result to an arm.
+        // Off is not an approximation of the shipped path — it *is* the shipped path,
+        // `text.count <= 15` fast path included, because an A/B whose control drifted from what
+        // ships cannot attribute a bad result to an arm.
+        //
+        // **This runs before the `llmEnabled` / `isModelLoaded` guard, and that placement is the
+        // whole feature.** It used to sit after it, which meant the deterministic path — the one
+        // whose Settings card reads "Polish without the language model" — only ran for users who
+        // had the language model switched on and resident. `llmEnabled` defaults to false, so on
+        // a fresh install the flag was on, the switch said on, and nothing polished: raw ASR went
+        // to the clipboard and not one `polish:` line was written. A flag that is on by default
+        // and gated behind a flag that is off by default is off.
         let isStrict = (mode.id == AIMode.correctModeId || mode.id == AIMode.grammarModeId)
-        let input = text
-        if PolishFeatureFlags.isFastPolishEnabled {
-            if isStrict {
-                let polisher = DeterministicPolisher.forTranscript(
-                    dictionaryEntries: DictionaryManager.shared.entries,
-                    formatsLists: false)
-                // Chunks when they are still an honest description of this text, the string
-                // otherwise. The chunk form is what carries the silence between them, and silence
-                // is the only evidence of a sentence boundary that survives every backend.
-                let chunks = fragment ? nil : committedChunks(matching: text)
-                let polished = chunks.map { polisher.polish(chunks: $0) }
-                    ?? polisher.polish(text: text)
-                Logger.debug("polish: \(PolishFeatureFlags.stateDescription), "
-                             + "\(polished.appliedEdits.count) edits, "
-                             + "\(chunks?.count ?? 0) chunks", subsystem: .transcription)
+        if PolishFeatureFlags.isFastPolishEnabled, isStrict {
+            let polisher = DeterministicPolisher.forTranscript(
+                dictionaryEntries: DictionaryManager.shared.entries,
+                formatsLists: false)
+            // Chunks when they are still an honest description of this text, the string
+            // otherwise. The chunk form is what carries the silence between them, and silence
+            // is the only evidence of a sentence boundary that survives every backend.
+            let chunks = fragment ? nil : committedChunks(matching: text)
+            let polished = chunks.map { polisher.polish(chunks: $0) }
+                ?? polisher.polish(text: text)
 
-                // Arm B: the deterministic path is terminal in strict correction modes. The 4B is
-                // not consulted at all, which is the whole point — a decode the user waits ~1.8s
-                // for, to adjust punctuation the pipeline has already restored from the pauses in
-                // their own speech, is a cost with no matching benefit.
-                //
-                // `needsGenerativePass` stays computed and logged rather than deleted. It was the
-                // control flow; now it is the diagnostic that says how often the deterministic
-                // output still looks unfinished, which is the number that would justify bringing
-                // the fallback back. A predicate that stops being observable the moment it stops
-                // being load-bearing is how a regression hides.
-                Logger.debug("LLM skip: deterministic polish is terminal "
-                             + "(\(polished.appliedEdits.count) edits, "
-                             + "residual=\(polished.needsGenerativePass))", subsystem: .transcription)
-                return polished.text
-            }
-        } else {
-            // Fast-path: skip LLM for very short, already-clean text in strict correction modes.
-            // Pre-cleaner handles filler removal and dedup; LLM adds no value for "OK." or "Yes."
-            if text.count <= 15 {
-                let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
-                let firstUpper = trimmed.first?.isUppercase ?? false
-                let endsPunct = ".!?".contains(trimmed.last ?? Character(" "))
-                if firstUpper && endsPunct && isStrict {
-                    Logger.debug("LLM skip: short clean text (\(trimmed.count) chars)", subsystem: .transcription)
-                    return text
-                }
+            // Arm B is terminal in strict correction modes: the 4B is not consulted at all, which
+            // is the point — a decode the user waits ~1.8s for, to adjust punctuation the pipeline
+            // has already restored from the pauses in their own speech, is a cost with no matching
+            // benefit.
+            //
+            // One line, at `info`, naming the arm. `stateDescription` existed for exactly this and
+            // had no caller that survived; a user reporting "the output looks wrong" produced a log
+            // with nothing in it to attribute the result to an arm, which is the one thing shipping
+            // this behind a switch was supposed to buy. `needsGenerativePass` rides along rather
+            // than being deleted: it was the control flow, and now it is the diagnostic that says
+            // how often the deterministic output still looks unfinished — the number that would
+            // justify bringing the fallback back. A predicate that stops being observable the
+            // moment it stops being load-bearing is how a regression hides.
+            Logger.info("polish: \(PolishFeatureFlags.stateDescription), "
+                        + "\(polished.appliedEdits.count) edits, "
+                        + "\(chunks?.count ?? 0) chunks, "
+                        + "residual=\(polished.needsGenerativePass), "
+                        + "llm=\(llmEnabled ? "on" : "off")", subsystem: .transcription)
+            return polished.text
+        }
+
+        // Everything past here is the model, so everything past here needs the model.
+        guard llmEnabled, let processor = llmPostProcessor, processor.isModelLoaded else {
+            return text
+        }
+        guard !mode.prompt.isEmpty else { return text }
+
+        let input = text
+
+        // Fast-path: skip LLM for very short, already-clean text in strict correction modes.
+        // Pre-cleaner handles filler removal and dedup; LLM adds no value for "OK." or "Yes."
+        // Unreachable when Fast Polish is on — the branch above already returned for strict modes —
+        // and kept exactly as it was so that "off" restores the shipped path rather than a
+        // simplification of it.
+        if !PolishFeatureFlags.isFastPolishEnabled, text.count <= 15 {
+            let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+            let firstUpper = trimmed.first?.isUppercase ?? false
+            let endsPunct = ".!?".contains(trimmed.last ?? Character(" "))
+            if firstUpper && endsPunct && isStrict {
+                Logger.debug("LLM skip: short clean text (\(trimmed.count) chars)", subsystem: .transcription)
+                return text
             }
         }
 
@@ -2833,7 +2862,13 @@ class AppState: ObservableObject {
                     Task { await HistoryManager.shared.appendChunk(sessionID: id, chunkText: chunkText, totalDuration: chunk.recordedDuration) }
                     self.retainForPolish(chunk)
                     Task { @MainActor [weak self] in
-                        guard let self, self.llmEnabled else { return }
+                        // `deterministicPolishHandlesPostProcessing` short-circuits the whole
+                        // per-chunk arm: the stop path no longer drains the coordinator when arm B
+                        // owns the mode, so enqueuing here would polish every chunk in isolation
+                        // and throw the result away — wasted work and a `polish:` line per chunk
+                        // that describes output nobody sees.
+                        guard let self, self.llmEnabled,
+                              !self.deterministicPolishHandlesPostProcessing else { return }
                         let mode = AIModeManager.shared.postProcessMode
                         // Nemotron fires onChunkCompleted once with the full session text at stop time.
                         // Per-chunk LLM is redundant — full-text path runs in stopRecording() instead.
@@ -3063,7 +3098,8 @@ class AppState: ObservableObject {
                 // Transformative modes or no chunks collected → existing full-text path.
                 let mode = AIModeManager.shared.postProcessMode
                 let processedText: String
-                if llmEnabled && mode.supportsChunkProcessing && chunkLLMCoordinator.hasChunks {
+                if llmEnabled && mode.supportsChunkProcessing && chunkLLMCoordinator.hasChunks
+                    && !deterministicPolishHandlesPostProcessing {
                     processedText = await chunkLLMCoordinator.drain()
                 } else {
                     let listFormatted = await applyListFormatting(finalText)
@@ -3073,7 +3109,16 @@ class AppState: ObservableObject {
 
                 // Save AI enhancement if text was modified by post-processing
                 if processedText != finalText, let recordId = savedRecordId {
-                    let modeName = llmEnabled ? AIModeManager.shared.postProcessMode.name : "List Format"
+                    // Name the arm that actually produced the change. "List Format" was the only
+                    // non-LLM producer when this was written; arm B is now a second one, and
+                    // attributing its output to list formatting makes the history lie about which
+                    // path a result came from.
+                    let modeName: String
+                    if deterministicPolishHandlesPostProcessing {
+                        modeName = "Fast Polish"
+                    } else {
+                        modeName = llmEnabled ? AIModeManager.shared.postProcessMode.name : "List Format"
+                    }
                     Task {
                         try? await HistoryManager.shared.updateAIEnhancementById(recordId, aiText: processedText, modeName: modeName)
                     }
@@ -3210,7 +3255,13 @@ class AppState: ObservableObject {
                     Task { await HistoryManager.shared.appendChunk(sessionID: id, chunkText: chunkText, totalDuration: chunk.recordedDuration) }
                     self.retainForPolish(chunk)
                     Task { @MainActor [weak self] in
-                        guard let self, self.llmEnabled else { return }
+                        // `deterministicPolishHandlesPostProcessing` short-circuits the whole
+                        // per-chunk arm: the stop path no longer drains the coordinator when arm B
+                        // owns the mode, so enqueuing here would polish every chunk in isolation
+                        // and throw the result away — wasted work and a `polish:` line per chunk
+                        // that describes output nobody sees.
+                        guard let self, self.llmEnabled,
+                              !self.deterministicPolishHandlesPostProcessing else { return }
                         let mode = AIModeManager.shared.postProcessMode
                         // Nemotron fires onChunkCompleted once with the full session text at stop time.
                         // Per-chunk LLM is redundant — full-text path runs in stopRecording() instead.
@@ -3429,7 +3480,8 @@ class AppState: ObservableObject {
                 // Transformative modes or no chunks collected → existing full-text path.
                 let mode = AIModeManager.shared.postProcessMode
                 let processedText: String
-                if llmEnabled && mode.supportsChunkProcessing && chunkLLMCoordinator.hasChunks {
+                if llmEnabled && mode.supportsChunkProcessing && chunkLLMCoordinator.hasChunks
+                    && !deterministicPolishHandlesPostProcessing {
                     processedText = await chunkLLMCoordinator.drain()
                 } else {
                     let listFormatted = await applyListFormatting(finalText)
@@ -3439,7 +3491,16 @@ class AppState: ObservableObject {
 
                 // Save AI enhancement if text was modified by post-processing
                 if processedText != finalText, let recordId = savedRecordId {
-                    let modeName = llmEnabled ? AIModeManager.shared.postProcessMode.name : "List Format"
+                    // Name the arm that actually produced the change. "List Format" was the only
+                    // non-LLM producer when this was written; arm B is now a second one, and
+                    // attributing its output to list formatting makes the history lie about which
+                    // path a result came from.
+                    let modeName: String
+                    if deterministicPolishHandlesPostProcessing {
+                        modeName = "Fast Polish"
+                    } else {
+                        modeName = llmEnabled ? AIModeManager.shared.postProcessMode.name : "List Format"
+                    }
                     Task {
                         try? await HistoryManager.shared.updateAIEnhancementById(recordId, aiText: processedText, modeName: modeName)
                     }

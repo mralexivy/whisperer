@@ -431,3 +431,31 @@ A precision fix that works by not firing must be scored on recall in the same ru
 goes to n=0 is not a pass. `ConfidenceGate`'s precedent — refuse an uncertified *edit class* — does
 not transfer to refusing an entire rule for a whole script: the class is the unit that was
 measured, the script is not.
+
+---
+
+## A default-on flag reached only through a default-off flag is off
+
+**Confirmed 2026-08-19** (`PolishFeatureFlags.isFastPolishEnabled` behind `AppState.llmEnabled`).
+
+Fast Polish was flipped to on by default, its Settings card reads "Polish without the language
+model", and on a fresh install it polished nothing. The deterministic branch lived inside
+`applyLLMPostProcessing`, *after* `guard llmEnabled, let processor = llmPostProcessor,
+processor.isModelLoaded`. `llmEnabled` is `UserDefaults.bool(forKey:)` — false until the user turns
+the 4B on. So the arm that exists to replace the model could only run for users who had the model
+enabled and resident.
+
+Nothing in the test suite could see it: every polish test calls `DeterministicPolisher` directly,
+and the verdict bench calls `polish(text:)`. The unit under test was live in all 400 fixtures and
+dead in the app. **The reachability of a feature is a separate claim from its correctness, and only
+a runtime log line or an end-to-end path can carry it.**
+
+Two rules follow:
+
+1. When a flag's default moves, re-derive every predicate between the flag and the effect, and
+   check the *default* value of each one. "The flag is on" and "the code runs" are different
+   statements joined by every guard in between.
+2. Log the arm, at `info`, on the path that actually ships. `PolishFeatureFlags.stateDescription`
+   was written for exactly this and had no surviving caller; the absence of a `polish:` line in a
+   user's log was the only evidence that found the bug, and it was evidence by absence — which is
+   the weakest kind and the last to be noticed.
