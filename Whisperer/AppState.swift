@@ -103,6 +103,15 @@ class AppState: ObservableObject {
     /// for why a stale or divergent set is discarded rather than used.
     private var committedChunks: [DeterministicPolisher.Chunk] = []
 
+    /// The in-flight history insert for the recording that just stopped.
+    ///
+    /// Held only so the post-processing update can await it. The insert and the update are both
+    /// detached Tasks started microseconds apart against the same row, and nothing ordered them:
+    /// when the update ran first it threw `recordNotFound` into a `try?` and the polished text was
+    /// gone, leaving a row that showed the raw transcript with no enhancement marker. Ordering two
+    /// writes to one record is the fix; making the failure loud is the backstop.
+    private var historySaveTask: Task<Void, Never>?
+
     // Latest committed transcript for macOS Services provider
     private(set) var lastTranscribedText: String = ""
     private(set) var lastTranscriptionDate: Date?
@@ -2036,10 +2045,18 @@ class AppState: ObservableObject {
     /// `start` and `end` come from `TranscriptChunk`, which derives them from sample counts, not
     /// from ASR word timings — so this signal exists identically behind every backend, including
     /// the ones that emit no per-word evidence at all.
+    /// Retain a chunk for the deterministic pass, on its **acoustic** span.
+    ///
+    /// `acousticStart`/`acousticEnd` rather than `start`/`end`: on the eager path the decode span
+    /// is contiguous with its neighbours by construction, so the inter-chunk gap is identically
+    /// zero and `SentenceTerminator`'s interior rule could never fire. The voiced span recovers
+    /// the pause that is sitting inside the span. History and meetings keep reading `start`/`end`
+    /// — their timestamps address the recording, not the speech, and moving them would shift
+    /// diarizer alignment for a benefit that belongs only here.
     private func retainForPolish(_ chunk: TranscriptChunk) {
         committedChunks.append(DeterministicPolisher.Chunk(text: chunk.text,
-                                                           start: chunk.start,
-                                                           end: chunk.end))
+                                                           start: chunk.acousticStart,
+                                                           end: chunk.acousticEnd))
     }
 
     /// The retained chunks, but only when they still describe `text`.
@@ -2148,9 +2165,17 @@ class AppState: ObservableObject {
             // how often the deterministic output still looks unfinished — the number that would
             // justify bringing the fallback back. A predicate that stops being observable the
             // moment it stops being load-bearing is how a regression hides.
+            // The gaps are in the line because their absence was the bug and could not be seen
+            // from the outside: "1 edits, 3 chunks" reads like a working pass, and the reason it
+            // was not one is that every gap between those three chunks was 0.00s.
+            let spans = chunks ?? []
+            let gaps = zip(spans, spans.dropFirst())
+                .map { String(format: "%.2f", max(0, $1.start - $0.end)) }
+                .joined(separator: "/")
             Logger.info("polish: \(PolishFeatureFlags.stateDescription), "
                         + "\(polished.appliedEdits.count) edits, "
-                        + "\(chunks?.count ?? 0) chunks, "
+                        + "\(chunks?.count ?? 0) chunks"
+                        + (gaps.isEmpty ? "" : " gaps=\(gaps)s") + ", "
                         + "residual=\(polished.needsGenerativePass), "
                         + "llm=\(llmEnabled ? "on" : "off")", subsystem: .transcription)
             return polished.text
@@ -3119,8 +3144,23 @@ class AppState: ObservableObject {
                     } else {
                         modeName = llmEnabled ? AIModeManager.shared.postProcessMode.name : "List Format"
                     }
-                    Task {
-                        try? await HistoryManager.shared.updateAIEnhancementById(recordId, aiText: processedText, modeName: modeName)
+                    Task { [historySave = historySaveTask] in
+                        // Wait for the insert before updating the row it updates.
+                        //
+                        // `saveRecordingFromTranscriber` persists inside a detached Task and
+                        // returns the id immediately, so this update used to race it.
+                        // `updateAIEnhancementById` throws `recordNotFound` when it loses, and the
+                        // `try?` here swallowed it: the polished text was dropped, the row kept the
+                        // raw transcript, and the wand icon that means "this was post-processed"
+                        // never appeared. Silently — a lost enhancement and an unenhanced
+                        // recording are the same UI.
+                        await historySave?.value
+                        do {
+                            try await HistoryManager.shared.updateAIEnhancementById(recordId, aiText: processedText, modeName: modeName)
+                        } catch {
+                            Logger.error("Failed to attach \(modeName) output to history: \(error)",
+                                         subsystem: .app)
+                        }
                     }
                 }
             }
@@ -3501,8 +3541,23 @@ class AppState: ObservableObject {
                     } else {
                         modeName = llmEnabled ? AIModeManager.shared.postProcessMode.name : "List Format"
                     }
-                    Task {
-                        try? await HistoryManager.shared.updateAIEnhancementById(recordId, aiText: processedText, modeName: modeName)
+                    Task { [historySave = historySaveTask] in
+                        // Wait for the insert before updating the row it updates.
+                        //
+                        // `saveRecordingFromTranscriber` persists inside a detached Task and
+                        // returns the id immediately, so this update used to race it.
+                        // `updateAIEnhancementById` throws `recordNotFound` when it loses, and the
+                        // `try?` here swallowed it: the polished text was dropped, the row kept the
+                        // raw transcript, and the wand icon that means "this was post-processed"
+                        // never appeared. Silently — a lost enhancement and an unenhanced
+                        // recording are the same UI.
+                        await historySave?.value
+                        do {
+                            try await HistoryManager.shared.updateAIEnhancementById(recordId, aiText: processedText, modeName: modeName)
+                        } catch {
+                            Logger.error("Failed to attach \(modeName) output to history: \(error)",
+                                         subsystem: .app)
+                        }
                     }
                 }
 
@@ -3899,8 +3954,9 @@ class AppState: ObservableObject {
                 SessionStorage.deleteSessionFile(at: sessionURL)
             }
 
-            // Save to history database
-            Task {
+            // Save to history database. Retained so the post-processing update can await the
+            // insert instead of racing it — see the `historySaveTask` declaration.
+            historySaveTask = Task {
                 do {
                     // Use the language the transcriber actually used (routing detection or configured)
                     let effectiveLang = transcriber.effectiveLanguage

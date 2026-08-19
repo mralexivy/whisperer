@@ -60,6 +60,43 @@ struct TranscriptChunk {
     /// Total audio received when this chunk committed — for callers that need the session
     /// length rather than this chunk's own span.
     let recordedDuration: Double
+
+    /// The span of *voiced* audio inside `start...end`, when it is known and narrower.
+    ///
+    /// Exists because the sentence in the doc comment above — "the gap between one chunk's `end`
+    /// and the next chunk's `start` is real silence" — is true for VAD-segmented backends and
+    /// false for the eager streaming path, which is the one dictation actually uses. There a
+    /// soft-commit stamps `start` at the previous commit's `end` exactly (`[2400-101120]`,
+    /// `[101120-198400]`), so consecutive chunks are contiguous by construction and the gap is
+    /// identically zero however long the speaker paused. `SentenceTerminator` reads those gaps and
+    /// so inserted nothing at any interior boundary, on any recording — measured at 0 of 439 joins
+    /// and mistaken for a property of the corpus rather than of the clock.
+    ///
+    /// The pause is not missing, it is *inside* the span: a commit boundary lands wherever
+    /// LocalAgreement stabilised, which is generally somewhere in the silence rather than at
+    /// either edge of it. Trimming each span to its voiced content recovers the real gap, and
+    /// keeps it derived from sample counts and our own VAD rather than from ASR word timings —
+    /// the property that makes this pass behave identically at `ASRCapabilities = []`.
+    ///
+    /// `nil` when there is no VAD (it is a user setting), when the slice is unavailable, or when
+    /// the span is silent end to end. Consumers fall back to `start`/`end`, which is the current
+    /// behaviour.
+    let voicedStart: Double?
+    let voicedEnd: Double?
+
+    init(text: String, start: Double, end: Double, recordedDuration: Double,
+         voicedStart: Double? = nil, voicedEnd: Double? = nil) {
+        self.text = text
+        self.start = start
+        self.end = end
+        self.recordedDuration = recordedDuration
+        self.voicedStart = voicedStart
+        self.voicedEnd = voicedEnd
+    }
+
+    /// The span to measure silence against: voiced when known, the decode span otherwise.
+    var acousticStart: Double { voicedStart ?? start }
+    var acousticEnd: Double { voicedEnd ?? end }
 }
 
 // MARK: - StreamingTranscriber
@@ -1491,10 +1528,15 @@ class StreamingTranscriber {
         eagerEngine = engine
         if let commit = outcome.softCommit, !commit.text.isEmpty {
             completedChunkTexts.append(commit.text)
+            // Same contiguity as the whisper.cpp soft-commit below: measure the voiced span
+            // before the prune.
+            let voiced = voicedSpanSeconds(from: commit.startIndex, until: commit.endIndex)
             onChunkCompleted?(TranscriptChunk(text: commit.text,
                 start: Double(commit.startIndex) / sampleRate,
                 end: Double(commit.endIndex) / sampleRate,
-                recordedDuration: recordedDuration))
+                recordedDuration: recordedDuration,
+                voicedStart: voiced?.0,
+                voicedEnd: voiced?.1))
             lastTranscribedSampleIndex = commit.endIndex
             lastClaimedSampleIndex = commit.endIndex
             do { try allSamplesLock.withLock { ring.dropFront(toAbsoluteIndex: commit.endIndex) } }
@@ -1827,10 +1869,14 @@ class StreamingTranscriber {
             }
             if !committedText.isEmpty {
                 completedChunkTexts.append(committedText)
+                // Measured before the `dropFront` below prunes this audio away.
+                let voiced = voicedSpanSeconds(from: commit.startIndex, until: commit.endIndex)
                 onChunkCompleted?(TranscriptChunk(text: committedText,
                     start: Double(commit.startIndex) / sampleRate,
                     end: Double(commit.endIndex) / sampleRate,
-                    recordedDuration: recordedDuration))
+                    recordedDuration: recordedDuration,
+                    voicedStart: voiced?.0,
+                    voicedEnd: voiced?.1))
             }
             // The audio boundary advances either way: the text was either committed or was a
             // duplicate of text already committed, and re-decoding it would only produce the
@@ -2467,6 +2513,48 @@ class StreamingTranscriber {
         return canReuse
     }
 
+    /// The voiced sub-span of `startIndex..<endIndex`, in seconds on the audio clock.
+    ///
+    /// Answers the question a commit boundary cannot: of the audio this chunk covers, where did
+    /// the speaking actually start and stop? The difference between one chunk's voiced end and the
+    /// next chunk's voiced start is the pause the speaker took, which is the only sentence-boundary
+    /// evidence that survives every backend.
+    ///
+    /// Reads the ring **before** the caller prunes it — every call site here runs ahead of its
+    /// `dropFront`, which is why this takes absolute indices rather than samples.
+    ///
+    /// Deliberately conservative in one direction: `SileroVAD.speechPadMs` is 100 ms, so each
+    /// segment is already dilated by 0.1 s at both ends and a measured gap understates the real
+    /// silence by up to 0.2 s. Against `SentenceTerminator.minimumPause` of 0.7 s that means a
+    /// real pause needs to be about 0.9 s to register. Under-reporting a pause costs a period
+    /// that was owed; over-reporting one puts a full stop in the middle of a sentence. The
+    /// asymmetry is the same one the dangler set is curated for.
+    ///
+    /// Cost is one VAD pass per commit — tens of milliseconds on a few seconds of audio, on the
+    /// transcription queue, while the user is still speaking. It is not on the release path.
+    private func voicedSpanSeconds(from startIndex: Int, until endIndex: Int) -> (Double, Double)? {
+        guard let vad, endIndex > startIndex else { return nil }
+        let samples: [Float]
+        do {
+            samples = try allSamplesLock.withLock {
+                ring.slice(fromAbsolute: startIndex, toAbsolute: endIndex)
+            }
+        } catch {
+            return nil
+        }
+        guard !samples.isEmpty else { return nil }
+        let segments = vad.detectSpeechSegments(samples: samples)
+        guard let first = segments.first, let last = segments.last else { return nil }
+
+        // Segment times are relative to the slice; clamp to the span so a padded segment cannot
+        // report speech outside the audio it was measured on, which would make the gap negative.
+        let offset = Double(startIndex) / sampleRate
+        let spanEnd = Double(endIndex) / sampleRate
+        let voicedStart = min(max(offset + Double(first.startTime), offset), spanEnd)
+        let voicedEnd = min(max(offset + Double(last.endTime), voicedStart), spanEnd)
+        return (voicedStart, voicedEnd)
+    }
+
     private func containsSpeech(from startIndex: Int, until endIndex: Int) -> Bool {
         guard endIndex > startIndex else { return false }
         let samples: [Float]
@@ -2835,11 +2923,18 @@ class StreamingTranscriber {
         let endSeconds = endIndex.map {
             min(recordedDuration, max(startSeconds, Double($0) / sampleRate))
         } ?? recordedDuration
+        // The release tail starts at the previous commit's end, so it is contiguous with it for
+        // the same reason the soft-commits are contiguous with each other — and it is the join
+        // most likely to carry a real pause, because the speaker stopped to let go of the key.
+        let voiced = voicedSpanSeconds(from: lastTranscribedSampleIndex,
+                                       until: endIndex ?? Int(recordedDuration * sampleRate))
         onChunkCompleted?(TranscriptChunk(
             text: deduped,
             start: startSeconds,
             end: endSeconds,
-            recordedDuration: recordedDuration
+            recordedDuration: recordedDuration,
+            voicedStart: voiced?.0,
+            voicedEnd: voiced?.1
         ))
     }
 

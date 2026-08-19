@@ -398,6 +398,51 @@ Recovering a real pause means having the eager commit publish the **voiced** end
 partition end. That changes the span semantics consumed by history, meetings and the eager
 regression gate (`:2131`), so it is a decision, not a cleanup.
 
+### 39a. Resolved 2026-08-19 — the voiced span is published alongside the decode span, not instead of it
+
+The decision above was taken, and taken *additively*: `TranscriptChunk` gained optional
+`voicedStart`/`voicedEnd` and the accessors `acousticStart`/`acousticEnd`, which fall back to
+`start`/`end` when VAD is absent. `AppState.retainForPolish` reads the acoustic span; history,
+meetings and the regression gate keep reading `start`/`end`, whose timestamps address the
+**recording** rather than the speech and whose meaning diarizer alignment depends on. Replacing the
+span in place would have been the cleanup; publishing a second one was the decision.
+
+The measurement is `SileroVAD.detectSpeechSegments` over the commit's samples, taken **before** the
+caller prunes the ring, at the three contiguous-span sites (whisper.cpp eager soft-commit, WhisperKit
+eager soft-commit, `appendTailTranscription`). The VAD chunker and `finalizeTail` already carry exact
+voiced spans and Nemotron emits the session as one blob, so none of them changed.
+
+Two properties worth keeping in mind before tuning `minimumPause`:
+
+- `speechPadMs = 100` dilates every segment by 0.1 s per side, so a measured gap **understates** the
+  real silence by up to 0.2 s. A 0.85 s pause reads as 0.65 s and loses its period. The error runs in
+  the safe direction — a mid-sentence breath cannot gain a full stop — and that asymmetry is the
+  reason the padding was left in rather than compensated for.
+- The "0 of 439 joins" figure above is now a statement about the *decode* spans only. It remains true
+  of `start`/`end` and says nothing about `acousticStart`/`acousticEnd`; do not cite it as evidence
+  that dictation has no pauses.
+
+Pinned by `TranscriptChunkAcousticSpanTests`, which asserts the contiguity of the decode spans and
+the recovery of the gap from the voiced ones in the same run — a refactor that drops the field puts
+every dictation back to one run-on sentence and breaks nothing else.
+
+## 40. Two detached writes to the same record are ordered by nothing
+
+`saveRecordingFromTranscriber` inserted the history row in a `Task`; post-processing attached the
+polished text in a *separate* `Task` started microseconds later. When the update won the race,
+`updateAIEnhancementById` threw `HistoryError.recordNotFound` into a `try?` and the polished text was
+simply gone — the row kept the raw transcript and the purple `wand.and.stars` marker never appeared.
+Intermittent, silent, and indistinguishable from "the feature did not run", which is how it was first
+reported.
+
+Both halves of the fix matter and neither substitutes for the other: the insert is retained in
+`historySaveTask` and awaited by the update (ordering), and the `try?` became do/catch with
+`Logger.error` (audibility). A swallowed error on a write path is not a defensive measure — it is the
+reason a race takes days to find rather than one log line.
+
+Generalise: `try?` is only honest where the failure is genuinely uninteresting. On a write whose
+whole purpose is to persist work the user can see, every failure is interesting.
+
 ---
 
 ## A guard applied at one boundary must be applied at every boundary of the same kind
