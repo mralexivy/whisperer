@@ -939,10 +939,32 @@ class AppState: ObservableObject {
         preloadModel()
     }
 
+    /// Make `backend` the active one after a download the user kicked off from the Models tab.
+    ///
+    /// The click that started the download *was* the pick, so the model has to end up loaded.
+    /// `selectBackend` alone isn't enough: it bails when `selectedBackendType` already names
+    /// this backend, which is exactly the case where a previous attempt left the selection set
+    /// but no bridge resident.
+    func activateBackendAfterDownload(_ backend: BackendType) {
+        guard state == .idle else { return }
+        if selectedBackendType == backend {
+            guard !(isModelLoaded && loadedBackendType == backend) else { return }
+            preloadModel()
+        } else {
+            selectBackend(backend)
+        }
+    }
+
     /// Switch the active transcription backend
     func selectBackend(_ backend: BackendType) {
         guard state == .idle else { return }
-        guard backend != selectedBackendType else { return }
+        // Re-picking the current backend is a no-op only when it is actually resident; when the
+        // selection is stale (a load failed, or a meeting evicted the bridge) the click has to
+        // still produce a loaded model rather than silently doing nothing.
+        if backend == selectedBackendType {
+            if !(isModelLoaded && loadedBackendType == backend) { preloadModel() }
+            return
+        }
 
         // Release current bridge and all satellite resources BEFORE switching
         releaseCurrentBridge()
@@ -1317,10 +1339,21 @@ class AppState: ObservableObject {
                     self.downloadProgress = 0
                     self.state = .idle
 
-                    // Auto-load after download if this is the active backend
-                    if self.selectedBackendType == .parakeet && self.selectedParakeetModel == variant {
-                        self.preloadParakeetModel()
+                    // The row click that started this download was the user picking this
+                    // variant — settle the selection first so the backend activation below
+                    // loads the model they asked for rather than the previously selected one.
+                    if self.selectedParakeetModel != variant {
+                        if self.selectedBackendType == .parakeet {
+                            self.selectParakeetModel(variant)
+                            return
+                        }
+                        // Record the pick without loading — `selectParakeetModel` would preload
+                        // through the *current* backend, so the switch below would immediately
+                        // tear that down again.
+                        self.selectedParakeetModel = variant
+                        UserDefaults.standard.set(variant.rawValue, forKey: "selectedParakeetModel")
                     }
+                    self.activateBackendAfterDownload(.parakeet)
                 }
             } catch {
                 progressTask.cancel()
@@ -1496,9 +1529,7 @@ class AppState: ObservableObject {
                     self.nemotronDownloadStatus = ""
                     self.downloadProgress = 0
                     self.state = .idle
-                    if self.selectedBackendType == .nemotron {
-                        self.preloadNemotronModel()
-                    }
+                    self.activateBackendAfterDownload(.nemotron)
                 }
             } catch {
                 Logger.error("Failed to download Nemotron: \(error)", subsystem: .model)
@@ -1584,9 +1615,7 @@ class AppState: ObservableObject {
                     self.nemotronHebrewDownloadStatus = ""
                     self.downloadProgress = 0
                     self.state = .idle
-                    if self.selectedBackendType == .nemotronHebrew {
-                        self.preloadNemotronHebrewModel()
-                    }
+                    self.activateBackendAfterDownload(.nemotronHebrew)
                 }
             } catch {
                 Logger.error("Failed to download Nemotron Hebrew: \(error)", subsystem: .model)
