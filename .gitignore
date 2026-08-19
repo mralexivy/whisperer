@@ -65,3 +65,10 @@ reference/
 # Machine-local symlink some worktrees use to reach the prebuilt static whisper library.
 # `whisper.cpp/.gitignore` only ignores `build-*/`, which matches directories, not this link.
 whisper.cpp/build-static
+
+# Python bytecode from Tools/ scripts
+__pycache__/
+*.pyc
+
+# Pre-gold mmBERT data snapshot — local backup, not history
+Tools/mmbert/data.backup-pre-gold/

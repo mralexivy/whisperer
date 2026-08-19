@@ -1,0 +1,5543 @@
+{
+  "id_set_errors": [
+    {
+      "batch": "batch-en-04.json",
+      "check": "a_id_set",
+      "extra_in_gold": [
+        "099C5E8CB9A143498F6FF7B0AD8F64D"
+      ],
+      "missing_from_gold": [
+        "099C5E8CB9A143498F6FF7B0AD8DF64D"
+      ]
+    }
+  ],
+  "cases": [
+    {
+      "id": "00D1AB8E7C474ECEAD9D58907E11DFCC",
+      "pass": false,
+      "failures": [
+        {
+          "check": "d_headroom",
+          "reason": "too similar: sim=0.990 headroom=0.010 < 0.05"
+        }
+      ],
+      "language": "en",
+      "batch": "batch-en-00.json"
+    },
+    {
+      "id": "0FC2182A67054C63AF73291733601ACE",
+      "pass": false,
+      "failures": [
+        {
+          "check": "c_multiset",
+          "reason": "content-word mismatch: gold_only=[does, not]"
+        }
+      ],
+      "language": "en",
+      "batch": "batch-en-00.json"
+    },
+    {
+      "id": "1CBFF7AE8B404B1E86F35D7DCC625CD6",
+      "pass": false,
+      "failures": [
+        {
+          "check": "c_multiset",
+          "reason": "content-word mismatch: input_only=[add, code, hard, locals, skill]; gold_only=[hardcode, locales, strings]"
+        }
+      ],
+      "language": "en",
+      "batch": "batch-en-00.json"
+    },
+    {
+      "id": "2882AB6043BC408A826CCC4666389547",
+      "pass": true,
+      "failures": [],
+      "language": "en",
+      "batch": "batch-en-00.json"
+    },
+    {
+      "id": "314A924001FC4D3FB6E19FDB9742335F",
+      "pass": false,
+      "failures": [
+        {
+          "check": "c_multiset",
+          "reason": "content-word mismatch: input_only=[produce]; gold_only=[produced]"
+        },
+        {
+          "check": "d_headroom",
+          "reason": "too similar: sim=0.983 headroom=0.017 < 0.05"
+        }
+      ],
+      "language": "en",
+      "batch": "batch-en-00.json"
+    },
+    {
+      "id": "3926052EC0D4442A96A036CE225CAB1B",
+      "pass": false,
+      "failures": [
+        {
+          "check": "c_multiset",
+          "reason": "content-word mismatch: gold_only=[is]"
+        }
+      ],
+      "language": "en",
+      "batch": "batch-en-00.json"
+    },
+    {
+      "id": "438497F708D1435D8A7F8ADC935A164B",
+      "pass": false,
+      "failures": [
+        {
+          "check": "c_multiset",
+          "reason": "content-word mismatch: gold_only=[at]"
+        }
+      ],
+      "language": "en",
+      "batch": "batch-en-00.json"
+    },
+    {
+      "id": "4D61543E60AD4735A725EA67F1ECA3B7",
+      "pass": false,
+      "failures": [
+        {
+          "check": "c_multiset",
+          "reason": "content-word mismatch: gold_only=[is]"
+        },
+        {
+          "check": "d_headroom",
+          "reason": "too similar: sim=0.952 headroom=0.048 < 0.05"
+        }
+      ],
+      "language": "en",
+      "batch": "batch-en-00.json"
+    },
+    {
+      "id": "54F6704EA2D44EBC8B3CA30962A2C1F8",
+      "pass": false,
+      "failures": [
+        {
+          "check": "d_headroom",
+          "reason": "too similar: sim=1.000 headroom=0.000 < 0.05"
+        }
+      ],
+      "language": "en",
+      "batch": "batch-en-00.json"
+    },
+    {
+      "id": "61B242EABAF84BF88A8154AC19A100B8",
+      "pass": false,
+      "failures": [
+        {
+          "check": "c_multiset",
+          "reason": "content-word mismatch: gold_only=[is]"
+        },
+        {
+          "check": "d_headroom",
+          "reason": "too similar: sim=0.973 headroom=0.027 < 0.05"
+        }
+      ],
+      "language": "en",
+      "batch": "batch-en-00.json"
+    },
+    {
+      "id": "6CAE65F8A1AE44B183000EDEF9C4AD8D",
+      "pass": false,
+      "failures": [
+        {
+          "check": "d_headroom",
+          "reason": "too similar: sim=0.970 headroom=0.030 < 0.05"
+        }
+      ],
+      "language": "en",
+      "batch": "batch-en-00.json"
+    },
+    {
+      "id": "78954D483EA34564BFA3A5C1EF281AB2",
+      "pass": false,
+      "failures": [
+        {
+          "check": "d_headroom",
+          "reason": "too similar: sim=0.983 headroom=0.017 < 0.05"
+        }
+      ],
+      "language": "en",
+      "batch": "batch-en-00.json"
+    },
+    {
+      "id": "7FF816A303BE48EC9BE65D0CA4F2B1DC",
+      "pass": false,
+      "failures": [
+        {
+          "check": "d_headroom",
+          "reason": "too similar: sim=1.000 headroom=0.000 < 0.05"
+        }
+      ],
+      "language": "en",
+      "batch": "batch-en-00.json"
+    },
+    {
+      "id": "8AD0D8E0E150493587F0967051B6AD7D",
+      "pass": false,
+      "failures": [
+        {
+          "check": "d_headroom",
+          "reason": "too similar: sim=1.000 headroom=0.000 < 0.05"
+        }
+      ],
+      "language": "en",
+      "batch": "batch-en-00.json"
+    },
+    {
+      "id": "93E560FC511C41BC87E3F138EFDBDA35",
+      "pass": true,
+      "failures": [],
+      "language": "en",
+      "batch": "batch-en-00.json"
+    },
+    {
+      "id": "9F22B3A3F1484229BB286FC2135E11F0",
+      "pass": true,
+      "failures": [],
+      "language": "en",
+      "batch": "batch-en-01.json"
+    },
+    {
+      "id": "ACBA5D3A583E4B1CA9A255C9BAD53059",
+      "pass": false,
+      "failures": [
+        {
+          "check": "d_headroom",
+          "reason": "too similar: sim=1.000 headroom=0.000 < 0.05"
+        }
+      ],
+      "language": "en",
+      "batch": "batch-en-01.json"
+    },
+    {
+      "id": "B67F90C3FAE54D87B0F140823FBB72F8",
+      "pass": false,
+      "failures": [
+        {
+          "check": "c_multiset",
+          "reason": "content-word mismatch: input_only=[have]; gold_only=[has]"
+        },
+        {
+          "check": "d_headroom",
+          "reason": "too similar: sim=0.964 headroom=0.036 < 0.05"
+        }
+      ],
+      "language": "en",
+      "batch": "batch-en-01.json"
+    },
+    {
+      "id": "C466D909CD0F4A7F94A89C38266F2E06",
+      "pass": false,
+      "failures": [
+        {
+          "check": "c_multiset",
+          "reason": "content-word mismatch: input_only=[or]"
+        },
+        {
+          "check": "d_headroom",
+          "reason": "too similar: sim=0.962 headroom=0.038 < 0.05"
+        }
+      ],
+      "language": "en",
+      "batch": "batch-en-01.json"
+    },
+    {
+      "id": "CF9A3A2D29A946A884C2505E93B47162",
+      "pass": false,
+      "failures": [
+        {
+          "check": "d_headroom",
+          "reason": "too similar: sim=0.968 headroom=0.032 < 0.05"
+        }
+      ],
+      "language": "en",
+      "batch": "batch-en-01.json"
+    },
+    {
+      "id": "E506E897A2F944F6B0913E0C32947098",
+      "pass": false,
+      "failures": [
+        {
+          "check": "c_multiset",
+          "reason": "content-word mismatch: input_only=[detect]; gold_only=[detects]"
+        }
+      ],
+      "language": "en",
+      "batch": "batch-en-01.json"
+    },
+    {
+      "id": "F25CB9B493F24DCC872DAC2F22635F5F",
+      "pass": false,
+      "failures": [
+        {
+          "check": "c_multiset",
+          "reason": "content-word mismatch: gold_only=[did]"
+        }
+      ],
+      "language": "en",
+      "batch": "batch-en-01.json"
+    },
+    {
+      "id": "0099ABC9BF74424FA42B0425008C9B48",
+      "pass": false,
+      "failures": [
+        {
+          "check": "c_multiset",
+          "reason": "content-word mismatch: input_only=[be, can, clear, fucking, idiot, is, it, not, stupid, which, you]; gold_only=[are, unclear]"
+        }
+      ],
+      "language": "en",
+      "batch": "batch-en-01.json"
+    },
+    {
+      "id": "0BD5E021A59941269D4BE6812463080B",
+      "pass": false,
+      "failures": [
+        {
+          "check": "c_multiset",
+          "reason": "content-word mismatch: input_only=[doing, paas, shitty, you]; gold_only=[pass, subpar]"
+        }
+      ],
+      "language": "en",
+      "batch": "batch-en-01.json"
+    },
+    {
+      "id": "17545B7E3D124C57BB5F8922D94DBE08",
+      "pass": false,
+      "failures": [
+        {
+          "check": "c_multiset",
+          "reason": "content-word mismatch: input_only=[discrete, on]; gold_only=[at, discretize]"
+        },
+        {
+          "check": "d_headroom",
+          "reason": "too similar: sim=0.964 headroom=0.036 < 0.05"
+        }
+      ],
+      "language": "en",
+      "batch": "batch-en-01.json"
+    },
+    {
+      "id": "2528BF4F6CD74CDCB943CD89C7B1EB7A",
+      "pass": false,
+      "failures": [
+        {
+          "check": "d_headroom",
+          "reason": "too similar: sim=0.980 headroom=0.020 < 0.05"
+        }
+      ],
+      "language": "en",
+      "batch": "batch-en-01.json"
+    },
+    {
+      "id": "3032527FAD734E21B3504A63240A9FBF",
+      "pass": false,
+      "failures": [
+        {
+          "check": "d_headroom",
+          "reason": "too similar: sim=0.993 headroom=0.007 < 0.05"
+        }
+      ],
+      "language": "en",
+      "batch": "batch-en-01.json"
+    },
+    {
+      "id": "3A461AF009EA460A87DCF2959D5E7DE6",
+      "pass": true,
+      "failures": [],
+      "language": "en",
+      "batch": "batch-en-01.json"
+    },
+    {
+      "id": "47165EA23D5041A0A2E6386B6F4A5D79",
+      "pass": false,
+      "failures": [
+        {
+          "check": "d_headroom",
+          "reason": "too similar: sim=0.993 headroom=0.007 < 0.05"
+        }
+      ],
+      "language": "en",
+      "batch": "batch-en-01.json"
+    },
+    {
+      "id": "547688DA164A4668A794ED6501C24693",
+      "pass": false,
+      "failures": [
+        {
+          "check": "c_multiset",
+          "reason": "content-word mismatch: input_only=[bar, fucking, idiot, much, pot, sold, you]; gold_only=[match, put, sidebar]"
+        }
+      ],
+      "language": "en",
+      "batch": "batch-en-01.json"
+    },
+    {
+      "id": "5F7EF54D5AA74E2B9B819036B30D17D2",
+      "pass": false,
+      "failures": [
+        {
+          "check": "c_multiset",
+          "reason": "content-word mismatch: input_only=[shit]"
+        }
+      ],
+      "language": "en",
+      "batch": "batch-en-02.json"
+    },
+    {
+      "id": "6937CDD825754DF8BD3A67BFA567CCB2",
+      "pass": false,
+      "failures": [
+        {
+          "check": "d_headroom",
+          "reason": "too similar: sim=0.957 headroom=0.043 < 0.05"
+        }
+      ],
+      "language": "en",
+      "batch": "batch-en-02.json"
+    },
+    {
+      "id": "727FF2711D114F6A89E03B5AB7261826",
+      "pass": false,
+      "failures": [
+        {
+          "check": "d_headroom",
+          "reason": "too similar: sim=0.976 headroom=0.024 < 0.05"
+        }
+      ],
+      "language": "en",
+      "batch": "batch-en-02.json"
+    },
+    {
+      "id": "7D917F0DEAFC4740AFC21FE4B1141FC9",
+      "pass": false,
+      "failures": [
+        {
+          "check": "c_multiset",
+          "reason": "content-word mismatch: input_only=[in, it]; gold_only=[and]"
+        }
+      ],
+      "language": "en",
+      "batch": "batch-en-02.json"
+    },
+    {
+      "id": "8957350209BD438397BB3BD58E9F18EF",
+      "pass": false,
+      "failures": [
+        {
+          "check": "c_multiset",
+          "reason": "content-word mismatch: input_only=[true, version]; gold_only=[through, versions]"
+        }
+      ],
+      "language": "en",
+      "batch": "batch-en-02.json"
+    },
+    {
+      "id": "955CF87FDD2E49D29D73E7E16CC13BFA",
+      "pass": true,
+      "failures": [],
+      "language": "en",
+      "batch": "batch-en-02.json"
+    },
+    {
+      "id": "A2DF885593944EFA9BB5A26E98A138A8",
+      "pass": false,
+      "failures": [
+        {
+          "check": "c_multiset",
+          "reason": "content-word mismatch: input_only=[gonna, shhhhhh]; gold_only=[going, to]"
+        }
+      ],
+      "language": "en",
+      "batch": "batch-en-02.json"
+    },
+    {
+      "id": "AE8B66F45FF24EDB8EA0A46C8756749B",
+      "pass": false,
+      "failures": [
+        {
+          "check": "c_multiset",
+          "reason": "content-word mismatch: input_only=[audit, bullshit, does, need]; gold_only=[do, it, needs]"
+        }
+      ],
+      "language": "en",
+      "batch": "batch-en-02.json"
+    },
+    {
+      "id": "B84F35A87DF544BEA58ED800DC43D539",
+      "pass": true,
+      "failures": [],
+      "language": "en",
+      "batch": "batch-en-02.json"
+    },
+    {
+      "id": "C31350CAFD3B47978F4CCABB05B16CC5",
+      "pass": false,
+      "failures": [
+        {
+          "check": "c_multiset",
+          "reason": "content-word mismatch: input_only=[it]; gold_only=[are]"
+        },
+        {
+          "check": "d_headroom",
+          "reason": "too similar: sim=0.966 headroom=0.034 < 0.05"
+        }
+      ],
+      "language": "en",
+      "batch": "batch-en-02.json"
+    },
+    {
+      "id": "D282E1D3F51C40838292ECA39FB3B569",
+      "pass": false,
+      "failures": [
+        {
+          "check": "c_multiset",
+          "reason": "content-word mismatch: input_only=[try]; gold_only=[is, tries]"
+        },
+        {
+          "check": "d_headroom",
+          "reason": "too similar: sim=0.971 headroom=0.029 < 0.05"
+        }
+      ],
+      "language": "en",
+      "batch": "batch-en-02.json"
+    },
+    {
+      "id": "DC15CA018C9F4147A3209DAEC8DDB3B1",
+      "pass": false,
+      "failures": [
+        {
+          "check": "c_multiset",
+          "reason": "content-word mismatch: input_only=[in, optimize]; gold_only=[and, is, optimizes]"
+        },
+        {
+          "check": "d_headroom",
+          "reason": "too similar: sim=0.951 headroom=0.049 < 0.05"
+        }
+      ],
+      "language": "en",
+      "batch": "batch-en-02.json"
+    },
+    {
+      "id": "E776337AE4AD4F8DB9EA775CFC6E16AE",
+      "pass": true,
+      "failures": [],
+      "language": "en",
+      "batch": "batch-en-02.json"
+    },
+    {
+      "id": "F4D6DC7462494D03A371DAE820A8E4A8",
+      "pass": true,
+      "failures": [],
+      "language": "en",
+      "batch": "batch-en-02.json"
+    },
+    {
+      "id": "00720393CF074BE699C81A13D927E8FA",
+      "pass": true,
+      "failures": [],
+      "language": "en",
+      "batch": "batch-en-02.json"
+    },
+    {
+      "id": "08CF5BCA2F2942E4BA5890B1A5CCBE4C",
+      "pass": false,
+      "failures": [
+        {
+          "check": "c_multiset",
+          "reason": "content-word mismatch: input_only=[again, is]; gold_only=[are, do, not]"
+        }
+      ],
+      "language": "en",
+      "batch": "batch-en-03.json"
+    },
+    {
+      "id": "13A30C4607244224B94F859A50CBC990",
+      "pass": false,
+      "failures": [
+        {
+          "check": "c_multiset",
+          "reason": "content-word mismatch: input_only=[blown, it, rows, separate, to, to]; gold_only=[are, bloated, do, do, separately, you, your]"
+        }
+      ],
+      "language": "en",
+      "batch": "batch-en-03.json"
+    },
+    {
+      "id": "1E7692584891455186642B53AE82AE2D",
+      "pass": false,
+      "failures": [
+        {
+          "check": "c_multiset",
+          "reason": "content-word mismatch: input_only=[have, itself]; gold_only=[has]"
+        }
+      ],
+      "language": "en",
+      "batch": "batch-en-03.json"
+    },
+    {
+      "id": "2A584CDC54AC4606913661CDAD9BE54C",
+      "pass": false,
+      "failures": [
+        {
+          "check": "c_multiset",
+          "reason": "content-word mismatch: input_only=[be, can, down, drop, glyn, glyn, glyn, his, of, passed, suit, that]; gold_only=[dropdown, glean, glean, glean, is, is, passes, suits, their, where]"
+        }
+      ],
+      "language": "en",
+      "batch": "batch-en-03.json"
+    },
+    {
+      "id": "34BD640A91894F9183C974D80875DA11",
+      "pass": false,
+      "failures": [
+        {
+          "check": "c_multiset",
+          "reason": "content-word mismatch: input_only=[devices]; gold_only=[device]"
+        }
+      ],
+      "language": "en",
+      "batch": "batch-en-03.json"
+    },
+    {
+      "id": "42DC214866C74E3380D86FCB6B7ED9DD",
+      "pass": false,
+      "failures": [
+        {
+          "check": "c_multiset",
+          "reason": "content-word mismatch: input_only=[i, is, it, to, to, want, you]"
+        }
+      ],
+      "language": "en",
+      "batch": "batch-en-03.json"
+    },
+    {
+      "id": "52C94634805540E79F09B770CBA4B469",
+      "pass": false,
+      "failures": [
+        {
+          "check": "c_multiset",
+          "reason": "content-word mismatch: input_only=[also, can, fix, he, he, retrancribe, retrancribe, retrancribes, supports, up, we, when]; gold_only=[retranscribe, retranscribe, retranscribes, s, support, they, they, to, where, wishes]"
+        }
+      ],
+      "language": "en",
+      "batch": "batch-en-03.json"
+    },
+    {
+      "id": "5AAE12CACE714B66BE7E426B06881DC3",
+      "pass": false,
+      "failures": [
+        {
+          "check": "c_multiset",
+          "reason": "content-word mismatch: input_only=[for, matter, need, that, that, this, we, word]; gold_only=[of, words]"
+        }
+      ],
+      "language": "en",
+      "batch": "batch-en-03.json"
+    },
+    {
+      "id": "656ECE19DB2C4CF7B562DB7038206E2E",
+      "pass": false,
+      "failures": [
+        {
+          "check": "c_multiset",
+          "reason": "content-word mismatch: input_only=[it, rendering]; gold_only=[hud, is, render]"
+        }
+      ],
+      "language": "en",
+      "batch": "batch-en-03.json"
+    },
+    {
+      "id": "718CDCA20516422EBEC8AB6BFFF7C528",
+      "pass": false,
+      "failures": [
+        {
+          "check": "c_multiset",
+          "reason": "content-word mismatch: input_only=[compute, connknexnaboo, exposes, has, is, knex, me, platform, processed, supports]; gold_only=[computing, connect, connects, do, does, does, does, does, does, expose, have, it]"
+        }
+      ],
+      "language": "en",
+      "batch": "batch-en-03.json"
+    },
+    {
+      "id": "7BDBFAF3AC4041F786C0E6B3E4E0AA20",
+      "pass": false,
+      "failures": [
+        {
+          "check": "c_multiset",
+          "reason": "content-word mismatch: input_only=[for, relation]; gold_only=[are, relationships, to]"
+        }
+      ],
+      "language": "en",
+      "batch": "batch-en-03.json"
+    },
+    {
+      "id": "8A31AB5D3A0B42F7929B86A14C0F19BF",
+      "pass": false,
+      "failures": [
+        {
+          "check": "c_multiset",
+          "reason": "content-word mismatch: input_only=[calculation, kpi, kpi, s]; gold_only=[calculations, kpis, kpis, on]"
+        }
+      ],
+      "language": "en",
+      "batch": "batch-en-03.json"
+    },
+    {
+      "id": "94DB1FD9C1E347A7B1E91D407DB80250",
+      "pass": false,
+      "failures": [
+        {
+          "check": "c_multiset",
+          "reason": "content-word mismatch: input_only=[audit, cause, eliminated, stack]; gold_only=[are, causes, eliminate, hud, stuck, that]"
+        }
+      ],
+      "language": "en",
+      "batch": "batch-en-03.json"
+    },
+    {
+      "id": "A24ACEA779DD4C158809611C7C72A8CF",
+      "pass": false,
+      "failures": [
+        {
+          "check": "c_multiset",
+          "reason": "content-word mismatch: input_only=[be, will]"
+        }
+      ],
+      "language": "en",
+      "batch": "batch-en-03.json"
+    },
+    {
+      "id": "AE91DB224F494E69B2D86DD16A15D624",
+      "pass": false,
+      "failures": [
+        {
+          "check": "c_multiset",
+          "reason": "content-word mismatch: input_only=[and, fixed, log, work]; gold_only=[fix, is, logs, to, worked]"
+        }
+      ],
+      "language": "en",
+      "batch": "batch-en-03.json"
+    },
+    {
+      "id": "BAB17646CA5B4BFBBB522FC02D4D79CE",
+      "pass": false,
+      "failures": [
+        {
+          "check": "c_multiset",
+          "reason": "content-word mismatch: input_only=[and, bar, override, user]; gold_only=[bulk, overwrite, to, to, users]"
+        }
+      ],
+      "language": "en",
+      "batch": "batch-en-04.json"
+    },
+    {
+      "id": "C312DDBADCF24E85B7CEE9B397D2AA75",
+      "pass": false,
+      "failures": [
+        {
+          "check": "c_multiset",
+          "reason": "content-word mismatch: input_only=[clot, clot, mcp, mcp, mcp, mcp, s, s, s, to, you]; gold_only=[claude, claude, mcps, mcps, mcps, mcps]"
+        },
+        {
+          "check": "d_headroom",
+          "reason": "too similar: sim=0.954 headroom=0.046 < 0.05"
+        }
+      ],
+      "language": "en",
+      "batch": "batch-en-04.json"
+    },
+    {
+      "id": "CF57AC7DAFBF4C508F44209B717EA005",
+      "pass": false,
+      "failures": [
+        {
+          "check": "c_multiset",
+          "reason": "content-word mismatch: input_only=[he, him, is, is]; gold_only=[are, does, does, has, them, they]"
+        }
+      ],
+      "language": "en",
+      "batch": "batch-en-04.json"
+    },
+    {
+      "id": "DC7E6AFF05A94B11A73E5E0D8BB93F53",
+      "pass": false,
+      "failures": [
+        {
+          "check": "c_multiset",
+          "reason": "content-word mismatch: gold_only=[is]"
+        },
+        {
+          "check": "d_headroom",
+          "reason": "too similar: sim=0.958 headroom=0.042 < 0.05"
+        }
+      ],
+      "language": "en",
+      "batch": "batch-en-04.json"
+    },
+    {
+      "id": "E985BA7B38264365922ABA569392373D",
+      "pass": false,
+      "failures": [
+        {
+          "check": "c_multiset",
+          "reason": "content-word mismatch: input_only=[catched, fucked, kinda, shall, unannoying, wget]; gold_only=[affected, annoying, caught, is, should]"
+        }
+      ],
+      "language": "en",
+      "batch": "batch-en-04.json"
+    },
+    {
+      "id": "F3074AB94D374C4099A261DFAD307809",
+      "pass": false,
+      "failures": [
+        {
+          "check": "c_multiset",
+          "reason": "content-word mismatch: input_only=[it]"
+        }
+      ],
+      "language": "en",
+      "batch": "batch-en-04.json"
+    },
+    {
+      "id": "05011586377F43C58869FDF825B7B19D",
+      "pass": true,
+      "failures": [],
+      "language": "en",
+      "batch": "batch-en-04.json"
+    },
+    {
+      "id": "06AC473754274334BFA7F11D837A411C",
+      "pass": false,
+      "failures": [
+        {
+          "check": "c_multiset",
+          "reason": "content-word mismatch: input_only=[create, glyn, is, it]; gold_only=[creating, glean, in]"
+        }
+      ],
+      "language": "en",
+      "batch": "batch-en-04.json"
+    },
+    {
+      "id": "395E9FB9D69547FC9517E59BA067B5C5",
+      "pass": false,
+      "failures": [
+        {
+          "check": "c_multiset",
+          "reason": "content-word mismatch: input_only=[dog, engineering, how, in, in, second, second, two]; gold_only=[doc, too, way]"
+        }
+      ],
+      "language": "en",
+      "batch": "batch-en-04.json"
+    },
+    {
+      "id": "4CEF75DAB5354ACD997893B1CEBE53E8",
+      "pass": false,
+      "failures": [
+        {
+          "check": "c_multiset",
+          "reason": "content-word mismatch: input_only=[glyn, in, q, that]; gold_only=[glean, is]"
+        },
+        {
+          "check": "d_headroom",
+          "reason": "too similar: sim=0.952 headroom=0.048 < 0.05"
+        }
+      ],
+      "language": "en",
+      "batch": "batch-en-04.json"
+    },
+    {
+      "id": "649AC30C07CF4120B19732A0CC5315EF",
+      "pass": false,
+      "failures": [
+        {
+          "check": "c_multiset",
+          "reason": "content-word mismatch: input_only=[likes, understaudit]; gold_only=[understand]"
+        },
+        {
+          "check": "d_headroom",
+          "reason": "too similar: sim=0.972 headroom=0.028 < 0.05"
+        }
+      ],
+      "language": "en",
+      "batch": "batch-en-04.json"
+    },
+    {
+      "id": "77F685FDA432487999E8B2C3955B4EC4",
+      "pass": false,
+      "failures": [
+        {
+          "check": "d_headroom",
+          "reason": "too similar: sim=0.970 headroom=0.030 < 0.05"
+        }
+      ],
+      "language": "en",
+      "batch": "batch-en-04.json"
+    },
+    {
+      "id": "79D2F5D80F0F4BAA979341D92F94A813",
+      "pass": false,
+      "failures": [
+        {
+          "check": "d_headroom",
+          "reason": "too similar: sim=0.967 headroom=0.033 < 0.05"
+        }
+      ],
+      "language": "en",
+      "batch": "batch-en-04.json"
+    },
+    {
+      "id": "980336B44CA54232A2500248F0437F82",
+      "pass": false,
+      "failures": [
+        {
+          "check": "d_headroom",
+          "reason": "too similar: sim=0.989 headroom=0.011 < 0.05"
+        }
+      ],
+      "language": "en",
+      "batch": "batch-en-04.json"
+    },
+    {
+      "id": "9C9E386A9E8346B0B5BBB8B46EDA0131",
+      "pass": false,
+      "failures": [
+        {
+          "check": "c_multiset",
+          "reason": "content-word mismatch: input_only=[and, and, and, are, but, executed, for, how, of, of, on, on]; gold_only=[at, at, at, been, executing, in, is, looking, need, pushing, see, show]"
+        }
+      ],
+      "language": "en",
+      "batch": "batch-en-05.json"
+    },
+    {
+      "id": "A4477508798343E1B2CB261ABC9E1423",
+      "pass": false,
+      "failures": [
+        {
+          "check": "c_multiset",
+          "reason": "content-word mismatch: input_only=[and, chest, class, diagram, dog, dog, dog, dog, dog, edit, glim, humanized]; gold_only=[at, diagrams, doc, doc, doc, doc, docs, edited, from, glean, humanizer, is]"
+        }
+      ],
+      "language": "en",
+      "batch": "batch-en-05.json"
+    },
+    {
+      "id": "B5E43185BDF342A490A52FACF93B79CD",
+      "pass": false,
+      "failures": [
+        {
+          "check": "c_multiset",
+          "reason": "content-word mismatch: input_only=[and, and, approach, at, cannot, change, cluster, do, have, inside, is, is]; gold_only=[adds, are, are, are, changes, has, openai, packaged, packaged]"
+        }
+      ],
+      "language": "en",
+      "batch": "batch-en-05.json"
+    },
+    {
+      "id": "CA5239BDC69E4F6EA209F6A4053D62A2",
+      "pass": false,
+      "failures": [
+        {
+          "check": "c_multiset",
+          "reason": "content-word mismatch: input_only=[and, and, data, fe, fe, from, glyn, glyn, have, in, in, is]; gold_only=[datasets, glean, glean, kfee, kfee, on, problems, solutions, than, there]"
+        }
+      ],
+      "language": "en",
+      "batch": "batch-en-05.json"
+    },
+    {
+      "id": "D327CF0AA96148FC92E7DC081E342641",
+      "pass": false,
+      "failures": [
+        {
+          "check": "c_multiset",
+          "reason": "content-word mismatch: input_only=[appears, word]; gold_only=[appear, are, is, words]"
+        }
+      ],
+      "language": "en",
+      "batch": "batch-en-05.json"
+    },
+    {
+      "id": "DF9423EB19714546A7DB7F6A550A780F",
+      "pass": false,
+      "failures": [
+        {
+          "check": "c_multiset",
+          "reason": "content-word mismatch: input_only=[and, i, it, note, note, or, script, stop, then, to]; gold_only=[are, is, notes, notes, of, stops]"
+        }
+      ],
+      "language": "en",
+      "batch": "batch-en-05.json"
+    },
+    {
+      "id": "E61FDF75EC1E48388C6CE04A48094DF5",
+      "pass": false,
+      "failures": [
+        {
+          "check": "c_multiset",
+          "reason": "content-word mismatch: input_only=[code, did, extracting, frame, graph, i, kfa, question, support, that, too]; gold_only=[are, at, codegraph, extract, frames, kfee, of, questions, supported, than, to]"
+        }
+      ],
+      "language": "en",
+      "batch": "batch-en-05.json"
+    },
+    {
+      "id": "00C3A80250F04FB8A2AD7527DB4C55EF",
+      "pass": false,
+      "failures": [
+        {
+          "check": "c_multiset",
+          "reason": "content-word mismatch: input_only=[is]; gold_only=[1, 2, 3]"
+        }
+      ],
+      "language": "en",
+      "batch": "batch-en-05.json"
+    },
+    {
+      "id": "221CE4F04D4B4D348E6D8466F8C2D2C9",
+      "pass": false,
+      "failures": [
+        {
+          "check": "c_multiset",
+          "reason": "content-word mismatch: input_only=[fuck]; gold_only=[affect, it]"
+        },
+        {
+          "check": "d_headroom",
+          "reason": "too similar: sim=0.956 headroom=0.044 < 0.05"
+        }
+      ],
+      "language": "en",
+      "batch": "batch-en-05.json"
+    },
+    {
+      "id": "40763A5F12FF45F6915B969081A7D109",
+      "pass": false,
+      "failures": [
+        {
+          "check": "c_multiset",
+          "reason": "content-word mismatch: input_only=[does, reappears, work]; gold_only=[reappearing, works]"
+        }
+      ],
+      "language": "en",
+      "batch": "batch-en-05.json"
+    },
+    {
+      "id": "628A259563C441D095B2839F73B39639",
+      "pass": true,
+      "failures": [],
+      "language": "en",
+      "batch": "batch-en-05.json"
+    },
+    {
+      "id": "7DA18B0A86464284B182F5A0537DB520",
+      "pass": false,
+      "failures": [
+        {
+          "check": "c_multiset",
+          "reason": "content-word mismatch: input_only=[fucking, fucking, idiot, then, to, you]"
+        }
+      ],
+      "language": "en",
+      "batch": "batch-en-05.json"
+    },
+    {
+      "id": "9ECC4A10D0A04EB4A51CCDA15C45B1EF",
+      "pass": true,
+      "failures": [],
+      "language": "en",
+      "batch": "batch-en-05.json"
+    },
+    {
+      "id": "BD494C88D95F4926ABAA138C031FD78B",
+      "pass": true,
+      "failures": [],
+      "language": "en",
+      "batch": "batch-en-05.json"
+    },
+    {
+      "id": "DFF4A42DBA694CEC99EE243E16A89774",
+      "pass": false,
+      "failures": [
+        {
+          "check": "d_headroom",
+          "reason": "too similar: sim=0.994 headroom=0.006 < 0.05"
+        }
+      ],
+      "language": "en",
+      "batch": "batch-en-05.json"
+    },
+    {
+      "id": "0D93B3F65D8A4E9DA58A931EF039BCFF",
+      "pass": false,
+      "failures": [
+        {
+          "check": "d_headroom",
+          "reason": "too similar: sim=0.985 headroom=0.015 < 0.05"
+        }
+      ],
+      "language": "he",
+      "batch": "batch-he-00.json"
+    },
+    {
+      "id": "2527C7F4BE4E49CC92E3428983090820",
+      "pass": false,
+      "failures": [
+        {
+          "check": "d_headroom",
+          "reason": "too similar: sim=0.987 headroom=0.013 < 0.05"
+        }
+      ],
+      "language": "he",
+      "batch": "batch-he-00.json"
+    },
+    {
+      "id": "37AA91C5046A47AEB6514BEE1B2803ED",
+      "pass": false,
+      "failures": [
+        {
+          "check": "d_headroom",
+          "reason": "too similar: sim=0.990 headroom=0.010 < 0.05"
+        }
+      ],
+      "language": "he",
+      "batch": "batch-he-00.json"
+    },
+    {
+      "id": "61DBCF5A59C24B8991E0E6A2669740EC",
+      "pass": false,
+      "failures": [
+        {
+          "check": "d_headroom",
+          "reason": "too similar: sim=1.000 headroom=0.000 < 0.05"
+        }
+      ],
+      "language": "he",
+      "batch": "batch-he-00.json"
+    },
+    {
+      "id": "7AA576174A714EEB95F79820D0780927",
+      "pass": false,
+      "failures": [
+        {
+          "check": "d_headroom",
+          "reason": "too similar: sim=0.990 headroom=0.010 < 0.05"
+        }
+      ],
+      "language": "he",
+      "batch": "batch-he-00.json"
+    },
+    {
+      "id": "95B95837CA8848B29AB27D3F17FB7C29",
+      "pass": true,
+      "failures": [],
+      "language": "he",
+      "batch": "batch-he-00.json"
+    },
+    {
+      "id": "997608B9980443F3AD52B5D815E38BE2",
+      "pass": false,
+      "failures": [
+        {
+          "check": "d_headroom",
+          "reason": "too similar: sim=0.986 headroom=0.014 < 0.05"
+        }
+      ],
+      "language": "he",
+      "batch": "batch-he-00.json"
+    },
+    {
+      "id": "C712133819124E67B6EAAF4582BFC0ED",
+      "pass": false,
+      "failures": [
+        {
+          "check": "d_headroom",
+          "reason": "too similar: sim=1.000 headroom=0.000 < 0.05"
+        }
+      ],
+      "language": "he",
+      "batch": "batch-he-00.json"
+    },
+    {
+      "id": "D7DE9B593D9A4102A3AE4F4A3D43972A",
+      "pass": true,
+      "failures": [],
+      "language": "he",
+      "batch": "batch-he-00.json"
+    },
+    {
+      "id": "E338913DF7A6485881757E453F322D6D",
+      "pass": false,
+      "failures": [
+        {
+          "check": "d_headroom",
+          "reason": "too similar: sim=0.986 headroom=0.014 < 0.05"
+        }
+      ],
+      "language": "he",
+      "batch": "batch-he-00.json"
+    },
+    {
+      "id": "0A9DEEC8F1664B96BFF2C3C2BF1B1655",
+      "pass": false,
+      "failures": [
+        {
+          "check": "c_multiset",
+          "reason": "content-word mismatch: input_only=[עם]; gold_only=[אם]"
+        },
+        {
+          "check": "d_headroom",
+          "reason": "too similar: sim=0.977 headroom=0.023 < 0.05"
+        }
+      ],
+      "language": "he",
+      "batch": "batch-he-00.json"
+    },
+    {
+      "id": "14860DC3D16F4C91B3B67FB11411F07C",
+      "pass": false,
+      "failures": [
+        {
+          "check": "c_multiset",
+          "reason": "content-word mismatch: input_only=[כאשר, כשתיהיה, להביד]; gold_only=[כשתהיה, להביא]"
+        }
+      ],
+      "language": "he",
+      "batch": "batch-he-00.json"
+    },
+    {
+      "id": "4237CC4A68E145B58D0A3539CBCD7B12",
+      "pass": false,
+      "failures": [
+        {
+          "check": "c_multiset",
+          "reason": "content-word mismatch: input_only=[biquary, הקוסט, שכאילו]; gold_only=[bigquery, שהקוסט]"
+        }
+      ],
+      "language": "he",
+      "batch": "batch-he-00.json"
+    },
+    {
+      "id": "5AF23B18CC0E46B39FDA76291F6A2F87",
+      "pass": false,
+      "failures": [
+        {
+          "check": "c_multiset",
+          "reason": "content-word mismatch: input_only=[ולכן, תודה]"
+        }
+      ],
+      "language": "he",
+      "batch": "batch-he-00.json"
+    },
+    {
+      "id": "74B34E5931A14B5589B2F7B26B7B74AD",
+      "pass": false,
+      "failures": [
+        {
+          "check": "c_multiset",
+          "reason": "content-word mismatch: input_only=[ehm]"
+        }
+      ],
+      "language": "he",
+      "batch": "batch-he-00.json"
+    },
+    {
+      "id": "84627EF42EFC41568FB476901ACF1F22",
+      "pass": true,
+      "failures": [],
+      "language": "he",
+      "batch": "batch-he-01.json"
+    },
+    {
+      "id": "9382579052EE479E9EB6AD7ED6A0A2F7",
+      "pass": true,
+      "failures": [],
+      "language": "he",
+      "batch": "batch-he-01.json"
+    },
+    {
+      "id": "A094FCE7F32A4242A8521E31BAC2B21C",
+      "pass": false,
+      "failures": [
+        {
+          "check": "d_headroom",
+          "reason": "too similar: sim=1.000 headroom=0.000 < 0.05"
+        }
+      ],
+      "language": "he",
+      "batch": "batch-he-01.json"
+    },
+    {
+      "id": "B55FEE533E7A47CE9BB2F6837C9E5BF5",
+      "pass": false,
+      "failures": [
+        {
+          "check": "d_headroom",
+          "reason": "too similar: sim=0.961 headroom=0.039 < 0.05"
+        }
+      ],
+      "language": "he",
+      "batch": "batch-he-01.json"
+    },
+    {
+      "id": "E3F48F3D265B4896B6F8BD4E122A7308",
+      "pass": false,
+      "failures": [
+        {
+          "check": "c_multiset",
+          "reason": "content-word mismatch: input_only=[לאלסינקיה]; gold_only=[להלסינקי]"
+        },
+        {
+          "check": "d_headroom",
+          "reason": "too similar: sim=0.971 headroom=0.029 < 0.05"
+        }
+      ],
+      "language": "he",
+      "batch": "batch-he-01.json"
+    },
+    {
+      "id": "0693515FB129425EA2B3935FFA964E6B",
+      "pass": false,
+      "failures": [
+        {
+          "check": "d_headroom",
+          "reason": "too similar: sim=1.000 headroom=0.000 < 0.05"
+        }
+      ],
+      "language": "he",
+      "batch": "batch-he-01.json"
+    },
+    {
+      "id": "17104A5F3BF34E4E810A3774CAC5BFB0",
+      "pass": false,
+      "failures": [
+        {
+          "check": "d_headroom",
+          "reason": "too similar: sim=0.987 headroom=0.013 < 0.05"
+        }
+      ],
+      "language": "he",
+      "batch": "batch-he-01.json"
+    },
+    {
+      "id": "1A6B379EB4494F3FB1803CC97C812383",
+      "pass": false,
+      "failures": [
+        {
+          "check": "c_multiset",
+          "reason": "content-word mismatch: input_only=[אם, בעצםלעשות, היה, הרבה]; gold_only=[לעשות]"
+        }
+      ],
+      "language": "he",
+      "batch": "batch-he-01.json"
+    },
+    {
+      "id": "47B9AD27DE1C42B7825A54F768E83638",
+      "pass": false,
+      "failures": [
+        {
+          "check": "c_multiset",
+          "reason": "content-word mismatch: input_only=[לפענך]; gold_only=[לפענח]"
+        },
+        {
+          "check": "d_headroom",
+          "reason": "too similar: sim=0.974 headroom=0.026 < 0.05"
+        }
+      ],
+      "language": "he",
+      "batch": "batch-he-01.json"
+    },
+    {
+      "id": "6E4AA3BD88E94A33AD8AB120916F3108",
+      "pass": false,
+      "failures": [
+        {
+          "check": "c_multiset",
+          "reason": "content-word mismatch: input_only=[אותה, הבעיה]"
+        }
+      ],
+      "language": "he",
+      "batch": "batch-he-01.json"
+    },
+    {
+      "id": "6FFAA45BA44D4573968C8814B997D8B0",
+      "pass": false,
+      "failures": [
+        {
+          "check": "c_multiset",
+          "reason": "content-word mismatch: input_only=[טבלעות, טבלעות]; gold_only=[טבלאות, טבלאות]"
+        },
+        {
+          "check": "d_headroom",
+          "reason": "too similar: sim=0.971 headroom=0.029 < 0.05"
+        }
+      ],
+      "language": "he",
+      "batch": "batch-he-01.json"
+    },
+    {
+      "id": "7AC60E740E1E48EC9AF36818220CF45C",
+      "pass": false,
+      "failures": [
+        {
+          "check": "d_headroom",
+          "reason": "too similar: sim=0.963 headroom=0.037 < 0.05"
+        }
+      ],
+      "language": "he",
+      "batch": "batch-he-01.json"
+    },
+    {
+      "id": "A905C5EFB4254D789C2341BD0BD5BFF1",
+      "pass": false,
+      "failures": [
+        {
+          "check": "d_headroom",
+          "reason": "too similar: sim=0.982 headroom=0.018 < 0.05"
+        }
+      ],
+      "language": "he",
+      "batch": "batch-he-01.json"
+    },
+    {
+      "id": "CE5364410D2046F9B81D805FBEAA361E",
+      "pass": false,
+      "failures": [
+        {
+          "check": "d_headroom",
+          "reason": "too similar: sim=0.984 headroom=0.016 < 0.05"
+        }
+      ],
+      "language": "he",
+      "batch": "batch-he-01.json"
+    },
+    {
+      "id": "D7BCF38890074D1AA4E52F24F555AC5A",
+      "pass": false,
+      "failures": [
+        {
+          "check": "c_multiset",
+          "reason": "content-word mismatch: input_only=[להחזין]; gold_only=[להזין]"
+        },
+        {
+          "check": "d_headroom",
+          "reason": "too similar: sim=0.978 headroom=0.022 < 0.05"
+        }
+      ],
+      "language": "he",
+      "batch": "batch-he-01.json"
+    },
+    {
+      "id": "0107BC2A66454E9E8DD4FE8E6006D724",
+      "pass": false,
+      "failures": [
+        {
+          "check": "c_multiset",
+          "reason": "content-word mismatch: input_only=[таком]; gold_only=[такой]"
+        },
+        {
+          "check": "d_headroom",
+          "reason": "too similar: sim=0.988 headroom=0.012 < 0.05"
+        }
+      ],
+      "language": "ru",
+      "batch": "batch-ru-00.json"
+    },
+    {
+      "id": "0E8D6AF7F18748DEBE53F9E542804A73",
+      "pass": false,
+      "failures": [
+        {
+          "check": "d_headroom",
+          "reason": "too similar: sim=0.986 headroom=0.014 < 0.05"
+        }
+      ],
+      "language": "ru",
+      "batch": "batch-ru-00.json"
+    },
+    {
+      "id": "503C8ED48B7A40CFB8156D9F97BD116B",
+      "pass": false,
+      "failures": [
+        {
+          "check": "b_script",
+          "reason": "script mismatch: input=ru gold=en"
+        },
+        {
+          "check": "c_multiset",
+          "reason": "content-word mismatch: input_only=[очень, это]"
+        }
+      ],
+      "language": "ru",
+      "batch": "batch-ru-00.json"
+    },
+    {
+      "id": "6DAE9C2D6863485DB2C9350245A32FB8",
+      "pass": false,
+      "failures": [
+        {
+          "check": "d_headroom",
+          "reason": "too similar: sim=1.000 headroom=0.000 < 0.05"
+        }
+      ],
+      "language": "ru",
+      "batch": "batch-ru-00.json"
+    },
+    {
+      "id": "97F3B49523F54667A4C116A97E88ABDA",
+      "pass": true,
+      "failures": [],
+      "language": "ru",
+      "batch": "batch-ru-00.json"
+    },
+    {
+      "id": "B4211D28B5EF4C42AD35E6455D4E64A2",
+      "pass": false,
+      "failures": [
+        {
+          "check": "d_headroom",
+          "reason": "too similar: sim=0.985 headroom=0.015 < 0.05"
+        }
+      ],
+      "language": "ru",
+      "batch": "batch-ru-00.json"
+    },
+    {
+      "id": "D57D6561A4874A5EBAEC538806281DD4",
+      "pass": true,
+      "failures": [],
+      "language": "ru",
+      "batch": "batch-ru-00.json"
+    },
+    {
+      "id": "02C4F68BB8F446F58BC2A21ED4D9B2C8",
+      "pass": false,
+      "failures": [
+        {
+          "check": "c_multiset",
+          "reason": "content-word mismatch: input_only=[застаивает]; gold_only=[зависает]"
+        },
+        {
+          "check": "d_headroom",
+          "reason": "too similar: sim=0.978 headroom=0.022 < 0.05"
+        }
+      ],
+      "language": "ru",
+      "batch": "batch-ru-00.json"
+    },
+    {
+      "id": "2DC2A0A3E5324D1687E7133FBF970DA3",
+      "pass": false,
+      "failures": [
+        {
+          "check": "d_headroom",
+          "reason": "too similar: sim=0.987 headroom=0.013 < 0.05"
+        }
+      ],
+      "language": "ru",
+      "batch": "batch-ru-00.json"
+    },
+    {
+      "id": "5F7ECC32CC3D4E4CB92D0CC01B455AE9",
+      "pass": false,
+      "failures": [
+        {
+          "check": "c_multiset",
+          "reason": "content-word mismatch: input_only=[очень, хрейново, это]; gold_only=[хреново]"
+        }
+      ],
+      "language": "ru",
+      "batch": "batch-ru-00.json"
+    },
+    {
+      "id": "727F56EEE612477B947B8DDD80AA4025",
+      "pass": false,
+      "failures": [
+        {
+          "check": "c_multiset",
+          "reason": "content-word mismatch: input_only=[влезавшись, влезавшись, влезавшись, влезавшись, влезавшись, влезавшись, влезавшись, влезавшись, влезавшись, влезавшись, влезавшись, влезавшись]"
+        },
+        {
+          "check": "e_length",
+          "reason": "length ratio 0.15 out of [0.75,1.15]: input_words=52 gold_words=8"
+        }
+      ],
+      "language": "ru",
+      "batch": "batch-ru-00.json"
+    },
+    {
+      "id": "80C179BDE7574000BBFD759CAEBDA40F",
+      "pass": false,
+      "failures": [
+        {
+          "check": "d_headroom",
+          "reason": "too similar: sim=1.000 headroom=0.000 < 0.05"
+        }
+      ],
+      "language": "ru",
+      "batch": "batch-ru-00.json"
+    },
+    {
+      "id": "9BDFA9E7EF034D9BB01A7A3ECABDDF94",
+      "pass": false,
+      "failures": [
+        {
+          "check": "d_headroom",
+          "reason": "too similar: sim=0.965 headroom=0.035 < 0.05"
+        }
+      ],
+      "language": "ru",
+      "batch": "batch-ru-00.json"
+    },
+    {
+      "id": "DADCBFE9ED5143DB8D7E63C727583B9D",
+      "pass": false,
+      "failures": [
+        {
+          "check": "c_multiset",
+          "reason": "content-word mismatch: input_only=[сиट]; gold_only=[сиит]"
+        },
+        {
+          "check": "d_headroom",
+          "reason": "too similar: sim=0.974 headroom=0.026 < 0.05"
+        }
+      ],
+      "language": "ru",
+      "batch": "batch-ru-00.json"
+    },
+    {
+      "id": "2E606469F8784DE8B5D5315FF1D068AA",
+      "pass": false,
+      "failures": [
+        {
+          "check": "d_headroom",
+          "reason": "too similar: sim=0.986 headroom=0.014 < 0.05"
+        }
+      ],
+      "language": "ru",
+      "batch": "batch-ru-00.json"
+    },
+    {
+      "id": "3281B4A392ED411F89F578ED44BFC647",
+      "pass": false,
+      "failures": [
+        {
+          "check": "c_multiset",
+          "reason": "content-word mismatch: input_only=[непло, суперовского, это]"
+        }
+      ],
+      "language": "ru",
+      "batch": "batch-ru-01.json"
+    },
+    {
+      "id": "50251F1EEF28454FB66A1F2269E42D6E",
+      "pass": false,
+      "failures": [
+        {
+          "check": "c_multiset",
+          "reason": "content-word mismatch: input_only=[с, са]"
+        },
+        {
+          "check": "e_length",
+          "reason": "length ratio 0.36 out of [0.75,1.15]: input_words=169 gold_words=61"
+        }
+      ],
+      "language": "ru",
+      "batch": "batch-ru-01.json"
+    },
+    {
+      "id": "6E239E5D3930481FA714363FA80A52FD",
+      "pass": false,
+      "failures": [
+        {
+          "check": "d_headroom",
+          "reason": "too similar: sim=0.972 headroom=0.028 < 0.05"
+        }
+      ],
+      "language": "ru",
+      "batch": "batch-ru-01.json"
+    },
+    {
+      "id": "92F0122BF0114753B86E3041D97D42C6",
+      "pass": false,
+      "failures": [
+        {
+          "check": "d_headroom",
+          "reason": "too similar: sim=0.979 headroom=0.021 < 0.05"
+        }
+      ],
+      "language": "ru",
+      "batch": "batch-ru-01.json"
+    },
+    {
+      "id": "A499DD40A88548AE9E9B7C0E77047394",
+      "pass": false,
+      "failures": [
+        {
+          "check": "c_multiset",
+          "reason": "content-word mismatch: input_only=[небольшей]; gold_only=[небольшой]"
+        },
+        {
+          "check": "d_headroom",
+          "reason": "too similar: sim=0.996 headroom=0.004 < 0.05"
+        }
+      ],
+      "language": "ru",
+      "batch": "batch-ru-01.json"
+    },
+    {
+      "id": "E9169766268B4D799496E4D004629D14",
+      "pass": false,
+      "failures": [
+        {
+          "check": "d_headroom",
+          "reason": "too similar: sim=0.973 headroom=0.027 < 0.05"
+        }
+      ],
+      "language": "ru",
+      "batch": "batch-ru-01.json"
+    },
+    {
+      "id": "5F64F423742443A0805B16D9C5E20BD9",
+      "pass": false,
+      "failures": [
+        {
+          "check": "c_multiset",
+          "reason": "content-word mismatch: input_only=[m, s, t, t, t, t, t, t, t, t, t, t]; gold_only=[оказался]"
+        },
+        {
+          "check": "e_length",
+          "reason": "length ratio 0.74 out of [0.75,1.15]: input_words=280 gold_words=206"
+        }
+      ],
+      "language": "ru",
+      "batch": "batch-ru-01.json"
+    },
+    {
+      "id": "848F0AFEC11F403FAFAA0B71B8DF1876",
+      "pass": false,
+      "failures": [
+        {
+          "check": "c_multiset",
+          "reason": "content-word mismatch: input_only=[док, док]; gold_only=[dok, dok]"
+        },
+        {
+          "check": "d_headroom",
+          "reason": "too similar: sim=0.989 headroom=0.011 < 0.05"
+        }
+      ],
+      "language": "ru",
+      "batch": "batch-ru-01.json"
+    },
+    {
+      "id": "051F67669B084BA4A8CFCCA13C0A978B",
+      "pass": false,
+      "failures": [
+        {
+          "check": "d_headroom",
+          "reason": "too similar: sim=0.988 headroom=0.012 < 0.05"
+        }
+      ],
+      "language": "ru",
+      "batch": "batch-ru-01.json"
+    },
+    {
+      "id": "12FBC7E629E04A839AC53DDB062FCDAB",
+      "pass": false,
+      "failures": [
+        {
+          "check": "d_headroom",
+          "reason": "too similar: sim=0.989 headroom=0.011 < 0.05"
+        }
+      ],
+      "language": "ru",
+      "batch": "batch-ru-01.json"
+    },
+    {
+      "id": "539B99ECBA5A49FD805DDDF537790BB0",
+      "pass": false,
+      "failures": [
+        {
+          "check": "d_headroom",
+          "reason": "too similar: sim=1.000 headroom=0.000 < 0.05"
+        }
+      ],
+      "language": "ru",
+      "batch": "batch-ru-01.json"
+    },
+    {
+      "id": "70CDFF8EEF43413AB62D3734B0C3F227",
+      "pass": false,
+      "failures": [
+        {
+          "check": "d_headroom",
+          "reason": "too similar: sim=0.960 headroom=0.040 < 0.05"
+        }
+      ],
+      "language": "ru",
+      "batch": "batch-ru-01.json"
+    },
+    {
+      "id": "99049B4362EA4EAE920D78A9F09106CB",
+      "pass": false,
+      "failures": [
+        {
+          "check": "d_headroom",
+          "reason": "too similar: sim=1.000 headroom=0.000 < 0.05"
+        }
+      ],
+      "language": "ru",
+      "batch": "batch-ru-01.json"
+    },
+    {
+      "id": "C01953FF96914C7AAA6F7F3605E34A88",
+      "pass": false,
+      "failures": [
+        {
+          "check": "d_headroom",
+          "reason": "too similar: sim=0.990 headroom=0.010 < 0.05"
+        }
+      ],
+      "language": "ru",
+      "batch": "batch-ru-01.json"
+    },
+    {
+      "id": "E25C0C76B88E400D9760A5843EB512DA",
+      "pass": false,
+      "failures": [
+        {
+          "check": "d_headroom",
+          "reason": "too similar: sim=0.992 headroom=0.008 < 0.05"
+        }
+      ],
+      "language": "ru",
+      "batch": "batch-ru-01.json"
+    },
+    {
+      "id": "023C49457F564946AF8480425E8E0C31",
+      "pass": false,
+      "failures": [
+        {
+          "check": "d_headroom",
+          "reason": "too similar: sim=1.000 headroom=0.000 < 0.05"
+        }
+      ],
+      "language": "en",
+      "batch": "batch2-en-00.json"
+    },
+    {
+      "id": "08BB7910287B473480BC06D65EF4A4AA",
+      "pass": true,
+      "failures": [],
+      "language": "en",
+      "batch": "batch2-en-00.json"
+    },
+    {
+      "id": "0E15B49EA3C0475BB8660199948830FC",
+      "pass": false,
+      "failures": [
+        {
+          "check": "c_multiset",
+          "reason": "content-word mismatch: input_only=[زنخماد]; gold_only=[זנخماד]"
+        },
+        {
+          "check": "d_headroom",
+          "reason": "too similar: sim=0.956 headroom=0.044 < 0.05"
+        }
+      ],
+      "language": "en",
+      "batch": "batch2-en-00.json"
+    },
+    {
+      "id": "155E587AD32F46CF90895FC7B5BDF4F8",
+      "pass": false,
+      "failures": [
+        {
+          "check": "d_headroom",
+          "reason": "too similar: sim=0.980 headroom=0.020 < 0.05"
+        }
+      ],
+      "language": "en",
+      "batch": "batch2-en-00.json"
+    },
+    {
+      "id": "1A1FE0E535B64929AAACC34DCFB045B8",
+      "pass": false,
+      "failures": [
+        {
+          "check": "d_headroom",
+          "reason": "too similar: sim=0.989 headroom=0.011 < 0.05"
+        }
+      ],
+      "language": "en",
+      "batch": "batch2-en-00.json"
+    },
+    {
+      "id": "1FABD58C315149C095D296E988168B78",
+      "pass": false,
+      "failures": [
+        {
+          "check": "d_headroom",
+          "reason": "too similar: sim=0.988 headroom=0.012 < 0.05"
+        }
+      ],
+      "language": "en",
+      "batch": "batch2-en-00.json"
+    },
+    {
+      "id": "23A2F8E18E874143B55F4EAE1D5DA6B1",
+      "pass": false,
+      "failures": [
+        {
+          "check": "d_headroom",
+          "reason": "too similar: sim=0.984 headroom=0.016 < 0.05"
+        }
+      ],
+      "language": "en",
+      "batch": "batch2-en-00.json"
+    },
+    {
+      "id": "2A38FDF8D4684906BB2B963776BBD595",
+      "pass": false,
+      "failures": [
+        {
+          "check": "d_headroom",
+          "reason": "too similar: sim=0.963 headroom=0.037 < 0.05"
+        }
+      ],
+      "language": "en",
+      "batch": "batch2-en-00.json"
+    },
+    {
+      "id": "2D0393B4D669465583383A33D1C8AC50",
+      "pass": false,
+      "failures": [
+        {
+          "check": "d_headroom",
+          "reason": "too similar: sim=1.000 headroom=0.000 < 0.05"
+        }
+      ],
+      "language": "en",
+      "batch": "batch2-en-00.json"
+    },
+    {
+      "id": "30C9BCCDB4AC47148AF80C35A7F6CB4C",
+      "pass": false,
+      "failures": [
+        {
+          "check": "d_headroom",
+          "reason": "too similar: sim=0.994 headroom=0.006 < 0.05"
+        }
+      ],
+      "language": "en",
+      "batch": "batch2-en-00.json"
+    },
+    {
+      "id": "3449636527F84EDEA276A9082BDE9ED1",
+      "pass": false,
+      "failures": [
+        {
+          "check": "d_headroom",
+          "reason": "too similar: sim=0.988 headroom=0.012 < 0.05"
+        }
+      ],
+      "language": "en",
+      "batch": "batch2-en-00.json"
+    },
+    {
+      "id": "37C2334DE7084487B129BD168F83C68F",
+      "pass": true,
+      "failures": [],
+      "language": "en",
+      "batch": "batch2-en-00.json"
+    },
+    {
+      "id": "3B94ABE84B00427CB236900D97C41264",
+      "pass": false,
+      "failures": [
+        {
+          "check": "d_headroom",
+          "reason": "too similar: sim=0.988 headroom=0.012 < 0.05"
+        }
+      ],
+      "language": "en",
+      "batch": "batch2-en-00.json"
+    },
+    {
+      "id": "40C24582F83D48EFB5D589D235238DC5",
+      "pass": false,
+      "failures": [
+        {
+          "check": "d_headroom",
+          "reason": "too similar: sim=0.963 headroom=0.037 < 0.05"
+        }
+      ],
+      "language": "en",
+      "batch": "batch2-en-00.json"
+    },
+    {
+      "id": "4555FE3637DD4991A078DEA23721EF39",
+      "pass": false,
+      "failures": [
+        {
+          "check": "d_headroom",
+          "reason": "too similar: sim=1.000 headroom=0.000 < 0.05"
+        }
+      ],
+      "language": "en",
+      "batch": "batch2-en-00.json"
+    },
+    {
+      "id": "4B0DD7E1D1CF40F4B2FD5F2277688BCE",
+      "pass": false,
+      "failures": [
+        {
+          "check": "d_headroom",
+          "reason": "too similar: sim=0.989 headroom=0.011 < 0.05"
+        }
+      ],
+      "language": "en",
+      "batch": "batch2-en-00.json"
+    },
+    {
+      "id": "4D8D504C963C49D988BFF424DA932457",
+      "pass": false,
+      "failures": [
+        {
+          "check": "d_headroom",
+          "reason": "too similar: sim=1.000 headroom=0.000 < 0.05"
+        }
+      ],
+      "language": "en",
+      "batch": "batch2-en-00.json"
+    },
+    {
+      "id": "50339359CEA3464DA97FA3DC82B1BF28",
+      "pass": false,
+      "failures": [
+        {
+          "check": "d_headroom",
+          "reason": "too similar: sim=1.000 headroom=0.000 < 0.05"
+        }
+      ],
+      "language": "en",
+      "batch": "batch2-en-00.json"
+    },
+    {
+      "id": "54EAE3C357E640A2BF6CFA83193D2BB9",
+      "pass": false,
+      "failures": [
+        {
+          "check": "d_headroom",
+          "reason": "too similar: sim=1.000 headroom=0.000 < 0.05"
+        }
+      ],
+      "language": "en",
+      "batch": "batch2-en-00.json"
+    },
+    {
+      "id": "5C1410EAC6444CBCA2B705AD67152DDA",
+      "pass": false,
+      "failures": [
+        {
+          "check": "d_headroom",
+          "reason": "too similar: sim=0.988 headroom=0.012 < 0.05"
+        }
+      ],
+      "language": "en",
+      "batch": "batch2-en-00.json"
+    },
+    {
+      "id": "5F7FE368A3224DFCBB0ED7F76B0426B0",
+      "pass": true,
+      "failures": [],
+      "language": "en",
+      "batch": "batch2-en-01.json"
+    },
+    {
+      "id": "63B2231E02B741418DABA8DBCDAE1083",
+      "pass": false,
+      "failures": [
+        {
+          "check": "d_headroom",
+          "reason": "too similar: sim=0.984 headroom=0.016 < 0.05"
+        }
+      ],
+      "language": "en",
+      "batch": "batch2-en-01.json"
+    },
+    {
+      "id": "69CF137053C44D158268C5A3042A5176",
+      "pass": false,
+      "failures": [
+        {
+          "check": "d_headroom",
+          "reason": "too similar: sim=1.000 headroom=0.000 < 0.05"
+        }
+      ],
+      "language": "en",
+      "batch": "batch2-en-01.json"
+    },
+    {
+      "id": "6DD94A2C09284A8B8980CF54857BAA95",
+      "pass": true,
+      "failures": [],
+      "language": "en",
+      "batch": "batch2-en-01.json"
+    },
+    {
+      "id": "743BFDFACEEB4878B723F01177046BFC",
+      "pass": false,
+      "failures": [
+        {
+          "check": "d_headroom",
+          "reason": "too similar: sim=1.000 headroom=0.000 < 0.05"
+        }
+      ],
+      "language": "en",
+      "batch": "batch2-en-01.json"
+    },
+    {
+      "id": "78A918C6C0B141AD85F4F8620001C4AB",
+      "pass": false,
+      "failures": [
+        {
+          "check": "d_headroom",
+          "reason": "too similar: sim=1.000 headroom=0.000 < 0.05"
+        }
+      ],
+      "language": "en",
+      "batch": "batch2-en-01.json"
+    },
+    {
+      "id": "7BC7A26AEB7E4E3581C6262161B0FAC1",
+      "pass": false,
+      "failures": [
+        {
+          "check": "d_headroom",
+          "reason": "too similar: sim=0.989 headroom=0.011 < 0.05"
+        }
+      ],
+      "language": "en",
+      "batch": "batch2-en-01.json"
+    },
+    {
+      "id": "7FAEE5BB12664B8B9DD29967EF77873C",
+      "pass": false,
+      "failures": [
+        {
+          "check": "d_headroom",
+          "reason": "too similar: sim=0.972 headroom=0.028 < 0.05"
+        }
+      ],
+      "language": "en",
+      "batch": "batch2-en-01.json"
+    },
+    {
+      "id": "82FE8D4329C34D6F9A2FD0C8528AD47B",
+      "pass": false,
+      "failures": [
+        {
+          "check": "d_headroom",
+          "reason": "too similar: sim=0.989 headroom=0.011 < 0.05"
+        }
+      ],
+      "language": "en",
+      "batch": "batch2-en-01.json"
+    },
+    {
+      "id": "882CC4DB03BF45009A3042D10996AC12",
+      "pass": false,
+      "failures": [
+        {
+          "check": "d_headroom",
+          "reason": "too similar: sim=0.988 headroom=0.012 < 0.05"
+        }
+      ],
+      "language": "en",
+      "batch": "batch2-en-01.json"
+    },
+    {
+      "id": "8B8382BAE2AA4D1FB61FA2758E2CC733",
+      "pass": true,
+      "failures": [],
+      "language": "en",
+      "batch": "batch2-en-01.json"
+    },
+    {
+      "id": "8F5E5ED457B94778A6B02734D332F7F6",
+      "pass": false,
+      "failures": [
+        {
+          "check": "d_headroom",
+          "reason": "too similar: sim=0.980 headroom=0.020 < 0.05"
+        }
+      ],
+      "language": "en",
+      "batch": "batch2-en-01.json"
+    },
+    {
+      "id": "94AD4726C3B74FCEA01611BEE88FD2A3",
+      "pass": false,
+      "failures": [
+        {
+          "check": "d_headroom",
+          "reason": "too similar: sim=1.000 headroom=0.000 < 0.05"
+        }
+      ],
+      "language": "en",
+      "batch": "batch2-en-01.json"
+    },
+    {
+      "id": "991CA55327FD4BAAABE33ADCE4101077",
+      "pass": false,
+      "failures": [
+        {
+          "check": "d_headroom",
+          "reason": "too similar: sim=0.989 headroom=0.011 < 0.05"
+        }
+      ],
+      "language": "en",
+      "batch": "batch2-en-01.json"
+    },
+    {
+      "id": "9EC8DF19895A4C8B91ED40DE5EF4AC8C",
+      "pass": true,
+      "failures": [],
+      "language": "en",
+      "batch": "batch2-en-01.json"
+    },
+    {
+      "id": "A1D9C39511BD42FA9AEEE7E1246FE3F8",
+      "pass": true,
+      "failures": [],
+      "language": "en",
+      "batch": "batch2-en-01.json"
+    },
+    {
+      "id": "AC24DB630DF44E91A329052040AB8A7C",
+      "pass": false,
+      "failures": [
+        {
+          "check": "d_headroom",
+          "reason": "too similar: sim=1.000 headroom=0.000 < 0.05"
+        }
+      ],
+      "language": "en",
+      "batch": "batch2-en-01.json"
+    },
+    {
+      "id": "AF0E56A5552646A9B06964DA47EAE773",
+      "pass": false,
+      "failures": [
+        {
+          "check": "d_headroom",
+          "reason": "too similar: sim=0.970 headroom=0.030 < 0.05"
+        }
+      ],
+      "language": "en",
+      "batch": "batch2-en-01.json"
+    },
+    {
+      "id": "B21658E00893413A9956998E61AD883B",
+      "pass": false,
+      "failures": [
+        {
+          "check": "d_headroom",
+          "reason": "too similar: sim=0.955 headroom=0.045 < 0.05"
+        }
+      ],
+      "language": "en",
+      "batch": "batch2-en-01.json"
+    },
+    {
+      "id": "B9F5AA3075FA4E0080F4486588B35FE8",
+      "pass": false,
+      "failures": [
+        {
+          "check": "d_headroom",
+          "reason": "too similar: sim=1.000 headroom=0.000 < 0.05"
+        }
+      ],
+      "language": "en",
+      "batch": "batch2-en-01.json"
+    },
+    {
+      "id": "BFC7793094204791881DC92C39E8A783",
+      "pass": false,
+      "failures": [
+        {
+          "check": "d_headroom",
+          "reason": "too similar: sim=0.959 headroom=0.041 < 0.05"
+        }
+      ],
+      "language": "en",
+      "batch": "batch2-en-02.json"
+    },
+    {
+      "id": "C5AACF14B80445438D2FD0F4E21221BA",
+      "pass": true,
+      "failures": [],
+      "language": "en",
+      "batch": "batch2-en-02.json"
+    },
+    {
+      "id": "C93D204248BD43F5AC323F1716848D9C",
+      "pass": false,
+      "failures": [
+        {
+          "check": "d_headroom",
+          "reason": "too similar: sim=1.000 headroom=0.000 < 0.05"
+        }
+      ],
+      "language": "en",
+      "batch": "batch2-en-02.json"
+    },
+    {
+      "id": "CF42F6D294414215AE3946117E1C1242",
+      "pass": false,
+      "failures": [
+        {
+          "check": "d_headroom",
+          "reason": "too similar: sim=1.000 headroom=0.000 < 0.05"
+        }
+      ],
+      "language": "en",
+      "batch": "batch2-en-02.json"
+    },
+    {
+      "id": "D52954DEEF144ECDBACDE4A5C98D603C",
+      "pass": true,
+      "failures": [],
+      "language": "en",
+      "batch": "batch2-en-02.json"
+    },
+    {
+      "id": "E08D24C9CACB4189B7411E129C5EDED4",
+      "pass": false,
+      "failures": [
+        {
+          "check": "d_headroom",
+          "reason": "too similar: sim=0.990 headroom=0.010 < 0.05"
+        }
+      ],
+      "language": "en",
+      "batch": "batch2-en-02.json"
+    },
+    {
+      "id": "E8EBBC0BAD18431AB2586A44C2A89B13",
+      "pass": false,
+      "failures": [
+        {
+          "check": "d_headroom",
+          "reason": "too similar: sim=0.981 headroom=0.019 < 0.05"
+        }
+      ],
+      "language": "en",
+      "batch": "batch2-en-02.json"
+    },
+    {
+      "id": "EE86BC49AEE54C62984C8AA7445955DE",
+      "pass": false,
+      "failures": [
+        {
+          "check": "d_headroom",
+          "reason": "too similar: sim=1.000 headroom=0.000 < 0.05"
+        }
+      ],
+      "language": "en",
+      "batch": "batch2-en-02.json"
+    },
+    {
+      "id": "F3F49F7389B8442BB4789D216105EAE4",
+      "pass": false,
+      "failures": [
+        {
+          "check": "d_headroom",
+          "reason": "too similar: sim=0.977 headroom=0.023 < 0.05"
+        }
+      ],
+      "language": "en",
+      "batch": "batch2-en-02.json"
+    },
+    {
+      "id": "F795343CC7CF4EE094B7C6B2DBE43AD4",
+      "pass": false,
+      "failures": [
+        {
+          "check": "d_headroom",
+          "reason": "too similar: sim=0.966 headroom=0.034 < 0.05"
+        }
+      ],
+      "language": "en",
+      "batch": "batch2-en-02.json"
+    },
+    {
+      "id": "00E1D2E0BF62493C9EB76DA12AE8B726",
+      "pass": false,
+      "failures": [
+        {
+          "check": "d_headroom",
+          "reason": "too similar: sim=0.972 headroom=0.028 < 0.05"
+        }
+      ],
+      "language": "en",
+      "batch": "batch2-en-02.json"
+    },
+    {
+      "id": "06573C2FF92E41A0A5D4A2595FE050B8",
+      "pass": false,
+      "failures": [
+        {
+          "check": "d_headroom",
+          "reason": "too similar: sim=0.993 headroom=0.007 < 0.05"
+        }
+      ],
+      "language": "en",
+      "batch": "batch2-en-02.json"
+    },
+    {
+      "id": "0B3AA8FCC3E543FCBE87A27A45B08E04",
+      "pass": false,
+      "failures": [
+        {
+          "check": "d_headroom",
+          "reason": "too similar: sim=0.979 headroom=0.021 < 0.05"
+        }
+      ],
+      "language": "en",
+      "batch": "batch2-en-02.json"
+    },
+    {
+      "id": "0EFD3482512145F697C480E1E65A7C75",
+      "pass": true,
+      "failures": [],
+      "language": "en",
+      "batch": "batch2-en-02.json"
+    },
+    {
+      "id": "13B50271F7FC4CE2906DAA8A16604D6F",
+      "pass": false,
+      "failures": [
+        {
+          "check": "d_headroom",
+          "reason": "too similar: sim=0.957 headroom=0.043 < 0.05"
+        }
+      ],
+      "language": "en",
+      "batch": "batch2-en-02.json"
+    },
+    {
+      "id": "1B2AE9D7B92D41299AB74F60208E2CA0",
+      "pass": true,
+      "failures": [],
+      "language": "en",
+      "batch": "batch2-en-02.json"
+    },
+    {
+      "id": "21B48CC4464C4A6EBAEBF97236364185",
+      "pass": false,
+      "failures": [
+        {
+          "check": "d_headroom",
+          "reason": "too similar: sim=1.000 headroom=0.000 < 0.05"
+        }
+      ],
+      "language": "en",
+      "batch": "batch2-en-02.json"
+    },
+    {
+      "id": "267863CCF4AA4CBF949C04737B842E53",
+      "pass": true,
+      "failures": [],
+      "language": "en",
+      "batch": "batch2-en-02.json"
+    },
+    {
+      "id": "2A4F2FB50D7C4CE9BFDC3A4371E694AB",
+      "pass": false,
+      "failures": [
+        {
+          "check": "d_headroom",
+          "reason": "too similar: sim=0.993 headroom=0.007 < 0.05"
+        }
+      ],
+      "language": "en",
+      "batch": "batch2-en-02.json"
+    },
+    {
+      "id": "2FE0B1711CB14752938603F8DBFA65FA",
+      "pass": false,
+      "failures": [
+        {
+          "check": "d_headroom",
+          "reason": "too similar: sim=1.000 headroom=0.000 < 0.05"
+        }
+      ],
+      "language": "en",
+      "batch": "batch2-en-02.json"
+    },
+    {
+      "id": "335966815F5143DBADF2375C89005D9E",
+      "pass": false,
+      "failures": [
+        {
+          "check": "d_headroom",
+          "reason": "too similar: sim=1.000 headroom=0.000 < 0.05"
+        }
+      ],
+      "language": "en",
+      "batch": "batch2-en-03.json"
+    },
+    {
+      "id": "37F11DD2B7D34DB7931D1B1F59238572",
+      "pass": false,
+      "failures": [
+        {
+          "check": "d_headroom",
+          "reason": "too similar: sim=0.951 headroom=0.049 < 0.05"
+        }
+      ],
+      "language": "en",
+      "batch": "batch2-en-03.json"
+    },
+    {
+      "id": "3D7376171BE04BCA9455385E63DB887F",
+      "pass": true,
+      "failures": [],
+      "language": "en",
+      "batch": "batch2-en-03.json"
+    },
+    {
+      "id": "4328334F4E7B44BCA3B1BD3EFB4619B8",
+      "pass": false,
+      "failures": [
+        {
+          "check": "d_headroom",
+          "reason": "too similar: sim=0.964 headroom=0.036 < 0.05"
+        }
+      ],
+      "language": "en",
+      "batch": "batch2-en-03.json"
+    },
+    {
+      "id": "49630FE315B9492388909D52182B627A",
+      "pass": false,
+      "failures": [
+        {
+          "check": "d_headroom",
+          "reason": "too similar: sim=0.983 headroom=0.017 < 0.05"
+        }
+      ],
+      "language": "en",
+      "batch": "batch2-en-03.json"
+    },
+    {
+      "id": "507A5D8B49AF45D58D6BF14F0A2D33D2",
+      "pass": true,
+      "failures": [],
+      "language": "en",
+      "batch": "batch2-en-03.json"
+    },
+    {
+      "id": "5577B4E475B942D58CACADE903B2CECA",
+      "pass": false,
+      "failures": [
+        {
+          "check": "d_headroom",
+          "reason": "too similar: sim=0.952 headroom=0.048 < 0.05"
+        }
+      ],
+      "language": "en",
+      "batch": "batch2-en-03.json"
+    },
+    {
+      "id": "5A1603143F72459AA587C9AA94B4F9C7",
+      "pass": false,
+      "failures": [
+        {
+          "check": "d_headroom",
+          "reason": "too similar: sim=0.982 headroom=0.018 < 0.05"
+        }
+      ],
+      "language": "en",
+      "batch": "batch2-en-03.json"
+    },
+    {
+      "id": "5ED12D1460D64DD78C1BFABD0B62F5DB",
+      "pass": false,
+      "failures": [
+        {
+          "check": "d_headroom",
+          "reason": "too similar: sim=0.988 headroom=0.012 < 0.05"
+        }
+      ],
+      "language": "en",
+      "batch": "batch2-en-03.json"
+    },
+    {
+      "id": "63411A039D0D4A98A259D523C9720DAF",
+      "pass": false,
+      "failures": [
+        {
+          "check": "d_headroom",
+          "reason": "too similar: sim=0.951 headroom=0.049 < 0.05"
+        }
+      ],
+      "language": "en",
+      "batch": "batch2-en-03.json"
+    },
+    {
+      "id": "680FA9A69BB1469D81C02CAEF9722574",
+      "pass": true,
+      "failures": [],
+      "language": "en",
+      "batch": "batch2-en-03.json"
+    },
+    {
+      "id": "6C0DDB5430F24E44AE1B77BA2179DDA0",
+      "pass": false,
+      "failures": [
+        {
+          "check": "d_headroom",
+          "reason": "too similar: sim=0.982 headroom=0.018 < 0.05"
+        }
+      ],
+      "language": "en",
+      "batch": "batch2-en-03.json"
+    },
+    {
+      "id": "6FFD97112F5B44A1BFA550B11A0126D3",
+      "pass": true,
+      "failures": [],
+      "language": "en",
+      "batch": "batch2-en-03.json"
+    },
+    {
+      "id": "73E39B0DC2E3430ABF42A6969BB7D629",
+      "pass": false,
+      "failures": [
+        {
+          "check": "d_headroom",
+          "reason": "too similar: sim=0.969 headroom=0.031 < 0.05"
+        }
+      ],
+      "language": "en",
+      "batch": "batch2-en-03.json"
+    },
+    {
+      "id": "7A3C4DB9C39542CEB0ED16AD94F7B46E",
+      "pass": false,
+      "failures": [
+        {
+          "check": "d_headroom",
+          "reason": "too similar: sim=0.967 headroom=0.033 < 0.05"
+        }
+      ],
+      "language": "en",
+      "batch": "batch2-en-03.json"
+    },
+    {
+      "id": "7D549E1E185244958CF3EBEF75091469",
+      "pass": false,
+      "failures": [
+        {
+          "check": "d_headroom",
+          "reason": "too similar: sim=0.965 headroom=0.035 < 0.05"
+        }
+      ],
+      "language": "en",
+      "batch": "batch2-en-03.json"
+    },
+    {
+      "id": "82E942D9FC6F4E4896FB01E98BE475D5",
+      "pass": true,
+      "failures": [],
+      "language": "en",
+      "batch": "batch2-en-03.json"
+    },
+    {
+      "id": "8855408A0BA14BE7B3605FAE4FD0B794",
+      "pass": false,
+      "failures": [
+        {
+          "check": "d_headroom",
+          "reason": "too similar: sim=1.000 headroom=0.000 < 0.05"
+        }
+      ],
+      "language": "en",
+      "batch": "batch2-en-03.json"
+    },
+    {
+      "id": "8EB0944845124E7F8F66DDB940C47DE7",
+      "pass": true,
+      "failures": [],
+      "language": "en",
+      "batch": "batch2-en-03.json"
+    },
+    {
+      "id": "93B11DC74CC64BEAB735736D951FABF1",
+      "pass": false,
+      "failures": [
+        {
+          "check": "d_headroom",
+          "reason": "too similar: sim=0.957 headroom=0.043 < 0.05"
+        }
+      ],
+      "language": "en",
+      "batch": "batch2-en-03.json"
+    },
+    {
+      "id": "97201CBF8365401E940C2D8912C319BD",
+      "pass": true,
+      "failures": [],
+      "language": "en",
+      "batch": "batch2-en-04.json"
+    },
+    {
+      "id": "9C42B84DAF0D426EABE67A66C10BC347",
+      "pass": false,
+      "failures": [
+        {
+          "check": "c_multiset",
+          "reason": "content-word mismatch: input_only=[you]"
+        }
+      ],
+      "language": "en",
+      "batch": "batch2-en-04.json"
+    },
+    {
+      "id": "A4600B34E01C445C964730DB7D014952",
+      "pass": true,
+      "failures": [],
+      "language": "en",
+      "batch": "batch2-en-04.json"
+    },
+    {
+      "id": "A91B1DC0A74A4F23A1F64CC8BE1AE444",
+      "pass": false,
+      "failures": [
+        {
+          "check": "d_headroom",
+          "reason": "too similar: sim=0.962 headroom=0.038 < 0.05"
+        }
+      ],
+      "language": "en",
+      "batch": "batch2-en-04.json"
+    },
+    {
+      "id": "AE35FB133BC84D5CA63F7725A7660E6B",
+      "pass": false,
+      "failures": [
+        {
+          "check": "d_headroom",
+          "reason": "too similar: sim=1.000 headroom=0.000 < 0.05"
+        }
+      ],
+      "language": "en",
+      "batch": "batch2-en-04.json"
+    },
+    {
+      "id": "B3014CF7D8AC4BB3BA060B348F8AEFA2",
+      "pass": false,
+      "failures": [
+        {
+          "check": "d_headroom",
+          "reason": "too similar: sim=0.955 headroom=0.045 < 0.05"
+        }
+      ],
+      "language": "en",
+      "batch": "batch2-en-04.json"
+    },
+    {
+      "id": "B728A35C87DE429F875B8A8129AA4F97",
+      "pass": true,
+      "failures": [],
+      "language": "en",
+      "batch": "batch2-en-04.json"
+    },
+    {
+      "id": "BB8E4EFAE6EC4163AF2E8837142EF6A2",
+      "pass": true,
+      "failures": [],
+      "language": "en",
+      "batch": "batch2-en-04.json"
+    },
+    {
+      "id": "BF84298EFC2C4A818DF0B685C3603EEB",
+      "pass": true,
+      "failures": [],
+      "language": "en",
+      "batch": "batch2-en-04.json"
+    },
+    {
+      "id": "C841BF81E9E843B28B956714CD9DAA2D",
+      "pass": false,
+      "failures": [
+        {
+          "check": "d_headroom",
+          "reason": "too similar: sim=0.983 headroom=0.017 < 0.05"
+        }
+      ],
+      "language": "en",
+      "batch": "batch2-en-04.json"
+    },
+    {
+      "id": "CE2BCE1466924B7798B3E3C00F1D671B",
+      "pass": true,
+      "failures": [],
+      "language": "en",
+      "batch": "batch2-en-04.json"
+    },
+    {
+      "id": "D375E7115D5840FF9929FE089186F8C5",
+      "pass": true,
+      "failures": [],
+      "language": "en",
+      "batch": "batch2-en-04.json"
+    },
+    {
+      "id": "D75E096AD7184125A65E6E8DC5DCC4B0",
+      "pass": false,
+      "failures": [
+        {
+          "check": "d_headroom",
+          "reason": "too similar: sim=1.000 headroom=0.000 < 0.05"
+        }
+      ],
+      "language": "en",
+      "batch": "batch2-en-04.json"
+    },
+    {
+      "id": "DB82BF5DD6D5450EA21A81A883CAC9BD",
+      "pass": false,
+      "failures": [
+        {
+          "check": "d_headroom",
+          "reason": "too similar: sim=0.991 headroom=0.009 < 0.05"
+        }
+      ],
+      "language": "en",
+      "batch": "batch2-en-04.json"
+    },
+    {
+      "id": "E15E92DBBCD748BC849153689B837D22",
+      "pass": false,
+      "failures": [
+        {
+          "check": "d_headroom",
+          "reason": "too similar: sim=0.982 headroom=0.018 < 0.05"
+        }
+      ],
+      "language": "en",
+      "batch": "batch2-en-04.json"
+    },
+    {
+      "id": "E4D4E22B4A524FD3B24C0CF9BF2F946C",
+      "pass": false,
+      "failures": [
+        {
+          "check": "d_headroom",
+          "reason": "too similar: sim=0.967 headroom=0.033 < 0.05"
+        }
+      ],
+      "language": "en",
+      "batch": "batch2-en-04.json"
+    },
+    {
+      "id": "EA84C133A92E4E6EBC7DF6527CA27ADB",
+      "pass": true,
+      "failures": [],
+      "language": "en",
+      "batch": "batch2-en-04.json"
+    },
+    {
+      "id": "F036927411984D84843F0B6925BD73BC",
+      "pass": true,
+      "failures": [],
+      "language": "en",
+      "batch": "batch2-en-04.json"
+    },
+    {
+      "id": "F6CB7FF07D4C4385BCA9D4CD7E9229D0",
+      "pass": false,
+      "failures": [
+        {
+          "check": "d_headroom",
+          "reason": "too similar: sim=0.988 headroom=0.012 < 0.05"
+        }
+      ],
+      "language": "en",
+      "batch": "batch2-en-04.json"
+    },
+    {
+      "id": "FC2125DC54A1483D99ACE48E67C66D5A",
+      "pass": false,
+      "failures": [
+        {
+          "check": "d_headroom",
+          "reason": "too similar: sim=0.957 headroom=0.043 < 0.05"
+        }
+      ],
+      "language": "en",
+      "batch": "batch2-en-04.json"
+    },
+    {
+      "id": "00BAAF60922B48B6962F403A541A7731",
+      "pass": false,
+      "failures": [
+        {
+          "check": "d_headroom",
+          "reason": "too similar: sim=0.998 headroom=0.002 < 0.05"
+        }
+      ],
+      "language": "en",
+      "batch": "batch2-en-05.json"
+    },
+    {
+      "id": "0482D892923E43C7A0E7B2548A9AB1DC",
+      "pass": true,
+      "failures": [],
+      "language": "en",
+      "batch": "batch2-en-05.json"
+    },
+    {
+      "id": "08BD493BFDC04909B7E06CC5E9D44E25",
+      "pass": true,
+      "failures": [],
+      "language": "en",
+      "batch": "batch2-en-05.json"
+    },
+    {
+      "id": "0FF07500FF4C4556A913FEE3B9970BAF",
+      "pass": true,
+      "failures": [],
+      "language": "en",
+      "batch": "batch2-en-05.json"
+    },
+    {
+      "id": "1275C52B722342B390C3F6762A42AEC3",
+      "pass": true,
+      "failures": [],
+      "language": "en",
+      "batch": "batch2-en-05.json"
+    },
+    {
+      "id": "156B82C1810F4DC6A200B5039E89943A",
+      "pass": false,
+      "failures": [
+        {
+          "check": "d_headroom",
+          "reason": "too similar: sim=0.982 headroom=0.018 < 0.05"
+        }
+      ],
+      "language": "en",
+      "batch": "batch2-en-05.json"
+    },
+    {
+      "id": "1A82EBF8A91A4635BD9426AE91339F10",
+      "pass": true,
+      "failures": [],
+      "language": "en",
+      "batch": "batch2-en-05.json"
+    },
+    {
+      "id": "20F2F027F94C4C7C839B9B75DCB5E3E1",
+      "pass": false,
+      "failures": [
+        {
+          "check": "c_multiset",
+          "reason": "content-word mismatch: input_only=[in]"
+        }
+      ],
+      "language": "en",
+      "batch": "batch2-en-05.json"
+    },
+    {
+      "id": "24461FFA716A4C4CA658159D42ACFCBF",
+      "pass": true,
+      "failures": [],
+      "language": "en",
+      "batch": "batch2-en-05.json"
+    },
+    {
+      "id": "29AFC9D24A254C43BE4355148689CF4C",
+      "pass": true,
+      "failures": [],
+      "language": "en",
+      "batch": "batch2-en-05.json"
+    },
+    {
+      "id": "2E8CE34F1BFC46A89AEF5056A52A203C",
+      "pass": true,
+      "failures": [],
+      "language": "en",
+      "batch": "batch2-en-05.json"
+    },
+    {
+      "id": "32370022E9634722B6A328474B2F7AF7",
+      "pass": false,
+      "failures": [
+        {
+          "check": "d_headroom",
+          "reason": "too similar: sim=0.982 headroom=0.018 < 0.05"
+        }
+      ],
+      "language": "en",
+      "batch": "batch2-en-05.json"
+    },
+    {
+      "id": "3963D23AC9F942B8A8A208EEB206A7E8",
+      "pass": true,
+      "failures": [],
+      "language": "en",
+      "batch": "batch2-en-05.json"
+    },
+    {
+      "id": "403E6F21BAE645E89100014AB022B61C",
+      "pass": false,
+      "failures": [
+        {
+          "check": "d_headroom",
+          "reason": "too similar: sim=0.958 headroom=0.042 < 0.05"
+        }
+      ],
+      "language": "en",
+      "batch": "batch2-en-05.json"
+    },
+    {
+      "id": "47990930A59F47C08CB3114C45BAC77D",
+      "pass": false,
+      "failures": [
+        {
+          "check": "d_headroom",
+          "reason": "too similar: sim=0.966 headroom=0.034 < 0.05"
+        }
+      ],
+      "language": "en",
+      "batch": "batch2-en-05.json"
+    },
+    {
+      "id": "4E7844D01B204844B75A4A77C01BFE04",
+      "pass": false,
+      "failures": [
+        {
+          "check": "d_headroom",
+          "reason": "too similar: sim=0.992 headroom=0.008 < 0.05"
+        }
+      ],
+      "language": "en",
+      "batch": "batch2-en-05.json"
+    },
+    {
+      "id": "5310B708DB17491ABA06DF48F9D59924",
+      "pass": true,
+      "failures": [],
+      "language": "en",
+      "batch": "batch2-en-05.json"
+    },
+    {
+      "id": "5520E11B5A8F4C999DBC6192C3156353",
+      "pass": false,
+      "failures": [
+        {
+          "check": "d_headroom",
+          "reason": "too similar: sim=1.000 headroom=0.000 < 0.05"
+        }
+      ],
+      "language": "en",
+      "batch": "batch2-en-05.json"
+    },
+    {
+      "id": "5A00867EF6E8479E9B52B057CACF2C53",
+      "pass": true,
+      "failures": [],
+      "language": "en",
+      "batch": "batch2-en-05.json"
+    },
+    {
+      "id": "5F166129B37447A99514AE6F91D49703",
+      "pass": false,
+      "failures": [
+        {
+          "check": "d_headroom",
+          "reason": "too similar: sim=0.968 headroom=0.032 < 0.05"
+        }
+      ],
+      "language": "en",
+      "batch": "batch2-en-05.json"
+    },
+    {
+      "id": "655CBAFCD6CD48C28F5358399188CACC",
+      "pass": true,
+      "failures": [],
+      "language": "en",
+      "batch": "batch2-en-06.json"
+    },
+    {
+      "id": "680452794D5044E7B05654B14C100C16",
+      "pass": false,
+      "failures": [
+        {
+          "check": "d_headroom",
+          "reason": "too similar: sim=0.975 headroom=0.025 < 0.05"
+        }
+      ],
+      "language": "en",
+      "batch": "batch2-en-06.json"
+    },
+    {
+      "id": "6B9451EA5F274D80887C7060AF1EFAA3",
+      "pass": true,
+      "failures": [],
+      "language": "en",
+      "batch": "batch2-en-06.json"
+    },
+    {
+      "id": "734DD679151F41958177B3081210F238",
+      "pass": true,
+      "failures": [],
+      "language": "en",
+      "batch": "batch2-en-06.json"
+    },
+    {
+      "id": "7812FF7D472545EDA76DABCD71125EA4",
+      "pass": false,
+      "failures": [
+        {
+          "check": "d_headroom",
+          "reason": "too similar: sim=0.973 headroom=0.027 < 0.05"
+        }
+      ],
+      "language": "en",
+      "batch": "batch2-en-06.json"
+    },
+    {
+      "id": "7DA98C96042440BFB5C1122CAE96095C",
+      "pass": false,
+      "failures": [
+        {
+          "check": "d_headroom",
+          "reason": "too similar: sim=0.975 headroom=0.025 < 0.05"
+        }
+      ],
+      "language": "en",
+      "batch": "batch2-en-06.json"
+    },
+    {
+      "id": "86B478CDC78941B5A9E66958F6640A0D",
+      "pass": false,
+      "failures": [
+        {
+          "check": "d_headroom",
+          "reason": "too similar: sim=0.962 headroom=0.038 < 0.05"
+        }
+      ],
+      "language": "en",
+      "batch": "batch2-en-06.json"
+    },
+    {
+      "id": "899E9FB879A64CDFBA4C85A8A9E87E96",
+      "pass": false,
+      "failures": [
+        {
+          "check": "d_headroom",
+          "reason": "too similar: sim=0.958 headroom=0.042 < 0.05"
+        }
+      ],
+      "language": "en",
+      "batch": "batch2-en-06.json"
+    },
+    {
+      "id": "8F10E450684C4D1BB30E8BEF932ACF3F",
+      "pass": true,
+      "failures": [],
+      "language": "en",
+      "batch": "batch2-en-06.json"
+    },
+    {
+      "id": "92007AEC07F345FCAEC1A2DF43B8102B",
+      "pass": true,
+      "failures": [],
+      "language": "en",
+      "batch": "batch2-en-06.json"
+    },
+    {
+      "id": "9B182C57D7EA41A4BFAAC6F625EABE7D",
+      "pass": false,
+      "failures": [
+        {
+          "check": "d_headroom",
+          "reason": "too similar: sim=0.953 headroom=0.047 < 0.05"
+        }
+      ],
+      "language": "en",
+      "batch": "batch2-en-06.json"
+    },
+    {
+      "id": "9EB2008AF7314694B83D5047B1CEE496",
+      "pass": false,
+      "failures": [
+        {
+          "check": "d_headroom",
+          "reason": "too similar: sim=0.959 headroom=0.041 < 0.05"
+        }
+      ],
+      "language": "en",
+      "batch": "batch2-en-06.json"
+    },
+    {
+      "id": "A430C24EADD3474E8F7E19E66175A4C3",
+      "pass": true,
+      "failures": [],
+      "language": "en",
+      "batch": "batch2-en-06.json"
+    },
+    {
+      "id": "A9829A75C1A24494964425FD5F44BC13",
+      "pass": false,
+      "failures": [
+        {
+          "check": "c_multiset",
+          "reason": "content-word mismatch: input_only=[now]"
+        },
+        {
+          "check": "d_headroom",
+          "reason": "too similar: sim=0.950 headroom=0.050 < 0.05"
+        }
+      ],
+      "language": "en",
+      "batch": "batch2-en-06.json"
+    },
+    {
+      "id": "AD70FD43F93C49F3AD5CDFA707C2F15F",
+      "pass": false,
+      "failures": [
+        {
+          "check": "d_headroom",
+          "reason": "too similar: sim=0.977 headroom=0.023 < 0.05"
+        }
+      ],
+      "language": "en",
+      "batch": "batch2-en-06.json"
+    },
+    {
+      "id": "B1EAF1B46CB54F119F85B5C80A2A8635",
+      "pass": true,
+      "failures": [],
+      "language": "en",
+      "batch": "batch2-en-06.json"
+    },
+    {
+      "id": "B91F1D8AE4984FB58405A40A5A53D8D1",
+      "pass": false,
+      "failures": [
+        {
+          "check": "d_headroom",
+          "reason": "too similar: sim=0.994 headroom=0.006 < 0.05"
+        }
+      ],
+      "language": "en",
+      "batch": "batch2-en-06.json"
+    },
+    {
+      "id": "BD477B2F09AC475AADEE0996CDC5C5C1",
+      "pass": false,
+      "failures": [
+        {
+          "check": "d_headroom",
+          "reason": "too similar: sim=0.962 headroom=0.038 < 0.05"
+        }
+      ],
+      "language": "en",
+      "batch": "batch2-en-06.json"
+    },
+    {
+      "id": "C08DF8695888422797F2B9AA7AEB0FEC",
+      "pass": true,
+      "failures": [],
+      "language": "en",
+      "batch": "batch2-en-06.json"
+    },
+    {
+      "id": "C5A4519A76E94B44B15B34014756ACE2",
+      "pass": false,
+      "failures": [
+        {
+          "check": "d_headroom",
+          "reason": "too similar: sim=0.976 headroom=0.024 < 0.05"
+        }
+      ],
+      "language": "en",
+      "batch": "batch2-en-06.json"
+    },
+    {
+      "id": "C934532D424646659052B24AD1B90F2E",
+      "pass": false,
+      "failures": [
+        {
+          "check": "c_multiset",
+          "reason": "content-word mismatch: input_only=[is, it]"
+        }
+      ],
+      "language": "en",
+      "batch": "batch2-en-07.json"
+    },
+    {
+      "id": "D1FBBC6342084FBFB75794DCF286B5D0",
+      "pass": true,
+      "failures": [],
+      "language": "en",
+      "batch": "batch2-en-07.json"
+    },
+    {
+      "id": "D613455F077F43C999A71592E6F39306",
+      "pass": false,
+      "failures": [
+        {
+          "check": "d_headroom",
+          "reason": "too similar: sim=0.953 headroom=0.047 < 0.05"
+        }
+      ],
+      "language": "en",
+      "batch": "batch2-en-07.json"
+    },
+    {
+      "id": "DC62E25F2C8B41B0A2064A709681FAAC",
+      "pass": true,
+      "failures": [],
+      "language": "en",
+      "batch": "batch2-en-07.json"
+    },
+    {
+      "id": "E3E5765598344D1DB08F3F0CD277D897",
+      "pass": false,
+      "failures": [
+        {
+          "check": "d_headroom",
+          "reason": "too similar: sim=0.983 headroom=0.017 < 0.05"
+        }
+      ],
+      "language": "en",
+      "batch": "batch2-en-07.json"
+    },
+    {
+      "id": "E90279FF0D8F4EF78004EA0828C2F005",
+      "pass": false,
+      "failures": [
+        {
+          "check": "d_headroom",
+          "reason": "too similar: sim=0.965 headroom=0.035 < 0.05"
+        }
+      ],
+      "language": "en",
+      "batch": "batch2-en-07.json"
+    },
+    {
+      "id": "EBBC2755A740434996A1D92DFE50FB0C",
+      "pass": true,
+      "failures": [],
+      "language": "en",
+      "batch": "batch2-en-07.json"
+    },
+    {
+      "id": "F07B670C09C14857AEEFBE460385D3D6",
+      "pass": false,
+      "failures": [
+        {
+          "check": "d_headroom",
+          "reason": "too similar: sim=0.970 headroom=0.030 < 0.05"
+        }
+      ],
+      "language": "en",
+      "batch": "batch2-en-07.json"
+    },
+    {
+      "id": "F4C172A9A98E457BAB4C5A21FA4B4604",
+      "pass": true,
+      "failures": [],
+      "language": "en",
+      "batch": "batch2-en-07.json"
+    },
+    {
+      "id": "F90CA478826147B286B79BE968F510F3",
+      "pass": true,
+      "failures": [],
+      "language": "en",
+      "batch": "batch2-en-07.json"
+    },
+    {
+      "id": "14C0CDB39C5B42CA8C2AEBA775FFE167",
+      "pass": false,
+      "failures": [
+        {
+          "check": "d_headroom",
+          "reason": "too similar: sim=1.000 headroom=0.000 < 0.05"
+        }
+      ],
+      "language": "he",
+      "batch": "batch2-he-00.json"
+    },
+    {
+      "id": "29BCAE1C710A4393A544AAB3D4F168CC",
+      "pass": false,
+      "failures": [
+        {
+          "check": "d_headroom",
+          "reason": "too similar: sim=1.000 headroom=0.000 < 0.05"
+        }
+      ],
+      "language": "he",
+      "batch": "batch2-he-00.json"
+    },
+    {
+      "id": "31463A54FE8C405EA6357063884B6400",
+      "pass": false,
+      "failures": [
+        {
+          "check": "d_headroom",
+          "reason": "too similar: sim=0.988 headroom=0.012 < 0.05"
+        }
+      ],
+      "language": "he",
+      "batch": "batch2-he-00.json"
+    },
+    {
+      "id": "46D023466AE14A099C220799607DB2BC",
+      "pass": false,
+      "failures": [
+        {
+          "check": "d_headroom",
+          "reason": "too similar: sim=0.985 headroom=0.015 < 0.05"
+        }
+      ],
+      "language": "he",
+      "batch": "batch2-he-00.json"
+    },
+    {
+      "id": "4D5BAFB4865A4AC3BE5D1905D6E5ADD0",
+      "pass": false,
+      "failures": [
+        {
+          "check": "d_headroom",
+          "reason": "too similar: sim=1.000 headroom=0.000 < 0.05"
+        }
+      ],
+      "language": "he",
+      "batch": "batch2-he-00.json"
+    },
+    {
+      "id": "6A92640FBF594A19BB556E2FDBDE93CA",
+      "pass": false,
+      "failures": [
+        {
+          "check": "d_headroom",
+          "reason": "too similar: sim=0.990 headroom=0.010 < 0.05"
+        }
+      ],
+      "language": "he",
+      "batch": "batch2-he-00.json"
+    },
+    {
+      "id": "6CF3E2ACA12D42F48808C97C3B163503",
+      "pass": false,
+      "failures": [
+        {
+          "check": "d_headroom",
+          "reason": "too similar: sim=1.000 headroom=0.000 < 0.05"
+        }
+      ],
+      "language": "he",
+      "batch": "batch2-he-00.json"
+    },
+    {
+      "id": "7EF28B8DAF1445B9A9A704840A01FDF5",
+      "pass": false,
+      "failures": [
+        {
+          "check": "d_headroom",
+          "reason": "too similar: sim=0.990 headroom=0.010 < 0.05"
+        }
+      ],
+      "language": "he",
+      "batch": "batch2-he-00.json"
+    },
+    {
+      "id": "8B0D9E20B0B64B4390AD5F9BC843FD2E",
+      "pass": false,
+      "failures": [
+        {
+          "check": "d_headroom",
+          "reason": "too similar: sim=1.000 headroom=0.000 < 0.05"
+        }
+      ],
+      "language": "he",
+      "batch": "batch2-he-00.json"
+    },
+    {
+      "id": "96CDEAF0E7C942A18BA0F6FC7907DB09",
+      "pass": false,
+      "failures": [
+        {
+          "check": "d_headroom",
+          "reason": "too similar: sim=0.986 headroom=0.014 < 0.05"
+        }
+      ],
+      "language": "he",
+      "batch": "batch2-he-00.json"
+    },
+    {
+      "id": "983D112560E949E6B039CA7F781B42CB",
+      "pass": false,
+      "failures": [
+        {
+          "check": "d_headroom",
+          "reason": "too similar: sim=0.986 headroom=0.014 < 0.05"
+        }
+      ],
+      "language": "he",
+      "batch": "batch2-he-00.json"
+    },
+    {
+      "id": "B05F6D5BDF5F4280B183AD9205BD18D5",
+      "pass": false,
+      "failures": [
+        {
+          "check": "d_headroom",
+          "reason": "too similar: sim=1.000 headroom=0.000 < 0.05"
+        }
+      ],
+      "language": "he",
+      "batch": "batch2-he-00.json"
+    },
+    {
+      "id": "C5F2D198ACC5454A8C079DBC9887B616",
+      "pass": false,
+      "failures": [
+        {
+          "check": "d_headroom",
+          "reason": "too similar: sim=0.990 headroom=0.010 < 0.05"
+        }
+      ],
+      "language": "he",
+      "batch": "batch2-he-00.json"
+    },
+    {
+      "id": "C7A83409552644B283C096727EE552D2",
+      "pass": false,
+      "failures": [
+        {
+          "check": "d_headroom",
+          "reason": "too similar: sim=0.984 headroom=0.016 < 0.05"
+        }
+      ],
+      "language": "he",
+      "batch": "batch2-he-00.json"
+    },
+    {
+      "id": "D65DCD1D6C75418AAB0E9FAF638BD9E9",
+      "pass": false,
+      "failures": [
+        {
+          "check": "d_headroom",
+          "reason": "too similar: sim=0.983 headroom=0.017 < 0.05"
+        }
+      ],
+      "language": "he",
+      "batch": "batch2-he-00.json"
+    },
+    {
+      "id": "DC160A712A0A4E29B77146BE2E6B52C7",
+      "pass": false,
+      "failures": [
+        {
+          "check": "d_headroom",
+          "reason": "too similar: sim=1.000 headroom=0.000 < 0.05"
+        }
+      ],
+      "language": "he",
+      "batch": "batch2-he-00.json"
+    },
+    {
+      "id": "DCA879A9FE1147F6B40F62910E8F26F6",
+      "pass": false,
+      "failures": [
+        {
+          "check": "d_headroom",
+          "reason": "too similar: sim=0.985 headroom=0.015 < 0.05"
+        }
+      ],
+      "language": "he",
+      "batch": "batch2-he-00.json"
+    },
+    {
+      "id": "E61839C7B7A243B2B2D41DB82370BCBE",
+      "pass": false,
+      "failures": [
+        {
+          "check": "d_headroom",
+          "reason": "too similar: sim=0.982 headroom=0.018 < 0.05"
+        }
+      ],
+      "language": "he",
+      "batch": "batch2-he-00.json"
+    },
+    {
+      "id": "EDC031788ECA4E58870A24C623EE2FFD",
+      "pass": false,
+      "failures": [
+        {
+          "check": "d_headroom",
+          "reason": "too similar: sim=0.991 headroom=0.009 < 0.05"
+        }
+      ],
+      "language": "he",
+      "batch": "batch2-he-00.json"
+    },
+    {
+      "id": "0E4FA773923743ACBA5D3DF4A3BA0AF8",
+      "pass": false,
+      "failures": [
+        {
+          "check": "d_headroom",
+          "reason": "too similar: sim=0.993 headroom=0.007 < 0.05"
+        }
+      ],
+      "language": "he",
+      "batch": "batch2-he-00.json"
+    },
+    {
+      "id": "1192DDED40D4407890F4796B7031E4EB",
+      "pass": false,
+      "failures": [
+        {
+          "check": "d_headroom",
+          "reason": "too similar: sim=0.991 headroom=0.009 < 0.05"
+        }
+      ],
+      "language": "he",
+      "batch": "batch2-he-01.json"
+    },
+    {
+      "id": "2D360A171AAA408FBDF14F4059F1026E",
+      "pass": false,
+      "failures": [
+        {
+          "check": "d_headroom",
+          "reason": "too similar: sim=0.990 headroom=0.010 < 0.05"
+        }
+      ],
+      "language": "he",
+      "batch": "batch2-he-01.json"
+    },
+    {
+      "id": "3FF4C58ED35E45A48221BFFBA6769598",
+      "pass": false,
+      "failures": [
+        {
+          "check": "d_headroom",
+          "reason": "too similar: sim=0.965 headroom=0.035 < 0.05"
+        }
+      ],
+      "language": "he",
+      "batch": "batch2-he-01.json"
+    },
+    {
+      "id": "4699A99109194C759A8561DFA2DF8C93",
+      "pass": false,
+      "failures": [
+        {
+          "check": "c_multiset",
+          "reason": "content-word mismatch: input_only=[אממ]"
+        },
+        {
+          "check": "d_headroom",
+          "reason": "too similar: sim=0.965 headroom=0.035 < 0.05"
+        }
+      ],
+      "language": "he",
+      "batch": "batch2-he-01.json"
+    },
+    {
+      "id": "4E742079F7D8495C8908F8D437737D3A",
+      "pass": false,
+      "failures": [
+        {
+          "check": "d_headroom",
+          "reason": "too similar: sim=1.000 headroom=0.000 < 0.05"
+        }
+      ],
+      "language": "he",
+      "batch": "batch2-he-01.json"
+    },
+    {
+      "id": "5CC1C4238ACE4DE29D1899955ADE4D26",
+      "pass": false,
+      "failures": [
+        {
+          "check": "d_headroom",
+          "reason": "too similar: sim=1.000 headroom=0.000 < 0.05"
+        }
+      ],
+      "language": "he",
+      "batch": "batch2-he-01.json"
+    },
+    {
+      "id": "61B42775F6E744D38B8E41CFC3C9A0F8",
+      "pass": true,
+      "failures": [],
+      "language": "he",
+      "batch": "batch2-he-01.json"
+    },
+    {
+      "id": "76F2D682039341E18A23378D8350FC69",
+      "pass": false,
+      "failures": [
+        {
+          "check": "d_headroom",
+          "reason": "too similar: sim=0.978 headroom=0.022 < 0.05"
+        }
+      ],
+      "language": "he",
+      "batch": "batch2-he-01.json"
+    },
+    {
+      "id": "7BB79BFDA5524CF58633FDB2DD8C1413",
+      "pass": true,
+      "failures": [],
+      "language": "he",
+      "batch": "batch2-he-01.json"
+    },
+    {
+      "id": "870EF249D2F5478D9EEE7B057C0DE0EC",
+      "pass": false,
+      "failures": [
+        {
+          "check": "d_headroom",
+          "reason": "too similar: sim=0.978 headroom=0.022 < 0.05"
+        }
+      ],
+      "language": "he",
+      "batch": "batch2-he-01.json"
+    },
+    {
+      "id": "8F8DB12DD3E84D7ABDE2EFBA2D256367",
+      "pass": false,
+      "failures": [
+        {
+          "check": "d_headroom",
+          "reason": "too similar: sim=0.969 headroom=0.031 < 0.05"
+        }
+      ],
+      "language": "he",
+      "batch": "batch2-he-01.json"
+    },
+    {
+      "id": "9994F189218B47ED8A607FDFB82628FE",
+      "pass": false,
+      "failures": [
+        {
+          "check": "d_headroom",
+          "reason": "too similar: sim=0.994 headroom=0.006 < 0.05"
+        }
+      ],
+      "language": "he",
+      "batch": "batch2-he-01.json"
+    },
+    {
+      "id": "9AC34D41A154486DA5ACA94D69068FA2",
+      "pass": false,
+      "failures": [
+        {
+          "check": "d_headroom",
+          "reason": "too similar: sim=1.000 headroom=0.000 < 0.05"
+        }
+      ],
+      "language": "he",
+      "batch": "batch2-he-01.json"
+    },
+    {
+      "id": "A0E44C109AF245DDAC2C114F9E60C33D",
+      "pass": false,
+      "failures": [
+        {
+          "check": "d_headroom",
+          "reason": "too similar: sim=0.984 headroom=0.016 < 0.05"
+        }
+      ],
+      "language": "he",
+      "batch": "batch2-he-01.json"
+    },
+    {
+      "id": "A988A3D751FC4D618CB86AD6D1344C93",
+      "pass": false,
+      "failures": [
+        {
+          "check": "d_headroom",
+          "reason": "too similar: sim=0.971 headroom=0.029 < 0.05"
+        }
+      ],
+      "language": "he",
+      "batch": "batch2-he-01.json"
+    },
+    {
+      "id": "BA4FD46C510B4C83B509BDA1A4890A42",
+      "pass": true,
+      "failures": [],
+      "language": "he",
+      "batch": "batch2-he-01.json"
+    },
+    {
+      "id": "D33800D24E954D0E993DCCDEE4825598",
+      "pass": false,
+      "failures": [
+        {
+          "check": "d_headroom",
+          "reason": "too similar: sim=0.977 headroom=0.023 < 0.05"
+        }
+      ],
+      "language": "he",
+      "batch": "batch2-he-01.json"
+    },
+    {
+      "id": "E6DC7707F0AE40029A1F2AA7FBEF2017",
+      "pass": false,
+      "failures": [
+        {
+          "check": "d_headroom",
+          "reason": "too similar: sim=0.986 headroom=0.014 < 0.05"
+        }
+      ],
+      "language": "he",
+      "batch": "batch2-he-01.json"
+    },
+    {
+      "id": "F5A4D71DDEC74600AB39734951C3EC45",
+      "pass": true,
+      "failures": [],
+      "language": "he",
+      "batch": "batch2-he-01.json"
+    },
+    {
+      "id": "6D1E0709BF564A4383B0E712732438C5",
+      "pass": false,
+      "failures": [
+        {
+          "check": "d_headroom",
+          "reason": "too similar: sim=0.980 headroom=0.020 < 0.05"
+        }
+      ],
+      "language": "he",
+      "batch": "batch2-he-01.json"
+    },
+    {
+      "id": "993292A9B3624856B1E00D18B8D1B317",
+      "pass": true,
+      "failures": [],
+      "language": "he",
+      "batch": "batch2-he-02.json"
+    },
+    {
+      "id": "DD64125C137C4AE3871D4BE9B2B6B757",
+      "pass": false,
+      "failures": [
+        {
+          "check": "d_headroom",
+          "reason": "too similar: sim=0.997 headroom=0.003 < 0.05"
+        }
+      ],
+      "language": "he",
+      "batch": "batch2-he-02.json"
+    },
+    {
+      "id": "12CF2018A58B469BA6D3453E0B9A97B1",
+      "pass": false,
+      "failures": [
+        {
+          "check": "d_headroom",
+          "reason": "too similar: sim=1.000 headroom=0.000 < 0.05"
+        }
+      ],
+      "language": "he",
+      "batch": "batch2-he-02.json"
+    },
+    {
+      "id": "36C719CDCE8F4BD6812B9ED7000D59E1",
+      "pass": false,
+      "failures": [
+        {
+          "check": "d_headroom",
+          "reason": "too similar: sim=1.000 headroom=0.000 < 0.05"
+        }
+      ],
+      "language": "he",
+      "batch": "batch2-he-02.json"
+    },
+    {
+      "id": "411D97D266674706A2B4167B10C1E6B8",
+      "pass": false,
+      "failures": [
+        {
+          "check": "d_headroom",
+          "reason": "too similar: sim=1.000 headroom=0.000 < 0.05"
+        }
+      ],
+      "language": "he",
+      "batch": "batch2-he-02.json"
+    },
+    {
+      "id": "5262311F41CF45F6872E837FB14F76BD",
+      "pass": false,
+      "failures": [
+        {
+          "check": "d_headroom",
+          "reason": "too similar: sim=1.000 headroom=0.000 < 0.05"
+        }
+      ],
+      "language": "he",
+      "batch": "batch2-he-02.json"
+    },
+    {
+      "id": "5F6F802AC3154D49BCFB432D601CD2CD",
+      "pass": false,
+      "failures": [
+        {
+          "check": "d_headroom",
+          "reason": "too similar: sim=0.989 headroom=0.011 < 0.05"
+        }
+      ],
+      "language": "he",
+      "batch": "batch2-he-02.json"
+    },
+    {
+      "id": "6821E5B5C20B4FDEBC1D8A158C0332FF",
+      "pass": false,
+      "failures": [
+        {
+          "check": "d_headroom",
+          "reason": "too similar: sim=0.983 headroom=0.017 < 0.05"
+        }
+      ],
+      "language": "he",
+      "batch": "batch2-he-02.json"
+    },
+    {
+      "id": "810BC66C0EA6499D986E7685A2098AE4",
+      "pass": false,
+      "failures": [
+        {
+          "check": "d_headroom",
+          "reason": "too similar: sim=0.980 headroom=0.020 < 0.05"
+        }
+      ],
+      "language": "he",
+      "batch": "batch2-he-02.json"
+    },
+    {
+      "id": "8AA8CF1F9B954CB798C8B9FAE66C209A",
+      "pass": false,
+      "failures": [
+        {
+          "check": "d_headroom",
+          "reason": "too similar: sim=0.975 headroom=0.025 < 0.05"
+        }
+      ],
+      "language": "he",
+      "batch": "batch2-he-02.json"
+    },
+    {
+      "id": "92F8A6DFD8CD4B91844D784BCDE4F3BF",
+      "pass": true,
+      "failures": [],
+      "language": "he",
+      "batch": "batch2-he-02.json"
+    },
+    {
+      "id": "9FCDB7A808FE4D0F9BB104A2220E772B",
+      "pass": false,
+      "failures": [
+        {
+          "check": "d_headroom",
+          "reason": "too similar: sim=0.970 headroom=0.030 < 0.05"
+        }
+      ],
+      "language": "he",
+      "batch": "batch2-he-02.json"
+    },
+    {
+      "id": "A51FC0662DC246BDA020E01FDE92A363",
+      "pass": false,
+      "failures": [
+        {
+          "check": "d_headroom",
+          "reason": "too similar: sim=0.991 headroom=0.009 < 0.05"
+        }
+      ],
+      "language": "he",
+      "batch": "batch2-he-02.json"
+    },
+    {
+      "id": "AD965B1A8AA94D2690ACCDD28E8D10E4",
+      "pass": true,
+      "failures": [],
+      "language": "he",
+      "batch": "batch2-he-02.json"
+    },
+    {
+      "id": "DF089019314F4568AF0E679AE6722824",
+      "pass": false,
+      "failures": [
+        {
+          "check": "c_multiset",
+          "reason": "content-word mismatch: input_only=[אההההההההההההההההההההההההההההההההההההההההההההההההההההההההההההההההההההההההההההההההההההההההההההההההההההההההההההההההההההההההההההההההההההההההההההההההההההההההההההההההההההההההההההההההההההההההההההההההההההההההההההההההההההההההההה]"
+        }
+      ],
+      "language": "he",
+      "batch": "batch2-he-02.json"
+    },
+    {
+      "id": "F56A3D9748DB40758334FAB60D165170",
+      "pass": false,
+      "failures": [
+        {
+          "check": "d_headroom",
+          "reason": "too similar: sim=1.000 headroom=0.000 < 0.05"
+        }
+      ],
+      "language": "he",
+      "batch": "batch2-he-02.json"
+    },
+    {
+      "id": "FC355952B8D1454DAEDC73130F6F7ACB",
+      "pass": false,
+      "failures": [
+        {
+          "check": "d_headroom",
+          "reason": "too similar: sim=0.977 headroom=0.023 < 0.05"
+        }
+      ],
+      "language": "he",
+      "batch": "batch2-he-02.json"
+    },
+    {
+      "id": "06BBD6A384D54E77BDD9654F399DE565",
+      "pass": false,
+      "failures": [
+        {
+          "check": "d_headroom",
+          "reason": "too similar: sim=0.993 headroom=0.007 < 0.05"
+        }
+      ],
+      "language": "ru",
+      "batch": "batch2-ru-00.json"
+    },
+    {
+      "id": "079A1FF0B9C248D9B4BC3F7F42314871",
+      "pass": false,
+      "failures": [
+        {
+          "check": "d_headroom",
+          "reason": "too similar: sim=0.989 headroom=0.011 < 0.05"
+        }
+      ],
+      "language": "ru",
+      "batch": "batch2-ru-00.json"
+    },
+    {
+      "id": "0D5B6867D6574758AE45B0507072F162",
+      "pass": false,
+      "failures": [
+        {
+          "check": "d_headroom",
+          "reason": "too similar: sim=1.000 headroom=0.000 < 0.05"
+        }
+      ],
+      "language": "ru",
+      "batch": "batch2-ru-00.json"
+    },
+    {
+      "id": "146109E71CF545429F9D7803AE8F6744",
+      "pass": false,
+      "failures": [
+        {
+          "check": "d_headroom",
+          "reason": "too similar: sim=1.000 headroom=0.000 < 0.05"
+        }
+      ],
+      "language": "ru",
+      "batch": "batch2-ru-00.json"
+    },
+    {
+      "id": "1D797E88B8C84006A4D3E2DF60149DBE",
+      "pass": false,
+      "failures": [
+        {
+          "check": "d_headroom",
+          "reason": "too similar: sim=0.992 headroom=0.008 < 0.05"
+        }
+      ],
+      "language": "ru",
+      "batch": "batch2-ru-00.json"
+    },
+    {
+      "id": "500A03F055C54ADCB74B3C675B49B29A",
+      "pass": false,
+      "failures": [
+        {
+          "check": "d_headroom",
+          "reason": "too similar: sim=0.967 headroom=0.033 < 0.05"
+        }
+      ],
+      "language": "ru",
+      "batch": "batch2-ru-00.json"
+    },
+    {
+      "id": "5EE2BB4389544C708E37EEAE2141DF56",
+      "pass": false,
+      "failures": [
+        {
+          "check": "d_headroom",
+          "reason": "too similar: sim=0.983 headroom=0.017 < 0.05"
+        }
+      ],
+      "language": "ru",
+      "batch": "batch2-ru-00.json"
+    },
+    {
+      "id": "5FBF83D5E2D64FCE9E47EAC95B34833C",
+      "pass": false,
+      "failures": [
+        {
+          "check": "d_headroom",
+          "reason": "too similar: sim=1.000 headroom=0.000 < 0.05"
+        }
+      ],
+      "language": "ru",
+      "batch": "batch2-ru-00.json"
+    },
+    {
+      "id": "65B764D790A54E85A8903AEF3396B3C6",
+      "pass": false,
+      "failures": [
+        {
+          "check": "d_headroom",
+          "reason": "too similar: sim=0.987 headroom=0.013 < 0.05"
+        }
+      ],
+      "language": "ru",
+      "batch": "batch2-ru-00.json"
+    },
+    {
+      "id": "861B4A19FE0A4C5395E87D23379597E9",
+      "pass": false,
+      "failures": [
+        {
+          "check": "d_headroom",
+          "reason": "too similar: sim=1.000 headroom=0.000 < 0.05"
+        }
+      ],
+      "language": "ru",
+      "batch": "batch2-ru-00.json"
+    },
+    {
+      "id": "9223FF25E98546DDA8D3D42E822E30D2",
+      "pass": false,
+      "failures": [
+        {
+          "check": "d_headroom",
+          "reason": "too similar: sim=0.990 headroom=0.010 < 0.05"
+        }
+      ],
+      "language": "ru",
+      "batch": "batch2-ru-00.json"
+    },
+    {
+      "id": "A98C0551B6B4499D98D868C67E3AD36B",
+      "pass": false,
+      "failures": [
+        {
+          "check": "d_headroom",
+          "reason": "too similar: sim=0.989 headroom=0.011 < 0.05"
+        }
+      ],
+      "language": "ru",
+      "batch": "batch2-ru-00.json"
+    },
+    {
+      "id": "AEF7CC71EC6640ADA5B9F71E1097D3C6",
+      "pass": false,
+      "failures": [
+        {
+          "check": "d_headroom",
+          "reason": "too similar: sim=1.000 headroom=0.000 < 0.05"
+        }
+      ],
+      "language": "ru",
+      "batch": "batch2-ru-00.json"
+    },
+    {
+      "id": "B39A5291A48C45EA8D6FBD05F9657060",
+      "pass": false,
+      "failures": [
+        {
+          "check": "d_headroom",
+          "reason": "too similar: sim=1.000 headroom=0.000 < 0.05"
+        }
+      ],
+      "language": "ru",
+      "batch": "batch2-ru-00.json"
+    },
+    {
+      "id": "C0D3570E23CF4C3E95E9F46EC1FA1935",
+      "pass": false,
+      "failures": [
+        {
+          "check": "d_headroom",
+          "reason": "too similar: sim=0.990 headroom=0.010 < 0.05"
+        }
+      ],
+      "language": "ru",
+      "batch": "batch2-ru-00.json"
+    },
+    {
+      "id": "C663CB8CFBBA4605A5674B32E67AAD3C",
+      "pass": false,
+      "failures": [
+        {
+          "check": "d_headroom",
+          "reason": "too similar: sim=0.988 headroom=0.012 < 0.05"
+        }
+      ],
+      "language": "ru",
+      "batch": "batch2-ru-00.json"
+    },
+    {
+      "id": "C85182F3238640CE9082378FF4DBE446",
+      "pass": false,
+      "failures": [
+        {
+          "check": "d_headroom",
+          "reason": "too similar: sim=1.000 headroom=0.000 < 0.05"
+        }
+      ],
+      "language": "ru",
+      "batch": "batch2-ru-00.json"
+    },
+    {
+      "id": "EAA33EE022ED440CB200245F218792B8",
+      "pass": false,
+      "failures": [
+        {
+          "check": "d_headroom",
+          "reason": "too similar: sim=1.000 headroom=0.000 < 0.05"
+        }
+      ],
+      "language": "ru",
+      "batch": "batch2-ru-00.json"
+    },
+    {
+      "id": "EC831089E32948C5BF9D220C190339B9",
+      "pass": false,
+      "failures": [
+        {
+          "check": "d_headroom",
+          "reason": "too similar: sim=0.990 headroom=0.010 < 0.05"
+        }
+      ],
+      "language": "ru",
+      "batch": "batch2-ru-00.json"
+    },
+    {
+      "id": "FBF0FE547665434CBBCCB7A79442B89E",
+      "pass": false,
+      "failures": [
+        {
+          "check": "d_headroom",
+          "reason": "too similar: sim=0.986 headroom=0.014 < 0.05"
+        }
+      ],
+      "language": "ru",
+      "batch": "batch2-ru-00.json"
+    },
+    {
+      "id": "1466C6D7F9654C969088D9DE932F7904",
+      "pass": false,
+      "failures": [
+        {
+          "check": "d_headroom",
+          "reason": "too similar: sim=1.000 headroom=0.000 < 0.05"
+        }
+      ],
+      "language": "ru",
+      "batch": "batch2-ru-01.json"
+    },
+    {
+      "id": "162BB77B50594E7FAA126D8757E60CBC",
+      "pass": false,
+      "failures": [
+        {
+          "check": "d_headroom",
+          "reason": "too similar: sim=1.000 headroom=0.000 < 0.05"
+        }
+      ],
+      "language": "ru",
+      "batch": "batch2-ru-01.json"
+    },
+    {
+      "id": "20D6BF69F277465194B4B2CD952C3346",
+      "pass": true,
+      "failures": [],
+      "language": "ru",
+      "batch": "batch2-ru-01.json"
+    },
+    {
+      "id": "319651BACC194B0F8CAAB2B1CB648D47",
+      "pass": false,
+      "failures": [
+        {
+          "check": "d_headroom",
+          "reason": "too similar: sim=0.982 headroom=0.018 < 0.05"
+        }
+      ],
+      "language": "ru",
+      "batch": "batch2-ru-01.json"
+    },
+    {
+      "id": "383F9519B3DF4B8B890877BECD4B5E47",
+      "pass": false,
+      "failures": [
+        {
+          "check": "d_headroom",
+          "reason": "too similar: sim=0.973 headroom=0.027 < 0.05"
+        }
+      ],
+      "language": "ru",
+      "batch": "batch2-ru-01.json"
+    },
+    {
+      "id": "41ABB0DA19C148F78D92104A0CE024D6",
+      "pass": false,
+      "failures": [
+        {
+          "check": "d_headroom",
+          "reason": "too similar: sim=1.000 headroom=0.000 < 0.05"
+        }
+      ],
+      "language": "ru",
+      "batch": "batch2-ru-01.json"
+    },
+    {
+      "id": "628D9AD0F157411D9FB0513B536310F1",
+      "pass": false,
+      "failures": [
+        {
+          "check": "d_headroom",
+          "reason": "too similar: sim=0.995 headroom=0.005 < 0.05"
+        }
+      ],
+      "language": "ru",
+      "batch": "batch2-ru-01.json"
+    },
+    {
+      "id": "6340024718924CCCBEDE8CD908A70B40",
+      "pass": false,
+      "failures": [
+        {
+          "check": "d_headroom",
+          "reason": "too similar: sim=1.000 headroom=0.000 < 0.05"
+        }
+      ],
+      "language": "ru",
+      "batch": "batch2-ru-01.json"
+    },
+    {
+      "id": "68CA668B6E7A488DBAA9CAD8F3767DA2",
+      "pass": false,
+      "failures": [
+        {
+          "check": "d_headroom",
+          "reason": "too similar: sim=0.978 headroom=0.022 < 0.05"
+        }
+      ],
+      "language": "ru",
+      "batch": "batch2-ru-01.json"
+    },
+    {
+      "id": "79D761E818894A419BCE56741132C816",
+      "pass": false,
+      "failures": [
+        {
+          "check": "d_headroom",
+          "reason": "too similar: sim=0.988 headroom=0.012 < 0.05"
+        }
+      ],
+      "language": "ru",
+      "batch": "batch2-ru-01.json"
+    },
+    {
+      "id": "7ADCCE8201534F85BB7EDA27164D1B1F",
+      "pass": false,
+      "failures": [
+        {
+          "check": "d_headroom",
+          "reason": "too similar: sim=0.960 headroom=0.040 < 0.05"
+        }
+      ],
+      "language": "ru",
+      "batch": "batch2-ru-01.json"
+    },
+    {
+      "id": "7F39B4F79A684EB29F43E7A596F27A00",
+      "pass": false,
+      "failures": [
+        {
+          "check": "d_headroom",
+          "reason": "too similar: sim=0.973 headroom=0.027 < 0.05"
+        }
+      ],
+      "language": "ru",
+      "batch": "batch2-ru-01.json"
+    },
+    {
+      "id": "87EDFD4136A447339DD84823B987CF07",
+      "pass": false,
+      "failures": [
+        {
+          "check": "d_headroom",
+          "reason": "too similar: sim=0.965 headroom=0.035 < 0.05"
+        }
+      ],
+      "language": "ru",
+      "batch": "batch2-ru-01.json"
+    },
+    {
+      "id": "96C6E348A44F43BBBEA481FF6E2C8F30",
+      "pass": false,
+      "failures": [
+        {
+          "check": "d_headroom",
+          "reason": "too similar: sim=0.988 headroom=0.012 < 0.05"
+        }
+      ],
+      "language": "ru",
+      "batch": "batch2-ru-01.json"
+    },
+    {
+      "id": "C52977D54A3743439E13FF462C9FF9EF",
+      "pass": false,
+      "failures": [
+        {
+          "check": "d_headroom",
+          "reason": "too similar: sim=0.965 headroom=0.035 < 0.05"
+        }
+      ],
+      "language": "ru",
+      "batch": "batch2-ru-01.json"
+    },
+    {
+      "id": "C5FE49769BAB4CF3B083690EF98B81E8",
+      "pass": false,
+      "failures": [
+        {
+          "check": "d_headroom",
+          "reason": "too similar: sim=0.987 headroom=0.013 < 0.05"
+        }
+      ],
+      "language": "ru",
+      "batch": "batch2-ru-01.json"
+    },
+    {
+      "id": "CF191D70205943BD9E07305BB95F20BA",
+      "pass": false,
+      "failures": [
+        {
+          "check": "d_headroom",
+          "reason": "too similar: sim=0.964 headroom=0.036 < 0.05"
+        }
+      ],
+      "language": "ru",
+      "batch": "batch2-ru-01.json"
+    },
+    {
+      "id": "E7A884EA2B684A43B61B99B8612DF615",
+      "pass": false,
+      "failures": [
+        {
+          "check": "d_headroom",
+          "reason": "too similar: sim=1.000 headroom=0.000 < 0.05"
+        }
+      ],
+      "language": "ru",
+      "batch": "batch2-ru-01.json"
+    },
+    {
+      "id": "ED9BDDEA70024314AC7F95F07C5794A6",
+      "pass": false,
+      "failures": [
+        {
+          "check": "d_headroom",
+          "reason": "too similar: sim=0.966 headroom=0.034 < 0.05"
+        }
+      ],
+      "language": "ru",
+      "batch": "batch2-ru-01.json"
+    },
+    {
+      "id": "F8EC5C5256EB45A692F9EE44CFFA7D25",
+      "pass": false,
+      "failures": [
+        {
+          "check": "d_headroom",
+          "reason": "too similar: sim=0.993 headroom=0.007 < 0.05"
+        }
+      ],
+      "language": "ru",
+      "batch": "batch2-ru-01.json"
+    },
+    {
+      "id": "4BC93C8D10F849EE84C2D39A45817590",
+      "pass": false,
+      "failures": [
+        {
+          "check": "d_headroom",
+          "reason": "too similar: sim=0.991 headroom=0.009 < 0.05"
+        }
+      ],
+      "language": "ru",
+      "batch": "batch2-ru-02.json"
+    },
+    {
+      "id": "8D283B2866334B1587E36BD83772AB5E",
+      "pass": false,
+      "failures": [
+        {
+          "check": "d_headroom",
+          "reason": "too similar: sim=0.997 headroom=0.003 < 0.05"
+        }
+      ],
+      "language": "ru",
+      "batch": "batch2-ru-02.json"
+    },
+    {
+      "id": "B43A73A18E8D44CCBE5D687497EB8F4B",
+      "pass": false,
+      "failures": [
+        {
+          "check": "d_headroom",
+          "reason": "too similar: sim=0.981 headroom=0.019 < 0.05"
+        }
+      ],
+      "language": "ru",
+      "batch": "batch2-ru-02.json"
+    },
+    {
+      "id": "F3CF041534C04D93889640B25A3515D6",
+      "pass": false,
+      "failures": [
+        {
+          "check": "d_headroom",
+          "reason": "too similar: sim=0.978 headroom=0.022 < 0.05"
+        }
+      ],
+      "language": "ru",
+      "batch": "batch2-ru-02.json"
+    },
+    {
+      "id": "2B8726C1A0B14673BB9DD2BA019921BD",
+      "pass": false,
+      "failures": [
+        {
+          "check": "c_multiset",
+          "reason": "content-word mismatch: input_only=[в, мы, проверили, социальной]"
+        }
+      ],
+      "language": "ru",
+      "batch": "batch2-ru-02.json"
+    },
+    {
+      "id": "3A85C294F9104501BF709C75029424F7",
+      "pass": false,
+      "failures": [
+        {
+          "check": "d_headroom",
+          "reason": "too similar: sim=0.989 headroom=0.011 < 0.05"
+        }
+      ],
+      "language": "ru",
+      "batch": "batch2-ru-02.json"
+    },
+    {
+      "id": "629EB3FF2FB94237B544ED23BA6FBF02",
+      "pass": false,
+      "failures": [
+        {
+          "check": "d_headroom",
+          "reason": "too similar: sim=1.000 headroom=0.000 < 0.05"
+        }
+      ],
+      "language": "ru",
+      "batch": "batch2-ru-02.json"
+    },
+    {
+      "id": "7810E25FA080454E9DEBF344FED31CD3",
+      "pass": false,
+      "failures": [
+        {
+          "check": "d_headroom",
+          "reason": "too similar: sim=0.994 headroom=0.006 < 0.05"
+        }
+      ],
+      "language": "ru",
+      "batch": "batch2-ru-02.json"
+    },
+    {
+      "id": "80FE6F0F71E74DB98C3BAC00CAA85F7B",
+      "pass": false,
+      "failures": [
+        {
+          "check": "c_multiset",
+          "reason": "content-word mismatch: input_only=[он]"
+        },
+        {
+          "check": "d_headroom",
+          "reason": "too similar: sim=0.977 headroom=0.023 < 0.05"
+        }
+      ],
+      "language": "ru",
+      "batch": "batch2-ru-02.json"
+    },
+    {
+      "id": "988E4878652F4192AA017EB95314DF27",
+      "pass": false,
+      "failures": [
+        {
+          "check": "d_headroom",
+          "reason": "too similar: sim=1.000 headroom=0.000 < 0.05"
+        }
+      ],
+      "language": "ru",
+      "batch": "batch2-ru-02.json"
+    },
+    {
+      "id": "CE9B9A4E81F04021BC54784F345E7992",
+      "pass": false,
+      "failures": [
+        {
+          "check": "d_headroom",
+          "reason": "too similar: sim=0.982 headroom=0.018 < 0.05"
+        }
+      ],
+      "language": "ru",
+      "batch": "batch2-ru-02.json"
+    },
+    {
+      "id": "EC536464D094497EB002E781DBCD84B3",
+      "pass": false,
+      "failures": [
+        {
+          "check": "d_headroom",
+          "reason": "too similar: sim=1.000 headroom=0.000 < 0.05"
+        }
+      ],
+      "language": "ru",
+      "batch": "batch2-ru-02.json"
+    },
+    {
+      "id": "FED48B3E8D464DEF8CE68C2BB342692C",
+      "pass": false,
+      "failures": [
+        {
+          "check": "d_headroom",
+          "reason": "too similar: sim=1.000 headroom=0.000 < 0.05"
+        }
+      ],
+      "language": "ru",
+      "batch": "batch2-ru-02.json"
+    },
+    {
+      "id": "047063AFF6EA47529B0597EE08E2D2A2",
+      "pass": false,
+      "failures": [
+        {
+          "check": "d_headroom",
+          "reason": "too similar: sim=0.965 headroom=0.035 < 0.05"
+        }
+      ],
+      "language": "en",
+      "batch": "batch3-mixed-00.json"
+    },
+    {
+      "id": "04A18B06D3C14855B29CA44583542DE4",
+      "pass": false,
+      "failures": [
+        {
+          "check": "d_headroom",
+          "reason": "too similar: sim=0.991 headroom=0.009 < 0.05"
+        }
+      ],
+      "language": "en",
+      "batch": "batch3-mixed-00.json"
+    },
+    {
+      "id": "07AFECBD64FE43998E90B1262AADC0CC",
+      "pass": false,
+      "failures": [
+        {
+          "check": "c_multiset",
+          "reason": "content-word mismatch: input_only=[it]"
+        },
+        {
+          "check": "d_headroom",
+          "reason": "too similar: sim=0.956 headroom=0.044 < 0.05"
+        }
+      ],
+      "language": "en",
+      "batch": "batch3-mixed-00.json"
+    },
+    {
+      "id": "0BEF7336DA5440D6A5A16C1DE473A608",
+      "pass": false,
+      "failures": [
+        {
+          "check": "d_headroom",
+          "reason": "too similar: sim=0.958 headroom=0.042 < 0.05"
+        }
+      ],
+      "language": "en",
+      "batch": "batch3-mixed-00.json"
+    },
+    {
+      "id": "0DC16613CD4D45B1987A43F993EABB5E",
+      "pass": false,
+      "failures": [
+        {
+          "check": "d_headroom",
+          "reason": "too similar: sim=1.000 headroom=0.000 < 0.05"
+        }
+      ],
+      "language": "en",
+      "batch": "batch3-mixed-00.json"
+    },
+    {
+      "id": "12CF2018A58B469BA6D3453E0B9A97B1",
+      "pass": false,
+      "failures": [
+        {
+          "check": "d_headroom",
+          "reason": "too similar: sim=1.000 headroom=0.000 < 0.05"
+        }
+      ],
+      "language": "he",
+      "batch": "batch3-mixed-00.json"
+    },
+    {
+      "id": "13F712C5F0E54790BDD1D56BA1B31263",
+      "pass": false,
+      "failures": [
+        {
+          "check": "d_headroom",
+          "reason": "too similar: sim=0.978 headroom=0.022 < 0.05"
+        }
+      ],
+      "language": "en",
+      "batch": "batch3-mixed-00.json"
+    },
+    {
+      "id": "14F69591C5E7439594DD426DCD3A77DA",
+      "pass": false,
+      "failures": [
+        {
+          "check": "d_headroom",
+          "reason": "too similar: sim=0.986 headroom=0.014 < 0.05"
+        }
+      ],
+      "language": "en",
+      "batch": "batch3-mixed-00.json"
+    },
+    {
+      "id": "1C1EEC0A13B644FE9C22692ADAE98D78",
+      "pass": true,
+      "failures": [],
+      "language": "en",
+      "batch": "batch3-mixed-00.json"
+    },
+    {
+      "id": "1E92E9945C214BABBC461909930945CB",
+      "pass": false,
+      "failures": [
+        {
+          "check": "d_headroom",
+          "reason": "too similar: sim=0.958 headroom=0.042 < 0.05"
+        }
+      ],
+      "language": "en",
+      "batch": "batch3-mixed-00.json"
+    },
+    {
+      "id": "226C745315384A9DB5535AFAC835ED02",
+      "pass": false,
+      "failures": [
+        {
+          "check": "d_headroom",
+          "reason": "too similar: sim=0.955 headroom=0.045 < 0.05"
+        }
+      ],
+      "language": "en",
+      "batch": "batch3-mixed-00.json"
+    },
+    {
+      "id": "25D0FECD77F34D7CB2A642D641A7732C",
+      "pass": false,
+      "failures": [
+        {
+          "check": "d_headroom",
+          "reason": "too similar: sim=0.991 headroom=0.009 < 0.05"
+        }
+      ],
+      "language": "en",
+      "batch": "batch3-mixed-00.json"
+    },
+    {
+      "id": "25F34E7D7F34412B94A419DC7B97402E",
+      "pass": false,
+      "failures": [
+        {
+          "check": "d_headroom",
+          "reason": "too similar: sim=0.981 headroom=0.019 < 0.05"
+        }
+      ],
+      "language": "en",
+      "batch": "batch3-mixed-00.json"
+    },
+    {
+      "id": "27F4F6B21AEA43809EF65B87FA0368C2",
+      "pass": true,
+      "failures": [],
+      "language": "en",
+      "batch": "batch3-mixed-00.json"
+    },
+    {
+      "id": "2BA26A066F9547F3A3BD9BB9F846C0D9",
+      "pass": true,
+      "failures": [],
+      "language": "en",
+      "batch": "batch3-mixed-00.json"
+    },
+    {
+      "id": "30CA04CC2CCD4C728C5C31A1D65D97A8",
+      "pass": false,
+      "failures": [
+        {
+          "check": "d_headroom",
+          "reason": "too similar: sim=0.985 headroom=0.015 < 0.05"
+        }
+      ],
+      "language": "en",
+      "batch": "batch3-mixed-00.json"
+    },
+    {
+      "id": "30E61504E52C43C4BFBABE236D88819E",
+      "pass": false,
+      "failures": [
+        {
+          "check": "d_headroom",
+          "reason": "too similar: sim=0.988 headroom=0.012 < 0.05"
+        }
+      ],
+      "language": "en",
+      "batch": "batch3-mixed-00.json"
+    },
+    {
+      "id": "312C2C2679B845FDB13FE527D5785095",
+      "pass": false,
+      "failures": [
+        {
+          "check": "d_headroom",
+          "reason": "too similar: sim=0.987 headroom=0.013 < 0.05"
+        }
+      ],
+      "language": "en",
+      "batch": "batch3-mixed-00.json"
+    },
+    {
+      "id": "32CC812704DA4137A42D0914D578545F",
+      "pass": false,
+      "failures": [
+        {
+          "check": "d_headroom",
+          "reason": "too similar: sim=1.000 headroom=0.000 < 0.05"
+        }
+      ],
+      "language": "en",
+      "batch": "batch3-mixed-01.json"
+    },
+    {
+      "id": "33864F847F7A415CBD14B8819D38F152",
+      "pass": false,
+      "failures": [
+        {
+          "check": "d_headroom",
+          "reason": "too similar: sim=0.954 headroom=0.046 < 0.05"
+        }
+      ],
+      "language": "en",
+      "batch": "batch3-mixed-01.json"
+    },
+    {
+      "id": "3A5959FC8F34401D82597C2999A4839F",
+      "pass": true,
+      "failures": [],
+      "language": "en",
+      "batch": "batch3-mixed-01.json"
+    },
+    {
+      "id": "3B4EEDB129ED4F99930DF2A6E0AF17FC",
+      "pass": true,
+      "failures": [],
+      "language": "en",
+      "batch": "batch3-mixed-01.json"
+    },
+    {
+      "id": "3CF25F32122F4528B33FA7983E924982",
+      "pass": false,
+      "failures": [
+        {
+          "check": "d_headroom",
+          "reason": "too similar: sim=0.971 headroom=0.029 < 0.05"
+        }
+      ],
+      "language": "en",
+      "batch": "batch3-mixed-01.json"
+    },
+    {
+      "id": "3E523B61B57A463BAF4FD13B623B4C2C",
+      "pass": false,
+      "failures": [
+        {
+          "check": "d_headroom",
+          "reason": "too similar: sim=0.992 headroom=0.008 < 0.05"
+        }
+      ],
+      "language": "en",
+      "batch": "batch3-mixed-01.json"
+    },
+    {
+      "id": "40C20309187E4A199213865798D06765",
+      "pass": false,
+      "failures": [
+        {
+          "check": "d_headroom",
+          "reason": "too similar: sim=0.962 headroom=0.038 < 0.05"
+        }
+      ],
+      "language": "en",
+      "batch": "batch3-mixed-01.json"
+    },
+    {
+      "id": "4105A19D410A429DBA3493BFF3F16022",
+      "pass": false,
+      "failures": [
+        {
+          "check": "d_headroom",
+          "reason": "too similar: sim=0.973 headroom=0.027 < 0.05"
+        }
+      ],
+      "language": "en",
+      "batch": "batch3-mixed-01.json"
+    },
+    {
+      "id": "41A9C484C2C04A9FBF591409C41A65A1",
+      "pass": true,
+      "failures": [],
+      "language": "en",
+      "batch": "batch3-mixed-01.json"
+    },
+    {
+      "id": "4309685B6FE94C17AB573B6A9E697B5B",
+      "pass": false,
+      "failures": [
+        {
+          "check": "d_headroom",
+          "reason": "too similar: sim=0.953 headroom=0.047 < 0.05"
+        }
+      ],
+      "language": "en",
+      "batch": "batch3-mixed-01.json"
+    },
+    {
+      "id": "45BE8178DA8247B6B3D83A6D420E9C4F",
+      "pass": true,
+      "failures": [],
+      "language": "en",
+      "batch": "batch3-mixed-01.json"
+    },
+    {
+      "id": "46736D738707461780E15558955512FB",
+      "pass": true,
+      "failures": [],
+      "language": "en",
+      "batch": "batch3-mixed-01.json"
+    },
+    {
+      "id": "478AA63AAE8C4CA8B33DB445D1F19C33",
+      "pass": false,
+      "failures": [
+        {
+          "check": "d_headroom",
+          "reason": "too similar: sim=0.974 headroom=0.026 < 0.05"
+        }
+      ],
+      "language": "en",
+      "batch": "batch3-mixed-01.json"
+    },
+    {
+      "id": "48ED0D6EA7C2458C8E8C32D676F63ED0",
+      "pass": false,
+      "failures": [
+        {
+          "check": "d_headroom",
+          "reason": "too similar: sim=1.000 headroom=0.000 < 0.05"
+        }
+      ],
+      "language": "en",
+      "batch": "batch3-mixed-01.json"
+    },
+    {
+      "id": "586B21522D584331A8FE8CE2855F0AE5",
+      "pass": false,
+      "failures": [
+        {
+          "check": "d_headroom",
+          "reason": "too similar: sim=1.000 headroom=0.000 < 0.05"
+        }
+      ],
+      "language": "en",
+      "batch": "batch3-mixed-01.json"
+    },
+    {
+      "id": "5A39AADED95A477C946ADFEDED6160CA",
+      "pass": false,
+      "failures": [
+        {
+          "check": "d_headroom",
+          "reason": "too similar: sim=0.995 headroom=0.005 < 0.05"
+        }
+      ],
+      "language": "en",
+      "batch": "batch3-mixed-01.json"
+    },
+    {
+      "id": "5D85F987652A439C9D20C556BD4EF8A8",
+      "pass": false,
+      "failures": [
+        {
+          "check": "d_headroom",
+          "reason": "too similar: sim=1.000 headroom=0.000 < 0.05"
+        }
+      ],
+      "language": "en",
+      "batch": "batch3-mixed-01.json"
+    },
+    {
+      "id": "623C108859AC4D4FBCC696EDE98D2BC5",
+      "pass": false,
+      "failures": [
+        {
+          "check": "d_headroom",
+          "reason": "too similar: sim=0.956 headroom=0.044 < 0.05"
+        }
+      ],
+      "language": "en",
+      "batch": "batch3-mixed-01.json"
+    },
+    {
+      "id": "68CD8135CFDF4D93B99D6A99F18E692F",
+      "pass": true,
+      "failures": [],
+      "language": "en",
+      "batch": "batch3-mixed-02.json"
+    },
+    {
+      "id": "6A7C2FE6626949D7A06C32077AEEB764",
+      "pass": false,
+      "failures": [
+        {
+          "check": "d_headroom",
+          "reason": "too similar: sim=0.974 headroom=0.026 < 0.05"
+        }
+      ],
+      "language": "en",
+      "batch": "batch3-mixed-02.json"
+    },
+    {
+      "id": "6D7433DE073145CFAAE920CCE50C3AD0",
+      "pass": true,
+      "failures": [],
+      "language": "en",
+      "batch": "batch3-mixed-02.json"
+    },
+    {
+      "id": "6E2D55EB0A9543B9B902694ACA85C627",
+      "pass": false,
+      "failures": [
+        {
+          "check": "d_headroom",
+          "reason": "too similar: sim=0.976 headroom=0.024 < 0.05"
+        }
+      ],
+      "language": "en",
+      "batch": "batch3-mixed-02.json"
+    },
+    {
+      "id": "78FA19E1470D4AA0A95620BD63ABECFF",
+      "pass": true,
+      "failures": [],
+      "language": "en",
+      "batch": "batch3-mixed-02.json"
+    },
+    {
+      "id": "791ABBFA4B3D4C3CBE0821065191152F",
+      "pass": true,
+      "failures": [],
+      "language": "en",
+      "batch": "batch3-mixed-02.json"
+    },
+    {
+      "id": "7A94B3F53E9C4E8AB25D616B5584CF1B",
+      "pass": true,
+      "failures": [],
+      "language": "en",
+      "batch": "batch3-mixed-02.json"
+    },
+    {
+      "id": "7BA9E34A255F4A5FAAEBBFCAAE6A57A8",
+      "pass": true,
+      "failures": [],
+      "language": "en",
+      "batch": "batch3-mixed-02.json"
+    },
+    {
+      "id": "833B59793A1544EDBDD94B3A9BA51DD3",
+      "pass": true,
+      "failures": [],
+      "language": "en",
+      "batch": "batch3-mixed-02.json"
+    },
+    {
+      "id": "8AFB6829EAC24F3C83AE0109D9C76DED",
+      "pass": true,
+      "failures": [],
+      "language": "en",
+      "batch": "batch3-mixed-02.json"
+    },
+    {
+      "id": "8B247FDA2BE8414593DE4B617842D06B",
+      "pass": false,
+      "failures": [
+        {
+          "check": "d_headroom",
+          "reason": "too similar: sim=0.964 headroom=0.036 < 0.05"
+        }
+      ],
+      "language": "en",
+      "batch": "batch3-mixed-02.json"
+    },
+    {
+      "id": "952D487D3CE54B9D930D986F3D27F77F",
+      "pass": false,
+      "failures": [
+        {
+          "check": "d_headroom",
+          "reason": "too similar: sim=0.996 headroom=0.004 < 0.05"
+        }
+      ],
+      "language": "en",
+      "batch": "batch3-mixed-02.json"
+    },
+    {
+      "id": "959C40126DB8410397A35817AEAED9D4",
+      "pass": false,
+      "failures": [
+        {
+          "check": "d_headroom",
+          "reason": "too similar: sim=0.984 headroom=0.016 < 0.05"
+        }
+      ],
+      "language": "en",
+      "batch": "batch3-mixed-02.json"
+    },
+    {
+      "id": "98BDBF02DB2E4819A30C114F5A06546D",
+      "pass": false,
+      "failures": [
+        {
+          "check": "d_headroom",
+          "reason": "too similar: sim=1.000 headroom=0.000 < 0.05"
+        }
+      ],
+      "language": "en",
+      "batch": "batch3-mixed-02.json"
+    },
+    {
+      "id": "A0F42F841FB749D39E3435704AB9F4EB",
+      "pass": true,
+      "failures": [],
+      "language": "en",
+      "batch": "batch3-mixed-02.json"
+    },
+    {
+      "id": "A35F4F0AF80C409A8E1530BCA4819195",
+      "pass": false,
+      "failures": [
+        {
+          "check": "d_headroom",
+          "reason": "too similar: sim=0.952 headroom=0.048 < 0.05"
+        }
+      ],
+      "language": "en",
+      "batch": "batch3-mixed-02.json"
+    },
+    {
+      "id": "A41055FC54834FD18C90FE6E46A4BEA6",
+      "pass": true,
+      "failures": [],
+      "language": "en",
+      "batch": "batch3-mixed-02.json"
+    },
+    {
+      "id": "A67D31A0553F4AACA4EDC83351FB3CA4",
+      "pass": true,
+      "failures": [],
+      "language": "en",
+      "batch": "batch3-mixed-02.json"
+    },
+    {
+      "id": "A898B9E3332B4B6CB02228B5084E9B38",
+      "pass": false,
+      "failures": [
+        {
+          "check": "d_headroom",
+          "reason": "too similar: sim=0.978 headroom=0.022 < 0.05"
+        }
+      ],
+      "language": "en",
+      "batch": "batch3-mixed-03.json"
+    },
+    {
+      "id": "AD042BD3105C4F45B40179A7A664D5B6",
+      "pass": true,
+      "failures": [],
+      "language": "en",
+      "batch": "batch3-mixed-03.json"
+    },
+    {
+      "id": "AF4E64AFD1DA460D9E3F754121CA9B9B",
+      "pass": false,
+      "failures": [
+        {
+          "check": "d_headroom",
+          "reason": "too similar: sim=0.961 headroom=0.039 < 0.05"
+        }
+      ],
+      "language": "en",
+      "batch": "batch3-mixed-03.json"
+    },
+    {
+      "id": "B45743122D1C48FC8D7CF5C701714D69",
+      "pass": true,
+      "failures": [],
+      "language": "en",
+      "batch": "batch3-mixed-03.json"
+    },
+    {
+      "id": "B573E653AE954FBDAEBF3A5CAC2C2671",
+      "pass": true,
+      "failures": [],
+      "language": "en",
+      "batch": "batch3-mixed-03.json"
+    },
+    {
+      "id": "B6250001F7F94B44B6DE3C80F7846840",
+      "pass": true,
+      "failures": [],
+      "language": "en",
+      "batch": "batch3-mixed-03.json"
+    },
+    {
+      "id": "B939EC98234B4974A44908C104A833E1",
+      "pass": true,
+      "failures": [],
+      "language": "en",
+      "batch": "batch3-mixed-03.json"
+    },
+    {
+      "id": "BA11F73BFFF94147BDA773A34B9FF4A5",
+      "pass": false,
+      "failures": [
+        {
+          "check": "d_headroom",
+          "reason": "too similar: sim=0.980 headroom=0.020 < 0.05"
+        }
+      ],
+      "language": "en",
+      "batch": "batch3-mixed-03.json"
+    },
+    {
+      "id": "BA4FD46C510B4C83B509BDA1A4890A42",
+      "pass": true,
+      "failures": [],
+      "language": "he",
+      "batch": "batch3-mixed-03.json"
+    },
+    {
+      "id": "BB8E4EFAE6EC4163AF2E8837142EF6A2",
+      "pass": true,
+      "failures": [],
+      "language": "en",
+      "batch": "batch3-mixed-03.json"
+    },
+    {
+      "id": "CB1FBD1A12D1430096DD238D5F5F9610",
+      "pass": false,
+      "failures": [
+        {
+          "check": "d_headroom",
+          "reason": "too similar: sim=0.963 headroom=0.037 < 0.05"
+        }
+      ],
+      "language": "en",
+      "batch": "batch3-mixed-03.json"
+    },
+    {
+      "id": "CD49A7FD196A46708F7533960D9403A6",
+      "pass": false,
+      "failures": [
+        {
+          "check": "d_headroom",
+          "reason": "too similar: sim=0.993 headroom=0.007 < 0.05"
+        }
+      ],
+      "language": "en",
+      "batch": "batch3-mixed-03.json"
+    },
+    {
+      "id": "CE66E51612224C6AAC8551DEA56F41FF",
+      "pass": true,
+      "failures": [],
+      "language": "en",
+      "batch": "batch3-mixed-03.json"
+    },
+    {
+      "id": "CE6BB6EF3738473E9B9C28C073AD889E",
+      "pass": true,
+      "failures": [],
+      "language": "en",
+      "batch": "batch3-mixed-03.json"
+    },
+    {
+      "id": "D47E82DB88B4498BB526DFC5C789B305",
+      "pass": false,
+      "failures": [
+        {
+          "check": "d_headroom",
+          "reason": "too similar: sim=0.988 headroom=0.012 < 0.05"
+        }
+      ],
+      "language": "en",
+      "batch": "batch3-mixed-03.json"
+    },
+    {
+      "id": "D5E1A5B1E1654C3AB887A926A4A5F0D9",
+      "pass": false,
+      "failures": [
+        {
+          "check": "d_headroom",
+          "reason": "too similar: sim=0.959 headroom=0.041 < 0.05"
+        }
+      ],
+      "language": "en",
+      "batch": "batch3-mixed-03.json"
+    },
+    {
+      "id": "D93556B539164CE699E7E9BBCE9E4736",
+      "pass": false,
+      "failures": [
+        {
+          "check": "d_headroom",
+          "reason": "too similar: sim=1.000 headroom=0.000 < 0.05"
+        }
+      ],
+      "language": "en",
+      "batch": "batch3-mixed-03.json"
+    },
+    {
+      "id": "DB16EA8047954579A66CB2552DCC3D72",
+      "pass": false,
+      "failures": [
+        {
+          "check": "d_headroom",
+          "reason": "too similar: sim=0.993 headroom=0.007 < 0.05"
+        }
+      ],
+      "language": "en",
+      "batch": "batch3-mixed-03.json"
+    },
+    {
+      "id": "DBA7F19E234E4C56ACF6D1D4FEFCFDF9",
+      "pass": false,
+      "failures": [
+        {
+          "check": "d_headroom",
+          "reason": "too similar: sim=0.996 headroom=0.004 < 0.05"
+        }
+      ],
+      "language": "en",
+      "batch": "batch3-mixed-04.json"
+    },
+    {
+      "id": "E15E92DBBCD748BC849153689B837D22",
+      "pass": false,
+      "failures": [
+        {
+          "check": "d_headroom",
+          "reason": "too similar: sim=0.978 headroom=0.022 < 0.05"
+        }
+      ],
+      "language": "en",
+      "batch": "batch3-mixed-04.json"
+    },
+    {
+      "id": "E1DEF7C4E9A5440A9EE61800DB4E41A8",
+      "pass": false,
+      "failures": [
+        {
+          "check": "d_headroom",
+          "reason": "too similar: sim=0.962 headroom=0.038 < 0.05"
+        }
+      ],
+      "language": "en",
+      "batch": "batch3-mixed-04.json"
+    },
+    {
+      "id": "E863AFBDA8214FE38C32CCB6428F036C",
+      "pass": false,
+      "failures": [
+        {
+          "check": "d_headroom",
+          "reason": "too similar: sim=0.959 headroom=0.041 < 0.05"
+        }
+      ],
+      "language": "en",
+      "batch": "batch3-mixed-04.json"
+    },
+    {
+      "id": "E9CCCB93E930453B818CC541A7E692B3",
+      "pass": true,
+      "failures": [],
+      "language": "en",
+      "batch": "batch3-mixed-04.json"
+    },
+    {
+      "id": "E9F0AD43D1DF416F9DB446FBADFCBBE0",
+      "pass": false,
+      "failures": [
+        {
+          "check": "d_headroom",
+          "reason": "too similar: sim=0.992 headroom=0.008 < 0.05"
+        }
+      ],
+      "language": "en",
+      "batch": "batch3-mixed-04.json"
+    },
+    {
+      "id": "EA34AA64B101405A908314A2D5F5FB03",
+      "pass": false,
+      "failures": [
+        {
+          "check": "d_headroom",
+          "reason": "too similar: sim=1.000 headroom=0.000 < 0.05"
+        }
+      ],
+      "language": "en",
+      "batch": "batch3-mixed-04.json"
+    },
+    {
+      "id": "EC2CF592997844A297B0AC251C7B2259",
+      "pass": false,
+      "failures": [
+        {
+          "check": "d_headroom",
+          "reason": "too similar: sim=0.964 headroom=0.036 < 0.05"
+        }
+      ],
+      "language": "en",
+      "batch": "batch3-mixed-04.json"
+    },
+    {
+      "id": "EC32C30F91AC4404BFDB8998746E2643",
+      "pass": false,
+      "failures": [
+        {
+          "check": "d_headroom",
+          "reason": "too similar: sim=0.973 headroom=0.027 < 0.05"
+        }
+      ],
+      "language": "en",
+      "batch": "batch3-mixed-04.json"
+    },
+    {
+      "id": "F18D3DC7A6A44464810750E15E5BCE5E",
+      "pass": true,
+      "failures": [],
+      "language": "en",
+      "batch": "batch3-mixed-04.json"
+    },
+    {
+      "id": "F3953E2F875A4293B3164BE2446D06D7",
+      "pass": false,
+      "failures": [
+        {
+          "check": "c_multiset",
+          "reason": "content-word mismatch: input_only=[is, it]"
+        }
+      ],
+      "language": "en",
+      "batch": "batch3-mixed-04.json"
+    },
+    {
+      "id": "F6F57FA120EC484790BEE33D80248FBA",
+      "pass": false,
+      "failures": [
+        {
+          "check": "d_headroom",
+          "reason": "too similar: sim=0.961 headroom=0.039 < 0.05"
+        }
+      ],
+      "language": "en",
+      "batch": "batch3-mixed-04.json"
+    },
+    {
+      "id": "FA07325F3359497DBE5EF7174A657B2C",
+      "pass": false,
+      "failures": [
+        {
+          "check": "d_headroom",
+          "reason": "too similar: sim=0.950 headroom=0.050 < 0.05"
+        }
+      ],
+      "language": "en",
+      "batch": "batch3-mixed-04.json"
+    },
+    {
+      "id": "FF422B3CF6824064A2B9FF1E7AC204BC",
+      "pass": true,
+      "failures": [],
+      "language": "en",
+      "batch": "batch3-mixed-04.json"
+    }
+  ]
+}

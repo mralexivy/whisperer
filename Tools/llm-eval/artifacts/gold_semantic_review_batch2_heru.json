@@ -1,0 +1,45 @@
+{
+  "reviewed": 110,
+  "flagged": [
+    {
+      "id": "4699A99109194C759A8561DFA2DF8C93",
+      "batch": "batch2-he-01",
+      "category": "over_deletion",
+      "input_span": "לא טוב אממ ‫התמודד שלכם",
+      "gold_span": "לא טוב ‫התמודד שלכם",
+      "why": "\"אממ\" (double-mem) is an elongated variant of the listed filler \"אמ\". The filler list contains only the exact token \"אמ\"; elongated forms are not covered. Deletion should be flagged for corpus-owner decision."
+    },
+    {
+      "id": "DF089019314F4568AF0E679AE6722824",
+      "batch": "batch2-he-02",
+      "category": "over_deletion",
+      "input_span": "איך הטקסט מופיע אההההההההההההההההההההההההה...",
+      "gold_span": "איך הטקסט מופיע.",
+      "why": "The long run of \"אהה...\" is an elongated variant of the listed filler \"אה\". The exact token \"אה\" is on the list; the elongated multi-character form is not. The entire token was dropped rather than kept or flagged for corpus-owner decision."
+    },
+    {
+      "id": "319651BACC194B0F8CAAB2B1CB648D47",
+      "batch": "batch2-ru-01",
+      "category": "over_deletion",
+      "input_span": "мы будем говорить очень очень длинный текст",
+      "gold_span": "мы будем говорить очень длинный текст",
+      "why": "\"очень очень\" is emphatic reduplication, which is meaning-bearing and must not be treated as a single-word stutter. One \"очень\" was deleted. The constraint explicitly lists \"очень очень\" as a prohibited deletion alongside \"довольно-довольно\"."
+    },
+    {
+      "id": "2B8726C1A0B14673BB9DD2BA019921BD",
+      "batch": "batch2-ru-02",
+      "category": "over_deletion",
+      "input_span": "мы проверили в социальной, мы проверили в социальной,",
+      "gold_span": "мы проверили в социальной,",
+      "why": "The repeated span \"мы проверили в социальной\" is a multi-word phrase, not a single immediately-repeated word. Only single-word immediate repeats may be deleted. Collapsing a repeated phrase violates the stutter-deletion rule."
+    },
+    {
+      "id": "F3CF041534C04D93889640B25A3515D6",
+      "batch": "batch2-ru-02",
+      "category": "over_deletion",
+      "input_span": "если я сделаю вот так вот, мы сможем посмотреть и описать вот этот функционал",
+      "gold_span": "если я сделаю так, мы сможем посмотреть и описать этот функционал",
+      "why": "Three instances of \"вот\" were deleted. In \"вот так вот\" both tokens are demonstrative/emphatic (\"like this\"); in \"вот этот функционал\" \"вот\" is a demonstrative pointing to the item. The constraint notes that Russian \"вот\" used as a demonstrative is not a filler and must not be deleted."
+    }
+  ]
+}

@@ -123,3 +123,21 @@ fatal. `nonisolated class VADSegmenter` turned a deterministic abort into a pass
 **Diagnostic value:** a `pointer being freed was not allocated` whose address is *identical across
 separate processes* (here `0x2b2ecadc0`) is not heap corruption. Real corruption produces varying
 addresses; a constant one points at the runtime freeing something it should not.
+
+#### It also rules out recursively-owned reference structures (2026-08-17)
+
+Same abort, reached without any XCTest peculiarity: `AliasEngine` was first written as a node
+trie for longest-match-wins phrase lookup. A trie of reference types deallocates **recursively** —
+releasing the root releases its children, and so on — so with `SWIFT_DEFAULT_ACTOR_ISOLATION =
+MainActor` every node's `deinit` is an isolated deinit, and tearing the trie down ran the whole
+cascade through `swift_task_deinitOnExecutorImpl` and aborted in malloc with `pointer being freed
+was not allocated`.
+
+`nonisolated` on the node class would have fixed it, but the data structure was not worth the
+constraint: the fix taken was a **flat dictionary** keyed by the folded phrase
+(`AliasEngine.table`). The lookup it trades away is bounded by `maxPhraseWords`, which is 2 for
+the shipped lexicon.
+
+Generalizes: in this target, "a plain `class`" is not a neutral choice — it is a `@MainActor`
+class with an isolated deinit. Anything whose teardown is a cascade of releases (trie, linked
+list, tree, parent/child graph) multiplies that hazard by its node count.

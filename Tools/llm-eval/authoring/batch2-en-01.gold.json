@@ -1,0 +1,22 @@
+[
+ {"id": "5F7FE368A3224DFCBB0ED7F76B0426B0", "gold": "This is sample recording. So let me try first to record some sample text to see if it's working or not working."},
+ {"id": "63B2231E02B741418DABA8DBCDAE1083", "gold": "Also the herder itself it has some white border around it when I move and then it disappears, so something strange is happening."},
+ {"id": "69CF137053C44D158268C5A3042A5176", "gold": "Run BigQuery only. Tell me why in BigQuery only it doesn't return the results."},
+ {"id": "6DD94A2C09284A8B8980CF54857BAA95", "gold": "And not the stupid files that you created, we should place this in Contentful."},
+ {"id": "743BFDFACEEB4878B723F01177046BFC", "gold": "Still I think it doesn't work right and header looks different. Please check it out."},
+ {"id": "78A918C6C0B141AD85F4F8620001C4AB", "gold": "As translation behaves now, I want to see the text, nothing is getting displayed."},
+ {"id": "7BC7A26AEB7E4E3581C6262161B0FAC1", "gold": "No, I only ask you to examine and extract design language of these infographics attached."},
+ {"id": "7FAEE5BB12664B8B9DD29967EF77873C", "gold": "You literally fix nothing. It's still broken the same way as I provided."},
+ {"id": "82FE8D4329C34D6F9A2FD0C8528AD47B", "gold": "Still no, still fucking no, search documentation, how it's done, what files should be modified."},
+ {"id": "882CC4DB03BF45009A3042D10996AC12", "gold": "Let me show you the performance of this application so you can see how fast it works."},
+ {"id": "8B8382BAE2AA4D1FB61FA2758E2CC733", "gold": "In this example, please explain me what the query is responsible to populate text tab."},
+ {"id": "8F5E5ED457B94778A6B02734D332F7F6", "gold": "I want our title to be displayed like your complete platform like for like, look the image attach."},
+ {"id": "94AD4726C3B74FCEA01611BEE88FD2A3", "gold": "That's what mobile view shows. You fucked the mobile view. It doesn't render the video. What the fuck did you do?"},
+ {"id": "991CA55327FD4BAAABE33ADCE4101077", "gold": "Please update README with full support flow of what we support, which tools, which application,"},
+ {"id": "9EC8DF19895A4C8B91ED40DE5EF4AC8C", "gold": "This is too basic, we need premium. Think what top designer would create."},
+ {"id": "A1D9C39511BD42FA9AEEE7E1246FE3F8", "gold": "Why the fuck you wasted so much space? I ask you move it a bit."},
+ {"id": "AC24DB630DF44E91A329052040AB8A7C", "gold": "Are we doing the same thing that we are doing for the Pinterest query, for example? The previous query that I shared with you?"},
+ {"id": "AF0E56A5552646A9B06964DA47EAE773", "gold": "So do you think for consistency like what we have now, because it's display different on one screen we just click continue and other screens we don't click continue."},
+ {"id": "B21658E00893413A9956998E61AD883B", "gold": "Generally I thought we fixed the LLM transcription so the LLM transcription should be much faster in this version but it doesn't."},
+ {"id": "B9F5AA3075FA4E0080F4486588B35FE8", "gold": "Let me try to say one complex sentence and see if it can be immediately outputted inside the box."}
+]

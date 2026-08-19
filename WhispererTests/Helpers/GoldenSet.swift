@@ -72,6 +72,12 @@ enum GoldenSet {
     /// (they need the user's history database and a downloaded model on disk). Resolving against
     /// `#filePath` keeps the set readable when the bundle copy is absent, rather than silently
     /// degrading every accuracy assertion to "no reference, skipped".
+    /// Which file the corpus was actually read from, for the benchmark report. A stale bundle
+    /// copy and the checked-in source tree are indistinguishable from the numbers alone.
+    static var resolvedSource: String {
+        locate().map(\.path) ?? "<not found>"
+    }
+
     private static func locate() -> URL? {
         if let url = Bundle(for: BundleToken.self).url(forResource: "golden-set", withExtension: "json") {
             return url

@@ -13,18 +13,71 @@ final class MCPServerTests: XCTestCase {
 
     static let testPort = 18547
     static var serverStarted = false
+    /// Nil until startup has been attempted; a message once it has failed.
+    private static var startupFailure: String?
 
+    /// Waits for the server with `XCTWaiter`, not a semaphore.
+    ///
+    /// `DispatchSemaphore.wait()` here deadlocked the **entire test bundle**, indefinitely:
+    /// `class setUp()` runs on the main thread, and `WhispererMCPServer.start(port:)` ends in
+    /// `await MainActor.run { AppState.shared.mcpServerRunning = true }`. Blocking the main
+    /// thread is precisely what stops that hop from ever being scheduled, so the semaphore
+    /// waited on a task that could not finish until the semaphore was done waiting. Because
+    /// `class setUp()` runs before the first test in the class, nothing after `MCPServerTests`
+    /// in the bundle ever ran — the suite hung with no failure and no timeout.
+    ///
+    /// `XCTWaiter.wait` drains the main run loop while it waits, so the continuation lands and
+    /// the hop completes. The timeout is the second half of the fix: a network listener that
+    /// never comes up must fail this class, not stall every class after it.
     override class func setUp() {
         super.setUp()
         guard !serverStarted else { return }
         serverStarted = true
-        let semaphore = DispatchSemaphore(value: 0)
+
+        let ready = XCTestExpectation(description: "MCP server listening on \(testPort)")
         Task {
             await WhispererMCPServer.shared.start(port: testPort)
-            semaphore.signal()
+            ready.fulfill()
         }
-        semaphore.wait()
-        Thread.sleep(forTimeInterval: 0.3)
+        guard XCTWaiter().wait(for: [ready], timeout: 10) == .completed else {
+            startupFailure = "MCP server did not start within 10s on port \(testPort)"
+            return
+        }
+        // The listener binds asynchronously after `start` returns, so the first connection can
+        // still be refused. Polling beats sleeping: it is usually faster and never too short.
+        let deadline = Date().addingTimeInterval(5)
+        while Date() < deadline, !isPortAccepting(testPort) {
+            RunLoop.current.run(until: Date().addingTimeInterval(0.05))
+        }
+        if !isPortAccepting(testPort) {
+            startupFailure = "MCP server bound no listener on port \(testPort) within 5s"
+        }
+    }
+
+    /// One non-blocking connect attempt. Deliberately BSD sockets rather than `NWConnection`:
+    /// readiness has to be answerable synchronously from this main-thread poll loop, and an
+    /// `NWConnection` state handler would need the very concurrency hop being waited on.
+    private static func isPortAccepting(_ port: Int) -> Bool {
+        let fd = socket(AF_INET, SOCK_STREAM, 0)
+        guard fd >= 0 else { return false }
+        defer { close(fd) }
+        var addr = sockaddr_in()
+        addr.sin_len = UInt8(MemoryLayout<sockaddr_in>.size)
+        addr.sin_family = sa_family_t(AF_INET)
+        addr.sin_port = UInt16(port).bigEndian
+        addr.sin_addr.s_addr = inet_addr("127.0.0.1")
+        let connected = withUnsafePointer(to: &addr) {
+            $0.withMemoryRebound(to: sockaddr.self, capacity: 1) {
+                connect(fd, $0, socklen_t(MemoryLayout<sockaddr_in>.size)) == 0
+            }
+        }
+        return connected
+    }
+
+    override func setUpWithError() throws {
+        try super.setUpWithError()
+        // Fail this class rather than let every test report an unrelated connection error.
+        if let failure = Self.startupFailure { XCTFail(failure) }
     }
 
     override class func tearDown() {

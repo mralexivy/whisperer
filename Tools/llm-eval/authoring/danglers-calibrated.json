@@ -1,0 +1,1338 @@
+{
+  "purpose": "Words that may not carry a sentence-terminating period, calibrated from the authored punctuation gold rather than curated by hand.",
+  "method": "Fitted on a stable half of the corpus (sha1(id) parity), reported on the other. A word is admitted when it appears at least --min-observations times in the fit half and ends a sentence in at most --max-ending-rate of them.",
+  "caveat": "The gold is LLM-authored and independently reviewed, not human truth. This set is a precision guard, so a wrong entry costs a period on a sentence that genuinely ended — which is why the held-out ending rate is reported per language and must stay near zero.",
+  "thresholds": {
+    "minObservations": 12,
+    "maxEndingRate": 0.15
+  },
+  "perLanguage": {
+    "en": {
+      "cases": 2080,
+      "fitCases": 1042,
+      "words": {
+        "a": {
+          "fitAppearances": 313,
+          "fitEndings": 0,
+          "endingRateUpperBound": 0.0121,
+          "evalAppearances": 269,
+          "evalEndings": 0
+        },
+        "able": {
+          "fitAppearances": 29,
+          "fitEndings": 0,
+          "endingRateUpperBound": 0.117,
+          "evalAppearances": 24,
+          "evalEndings": 1
+        },
+        "add": {
+          "fitAppearances": 54,
+          "fitEndings": 1,
+          "endingRateUpperBound": 0.0977,
+          "evalAppearances": 37,
+          "evalEndings": 2
+        },
+        "additional": {
+          "fitAppearances": 25,
+          "fitEndings": 0,
+          "endingRateUpperBound": 0.1332,
+          "evalAppearances": 16,
+          "evalEndings": 0
+        },
+        "adjustment": {
+          "fitAppearances": 32,
+          "fitEndings": 0,
+          "endingRateUpperBound": 0.1072
+        },
+        "all": {
+          "fitAppearances": 171,
+          "fitEndings": 13,
+          "endingRateUpperBound": 0.1257,
+          "evalAppearances": 193,
+          "evalEndings": 10
+        },
+        "also": {
+          "fitAppearances": 183,
+          "fitEndings": 2,
+          "endingRateUpperBound": 0.039,
+          "evalAppearances": 171,
+          "evalEndings": 0
+        },
+        "always": {
+          "fitAppearances": 27,
+          "fitEndings": 0,
+          "endingRateUpperBound": 0.1246,
+          "evalAppearances": 36,
+          "evalEndings": 1
+        },
+        "and": {
+          "fitAppearances": 1150,
+          "fitEndings": 0,
+          "endingRateUpperBound": 0.0033,
+          "evalAppearances": 1188,
+          "evalEndings": 0
+        },
+        "another": {
+          "fitAppearances": 37,
+          "fitEndings": 0,
+          "endingRateUpperBound": 0.0941,
+          "evalAppearances": 28,
+          "evalEndings": 0
+        },
+        "any": {
+          "fitAppearances": 40,
+          "fitEndings": 0,
+          "endingRateUpperBound": 0.0876,
+          "evalAppearances": 51,
+          "evalEndings": 0
+        },
+        "are": {
+          "fitAppearances": 221,
+          "fitEndings": 0,
+          "endingRateUpperBound": 0.0171,
+          "evalAppearances": 205,
+          "evalEndings": 0
+        },
+        "as": {
+          "fitAppearances": 117,
+          "fitEndings": 0,
+          "endingRateUpperBound": 0.0318,
+          "evalAppearances": 78,
+          "evalEndings": 0
+        },
+        "at": {
+          "fitAppearances": 54,
+          "fitEndings": 0,
+          "endingRateUpperBound": 0.0664,
+          "evalAppearances": 42,
+          "evalEndings": 0
+        },
+        "based": {
+          "fitAppearances": 76,
+          "fitEndings": 0,
+          "endingRateUpperBound": 0.0481,
+          "evalAppearances": 67,
+          "evalEndings": 0
+        },
+        "basically": {
+          "fitAppearances": 334,
+          "fitEndings": 3,
+          "endingRateUpperBound": 0.0261,
+          "evalAppearances": 303,
+          "evalEndings": 0
+        },
+        "be": {
+          "fitAppearances": 457,
+          "fitEndings": 4,
+          "endingRateUpperBound": 0.0223,
+          "evalAppearances": 397,
+          "evalEndings": 4
+        },
+        "because": {
+          "fitAppearances": 129,
+          "fitEndings": 1,
+          "endingRateUpperBound": 0.0426,
+          "evalAppearances": 138,
+          "evalEndings": 0
+        },
+        "but": {
+          "fitAppearances": 214,
+          "fitEndings": 0,
+          "endingRateUpperBound": 0.0176,
+          "evalAppearances": 229,
+          "evalEndings": 1
+        },
+        "by": {
+          "fitAppearances": 44,
+          "fitEndings": 0,
+          "endingRateUpperBound": 0.0803,
+          "evalAppearances": 36,
+          "evalEndings": 0
+        },
+        "can": {
+          "fitAppearances": 376,
+          "fitEndings": 3,
+          "endingRateUpperBound": 0.0232,
+          "evalAppearances": 305,
+          "evalEndings": 0
+        },
+        "commit": {
+          "fitAppearances": 26,
+          "fitEndings": 0,
+          "endingRateUpperBound": 0.1287,
+          "evalAppearances": 42,
+          "evalEndings": 2
+        },
+        "create": {
+          "fitAppearances": 99,
+          "fitEndings": 1,
+          "endingRateUpperBound": 0.055,
+          "evalAppearances": 87,
+          "evalEndings": 1
+        },
+        "current": {
+          "fitAppearances": 28,
+          "fitEndings": 0,
+          "endingRateUpperBound": 0.1206,
+          "evalAppearances": 24,
+          "evalEndings": 0
+        },
+        "currently": {
+          "fitAppearances": 36,
+          "fitEndings": 1,
+          "endingRateUpperBound": 0.1417,
+          "evalAppearances": 28,
+          "evalEndings": 0
+        },
+        "didnt": {
+          "fitAppearances": 30,
+          "fitEndings": 0,
+          "endingRateUpperBound": 0.1135,
+          "evalAppearances": 32,
+          "evalEndings": 0
+        },
+        "display": {
+          "fitAppearances": 49,
+          "fitEndings": 2,
+          "endingRateUpperBound": 0.1371,
+          "evalAppearances": 38,
+          "evalEndings": 0
+        },
+        "do": {
+          "fitAppearances": 180,
+          "fitEndings": 12,
+          "endingRateUpperBound": 0.1129,
+          "evalAppearances": 189,
+          "evalEndings": 15
+        },
+        "does": {
+          "fitAppearances": 32,
+          "fitEndings": 0,
+          "endingRateUpperBound": 0.1072,
+          "evalAppearances": 38,
+          "evalEndings": 0
+        },
+        "doesnt": {
+          "fitAppearances": 86,
+          "fitEndings": 3,
+          "endingRateUpperBound": 0.0976,
+          "evalAppearances": 78,
+          "evalEndings": 0
+        },
+        "dont": {
+          "fitAppearances": 158,
+          "fitEndings": 0,
+          "endingRateUpperBound": 0.0237,
+          "evalAppearances": 142,
+          "evalEndings": 0
+        },
+        "every": {
+          "fitAppearances": 93,
+          "fitEndings": 0,
+          "endingRateUpperBound": 0.0397,
+          "evalAppearances": 64,
+          "evalEndings": 0
+        },
+        "exactly": {
+          "fitAppearances": 22,
+          "fitEndings": 0,
+          "endingRateUpperBound": 0.1487,
+          "evalAppearances": 18,
+          "evalEndings": 1
+        },
+        "find": {
+          "fitAppearances": 29,
+          "fitEndings": 0,
+          "endingRateUpperBound": 0.117,
+          "evalAppearances": 43,
+          "evalEndings": 1
+        },
+        "first": {
+          "fitAppearances": 72,
+          "fitEndings": 2,
+          "endingRateUpperBound": 0.0957,
+          "evalAppearances": 56,
+          "evalEndings": 1
+        },
+        "fix": {
+          "fitAppearances": 90,
+          "fitEndings": 5,
+          "endingRateUpperBound": 0.1235,
+          "evalAppearances": 115,
+          "evalEndings": 11
+        },
+        "for": {
+          "fitAppearances": 257,
+          "fitEndings": 2,
+          "endingRateUpperBound": 0.0279,
+          "evalAppearances": 229,
+          "evalEndings": 2
+        },
+        "from": {
+          "fitAppearances": 80,
+          "fitEndings": 0,
+          "endingRateUpperBound": 0.0458,
+          "evalAppearances": 71,
+          "evalEndings": 2
+        },
+        "fucking": {
+          "fitAppearances": 86,
+          "fitEndings": 0,
+          "endingRateUpperBound": 0.0428,
+          "evalAppearances": 69,
+          "evalEndings": 1
+        },
+        "full": {
+          "fitAppearances": 44,
+          "fitEndings": 0,
+          "endingRateUpperBound": 0.0803,
+          "evalAppearances": 32,
+          "evalEndings": 0
+        },
+        "get": {
+          "fitAppearances": 29,
+          "fitEndings": 0,
+          "endingRateUpperBound": 0.117,
+          "evalAppearances": 34,
+          "evalEndings": 0
+        },
+        "give": {
+          "fitAppearances": 31,
+          "fitEndings": 0,
+          "endingRateUpperBound": 0.1103,
+          "evalAppearances": 28,
+          "evalEndings": 0
+        },
+        "going": {
+          "fitAppearances": 56,
+          "fitEndings": 1,
+          "endingRateUpperBound": 0.0945,
+          "evalAppearances": 44,
+          "evalEndings": 0
+        },
+        "have": {
+          "fitAppearances": 189,
+          "fitEndings": 4,
+          "endingRateUpperBound": 0.0531,
+          "evalAppearances": 236,
+          "evalEndings": 9
+        },
+        "hello": {
+          "fitAppearances": 35,
+          "fitEndings": 1,
+          "endingRateUpperBound": 0.1453,
+          "evalAppearances": 37,
+          "evalEndings": 2
+        },
+        "high": {
+          "fitAppearances": 25,
+          "fitEndings": 0,
+          "endingRateUpperBound": 0.1332,
+          "evalAppearances": 9,
+          "evalEndings": 0
+        },
+        "how": {
+          "fitAppearances": 366,
+          "fitEndings": 2,
+          "endingRateUpperBound": 0.0197,
+          "evalAppearances": 308,
+          "evalEndings": 1
+        },
+        "i": {
+          "fitAppearances": 784,
+          "fitEndings": 0,
+          "endingRateUpperBound": 0.0049,
+          "evalAppearances": 732,
+          "evalEndings": 0
+        },
+        "if": {
+          "fitAppearances": 223,
+          "fitEndings": 0,
+          "endingRateUpperBound": 0.0169,
+          "evalAppearances": 213,
+          "evalEndings": 0
+        },
+        "im": {
+          "fitAppearances": 93,
+          "fitEndings": 0,
+          "endingRateUpperBound": 0.0397,
+          "evalAppearances": 80,
+          "evalEndings": 0
+        },
+        "in": {
+          "fitAppearances": 444,
+          "fitEndings": 3,
+          "endingRateUpperBound": 0.0197,
+          "evalAppearances": 426,
+          "evalEndings": 5
+        },
+        "instead": {
+          "fitAppearances": 26,
+          "fitEndings": 0,
+          "endingRateUpperBound": 0.1287,
+          "evalAppearances": 20,
+          "evalEndings": 2
+        },
+        "is": {
+          "fitAppearances": 648,
+          "fitEndings": 6,
+          "endingRateUpperBound": 0.0201,
+          "evalAppearances": 581,
+          "evalEndings": 2
+        },
+        "it": {
+          "fitAppearances": 890,
+          "fitEndings": 91,
+          "endingRateUpperBound": 0.1239,
+          "evalAppearances": 980,
+          "evalEndings": 114
+        },
+        "its": {
+          "fitAppearances": 464,
+          "fitEndings": 0,
+          "endingRateUpperBound": 0.0082,
+          "evalAppearances": 412,
+          "evalEndings": 0
+        },
+        "just": {
+          "fitAppearances": 52,
+          "fitEndings": 0,
+          "endingRateUpperBound": 0.0688,
+          "evalAppearances": 47,
+          "evalEndings": 0
+        },
+        "let": {
+          "fitAppearances": 47,
+          "fitEndings": 0,
+          "endingRateUpperBound": 0.0756,
+          "evalAppearances": 52,
+          "evalEndings": 0
+        },
+        "lets": {
+          "fitAppearances": 230,
+          "fitEndings": 0,
+          "endingRateUpperBound": 0.0164,
+          "evalAppearances": 238,
+          "evalEndings": 0
+        },
+        "like": {
+          "fitAppearances": 1017,
+          "fitEndings": 11,
+          "endingRateUpperBound": 0.0193,
+          "evalAppearances": 986,
+          "evalEndings": 7
+        },
+        "little": {
+          "fitAppearances": 22,
+          "fitEndings": 0,
+          "endingRateUpperBound": 0.1487,
+          "evalAppearances": 4,
+          "evalEndings": 0
+        },
+        "live": {
+          "fitAppearances": 52,
+          "fitEndings": 0,
+          "endingRateUpperBound": 0.0688,
+          "evalAppearances": 47,
+          "evalEndings": 1
+        },
+        "long": {
+          "fitAppearances": 65,
+          "fitEndings": 2,
+          "endingRateUpperBound": 0.1054,
+          "evalAppearances": 44,
+          "evalEndings": 2
+        },
+        "looks": {
+          "fitAppearances": 28,
+          "fitEndings": 0,
+          "endingRateUpperBound": 0.1206,
+          "evalAppearances": 23,
+          "evalEndings": 1
+        },
+        "make": {
+          "fitAppearances": 114,
+          "fitEndings": 1,
+          "endingRateUpperBound": 0.048,
+          "evalAppearances": 137,
+          "evalEndings": 0
+        },
+        "maybe": {
+          "fitAppearances": 98,
+          "fitEndings": 0,
+          "endingRateUpperBound": 0.0377,
+          "evalAppearances": 138,
+          "evalEndings": 1
+        },
+        "more": {
+          "fitAppearances": 106,
+          "fitEndings": 7,
+          "endingRateUpperBound": 0.1301,
+          "evalAppearances": 114,
+          "evalEndings": 4
+        },
+        "much": {
+          "fitAppearances": 87,
+          "fitEndings": 4,
+          "endingRateUpperBound": 0.1123,
+          "evalAppearances": 80,
+          "evalEndings": 2
+        },
+        "multiple": {
+          "fitAppearances": 28,
+          "fitEndings": 0,
+          "endingRateUpperBound": 0.1206,
+          "evalAppearances": 37,
+          "evalEndings": 0
+        },
+        "my": {
+          "fitAppearances": 42,
+          "fitEndings": 0,
+          "endingRateUpperBound": 0.0838,
+          "evalAppearances": 40,
+          "evalEndings": 0
+        },
+        "need": {
+          "fitAppearances": 421,
+          "fitEndings": 2,
+          "endingRateUpperBound": 0.0172,
+          "evalAppearances": 425,
+          "evalEndings": 2
+        },
+        "new": {
+          "fitAppearances": 75,
+          "fitEndings": 0,
+          "endingRateUpperBound": 0.0487,
+          "evalAppearances": 65,
+          "evalEndings": 1
+        },
+        "not": {
+          "fitAppearances": 398,
+          "fitEndings": 20,
+          "endingRateUpperBound": 0.0763,
+          "evalAppearances": 341,
+          "evalEndings": 12
+        },
+        "of": {
+          "fitAppearances": 279,
+          "fitEndings": 0,
+          "endingRateUpperBound": 0.0136,
+          "evalAppearances": 306,
+          "evalEndings": 0
+        },
+        "on": {
+          "fitAppearances": 300,
+          "fitEndings": 8,
+          "endingRateUpperBound": 0.0517,
+          "evalAppearances": 272,
+          "evalEndings": 4
+        },
+        "one": {
+          "fitAppearances": 93,
+          "fitEndings": 4,
+          "endingRateUpperBound": 0.1054,
+          "evalAppearances": 96,
+          "evalEndings": 6
+        },
+        "only": {
+          "fitAppearances": 80,
+          "fitEndings": 4,
+          "endingRateUpperBound": 0.1216,
+          "evalAppearances": 105,
+          "evalEndings": 1
+        },
+        "or": {
+          "fitAppearances": 142,
+          "fitEndings": 0,
+          "endingRateUpperBound": 0.0263,
+          "evalAppearances": 133,
+          "evalEndings": 0
+        },
+        "other": {
+          "fitAppearances": 37,
+          "fitEndings": 0,
+          "endingRateUpperBound": 0.0941,
+          "evalAppearances": 41,
+          "evalEndings": 1
+        },
+        "our": {
+          "fitAppearances": 199,
+          "fitEndings": 0,
+          "endingRateUpperBound": 0.0189,
+          "evalAppearances": 177,
+          "evalEndings": 0
+        },
+        "please": {
+          "fitAppearances": 102,
+          "fitEndings": 4,
+          "endingRateUpperBound": 0.0965,
+          "evalAppearances": 107,
+          "evalEndings": 1
+        },
+        "real": {
+          "fitAppearances": 31,
+          "fitEndings": 0,
+          "endingRateUpperBound": 0.1103,
+          "evalAppearances": 24,
+          "evalEndings": 0
+        },
+        "really": {
+          "fitAppearances": 192,
+          "fitEndings": 1,
+          "endingRateUpperBound": 0.0289,
+          "evalAppearances": 141,
+          "evalEndings": 0
+        },
+        "same": {
+          "fitAppearances": 67,
+          "fitEndings": 4,
+          "endingRateUpperBound": 0.1437,
+          "evalAppearances": 76,
+          "evalEndings": 8
+        },
+        "say": {
+          "fitAppearances": 51,
+          "fitEndings": 1,
+          "endingRateUpperBound": 0.103,
+          "evalAppearances": 38,
+          "evalEndings": 1
+        },
+        "second": {
+          "fitAppearances": 25,
+          "fitEndings": 0,
+          "endingRateUpperBound": 0.1332,
+          "evalAppearances": 20,
+          "evalEndings": 1
+        },
+        "see": {
+          "fitAppearances": 369,
+          "fitEndings": 3,
+          "endingRateUpperBound": 0.0236,
+          "evalAppearances": 281,
+          "evalEndings": 8
+        },
+        "should": {
+          "fitAppearances": 495,
+          "fitEndings": 3,
+          "endingRateUpperBound": 0.0177,
+          "evalAppearances": 431,
+          "evalEndings": 2
+        },
+        "show": {
+          "fitAppearances": 63,
+          "fitEndings": 0,
+          "endingRateUpperBound": 0.0575,
+          "evalAppearances": 58,
+          "evalEndings": 1
+        },
+        "so": {
+          "fitAppearances": 689,
+          "fitEndings": 0,
+          "endingRateUpperBound": 0.0055,
+          "evalAppearances": 654,
+          "evalEndings": 1
+        },
+        "some": {
+          "fitAppearances": 75,
+          "fitEndings": 0,
+          "endingRateUpperBound": 0.0487,
+          "evalAppearances": 89,
+          "evalEndings": 0
+        },
+        "still": {
+          "fitAppearances": 48,
+          "fitEndings": 0,
+          "endingRateUpperBound": 0.0741,
+          "evalAppearances": 39,
+          "evalEndings": 0
+        },
+        "super": {
+          "fitAppearances": 88,
+          "fitEndings": 0,
+          "endingRateUpperBound": 0.0418,
+          "evalAppearances": 62,
+          "evalEndings": 1
+        },
+        "sure": {
+          "fitAppearances": 58,
+          "fitEndings": 3,
+          "endingRateUpperBound": 0.1414,
+          "evalAppearances": 90,
+          "evalEndings": 6
+        },
+        "tell": {
+          "fitAppearances": 26,
+          "fitEndings": 0,
+          "endingRateUpperBound": 0.1287,
+          "evalAppearances": 27,
+          "evalEndings": 0
+        },
+        "than": {
+          "fitAppearances": 35,
+          "fitEndings": 0,
+          "endingRateUpperBound": 0.0989,
+          "evalAppearances": 16,
+          "evalEndings": 0
+        },
+        "that": {
+          "fitAppearances": 549,
+          "fitEndings": 2,
+          "endingRateUpperBound": 0.0132,
+          "evalAppearances": 530,
+          "evalEndings": 2
+        },
+        "thats": {
+          "fitAppearances": 32,
+          "fitEndings": 0,
+          "endingRateUpperBound": 0.1072,
+          "evalAppearances": 25,
+          "evalEndings": 0
+        },
+        "the": {
+          "fitAppearances": 1782,
+          "fitEndings": 0,
+          "endingRateUpperBound": 0.0022,
+          "evalAppearances": 1714,
+          "evalEndings": 2
+        },
+        "then": {
+          "fitAppearances": 108,
+          "fitEndings": 0,
+          "endingRateUpperBound": 0.0343,
+          "evalAppearances": 122,
+          "evalEndings": 0
+        },
+        "these": {
+          "fitAppearances": 25,
+          "fitEndings": 0,
+          "endingRateUpperBound": 0.1332,
+          "evalAppearances": 20,
+          "evalEndings": 0
+        },
+        "they": {
+          "fitAppearances": 72,
+          "fitEndings": 0,
+          "endingRateUpperBound": 0.0507,
+          "evalAppearances": 79,
+          "evalEndings": 0
+        },
+        "think": {
+          "fitAppearances": 105,
+          "fitEndings": 2,
+          "endingRateUpperBound": 0.0668,
+          "evalAppearances": 126,
+          "evalEndings": 5
+        },
+        "this": {
+          "fitAppearances": 647,
+          "fitEndings": 68,
+          "endingRateUpperBound": 0.1311,
+          "evalAppearances": 622,
+          "evalEndings": 58
+        },
+        "those": {
+          "fitAppearances": 27,
+          "fitEndings": 0,
+          "endingRateUpperBound": 0.1246,
+          "evalAppearances": 30,
+          "evalEndings": 1
+        },
+        "to": {
+          "fitAppearances": 1313,
+          "fitEndings": 1,
+          "endingRateUpperBound": 0.0043,
+          "evalAppearances": 1335,
+          "evalEndings": 1
+        },
+        "try": {
+          "fitAppearances": 108,
+          "fitEndings": 0,
+          "endingRateUpperBound": 0.0343,
+          "evalAppearances": 95,
+          "evalEndings": 0
+        },
+        "understand": {
+          "fitAppearances": 132,
+          "fitEndings": 11,
+          "endingRateUpperBound": 0.1431,
+          "evalAppearances": 122,
+          "evalEndings": 13
+        },
+        "use": {
+          "fitAppearances": 127,
+          "fitEndings": 2,
+          "endingRateUpperBound": 0.0556,
+          "evalAppearances": 147,
+          "evalEndings": 2
+        },
+        "using": {
+          "fitAppearances": 63,
+          "fitEndings": 1,
+          "endingRateUpperBound": 0.0846,
+          "evalAppearances": 59,
+          "evalEndings": 1
+        },
+        "very": {
+          "fitAppearances": 52,
+          "fitEndings": 0,
+          "endingRateUpperBound": 0.0688,
+          "evalAppearances": 51,
+          "evalEndings": 0
+        },
+        "want": {
+          "fitAppearances": 255,
+          "fitEndings": 5,
+          "endingRateUpperBound": 0.0451,
+          "evalAppearances": 240,
+          "evalEndings": 1
+        },
+        "was": {
+          "fitAppearances": 61,
+          "fitEndings": 0,
+          "endingRateUpperBound": 0.0592,
+          "evalAppearances": 67,
+          "evalEndings": 0
+        },
+        "we": {
+          "fitAppearances": 1383,
+          "fitEndings": 1,
+          "endingRateUpperBound": 0.0041,
+          "evalAppearances": 1326,
+          "evalEndings": 0
+        },
+        "were": {
+          "fitAppearances": 88,
+          "fitEndings": 0,
+          "endingRateUpperBound": 0.0418,
+          "evalAppearances": 60,
+          "evalEndings": 0
+        },
+        "what": {
+          "fitAppearances": 262,
+          "fitEndings": 3,
+          "endingRateUpperBound": 0.0331,
+          "evalAppearances": 288,
+          "evalEndings": 3
+        },
+        "whats": {
+          "fitAppearances": 27,
+          "fitEndings": 0,
+          "endingRateUpperBound": 0.1246,
+          "evalAppearances": 14,
+          "evalEndings": 0
+        },
+        "when": {
+          "fitAppearances": 133,
+          "fitEndings": 0,
+          "endingRateUpperBound": 0.0281,
+          "evalAppearances": 117,
+          "evalEndings": 1
+        },
+        "where": {
+          "fitAppearances": 25,
+          "fitEndings": 0,
+          "endingRateUpperBound": 0.1332,
+          "evalAppearances": 25,
+          "evalEndings": 0
+        },
+        "which": {
+          "fitAppearances": 50,
+          "fitEndings": 0,
+          "endingRateUpperBound": 0.0714,
+          "evalAppearances": 55,
+          "evalEndings": 0
+        },
+        "whole": {
+          "fitAppearances": 29,
+          "fitEndings": 0,
+          "endingRateUpperBound": 0.117,
+          "evalAppearances": 29,
+          "evalEndings": 1
+        },
+        "why": {
+          "fitAppearances": 106,
+          "fitEndings": 2,
+          "endingRateUpperBound": 0.0662,
+          "evalAppearances": 118,
+          "evalEndings": 1
+        },
+        "will": {
+          "fitAppearances": 286,
+          "fitEndings": 0,
+          "endingRateUpperBound": 0.0133,
+          "evalAppearances": 260,
+          "evalEndings": 0
+        },
+        "with": {
+          "fitAppearances": 164,
+          "fitEndings": 0,
+          "endingRateUpperBound": 0.0229,
+          "evalAppearances": 212,
+          "evalEndings": 2
+        },
+        "without": {
+          "fitAppearances": 29,
+          "fitEndings": 0,
+          "endingRateUpperBound": 0.117,
+          "evalAppearances": 19,
+          "evalEndings": 0
+        },
+        "you": {
+          "fitAppearances": 543,
+          "fitEndings": 13,
+          "endingRateUpperBound": 0.0405,
+          "evalAppearances": 566,
+          "evalEndings": 14
+        },
+        "your": {
+          "fitAppearances": 28,
+          "fitEndings": 0,
+          "endingRateUpperBound": 0.1206,
+          "evalAppearances": 24,
+          "evalEndings": 0
+        },
+        "youre": {
+          "fitAppearances": 51,
+          "fitEndings": 0,
+          "endingRateUpperBound": 0.07,
+          "evalAppearances": 44,
+          "evalEndings": 0
+        }
+      },
+      "heldOutAppearances": 23990,
+      "heldOutEndings": 374,
+      "heldOutEndingRate": 0.01558982909545644
+    },
+    "he": {
+      "cases": 117,
+      "fitCases": 56,
+      "words": {
+        "איך": {
+          "fitAppearances": 36,
+          "fitEndings": 0,
+          "endingRateUpperBound": 0.0964,
+          "evalAppearances": 25,
+          "evalEndings": 0
+        },
+        "אנחנו": {
+          "fitAppearances": 27,
+          "fitEndings": 0,
+          "endingRateUpperBound": 0.1246,
+          "evalAppearances": 27,
+          "evalEndings": 0
+        },
+        "אני": {
+          "fitAppearances": 34,
+          "fitEndings": 0,
+          "endingRateUpperBound": 0.1015,
+          "evalAppearances": 48,
+          "evalEndings": 0
+        },
+        "את": {
+          "fitAppearances": 32,
+          "fitEndings": 0,
+          "endingRateUpperBound": 0.1072,
+          "evalAppearances": 33,
+          "evalEndings": 0
+        },
+        "זה": {
+          "fitAppearances": 66,
+          "fitEndings": 1,
+          "endingRateUpperBound": 0.081,
+          "evalAppearances": 47,
+          "evalEndings": 0
+        },
+        "נראה": {
+          "fitAppearances": 23,
+          "fitEndings": 0,
+          "endingRateUpperBound": 0.1431,
+          "evalAppearances": 19,
+          "evalEndings": 0
+        }
+      },
+      "heldOutAppearances": 199,
+      "heldOutEndings": 0,
+      "heldOutEndingRate": 0.0
+    },
+    "ru": {
+      "cases": 424,
+      "fitCases": 204,
+      "words": {
+        "будет": {
+          "fitAppearances": 22,
+          "fitEndings": 0,
+          "endingRateUpperBound": 0.1487,
+          "evalAppearances": 17,
+          "evalEndings": 1
+        },
+        "бъдам": {
+          "fitAppearances": 44,
+          "fitEndings": 0,
+          "endingRateUpperBound": 0.0803
+        },
+        "в": {
+          "fitAppearances": 103,
+          "fitEndings": 0,
+          "endingRateUpperBound": 0.036,
+          "evalAppearances": 62,
+          "evalEndings": 0
+        },
+        "да": {
+          "fitAppearances": 123,
+          "fitEndings": 1,
+          "endingRateUpperBound": 0.0446,
+          "evalAppearances": 193,
+          "evalEndings": 0
+        },
+        "е": {
+          "fitAppearances": 51,
+          "fitEndings": 1,
+          "endingRateUpperBound": 0.103,
+          "evalAppearances": 55,
+          "evalEndings": 0
+        },
+        "есть": {
+          "fitAppearances": 25,
+          "fitEndings": 0,
+          "endingRateUpperBound": 0.1332,
+          "evalAppearances": 19,
+          "evalEndings": 0
+        },
+        "за": {
+          "fitAppearances": 25,
+          "fitEndings": 0,
+          "endingRateUpperBound": 0.1332,
+          "evalAppearances": 8,
+          "evalEndings": 1
+        },
+        "и": {
+          "fitAppearances": 106,
+          "fitEndings": 0,
+          "endingRateUpperBound": 0.035,
+          "evalAppearances": 98,
+          "evalEndings": 1
+        },
+        "как": {
+          "fitAppearances": 54,
+          "fitEndings": 1,
+          "endingRateUpperBound": 0.0977,
+          "evalAppearances": 164,
+          "evalEndings": 0
+        },
+        "мы": {
+          "fitAppearances": 50,
+          "fitEndings": 0,
+          "endingRateUpperBound": 0.0714,
+          "evalAppearances": 78,
+          "evalEndings": 0
+        },
+        "на": {
+          "fitAppearances": 59,
+          "fitEndings": 0,
+          "endingRateUpperBound": 0.0611,
+          "evalAppearances": 50,
+          "evalEndings": 0
+        },
+        "насколько": {
+          "fitAppearances": 22,
+          "fitEndings": 0,
+          "endingRateUpperBound": 0.1487,
+          "evalAppearances": 25,
+          "evalEndings": 0
+        },
+        "не": {
+          "fitAppearances": 125,
+          "fitEndings": 2,
+          "endingRateUpperBound": 0.0565,
+          "evalAppearances": 82,
+          "evalEndings": 3
+        },
+        "но": {
+          "fitAppearances": 27,
+          "fitEndings": 0,
+          "endingRateUpperBound": 0.1246,
+          "evalAppearances": 23,
+          "evalEndings": 0
+        },
+        "очень": {
+          "fitAppearances": 41,
+          "fitEndings": 0,
+          "endingRateUpperBound": 0.0857,
+          "evalAppearances": 53,
+          "evalEndings": 0
+        },
+        "с": {
+          "fitAppearances": 34,
+          "fitEndings": 0,
+          "endingRateUpperBound": 0.1015,
+          "evalAppearances": 21,
+          "evalEndings": 0
+        },
+        "са": {
+          "fitAppearances": 109,
+          "fitEndings": 0,
+          "endingRateUpperBound": 0.034,
+          "evalAppearances": 4,
+          "evalEndings": 0
+        },
+        "се": {
+          "fitAppearances": 35,
+          "fitEndings": 0,
+          "endingRateUpperBound": 0.0989,
+          "evalAppearances": 27,
+          "evalEndings": 0
+        },
+        "си": {
+          "fitAppearances": 429,
+          "fitEndings": 3,
+          "endingRateUpperBound": 0.0204,
+          "evalAppearances": 188,
+          "evalEndings": 0
+        },
+        "то": {
+          "fitAppearances": 23,
+          "fitEndings": 0,
+          "endingRateUpperBound": 0.1431,
+          "evalAppearances": 19,
+          "evalEndings": 0
+        },
+        "това": {
+          "fitAppearances": 64,
+          "fitEndings": 1,
+          "endingRateUpperBound": 0.0833,
+          "evalAppearances": 24,
+          "evalEndings": 4
+        },
+        "том": {
+          "fitAppearances": 44,
+          "fitEndings": 0,
+          "endingRateUpperBound": 0.0803,
+          "evalAppearances": 1,
+          "evalEndings": 0
+        },
+        "ты": {
+          "fitAppearances": 51,
+          "fitEndings": 1,
+          "endingRateUpperBound": 0.103,
+          "evalAppearances": 54,
+          "evalEndings": 0
+        },
+        "че": {
+          "fitAppearances": 33,
+          "fitEndings": 0,
+          "endingRateUpperBound": 0.1043,
+          "evalAppearances": 22,
+          "evalEndings": 0
+        },
+        "числе": {
+          "fitAppearances": 42,
+          "fitEndings": 0,
+          "endingRateUpperBound": 0.0838
+        },
+        "что": {
+          "fitAppearances": 54,
+          "fitEndings": 1,
+          "endingRateUpperBound": 0.0977,
+          "evalAppearances": 63,
+          "evalEndings": 0
+        },
+        "чтото": {
+          "fitAppearances": 59,
+          "fitEndings": 1,
+          "endingRateUpperBound": 0.09,
+          "evalAppearances": 56,
+          "evalEndings": 0
+        },
+        "это": {
+          "fitAppearances": 115,
+          "fitEndings": 2,
+          "endingRateUpperBound": 0.0612,
+          "evalAppearances": 141,
+          "evalEndings": 4
+        },
+        "этот": {
+          "fitAppearances": 26,
+          "fitEndings": 0,
+          "endingRateUpperBound": 0.1287,
+          "evalAppearances": 16,
+          "evalEndings": 0
+        },
+        "я": {
+          "fitAppearances": 89,
+          "fitEndings": 0,
+          "endingRateUpperBound": 0.0414,
+          "evalAppearances": 97,
+          "evalEndings": 1
+        }
+      },
+      "heldOutAppearances": 1660,
+      "heldOutEndings": 15,
+      "heldOutEndingRate": 0.009036144578313253
+    }
+  },
+  "union": [
+    "a",
+    "able",
+    "add",
+    "additional",
+    "adjustment",
+    "all",
+    "also",
+    "always",
+    "and",
+    "another",
+    "any",
+    "are",
+    "as",
+    "at",
+    "based",
+    "basically",
+    "be",
+    "because",
+    "but",
+    "by",
+    "can",
+    "commit",
+    "create",
+    "current",
+    "currently",
+    "didnt",
+    "display",
+    "do",
+    "does",
+    "doesnt",
+    "dont",
+    "every",
+    "exactly",
+    "find",
+    "first",
+    "fix",
+    "for",
+    "from",
+    "fucking",
+    "full",
+    "get",
+    "give",
+    "going",
+    "have",
+    "hello",
+    "high",
+    "how",
+    "i",
+    "if",
+    "im",
+    "in",
+    "instead",
+    "is",
+    "it",
+    "its",
+    "just",
+    "let",
+    "lets",
+    "like",
+    "little",
+    "live",
+    "long",
+    "looks",
+    "make",
+    "maybe",
+    "more",
+    "much",
+    "multiple",
+    "my",
+    "need",
+    "new",
+    "not",
+    "of",
+    "on",
+    "one",
+    "only",
+    "or",
+    "other",
+    "our",
+    "please",
+    "real",
+    "really",
+    "same",
+    "say",
+    "second",
+    "see",
+    "should",
+    "show",
+    "so",
+    "some",
+    "still",
+    "super",
+    "sure",
+    "tell",
+    "than",
+    "that",
+    "thats",
+    "the",
+    "then",
+    "these",
+    "they",
+    "think",
+    "this",
+    "those",
+    "to",
+    "try",
+    "understand",
+    "use",
+    "using",
+    "very",
+    "want",
+    "was",
+    "we",
+    "were",
+    "what",
+    "whats",
+    "when",
+    "where",
+    "which",
+    "whole",
+    "why",
+    "will",
+    "with",
+    "without",
+    "you",
+    "your",
+    "youre",
+    "будет",
+    "бъдам",
+    "в",
+    "да",
+    "е",
+    "есть",
+    "за",
+    "и",
+    "как",
+    "мы",
+    "на",
+    "насколько",
+    "не",
+    "но",
+    "очень",
+    "с",
+    "са",
+    "се",
+    "си",
+    "то",
+    "това",
+    "том",
+    "ты",
+    "че",
+    "числе",
+    "что",
+    "чтото",
+    "это",
+    "этот",
+    "я",
+    "איך",
+    "אנחנו",
+    "אני",
+    "את",
+    "זה",
+    "נראה"
+  ]
+}

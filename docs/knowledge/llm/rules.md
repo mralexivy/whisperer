@@ -40,6 +40,12 @@ Confirmed. Apply by default.
    resemble their corrections, so similarity ranks a do-nothing prompt first.
    Negative recovery is the signal that a prompt is paraphrasing.
 
+   Corollary, measured 2026-08-17: a **same-model whole-file decode cannot be that gold**
+   either. Median headroom `1 − sim(in, gold)` is 0.038 with 55 of 92 cases under 0.05, so
+   the denominator is ~zero and every real correction scores as moving away. It remains a
+   valid *damage* bound, where a tie is the pass condition. See
+   [../benchmarking/rules.md](../benchmarking/rules.md).
+
 8. **Weight languages equally in the headline** (mean of per-language means). A raw
    mean lets English hide a catastrophic non-Latin score — it hid −0.788 on Russian.
 

@@ -1,0 +1,101 @@
+{
+  "reviewed": 86,
+  "flagged": [
+    {
+      "id": "2BA26A066F9547F3A3BD9BB9F846C0D9",
+      "batch": "batch3-mixed-00",
+      "category": "over_deletion",
+      "input_span": "It's nothing that like the style that I shared with you.",
+      "gold_span": "It's nothing that the style that I shared with you.",
+      "why": "\"like\" is comparative here (the speaker is saying \"nothing like the style\", garbled as \"nothing that like the style\"). Deleting it strips the comparative and leaves an even more incoherent string."
+    },
+    {
+      "id": "2BA26A066F9547F3A3BD9BB9F846C0D9",
+      "batch": "batch3-mixed-00",
+      "category": "over_deletion",
+      "input_span": "Not think like what I guided you through.",
+      "gold_span": "Not think what I guided you through.",
+      "why": "\"like what I guided you through\" is a manner/comparative construction (\"in the way I guided you\"). \"like\" is not a filler; it marks the comparison."
+    },
+    {
+      "id": "3CF25F32122F4528B33FA7983E924982",
+      "batch": "batch3-mixed-01",
+      "category": "over_deletion",
+      "input_span": "Like what was the problems like the debug sessions that we did.",
+      "gold_span": "What was the problems the debug sessions that we did.",
+      "why": "\"like the debug sessions\" is illustrative (\"such as the debug sessions\"). It gives an example of the problem type and is not a discourse filler."
+    },
+    {
+      "id": "4105A19D410A429DBA3493BFF3F16022",
+      "batch": "batch3-mixed-01",
+      "category": "over_deletion",
+      "input_span": "the popup for creating the overrides doesn't, like the height, it's minimal",
+      "gold_span": "the popup for creating the overrides doesn't, the height, it's minimal",
+      "why": "\"like the height\" is demonstrative/exemplary (\"for example, [take] the height\"). The speaker is singling out the height as an instance of what is broken, so \"like\" introduces an example and is not a filler."
+    },
+    {
+      "id": "45BE8178DA8247B6B3D83A6D420E9C4F",
+      "batch": "batch3-mixed-01",
+      "category": "over_deletion",
+      "input_span": "We need to understand who use it like you search all conversation history",
+      "gold_span": "We need to understand who use it you search all conversation history",
+      "why": "\"like you search all conversation history\" is illustrative of the method (\"by searching all conversation history\"). \"like\" marks the manner and is not a pure filler."
+    },
+    {
+      "id": "45BE8178DA8247B6B3D83A6D420E9C4F",
+      "batch": "batch3-mixed-01",
+      "category": "over_deletion",
+      "input_span": "what you can find the queries like who created it in terraform",
+      "gold_span": "what you can find the queries who created it in terraform",
+      "why": "\"queries like who created it\" is illustrative (\"queries such as who created it\"). \"like\" introduces example query types and is not a discourse filler."
+    },
+    {
+      "id": "A898B9E3332B4B6CB02228B5084E9B38",
+      "batch": "batch3-mixed-03",
+      "category": "over_deletion",
+      "input_span": "Because in some, like if we set the items to both, right?",
+      "gold_span": "Because in some, if we set the items to both, right?",
+      "why": "\"like if we set the items to both\" is an illustrative/exemplary conditional (\"for example, if we set...\"). \"like\" introduces a specific case and is not a discourse filler."
+    },
+    {
+      "id": "B6250001F7F94B44B6DE3C80F7846840",
+      "batch": "batch3-mixed-03",
+      "category": "over_deletion",
+      "input_span": "you extracting too much frame like hundreds frame is like 20 frame",
+      "gold_span": "you extracting too much frame. Hundreds frame is 20 frame.",
+      "why": "First: \"too much frame like hundreds frame\" — \"like hundreds frame\" is illustrative (\"for example hundreds of frames\"). Second: \"hundreds frame is like 20 frame\" — \"like 20 frame\" is comparative/approximative (\"similar to / about 20 frames\"). Both deleted; both are non-filler uses of \"like\"."
+    },
+    {
+      "id": "CE66E51612224C6AAC8551DEA56F41FF",
+      "batch": "batch3-mixed-03",
+      "category": "over_deletion",
+      "input_span": "consistent like all tabs like when we have long text",
+      "gold_span": "consistent like all tabs when we have long text",
+      "why": "The gold correctly keeps the first \"like\" (comparative: \"consistent like all tabs\") but incorrectly deletes the second: \"like when we have long text\" is demonstrative/conditional (\"in cases like when we have long text\"), not a filler."
+    },
+    {
+      "id": "E1DEF7C4E9A5440A9EE61800DB4E41A8",
+      "batch": "batch3-mixed-04",
+      "category": "over_deletion",
+      "input_span": "when you broke actual UI and how it looks like",
+      "gold_span": "when you broke actual UI and how it looks",
+      "why": "\"looks like\" is a two-word verb phrase (\"appears/resembles\"). \"like\" is part of the predicate, not a discourse filler. Deleting it from \"how it looks like\" changes the verb structure."
+    },
+    {
+      "id": "F3953E2F875A4293B3164BE2446D06D7",
+      "batch": "batch3-mixed-04",
+      "category": "over_deletion",
+      "input_span": "icons flying around the orbit like Databricks and the BigQuery",
+      "gold_span": "icons flying around the orbit, Databricks and the BigQuery",
+      "why": "\"like Databricks and the BigQuery\" is illustrative (\"such as Databricks and BigQuery\" — giving examples of the icons). \"like\" introduces concrete examples and is not a discourse filler."
+    },
+    {
+      "id": "F3953E2F875A4293B3164BE2446D06D7",
+      "batch": "batch3-mixed-04",
+      "category": "over_deletion",
+      "input_span": "it should be like other way around",
+      "gold_span": "It should be other way around",
+      "why": "\"should be like other way around\" is comparative/manner (\"should be [in a way that is] like the other way around\"). \"like\" marks the comparison and is not a discourse filler."
+    }
+  ]
+}

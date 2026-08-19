@@ -72,6 +72,48 @@ This cost a whole benchmark run: selecting multilingual test fixtures by the `la
 column produced four English chunks and one each of Hebrew and Russian, all mislabelled,
 and the "multilingual" comparison it fed was effectively an English-only one.
 
+### The scale of the mislabelling, measured (2026-08-17)
+
+The polish benchmark measured it over the whole corpus rather than a handful of fixtures.
+`ZLANGUAGE` declares **151 Hebrew recordings, of which only ~10 contain any Hebrew**. The
+golden set inherits the same field — `GoldenEntry.language` is copied from the database row,
+so its `he = 93` is likewise ~10 real Hebrew and ~83 English or Russian speech that happened
+to be routed through the Hebrew model. A "Hebrew" column built on it measures mostly English.
+
+What the field actually records is **which model the audio was routed to**. That is a useful
+fact about the router and a useless one about the speech, and the two are only correlated
+when detection was right — which is the thing a benchmark is usually trying to measure.
+
+The replacement is `PolishBenchmarkTests.detectedLanguage(of:)`: majority-by-word over
+`ScriptAnalyzer.scriptFamilies(in:)`, `mixed` when nothing holds a majority. Majority by
+*word* rather than by character, matching `ProtectionDetector.dominantFamily`, so one
+borrowed Latin technical term cannot relabel a Hebrew utterance.
+
+## Whisper's language routing is not stable between a streaming and a whole-file decode
+
+Same audio, same model, same decode params, differing only in windowing — and the two land
+in different languages on **22 of 400 recordings (~5.5%)** in the golden set. 21 are English
+speech whose whole-file `goldenTranscript` came back in Russian, one came back Bulgarian,
+one went Russian → English.
+
+This is not a polishing result and not a transcription defect that shows up in normal use;
+it is a property of running language detection over a different amount of audio. It matters
+because the whole-file decode is used as a *reference* (see `GoldenSet.swift`), and a
+reference in another language is a **translation of the input**: WER against it is ~1.0 by
+construction, on every arm, however good the thing being measured was.
+
+Measured cost of not excluding those rows, on the Russian column of the polish benchmark:
+
+| | mean WER | median WER |
+|---|---|---|
+| including cross-language references | 0.6566 | 1.0000 |
+| excluding them | 0.0215 | 0.0000 |
+
+The metric inverted — Russian went from the corpus's worst-scoring language to its best. The
+exclusion applies to WER only. Metrics that never read the reference (script drift, digit and
+URL preservation) still run over every row, because a mistranslated reference must not be
+allowed to excuse damage.
+
 ## Encoder cost on largeTurboQ5: ANE is a flat ~0.57s floor; audio_ctx breaks it (measured 2026-08-15)
 
 Measured by `WhispererTests/EagerStreamEncoderBenchmarkTests` (Phase 0b), M2 Pro, Debug,

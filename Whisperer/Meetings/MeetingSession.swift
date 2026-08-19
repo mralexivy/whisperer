@@ -32,7 +32,35 @@ class MeetingSession: ObservableObject {
     @Published var notes: [MeetingNote] = []
     @Published var isRecording: Bool = false
     @Published var elapsedSeconds: Double = 0
-    @Published var livePreviewText: String = ""
+
+    /// Backing store for `livePreviewText`. Private so every write goes through the editor
+    /// below; `@Published` on it is what still drives `objectWillChange` for the views, which
+    /// read the computed property.
+    @Published private var livePreviewStorage: String = ""
+
+    /// The not-yet-committed tail, written by `AppState`'s preview callbacks at the transcriber's
+    /// ~300–500 ms cadence and rendered under the open card.
+    ///
+    /// The setter is the streaming contract's live half: the tail is polished by the *same*
+    /// editor as everything else, minus list reflow. Nothing here restores punctuation, respells
+    /// a word from context or touches grammar — the deterministic editor has no such pass — so
+    /// the conservative subset falls out of the pipeline rather than needing a second one. It
+    /// matters that live and committed text agree: a filler the card drops but the tail keeps
+    /// would flicker back into view every time the preview refreshed.
+    ///
+    /// This one stays on the main actor, unlike the batch pass in `applyEditor`. A property
+    /// setter cannot await, so hopping would mean the write lands some time after the caller
+    /// returns — and the preview is a *replacement*, not an append, so two 400 ms callbacks
+    /// completing out of order would show older text than the one before it. The work is one
+    /// utterance-sized graph, not a whole meeting, and it no longer pays the quadratic
+    /// `index(of:)` scan that made it grow with tail length.
+    var livePreviewText: String {
+        get { livePreviewStorage }
+        set {
+            let trimmed = newValue.trimmingCharacters(in: .whitespacesAndNewlines)
+            livePreviewStorage = trimmed.isEmpty ? "" : polishUtterance(trimmed)
+        }
+    }
 
     // Accumulated text for the current in-progress segment (dark committed text).
     // Grows as chunks land; flushed to a MeetingSegment on the rules below.
@@ -96,6 +124,115 @@ class MeetingSession: ObservableObject {
     /// interrupted session(s)" on the next launch.
     private var isStarting = false
 
+    // MARK: - Deterministic editor
+
+    /// The two configurations of the shared editor this session runs.
+    ///
+    /// Built once per recording rather than per chunk: `AliasEngine` compiles the user dictionary
+    /// plus the shipped lexicon into a table at init, and the live tail alone would rebuild it
+    /// two or three times a second. A dictionary entry added mid-meeting is therefore picked up
+    /// at the next start, which is the same staleness the meeting's own model choice has.
+    ///
+    /// They differ only in `formatsLists`, which is the live-versus-authoritative seam:
+    /// enumerations routinely straddle a VAD chunk or a diarizer turn, so reflowing one
+    /// mid-stream would number half a list here and restart the numbering there. The card pass
+    /// is the first point where the whole paragraph exists at once.
+    private var utteranceEditor: DeterministicPolisher?
+    private var cardEditor: DeterministicPolisher?
+
+    /// The chunks that built the open card, so the card pass can read the silence between them.
+    ///
+    /// Appended only by `accumulate` and cleared by every other write to `currentSegmentText` —
+    /// a dedupe, a carried remainder or a reset all leave the text no longer describable by these
+    /// chunks. `chunksMatching(_:)` re-checks that anyway before the pauses are used, because a
+    /// pause keyed to the wrong join would end a sentence in the middle of one.
+    private var currentSegmentChunks: [DeterministicPolisher.Chunk] = []
+
+    private func makeEditors() {
+        let entries = DictionaryManager.shared.entries
+        // The per-utterance pass does not close the last sentence: its text ends where the VAD cut,
+        // and only the silence carried by the *next* chunk says whether the speaker finished there.
+        // The card pass below has that silence and makes the call.
+        utteranceEditor = DeterministicPolisher.forTranscript(dictionaryEntries: entries,
+                                                              formatsLists: false,
+                                                              terminatesUtteranceEnd: false)
+        cardEditor = DeterministicPolisher.forTranscript(dictionaryEntries: entries,
+                                                         formatsLists: true)
+    }
+
+    /// Mid-stream pass: every utterance as it arrives, and the live tail.
+    ///
+    /// Behind `PolishFeatureFlags` while it is experimental. Meetings shipped with no polishing at
+    /// all, so "off" here means returning the argument untouched — not a reduced pass.
+    private func polishUtterance(_ text: String) -> String {
+        guard PolishFeatureFlags.isFastPolishEnabled else { return text }
+        if utteranceEditor == nil { makeEditors() }
+        guard let editor = utteranceEditor else { return text }
+        let polished = editor.polish(text: text).text
+        // An empty render would mean the editor deleted an entire utterance — it has no rule that
+        // can, but dropping speech is the one failure worth a guard rather than a test.
+        return polished.isEmpty ? text : polished
+    }
+
+    /// Authoritative pass: once per card, at the endpoint, with list reflow on.
+    ///
+    /// This is the pass that gets the pauses. A card is several VAD chunks joined, and the gaps
+    /// between them are where the speaker stopped — the only sentence-boundary evidence that
+    /// survives a backend with no per-word timings at all.
+    private func polishCard(_ text: String) -> String {
+        guard PolishFeatureFlags.isFastPolishEnabled else { return text }
+        if cardEditor == nil { makeEditors() }
+        guard let editor = cardEditor else { return text }
+        guard let chunks = chunksMatching(text) else { return Self.polishCard(text, with: editor) }
+        let polished = editor.polish(chunks: chunks).text
+        return polished.isEmpty ? text : polished
+    }
+
+    /// The open card's chunks, but only when they still join to exactly `text`.
+    ///
+    /// A card is often committed as a *prefix* of the open text — `closeSegment` carries a trailing
+    /// incomplete sentence forward — and the dedupe path rewrites the text outright. Both leave the
+    /// chunk list describing something else, so this declines rather than guessing, and the card is
+    /// polished from the string with no acoustic signal. Losing the signal is a smaller error than
+    /// applying it to the wrong join.
+    private func chunksMatching(_ text: String) -> [DeterministicPolisher.Chunk]? {
+        guard currentSegmentChunks.count > 1 else { return nil }
+        let joined = currentSegmentChunks.map(\.text).joined(separator: " ")
+        guard Self.whitespaceCollapsed(joined) == Self.whitespaceCollapsed(text) else { return nil }
+        return currentSegmentChunks
+    }
+
+    private static func whitespaceCollapsed(_ text: String) -> String {
+        text.split(whereSeparator: \.isWhitespace).joined(separator: " ")
+    }
+
+    /// The card pass with the editor handed in, so it can run off the main actor.
+    ///
+    /// Same rule as `polishUtterance`: an empty render would mean the editor deleted a whole
+    /// card, which it has no rule that can, but dropping speech is worth a guard.
+    private nonisolated static func polishCard(_ text: String,
+                                               with editor: DeterministicPolisher) -> String {
+        let polished = editor.polish(text: text).text
+        return polished.isEmpty ? text : polished
+    }
+
+    /// The batch card pass. Pure, so `applyEditor` can hand it to a detached task.
+    private nonisolated static func polishAll(_ segments: [MeetingSegment],
+                                              with editor: DeterministicPolisher)
+        -> (segments: [MeetingSegment], rewritten: Int) {
+        var working = segments
+        var rewritten = 0
+        for index in working.indices {
+            let original = working[index].text
+            let polished = polishCard(original, with: editor)
+            guard polished != original else { continue }
+            if working[index].rawText == nil { working[index].rawText = original }
+            working[index].text = polished
+            rewritten += 1
+        }
+        return (working, rewritten)
+    }
+
     // MARK: - Start
 
     func startRecording(title: String, surface: MeetingLiveSurface) async {
@@ -123,6 +260,7 @@ class MeetingSession: ObservableObject {
         notes = []
         livePreviewText = ""
         currentSegmentText = ""
+        currentSegmentChunks = []
         currentSegmentStartTimestamp = 0
         lastChunkEndTimestamp = 0
         elapsedSeconds = 0
@@ -132,6 +270,7 @@ class MeetingSession: ObservableObject {
         liveSpeakerName = "Speaker 1"
         hasSpeakerSignal = false
         speakerNames = [:]
+        makeEditors()
 
         let language = await AppState.shared.selectedLanguage.rawValue
         let model = await AppState.shared.selectedModel.rawValue
@@ -172,12 +311,14 @@ class MeetingSession: ObservableObject {
             .joined(separator: " ")
         if !tail.isEmpty {
             currentSegmentText = tail
+            currentSegmentChunks = []
             // elapsedSeconds is the wall-clock display counter; lastChunkEndTimestamp is the
             // audio clock. Take the later so the final card reaches the end of the recording
             // whichever one is ahead.
             closeSegment(endTimestamp: max(lastChunkEndTimestamp, elapsedSeconds), policy: .commitAll)
         }
         currentSegmentText = ""
+        currentSegmentChunks = []
         livePreviewText = ""
 
         // Pending sidecar fully handled by the final flush above — clear for safety.
@@ -243,6 +384,12 @@ class MeetingSession: ObservableObject {
                         segmentsForSummary = await MeetingTranscriptRefiner.shared.run(
                             meetingID: id, segments: finalSegments
                         )
+                        // The refiner replaces the text the per-chunk editor already polished, so
+                        // the editor has to run again on what came back. Order, not preference:
+                        // a second Whisper decode is better evidence than any text-only pass, so
+                        // the editor works on the refiner's output rather than defending its own.
+                        segmentsForSummary = await self.applyEditor(to: segmentsForSummary,
+                                                                    meetingID: id)
                         self.applyRefined(segmentsForSummary, meetingID: id)
                     }
                 }
@@ -296,6 +443,7 @@ class MeetingSession: ObservableObject {
         // onNewChunk guards on `meetingID != nil`. Clearing it here would drop the tail chunk.
         // The next startRecording() call resets meetingID before the CoreData round-trip.
         currentSegmentText = ""
+        currentSegmentChunks = []
         livePreviewText = ""
     }
 
@@ -335,6 +483,48 @@ class MeetingSession: ObservableObject {
         segments = refined
     }
 
+    /// Runs the card editor over a re-transcribed transcript, persisting and broadcasting the
+    /// result the way the refiner broadcasts its own.
+    ///
+    /// The write-back is not optional bookkeeping. `MeetingTranscriptRefiner` has already stored
+    /// its output and posted `.meetingSegmentsDidRefine`, and `MeetingDetailView` renders what
+    /// that notification carried — leaving the polish in memory only would show the unpolished
+    /// copy in the detail view and persist it as the transcript of record.
+    ///
+    /// `rawText` follows the refiner's convention: filled with the pre-edit text only if nothing
+    /// has claimed it yet, so the Polished/Original toggle keeps showing the true raw ASR rather
+    /// than an intermediate.
+    ///
+    /// The polish itself runs **off** the main actor. This is the whole-transcript pass — every
+    /// segment of a finished meeting, hundreds of them, each a full protect/alias/normalize/
+    /// format cycle — and running it inline on `@MainActor` froze the UI for as long as it took.
+    /// `DeterministicPolisher` and `TokenGraph` are both `Sendable` and read nothing but their
+    /// argument, so the loop moves wholesale; only the write-back needs the actor, and this
+    /// function is already back on it after the `await`.
+    ///
+    /// The live per-utterance path stays on the main actor deliberately — see `livePreviewText`.
+    private func applyEditor(to segments: [MeetingSegment], meetingID id: UUID) async -> [MeetingSegment] {
+        guard PolishFeatureFlags.isFastPolishEnabled else { return segments }
+        if cardEditor == nil { makeEditors() }
+        guard let editor = cardEditor else { return segments }
+
+        let outcome = await Task.detached(priority: .utility) { [segments] in
+            Self.polishAll(segments, with: editor)
+        }.value
+
+        let working = outcome.segments
+        let rewritten = outcome.rewritten
+        guard rewritten > 0 else { return segments }
+
+        await MeetingManager.shared.updateSegments(meetingID: id, segments: working)
+        NotificationCenter.default.post(
+            name: .meetingSegmentsDidRefine, object: id, userInfo: ["segments": working]
+        )
+        Logger.info("Meeting editor: \(rewritten)/\(working.count) refined segment(s) polished",
+                    subsystem: .transcription)
+        return working
+    }
+
     func cancelRecording() async {
         guard isRecording, let id = meetingID else { return }
         isRecording = false
@@ -343,6 +533,7 @@ class MeetingSession: ObservableObject {
         stopElapsedTimer()
         livePreviewText = ""
         currentSegmentText = ""
+        currentSegmentChunks = []
         currentSegmentStartTimestamp = 0
         lastChunkEndTimestamp = 0
         currentSpeakerIndex = 0
@@ -383,6 +574,7 @@ class MeetingSession: ObservableObject {
         stopElapsedTimer()
         livePreviewText = ""
         currentSegmentText = ""
+        currentSegmentChunks = []
         currentSegmentStartTimestamp = 0
         lastChunkEndTimestamp = 0
         currentSpeakerIndex = 0
@@ -474,6 +666,17 @@ class MeetingSession: ObservableObject {
         // after isRecording=false (during stop drain) still accumulates.
         guard !trimmed.isEmpty, meetingID != nil else { return }
 
+        // The editor, per utterance, on arrival — the same `DeterministicPolisher` call dictation
+        // makes at its VAD endpoint in `AppState.applyLLMPostProcessing`, with the same dictionary
+        // behind it. Running it here rather than at stop is what keeps the end-of-meeting critical
+        // path down to the last utterance plus artifact synthesis, and it means the card text, the
+        // crash sidecar and the tail-overlap dedupe all describe the same spelling of the words.
+        //
+        // Per utterance is deliberately not the whole story: two chunks polished separately can
+        // still leave a duplicate or a filler straddling the join. `polishCard` catches that when
+        // the paragraph closes.
+        let utterance = polishUtterance(trimmed)
+
         livePreviewText = ""  // chunk committed — clear the live tail
 
         // Clamp: an out-of-order or overlapping span would otherwise produce a segment
@@ -492,7 +695,10 @@ class MeetingSession: ObservableObject {
             if currentSegmentText.isEmpty { currentSegmentStartTimestamp = chunkStart }
         }
 
-        currentSegmentText += currentSegmentText.isEmpty ? trimmed : " " + trimmed
+        currentSegmentText += currentSegmentText.isEmpty ? utterance : " " + utterance
+        currentSegmentChunks.append(DeterministicPolisher.Chunk(text: utterance,
+                                                                start: chunkStart,
+                                                                end: chunkEnd))
         lastChunkEndTimestamp = chunkEnd
 
         // Persist accumulated text so it survives a crash before the next flush.
@@ -544,7 +750,11 @@ class MeetingSession: ObservableObject {
         let unique = previous.isEmpty
             ? currentSegmentText
             : VADSegmenter.deduplicateOverlap(previousText: previous, newText: currentSegmentText)
-        currentSegmentText = unique.trimmingCharacters(in: .whitespacesAndNewlines)
+        let deduped = unique.trimmingCharacters(in: .whitespacesAndNewlines)
+        // Only the dedupe invalidates the chunks, and it usually removes nothing. Clearing
+        // unconditionally would cost the tail card its pauses on every meeting.
+        if deduped != currentSegmentText { currentSegmentChunks = [] }
+        currentSegmentText = deduped
         guard !currentSegmentText.isEmpty else {
             MeetingPendingStore.clear(meetingID: id)
             return
@@ -618,7 +828,17 @@ class MeetingSession: ObservableObject {
                                carrying remainder: String?, from remainderStart: Double) {
         guard let id = meetingID else { return }
 
-        let pieces = Self.splitByDuration(text: text, start: start, end: end, cap: maxSegmentDuration)
+        // Authoritative pass. A card is a meeting's endpoint: the paragraph is complete, nothing
+        // else will be appended to it, and it is the first point where an enumeration spread over
+        // several chunks is whole. Idempotent over the per-utterance pass — the same edits are
+        // simply not proposed a second time — so the only new work it does is the cross-chunk
+        // duplicate and the list reflow.
+        //
+        // Before the split, not after: `splitByDuration` apportions the span by character share,
+        // and pieces cut from unpolished text would carry timings computed from characters the
+        // card no longer contains.
+        let polished = polishCard(text)
+        let pieces = Self.splitByDuration(text: polished, start: start, end: end, cap: maxSegmentDuration)
         let newSegments = pieces.map {
             MeetingSegment(
                 timestamp: $0.start,
@@ -632,6 +852,7 @@ class MeetingSession: ObservableObject {
 
         let carried = (remainder ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
         currentSegmentText = carried
+        currentSegmentChunks = []
         currentSegmentStartTimestamp = carried.isEmpty ? end : remainderStart
         lastChunkEndTimestamp = max(lastChunkEndTimestamp, end)
         // Committed text is in CoreData; the sidecar now holds only what is still open
@@ -881,3 +1102,4 @@ class MeetingSession: ObservableObject {
         return String(format: "%d:%02d", m, s)
     }
 }
+

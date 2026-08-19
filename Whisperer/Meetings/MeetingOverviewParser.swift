@@ -7,12 +7,20 @@
 //  robust than JSON for on-device LLMs that produce occasional syntax errors.
 //
 //  Format:
+//    TITLE: <text>
 //    OVERVIEW: <text>
 //    TOPIC: <text> | <seconds>
 //    DECISION: <label> | <text> | <seconds>
 //    OPEN: <text> | <seconds>
 //    NEXT: <text or "none">
 //    ACTION: <text> | <ownerName> | <dueLabel or "none">
+//
+//  TITLE is the merged artifact pass's first line — it is parsed out of the stream long
+//  before the rest arrives (see `firstCompleteTitle`) and carries no field in
+//  `MeetingAISummary`, so `parse` recognizes it only to keep it out of the OVERVIEW.
+//  TOPICS: and SUMMARY: are tolerated spellings of TOPIC: and OVERVIEW: — a 4B asked for
+//  a seven-label artifact pluralizes one label per few dozen runs, and an unrecognized
+//  label is not merely dropped: it is absorbed into whatever multi-line field precedes it.
 //
 
 import Foundation
@@ -21,13 +29,69 @@ enum MeetingOverviewParser {
 
     /// Every label the format defines. Any line that starts with one of these ends
     /// a multi-paragraph OVERVIEW.
-    private static let labels = ["OVERVIEW:", "TOPIC:", "DECISION:", "OPEN:", "NEXT:", "ACTION:"]
+    private static let labels = [
+        "TITLE:", "OVERVIEW:", "SUMMARY:", "TOPIC:", "TOPICS:", "DECISION:", "OPEN:", "NEXT:", "ACTION:"
+    ]
+
+    // MARK: - Title
+
+    private static let titleLabel = "TITLE:"
+
+    /// The TITLE field of a *complete* artifact, or nil when there is none.
+    ///
+    /// Only a leading TITLE counts, same rule as the streaming path: a `TITLE:` the model
+    /// emits halfway through an OVERVIEW is the format coming apart, and naming the recording
+    /// from it is worse than leaving the placeholder in place.
+    static func title(in raw: String) -> String? {
+        for rawLine in raw.components(separatedBy: "\n") {
+            let line = undecorate(rawLine)
+            guard !line.isEmpty else { continue }
+            guard line.hasPrefix(titleLabel) else { return nil }
+            let value = cleanText(field(line, after: titleLabel))
+            return value.isEmpty ? nil : value
+        }
+        return nil
+    }
+
+    /// The TITLE field of a *partial* stream, but only once the line is provably finished.
+    ///
+    /// The merged artifact emits TITLE first precisely so the library row can be named while
+    /// the summary is still decoding. The line is only complete when a newline follows it —
+    /// returning early would name a meeting "Redis migration plan" as "Redis mig".
+    ///
+    /// Callers poll this once per generated token, so it looks only at the opening
+    /// `titleScanChars` of the output: the TITLE line is the first thing the prompt asks for,
+    /// and rescanning a two-thousand-character accumulator every token would be quadratic.
+    static func firstCompleteTitle(in partial: String) -> String? {
+        let head = partial.count > titleScanChars ? String(partial.prefix(titleScanChars)) : partial
+        guard head.contains("\n") else { return nil }
+        for rawLine in head.components(separatedBy: "\n").dropLast() {
+            let line = undecorate(rawLine)
+            guard !line.isEmpty else { continue }
+            // A finished line that is not the title means the artifact did not lead with one,
+            // and no later line will change that — stop rather than pick up a TITLE the model
+            // emitted in the middle of the OVERVIEW.
+            guard line.hasPrefix(titleLabel) else { return nil }
+            let value = cleanText(field(line, after: titleLabel))
+            return value.isEmpty ? nil : value
+        }
+        return nil
+    }
+
+    /// How far into a stream a TITLE line may start. Comfortably past a 70-character title
+    /// plus its label, and short enough that per-token polling stays cheap.
+    private static let titleScanChars = 300
 
     // MARK: - Public entry point
 
     static func parse(_ raw: String) -> MeetingAISummary? {
         var overviewLines = [String]()
         var inOverview    = false
+        // SUMMARY is the merged artifact's alternative spelling of OVERVIEW, absorbed the same
+        // way and used only when no OVERVIEW line appeared — a model that emits both wrote the
+        // OVERVIEW it was asked for, and that one wins.
+        var summaryLines  = [String]()
+        var inSummary     = false
         var keyTopics     = [TopicItem]()
         var decisions     = [DecisionItem]()
         var openQuestions = [QuestionItem]()
@@ -50,17 +114,35 @@ enum MeetingOverviewParser {
                 overviewLines.append(line)
                 continue
             }
+            if inSummary && !isLabel {
+                summaryLines.append(line)
+                continue
+            }
             inOverview = false
+            inSummary  = false
             guard !line.isEmpty else { continue }
 
-            if isLabel { sawLabel = true }
+            // TITLE deliberately does not count: it carries no summary field, and a model that
+            // emits `TITLE:` and then a bare unlabeled paragraph — the failure mode short notes
+            // already had before the merge — must still reach the strayLines fallback below.
+            if isLabel && !line.hasPrefix(titleLabel) { sawLabel = true }
 
             if line.hasPrefix("OVERVIEW:") {
                 overviewLines = [field(line, after: "OVERVIEW:")]
                 inOverview = true
 
-            } else if line.hasPrefix("TOPIC:") {
-                let parts = parts(line, after: "TOPIC:", count: 2)
+            } else if line.hasPrefix("SUMMARY:") {
+                summaryLines = [field(line, after: "SUMMARY:")]
+                inSummary = true
+
+            } else if line.hasPrefix("TITLE:") {
+                // Consumed by `title(in:)` and by the streaming path; recognized here only so
+                // it terminates an absorbing field instead of being pulled into one.
+                continue
+
+            } else if line.hasPrefix("TOPIC:") || line.hasPrefix("TOPICS:") {
+                let label = line.hasPrefix("TOPICS:") ? "TOPICS:" : "TOPIC:"
+                let parts = parts(line, after: label, count: 2)
                 if let text = parts.first.map(cleanItem), !text.isEmpty {
                     let secs = parts.count > 1 ? Double(parts[1]) ?? 0 : 0
                     keyTopics.append(TopicItem(text: text, timestampSeconds: secs))
@@ -111,6 +193,7 @@ enum MeetingOverviewParser {
         // correctly-summarized short note — measured, both Qwen2.5-1.5B and Qwen3.5-4B drop
         // the label on those.
         var overview = joinParagraphs(overviewLines)
+        if overview.isEmpty { overview = joinParagraphs(summaryLines) }
         if overview.isEmpty { overview = joinParagraphs(strayLines) }
         overview = truncatingLoop(overview)
         guard !overview.isEmpty else { return nil }

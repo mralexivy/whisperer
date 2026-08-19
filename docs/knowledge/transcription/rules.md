@@ -275,3 +275,159 @@
     argument. `DecodeStackUsageTests.testProtocolDispatchDoesNotRecurse` dispatches through the
     existential — the only shape that reproduces it, since a call on the concrete type binds
     statically to the `audioCtx:` overload.
+
+31. **A stored `language` field is a routing decision, never a language label — group by detected
+    script instead.** `ZLANGUAGE` and the `language` field `GoldenEntry` copies from it record
+    which model the audio was sent to. Measured on the corpus: 151 recordings declared `he`, of
+    which ~10 contain any Hebrew; the golden set's `he = 93` is ~10 real Hebrew and ~83 English
+    or Russian. Any per-language metric grouped by that field is mislabelled, and the per-language
+    release gates bind to exactly those figures. Use `ScriptAnalyzer.scriptFamilies(in:)`,
+    majority by word (`PolishBenchmarkTests.detectedLanguage(of:)`), and print the `n` on every
+    row — after correction, real Hebrew and Russian are a small enough fraction of this corpus to
+    be directional only. Second confirmation of the same defect; the first cost a whole
+    multilingual benchmark run.
+
+32. **A whole-file decode is not a language-stable reference for a streaming decode.** 22 of the
+    400 golden-set recordings land in a different language than the streaming decode of the same
+    audio (21 English → Russian, one → Bulgarian, one Russian → English). Detect it — compare the
+    detected script of reference and input — and exclude those rows from WER, which is meaningless
+    against a translation of the input. Do **not** exclude them from metrics that never read the
+    reference. Not excluding them read the Russian column as 0.6566 mean / 1.0000 median; excluding
+    them, 0.0215 / 0.0000.
+
+33. **A Core ML compute unit is a correctness setting before it is a speed setting — measure
+    per-unit numeric fidelity against the same package run from Python before quoting either.**
+    `Tools/mmbert/export_coreml.py` benchmarked the mmBERT editor at `CPU_AND_NE` p50 1.27 ms
+    against `ALL`'s 7.3 ms, and the naive reading is "use the ANE". `MMBERTRuntimeTests
+    .testComputeUnitFidelityAgainstPython` then measured what that speed costs — worst per-logit
+    error against the identical `.mlpackage` executed by `coremltools`:
+
+        cpuAndGPU  0.0000   all  0.0000   cpuOnly  0.1406   cpuAndNeuralEngine  8.6455
+
+    8.6 logits is a different prediction, not a noisy one, and `thresholds.json` calibrates
+    decisions at 0.983–0.996 where it decides the outcome outright. The ANE p50 was therefore a
+    measurement of a wrong-answer path and must never be quoted as the editor's latency.
+    `MMBERTCoreMLRuntime` asks for `.cpuAndGPU` and not `.all`: `.all` merely *happens* not to
+    schedule the ANE for this graph today, and naming the exclusion is what stops a future OS
+    silently re-enabling it. On the correct backend the residual is 5e-06 across 848 logits and
+    end-to-end p50 is 12.5 ms / p95 13.5 ms for 19 words against a 100 ms budget — the correctness
+    choice is free. Note this is orthogonal to the whisper.cpp Core ML removal in CLAUDE.md: that
+    is about `audio_ctx` and fixed mel shapes, this is about ANE arithmetic on a BERT graph.
+
+34. **Read Core ML outputs through `MLMultiArray`'s `NSNumber` subscript, not
+    `dataPointer.assumingMemoryBound(to: Float32.self)`.** The exported graph is FP16, and the
+    dtype actually returned depends on the chosen compute unit. Reinterpreting half-precision
+    bytes as single precision does not crash — it returns plausibly-scaled garbage, which reads
+    as a badly-trained model rather than as a bug.
+
+35. **A precision-gated model cannot supply completeness — pair it with a source that is
+    high-precision by construction.** The retrained mmBERT `en/punct .` cell reaches its best
+    precision at recall 0.2895: 207 of 715 gold periods. Even a cell good enough to enable would
+    leave ~71% of sentence boundaries unmarked, and a gate tuned for precision makes that worse by
+    definition — every threshold that buys precision spends recall. The fix is not a better model.
+    It is a different kind of evidence: `SentenceTerminator` reads the silence between transcript
+    chunks, which is where speakers actually stop, and is therefore high-precision *and*
+    high-recall at once. Measured against the authored gold, arm B's boundary precision is
+    0.9938 en / 0.9518 he / 0.9783 ru with recall 0.70 / 0.61 / 0.86 — recall a model at that
+    precision cannot approach. The pause is engine-independent too: it comes from `TranscriptChunk`
+    sample counts, not from ASR word timings, so it survives at `ASRCapabilities = []`.
+
+36. **A bench that folds a dimension away cannot certify a change that removes the component
+    responsible for it.** `PolishBenchmarkTests.wordErrorRate` is case- and punctuation-folded,
+    which is exactly what makes it an honest measure of *word damage* — and exactly what makes it
+    blind to punctuation. An arm that returned one unbroken run-on scores the same WER as an arm
+    that segmented perfectly. The change under test removed the generative model, which was
+    silently supplying sentence segmentation, so the entire regression would have landed with
+    every reported number unchanged. The fix is a second column (`boundaryCounts`, F1 in
+    reference-word index space with hypothesis words aligned by LCS), not a change to the fold.
+    Generalise: before removing a component, ask which dimension the existing bench folds away,
+    and check whether that component was the one supplying it.
+
+37. **A guard applied at one boundary must be applied at every boundary of the same kind.**
+    `SentenceTerminator.danglesAfter` — the refusal to end a sentence on a word that cannot end
+    one — is called only from `endOfUtterance` (`SentenceTerminator.swift:112`) and never from the
+    interior pause loop (`:77`). The same word is therefore refused at the end of an utterance and
+    accepted at a chunk join, on identical evidence. Nothing in the guard is about the utterance
+    end; it was simply written where the failure was first noticed. Whenever a predicate encodes a
+    fact about *language* rather than about *position*, it belongs in the shared admissibility
+    check (`isTerminatable`), not at the call site that motivated it.
+
+38. **An entry point that is not the shipping one will make the shipping one unmeasurable.**
+    `DeterministicPolisher` has `polish(text:)` and `polish(chunks:)`. The app calls
+    `polish(chunks:)` (`AppState.swift:2007`, `MeetingSession.swift:187`); every benchmark called
+    `polish(text:)`, whose pause map is empty by construction. `SentenceTerminator`'s interior rule
+    reads only that map — so it fired on every multi-chunk dictation in production and exactly
+    zero times under measurement, and all 96 insertions verdict rule 5 scored were the other rule.
+    The cause was upstream and looked unrelated: `HistoryManager.appendChunk` persists chunk texts
+    and discards `start`/`end`, so no stored artifact could reconstruct the pauses. Closing it took
+    re-decoding real audio (`PolishChunkCorpusDumpTests`). Generalise: when a component has two
+    entry points and the tests use the convenient one, check what the other one carries that the
+    convenient one cannot — that payload is precisely what is unmeasured.
+
+## 39. The eager soft-commit path emits contiguous spans, so there is no inter-chunk pause
+
+`DeterministicPolisher.polish(chunks:)` records a pause only when `nextStart > chunk.end`
+(`DeterministicPolisher.swift:201`). On the eager streaming path each soft-commit starts exactly
+where the previous ended (`StreamingTranscriber.swift:1494`, `:1830` — `lastTranscribedSampleIndex
+= commit.endIndex`), so the condition is never true. Measured, not inferred: **0 of 439 joins**
+across 187 real decoded recordings carry any gap, and `polish(chunks:)` produced byte-identical
+output to `polish(text:)` on **187 of 187** (`PolishInteriorBoundaryTests`).
+
+`usesEagerStream` defaults to **true** for `WhisperBridge` when the key is absent
+(`StreamingTranscriber.swift:551-563`), and when it is on `scanAndProcessChunks` returns before the
+VAD chunker (`:860-863`). So the one path whose spans are voiced-only — and whose comment at
+`:1032` promises "VAD chunk boundaries are the exact voiced span, so the gap to the next chunk's
+start is genuine silence" — does not run for whisper.cpp dictation.
+
+**Consequences.**
+
+- `SentenceTerminator`'s interior rule and `ParagraphSplitter` are **inert for dictation as
+  shipped**. Both are driven entirely by the pause map.
+- Every polish benchmark that reached the pipeline through `polish(text:)` was measuring exactly
+  what ships. The caveat those runs carried — "boundary recall is a lower bound because the bench
+  cannot call `polish(chunks:)`" — was **never true on this path**, and should not be repeated.
+- A per-chunk comment that describes a *sibling* path's semantics is worse than no comment: the
+  `:1032` one is accurate where it sits and false for the path that actually runs, and it is what
+  made the pause map look like live evidence for two rounds of benchmarking.
+- **Open, not established:** meetings take the same `TranscriptChunk` values through
+  `AppState:2688`, and `MeetingSession:610` carries the same "one chunk per voiced VAD segment"
+  claim. Whether meetings run eager — and so whether their pause-driven paragraphing is inert too —
+  has not been checked and must not be assumed either way.
+
+Recovering a real pause means having the eager commit publish the **voiced** end rather than the
+partition end. That changes the span semantics consumed by history, meetings and the eager
+regression gate (`:2131`), so it is a decision, not a cleanup.
+
+---
+
+## A guard applied at one boundary must be applied at every boundary of the same kind
+
+**Confirmed 2026-08-19** (`SentenceTerminator`).
+
+`danglesAfter` — "this word cannot end a sentence, so the utterance was cut off rather than
+finished" — was called from `endOfUtterance` and not from the interior pause loop. The same word
+was therefore refused a period at the end of an utterance and handed one at a chunk join four
+words earlier. The question the guard asks ("can a sentence end after this word?") does not depend
+on what put the boundary there, so a guard that lives in one of the two producers is a bug waiting
+for the other producer to fire. It moved into `isTerminatable`, which both call.
+
+Generalise: when a rule has two entry points, guards belong at the **shared predicate**, not at the
+entry point where the failure was first noticed. Grep for every caller before deciding where a
+refusal lives.
+
+---
+
+## Do not gate a rule per script to remove its false positives — measure what it removes with them
+
+**Confirmed 2026-08-19** (`SentenceTerminator.Policy`, implemented and reverted the same day).
+
+The end-of-utterance period was wrong 3 times in 48 Hebrew cases. Disabling the rule for Hebrew and
+Cyrillic removed all three — and dropped Hebrew sentence-boundary F1 from 0.742 to 0.412, because
+the same rule was supplying far more *correct* periods at that position (post-gate recall 0.2615).
+The gate also emptied the precision cell it was meant to fix to n=0, so the rule it "passed" was
+passing on the absence of evidence.
+
+A precision fix that works by not firing must be scored on recall in the same run, and a cell that
+goes to n=0 is not a pass. `ConfidenceGate`'s precedent — refuse an uncertified *edit class* — does
+not transfer to refusing an entire rule for a whole script: the class is the unit that was
+measured, the script is not.

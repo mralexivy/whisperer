@@ -1,0 +1,205 @@
+{
+  "reviewed": 150,
+  "flagged": [
+    {
+      "id": "0FC2182A67054C63AF73291733601ACE",
+      "batch": "batch-en-00",
+      "category": "added_fact",
+      "input_span": "This piece of shit work because you removed all the context",
+      "gold_span": "This piece of shit doesn't work because you removed all the context",
+      "why": "Added 'doesn't' — a dropped negation that was not in the ASR output; gold silently supplies a word that inverts the predicate from 'work' to 'doesn't work'."
+    },
+    {
+      "id": "1CBFF7AE8B404B1E86F35D7DCC625CD6",
+      "batch": "batch-en-00",
+      "category": "content_word_substitution",
+      "input_span": "use localized skill",
+      "gold_span": "Use localized strings",
+      "why": "'skill' is replaced by 'strings' — a different noun with a different meaning; even if it reflects intent, the substitution is editorial, not typographic."
+    },
+    {
+      "id": "E506E897A2F944F6B0913E0C32947098",
+      "batch": "batch-en-01",
+      "category": "over_deletion",
+      "input_span": "really really fast",
+      "gold_span": "really fast",
+      "why": "One instance of 'really' deleted; the doubled intensifier was intentional emphasis, not a disfluency or repetition error."
+    },
+    {
+      "id": "0099ABC9BF74424FA42B0425008C9B48",
+      "batch": "batch-en-01",
+      "category": "paraphrase",
+      "input_span": "The stats here displayed something stupid which is not clear",
+      "gold_span": "The stats here displayed something unclear.",
+      "why": "'something stupid which is not clear' (two evaluative descriptors) collapsed into 'something unclear' — a paraphrase that removes the content word 'stupid' and the relative clause."
+    },
+    {
+      "id": "0099ABC9BF74424FA42B0425008C9B48",
+      "batch": "batch-en-01",
+      "category": "profanity_removal",
+      "input_span": "you fucking idiot it can be like you counting tasks or stories and not the projects",
+      "gold_span": "You're counting tasks or stories and not the projects.",
+      "why": "'you fucking idiot' and the framing clause 'it can be like you counting' were deleted entirely; profanity must survive verbatim per the constraint."
+    },
+    {
+      "id": "0BD5E021A59941269D4BE6812463080B",
+      "batch": "batch-en-01",
+      "category": "content_word_substitution",
+      "input_span": "You're doing shitty work.",
+      "gold_span": "You're doing subpar work.",
+      "why": "'shitty' replaced by 'subpar' — a euphemism; the authoring constraint explicitly prohibits softening profanity."
+    },
+    {
+      "id": "547688DA164A4668A794ED6501C24693",
+      "batch": "batch-en-01",
+      "category": "profanity_removal",
+      "input_span": "This sold bar doesn't much the mock you fucking idiot.",
+      "gold_span": "This sidebar doesn't match the mock.",
+      "why": "'you fucking idiot' removed entirely; profanity must survive verbatim."
+    },
+    {
+      "id": "17545B7E3D124C57BB5F8922D94DBE08",
+      "batch": "batch-en-01",
+      "category": "content_word_substitution",
+      "input_span": "let's a discrete the image",
+      "gold_span": "let's discretize the image",
+      "why": "'a discrete' (two ASR tokens) replaced by 'discretize' — a different word; even if this is the intended word, the substitution goes beyond spelling normalization."
+    },
+    {
+      "id": "5F7EF54D5AA74E2B9B819036B30D17D2",
+      "batch": "batch-en-02",
+      "category": "profanity_removal",
+      "input_span": "What is this shit?",
+      "gold_span": "What is this?",
+      "why": "'shit' deleted; profanity must survive verbatim per constraint."
+    },
+    {
+      "id": "7D917F0DEAFC4740AFC21FE4B1141FC9",
+      "batch": "batch-en-02",
+      "category": "content_word_substitution",
+      "input_span": "we need to make sure it's working in causing real speed up",
+      "gold_span": "we need to make sure it's working and causing real speed up",
+      "why": "Preposition 'in' replaced by conjunction 'and', changing the grammatical and semantic relationship between clauses."
+    },
+    {
+      "id": "AE8B66F45FF24EDB8EA0A46C8756749B",
+      "batch": "batch-en-02",
+      "category": "profanity_removal",
+      "input_span": "Not this bullshit with beautiful logos, premium look",
+      "gold_span": "Not this with beautiful logos, premium look.",
+      "why": "'bullshit' deleted; profanity must survive verbatim."
+    },
+    {
+      "id": "DC15CA018C9F4147A3209DAEC8DDB3B1",
+      "batch": "batch-en-02",
+      "category": "content_word_substitution",
+      "input_span": "We extended it in the way it working fine",
+      "gold_span": "We extended it and the way it's working fine.",
+      "why": "'in' replaced by 'and', changing the preposition to a conjunction and altering the syntactic relationship."
+    },
+    {
+      "id": "08CF5BCA2F2942E4BA5890B1A5CCBE4C",
+      "batch": "batch-en-03",
+      "category": "negation_flip",
+      "input_span": "I don't, it's disconnected. I understand why I need it.",
+      "gold_span": "I don't—it's disconnected. I don't understand why I need it.",
+      "why": "'I understand why I need it' becomes 'I don't understand why I need it' — a negation inserted that reverses the speaker's stated position; the most damaging class of error."
+    },
+    {
+      "id": "13A30C4607244224B94F859A50CBC990",
+      "batch": "batch-en-03",
+      "category": "content_word_substitution",
+      "input_span": "the controllers are not blown with logic",
+      "gold_span": "The controllers are not bloated with logic.",
+      "why": "'blown' replaced by 'bloated'; while both are informal, they are distinct words and the substitution is editorial not typographic."
+    },
+    {
+      "id": "13A30C4607244224B94F859A50CBC990",
+      "batch": "batch-en-03",
+      "category": "paraphrase",
+      "input_span": "file, like how much minimum rows it should have, how to split it",
+      "gold_span": "How much should a minimum file have? How do you split it?",
+      "why": "The clause is restructured as interrogatives with reordered noun ('file' moved to end of first question); this is a rewrite, not punctuation."
+    },
+    {
+      "id": "94DB1FD9C1E347A7B1E91D407DB80250",
+      "batch": "batch-en-03",
+      "category": "content_word_substitution",
+      "input_span": "we passing like the data from streaming like to the UI audit cause stuck",
+      "gold_span": "We're passing the data from streaming to the UI, and that causes stuck.",
+      "why": "'audit cause' replaced by 'and that causes' — the ASR token 'audit' is interpreted and substituted with a relative clause introduction, changing the surface words."
+    },
+    {
+      "id": "E985BA7B38264365922ABA569392373D",
+      "batch": "batch-en-04",
+      "category": "negation_flip",
+      "input_span": "This is really unannoying",
+      "gold_span": "This is really annoying.",
+      "why": "'unannoying' (with 'un-' prefix) becomes 'annoying' — the negating prefix is stripped, reversing the polarity of the adjective."
+    },
+    {
+      "id": "E985BA7B38264365922ABA569392373D",
+      "batch": "batch-en-04",
+      "category": "content_word_substitution",
+      "input_span": "how we fucked Parakeet engine",
+      "gold_span": "how we affected Parakeet engine",
+      "why": "'fucked' replaced by 'affected' — profanity softened with a milder synonym; violates the verbatim-profanity constraint."
+    },
+    {
+      "id": "9C9E386A9E8346B0B5BBB8B46EDA0131",
+      "batch": "batch-en-05",
+      "category": "content_word_substitution",
+      "input_span": "two tiers already been executed",
+      "gold_span": "two thirds already been executed",
+      "why": "'tiers' replaced by 'thirds'; while 'thirds' may be the intended word, 'tiers' is a distinct content noun and the change goes beyond spelling normalization."
+    },
+    {
+      "id": "7DA18B0A86464284B182F5A0537DB520",
+      "batch": "batch-en-05",
+      "category": "profanity_removal",
+      "input_span": "It's the same fucking platform, you fucking idiot",
+      "gold_span": "It's the same platform.",
+      "why": "'fucking' (twice) and 'you fucking idiot' deleted entirely; profanity must survive verbatim."
+    },
+    {
+      "id": "221CE4F04D4B4D348E6D8466F8C2D2C9",
+      "batch": "batch-en-05",
+      "category": "content_word_substitution",
+      "input_span": "won't fuck our production deployment",
+      "gold_span": "won't affect our production deployment",
+      "why": "'fuck' replaced by 'affect' — profanity softened with a neutral synonym; violates the verbatim-profanity constraint."
+    },
+    {
+      "id": "0A9DEEC8F1664B96BFF2C3C2BF1B1655",
+      "batch": "batch-he-00",
+      "category": "content_word_substitution",
+      "input_span": "ולראות עם המשפט הזה הוא באמת משתמש בו נכון או לא",
+      "gold_span": "ולראות אם המשפט הזה הוא באמת משתמש בו נכון או לא",
+      "why": "Hebrew preposition 'עם' (with) replaced by conjunction 'אם' (if); these are different words with different meanings, changing 'with the sentence' to 'if the sentence'."
+    },
+    {
+      "id": "02C4F68BB8F446F58BC2A21ED4D9B2C8",
+      "batch": "batch-ru-00",
+      "category": "content_word_substitution",
+      "input_span": "если это застаивает или нет",
+      "gold_span": "если это зависает или нет",
+      "why": "'застаивает' (stagnates/idles) replaced by 'зависает' (freezes/hangs) — distinct Russian verbs with different meanings."
+    },
+    {
+      "id": "727F56EEE612477B947B8DDD80AA4025",
+      "batch": "batch-ru-00",
+      "category": "over_deletion",
+      "input_span": "Стоил нот гуд, я думаю, как, влезавшись, как, влезавшись, как, влезавшись [×23 repetitions]",
+      "gold_span": "Стоил нот гуд, я думаю, как, влезавшись, как,",
+      "why": "~21 repetitions of 'как, влезавшись' deleted; even if these are an ASR loop artifact, the truncation removes content that was in the input signal."
+    },
+    {
+      "id": "5F64F423742443A0805B16D9C5E20BD9",
+      "batch": "batch-ru-01",
+      "category": "content_word_substitution",
+      "input_span": "Когда тест отказался отрицательным",
+      "gold_span": "Когда тест оказался отрицательным",
+      "why": "'отказался' (refused/declined) replaced by 'оказался' (turned out/proved) — these are distinct Russian verbs; 'оказался' is likely the intended word but the substitution is editorial."
+    }
+  ]
+}

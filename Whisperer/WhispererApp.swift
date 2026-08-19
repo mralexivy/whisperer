@@ -1817,6 +1817,15 @@ struct SettingsTabView: View {
     @ObservedObject var appState = AppState.shared
     @AppStorage("meetingDetectionEnabled") private var meetingDetectionEnabled: Bool = true
     @AppStorage("meetingPolishEnabled") private var meetingPolishEnabled: Bool = true
+    // The default here must match `PolishFeatureFlags.isFastPolishEnabled`, which reads the same
+    // key and defaults to true for an absent one. They are two separate declarations of one
+    // default, and while they disagreed the toggle rendered off on a fresh install while the
+    // feature ran — a switch showing the opposite of what the app is doing. See
+    // `PolishFeatureFlags` for why "off" has to mean the exact shipped path rather than an
+    // approximation of it.
+    @AppStorage(PolishFeatureFlags.fastPolishKey)
+    private var fastPolishEnabled: Bool = PolishFeatureFlags.fastPolishDefault
+    @AppStorage(PolishFeatureFlags.paragraphsKey) private var fastPolishParagraphsEnabled: Bool = false
     #if canImport(FluidAudio)
     @ObservedObject private var engines = MeetingEngines.shared
     #endif
@@ -2146,6 +2155,58 @@ struct SettingsTabView: View {
                 // Permissions
                 settingsCard(title: "Permissions", icon: "lock.shield.fill", color: .red) {
                     PermissionsView()
+                }
+
+                // Fast Polish — on by default as of 2026-08-19.
+                //
+                // Visible in every build, including App Store, which is a change: this card used
+                // to sit inside the `#if !APP_STORE` block below on the grounds that an
+                // experimental replacement for a shipped behaviour was not something to put in
+                // front of a reviewer. That reasoning does not survive the default flip. The
+                // feature is now what an App Store user gets, and hiding the card there would
+                // leave them with a changed behaviour and no switch — the one property
+                // `PolishFeatureFlags` insists on is that off restores the previous path exactly,
+                // and a control nobody can reach does not provide it.
+                settingsCard(title: "Fast Polish", icon: "bolt.fill", color: .orange) {
+                    HStack {
+                        VStack(alignment: .leading, spacing: 3) {
+                            Text("Polish without the language model")
+                                .font(.system(size: 13, weight: .medium))
+                                .foregroundColor(MBColors.textPrimary)
+                            Text("Punctuation, casing and formatting from fast local rules instead of the 4B model. Measured on 400 of your recordings: fewer errors against a whole-file re-decode, and milliseconds instead of a model pass. Turn it off to run the 4B model instead, exactly as before.")
+                                .font(.system(size: 11))
+                                .foregroundColor(MBColors.textSecondary)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+                        Spacer()
+                        Toggle("", isOn: $fastPolishEnabled)
+                            .toggleStyle(.switch)
+                            .tint(MBColors.accent)
+                            .labelsHidden()
+                    }
+
+                    if fastPolishEnabled {
+                        Divider()
+                            .background(MBColors.border)
+                            .padding(.vertical, 2)
+
+                        HStack {
+                            VStack(alignment: .leading, spacing: 3) {
+                                Text("Paragraph breaks")
+                                    .font(.system(size: 13, weight: .medium))
+                                    .foregroundColor(MBColors.textPrimary)
+                                Text("Splits long dictation into paragraphs at the pauses you actually took.")
+                                    .font(.system(size: 11))
+                                    .foregroundColor(MBColors.textSecondary)
+                                    .fixedSize(horizontal: false, vertical: true)
+                            }
+                            Spacer()
+                            Toggle("", isOn: $fastPolishParagraphsEnabled)
+                                .toggleStyle(.switch)
+                                .tint(MBColors.accent)
+                                .labelsHidden()
+                        }
+                    }
                 }
 
                 #if !APP_STORE

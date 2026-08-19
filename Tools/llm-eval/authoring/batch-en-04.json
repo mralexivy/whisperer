@@ -1,0 +1,92 @@
+[
+ {
+  "id": "BAB17646CA5B4BFBBB522FC02D4D79CE",
+  "language": "en",
+  "durationSec": 63.039375,
+  "input": "Everything that we fixed now for the single overwrite command we also need To Do the same basically for the bulk overwrite so bulk overwrite is supported on multiple items and the bar overwrite should have the same functionality as a single overwrite that we did. So the same fixes should apply including when we open the pop-up and we should add option download sample CSV file with the format that we expect. So it will be easier for user to upload it. And when the user uploads the CSV, we need in the pop-up show the progress with animation like we do in the single override. So it will be high quality, it will be performant audit will provide best user experience, premium look. So premium user experience."
+ },
+ {
+  "id": "C312DDBADCF24E85B7CEE9B397D2AA75",
+  "language": "en",
+  "durationSec": 60.637875,
+  "input": "For our agent to be effective we need DVMCP like we have in local setup. So basically I want you to search Glean how we are a Slack bot agent can use real MCPs and make a research and not only like you use Clot, Coat or Glint because Glint and Clot Coat doesn't have access to the MCP's So literally what we want is some way we can support MCP's in our setup. For example, BigQuery MCP and Databricks MCP I think they are crucial MCP's to have. Of course I will need to provide the secrets for them to support them, but we need to understand how we can easily like to integrate them to our bot. So our bot will use those MCP automatically when we need to investigate something"
+ },
+ {
+  "id": "CF57AC7DAFBF4C508F44209B717EA005",
+  "language": "en",
+  "durationSec": 33.22075,
+  "input": "Also when the user is basically trying to create expired data that is impossible to match because of a because of the expiration we need somehow to show to you the warning that he trying To Do something stupid and that's impossible to match the data doesn't exist anymore because so our app should be clever it should create like beautiful indication for the user when the data is not exist telling him that like data is not exist it already been expired"
+ },
+ {
+  "id": "DC7E6AFF05A94B11A73E5E0D8BB93F53",
+  "language": "en",
+  "durationSec": 73.3458125,
+  "input": "Also another thing, like you're setting like smaller timeout like of five minutes and actually because you're sharing like a BigQuery slots maybe it's not enough and query can run more time in some rare situations. So let's think about like maybe setting it to 10 minutes or something. It should be aligned with our backend. Check how our backend like implementing this, how much time our backend set for specific iteration it is specific timeouts and like let's make sure that gateway is aligned so we can pinpoint the error. Also, maybe we need to improve logs on the backend and also in the frontend. We should not refresh the app. It's strange that app just refreshes and clean the item without like displaying the error message or like timeout message to the user. It just doesn't make sense. We need everything to be in place audit should set the specific message. A premium UI X use skills how it should be displayed. So basically it should be set accordingly."
+ },
+ {
+  "id": "E985BA7B38264365922ABA569392373D",
+  "language": "en",
+  "durationSec": 78.3489375,
+  "input": "We found two bugs in our application First of all, Parakeet engine for some reason loses previous text So if I'm saying long sentence At some point only last part is inserted and catched at transcription not the full text This is really unannoying So we need to see like when we change like things with whisperer like how we fucked Parakeet engine because like our app shall be multi engine like this is like the first feature the second feature and second bug that I need you to fix is basically when we download model it can be slow we should always show progress to the user but we also need to give option to user to abort the operation because otherwise the app kinda stuck and even existing model is basically can be blocked and until basically the model is downloaded while the model is downloaded we should use previous model that already loaded in the memory to cause best user experience possible and alert user to activate when it's ready. Otherwise, like the, wget ugly experience and the app is broken if download state time. So we need to add abort and like a intelligent switch."
+ },
+ {
+  "id": "F3074AB94D374C4099A261DFAD307809",
+  "language": "en",
+  "durationSec": 33.9211875,
+  "input": "I also think that in mobile we will use let's make sure we are not using canvas because page seems to be blocked and not responsive and maybe it's happening because we are rendering video so it should not be on the main thread maybe we can design some like optimizations I don't know like check but like the page should be very responsive because like mobile experience should be like great so let's see like why it's not happening like what's wrong what needs to be fixed so it like the performance will be wonderful"
+ },
+ {
+  "id": "05011586377F43C58869FDF825B7B19D",
+  "language": "en",
+  "durationSec": 203.72725,
+  "input": "Okay, I want to show you why this experience is really, really, really off and what it needs to to be fixed. So first bug is basically All right, I'm going to continue my speaking, so So I'm giving a speech for for two minutes and and I still captured changed my voice. I'm not sure why it's not different it It should be"
+ },
+ {
+  "id": "06AC473754274334BFA7F11D837A411C",
+  "language": "en",
+  "durationSec": 97.060625,
+  "input": "How I expect it to work? So basically when we introducing... Like people share a lot of HTML files and don't know how to use lens. So I won't be able... So probably it's problematic to take all of the channels and listen to them and upload automatically and create public link. I think this is like problematic but what we can do is maybe like tag our lens up To Do it in specific channel if we solve this operation so I won't understand like possibility of the both options but I think for the first one we will need a lot of permissions which we're not going to get because it's like listening to all the channels and like create a sniffer like and not sure if it's allowed or not in the organization maybe we can confirm with Glyn MCP to understand if it's something that allowed at Divi To Do and if it's too interventive maybe we can just tag our bot so it will take the HTML file that was attached download it somehow and upload this public link based on identity of the user who basically created this file. That way we will result a good user experience. Like there are small security concerns here maybe but like it's user for originally like created the file so I think it's pretty safe. We need to think how to pull this off. Let's examine this feature."
+ },
+ {
+  "id": "099C5E8CB9A143498F6FF7B0AD8DF64D",
+  "language": "en",
+  "durationSec": 97.1606875,
+  "input": "Some issues that I noticed on mobile but they happening not only on mobile. So on mobile relevant when I click menu it displayed like below the content. So we fix this in regular menu for like desktop version but on mobile like sometimes like left menu displayed below. Also when I click like hamburger button not always menu displayed immediately. Sometimes it takes a lot of time. Another issue even when the menu is displayed the button is not so responsive. I don't know why but when I click change the language it's not too responsive. It takes a lot of time to change the language. We have some performance issues there. I don't understand why it's working that way but it's not working perfectly. Also if I will change the language it should propagate to all of the links but all of the hard links inside the pages live to English pages and not if I will select another local. So it doesn't PaaS in the links and we should fix all of the links so it will be passed correctly. So mobile should be like super responsive version audit should be display everything nicely. and in super responsive way. So we need like to create a comprehensive plan like to fix all of this performance issue inside the mobile."
+ },
+ {
+  "id": "395E9FB9D69547FC9517E59BA067B5C5",
+  "language": "en",
+  "durationSec": 109.1681875,
+  "input": "First, Dock Framing I think we need to fundamentally restructure our Dock given the options so in the same Dock we should have like a full Dock in say like addressing two things first of all like Peter suggested and AMD we need some white paper not too technical that will go through like OpenAI legal and privacy team. The doc should be like white paper voice like how a more conceptual lighter and and focus on the internals how like how wget data out that is anonymized that is summary based on everything that we are going to need like high level solution without like two technical engineering like engineering So basically that's how we should structure this. And another thing is basically in the second, in the second, in the second section we shall have like a technical document. So let's create one document that will address both. That's what I'm saying. The one is basically white paper, the second one is technical proposal, technical implementation proposal that we have now. So in addition, I want you to change this doc and basically create a section about white paper with high level solution, everything we need to shift based on all our knowledge. And the second existing dog that we will move to a next section of technical proposal."
+ },
+ {
+  "id": "4CEF75DAB5354ACD997893B1CEBE53E8",
+  "language": "en",
+  "durationSec": 151.494625,
+  "input": "I want you to update docs I have some... ...issue that I don't think it's completely aligned. So let me take it further with you. So first of all we are speaking that in Q In Q1 we will do English only. There can be like multiple assumptions how it will work with English only text and then basically we will ask them to translate it further. Right? So this is like the one thing. Then we basically another thing we are saying we will run ONNX and we discussing how basically we output it with ONNX But the problem is like we think Triton and ONNX and Modern Bird can work together so we need to clarify this like the architecture of the deployment then we are saying in many places in ForensGraph and NabooX, gRPC and stuff we didn't validate use Glyn MCP to validate how this should be basically implemented in our implementation. So basically if we know how to implement this correctly then we should use this accordingly. Another basically thing is like how this gRPC watch component will do it. We need to build it. This is a new component probably and how it will orchestrate. And the important thing we spoke that basically we not, if we are using single model, why do we need graph? Maybe we can export it directly with Onyx. So I think we need to review this accordingly and think if we need a graph at all or maybe graph will be like in second version. So V1 First version will include like only Onyx exposed Modern Bird and another version in V1 or maybe V2 will include basically the graph itself that can be extended by additional models and then V3 will be like a image support so maybe we need like to update it which make more sense that way"
+ },
+ {
+  "id": "649AC30C07CF4120B19732A0CC5315EF",
+  "language": "en",
+  "durationSec": 104.9655625,
+  "input": "Okay, I think I actually got it like here the differentiation that we must see. So first in the metadata tab, as I understaudit audit makes sense that it should show the metadata of the whole item that was sent to classification. So we're showing here the whole content as we received it. We know the item ID, the platform, like the text. And basically this contains like generic information. Then we have category stops that basically the categories that are assigned for this item. And it makes sense. And then we have individual engines. Like we have audio engine, but currently an audio engine it likes basically the classification categories and the flow is basically the item is sent to audio and then wget some transcript. And then we send it to text engine. So the correct way is show the result under audio. So in audio, we also show display there. We display the assigned category and not only in text engine because it makes more sense that it will be displayed in audio type. Same goes for video and image. So in text is basically we only showed basically display the text engine and we shall drop the transcription itself because like the audio transcription should be displayed in the audio tab and I think that's the comprehensive fix that we must do."
+ },
+ {
+  "id": "77F685FDA432487999E8B2C3955B4EC4",
+  "language": "en",
+  "durationSec": 101.7635625,
+  "input": "New trip planning What I liked about new trip planning is that now it looks pretty good and still on the right side we not show real map like in real trip details page so we should from a real trip details page see how we support Google Maps and also render the map here and when we click in each day so we should have functionality to depict the route of each day specifically exactly like we do in TripDetails page so it should behave the same way and same functionality Also when we generating the strip first before we had day teams so I really liked when we first defined a day teams and then I would prefer that like LLM will first create a first day of the trip then the second day and so on and not will try like to create them automatically all at once so we need it to be interactive so the user will see the progress so imagine for best premium user experience it's created one by one so what I want you To Do is To Do the adjustment so we need more polished look on this page wow interface and we need to borrow some details from actual trip details page so these pages should be very similar I want you to think how you can do it and do this polishing also use Bulletproof Planning Agent"
+ },
+ {
+  "id": "79D2F5D80F0F4BAA979341D92F94A813",
+  "language": "en",
+  "durationSec": 101.7635625,
+  "input": "One of the things that currently slow down the execution of the engines is because we are padding the date because like the engine is executed prior than the final classification. In the past what we did we saw basically when our categories, what is the classification time and based on this we understood like the day partition when we need to scan basically a day and which hours but then it proved unreliable because sometimes it shifted because like engine can like write the results and delay and then Amazon Kinesis which basically aggregates all the results can put like later time and then what we did we padded with the day see the current approach how we padded the date and then now it's resulted in slow queries but more reliable queries but if we execute it like we did in date range progressive approach when we first trying a first date and then like the second we also can structure a engine square like this so first we will prioritize day of the classification that we see in the category and then run the first query if the query returned result rate that we found the item but if it didn't we can pad additional days to scan more it can be day before and day after so scan before and if we execute this progressively in correct fashion then we will scan always the minimum amount of information and result and faster queries. We need super reliable plan how to basically build it properly."
+ },
+ {
+  "id": "980336B44CA54232A2500248F0437F82",
+  "language": "en",
+  "durationSec": 91.5571875,
+  "input": "You have the prompt that we use to generate the trip So basically when we generate the trip We have like a version of prompt embedded in the files that we are reusing so you can basically make sure that the basic functionality will work so we need valid test to see the generation does work perfectly and reliably and we need to test it so the interface that we'll introduce and our feature of replacing the screen won't be the application. Application should remain fully working with WoW experience. Also the whole idea here is user can type many things in the box and the second script building is showing progressively day by day planning so we need maybe to change and trigger prompt somehow with different mechanisms so we will make maybe more calls but still it will be super cost efficient audit give the experience that depicted in this reference UI that we referenced. We want the same experience of our trip generation responsive so users will get feedback very, very fast and progressively we will build the whole trip. We can split to multiple calls but still we need to think about efficiency how basically based on duration and period like setup it in best way. So let's think how we can do it."
+ }
+]
