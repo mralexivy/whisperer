@@ -249,7 +249,43 @@ actor MeetingAIService {
 
         Logger.info("Meeting overview: LLM ready, starting generation", subsystem: .transcription)
 
-        let userMessage = "TRANSCRIPT:\n\(transcript)"
+        // Map-reduce for Full-tier transcripts (≥700 words): split → parallel summarise →
+        // reduce into the final artifact. Shorter transcripts and the note tier keep the
+        // single-pass path (batch width ≤ 2 offers no throughput win).
+        let mapReduceEnabled: Bool = {
+            let key = "meetingOverviewMapReduceEnabled"
+            guard UserDefaults.standard.object(forKey: key) != nil else { return true }
+            return UserDefaults.standard.bool(forKey: key)
+        }()
+
+        let effectiveTranscript: String
+        if !isNote && wordCount >= 700 && mapReduceEnabled {
+            let chunks = WholeTextSplitter.summarySplit(transcript)
+            if chunks.count >= 3 {
+                Logger.info("Meeting overview: map step — \(chunks.count) chunk(s) for \(meetingID)", subsystem: .transcription)
+                let mapInstructions = """
+                    Extract the key points from this portion of a meeting transcript. \
+                    Preserve [Ns] timestamp markers for important moments. Be concise — \
+                    summarise what was actually said, not that it was said.
+                    """
+                let mapRequests = chunks.map { chunk in
+                    LLMBatchRequest.make(text: chunk, userMessage: "PORTION:\n\(chunk)",
+                                        maxTokensCap: 300)
+                }
+                let partials = await llm.processBatch(requests: mapRequests,
+                                                      instructions: mapInstructions)
+                let joined = partials.joined(separator: "\n\n")
+                Logger.info("Meeting overview: map done — \(joined.count) chars condensed from \(transcript.count)", subsystem: .transcription)
+                effectiveTranscript = joined
+            } else {
+                Logger.info("Meeting overview: map skipped — only \(chunks.count) chunk(s), using single-pass", subsystem: .transcription)
+                effectiveTranscript = transcript
+            }
+        } else {
+            effectiveTranscript = transcript
+        }
+
+        let userMessage = "TRANSCRIPT:\n\(effectiveTranscript)"
 
         // Whether the row may still be renamed. `generateTitle` records this at the start of
         // the sequence; when it was never called (a caller that only wants a summary), fall
@@ -282,7 +318,7 @@ actor MeetingAIService {
         let raw: String
         do {
             raw = try await llm.process(
-                text:                   transcript,
+                text:                   effectiveTranscript,
                 systemPrompt:           request.systemPrompt,
                 userMessage:            userMessage,
                 temperature:            0.15,

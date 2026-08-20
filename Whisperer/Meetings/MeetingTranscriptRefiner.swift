@@ -93,6 +93,12 @@ final class MeetingTranscriptRefiner: ObservableObject {
     /// or nil if the run should proceed. Returns nil for "nothing to clean up" — that is a
     /// silent correct exit, not a blocking condition.
     func blockingReason(for meetingID: UUID, audioURL: URL?) -> String? {
+        // When a resident WhisperBridge matching the cleanup model is already loaded, the run()
+        // path will borrow it — no download or warm pass required.
+        if AppState.shared.whisperBridge is WhisperBridge,
+           AppState.shared.loadedModelForDebug == Self.cleanupModel {
+            return nil
+        }
         #if canImport(FluidAudio)
         switch MeetingEngines.shared.readiness[.cleanup] {
         case .needsDownload(let msg):
@@ -165,18 +171,32 @@ final class MeetingTranscriptRefiner: ObservableObject {
 
         // Loading is its own queue job so it cannot overlap the meeting backend's own teardown.
         let modelPath = ModelDownloader.shared.modelPath(for: model)
+        // Borrow the resident bridge when it matches the cleanup model — avoids a ~2s reload
+        // and keeps the user's bridge warm for their next dictation recording. Per-window
+        // ModelWorkQueue("meeting-refine") already serialises decodes against dictation, so a
+        // borrowed bridge cannot be re-entered mid-decode.
+        let residentBridge = AppState.shared.whisperBridge as? WhisperBridge
+        let canBorrow = residentBridge != nil && AppState.shared.loadedModelForDebug == model
         let bridge: WhisperBridge
-        do {
-            // `runBlocking`, not `run`: this is blocking C, and on the first launch after a model
-            // is installed it is a ~40s synchronous-XPC CoreML/ANE encoder compile.
-            bridge = try await ModelWorkQueue.shared.runBlocking("meeting-refine-load") {
-                try WhisperBridge(modelPath: modelPath, useGPU: true)
+        let ownsBridge: Bool
+        if let borrowed = residentBridge, canBorrow {
+            bridge = borrowed
+            ownsBridge = false
+            Logger.info("Transcript refine: borrowing resident \(model.displayName) bridge for \(meetingID)", subsystem: .transcription)
+        } else {
+            do {
+                // `runBlocking`, not `run`: this is blocking C, and on the first launch after a
+                // model is installed it is a ~40s synchronous-XPC CoreML/ANE encoder compile.
+                bridge = try await ModelWorkQueue.shared.runBlocking("meeting-refine-load") {
+                    try WhisperBridge(modelPath: modelPath, useGPU: true)
+                }
+            } catch {
+                Logger.error("Transcript refine: failed to load \(model.displayName): \(error.localizedDescription)", subsystem: .transcription)
+                return finish(working, meetingID: meetingID)
             }
-        } catch {
-            Logger.error("Transcript refine: failed to load \(model.displayName): \(error.localizedDescription)", subsystem: .transcription)
-            return finish(working, meetingID: meetingID)
+            ownsBridge = true
         }
-        defer { bridge.prepareForShutdown() }
+        defer { if ownsBridge { bridge.prepareForShutdown() } }
 
         Logger.info("Transcript refine: \(windows.count) window(s) over \(working.count) segment(s) with \(model.displayName) for \(meetingID)", subsystem: .transcription)
 

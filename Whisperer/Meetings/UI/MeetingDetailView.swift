@@ -18,6 +18,8 @@ struct MeetingDetailView: View {
     @State private var searchQuery = ""
     @State private var editableTitle: String = ""
     @State private var showOverviewReadyToast = false
+    /// The Overview tab has a summary the user has not looked at yet — drives the glowing dot.
+    @State private var overviewIsUnread = false
     /// Render the pre-LLM ASR text. View-level only — nothing is written back.
     @State private var showOriginal = false
     /// Speaker cards vs continuous prose. View-level only, and deliberately not persisted:
@@ -151,6 +153,13 @@ struct MeetingDetailView: View {
             showOriginal = false
             transcriptMode = .speakers
             didCopy = false
+            overviewIsUnread = false
+        }
+        // Opening the tab *is* reading it — clear here rather than in the button so the
+        // indicator cannot survive a programmatic switch (the toast) either.
+        .onChange(of: selectedTab) { _, tab in
+            guard tab == .overview, overviewIsUnread else { return }
+            withAnimation(.easeInOut(duration: 0.25)) { overviewIsUnread = false }
         }
         .onReceive(NotificationCenter.default.publisher(for: .meetingTitleDidGenerate)) { notif in
             guard let id = notif.object as? UUID, id == meeting?.id,
@@ -172,6 +181,9 @@ struct MeetingDetailView: View {
         .onReceive(NotificationCenter.default.publisher(for: .meetingOverviewDidGenerate)) { notif in
             guard let id = notif.object as? UUID, id == meeting?.id,
                   selectedTab != .overview else { return }
+            // The toast is the two-second announcement; the dot is what remains after it,
+            // so a summary that lands while the user is elsewhere is never lost.
+            withAnimation(.easeInOut(duration: 0.25)) { overviewIsUnread = true }
             withAnimation(.spring(response: 0.3)) { showOverviewReadyToast = true }
             Task {
                 try? await Task.sleep(nanoseconds: 2_500_000_000)
@@ -237,6 +249,9 @@ struct MeetingDetailView: View {
             Text("Overview ready")
                 .font(.system(size: 13, weight: .medium))
                 .foregroundColor(.white.opacity(0.9))
+            Text("View")
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundColor(Color(hex: "5B6CF7"))
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 10)
@@ -434,6 +449,10 @@ struct MeetingDetailView: View {
                         // when the centre column is narrow.
                         .lineLimit(1)
                         .fixedSize(horizontal: true, vertical: false)
+                    if tab == .overview && overviewIsUnread {
+                        OverviewReadyDot()
+                            .transition(.scale(scale: 0.4).combined(with: .opacity))
+                    }
                     if tab == .transcript && !detailVM.allSegments.isEmpty {
                         Text("\(detailVM.allSegments.count)")
                             .font(.system(size: 10, weight: .bold))
@@ -449,7 +468,7 @@ struct MeetingDetailView: View {
                             )
                     }
                 }
-                .foregroundColor(selectedTab == tab ? .white : .white.opacity(0.4))
+                .foregroundColor(labelColor(for: tab))
                 .padding(.horizontal, 4)
                 .padding(.vertical, 10)
 
@@ -460,6 +479,14 @@ struct MeetingDetailView: View {
         }
         .buttonStyle(.plain)
         .padding(.trailing, 20)
+    }
+
+    /// An unread tab sits between selected and dormant: bright enough to be an invitation,
+    /// dim enough that the selected tab is still obviously the selected one.
+    private func labelColor(for tab: DetailTab) -> Color {
+        if selectedTab == tab { return .white }
+        if tab == .overview && overviewIsUnread { return .white.opacity(0.8) }
+        return .white.opacity(0.4)
     }
 
     private var searchField: some View {

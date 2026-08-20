@@ -57,7 +57,7 @@ enum SegmentTag: String, Codable, CaseIterable {
 
 // MARK: - Note
 
-struct MeetingNote: Codable, Identifiable {
+struct MeetingNote: Codable, Identifiable, Equatable {
     var id: UUID
     var kind: NoteKind
     var timestamp: Double
@@ -87,7 +87,7 @@ enum NoteKind: String, Codable, CaseIterable {
 
 // MARK: - Action item
 
-struct MeetingActionItem: Codable, Identifiable {
+struct MeetingActionItem: Codable, Identifiable, Equatable {
     var id: UUID
     var text: String
     var ownerName: String
@@ -105,7 +105,7 @@ struct MeetingActionItem: Codable, Identifiable {
 
 // MARK: - AI summary sub-types
 
-struct TopicItem: Codable, Identifiable {
+struct TopicItem: Codable, Identifiable, Equatable {
     var id: UUID
     var text: String
     var timestampSeconds: Double
@@ -117,7 +117,7 @@ struct TopicItem: Codable, Identifiable {
     }
 }
 
-struct DecisionItem: Codable, Identifiable {
+struct DecisionItem: Codable, Identifiable, Equatable {
     var id: UUID
     var label: String
     var text: String
@@ -131,7 +131,7 @@ struct DecisionItem: Codable, Identifiable {
     }
 }
 
-struct QuestionItem: Codable, Identifiable {
+struct QuestionItem: Codable, Identifiable, Equatable {
     var id: UUID
     var text: String
     var timestampSeconds: Double
@@ -145,7 +145,7 @@ struct QuestionItem: Codable, Identifiable {
 
 // MARK: - AI summary
 
-struct MeetingAISummary: Codable {
+struct MeetingAISummary: Codable, Equatable {
     var overview: String
     var keyTopics: [TopicItem]
     var decisions: [DecisionItem]

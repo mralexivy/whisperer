@@ -69,6 +69,30 @@ bare spinner. Step dots keyed off the stage index give real progress; the sweep 
 indeterminate because LLM latency cannot be honestly predicted. Always clear the phase on
 every exit path, including early returns — a stuck indicator reads worse than none.
 
+### A narrow hand-written `==` on a view's model freezes every view that renders the omitted field
+
+SwiftUI decides whether to re-evaluate a view's `body` by comparing the old and new view
+values, and when a stored property conforms to `Equatable` that comparison goes through the
+type's own `==`. So a custom `==` is not a private opinion about identity — it is a
+declaration of *which fields are allowed to change the screen*.
+
+`MeetingRecord` compared only `id`, `audioFileURL` and `isInProgress`. Everything else —
+`title`, `segments`, `aiSummary` — was invisible to the diff. `MeetingOverviewView`'s only
+non-`@State` property is a `MeetingRecord?`, so when `MeetingDetailViewModel.refreshDetail()`
+published a record that had just gained its LLM summary, SwiftUI compared it equal to the
+one without and skipped the render. The Overview tab sat on "No AI overview yet" until the
+user switched tabs and back, which destroys and rebuilds the view and reads the new value.
+
+Diagnostic signature, worth recognising directly: **the data is provably there, the view is
+stale, and any action that re-creates the view (tab switch, reselect, scroll out of a
+`LazyVStack`) fixes it.** That combination is a diffing bug, not a data-flow bug — do not go
+looking for the missing refresh, there isn't one.
+
+Prefer synthesized `Equatable`. The perf argument for a narrow `==` (avoid comparing a long
+`segments` array) is small — a few hundred short-string comparisons per diff — against a
+whole class of silently frozen views, and it decays badly: the omission is written once and
+then every future view that renders the omitted field inherits the bug.
+
 ## AppKit interop
 
 ### Rebuilding `NSTextView.textStorage` in `updateNSView` destroys text selection

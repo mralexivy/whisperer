@@ -7,13 +7,15 @@
 
 import Foundation
 
+/// Equality is **synthesized on purpose** — do not narrow it back to an identity check.
+///
+/// This is the value SwiftUI diffs to decide whether a meeting view needs re-rendering;
+/// `MeetingOverviewView` takes one as its only non-`@State` property. A hand-written `==`
+/// that skipped `aiSummary` is what froze the Overview tab on its empty state after the LLM
+/// finished: the refreshed record compared equal to the one without a summary, so the body
+/// was never re-evaluated, and only switching tabs (which rebuilds the view) revealed it.
+/// See `MeetingRecordEqualityTests`.
 struct MeetingRecord: Identifiable, Equatable {
-    static func == (lhs: MeetingRecord, rhs: MeetingRecord) -> Bool {
-        lhs.id == rhs.id &&
-        lhs.audioFileURL == rhs.audioFileURL &&
-        lhs.isInProgress == rhs.isInProgress
-    }
-
     let id: UUID
     var title: String
     let createdAt: Date

@@ -36,6 +36,8 @@ struct MeetingLiveWindowView: View {
     @State private var editableTitle = ""
     @State private var isCollapsed = false
     @State private var showOverviewReadyToast = false
+    /// The Overview tab has a summary the user has not looked at yet — drives the glowing dot.
+    @State private var overviewIsUnread = false
     @State private var didCopy = false
     @State private var closeHovering = false
     @State private var collapseHovering = false
@@ -97,6 +99,12 @@ struct MeetingLiveWindowView: View {
         }
         .onAppear { loadMeeting() }
         .onChange(of: session.meetingID) { _, _ in loadMeeting() }
+        // Opening the tab *is* reading it — clear here rather than in the button so the
+        // indicator cannot survive a programmatic switch (the toast) either.
+        .onChange(of: selectedTab) { _, tab in
+            guard tab == .overview, overviewIsUnread else { return }
+            withAnimation(.easeInOut(duration: 0.25)) { overviewIsUnread = false }
+        }
         // Same triggers MeetingStudioView uses: the second one catches the tail chunk that lands
         // after stopRecording() has already returned.
         .onChange(of: session.isRecording) { _, _ in Task { await detailVM.refreshDetail() } }
@@ -118,8 +126,11 @@ struct MeetingLiveWindowView: View {
         .onReceive(NotificationCenter.default.publisher(for: .meetingOverviewDidGenerate)) { notif in
             guard let id = notif.object as? UUID, id == session.meetingID else { return }
             // The whole point of keeping the window open after Stop: the summary arrives here.
+            // It announces itself and stops there — switching the tab out from under someone
+            // who is still reading the transcript is a worse interruption than a missed
+            // summary. The dot keeps the invitation open for as long as it is unread.
             if selectedTab == .overview { return }
-            withAnimation(.easeInOut(duration: 0.2)) { selectedTab = .overview }
+            withAnimation(.easeInOut(duration: 0.25)) { overviewIsUnread = true }
             withAnimation(.spring(response: 0.3)) { showOverviewReadyToast = true }
             Task {
                 try? await Task.sleep(nanoseconds: 2_500_000_000)
@@ -238,6 +249,10 @@ struct MeetingLiveWindowView: View {
                         // when the rail is narrow ("Transcript" broke to "Transcrip/t").
                         .lineLimit(1)
                         .fixedSize(horizontal: true, vertical: false)
+                    if tab == .overview && overviewIsUnread {
+                        OverviewReadyDot()
+                            .transition(.scale(scale: 0.4).combined(with: .opacity))
+                    }
                     if let count = count(for: tab), count > 0 {
                         Text("\(count)")
                             .font(.system(size: 10, weight: .bold))
@@ -253,7 +268,7 @@ struct MeetingLiveWindowView: View {
                             )
                     }
                 }
-                .foregroundColor(selectedTab == tab ? .white : .white.opacity(0.4))
+                .foregroundColor(labelColor(for: tab))
                 .padding(.horizontal, 4)
                 .padding(.vertical, 10)
 
@@ -264,6 +279,14 @@ struct MeetingLiveWindowView: View {
         }
         .buttonStyle(.plain)
         .padding(.trailing, 16)
+    }
+
+    /// An unread tab sits between selected and dormant: bright enough to be an invitation,
+    /// dim enough that the selected tab is still obviously the selected one.
+    private func labelColor(for tab: MeetingLiveTab) -> Color {
+        if selectedTab == tab { return .white }
+        if tab == .overview && overviewIsUnread { return .white.opacity(0.8) }
+        return .white.opacity(0.4)
     }
 
     private func count(for tab: MeetingLiveTab) -> Int? {
@@ -394,7 +417,8 @@ struct MeetingLiveWindowView: View {
         .buttonStyle(.plain)
     }
 
-    /// Copied from `MeetingDetailView.overviewReadyToast` — same wording, same capsule.
+    /// Copied from `MeetingDetailView.overviewReadyToast` — same wording, same capsule, and
+    /// the same one-tap shortcut to the tab it is announcing.
     private var overviewReadyToast: some View {
         HStack(spacing: 8) {
             Text("✦")
@@ -403,6 +427,9 @@ struct MeetingLiveWindowView: View {
             Text("Overview ready")
                 .font(.system(size: 13, weight: .medium))
                 .foregroundColor(.white.opacity(0.9))
+            Text("View")
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundColor(Color(hex: "5B6CF7"))
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 10)
@@ -415,6 +442,7 @@ struct MeetingLiveWindowView: View {
         .shadow(color: .black.opacity(0.4), radius: 12, y: 4)
         .onTapGesture {
             withAnimation(.spring(response: 0.3)) { showOverviewReadyToast = false }
+            withAnimation(.easeInOut(duration: 0.15)) { selectedTab = .overview }
         }
     }
 
