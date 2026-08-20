@@ -21,6 +21,8 @@ import Foundation
 
 enum WholeTextSplitter {
 
+    // MARK: - Correction split (dictation whole-text path)
+
     /// Below this, a text is left as one segment. Splitting a short text costs a seam and buys at
     /// most one extra row of batch width, and the single-pass behaviour on short dictations is what
     /// the measured prompt-quality corpus in `docs/knowledge/llm/criteria.md` was scored against.
@@ -65,6 +67,64 @@ enum WholeTextSplitter {
         }
         if !current.isEmpty { segments.append(current) }
         return segments.isEmpty ? [trimmed] : segments
+    }
+
+    // MARK: - Summary split (meeting overview map-reduce path)
+
+    /// Minimum transcript length before splitting into chunks for parallel summarisation.
+    /// Below this, single-pass overview generation is faster and the batch win is negligible.
+    static let summaryMinimumSplitLength = 1_200
+
+    /// Target chunk size for the map step. Larger than `targetSegmentLength` because
+    /// summarisation needs cross-sentence context that a correction pass does not.
+    static let summaryTargetChunkLength = 1_000
+
+    /// Maximum chunk size before a hard split is forced. Sized for ~250 tokens per chunk at
+    /// 4 chars/token, which keeps each map call well within the 300-token output budget.
+    static let summaryMaximumChunkLength = 3_000
+
+    /// Splits a transcript for parallel map-reduce summarisation.
+    ///
+    /// Returns a single-element array when the text is shorter than `summaryMinimumSplitLength`
+    /// or has no usable sentence boundaries — callers treat width ≤ 2 as a single-pass fallback.
+    /// Each chunk is large enough to summarise independently while preserving [Ns] markers.
+    static func summarySplit(_ text: String) -> [String] {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard trimmed.count >= summaryMinimumSplitLength else { return [trimmed] }
+
+        var segments: [String] = []
+        var current = ""
+        for sentence in sentences(of: trimmed) {
+            if current.count + sentence.count > summaryTargetChunkLength, !current.isEmpty {
+                segments.append(current)
+                current = ""
+            }
+            if sentence.count > summaryMaximumChunkLength {
+                segments.append(contentsOf: hardSummarySplit(sentence))
+            } else if current.isEmpty {
+                current = sentence
+            } else {
+                current += " " + sentence
+            }
+        }
+        if !current.isEmpty { segments.append(current) }
+        return segments.isEmpty ? [trimmed] : segments
+    }
+
+    private static func hardSummarySplit(_ sentence: String) -> [String] {
+        var segments: [String] = []
+        var current = ""
+        for word in sentence.split(separator: " ", omittingEmptySubsequences: true) {
+            let candidate = current.isEmpty ? String(word) : current + " " + word
+            if candidate.count > summaryTargetChunkLength, !current.isEmpty {
+                segments.append(current)
+                current = String(word)
+            } else {
+                current = candidate
+            }
+        }
+        if !current.isEmpty { segments.append(current) }
+        return segments
     }
 
     /// Sentence-ish units. `enumerateSubstrings(.bySentences)` is used rather than a regex on

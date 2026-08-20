@@ -189,6 +189,26 @@ struct EagerStreamEngine {
     /// Words the repetition guard refused to confirm this session. Diagnostic; see `confirm(_:)`.
     private(set) var suppressedRepeatWords = 0
 
+    /// Consecutive `consume` calls that moved neither the agreement boundary nor the accounted-for
+    /// index. Reset by any progress, and by `seek(past:)`.
+    ///
+    /// The engine cannot break a stall on its own — the boundary only advances as a *result* of a
+    /// decode, and whether re-presenting the window would help depends on whether the caller
+    /// capped it, which only the caller knows. But the engine is the only party that can see the
+    /// boundary has stopped moving, so it has to be the one to say so.
+    ///
+    /// What this catches, measured in production on 2026-08-20: `boundaryWordCount` is 2, so a
+    /// one-word hypothesis takes the short-tail branch with `confirmCount = hyp.count - 1 = 0`.
+    /// Nothing is confirmed, `confirmedThroughIndex` does not move, and `advanceAgreement(to:)`
+    /// clamps the boundary to where it already was. With the window capped at `[boundary, +cap]`
+    /// the same audio is presented forever: 2,429 identical 12s decodes over 40 minutes, no
+    /// commit, and — because `dropFront` only runs on commit — a ring buffer that grew to the
+    /// entire 41-minute meeting and became a single blocking tail decode at stop.
+    ///
+    /// The silent-window case has its own escape in `seek(past:)`. This covers the other half:
+    /// a window that *has* speech but yields nothing the agreement algorithm will accept.
+    private(set) var consecutiveStalledPasses = 0
+
     /// Audio index through which the text is accounted for: the end of the last word this engine
     /// either confirmed or deliberately suppressed as a repeat. The agreement boundary may never
     /// advance past it — see `advanceAgreement(to:)`.
@@ -227,6 +247,7 @@ struct EagerStreamEngine {
         confirmedThroughIndex = nil
         strictBoundaryIndex = sampleIndex
         suppressedRepeatWords = 0
+        consecutiveStalledPasses = 0
     }
 
     /// Move the agreement boundary forward, refusing to step over audio no word accounts for.
@@ -307,6 +328,9 @@ struct EagerStreamEngine {
         confirmedThroughIndex = max(confirmedThroughIndex ?? sampleIndex, sampleIndex)
         previousHypothesis.removeAll()
         prefixTokens.removeAll()
+        // The caller took the escape hatch: the next window is audio this engine has never seen,
+        // so whatever pinned the boundary is behind us.
+        consecutiveStalledPasses = 0
     }
 
     // MARK: - consume
@@ -332,6 +356,22 @@ struct EagerStreamEngine {
         let agreementStart = agreementStartIndex ?? audioBaseIndex
         let boundaryMoved = previousConsumeStart != nil && previousConsumeStart != agreementStart
         previousConsumeStart = agreementStart
+
+        // Liveness accounting, on every exit path including the early returns — a pass that bailed
+        // on an empty hypothesis or an anchor hold made no progress either, and those are exactly
+        // the passes that alternate with the productive-looking ones in a stall. See
+        // `consecutiveStalledPasses`. Both indices are checked because either one moving means the
+        // next window will differ: `strictBoundaryIndex` re-cuts it, `confirmedThroughIndex`
+        // unpins the clamp in `advanceAgreement(to:)` so a later pass can.
+        let boundaryOnEntry = strictBoundaryIndex
+        let accountedOnEntry = confirmedThroughIndex
+        defer {
+            if strictBoundaryIndex == boundaryOnEntry && confirmedThroughIndex == accountedOnEntry {
+                consecutiveStalledPasses += 1
+            } else {
+                consecutiveStalledPasses = 0
+            }
+        }
 
         // Filter the hypothesis to the unconfirmed region — by **overlap**, not onset.
         //

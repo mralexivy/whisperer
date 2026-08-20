@@ -735,4 +735,75 @@ final class EagerStreamEngineTests: XCTestCase {
         XCTAssertEqual(confirmed.count, Set(confirmed).count,
                        "a word was confirmed twice in one pass: \(confirmed)")
     }
+
+    // MARK: - Stall detection
+
+    /// A capped window whose decode yields a single word forever must be reported as stalled.
+    ///
+    /// Reproduces the 2026-08-20 meeting hang. `boundaryWordCount` is 2, so a one-word hypothesis
+    /// takes the short-tail branch, where `confirmCount = hyp.count - 1 = 0` — nothing is
+    /// confirmed, so `confirmedThroughIndex` does not move, so `advanceAgreement(to:)` clamps the
+    /// boundary to where it already was. The caller caps the window at `[agreementStartIndex,
+    /// +cap]`, so the window cannot move either. The production log shows the end state: 2,429
+    /// identical decodes of the same 12s window over 40 minutes, no commit, and a ring buffer that
+    /// grew to the whole meeting because `dropFront` is only called on commit.
+    ///
+    /// The engine cannot break the deadlock itself — only the caller knows the window is capped —
+    /// but it is the only party that knows the boundary stopped moving, so it must say so.
+    func testCappedWindowYieldingOneWordReportsStall() {
+        var engine = EagerStreamEngine()
+        engine.reset(at: 0)
+        // Mimic the silent-backlog seek that preceded the hang: it sets `confirmedThroughIndex`,
+        // which is what pins `advanceAgreement` afterwards.
+        engine.seek(past: 1_750_560)
+
+        let stuck = [word(" so", startSec: 109.6, endSec: 109.9, p: 0.30)]
+        for _ in 0..<8 {
+            _ = engine.consume(hypothesis: stuck, audioBaseIndex: 1_750_560,
+                               languageIsLocked: true, lastCommittedIndex: 251_200,
+                               windowEndIndex: 1_942_560)
+        }
+
+        XCTAssertEqual(engine.agreementStartIndex, 1_750_560,
+                       "precondition: the boundary is pinned — this is the deadlock")
+        XCTAssertGreaterThanOrEqual(
+            engine.consecutiveStalledPasses, 8,
+            "the engine must report that the boundary has not moved, so the caller can seek past "
+            + "the capped window instead of re-decoding it for the rest of the meeting")
+    }
+
+    /// A window that keeps confirming must never look stalled.
+    func testProgressingWindowReportsNoStall() {
+        var engine = EagerStreamEngine()
+        engine.reset(at: 0)
+
+        let hyp = sentence("alpha bravo charlie delta echo", p: 0.99)
+        _ = engine.consume(hypothesis: hyp, audioBaseIndex: 0, languageIsLocked: true,
+                           lastCommittedIndex: 0, windowEndIndex: .max)
+        _ = engine.consume(hypothesis: hyp, audioBaseIndex: 0, languageIsLocked: true,
+                           lastCommittedIndex: 0, windowEndIndex: .max)
+
+        XCTAssertEqual(engine.consecutiveStalledPasses, 0,
+                       "a pass that advanced the boundary must reset the stall counter")
+    }
+
+    /// `seek(past:)` is the escape hatch — taking it must clear the stall.
+    func testSeekClearsStall() {
+        var engine = EagerStreamEngine()
+        engine.reset(at: 0)
+        engine.seek(past: 1_750_560)
+
+        let stuck = [word(" so", startSec: 109.6, endSec: 109.9, p: 0.30)]
+        for _ in 0..<8 {
+            _ = engine.consume(hypothesis: stuck, audioBaseIndex: 1_750_560,
+                               languageIsLocked: true, lastCommittedIndex: 251_200,
+                               windowEndIndex: 1_942_560)
+        }
+        XCTAssertGreaterThan(engine.consecutiveStalledPasses, 0)
+
+        engine.seek(past: 1_942_560)
+        XCTAssertEqual(engine.consecutiveStalledPasses, 0,
+                       "the caller took the escape hatch; the next window is fresh audio")
+        XCTAssertEqual(engine.agreementStartIndex, 1_942_560)
+    }
 }

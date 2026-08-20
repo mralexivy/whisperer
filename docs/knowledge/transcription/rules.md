@@ -504,3 +504,55 @@ Two rules follow:
    was written for exactly this and had no surviving caller; the absence of a `polish:` line in a
    user's log was the only evidence that found the bug, and it was evidence by absence — which is
    the weakest kind and the last to be noticed.
+
+---
+
+## A progress variable that only advances as a result of its own output needs an unconditional escape
+
+**Confirmed 2026-08-20** (`EagerStreamEngine.advanceAgreement` / `StreamingTranscriber.applyEagerOutcome`,
+41-minute Google Meet meeting, 2,429 identical decodes).
+
+The eager decode window is `[agreementStartIndex, agreementStartIndex + eagerMaxWindowSeconds]`.
+The boundary only moves when a pass *confirms* words, and `advanceAgreement(to:)` clamps it to
+`confirmedThroughIndex`. With `boundaryWordCount = 2`, a hypothesis of one word takes the short-tail
+branch where `confirmCount = hyp.count - 1 = 0`, so nothing is confirmed, so `confirmedThroughIndex`
+never moves, so the clamp pins the boundary — and the *capped* window means the next pass sees byte
+for byte the same audio and returns the same one word. The loop is closed: same input → same output
+→ same input. It ran for 40 minutes at ~1 pass/second.
+
+Three consequences, each of which is its own rule:
+
+1. **Any loop whose next input is a function of its own last output must have a liveness counter and
+   an escape that does not depend on the loop making progress.** `seek(past:)` already existed for
+   the silent version of this stall; the speech version had no path to it. The counter
+   (`consecutiveStalledPasses`) increments on *every* exit path of `consume`, including the early
+   returns for empty hypotheses and anchor holds — those are exactly the passes that alternate with
+   the productive-looking ones and make a stall read as activity in the log.
+2. **The escape must be placed after the commit handling, not before.** A soft-commit can fire on
+   the pass that trips the counter (the counter tracks boundary movement, not commits), and escaping
+   first would silently drop that text.
+3. **Prune the audio ring on every boundary advance, not only on commit.** `ring.dropFront` was
+   called only from the soft-commit path, so a stall that produced no commits also released no
+   memory. The existing `silentBacklog` seek had the same hole: the log shows the boundary jumping
+   251200 → 1750560 while every sample behind it stayed resident. The ring grew to the whole
+   41-minute meeting, and at stop that became `Transcribing tail: 2484.7s` — one synchronous
+   whisper.cpp call over the entire session.
+
+**Set the escape threshold from the measured healthy distribution, not from intuition.** The escape
+costs audio — `seek(past:)` discards the window — so it is only as safe as its margin. The first cut
+used 6 stalled passes, reasoning from wall-clock latency. Across the 8-fixture eager regression
+corpus the longest *healthy* run of non-advancing passes is also 6, and runs of 6 occur 7 times: the
+escape fired on 3 of 8 fixtures, threw away ~10s of real speech each, and moved corpus mean WER from
+0.098 to 0.234. At 40 it fires on none of them. **A recovery mechanism that has never been run
+against the healthy population is untuned, and an untuned one is a new bug with a reassuring name.**
+The same applies to the tail cap: 90s looked "far past any legitimate tail" and immediately trimmed
+30s off a real 120s recording, so it went to 600s.
+
+**And the second-order failure is the one the user actually saw.** `transcribeTail()` set no
+`isProcessing`, so `AppState.startStopWatchdog`'s activity probe
+(`streamingTranscriber?.isProcessing == true`) read false for 5.8s while a 41-minute decode was
+running, force-idled the app, and `abandonMeetingMode` closed the meeting live window. The window
+vanishing was not a crash — there is no `.ips` for the day. **Any synchronous decode long enough to
+outlast a watchdog must report itself to that watchdog, and must be bounded** (`maxTailSeconds = 600`);
+an unbounded decode is an unbounded hang. A cap that trips is also a bug report: it logs at `error`,
+because reaching it means the prune path stopped working upstream.

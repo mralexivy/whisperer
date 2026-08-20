@@ -149,6 +149,15 @@ class StreamingTranscriber {
     private var ring = RingBuffer()
     private let allSamplesLock = SafeLock()
 
+    /// Unpruned ring content that means the pipeline has stopped committing. Well past any
+    /// legitimate window: the eager cap is 12s and the VAD target chunk is smaller still, so 120s
+    /// resident can only mean nothing has advanced for two minutes.
+    /// See `reportRingGrowthIfUnbounded(inMemoryCount:)`.
+    private static let ringGrowthWarnSeconds: Double = 120
+    /// Next resident-sample count that warrants a warning; doubles after each one, and is reset
+    /// to the base threshold whenever the ring drains back under it.
+    private var ringGrowthWarnThreshold = 0
+
     // VAD-chunked pipeline state
     private let vad: SileroVAD?  // Separate ref for language detection filtering
     private var vadSegmenter: VADSegmenter
@@ -363,6 +372,9 @@ class StreamingTranscriber {
     // Serializes bridge.feed() calls. Each addSamples Task chains onto this, preventing
     // concurrent process(samples:) on the same actor (Swift re-entrancy → heap corruption).
     private var nemotronFeedTask: Task<Void, Never>?
+    /// True when Nemotron drives the live HUD but whisper.cpp eager is the final decoder.
+    /// Computed from the same information the init already has — no extra parameter needed.
+    private var nemotronIsPreviewOnly: Bool { nemotronBridge != nil && usesEagerStream }
     #endif
 
     // Session audio file on disk (set by AppState after creation, used for saveRecording and tail)
@@ -420,7 +432,29 @@ class StreamingTranscriber {
         /// The window was capped and held nothing but silence; the boundary was seeked past it.
         /// Unlike the others this one is self-clearing, because the next window is new audio.
         case silentBacklog
+        /// The window was capped, held speech, and was decoded `eagerMaxStalledPasses` times
+        /// without the agreement boundary moving. Seeked past, same as `silentBacklog`.
+        case stalledBacklog
     }
+
+    /// How many consecutive non-advancing passes over a capped window are tolerated before the
+    /// boundary is forced past it.
+    ///
+    /// The stall this bounds is not hypothetical: on 2026-08-20 a meeting spent 40 minutes
+    /// re-decoding one 12-second window 2,429 times because the decode kept returning a single
+    /// word, and a one-word hypothesis confirms nothing (see
+    /// `EagerStreamEngine.consecutiveStalledPasses`). Nothing committed, so the ring was never
+    /// pruned, so the tail decode at stop was handed the entire 41-minute meeting.
+    ///
+    /// The threshold is measured, not guessed, because escaping *costs* audio — `seek(past:)`
+    /// discards the window. Across the 8-fixture eager regression corpus the longest healthy run of
+    /// consecutive non-advancing passes is 6, and runs of 6 occur 7 times; a 6-pass trigger fired
+    /// on 3 of 8 fixtures and threw away ~10 s of real speech each time (corpus mean WER 0.098 →
+    /// 0.234). The runaway this exists to stop ran to 2,429. Forty sits ~5x above the healthy
+    /// maximum and ~60x below the failure, which is as wide a margin as the two populations allow.
+    /// At the observed ~850 ms pass latency it is about 35 s of no progress — bounded, and bounded
+    /// again by the window cap on how much audio is given up.
+    var eagerMaxStalledPasses = 40
 
     /// Test-only probe, paired with `onEagerPassMeasured`. nil in the app.
     var onEagerPassSkipped: ((EagerPassSkip) -> Void)?
@@ -729,7 +763,10 @@ class StreamingTranscriber {
                 await nemotron.setPreviewCallback(callback)
                 self.isNemotronSessionReady = true
             }
-            return
+            // Preview-only: Nemotron drives the HUD while whisper.cpp runs the eager decode
+            // for the final text — both paths must start. Only return early when Nemotron
+            // is the final decoder (the non-preview case).
+            if !nemotronIsPreviewOnly { return }
         }
         #endif
 
@@ -797,38 +834,82 @@ class StreamingTranscriber {
         guard !samples.isEmpty, !isStopped else { return }
 
         #if canImport(FluidAudio)
-        // Nemotron: feed directly, bypass ring buffer. Duration tracking still needs updating.
         if nemotronBridge != nil {
-            do {
-                try allSamplesLock.withLock { totalSamplesReceived += samples.count }
-            } catch {}
-            // Drop samples until beginSession + setPreviewCallback have completed.
-            // beginSession typically takes 1-8ms while audio engine setup takes 80-200ms,
-            // so this guard only triggers if ANE is contended at session start.
-            guard isNemotronSessionReady else { return }
-            // Chain onto the previous feed task to serialize bridge.feed() calls.
-            // Spawning independent Tasks causes concurrent process(samples:) on the same
-            // actor (Swift re-entrancy via ANE encoder await) → shared-buffer heap corruption.
-            let capturedSamples = samples
-            nemotronFeedTask = Task { [weak self, prev = nemotronFeedTask] in
-                _ = await prev?.value  // wait for previous feed to finish
-                // No isStopped check here — pending tasks must complete their feed()
-                // before endSession(). stopAsync() awaits this chain first.
-                guard let self else { return }
-                await self.nemotronBridge?.feed(samples: capturedSamples)
+            if nemotronIsPreviewOnly {
+                // Preview-only: chain Nemotron feed AND fall through to the ring buffer below
+                // so whisper.cpp sees the full audio for its final decode.
+                // totalSamplesReceived is counted by the ring-buffer append path — no double-count.
+                // Drop Nemotron feeds until beginSession + setPreviewCallback have completed;
+                // the ring buffer still receives the samples so whisper misses nothing.
+                if isNemotronSessionReady {
+                    let capturedSamples = samples
+                    nemotronFeedTask = Task { [weak self, prev = nemotronFeedTask] in
+                        _ = await prev?.value
+                        guard let self else { return }
+                        await self.nemotronBridge?.feed(samples: capturedSamples)
+                    }
+                }
+                // Fall through to ring buffer below.
+            } else {
+                // Nemotron is the final decoder: feed directly, bypass ring buffer.
+                do {
+                    try allSamplesLock.withLock { totalSamplesReceived += samples.count }
+                } catch {}
+                guard isNemotronSessionReady else { return }
+                let capturedSamples = samples
+                // Serialise bridge.feed() calls — spawning independent Tasks causes concurrent
+                // process(samples:) on the same actor (Swift re-entrancy via ANE encoder await)
+                // → shared-buffer heap corruption.
+                nemotronFeedTask = Task { [weak self, prev = nemotronFeedTask] in
+                    _ = await prev?.value
+                    guard let self else { return }
+                    await self.nemotronBridge?.feed(samples: capturedSamples)
+                }
+                return
             }
-            return
         }
         #endif
 
+        var inMemory = 0
         do {
             try allSamplesLock.withLock {
                 ring.append(samples)
                 totalSamplesReceived += samples.count
+                inMemory = ring.inMemoryCount
             }
         } catch {
             Logger.error("Failed to acquire allSamplesLock: \(error.localizedDescription)", subsystem: .transcription)
         }
+        reportRingGrowthIfUnbounded(inMemoryCount: inMemory)
+    }
+
+    /// Tripwire on unbounded ring growth.
+    ///
+    /// The ring is only pruned as a side effect of progress — a soft-commit, a completed VAD
+    /// chunk, a boundary seek. So "the ring keeps growing" is the observable signature of *any*
+    /// bug that stops the transcription pipeline from advancing, whatever the cause. On
+    /// 2026-08-20 that signature went unreported for 40 minutes: the eager boundary was pinned,
+    /// nothing ever committed, and the first anyone heard of it was a 2484.7s tail decode at stop
+    /// that wedged the UI. There was no shortage of logging — 16,000 lines of it — just nothing
+    /// that said the buffer was not draining.
+    ///
+    /// Warn only. The tail cap and the stall escape are the mechanisms that actually recover;
+    /// this exists so the next unknown failure announces itself in seconds rather than at stop.
+    /// Rate-limited by doubling so a genuinely long unpruned stretch does not flood the log.
+    private func reportRingGrowthIfUnbounded(inMemoryCount: Int) {
+        let threshold = Int(StreamingTranscriber.ringGrowthWarnSeconds * sampleRate)
+        guard inMemoryCount >= threshold else {
+            ringGrowthWarnThreshold = threshold
+            return
+        }
+        guard inMemoryCount >= ringGrowthWarnThreshold else { return }
+        ringGrowthWarnThreshold = max(inMemoryCount, ringGrowthWarnThreshold) * 2
+        Logger.warning(
+            "Audio ring holding \(String(format: "%.0f", Double(inMemoryCount) / sampleRate))s "
+            + "unpruned (\(inMemoryCount * MemoryLayout<Float>.size / 1_048_576)MB) — the "
+            + "transcription pipeline has stopped committing. Last committed sample: "
+            + "\(lastTranscribedSampleIndex), received: \(totalSamplesReceived).",
+            subsystem: .transcription)
     }
 
     // MARK: - VAD Scan & Chunk Processing
@@ -1724,6 +1805,17 @@ class StreamingTranscriber {
             if candidateEndIndex < liveEndIndex {
                 eagerEngine?.seek(past: candidateEndIndex)
                 onEagerPassSkipped?(.silentBacklog)
+                // Release the skipped silence. The boundary has moved past it, so no future pass
+                // will ever ask for it again — but the ring only prunes on soft-commit, so
+                // without this the audio stays resident for the rest of the recording and the
+                // stop-time tail decode is handed all of it. On the 2026-08-20 meeting the
+                // silent seek jumped the boundary 251200 → 1750560 and the ring kept every
+                // sample behind it.
+                lastClaimedSampleIndex = max(lastClaimedSampleIndex, candidateEndIndex)
+                lastPreviewVADCheckEndIndex = max(lastPreviewVADCheckEndIndex, candidateEndIndex)
+                do { try allSamplesLock.withLock { ring.dropFront(toAbsoluteIndex: candidateEndIndex) } }
+                catch { Logger.warning("Eager silent seek could not prune skipped audio",
+                                       subsystem: .transcription) }
             } else {
                 onEagerPassSkipped?(.silent)
             }
@@ -1851,6 +1943,7 @@ class StreamingTranscriber {
               confirmed: \(outcome.confirmedText ?? "-")
               display:   \(outcome.displayText ?? "-")
             """, subsystem: .transcription)
+
         if let commit = outcome.softCommit, !commit.text.isEmpty {
             // Dedup against the previous chunk, as every other commit path here already does
             // (`appendTailTranscription`, the VAD chunk path). This one appended raw, and the
@@ -1891,8 +1984,80 @@ class StreamingTranscriber {
             // from the unconfirmed tail. Reset the monotonicity floor with it.
             lastPublishedEagerWordCount = 0
         }
+        // ── Liveness escape ───────────────────────────────────────────────────────
+        // The boundary only advances as a result of a decode, and the window is
+        // `[boundary, +cap]`, so a capped window that never confirms is a closed loop: the same
+        // audio is re-decoded until the recording ends. `seek(past:)` already breaks the silent
+        // version of this; this breaks the version where the window has speech the agreement
+        // algorithm will not accept. Without it the ring is never pruned either, and a 40-minute
+        // stall turns the stop-time tail decode into a single blocking pass over the whole
+        // recording — which is how a meeting hung the UI on 2026-08-20.
+        //
+        // Placed *after* the soft-commit block deliberately. A commit can still fire on the pass
+        // that trips the counter — the counter tracks boundary movement, not commits — and
+        // escaping before it would silently drop that text.
+        //
+        // Only fires when the window is actually capped. An uncapped window reaches the live edge
+        // and grows with the audio, so it changes on its own and seeking would discard speech the
+        // next pass was about to decode anyway.
+        if engine.consecutiveStalledPasses >= eagerMaxStalledPasses {
+            let liveEndIndex = (try? allSamplesLock.withLock { ring.endAbsoluteIndex })
+                ?? candidateEndIndex
+            if candidateEndIndex < liveEndIndex {
+                let skipped = Double(candidateEndIndex - audioBaseIndex) / sampleRate
+                Logger.warning(
+                    "Eager stream stalled: boundary pinned at \(audioBaseIndex) for "
+                    + "\(engine.consecutiveStalledPasses) passes over a capped window — seeking "
+                    + "past \(String(format: "%.1f", skipped))s to \(candidateEndIndex)",
+                    subsystem: .transcription)
+                engine.seek(past: candidateEndIndex)
+                eagerEngine = engine
+                onEagerPassSkipped?(.stalledBacklog)
+                // The audio is accounted for whether or not it produced text, so let the ring
+                // release it. This is the prune that the missing commit never performed, and it
+                // is what keeps the tail decode at stop proportional to the unread tail rather
+                // than to the whole session.
+                lastClaimedSampleIndex = max(lastClaimedSampleIndex, candidateEndIndex)
+                lastPreviewVADCheckEndIndex = max(lastPreviewVADCheckEndIndex, candidateEndIndex)
+                do { try allSamplesLock.withLock { ring.dropFront(toAbsoluteIndex: candidateEndIndex) } }
+                catch { Logger.warning("Eager stall recovery could not prune skipped audio",
+                                       subsystem: .transcription) }
+                return
+            }
+        }
+
         guard let displayText = outcome.displayText, !displayText.isEmpty else { return }
         guard !isHallucination(displayText) else { return }
+
+        let wordCount = displayText.split(separator: " ").count
+
+        // Reject a pass that claims more words than the audio it covers could hold.
+        //
+        // Both stop-time consumers of the hypothesis below gate on
+        // `averageLogProbability >= -0.65`, and that test is inverted for the failure that matters
+        // here: a stuck decoder is *confident*. The 2026-08-20 spiral scored -0.17, better than
+        // most real speech, and was promoted to final output. Speaking rate is the signal
+        // confidence is not — that pass claimed 108 words over a 6.1s span (17.7 w/s) when fast
+        // human speech tops out near 4.
+        //
+        // Placed ahead of the shrink guard deliberately. Everything below it, including
+        // `lastPublishedEagerWordCount`, is state a bad pass would poison: a 96-word spiral that
+        // set the floor to 96 would drop every legitimate 4-8 word pass after it until the next
+        // soft-commit reset the floor, freezing the live preview.
+        let spanSeconds = Double(candidateEndIndex - lastTranscribedSampleIndex) / sampleRate
+        if spanSeconds > 0 {
+            let wordsPerSecond = Double(wordCount) / spanSeconds
+            guard wordsPerSecond <= Self.maximumPlausibleWordsPerSecond else {
+                Logger.debug(
+                    "Eager pass dropped: \(wordCount) words over "
+                    + "\(String(format: "%.1f", spanSeconds))s = "
+                    + "\(String(format: "%.1f", wordsPerSecond)) w/s exceeds "
+                    + "\(String(format: "%.1f", Self.maximumPlausibleWordsPerSecond))",
+                    subsystem: .transcription
+                )
+                return
+            }
+        }
 
         // Live text must never shrink. `displayText` is `confirmedWords + hyp`, and the
         // unconfirmed `hyp` is a fresh full-model decode of a *growing* window — whisper.cpp
@@ -1903,7 +2068,6 @@ class StreamingTranscriber {
         // so the worst case is one stale frame, and the next pass that actually extends the text
         // publishes normally. A shrunk hypothesis is also unfit to reuse at stop — it covers more
         // audio with fewer words — so this returns before touching the reuse fields too.
-        let wordCount = displayText.split(separator: " ").count
         guard wordCount >= lastPublishedEagerWordCount else {
             Logger.debug("Eager pass dropped: \(wordCount) words would shrink live text from \(lastPublishedEagerWordCount)", subsystem: .transcription)
             return
@@ -1920,19 +2084,28 @@ class StreamingTranscriber {
         let publishedText = eagerPublishesSpeculativeTail
             ? displayText
             : (outcome.confirmedText ?? "")
-        guard !publishedText.isEmpty else { return }
 
-        // Record this pass as a reusable final result. `displayText` is `confirmedWords + hyp`
-        // (EagerStreamEngine), so it already spans the whole uncommitted region from
-        // lastTranscribedSampleIndex through candidateEndIndex — nothing is held back for a
-        // later pass. That is what lets canReuseEagerPreviewAtStop() skip the tail decode and
-        // makes the stop insert immediate. Language is always locked here (fixed-language model).
+        // Record this pass as a reusable final result BEFORE any early exit — the stop path
+        // reads latestWhisperKitPreviewText to skip the tail decode (canReuseEagerPreviewAtStop),
+        // so this must be recorded even when publishedText is empty or the display is suppressed.
+        // `displayText` spans the whole uncommitted region; `publishedText` is what the screen sees.
         latestWhisperKitPreviewText = displayText
         latestWhisperKitPreviewStartIndex = lastTranscribedSampleIndex
         latestWhisperKitPreviewEndIndex = candidateEndIndex
         latestWhisperKitPreviewAverageLogProbability = result.averageLogProbability
         latestWhisperKitPreviewLanguageIsLocked = true
         whisperKitPreviewAnchoredAtTailStart = true
+
+        guard !publishedText.isEmpty else { return }
+
+        #if canImport(FluidAudio)
+        // When Nemotron drives the HUD, eager commits text but does not publish to the display.
+        // previewAccumulatedText is owned by the Nemotron partial callback — do not overwrite it.
+        if nemotronIsPreviewOnly {
+            lastPreviewedSampleIndex = candidateEndIndex
+            return
+        }
+        #endif
 
         let passID = previewPassID &+ 1
         previewPassID = passID
@@ -2005,15 +2178,12 @@ class StreamingTranscriber {
             }
         }
 
-        let maxPhraseLen = words.count / 3
-        if maxPhraseLen >= 3 {
-            for phraseLen in 3...min(6, maxPhraseLen) {
-                let phrase = words.prefix(phraseLen).joined(separator: " ")
-                let phraseCount = lower.components(separatedBy: phrase).count - 1
-                if phraseCount >= 3 {
-                    return true
-                }
-            }
+        // Scans every offset, not just the prefix. This check used to build its candidate phrase
+        // from `words.prefix(...)`, which cannot see a loop that starts anywhere but word 0 — the
+        // 2026-08-20 spiral began six words in and reached the clipboard. See `TranscriptRepetition`.
+        if TranscriptRepetition.containsLoop(words: words) {
+            Logger.debug("Hallucination detected: repetition loop in \(words.count)-word result", subsystem: .transcription)
+            return true
         }
 
         return false
@@ -2067,8 +2237,36 @@ class StreamingTranscriber {
         return clearAndReturn(finalResult)
     }
 
+    /// Longest tail the stop path will hand to a single synchronous decode.
+    ///
+    /// The tail is meant to be the sliver between the last commit and key release — sub-second on
+    /// the eager path, a few seconds on the VAD path. It is bounded only by how much unpruned
+    /// audio the ring happens to be holding, and on 2026-08-20 that was the entire meeting:
+    /// `Transcribing tail: 2484.7s`, one blocking whisper.cpp call over 41 minutes of audio, which
+    /// never returned and left the UI wedged behind it.
+    ///
+    /// The stall that filled the ring is fixed at its source (see `eagerMaxStalledPasses`); this
+    /// is the backstop that keeps the *next* such bug from being a hang.
+    ///
+    /// Ten minutes, not the 90s first tried: the regression corpus contains a 120s recording whose
+    /// whole body arrives as the tail, and a 90s cap silently dropped 30s of it. A cap that trims
+    /// real speech is worse than the hang it prevents, so it is set past any recording a user
+    /// dictates in one breath-hold while still bounding the decode. The watchdog is satisfied by
+    /// `isProcessing` regardless; this only bounds the wall clock. Exceeding it is a bug, so it is
+    /// logged as an error rather than silently accommodated — and the last N seconds are kept
+    /// rather than the first, because the tail's job is the end of the recording.
+    private static let maxTailSeconds: Double = 600
+
     /// Transcribe remaining audio after the last completed chunk
     private func transcribeTail() {
+        // Visible to the stop watchdog. `AppState.startStopWatchdog` force-idles the app after 5s
+        // of no reported activity, and on 2026-08-20 it did exactly that *while this decode was
+        // running* — `forceIdleFromWatchdog` → `abandonMeetingMode` closed the meeting window out
+        // from under a stop that was still working. A synchronous decode that reports nothing is
+        // indistinguishable from a hung app, so report it.
+        isProcessing = true
+        defer { isProcessing = false }
+
         var ringContent: [Float] = []
         var ringBase: Int = 0
         do {
@@ -2084,12 +2282,32 @@ class StreamingTranscriber {
         // Map absolute lastTranscribedSampleIndex to ring-relative
         let tailRelIndex = max(0, lastTranscribedSampleIndex - ringBase)
 
-        guard let tailChunk = vadSegmenter.finalizeTail(
+        guard var tailChunk = vadSegmenter.finalizeTail(
             allSamples: ringContent,
             lastTranscribedIndex: tailRelIndex
         ) else {
             Logger.debug("No tail audio to transcribe", subsystem: .transcription)
             return
+        }
+
+        // Backstop against an oversized tail — see `maxTailSeconds`. Keep the end, drop the head:
+        // whatever went wrong upstream, the words the user just said are at the end.
+        let tailCap = Int(StreamingTranscriber.maxTailSeconds * sampleRate)
+        if tailChunk.samples.count > tailCap {
+            let dropped = Double(tailChunk.samples.count - tailCap) / sampleRate
+            Logger.error(
+                "Tail is \(String(format: "%.1f", Double(tailChunk.samples.count) / sampleRate))s — "
+                + "over the \(Int(StreamingTranscriber.maxTailSeconds))s cap. Decoding the last "
+                + "\(Int(StreamingTranscriber.maxTailSeconds))s and dropping "
+                + "\(String(format: "%.1f", dropped))s. The ring should never grow this far; the "
+                + "commit path stopped pruning.",
+                subsystem: .transcription)
+            tailChunk = VADSegmenter.AudioChunk(
+                startSample: tailChunk.endSample - tailCap,
+                endSample: tailChunk.endSample,
+                samples: Array(tailChunk.samples.suffix(tailCap)),
+                overlapPrefixSamples: 0
+            )
         }
 
         // Energy check as secondary guard (when VAD is nil)
@@ -2358,36 +2576,44 @@ class StreamingTranscriber {
             Logger.debug("In-flight chunk completed after \(waitCount * 10)ms", subsystem: .transcription)
         }
 
-        // Nemotron: get complete transcript from finish(), skip tail transcription.
+        // Nemotron session teardown.
         #if canImport(FluidAudio)
         if let nemotron = nemotronBridge {
-            // Wait for all pending feed() calls to complete before ending the session.
-            // Without this, endSession() could race with in-flight feeds.
+            // Drain all pending feed() calls before ending the session.
             await nemotronFeedTask?.value
             nemotronFeedTask = nil
-            let durationSec = Double(totalSamplesReceived) / sampleRate
-            var text = await nemotron.endSession()
-            if text.isEmpty {
-                // finish() threw or returned nothing. Keep previewAccumulatedText so AppState's
-                // fallback (currentTranscription) can recover partial results from streaming.
-                Logger.event(.asrFail, .transcription, ["reason": .string("empty_finish")], level: .warning)
+
+            if nemotronIsPreviewOnly {
+                // Whisper is the final decoder. Close the Nemotron session for cleanup but
+                // discard its transcript — the whisper stop path below produces the final text.
+                _ = await nemotron.endSession()
+                // Fall through to the whisper tail decode path below.
             } else {
-                previewAccumulatedText = ""
-                if !skipCorrections {
-                    text = DictionaryManager.shared.correctText(text)
-                    if fillerWordRemovalEnabled { text = FillerWordFilter.removeFillers(from: text) }
+                // Nemotron is the final decoder: use its full-session result.
+                let durationSec = Double(totalSamplesReceived) / sampleRate
+                var text = await nemotron.endSession()
+                if text.isEmpty {
+                    // finish() threw or returned nothing. Keep previewAccumulatedText so AppState's
+                    // fallback (currentTranscription) can recover partial results from streaming.
+                    Logger.event(.asrFail, .transcription, ["reason": .string("empty_finish")], level: .warning)
+                } else {
+                    previewAccumulatedText = ""
+                    if !skipCorrections {
+                        text = DictionaryManager.shared.correctText(text)
+                        if fillerWordRemovalEnabled { text = FillerWordFilter.removeFillers(from: text) }
+                    }
+                    completedChunkTexts = [text]
+                    // Nemotron returns the whole session in one blob at stop, so the span is
+                    // the entire recording. Consumers that need finer granularity subdivide it.
+                    onChunkCompleted?(TranscriptChunk(
+                        text: text,
+                        start: 0,
+                        end: durationSec,
+                        recordedDuration: durationSec
+                    ))
                 }
-                completedChunkTexts = [text]
-                // Nemotron returns the whole session in one blob at stop, so the span is
-                // the entire recording. Consumers that need finer granularity subdivide it.
-                onChunkCompleted?(TranscriptChunk(
-                    text: text,
-                    start: 0,
-                    end: durationSec,
-                    recordedDuration: durationSec
-                ))
+                return clearAndReturn(text)
             }
-            return clearAndReturn(text)
         }
         #endif
 

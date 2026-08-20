@@ -150,7 +150,6 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     private func setupComponents() {
         // Initialize core components (always needed)
         appState.audioRecorder = AudioRecorder()
-        appState.whisperRunner = WhisperRunner()
         appState.textInjector = TextInjector()
         appState.audioMuter = AudioMuter()
         appState.soundPlayer = SoundPlayer()

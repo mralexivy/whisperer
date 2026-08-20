@@ -223,7 +223,6 @@ class AppState: ObservableObject {
     // Component references
     var audioRecorder: AudioRecorder?
     var keyListener: GlobalKeyListener?
-    var whisperRunner: WhisperRunner?
     var textInjector: TextInjector?
     var audioMuter: AudioMuter?
     var soundPlayer: SoundPlayer?
@@ -580,6 +579,10 @@ class AppState: ObservableObject {
     /// post-meeting AI work. The bridge is now loaded alongside the user's backend and
     /// released through `ModelWorkQueue` once the AI tail has drained.
     private var meetingOwnsNemotron = false
+    /// True when Nemotron was preloaded to serve as the live-preview source alongside
+    /// whisper.cpp dictation. Protects the bridge from being torn down by a backend switch
+    /// that should only affect the user's selected backend, not the preview engine.
+    private var previewOwnsNemotron = false
     /// Set when free memory was too tight to hold the user's backend and Nemotron at once,
     /// so the user's bridge was evicted for the duration of the meeting and must be reloaded
     /// afterwards. `selectedBackendType` is still never written.
@@ -994,6 +997,10 @@ class AppState: ObservableObject {
 
     /// Release the active transcription bridge and all satellite resources (EOU, VAD, CTC)
     func releaseCurrentBridge() {
+        // Surrendering the preview-owned Nemotron so it is released below (unless a meeting
+        // also owns it). Backend switch is an explicit user action, so preview ownership ends.
+        if !meetingOwnsNemotron { previewOwnsNemotron = false }
+
         let memBefore = BenchmarkUtilities.currentMemoryMB()
 
         // Cancel in-flight load tasks to prevent them from setting the bridge after we nil it
@@ -1004,8 +1011,8 @@ class AppState: ObservableObject {
         speechAnalyzerLoadTask?.cancel()
         speechAnalyzerLoadTask = nil
         #if canImport(FluidAudio)
-        // A meeting-initiated Nemotron load must survive a backend switch — see meetingOwnsNemotron.
-        if !meetingOwnsNemotron {
+        // A meeting-initiated or preview-initiated Nemotron load must survive a backend switch.
+        if !meetingOwnsNemotron && !previewOwnsNemotron {
             nemotronLoadTask?.cancel()
             nemotronLoadTask = nil
         }
@@ -1024,9 +1031,9 @@ class AppState: ObservableObject {
 
         // Release Nemotron bridge if loaded
         #if canImport(FluidAudio)
-        // A meeting-owned bridge survives backend switches — the meeting is recording through
-        // it right now, and it is not the user's selected backend to begin with.
-        if let nemotron = nemotronBridgeInstance, !meetingOwnsNemotron {
+        // A meeting-owned or preview-owned bridge survives backend switches — it is being used
+        // by an active recording or was loaded to serve live preview alongside whisper.cpp.
+        if let nemotron = nemotronBridgeInstance, !meetingOwnsNemotron && !previewOwnsNemotron {
             Task { await nemotron.prepareForShutdown() }
             nemotronBridgeInstance = nil
             isLoadingNemotron = false
@@ -1275,6 +1282,7 @@ class AppState: ObservableObject {
                     self.preloadVAD()
                     self.preloadLanguageRouting()
                     self.preloadLLM()
+                    self.preloadNemotronForPreview()
 
                     Logger.info("Whisper model loaded. Process memory: \(String(format: "%.0f", BenchmarkUtilities.currentMemoryMB()))MB", subsystem: .model)
                 }
@@ -1553,6 +1561,30 @@ class AppState: ObservableObject {
                 }
             }
         }
+    }
+
+    /// Preload Nemotron alongside whisper.cpp so it can drive the live-preview HUD.
+    /// No-ops when: opted out, already loaded, not cached, or memory is tight.
+    /// Default on (mirrors Fast Polish's `fastPolishDefault = true` precedent).
+    func preloadNemotronForPreview() {
+        let key = "nemotronPreviewEnabled"
+        let enabled: Bool
+        if UserDefaults.standard.object(forKey: key) != nil {
+            enabled = UserDefaults.standard.bool(forKey: key)
+        } else {
+            enabled = true  // default on
+        }
+        guard enabled else { return }
+        guard selectedBackendType == .whisperCpp else { return }
+        guard isNemotronModelCached() else { return }
+        guard nemotronBridgeInstance == nil, !isLoadingNemotron else { return }
+        guard SystemMemory.availableGB() >= Self.meetingDualBackendHeadroomGB else {
+            Logger.info("Nemotron preview: skipping — only \(String(format: "%.1f", SystemMemory.availableGB()))GB free", subsystem: .model)
+            return
+        }
+        previewOwnsNemotron = true
+        Logger.info("Nemotron preview: preloading alongside whisper.cpp", subsystem: .model)
+        preloadNemotronModel()
     }
 
     func preloadNemotronModel() {
@@ -2789,7 +2821,15 @@ class AppState: ObservableObject {
                 #endif
 
                 #if canImport(FluidAudio)
-                let nemotronInApp: NemotronBridge? = inAppBackend == .nemotron ? nemotronBridgeInstance : nil
+                let nemotronInApp: NemotronBridge? = {
+                    if inAppBackend == .nemotron { return nemotronBridgeInstance }
+                    // Preview-only: pass alongside whisper.cpp when resident and preview is armed.
+                    // StreamingTranscriber.nemotronIsPreviewOnly = true when both nemotronBridge
+                    // and usesEagerStream are set — it routes Nemotron to HUD, whisper to final text.
+                    if inAppBackend == .whisperCpp, previewOwnsNemotron,
+                       let bridge = nemotronBridgeInstance { return bridge }
+                    return nil
+                }()
                 let nemotronHebrewInApp: NemotronHebrewBridge? = inAppBackend == .nemotronHebrew ? nemotronHebrewBridgeInstance : nil
                 let anyNemotronInApp: (any AnyObject)? = (nemotronInApp as AnyObject?) ?? (nemotronHebrewInApp as AnyObject?)
                 #else
@@ -3263,8 +3303,13 @@ class AppState: ObservableObject {
                 #endif
 
                 #if canImport(FluidAudio)
-                let nemotron: (any AnyObject)? = selectedBackendType == .nemotron ? nemotronBridgeInstance :
-                    selectedBackendType == .nemotronHebrew ? nemotronHebrewBridgeInstance : nil
+                let nemotron: (any AnyObject)? = {
+                    if selectedBackendType == .nemotron { return nemotronBridgeInstance as AnyObject? }
+                    if selectedBackendType == .nemotronHebrew { return nemotronHebrewBridgeInstance as AnyObject? }
+                    if selectedBackendType == .whisperCpp, previewOwnsNemotron,
+                       let bridge = nemotronBridgeInstance { return bridge as AnyObject? }
+                    return nil
+                }()
                 #else
                 let nemotron: AnyObject? = nil
                 #endif
