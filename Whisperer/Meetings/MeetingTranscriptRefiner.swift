@@ -122,8 +122,12 @@ final class MeetingTranscriptRefiner: ObservableObject {
     /// Re-transcribe `segments` from the meeting audio and return the new array. Persists each
     /// window as it completes, so a quit mid-run loses at most one window. Returns the best
     /// array it has on cancellation or failure — never nil, never a partial mix.
+    ///
+    /// - Parameter forcedLanguage: set by the user correcting the language chip. Skips detection
+    ///   entirely and resets every card back to its raw ASR text first, so the re-decode starts
+    ///   from what was heard rather than from a previous pass's translation of it.
     @discardableResult
-    func run(meetingID: UUID, segments: [MeetingSegment]) async -> [MeetingSegment] {
+    func run(meetingID: UUID, segments: [MeetingSegment], forcedLanguage: TranscriptionLanguage? = nil) async -> [MeetingSegment] {
         // Re-read from CoreData rather than trusting the caller's snapshot. The tail chunk
         // from StreamingTranscriber lands *after* stopRecording() returns and appends one more
         // segment; refining a stale array and then writing it back with updateSegments would
@@ -163,6 +167,16 @@ final class MeetingTranscriptRefiner: ObservableObject {
         }
 
         var working = source
+        if forcedLanguage != nil {
+            // Undo the previous pass so `isPolished` goes false and every window decodes again.
+            // Without this the pending filter below would skip the whole meeting, and the cards
+            // that *were* re-decoded would be corrections of a translation rather than of speech.
+            for index in working.indices where working[index].rawText != nil {
+                working[index].text = working[index].rawText ?? working[index].text
+                working[index].rawText = nil
+                working[index].language = nil
+            }
+        }
         let windows = MeetingRefineWindow.plan(working, maxDuration: Self.windowDuration)
         guard !windows.isEmpty else {
             Logger.info("Transcript refine: nothing to do for \(meetingID)", subsystem: .transcription)
@@ -200,9 +214,39 @@ final class MeetingTranscriptRefiner: ObservableObject {
 
         Logger.info("Transcript refine: \(windows.count) window(s) over \(working.count) segment(s) with \(model.displayName) for \(meetingID)", subsystem: .transcription)
 
-        // A meeting cannot change language halfway through, but per-window auto-detect can.
-        // Detect once on the first decoded window, then pin.
-        var language = AppState.shared.selectedLanguage
+        // Which language each window is decoded in.
+        //
+        // This used to be "auto-detect on window #1, then pin the rest of the meeting to it".
+        // That gave the pass exactly one chance to be right, and being wrong is not a degraded
+        // transcript but a translated one — Whisper handed a wrong forced code emits fluent text
+        // in that language instead of failing, and `isPlausible` below only compares lengths.
+        //
+        // The timeline replaces that with evidence from probes spread over the whole recording,
+        // smoothed so a single mis-detected window cannot move it, and expressed per span so a
+        // genuinely code-switched stretch decodes in its own language. It abstains to `.auto`
+        // where the evidence is weak, which is exactly the old per-window behaviour and is safe.
+        let timeline: MeetingLanguageTimeline
+        if let forcedLanguage, forcedLanguage != .auto {
+            timeline = .empty
+            Logger.info("Transcript refine: language forced to \(forcedLanguage.displayName) by the user", subsystem: .transcription)
+        } else if AppState.shared.selectedLanguage == .auto {
+            let liveTally = AppState.shared.lastMeetingNemotronTally
+            timeline = await Self.buildTimeline(
+                audioURL: audioURL,
+                duration: record?.duration ?? (working.last?.endTimestamp ?? 0),
+                segments: working,
+                confirmBridge: bridge,
+                nemotronTally: liveTally?.meetingID == meetingID ? liveTally?.tally ?? [:] : [:]
+            )
+            if timeline.dominant != .auto {
+                await MeetingManager.shared.updateLanguage(meetingID: meetingID, language: timeline.dominant.rawValue)
+            }
+        } else {
+            timeline = .empty
+        }
+        /// Language forced when the timeline has nothing to say for a window: the user's explicit
+        /// selection, or `.auto` to let whisper detect per window as before.
+        let baseLanguage = forcedLanguage ?? AppState.shared.selectedLanguage
         var context = ""
         var rewritten = 0
         let t0 = Date()
@@ -240,7 +284,11 @@ final class MeetingTranscriptRefiner: ObservableObject {
             }
 
             let prompt = context.isEmpty ? nil : String(context.suffix(Self.contextMaxLength))
-            let fixedLanguage = language
+            // Windows come from `MeetingRefineWindow.plan`, so spans align to them for free.
+            // The midpoint, not the start, so a window straddling a span boundary follows
+            // whichever language owns most of it.
+            let spanLanguage = timeline.language(at: (window.start + window.end) / 2)
+            let fixedLanguage = spanLanguage == .auto ? baseLanguage : spanLanguage
             let timed: [WhisperTimedSegment]
             do {
                 // One queue job per window, not per run: a whole pass would far exceed the
@@ -255,16 +303,16 @@ final class MeetingTranscriptRefiner: ObservableObject {
                 break
             }
 
-            if language == .auto, let detected = bridge.lastDetectedLanguage,
-               let resolved = TranscriptionLanguage(rawValue: detected) {
-                language = resolved
-                Logger.debug("Transcript refine: language pinned to \(resolved.displayName)", subsystem: .transcription)
-            }
-
             // Shift to absolute meeting time and drop anything that lives entirely in the lead-in.
             let shifted = timed
                 .map { WhisperTimedSegment(text: $0.text, start: bufferStart + $0.start, end: bufferStart + $0.end) }
                 .filter { $0.end > window.start }
+
+            // Record what each card was decoded in, whether or not its text changed — the detail
+            // view's language chip and the "corrected, not translated" test both read this.
+            if fixedLanguage != .auto {
+                for index in pending { working[index].language = fixedLanguage.rawValue }
+            }
 
             for (index, decoded) in MeetingRefineWindow.assign(shifted, to: window, in: working) {
                 let corrected = DictionaryManager.shared.correctText(decoded)
@@ -298,22 +346,77 @@ final class MeetingTranscriptRefiner: ObservableObject {
         return finish(working, meetingID: meetingID)
     }
 
-    /// Start a run detached from the caller — used by the manual "Re-transcribe" action.
-    func start(meetingID: UUID, segments: [MeetingSegment], audioURL: URL?) {
-        guard runTask == nil, shouldRun(for: segments, audioURL: audioURL) else { return }
+    /// Start a run detached from the caller — used by the manual "Re-transcribe" action and by
+    /// the language chip. A forced run bypasses `shouldRun`'s "is there unpolished work" filter:
+    /// the point of correcting the language is to redo cards that *are* already polished, wrongly.
+    func start(meetingID: UUID, segments: [MeetingSegment], audioURL: URL?, forcedLanguage: TranscriptionLanguage? = nil) {
+        guard runTask == nil else { return }
+        guard forcedLanguage != nil ? canForceRun(audioURL: audioURL) : shouldRun(for: segments, audioURL: audioURL) else { return }
         MeetingManager.shared.setProcessing(.polishing, for: meetingID)
         runTask = Task { [weak self] in
             guard let self else { return }
-            _ = await self.run(meetingID: meetingID, segments: segments)
+            _ = await self.run(meetingID: meetingID, segments: segments, forcedLanguage: forcedLanguage)
             MeetingManager.shared.setProcessing(nil, for: meetingID)
             self.runTask = nil
         }
+    }
+
+    /// A forced re-run needs only the two things `run` cannot work without: the feature on and
+    /// the audio still on disk.
+    func canForceRun(audioURL: URL?) -> Bool {
+        guard Self.isEnabled, let audioURL else { return false }
+        return FileManager.default.fileExists(atPath: audioURL.path)
     }
 
     func cancel(meetingID: UUID) {
         guard activeMeetingID == meetingID else { return }
         cancelledMeetingID = meetingID
         runTask?.cancel()
+    }
+
+    // MARK: - Language timeline
+
+    /// Scan the recording for its language timeline.
+    ///
+    /// Two detectors, deliberately: the shared tiny CPU-only bridge does the wide sweep because
+    /// an encoder-only detection on it is a small fraction of one large-model window decode, and
+    /// the large bridge — already loaded, already warm — re-checks only the handful of probes the
+    /// tiny model was unsure about. Tiny picks *where* to look, large decides *what*.
+    ///
+    /// Falls back to the large bridge for everything if no tiny bridge is resident (it is loaded
+    /// for live preview, which a meeting imported from a file never went through).
+    private static func buildTimeline(
+        audioURL: URL,
+        duration: Double,
+        segments: [MeetingSegment],
+        confirmBridge: WhisperBridge,
+        nemotronTally: [String: Int]
+    ) async -> MeetingLanguageTimeline {
+        let transcript = segments.map(\.text).joined(separator: " ")
+        let routing = LanguageRoutingConfig.load()
+
+        // The tiny bridge has its own ctxLock and never touches the GPU, so it needs no queue slot.
+        let previewBridge = AppState.shared.modelPoolForDebug?.previewBridge
+        let accurate: MeetingLanguageScanner.Detector = { samples in
+            // Same queue and job name family as the window decodes, so a detection can never
+            // re-enter the borrowed bridge mid-decode.
+            try? await ModelWorkQueue.shared.runBlocking("meeting-refine-detect") {
+                confirmBridge.detectLanguage(samples: samples)
+            }
+        }
+        let coarse: MeetingLanguageScanner.Detector = previewBridge.map { tiny in
+            { samples in tiny.detectLanguage(samples: samples) }
+        } ?? accurate
+
+        return await MeetingLanguageScanner.scan(
+            audioURL: audioURL,
+            duration: duration,
+            coarse: coarse,
+            confirm: previewBridge == nil ? nil : accurate,
+            transcript: transcript,
+            nemotronTally: nemotronTally,
+            allowedLanguages: routing.isRoutingEnabled ? routing.allowedLanguages : []
+        )
     }
 
     // MARK: - Helpers

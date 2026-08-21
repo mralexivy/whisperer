@@ -133,7 +133,7 @@ actor MeetingAIService {
         }
 
         let transcript = Self.timestampedTranscript(useSegments)
-        let systemPrompt = Self.askSystemPrompt(transcript: transcript)
+        let systemPrompt = Self.askSystemPrompt(transcript: transcript, language: Self.dominantLanguage(of: segments))
 
         do {
             let response = try await llm.process(
@@ -218,7 +218,7 @@ actor MeetingAIService {
         // A voice memo of a few sentences has nothing to structure — asking for the
         // full label set only makes the model invent decisions and owners.
         let wordCount = plain.split(whereSeparator: { $0 == " " || $0.isNewline }).count
-        let request = Self.overviewRequest(transcriptWords: wordCount)
+        let request = Self.overviewRequest(transcriptWords: wordCount, language: Self.dominantLanguage(of: segments))
         let isNote = request.isNote
 
         // An overview summarizes what the recording was about, not who said it, so the
@@ -401,15 +401,16 @@ actor MeetingAIService {
     /// tokens each, plus the label, the newline and slack for a compound word.
     static let titleTokenAllowance = 40
 
-    static func overviewRequest(transcriptWords: Int) -> OverviewRequest {
+    static func overviewRequest(transcriptWords: Int, language: TranscriptionLanguage = .auto) -> OverviewRequest {
         switch transcriptWords {
         case ..<60:
             return OverviewRequest(
-                systemPrompt: notePrompt,
+                systemPrompt: notePrompt(language: language),
                 outputTokensHint: 300 + titleTokenAllowance, timeoutSeconds: 45, isNote: true)
         case ..<250:
             return OverviewRequest(
                 systemPrompt: overviewPrompt(
+                    language: language,
                     lengthLine: "90 to 180 words, one paragraph",
                     lengthRule: "Write 90 to 180 words, as a single paragraph. Write the label OVERVIEW: once, at the start.",
                     topicCount: "2 to 4"),
@@ -417,6 +418,7 @@ actor MeetingAIService {
         case ..<700:
             return OverviewRequest(
                 systemPrompt: overviewPrompt(
+                    language: language,
                     lengthLine: "140 to 240 words, one or two paragraphs",
                     lengthRule: "Write 140 to 240 words, as one or two paragraphs separated by a blank line. Write the label OVERVIEW: once, at the start; every paragraph after it belongs to it.",
                     topicCount: "3 to 5"),
@@ -424,6 +426,7 @@ actor MeetingAIService {
         default:
             return OverviewRequest(
                 systemPrompt: overviewPrompt(
+                    language: language,
                     lengthLine: "250 to 400 words, two to four paragraphs",
                     lengthRule: "Write 250 to 400 words, as 2 to 4 paragraphs separated by a blank line. Write the label OVERVIEW: once, at the start; every paragraph after it belongs to it. A reader who never heard the recording must finish the OVERVIEW knowing what was actually said.",
                     topicCount: "3 to 6"),
@@ -471,7 +474,7 @@ actor MeetingAIService {
     /// The worked example is contrastive rather than long: a full-length one would bias
     /// every tier toward its own length and triple the prefill. It is also entirely
     /// invented — a real recording must never be embedded in a shipped prompt.
-    static func overviewPrompt(lengthLine: String, lengthRule: String, topicCount: String) -> String {
+    static func overviewPrompt(language: TranscriptionLanguage = .auto, lengthLine: String, lengthRule: String, topicCount: String) -> String {
         """
     You summarize voice recordings. The input is a speech-to-text transcript, so it contains filler words, false starts and misheard words. Summarize what was meant, not the exact wording.
 
@@ -521,7 +524,7 @@ actor MeetingAIService {
     - ACTION requires a real person named in the transcript. If nobody was named, write no ACTION line.
 
     ALWAYS:
-    - Write the text in the language of the transcript. The labels themselves are not text: TITLE, TOPIC, OVERVIEW, DECISION, OPEN, NEXT and ACTION stay in English, spelled exactly as listed above, whatever language the transcript is in.
+    - \(languageRule(for: language, subject: "transcript")) The labels themselves are not text: TITLE, TOPIC, OVERVIEW, DECISION, OPEN, NEXT and ACTION stay in English, spelled exactly as listed above, whatever language the transcript is in.
     - Never state anything the transcript does not say.
     - Never use the characters < or >.
     """
@@ -530,7 +533,8 @@ actor MeetingAIService {
     /// Very short recordings — one line out, nothing to structure. The word count is
     /// stated because "two or three sentences" was answered with one clause; reference
     /// overviews for notes this size run about 70 words.
-    static let notePrompt = """
+    static func notePrompt(language: TranscriptionLanguage = .auto) -> String {
+        """
     You name and summarize short voice notes. Reply with exactly two lines — a TITLE line of 3 to 7 words, then an OVERVIEW line of 40 to 90 words:
 
     TITLE: 3 to 7 words naming what the note is about
@@ -544,9 +548,24 @@ actor MeetingAIService {
     5. Write no other label. No TOPIC, no DECISION, no ACTION.
     5. No markdown, no bullets, no quotes.
     6. Never state anything the note does not say.
-    7. Write in the language of the note.
+    7. \(languageRule(for: language, subject: "note"))
     8. Never use the characters < or >.
     """
+    }
+
+    /// The one line that names the output language.
+    ///
+    /// "Write in the language of the transcript" is an instruction the model has to *infer* the
+    /// answer to, and on a transcript that is itself partly mis-decoded it infers wrong and
+    /// translates the rest to match. Once the language is actually known — which is what
+    /// `MeetingLanguageTimeline` establishes — naming it removes the inference. Falls back to the
+    /// original wording when the timeline abstained, since a confidently wrong name is worse than
+    /// no name.
+    static func languageRule(for language: TranscriptionLanguage, subject: String) -> String {
+        guard language != .auto else { return "Write the text in the language of the \(subject)." }
+        let name = language.displayName
+        return "Write every line in \(name). The \(subject) is in \(name); where a word or a passage in it is in another language, that does not change the language you write in."
+    }
 
     /// Prefill dominates a Q&A turn — the answer is a few dozen tokens, the transcript
     /// underneath it is thousands. Roughly 4 chars per token at ~250 tok/s of prefill, doubled
@@ -560,13 +579,34 @@ actor MeetingAIService {
 
     /// System prompt for Q&A. Stable per meeting — the transcript is embedded verbatim,
     /// so every question about the same meeting hits the same KV-cache prefix.
-    static func askSystemPrompt(transcript: String) -> String {
-        """
-        You are an AI assistant analyzing a meeting transcript. Answer questions about this meeting concisely, citing specific moments using [Xs] timestamps from the transcript when relevant.
+    static func askSystemPrompt(transcript: String, language: TranscriptionLanguage = .auto) -> String {
+        let languageLine = language == .auto
+            ? "Answer in the language of the transcript."
+            : "The transcript is in \(language.displayName). Answer in \(language.displayName)."
+        return """
+        You are an AI assistant analyzing a meeting transcript. Answer questions about this meeting concisely, citing specific moments using [Xs] timestamps from the transcript when relevant. \(languageLine)
 
         Transcript:
         \(transcript)
         """
+    }
+
+    // MARK: - Meeting language
+
+    /// The language the meeting was decoded in, from the per-card languages the refine pass wrote.
+    ///
+    /// Weighted by text length, not by card count: a meeting of forty Hebrew cards and forty
+    /// one-word English interjections is a Hebrew meeting. `.auto` when nothing was recorded —
+    /// meetings that predate the timeline, or where it abstained — and every prompt then falls
+    /// back to its original "language of the transcript" wording.
+    static func dominantLanguage(of segments: [MeetingSegment]) -> TranscriptionLanguage {
+        var weights: [TranscriptionLanguage: Int] = [:]
+        for segment in segments {
+            guard let raw = segment.language,
+                  let language = TranscriptionLanguage(rawValue: raw), language != .auto else { continue }
+            weights[language, default: 0] += segment.text.count
+        }
+        return weights.max { ($0.value, $0.key.rawValue) < ($1.value, $1.key.rawValue) }?.key ?? .auto
     }
 
     // MARK: - Citation parsing

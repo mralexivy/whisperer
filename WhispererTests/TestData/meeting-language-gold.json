@@ -1,0 +1,300 @@
+{
+  "meetings": [
+    {
+      "durationSec": 4822,
+      "excerpt": "רפאל ופאז עובדים על קומץ קשור לפרומטים והקלסיפיקציה של השיחות. אלקס, אני … ‫אם אני אומר, נגיד גרנולרית, ‫למה זה נתפס, ונגיד רק כאילו ברמת הקטגוריה? ‫אבל זה עדיין, שא … כאילו, איך אנחנו שולחים להם את הסקורקארט, את התשובה הסופרית. -כן, שאלנו תתחילו לעבוד בסדר?",
+      "expected": "he",
+      "id": "1B879BC01A5C4B40B6193B213E9C164C",
+      "note": "PROVISIONAL — read off the stored transcript, not off the audio. If that transcript was itself mis-decoded (the bug this suite exists for) the label is wrong. Verify by listening before trusting a failure here.",
+      "title": "Note Aug 10, 2026 12:03 PM"
+    },
+    {
+      "durationSec": 2883,
+      "excerpt": "ששווה כך וכך כסף, האם הרייטינג הזה זה מביא בחשבון שאלות רגע, צפו … הם סוגפורות נראה קצת אחרת, והפיצ'רים והגבויות הן שונות, אבל כאילו אין היום איזה פרוסס או … איזה פלסטר כאלה שלי. בוא נראה לכם שם פלסטריק. אבל צריך כאילו... צריך לחשוב אם...",
+      "expected": "he",
+      "id": "E4240C891DD64D73A15CAE881309C2F1",
+      "note": "PROVISIONAL — read off the stored transcript, not off the audio. If that transcript was itself mis-decoded (the bug this suite exists for) the label is wrong. Verify by listening before trusting a failure here.",
+      "title": "Note Aug 10, 2026 10:11 AM"
+    },
+    {
+      "durationSec": 1618.3,
+      "excerpt": "Offline. Offline, okay. So you want To Do like a weird intro for a second? … be more meaningful if we … be August like the next report would be in September right so we will have the metrics for",
+      "expected": "en",
+      "id": "C5DC880B52FC44A1A97E18FD83670F5F",
+      "note": "PROVISIONAL — read off the stored transcript, not off the audio. If that transcript was itself mis-decoded (the bug this suite exists for) the label is wrong. Verify by listening before trusting a failure here.",
+      "title": "Note Aug 12, 2026 2:01 PM"
+    },
+    {
+      "durationSec": 1293.5,
+      "excerpt": "Quiser हשה בנחשו כל כל רכים שכלול כאילו … לקשור ממנו שיבדו ככל השישו הוא קי מספר במקום … כבר הסלייד הזה",
+      "expected": "he",
+      "id": "EFF8E485EFE7462DBA86A7D38069EA19",
+      "note": "PROVISIONAL — read off the stored transcript, not off the audio. If that transcript was itself mis-decoded (the bug this suite exists for) the label is wrong. Verify by listening before trusting a failure here.",
+      "title": "Scaling AI models and budget"
+    },
+    {
+      "durationSec": 764,
+      "excerpt": "مكن تسمي חתברים אני מדבר … أنا اختصم كيلو دارخ خدشة كيلو להתנהל עם הקوست כי אחר אנחנו בבעיית הבעיה של … דרך האי",
+      "expected": "he",
+      "id": "6CBAA023BC924FECBCB519AFB0986EBE",
+      "note": "PROVISIONAL — read off the stored transcript, not off the audio. If that transcript was itself mis-decoded (the bug this suite exists for) the label is wrong. Verify by listening before trusting a failure here.",
+      "title": "Budget Management Failures and Data Science Models"
+    },
+    {
+      "durationSec": 201,
+      "excerpt": "Okay, I want to show you why this experience is really, really, really off and what it nee … So I'm giving a speech for for two minutes and and I still captured changed my voice. I'm ",
+      "expected": "en",
+      "id": "2441439C017342BF8A8BDB7360B10118",
+      "note": "PROVISIONAL — read off the stored transcript, not off the audio. If that transcript was itself mis-decoded (the bug this suite exists for) the label is wrong. Verify by listening before trusting a failure here.",
+      "title": "Note Aug 9, 2026 7:46 PM"
+    },
+    {
+      "durationSec": 112,
+      "excerpt": "technology that powers the applications we're all familiar with, ChatGPT and Google BARD.  … labeled. Blue dot equals the order was picked up and yellow dot equals the order was deliv … raw data and see if it naturally falls into groups. In this example, we plotted the employ",
+      "expected": "en",
+      "id": "A2A8B38A6CFD44CAB755D0E5FC2851E5",
+      "note": "PROVISIONAL — read off the stored transcript, not off the audio. If that transcript was itself mis-decoded (the bug this suite exists for) the label is wrong. Verify by listening before trusting a failure here.",
+      "title": "Supervised and Unsupervised Learning"
+    },
+    {
+      "durationSec": 93,
+      "excerpt": "Large language models also fall under deep running and right at the intersection between g",
+      "expected": "en",
+      "id": "DFEA5720085346C48EB656DD7BE2D683",
+      "note": "PROVISIONAL — read off the stored transcript, not off the audio. If that transcript was itself mis-decoded (the bug this suite exists for) the label is wrong. Verify by listening before trusting a failure here.",
+      "title": "Note Aug 10, 2026 8:46 PM"
+    },
+    {
+      "durationSec": 92.7,
+      "excerpt": "הכי צחיחים שזה יעבוד כדי סקרי … ואיך הדבר זה מוחזק במערכת אני רק הבאתם לידבר על זה מחאן, אני רוצה שגילו חולחל באמת … אני להפך אני בא ואני מראה ניזרון, כי אני לא חראי על גנ אני לא יכול, אני לא דקון",
+      "expected": "he",
+      "id": "5F14817A602D4CC4BA5A4C6994EB0CBE",
+      "note": "PROVISIONAL — read off the stored transcript, not off the audio. If that transcript was itself mis-decoded (the bug this suite exists for) the label is wrong. Verify by listening before trusting a failure here.",
+      "title": "פרויקט פאידיה"
+    },
+    {
+      "durationSec": 81,
+      "excerpt": "If you don't have a technical background but you still want to learn the basics of artific … It turns out, and I'm so embarrassed to admit I didn't know this AI is an entire field of  … is a subfield of physics. Going down another level, deep learning is a subset of machine l",
+      "expected": "en",
+      "id": "524685675A2A4FB896AE38EA22DA90D7",
+      "note": "PROVISIONAL — read off the stored transcript, not off the audio. If that transcript was itself mis-decoded (the bug this suite exists for) the label is wrong. Verify by listening before trusting a failure here.",
+      "title": "Google AI Course AI Basics"
+    },
+    {
+      "durationSec": 73.8,
+      "excerpt": "If you don't have a technical background, but you still want to learn the basics of artifi … Machine learning and large language models. So starting with the broadest possible questio … and generative models. Large language models, LLMs, also fall under deep learning and righ",
+      "expected": "en",
+      "id": "4B27C7F419B74F4EAD229E5CD0632CAF",
+      "note": "PROVISIONAL — read off the stored transcript, not off the audio. If that transcript was itself mis-decoded (the bug this suite exists for) the label is wrong. Verify by listening before trusting a failure here.",
+      "title": "Google AI Course AI Basics"
+    },
+    {
+      "durationSec": 67,
+      "excerpt": "But you still want to learn the basics of artificial intelligence, stick around because yo",
+      "expected": "en",
+      "id": "B177C493BC2A479E9C744FD2246CC120",
+      "note": "PROVISIONAL — read off the stored transcript, not off the audio. If that transcript was itself mis-decoded (the bug this suite exists for) the label is wrong. Verify by listening before trusting a failure here.",
+      "title": "Note Aug 10, 2026 8:11 PM"
+    },
+    {
+      "durationSec": 66.9,
+      "excerpt": "If you don't have a … and large language models. So starting with the broadest possible question What is artific … machine learning",
+      "expected": "en",
+      "id": "1E17F3EECEC44C74A4F74193B28E249A",
+      "note": "PROVISIONAL — read off the stored transcript, not off the audio. If that transcript was itself mis-decoded (the bug this suite exists for) the label is wrong. Verify by listening before trusting a failure here.",
+      "title": "Google AI Course AI Basics"
+    },
+    {
+      "durationSec": 57,
+      "excerpt": "If you don't have a technical background but you still want to learn the basics of artific",
+      "expected": "en",
+      "id": "93282986E2DA461CB7C650F3DFFCCD42",
+      "note": "PROVISIONAL — read off the stored transcript, not off the audio. If that transcript was itself mis-decoded (the bug this suite exists for) the label is wrong. Verify by listening before trusting a failure here.",
+      "title": "Note Aug 10, 2026 8:27 PM"
+    },
+    {
+      "durationSec": 56.3,
+      "excerpt": "If you don't have a technical background but you still want to learn the basics of artific … If you don't have a technical background but you still want to learn the basics of artific … So starting with the broadest possible question What is artificial intelligence? It turns ",
+      "expected": "en",
+      "id": "546DD8DD05D74DA09D17E5BB8B94F9EB",
+      "note": "PROVISIONAL — read off the stored transcript, not off the audio. If that transcript was itself mis-decoded (the bug this suite exists for) the label is wrong. Verify by listening before trusting a failure here.",
+      "title": "Google AI Course AI Basics"
+    },
+    {
+      "durationSec": 56,
+      "excerpt": "Let's try this transcription mechanism. We're going to talk in life and see how it can wor … transcription and meetings and summarized like what's going so we're going demonstrate lik … I have",
+      "expected": "en",
+      "id": "6E20EBA064DA48E5B9E91BCD401EA55D",
+      "note": "PROVISIONAL — read off the stored transcript, not off the audio. If that transcript was itself mis-decoded (the bug this suite exists for) the label is wrong. Verify by listening before trusting a failure here.",
+      "title": "Live Whisper Demo of Whisperer"
+    },
+    {
+      "durationSec": 54,
+      "excerpt": "If you don't have a technical background but you still want to learn the basics of artific",
+      "expected": "en",
+      "id": "EE15F371443A4715A679D6138F124E22",
+      "note": "PROVISIONAL — read off the stored transcript, not off the audio. If that transcript was itself mis-decoded (the bug this suite exists for) the label is wrong. Verify by listening before trusting a failure here.",
+      "title": "Note Aug 10, 2026 9:38 PM"
+    },
+    {
+      "durationSec": 46,
+      "excerpt": "Let me try him at on I want to see how can I can walk really fast really … I don't understand why it's basically splitting it up … basically uh we will check this out",
+      "expected": "en",
+      "id": "E7610294EB854ED39C9A9AA7F446B01D",
+      "note": "PROVISIONAL — read off the stored transcript, not off the audio. If that transcript was itself mis-decoded (the bug this suite exists for) the label is wrong. Verify by listening before trusting a failure here.",
+      "title": "Testing speech behavior and speed"
+    },
+    {
+      "durationSec": 46,
+      "excerpt": "Давай попробуем, насколько хорошо … его, ну давай это протестим сейчас. То есть мы сейчас будем говорить тоже на руском. Я гов … предложение. Интересно, если",
+      "expected": "ru",
+      "id": "B6B3B7298DD5459AAC40560B49A1EB26",
+      "note": "PROVISIONAL — read off the stored transcript, not off the audio. If that transcript was itself mis-decoded (the bug this suite exists for) the label is wrong. Verify by listening before trusting a failure here.",
+      "title": "Note Aug 12, 2026 9:54 AM"
+    },
+    {
+      "durationSec": 43,
+      "excerpt": "All right, we're starting new meeting now. We're going going to speak a lot of words So ba … write and we're going to … continue",
+      "expected": "en",
+      "id": "383E42635FA14BA584CA50455FC2762D",
+      "note": "PROVISIONAL — read off the stored transcript, not off the audio. If that transcript was itself mis-decoded (the bug this suite exists for) the label is wrong. Verify by listening before trusting a failure here.",
+      "title": "Demo1"
+    },
+    {
+      "durationSec": 41,
+      "excerpt": "Okay, let's try this new transcription mechanism. We We should see it one more time as as ",
+      "expected": "en",
+      "id": "833E0134D6D24EA295D8B16CD16FC238",
+      "note": "PROVISIONAL — read off the stored transcript, not off the audio. If that transcript was itself mis-decoded (the bug this suite exists for) the label is wrong. Verify by listening before trusting a failure here.",
+      "title": "Note Aug 9, 2026 7:45 PM"
+    },
+    {
+      "durationSec": 40,
+      "excerpt": "‫אם בואו נראה איך הדבר הזה עובד. ‫אנחנו אנחנו עורכים להגיד הרבה מאוד דברים, … לדבר פה על הרבה ‫היה ‫הרבה דברים. ‫אני הולך להגיד … הרבה מאוד טקסט כרגע. אני לא בטוח איך הטקסט הזה זה אמור להיות קיים, אבל אני רוצה כן להבין א",
+      "expected": "he",
+      "id": "BFC7B812CCB54AC583640014A8CC9DD8",
+      "note": "PROVISIONAL — read off the stored transcript, not off the audio. If that transcript was itself mis-decoded (the bug this suite exists for) the label is wrong. Verify by listening before trusting a failure here.",
+      "title": "Slack"
+    },
+    {
+      "durationSec": 38,
+      "excerpt": "If you don't have have a technical background but you still want to learn the basics of ar … The underlying concepts actually made me better at using tools like ChachiBT and Google Ba … about AI, machine learning and and large language models. So, starting with the broad",
+      "expected": "en",
+      "id": "91C6FEF3F1E14AD8822056266D934BE9",
+      "note": "PROVISIONAL — read off the stored transcript, not off the audio. If that transcript was itself mis-decoded (the bug this suite exists for) the label is wrong. Verify by listening before trusting a failure here.",
+      "title": "Note Aug 10, 2026 7:43 PM"
+    },
+    {
+      "durationSec": 37,
+      "excerpt": "- I'm not sure.",
+      "expected": null,
+      "id": "1D6F78F25A2D4036A81ADFB0F12CBA5C",
+      "note": "UNLABELLED: the stored transcript is one four-word card, too thin to read a language off. Listen to it.",
+      "title": "Note Aug 10, 2026 7:50 AM"
+    },
+    {
+      "durationSec": 35.1,
+      "excerpt": "Λόγο τα تفقيم אלה המנועים ועריץ הדברים צריכות אמילי … מצליחים להתמוד עם הדבר הזה או ше אנחנו לוקחים באמת כל החלטה ביחד, כי אנ … אנשים הם לא מצליחים",
+      "expected": "he",
+      "id": "B48C13A0EFB1486B9159DEA4EFCD08C7",
+      "note": "PROVISIONAL — read off the stored transcript, not off the audio. If that transcript was itself mis-decoded (the bug this suite exists for) the label is wrong. Verify by listening before trusting a failure here.",
+      "title": "Discussion on Motor Engines"
+    },
+    {
+      "durationSec": 34,
+      "excerpt": "Okay, let's try this one One one One more time. I'm going to to say a few words and then … the speech is perfect but we need like to create much much much much better experience. So … how it it breaks out and why it breaks because what is the reason it I'm not sure I'm goin",
+      "expected": "en",
+      "id": "B0DF2289E7614B6EBF5CFCEA6D2EE83F",
+      "note": "PROVISIONAL — read off the stored transcript, not off the audio. If that transcript was itself mis-decoded (the bug this suite exists for) the label is wrong. Verify by listening before trusting a failure here.",
+      "title": "Test1"
+    },
+    {
+      "durationSec": 33,
+      "excerpt": "Okay, let's try to see one more time What's going What's going on here. Why I see on the n … Last Last transcription, I'm I'm not sure what's going on here. Like I need to like … to take take the state and and tell us that that it's not Hey. Hello? Hi.",
+      "expected": "en",
+      "id": "759811932DFD438BAC2D64955F87AD36",
+      "note": "PROVISIONAL — read off the stored transcript, not off the audio. If that transcript was itself mis-decoded (the bug this suite exists for) the label is wrong. Verify by listening before trusting a failure here.",
+      "title": "Note Aug 9, 2026 9:51 PM"
+    },
+    {
+      "durationSec": 33,
+      "excerpt": "Этми Трикзикутес она … basically I speaking in … let me try one",
+      "expected": null,
+      "id": "F81D074BD03D471AABAB3F956CA8537B",
+      "note": "UNLABELLED: the excerpt is half Russian, half English — either genuinely code-switched (then fill in `spans`) or a mis-decode. Listen to it.",
+      "title": "Russian Language Confusion"
+    },
+    {
+      "durationSec": 28,
+      "excerpt": "Let me try one more time. Let's try to record transcription and see if it can walk live. S … the delay, but … dictating like multiple",
+      "expected": "en",
+      "id": "0E3D1F358D1040E4AAC6BEF16666FED9",
+      "note": "PROVISIONAL — read off the stored transcript, not off the audio. If that transcript was itself mis-decoded (the bug this suite exists for) the label is wrong. Verify by listening before trusting a failure here.",
+      "title": "Live transcription delay transcription test results"
+    },
+    {
+      "durationSec": 27,
+      "excerpt": "Let me try one more time. This time I want to see if this meeting can work or it can't wor",
+      "expected": "en",
+      "id": "6FD4C4E67F0D4BC8805D4EF903E46927",
+      "note": "PROVISIONAL — read off the stored transcript, not off the audio. If that transcript was itself mis-decoded (the bug this suite exists for) the label is wrong. Verify by listening before trusting a failure here.",
+      "title": "Speaker recognition test"
+    },
+    {
+      "durationSec": 25,
+      "excerpt": "Stick around because you're distilling Google's … four-hour AI course for beginners into just 10 minutes. I was initially very because I tho … too conceptual. We're all about practical tips on on this channel, and I know in Google, t",
+      "expected": "en",
+      "id": "433F5B4C8B564FACAE9F0C2E2CFB963C",
+      "note": "PROVISIONAL — read off the stored transcript, not off the audio. If that transcript was itself mis-decoded (the bug this suite exists for) the label is wrong. Verify by listening before trusting a failure here.",
+      "title": "Note Aug 10, 2026 7:00 PM"
+    },
+    {
+      "durationSec": 23,
+      "excerpt": "Hello, let's see how How it's working, I'm not sure if it it can work fine Fine or not. Le … try to do whatever it It should be. I'm not sure why it so sucks … Why it's so bad user experience.",
+      "expected": "en",
+      "id": "A042173701154541B65C14DB010C4009",
+      "note": "PROVISIONAL — read off the stored transcript, not off the audio. If that transcript was itself mis-decoded (the bug this suite exists for) the label is wrong. Verify by listening before trusting a failure here.",
+      "title": "Note Aug 10, 2026 7:51 AM"
+    },
+    {
+      "durationSec": 20,
+      "excerpt": "Okay, let's try to to speak now and see if the transcription should should appear nicely.  … So I'm going to say multiple things I don't know if the transcription will appear appear o",
+      "expected": "en",
+      "id": "9268B6527429445181D6ACF449DFFB05",
+      "note": "PROVISIONAL — read off the stored transcript, not off the audio. If that transcript was itself mis-decoded (the bug this suite exists for) the label is wrong. Verify by listening before trusting a failure here.",
+      "title": "Note Aug 9, 2026 7:19 PM"
+    },
+    {
+      "durationSec": 19,
+      "excerpt": "Let me try this one one one one more time. So we're going Going to see what is this shit,  … Why it's So, shit. Why Why I see all the recording? Why? … Why? Why? Why? Why is this so stupid?",
+      "expected": "en",
+      "id": "93EDE8D79A8247C1A8F796750113DDFB",
+      "note": "PROVISIONAL — read off the stored transcript, not off the audio. If that transcript was itself mis-decoded (the bug this suite exists for) the label is wrong. Verify by listening before trusting a failure here.",
+      "title": "Note Aug 10, 2026 8:16 AM"
+    },
+    {
+      "durationSec": 16,
+      "excerpt": "This is completely broken solution.",
+      "expected": "en",
+      "id": "2DA6F3024653445387B8C4F143648F8F",
+      "note": "PROVISIONAL — read off the stored transcript, not off the audio. If that transcript was itself mis-decoded (the bug this suite exists for) the label is wrong. Verify by listening before trusting a failure here.",
+      "title": "Note3"
+    },
+    {
+      "durationSec": 14,
+      "excerpt": "איך הדבר הזה יכול לראות בעברית, ואם הוא יכול לתפוס את המשפט המורכב שאני אומר<unk> Ниралига … איך הדבר הזה יכול … לראות",
+      "expected": "he",
+      "id": "07BDD38B74E44C99B2C9AD80C15FCE92",
+      "note": "PROVISIONAL — read off the stored transcript, not off the audio. If that transcript was itself mis-decoded (the bug this suite exists for) the label is wrong. Verify by listening before trusting a failure here.",
+      "title": "הבנתח המורכשיר"
+    },
+    {
+      "durationSec": 5,
+      "excerpt": "Нажимаем Открываем митинг",
+      "expected": "ru",
+      "id": "CE1395B489A0417B80743C35557FDD79",
+      "note": "PROVISIONAL — read off the stored transcript, not off the audio. If that transcript was itself mis-decoded (the bug this suite exists for) the label is wrong. Verify by listening before trusting a failure here.",
+      "title": "Note Aug 10, 2026 9:38 PM"
+    }
+  ]
+}

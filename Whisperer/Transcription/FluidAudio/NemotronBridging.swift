@@ -23,5 +23,18 @@ protocol NemotronBridging: AnyObject {
     func setPreviewCallback(_ callback: @escaping @Sendable (String) -> Void) async
     func feed(samples: [Float]) async
     func endSession() async -> String
+
+    /// The model's own guess for the audio it has heard so far, or nil before it has one.
+    func detectedLanguageCode() async -> String?
+
+    /// Stop re-deciding the language on every chunk and hold this one.
+    ///
+    /// In auto mode FluidAudio picks a language per 1120 ms chunk with nothing holding it steady,
+    /// which is how a single-language meeting ends up with stretches decoded as — and therefore
+    /// written in — the wrong language. `beginSession` already proves `setLanguage` works on a
+    /// live manager; this is the same call, made once the evidence justifies it.
+    ///
+    /// Mid-session and reversible: the caller unpins by passing nil.
+    func pinLanguage(_ code: String?) async
 }
 #endif

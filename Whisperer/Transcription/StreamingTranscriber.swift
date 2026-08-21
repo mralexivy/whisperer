@@ -31,6 +31,115 @@ final class NemotronPartialCounter: @unchecked Sendable {
     }
 }
 
+// MARK: - NemotronLanguagePinner
+
+/// Decides when the live Nemotron session has seen enough to be told which language it is
+/// listening to, and holds the running tally of what it thought.
+///
+/// ### Why a pin is needed at all
+/// In auto mode FluidAudio re-decides the language on **every 1120 ms chunk**, with nothing
+/// carrying the decision forward. One noisy chunk in a Hebrew meeting is decoded as English and
+/// comes back transliterated; the next is Hebrew again. That is the flicker the user sees, and
+/// `detectedLanguage()` — the model's own answer — was never read by anything.
+///
+/// ### Why not pin on the first chunk
+/// Because a wrong pin is far worse than no pin: it holds the whole rest of the meeting in the
+/// wrong language instead of one chunk. So the pin arms only on accumulated agreement, and once
+/// armed it takes a *sustained* run of the other language to move — a borrowed English word
+/// inside a Hebrew sentence must not flip it.
+///
+/// Same class of decision as `MeetingLanguageTimeline`, at chunk granularity and with only the
+/// evidence available so far. The final pass re-decides from the audio on disk, so a live mistake
+/// is repaired rather than baked in.
+final class NemotronLanguagePinner: @unchecked Sendable {
+    struct Decision {
+        let code: String
+        /// True when this replaces an earlier pin — a genuine mid-meeting language switch.
+        let isRepin: Bool
+    }
+
+    /// ~9 s of speech. Fewer chunks and a run of noise at the top of a recording can carry a vote.
+    private let minChunksBeforePin: Int
+    private let agreementThreshold: Double
+    /// Consecutive chunks of the *other* language needed to move an existing pin. 14 chunks at
+    /// 1120 ms ≈ 15.7 s — long enough that only a real switch qualifies, since borrowed words and
+    /// short phrases never hold the floor that long.
+    private let chunksToRepin: Int
+
+    private let lock = NSLock()
+    private var _tally: [String: Int] = [:]
+    private var _pinned: String?
+    private var _challenger: String?
+    private var _challengerRun = 0
+
+    init(minChunksBeforePin: Int = 8, agreementThreshold: Double = 0.7, chunksToRepin: Int = 14) {
+        self.minChunksBeforePin = minChunksBeforePin
+        self.agreementThreshold = agreementThreshold
+        self.chunksToRepin = chunksToRepin
+    }
+
+    /// Everything the model has guessed this session, for the meeting timeline to reuse as a
+    /// free prior — this evidence spans the whole recording and was previously discarded.
+    var tally: [String: Int] {
+        lock.lock(); defer { lock.unlock() }
+        return _tally
+    }
+
+    var pinnedCode: String? {
+        lock.lock(); defer { lock.unlock() }
+        return _pinned
+    }
+
+    func reset() {
+        lock.lock(); defer { lock.unlock() }
+        _tally = [:]; _pinned = nil; _challenger = nil; _challengerRun = 0
+    }
+
+    /// Record one chunk's detection and return a pin to apply, or nil to leave things alone.
+    func observe(code: String?, text: String) -> Decision? {
+        guard let code, !code.isEmpty, code != "auto" else { return nil }
+        guard !scriptContradicts(code, text: text) else { return nil }
+
+        lock.lock(); defer { lock.unlock() }
+        _tally[code, default: 0] += 1
+
+        guard let pinned = _pinned else {
+            let total = _tally.values.reduce(0, +)
+            guard total >= minChunksBeforePin,
+                  Double(_tally[code] ?? 0) / Double(total) >= agreementThreshold else { return nil }
+            _pinned = code
+            return Decision(code: code, isRepin: false)
+        }
+
+        guard code != pinned else {
+            _challenger = nil
+            _challengerRun = 0
+            return nil
+        }
+        if _challenger == code { _challengerRun += 1 } else { _challenger = code; _challengerRun = 1 }
+        guard _challengerRun >= chunksToRepin else { return nil }
+        _pinned = code
+        _challenger = nil
+        _challengerRun = 0
+        return Decision(code: code, isRepin: true)
+    }
+
+    /// True when the text on screen rules this language out.
+    ///
+    /// Deliberately **asymmetric**. Text that is overwhelmingly Hebrew, Cyrillic or CJK is strong
+    /// evidence against a language written in some other script. Latin text is *not* evidence
+    /// against Hebrew audio — a mis-decoded Hebrew stretch comes back transliterated into Latin,
+    /// which is the exact failure being fixed here, and borrowed English terms are Latin too. So
+    /// a Latin-dominant transcript vetoes nothing.
+    private func scriptContradicts(_ code: String, text: String) -> Bool {
+        guard let language = TranscriptionLanguage(rawValue: code) else { return false }
+        let shares = ScriptAnalyzer.scriptShares(in: text)
+        guard let dominant = shares.max(by: { $0.value < $1.value }),
+              dominant.value >= 0.6, dominant.key != .latin else { return false }
+        return !ScriptAnalyzer.languages(for: dominant.key).contains(language)
+    }
+}
+
 // MARK: - NullTranscriptionBackend
 
 /// Placeholder backend for the Nemotron path. Nemotron bypasses all TranscriptionBackend
@@ -377,6 +486,14 @@ class StreamingTranscriber {
     private var nemotronIsPreviewOnly: Bool { nemotronBridge != nil && usesEagerStream }
     #endif
 
+    /// Accumulates Nemotron's own per-chunk language guesses and decides when to pin the session
+    /// to one. Declared unconditionally so `nemotronLanguageTally` is readable in any build.
+    private let nemotronLanguagePinner = NemotronLanguagePinner()
+
+    /// What Nemotron thought the language was, chunk by chunk, over the whole session. Free
+    /// evidence spanning the entire recording — `MeetingLanguageTimeline` folds it in as a prior.
+    var nemotronLanguageTally: [String: Int] { nemotronLanguagePinner.tally }
+
     // Session audio file on disk (set by AppState after creation, used for saveRecording and tail)
     var sessionAudioURL: URL?
 
@@ -602,6 +719,26 @@ class StreamingTranscriber {
     /// which is where the engine is built.
     var eagerSuppressesRepetitionLoops: Bool = true
 
+    /// Words per second above which an eager pass is not physically possible and is discarded.
+    ///
+    /// Conversational English runs 2-3 w/s and the fastest sustained human speech is around 4.
+    /// 8 leaves a 2x margin over that — this is a physical-impossibility test, not a style test,
+    /// and must never fire on a fast speaker. The 2026-08-20 spiral ran at 17.7 w/s, rejected by
+    /// 2.2x. Languages that tokenize into more words per second than English still sit far below
+    /// this ceiling, because the bound is on `split(separator: " ")` output, not on tokens.
+    static let maximumPlausibleWordsPerSecond: Double = 8.0
+
+    /// Consecutive shrink-drops after which the live-text floor is re-seated.
+    ///
+    /// `lastPublishedEagerWordCount` is a monotonic floor, so a single anomalous pass that clears
+    /// the plausibility gate but still overshoots would pin it and drop every legitimate pass
+    /// after it until the next soft-commit. Three passes is ~1.8s of frozen preview, which is the
+    /// most staleness worth tolerating before preferring a one-frame shrink over a dead HUD.
+    private static let maximumConsecutiveShrinkDrops = 3
+
+    /// Passes dropped in a row for shrinking. Reset by any published pass and by soft-commit.
+    private var consecutiveShrinkDrops = 0
+
     /// Initialize with a pre-loaded backend
     init(
         backend: TranscriptionBackend,
@@ -699,6 +836,7 @@ class StreamingTranscriber {
         previewAccumulatedText = ""
         previewPassID = 0
         lastPublishedEagerWordCount = 0
+        consecutiveShrinkDrops = 0
         eagerVADWindowStart = -1
         eagerVADScannedEnd = 0
         eagerVADFoundSpeech = false
@@ -737,6 +875,8 @@ class StreamingTranscriber {
                 guard let self else { return }
                 let lang = self.language
                 let partialCounter = NemotronPartialCounter()
+                let pinner = self.nemotronLanguagePinner
+                pinner.reset()
                 let callback: @Sendable (String) -> Void = { [weak self] accumulatedText in
                     // Guard: empty string means silence/no speech — never reset the live display.
                     guard let self, !accumulatedText.isEmpty else { return }
@@ -747,6 +887,22 @@ class StreamingTranscriber {
                     DispatchQueue.main.async {
                         self.onTranscription?(accumulatedText)
                         self.onPreviewTail?(accumulatedText)
+                    }
+                    // Only in auto mode: an explicitly selected language is already forced by
+                    // beginSession, and second-guessing it would override the user.
+                    guard lang == .auto else { return }
+                    Task { [weak self] in
+                        guard let self, !self.isStopped else { return }
+                        let detected = await nemotron.detectedLanguageCode()
+                        guard let decision = pinner.observe(code: detected, text: accumulatedText) else { return }
+                        await nemotron.pinLanguage(decision.code)
+                        Logger.info("[Nemotron] Language \(decision.isRepin ? "re-pinned" : "pinned") to \(decision.code) after \(pinner.tally[decision.code] ?? 0) agreeing chunk(s)", subsystem: .transcription)
+                        guard let resolved = TranscriptionLanguage(rawValue: decision.code) else { return }
+                        // Same callback the router uses, so AppState picks up the route info and
+                        // the live card's RTL direction along with it.
+                        DispatchQueue.main.async { [weak self] in
+                            self?.onLanguageDetected?(resolved)
+                        }
                     }
                 }
                 // Forcing a language the model has no prompt for is a silent no-op inside
@@ -1983,6 +2139,7 @@ class StreamingTranscriber {
             // A soft-commit empties `confirmedWords`, so the next display legitimately restarts
             // from the unconfirmed tail. Reset the monotonicity floor with it.
             lastPublishedEagerWordCount = 0
+            consecutiveShrinkDrops = 0
         }
         // ── Liveness escape ───────────────────────────────────────────────────────
         // The boundary only advances as a result of a decode, and the window is
@@ -2068,10 +2225,18 @@ class StreamingTranscriber {
         // so the worst case is one stale frame, and the next pass that actually extends the text
         // publishes normally. A shrunk hypothesis is also unfit to reuse at stop — it covers more
         // audio with fewer words — so this returns before touching the reuse fields too.
-        guard wordCount >= lastPublishedEagerWordCount else {
-            Logger.debug("Eager pass dropped: \(wordCount) words would shrink live text from \(lastPublishedEagerWordCount)", subsystem: .transcription)
-            return
+        //
+        // The floor is monotonic, so an overshooting pass would pin it and drop every legitimate
+        // pass after it. Re-seat it once the drops become a stale preview rather than one frame.
+        if wordCount < lastPublishedEagerWordCount {
+            consecutiveShrinkDrops += 1
+            guard consecutiveShrinkDrops >= Self.maximumConsecutiveShrinkDrops else {
+                Logger.debug("Eager pass dropped: \(wordCount) words would shrink live text from \(lastPublishedEagerWordCount)", subsystem: .transcription)
+                return
+            }
+            Logger.debug("Eager live-text floor re-seated to \(wordCount) after \(consecutiveShrinkDrops) shrink-drops from \(lastPublishedEagerWordCount)", subsystem: .transcription)
         }
+        consecutiveShrinkDrops = 0
         lastPublishedEagerWordCount = wordCount
 
         // What goes on screen. `displayText` keeps the speculative tail and so can be rewritten;

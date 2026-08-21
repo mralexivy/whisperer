@@ -102,6 +102,14 @@ actor NemotronBridge {
         await manager?.detectedLanguage()
     }
 
+    /// See `NemotronBridging.pinLanguage`. No `reset()` — the session's decoded audio must
+    /// survive; only the language choice changes from here on.
+    func pinLanguage(_ code: String?) async {
+        guard !_isShuttingDown, let manager else { return }
+        await manager.setLanguage(code)
+        Logger.step(.asrStart, .transcription, ["lang": .string(code ?? "auto"), "pin": .bool(true)])
+    }
+
     func isForcedPrefixEnabled() async -> Bool {
         await manager?.forcedPrefixEnabled() ?? false
     }

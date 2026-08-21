@@ -372,6 +372,23 @@ class MeetingManager: ObservableObject {
         updateItem(id: meetingID) { $0.title = title }
     }
 
+    /// Persist the language the meeting was actually spoken in.
+    ///
+    /// `beginSession` writes the *setting* into this column, which for the default Auto is the
+    /// literal `"auto"` — never the resolved language. `MeetingLanguageTimeline` is what finally
+    /// knows the answer, and the detail view's language chip reads it back from here.
+    func updateLanguage(meetingID: UUID, language: String) async {
+        let ctx = database.newBackgroundContext()
+        await ctx.perform {
+            let req = MeetingEntity.fetchRequest()
+            req.predicate = NSPredicate(format: "id == %@", meetingID as CVarArg)
+            req.fetchLimit = 1
+            guard let entity = try? ctx.fetch(req).first else { return }
+            entity.language = language
+            try? ctx.save()
+        }
+    }
+
     func updateNotes(meetingID: UUID, notes: [MeetingNote]) async {
         let ctx = database.newBackgroundContext()
         let enc = encoder

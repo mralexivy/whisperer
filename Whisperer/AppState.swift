@@ -538,6 +538,13 @@ class AppState: ObservableObject {
     // Streaming transcription
     private var streamingTranscriber: StreamingTranscriber?
 
+    /// Nemotron's per-chunk language guesses from the meeting that just stopped, kept for the
+    /// refiner's language timeline to fold in as a prior. Copied out at stop rather than read on
+    /// demand: `stopInAppRecording()` tears the transcriber down asynchronously, so by the time
+    /// the refine pass runs there is nothing left to ask. Tagged with the meeting it came from so
+    /// a re-run on some *other* meeting cannot pick up a stranger's evidence.
+    private(set) var lastMeetingNemotronTally: (meetingID: UUID, tally: [String: Int])?
+
     // Per-chunk LLM correction coordinator
     private let chunkLLMCoordinator = ChunkLLMCoordinator()
 
@@ -4307,6 +4314,12 @@ class AppState: ObservableObject {
 
         // Save audio file URL before tearing down
         meetingAudioFileURL = audioRecorder?.sessionAudioURL.map { $0.lastPathComponent }
+
+        // Same reason, one line later: the transcriber is still alive here and gone by the time
+        // the refiner asks. An empty tally is fine — the timeline treats it as no prior.
+        if let id = activeMeetingSession?.meetingID {
+            lastMeetingNemotronTally = (id, streamingTranscriber?.nemotronLanguageTally ?? [:])
+        }
 
         // NOTE: activeMeetingSession is NOT cleared here. The tail transcription fires
         // asynchronously inside stopInAppRecording()'s Task (after transcriber.stopAsync()

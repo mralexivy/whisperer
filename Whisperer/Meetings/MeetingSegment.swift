@@ -22,12 +22,22 @@ struct MeetingSegment: Codable, Identifiable, Equatable {
     /// (the synthesized Decodable uses `decodeIfPresent` for optionals).
     var rawText: String?
 
+    /// Language this card was decoded in, as a `TranscriptionLanguage` raw value. Written by the
+    /// re-transcription pass from `MeetingLanguageTimeline`; nil on cards that predate the timeline
+    /// or that were decoded with no language forced.
+    ///
+    /// Per-card rather than per-meeting because people code-switch: a five-minute English stretch
+    /// inside a Hebrew meeting must be decodable as English, and `MeetingEntity.language` can only
+    /// hold the dominant one. Optional for the same reason as `rawText` — every blob written before
+    /// this field existed still decodes.
+    var language: String?
+
     /// True once the polish pass has rewritten this segment — drives the Polished/Original toggle.
     var isPolished: Bool { rawText != nil }
 
     init(id: UUID = UUID(), timestamp: Double, endTimestamp: Double, text: String,
          speakerName: String = "Speaker 1", speakerIndex: Int = 0, tags: [SegmentTag] = [],
-         rawText: String? = nil) {
+         rawText: String? = nil, language: String? = nil) {
         self.id = id
         self.timestamp = timestamp
         self.endTimestamp = endTimestamp
@@ -36,6 +46,7 @@ struct MeetingSegment: Codable, Identifiable, Equatable {
         self.speakerIndex = speakerIndex
         self.tags = tags
         self.rawText = rawText
+        self.language = language
     }
 }
 

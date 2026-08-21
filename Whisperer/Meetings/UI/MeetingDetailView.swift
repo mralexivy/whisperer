@@ -527,6 +527,7 @@ struct MeetingDetailView: View {
                 polishedToggle
                     .transition(.opacity.combined(with: .scale(scale: 0.9)))
             }
+            languageChip
             copyButton
             if canPolishManually {
                 cleanUpButton
@@ -605,6 +606,113 @@ struct MeetingDetailView: View {
         .help(transcriptMode == .fullText
               ? "Copy the whole transcript as plain text"
               : "Copy the transcript with speaker names and timestamps")
+    }
+
+    // MARK: - Language
+
+    /// The language the transcript was actually decoded in.
+    ///
+    /// Read from the cards first and the meeting record second: the cards are rewritten in place
+    /// by the refine pass and by a forced re-run, so they reflect the newest answer without
+    /// waiting for the record to be re-fetched. `MeetingEntity.language` held the literal
+    /// `"auto"` on every meeting until the timeline started writing it back, so it is the weaker
+    /// of the two sources on older recordings.
+    private var resolvedLanguage: TranscriptionLanguage {
+        let fromSegments = MeetingAIService.dominantLanguage(of: detailVM.allSegments)
+        if fromSegments != .auto { return fromSegments }
+        if let raw = meeting?.language, let language = TranscriptionLanguage(rawValue: raw), language != .auto {
+            return language
+        }
+        return .auto
+    }
+
+    /// Every language a card in this meeting was decoded in, dominant first. More than one entry
+    /// means the timeline found a genuine code-switch.
+    private var segmentLanguages: [TranscriptionLanguage] {
+        var seen: [TranscriptionLanguage] = []
+        for segment in detailVM.allSegments {
+            guard let raw = segment.language, let language = TranscriptionLanguage(rawValue: raw),
+                  language != .auto, !seen.contains(language) else { continue }
+            seen.append(language)
+        }
+        return seen.sorted { $0 == resolvedLanguage && $1 != resolvedLanguage }
+    }
+
+    /// What the picker offers: the shortlist when language routing is on, otherwise everything
+    /// this meeting already contains plus the full list, so a wrong detection is always fixable.
+    private var languageOptions: [TranscriptionLanguage] {
+        let routing = LanguageRoutingConfig.load()
+        let base = routing.isRoutingEnabled
+            ? routing.allowedLanguages
+            : TranscriptionLanguage.allCases.filter { $0 != .auto }
+        var options = segmentLanguages
+        for language in base where !options.contains(language) { options.append(language) }
+        return options
+    }
+
+    private var canChangeLanguage: Bool {
+        guard !session.isRecording, refiner.activeMeetingID == nil,
+              manager.processingPhase(for: meeting?.id) == nil else { return false }
+        return MeetingTranscriptRefiner.shared.canForceRun(audioURL: meeting?.resolvedAudioURL)
+    }
+
+    /// Shows what the transcript was decoded in and lets the user overrule it.
+    ///
+    /// Worth surfacing because the failure it corrects is invisible otherwise: handed the wrong
+    /// language, Whisper writes fluent text in that language rather than failing, so a translated
+    /// transcript looks like a merely mediocre one. Naming the language is what makes it
+    /// recognisable, and the picker is what makes it fixable.
+    @ViewBuilder
+    private var languageChip: some View {
+        if resolvedLanguage != .auto || !detailVM.allSegments.isEmpty {
+            Menu {
+                ForEach(languageOptions, id: \.self) { language in
+                    Button {
+                        changeLanguage(to: language)
+                    } label: {
+                        Text(language == resolvedLanguage ? "✓ \(language.displayName)" : language.displayName)
+                    }
+                }
+            } label: {
+                HStack(spacing: 5) {
+                    Image(systemName: "globe")
+                        .font(.system(size: 10, weight: .semibold))
+                    Text(resolvedLanguage == .auto ? "Language" : resolvedLanguage.displayName)
+                        .font(.system(size: 11, weight: .medium))
+                    if segmentLanguages.count > 1 {
+                        Text("+\(segmentLanguages.count - 1)")
+                            .font(.system(size: 10, weight: .semibold))
+                            .foregroundColor(.white.opacity(0.45))
+                    }
+                }
+                .foregroundColor(.white.opacity(0.6))
+            }
+            .menuStyle(.borderlessButton)
+            .menuIndicator(.hidden)
+            .fixedSize()
+            .padding(.horizontal, 10)
+            .padding(.vertical, 5)
+            .background(Capsule().fill(Color.white.opacity(0.06)))
+            .disabled(!canChangeLanguage)
+            .opacity(canChangeLanguage ? 1 : 0.35)
+            .help(segmentLanguages.count > 1
+                  ? "Spoken in \(segmentLanguages.map(\.displayName).joined(separator: ", ")). Pick one to re-transcribe the whole recording in it."
+                  : "The language this transcript was decoded in. Pick another to re-transcribe the recording in it.")
+        }
+    }
+
+    /// Re-decode the whole recording in a language the user has chosen. Every card is restored
+    /// from its raw ASR text first — see `MeetingTranscriptRefiner.run(forcedLanguage:)` — so the
+    /// new pass corrects what was heard rather than a previous pass's translation of it.
+    private func changeLanguage(to language: TranscriptionLanguage) {
+        guard let id = meeting?.id, language != resolvedLanguage else { return }
+        let segments = detailVM.allSegments
+        let audioURL = meeting?.resolvedAudioURL
+        Task {
+            await MeetingManager.shared.updateLanguage(meetingID: id, language: language.rawValue)
+            MeetingTranscriptRefiner.shared.start(meetingID: id, segments: segments,
+                                                  audioURL: audioURL, forcedLanguage: language)
+        }
     }
 
     private var cleanUpButton: some View {

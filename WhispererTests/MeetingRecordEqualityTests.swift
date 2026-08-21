@@ -78,6 +78,31 @@ final class MeetingRecordEqualityTests: XCTestCase {
         XCTAssertNotEqual(before, after)
     }
 
+    /// The language chip and the RTL direction of a card both read `MeetingSegment.language`.
+    /// A re-run of the refine pass that only changes the language — same text, because the
+    /// original decode happened to be right — must still repaint.
+    func testSegmentLanguageChangeBreaksEquality() {
+        var before = makeRecord()
+        before.segments = [MeetingSegment(timestamp: 0, endTimestamp: 4, text: "שלום")]
+        var after = before
+        after.segments[0].language = "he"
+
+        XCTAssertNotEqual(before, after)
+    }
+
+    /// `language` is optional so that every `segmentsJSON` blob written before the field existed
+    /// still decodes. A throw here would make every pre-timeline meeting unreadable.
+    func testSegmentDecodesWithoutLanguageField() throws {
+        let legacy = Data("""
+            [{"id":"\(UUID().uuidString)","timestamp":0,"endTimestamp":4,"text":"we picked postgres",
+              "speakerName":"Speaker 1","speakerIndex":0,"tags":[]}]
+            """.utf8)
+
+        let segments = try JSONDecoder().decode([MeetingSegment].self, from: legacy)
+        XCTAssertEqual(segments.count, 1)
+        XCTAssertNil(segments[0].language)
+    }
+
     /// The other half of the contract: an unchanged record must still compare equal, or every
     /// diff pass re-renders the whole meeting surface.
     func testUnchangedRecordsCompareEqual() {

@@ -43,6 +43,20 @@ struct MeetingFixture {
     let durationSec: Double
     let segments: [MeetingSegment]
     let language: String
+    /// Resolved `Meetings/<file>` path, nil when the row names no file or the file is gone.
+    /// The language timeline is an audio-driven mechanism, so fixtures without this are
+    /// only usable for text-level assertions.
+    let audioURL: URL?
+
+    /// Same buckets the integration suite reports on: the failure modes differ by length —
+    /// short meetings starve the detector, long ones are where one early mistake costs most.
+    var durationBucket: String {
+        switch durationSec {
+        case ..<120:  return "short"
+        case ..<900:  return "medium"
+        default:      return "long"
+        }
+    }
 
     var wordCount: Int {
         segments.reduce(0) { $0 + $1.text.split(separator: " ").count }
@@ -91,14 +105,24 @@ enum HistoryTestLoader {
                  ABS(CAST(ZDURATION AS REAL) - 20.0) ASC
         """
 
-    /// Loads real meetings from `ZMEETINGENTITY`, newest first, decoding the `segmentsJSON` blob.
+    static let newestFirst = "ZCREATEDAT DESC"
+    static let longestMeetingsFirst = "CAST(ZDURATION AS REAL) DESC"
+
+    /// Loads real meetings from `ZMEETINGENTITY`, decoding the `segmentsJSON` blob.
     /// Rows whose blob fails to decode or holds no segments are skipped — an empty transcript
     /// would exercise `generateOverview`'s early-exit rather than the model.
-    static func loadMeetingFixtures(maxCount: Int = 10) -> [MeetingFixture] {
-        guard let (dbPath, _) = findDatabase() else {
+    /// `order` is a trusted SQL fragment, not user input — callers pass one of the constants below.
+    /// The language suite needs the *longest* meetings, which newest-first never reaches at a small
+    /// `maxCount`; the overview benchmarks want the newest. Both orderings read the same rows.
+    static func loadMeetingFixtures(maxCount: Int = 10,
+                                    order: String = newestFirst) -> [MeetingFixture] {
+        guard let (dbPath, recordingsDir) = findDatabase() else {
             print("⚠️  HistoryTestLoader: No history.sqlite found at expected paths")
             return []
         }
+        // Meetings live beside Recordings/, under the same Application Support directory —
+        // mirroring `MeetingRecord.resolvedAudioURL`, which appends `Whisperer/Meetings/<rel>`.
+        let meetingsDir = recordingsDir.deletingLastPathComponent().appendingPathComponent("Meetings")
 
         var db: OpaquePointer?
         guard sqlite3_open_v2(dbPath, &db, SQLITE_OPEN_READONLY, nil) == SQLITE_OK else {
@@ -110,11 +134,11 @@ enum HistoryTestLoader {
         let sql = """
             -- hex(ZID): CoreData stores the UUID as a 16-byte blob, so reading it as text
             -- yields mojibake. Only used as a short tag in the benchmark table.
-            SELECT hex(ZID), ZTITLE, ZDURATION, ZSEGMENTSJSON, ZLANGUAGE
+            SELECT hex(ZID), ZTITLE, ZDURATION, ZSEGMENTSJSON, ZLANGUAGE, ZAUDIOFILEURL
             FROM ZMEETINGENTITY
             WHERE ZISINPROGRESS = 0
               AND ZSEGMENTSJSON IS NOT NULL
-            ORDER BY ZCREATEDAT DESC
+            ORDER BY \(order)
             LIMIT ?;
             """
 
@@ -146,7 +170,8 @@ enum HistoryTestLoader {
                 title: title,
                 durationSec: duration,
                 segments: segments,
-                language: language
+                language: language,
+                audioURL: resolvedAudioURL(filename: column(stmt, 5), dir: meetingsDir)
             ))
         }
 

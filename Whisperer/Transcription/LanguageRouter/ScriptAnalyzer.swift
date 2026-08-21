@@ -149,6 +149,28 @@ enum ScriptAnalyzer {
         return langScores
     }
 
+    /// Proportion of each script family among the text's letters, summing to 1.
+    ///
+    /// `dominantScript` cannot answer this — it maps straight to languages, so a single Latin
+    /// character in an otherwise Hebrew transcript admits every Latin-script language at full
+    /// weight. Callers that need "is this text *mostly* one script" need the shares.
+    static func scriptShares(in text: String) -> [ScriptFamily: Float] {
+        var counts: [ScriptFamily: Int] = [:]
+        var total = 0
+        for scalar in text.unicodeScalars {
+            guard let family = family(of: scalar) else { continue }
+            counts[family, default: 0] += 1
+            total += 1
+        }
+        guard total > 0 else { return [:] }
+        return counts.mapValues { Float($0) / Float(total) }
+    }
+
+    /// Languages plausibly written in `family`. Empty for families with no mapping.
+    static func languages(for family: ScriptFamily) -> [TranscriptionLanguage] {
+        scriptToLanguages[family] ?? []
+    }
+
     /// Every script family present in `text`, with no language mapping and no normalization.
     ///
     /// `dominantScript` answers "which language is this", which needs the shortlist and the

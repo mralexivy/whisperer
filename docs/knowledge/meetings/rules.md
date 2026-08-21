@@ -488,3 +488,51 @@
     the workspace's own Start controls need nothing raised at all. `meetingWindowIsVisible` is set
     either way — it means "a meeting surface owns the recording UI", and the workspace is equally
     that surface — so nothing may assume a meeting in progress implies a live window on screen.
+
+64. **A meeting's language is decided by the whole meeting, and a wrong decision is worse than
+    none.** Whisper handed a wrong forced language code does not fail — it emits fluent text in the
+    language it was told, so a Hebrew meeting decoded as English comes back as plausible English
+    prose that a character-count plausibility check waves straight through. The old rule ("detect
+    on window #1, force it everywhere") therefore gave the pass one chance to be right and turned
+    a partly-wrong transcript into a fully translated one when it wasn't. Detection is encoder-only
+    (`whisper_pcm_to_mel` + `whisper_lang_auto_detect`, no decode) and returns the whole
+    distribution, so probing a coarse grid across the recording costs a fraction of one window
+    decode: 45 probes / 9.3s on an 80-minute meeting, 1–2 probes / <1s on a short one. Measured over
+    the app's own history (`MeetingLanguageTimelineIntegrationTests`): 35/35 dominant languages
+    correct — short 29/29, medium 2/2, long 4/4 — against 34/35 for the first-window rule it
+    replaced. Below the confidence margin the timeline abstains to `.auto`, which is the old
+    per-window behaviour and degrades rather than translating.
+
+65. **Local smoothing cannot fix a locally-confident mistake; only the meeting can.** A flat
+    Viterbi switch cost plus a ~15s dwell threshold stops a borrowed English word inside Hebrew from
+    flipping the pin, and that is what those two knobs are for. They cannot stop a *run*: on a
+    48-minute Hebrew meeting the tiny detector produced 73 consecutive seconds of Polish at 0.48,
+    which cleared both bars and got a span of its own. The fix is a second, non-local rule —
+    `minSwitchConfidence`: a minority run whose mean posterior is below it is re-labelled as the
+    meeting's leader, not abstained (abstaining hands those windows back to the per-window
+    detection that produced the Polish). **The whole-meeting veto must itself be gated on the
+    meeting having an opinion**: `leadingLanguage` returns nil unless the leader beats its rival by
+    `abstainMargin` across every probe. Without that gate a 50/50 en/nl meeting elects a leader by
+    tie-break and converts an honest abstention into a coin-flip pin — the exact outcome the design
+    treats as worse than no decision.
+
+66. **Ground truth read off the stored transcript is provisional, and the suite has to say so.**
+    The gold labels in `WhispererTests/TestData/meeting-language-gold.json` were derived from each
+    meeting's stored text, which is the output of the very pass under test — a fully mis-decoded
+    meeting is labelled with the language it was mis-decoded into, and the test then passes on it.
+    Every entry carries that warning in its `note`. The dump samples the **start, middle and end**
+    segments, not the first 200 characters: a meeting that switches language switches in the
+    middle, and a leading-only excerpt writes the single-language assumption straight into the gold.
+
+67. **An integration suite over the user's real recordings must not write to them.**
+    `MeetingTranscriptRefiner.run` persists — `MeetingEntity.language`, `segmentsJSON`, and a
+    `.meetingSegmentsDidRefine` post. The fixtures the history loader returns are the user's actual
+    meetings, not copies, so `MeetingRefineLanguageIntegrationTests` reproduces the three steps
+    (plan windows → build timeline → decode each window in its span's language) against the same
+    bridge instead of calling `run`, and writes nothing.
+
+68. **`xcodebuild` does not forward the invoking shell's environment to the test process.** A bare
+    `MEETING_LANG_TESTS=1 xcodebuild test …` silently *skips* every opt-in test and reports success.
+    The variable must be prefixed `TEST_RUNNER_`, which xcodebuild strips before the test sees it:
+    `TEST_RUNNER_MEETING_LANG_TESTS=1`. A gate that fails open into a green run is indistinguishable
+    from a passing suite.
