@@ -30,7 +30,7 @@ class HistoryWindow: NSWindow {
 
         // Configure window
         self.title = "Workspace"
-        self.minSize = NSSize(width: 700, height: 700)
+        self.minSize = NSSize(width: 1060, height: 660)
         self.center()
 
         // Force dark appearance and blend titlebar with content

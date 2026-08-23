@@ -139,31 +139,44 @@ struct MeetingStudioView: View {
     // MARK: - Main 3-column content
 
     private var mainContent: some View {
-        HStack(spacing: 0) {
-            // Left: library + live card
-            MeetingListPanel(
-                session: session,
-                selectedMeetingID: $selectedMeetingID
-            )
-            .frame(width: 260)
+        GeometryReader { geo in
+            HStack(spacing: 0) {
+                // Left: library + live card
+                MeetingListPanel(
+                    session: session,
+                    selectedMeetingID: $selectedMeetingID
+                )
+                .frame(width: listWidth(in: geo.size.width))
 
-            divider
+                divider
 
-            // Center: transcript / overview — always show if a selection exists or is loading
-            if selectedMeetingID != nil || detailVM.isLoading {
-                MeetingDetailView(detailVM: detailVM, session: session, playheadSeconds: audioPlayer.currentTime)
+                // Center: transcript / overview — always show if a selection exists or is loading
+                if selectedMeetingID != nil || detailVM.isLoading {
+                    MeetingDetailView(detailVM: detailVM, session: session, playheadSeconds: audioPlayer.currentTime)
+                        .id(selectedMeetingID)
+                        .frame(minWidth: 200)
+                        .layoutPriority(1)
+                } else {
+                    notesPlaceholder
+                        .layoutPriority(1)
+                }
+
+                divider
+
+                // Right: player + assistant
+                MeetingRightPanel(meeting: detailVM.meeting, session: session, player: audioPlayer)
+                    .frame(width: rightWidth(in: geo.size.width))
                     .id(selectedMeetingID)
-            } else {
-                notesPlaceholder
             }
-
-            divider
-
-            // Right: player + assistant
-            MeetingRightPanel(meeting: detailVM.meeting, session: session, player: audioPlayer)
-                .frame(width: 420)
-                .id(selectedMeetingID)
         }
+    }
+
+    private func listWidth(in total: CGFloat) -> CGFloat {
+        min(260, max(200, total * 0.18))
+    }
+
+    private func rightWidth(in total: CGFloat) -> CGFloat {
+        min(400, max(280, total * 0.28))
     }
 
     private var divider: some View {
