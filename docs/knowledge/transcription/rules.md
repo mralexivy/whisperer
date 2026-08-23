@@ -685,3 +685,26 @@ at most once — that transition leaves `.undecided` for good. The 15:37 log has
 lines 240 ms apart (`conf=0.818`, `conf=0.811`), i.e. two concurrent transcribers, and the
 `auto-detect` decodes interleaved after them could not be attributed to either. Router
 lines now carry `[R<n>]`.
+
+## Reset the abort flag on every stop exit path — it is bridge state, not session state
+
+`WhisperBridge`'s abort flag lives on the bridge, and for whisper.cpp that bridge is the
+resident `AppState.whisperBridge` shared with dictation and the meeting refine pass. A set
+flag is **silent**: `encoder_begin_callback` returns `false`, whisper.cpp `break`s the seek
+loop and `whisper_full` returns **0 with zero segments** — indistinguishable, from the
+return code, from a successful decode of silence. The `-9/-8/-6` "Whisper decode aborted on
+request" branch never fires, so nothing is logged.
+
+On 2026-08-23 `stopAsync`'s `whisper.requestAbort()` had no unconditional partner: the only
+`resetAbort()` on that path sits inside the tail decode, past the `Tail has no speech (VAD),
+skipping transcription` early return. A stop that ended in silence left the flag set for the
+life of the process. The meeting refine pass then ran all 79 windows in 4.2 s (7–45 ms each),
+rewrote 0 cards, and logged `0 segment(s) rewritten, 0 kept` — which reads like "the
+transcript was already correct". The same button on the same meeting after a relaunch took
+110 s and rewrote 94 cards. Two reruns inside the bad process failed identically.
+
+- `defer { whisper.resetAbort() }` at the top of `stopAsync`. A branch cannot skip a `defer`.
+- Anything that **borrows** a resident bridge calls `resetAbort()` first. It is the start of a
+  new operation; the flag is its to clear regardless of who set it.
+- Count and report "decoded to nothing". An outcome that increments neither the accept nor
+  the reject counter is invisible in a summary built from those two counters.

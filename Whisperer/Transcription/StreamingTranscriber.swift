@@ -2768,6 +2768,21 @@ class StreamingTranscriber {
     func stopAsync(skipCorrections: Bool = false) async -> String {
         Logger.debug("Stopping StreamingTranscriber (async)...", subsystem: .transcription)
 
+        // The abort flag is *bridge* state, and the bridge outlives this transcriber — for
+        // whisper.cpp it is the resident `AppState.whisperBridge` that dictation and the meeting
+        // refine pass both go on to use. `requestAbort()` below has no unconditional partner:
+        // the only `resetAbort()` on the stop path sits inside the tail decode, past the
+        // "Tail has no speech (VAD), skipping transcription" early return. A stop that ends in
+        // silence therefore leaves the flag set for the life of the process, and every later
+        // decode dies in `encoder_begin_callback` — which `break`s the seek loop and returns 0
+        // with no segments, so it looks like a successful decode of nothing rather than an error.
+        //
+        // That is what happened on 2026-08-23 16:02: the meeting refine pass ran all 79 windows
+        // in 4.2s (7-45ms each), rewrote 0 cards, and logged no fault. The same button on the
+        // same meeting after a relaunch took 110s and rewrote 94. Resetting here, on every exit
+        // path, is the only placement that cannot be skipped by a branch.
+        defer { whisper.resetAbort() }
+
         stopGateLock.withLock { _isPreparingToStop = true }
         vadScanTask?.cancel()
         vadScanTask = nil

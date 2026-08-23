@@ -225,6 +225,12 @@ final class MeetingTranscriptRefiner: ObservableObject {
         }
         defer { if ownsBridge { bridge.prepareForShutdown() } }
 
+        // A borrowed bridge arrives with whatever abort state the last owner left on it, and a
+        // set flag is silent: `encoder_begin_callback` skips the encode, `whisper_full` returns 0
+        // with no segments, and the pass "succeeds" having decoded nothing. We are the start of a
+        // new operation, so the flag is ours to clear regardless of who set it.
+        bridge.resetAbort()
+
         Logger.info("Transcript refine: \(windows.count) window(s) over \(working.count) segment(s) with \(model.displayName) for \(meetingID)", subsystem: .transcription)
 
         // Which language each window is decoded in.
@@ -263,6 +269,10 @@ final class MeetingTranscriptRefiner: ObservableObject {
         var context = ""
         var rewritten = 0
         var rejected = 0
+        // A window that decodes to nothing is not an outcome the accept/reject counters can
+        // express — it increments neither, so a whole pass of them reads as "0 rewritten, 0 kept"
+        // and looks like there was simply nothing to do. Counted separately so it cannot hide.
+        var silent = 0
         let t0 = Date()
 
         for (windowIndex, window) in windows.enumerated() {
@@ -322,6 +332,8 @@ final class MeetingTranscriptRefiner: ObservableObject {
                 .map { WhisperTimedSegment(text: $0.text, start: bufferStart + $0.start, end: bufferStart + $0.end) }
                 .filter { $0.end > window.start }
 
+            if timed.isEmpty { silent += 1 }
+
             let languageSource = spanLanguage != .auto ? "timeline"
                 : (forcedLanguage != nil ? "forced" : "base")
             Logger.debug("Transcript refine: window \(windowIndex + 1)/\(windows.count) decoded as \(fixedLanguage.displayName) (\(languageSource))", subsystem: .transcription)
@@ -362,6 +374,14 @@ final class MeetingTranscriptRefiner: ObservableObject {
 
         let elapsed = Int(Date().timeIntervalSince(t0) * 1000)
         Logger.info("Transcript refine: \(rewritten) segment(s) rewritten, \(rejected) kept, across \(windows.count) window(s) in \(elapsed)ms for \(meetingID)", subsystem: .transcription)
+        // Every window returning nothing means the decoder never ran — a stuck abort flag, a
+        // truncated audio file, a context that failed to load. None of those are "the transcript
+        // was already correct", which is what the line above says on its own.
+        if silent == windows.count {
+            Logger.error("Transcript refine: every window decoded to silence — the decoder produced nothing for \(meetingID)", subsystem: .transcription)
+        } else if silent > 0 {
+            Logger.warning("Transcript refine: \(silent)/\(windows.count) window(s) decoded to silence for \(meetingID)", subsystem: .transcription)
+        }
         uncorrected = rejected > 0 ? (meetingID: meetingID, count: rejected) : nil
 
         return finish(working, meetingID: meetingID)
