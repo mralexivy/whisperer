@@ -235,6 +235,22 @@ enum TranscriptionLanguage: String, CaseIterable, Codable {
         guard self != .auto else { return nil }
         return Locale(identifier: rawValue)
     }
+
+    /// The language behind a tag that may carry a region or script subtag — `"it-IT"` → `.italian`,
+    /// `"zh_Hans"` → `.chinese`.
+    ///
+    /// Raw values here are bare ISO-639-1 (`"he"`, `"it"`), but Nemotron reports BCP-47 (`"he-IL"`,
+    /// `"it-IT"`). `init(rawValue:)` returns nil for every one of those, which silently disabled the
+    /// pinner's script veto and the RTL callback — both of which simply stopped running rather than
+    /// failing visibly. Everything that consumes an external language tag must come through here.
+    static func from(languageTag: String) -> TranscriptionLanguage? {
+        let trimmed = languageTag.trimmingCharacters(in: .whitespaces)
+        guard !trimmed.isEmpty, trimmed != "auto" else { return nil }
+        if let exact = TranscriptionLanguage(rawValue: trimmed) { return exact }
+        let base = trimmed.lowercased().split(whereSeparator: { $0 == "-" || $0 == "_" }).first.map(String.init)
+        guard let base, base != trimmed else { return nil }
+        return TranscriptionLanguage(rawValue: base)
+    }
 }
 
 // MARK: - Whisper Error

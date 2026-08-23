@@ -51,7 +51,11 @@ final class NemotronPartialCounter: @unchecked Sendable {
 /// Same class of decision as `MeetingLanguageTimeline`, at chunk granularity and with only the
 /// evidence available so far. The final pass re-decides from the audio on disk, so a live mistake
 /// is repaired rather than baked in.
-final class NemotronLanguagePinner: @unchecked Sendable {
+/// `nonisolated` for the same reason as `LanguageRouter` — see the note on its declaration. It is
+/// `NSLock`-guarded state driven from the Nemotron preview callback, never from the main actor,
+/// and the isolated deinit that `SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor` would give it aborts
+/// when a synchronous XCTest method releases one.
+nonisolated final class NemotronLanguagePinner: @unchecked Sendable {
     struct Decision {
         let code: String
         /// True when this replaces an earlier pin — a genuine mid-meeting language switch.
@@ -111,7 +115,7 @@ final class NemotronLanguagePinner: @unchecked Sendable {
             return Decision(code: code, isRepin: false)
         }
 
-        guard code != pinned else {
+        guard !Self.sameLanguage(code, pinned) else {
             _challenger = nil
             _challengerRun = 0
             return nil
@@ -124,6 +128,32 @@ final class NemotronLanguagePinner: @unchecked Sendable {
         return Decision(code: code, isRepin: true)
     }
 
+    /// Take the pin from an authority outside this class — the fused verdict, which has seen
+    /// Whisperer V3 and the tiny probe as well as Nemotron's own guess.
+    ///
+    /// Returns false when the pin already names this language, so the caller does not re-issue
+    /// the same pin on every fusion. The tally is deliberately untouched: it is a record of what
+    /// Nemotron actually said, and the offline pass reads it as exactly that.
+    @discardableResult
+    func adopt(code: String) -> Bool {
+        lock.lock(); defer { lock.unlock() }
+        if let pinned = _pinned, Self.sameLanguage(code, pinned) { return false }
+        _pinned = code
+        _challenger = nil
+        _challengerRun = 0
+        return true
+    }
+
+    /// Whether two codes name the same language. `"he"` (what the arbiter speaks) and `"he-IL"`
+    /// (what Nemotron reports) are not a language switch, and comparing them as strings would
+    /// start a challenger run against our own pin.
+    private static func sameLanguage(_ lhs: String, _ rhs: String) -> Bool {
+        if lhs == rhs { return true }
+        guard let a = TranscriptionLanguage.from(languageTag: lhs),
+              let b = TranscriptionLanguage.from(languageTag: rhs) else { return false }
+        return a == b
+    }
+
     /// True when the text on screen rules this language out.
     ///
     /// Deliberately **asymmetric**. Text that is overwhelmingly Hebrew, Cyrillic or CJK is strong
@@ -132,7 +162,9 @@ final class NemotronLanguagePinner: @unchecked Sendable {
     /// which is the exact failure being fixed here, and borrowed English terms are Latin too. So
     /// a Latin-dominant transcript vetoes nothing.
     private func scriptContradicts(_ code: String, text: String) -> Bool {
-        guard let language = TranscriptionLanguage(rawValue: code) else { return false }
+        // `from(languageTag:)`, not `init(rawValue:)` — Nemotron reports BCP-47 (`"it-IT"`), which
+        // never parsed, so this guard returned false for every code and vetoed nothing.
+        guard let language = TranscriptionLanguage.from(languageTag: code) else { return false }
         let shares = ScriptAnalyzer.scriptShares(in: text)
         guard let dominant = shares.max(by: { $0.value < $1.value }),
               dominant.value >= 0.6, dominant.key != .latin else { return false }
@@ -490,9 +522,56 @@ class StreamingTranscriber {
     /// to one. Declared unconditionally so `nemotronLanguageTally` is readable in any build.
     private let nemotronLanguagePinner = NemotronLanguagePinner()
 
-    /// What Nemotron thought the language was, chunk by chunk, over the whole session. Free
-    /// evidence spanning the entire recording — `MeetingLanguageTimeline` folds it in as a prior.
-    var nemotronLanguageTally: [String: Int] { nemotronLanguagePinner.tally }
+    /// Fuses every language detector already resident in the process — Nemotron's free per-chunk
+    /// guess, the tiny CPU probe, and Whisperer V3 — into one verdict that drives both engines.
+    private let languageArbiter = LiveLanguageArbiter()
+
+    /// Guards against queueing a second V3 confirmation behind the first. The VAD scan runs twice
+    /// a second and a confirmation waits on the live decoder's `ctxLock`, so without this the
+    /// escalation budget would be spent on passes over audio that has already moved on.
+    private let accurateProbeLock = NSLock()
+    private var accurateProbeInFlight = false
+
+    /// Audio between language probes while nothing is decided — short, because everything decoded
+    /// before the lock is decoded unrouted.
+    private static let undecidedProbeInterval: Double = 3
+    /// Audio between probes once a route is settled. The probe is cheap, but there is nothing to
+    /// learn from asking twice a second; this keeps the arbiter accumulating for the whole meeting
+    /// at a rate a human can read in the log.
+    private static let settledProbeInterval: Double = 20
+
+    /// What the session's detectors thought the language was, over the whole recording. Free
+    /// evidence spanning the entire meeting — `MeetingLanguageTimeline` folds it in as a prior.
+    ///
+    /// Sourced from the arbiter rather than the pinner so that a Nemotron guess the pinner's
+    /// script veto rejected still counts as (weak) evidence offline, where there is a transcript
+    /// and a second model to weigh it against.
+    var nemotronLanguageTally: [String: Int] { languageArbiter.nemotronTally }
+
+    /// The last provisional language handed to the eager decoder, so a change can be logged once
+    /// instead of on every pass.
+    private var lastProvisionalLanguage: TranscriptionLanguage?
+    /// Recorded duration at which the eager stream first ran with nothing decided, or nil once
+    /// something is. Drives `unroutedCommitGrace`.
+    private var unroutedSince: Double?
+    /// How long the eager stream will decline to commit text while it has no idea what language it
+    /// is hearing. Past this the old behaviour resumes — provisional text is better than none, and
+    /// no path may silently drop a recording. Generous, because the arbiter probes every 3 s and a
+    /// session that has produced no usable probe in half a minute has a different problem.
+    private static let unroutedCommitGrace: Double = 30
+
+    /// The language the eager decoder should be told to use.
+    ///
+    /// `.auto` is the worst possible argument here and was the default for the whole pre-route
+    /// window: whisper re-detects per pass, so consecutive windows of the same Hebrew speech came
+    /// back `it`, `ru`, `he`, `fr` — and each was decoded, displayed and committed as such. A
+    /// settled route wins; failing that, the arbiter's running best guess; failing that only, the
+    /// configured language (which is `.auto` exactly when the user asked for auto-detect).
+    var provisionalLanguage: TranscriptionLanguage {
+        if let routed = routeDecision?.lang { return routed }
+        if language != .auto { return language }
+        return languageArbiter.leadingCandidate?.language ?? .auto
+    }
 
     // Session audio file on disk (set by AppState after creation, used for saveRecording and tail)
     var sessionAudioURL: URL?
@@ -817,6 +896,13 @@ class StreamingTranscriber {
         routeDecision = nil
         detectionAttempts = 0
         lastDetectionSampleCount = 0
+        languageArbiter.reset()
+        languageArbiter.configure(allowedLanguages: languageRouter?.allowedLanguages ?? [],
+                                  longForm: usesEagerStream)
+        lastProvisionalLanguage = nil
+        unroutedSince = nil
+        hasWarnedAboutUnroutedCommit = false
+        accurateProbeLock.lock(); accurateProbeInFlight = false; accurateProbeLock.unlock()
         scriptMismatchCount = 0
         chunkLangMismatchCount = 0
         lastSilenceStart = nil
@@ -894,10 +980,14 @@ class StreamingTranscriber {
                     Task { [weak self] in
                         guard let self, !self.isStopped else { return }
                         let detected = await nemotron.detectedLanguageCode()
+                        // Every guess, vetoed or not, is evidence for the fused verdict and for
+                        // the offline pass. The pinner sees the same code but only acts on it
+                        // when its own script veto lets it through.
+                        self.languageArbiter.recordNemotron(code: detected)
                         guard let decision = pinner.observe(code: detected, text: accumulatedText) else { return }
                         await nemotron.pinLanguage(decision.code)
                         Logger.info("[Nemotron] Language \(decision.isRepin ? "re-pinned" : "pinned") to \(decision.code) after \(pinner.tally[decision.code] ?? 0) agreeing chunk(s)", subsystem: .transcription)
-                        guard let resolved = TranscriptionLanguage(rawValue: decision.code) else { return }
+                        guard let resolved = TranscriptionLanguage.from(languageTag: decision.code) else { return }
                         // Same callback the router uses, so AppState picks up the route info and
                         // the live card's RTL direction along with it.
                         DispatchQueue.main.async { [weak self] in
@@ -1092,15 +1182,18 @@ class StreamingTranscriber {
         let fromRel = max(0, lastVADScanIndex - ringBase)
         let claimedRel = max(0, lastClaimedSampleIndex - ringBase)
 
-        // Language detection — detect before first chunk, retry if undecided
-        if routeDecision == nil,
-           detectionAttempts < RoutingThresholds.maxDetectionAttempts,
-           let pool = modelPool, let langRouter = languageRouter, let mdlRouter = modelRouter {
-            let targetSamples = RoutingThresholds.targetDetectionSamples
-                + (detectionAttempts * RoutingThresholds.retryGrowth)
-            // Compare against total received so detection window grows monotonically
+        // Language detection. There is deliberately no attempt limit any more: this used to stop
+        // after three 3–5 s windows, so a session whose opening happened to be ambiguous decoded
+        // its entire remaining length with `routeDecision == nil` and no way back — the only other
+        // detection path, `checkScriptStability`, requires a lock that by then could never happen.
+        // A meeting has forty minutes of evidence. The arbiter accumulates across all of it and
+        // can still flip a lock later, so probing continues on a cadence for the whole session.
+        if let pool = modelPool, let langRouter = languageRouter, let mdlRouter = modelRouter {
             let totalInRing = ringBase + allSamples.count
-            if totalInRing >= targetSamples, totalInRing > lastDetectionSampleCount {
+            let interval = routeDecision == nil ? Self.undecidedProbeInterval : Self.settledProbeInterval
+            let cadenceSamples = Int(interval * sampleRate)
+            if totalInRing >= RoutingThresholds.targetDetectionSamples,
+               totalInRing >= lastDetectionSampleCount + cadenceSamples {
                 lastDetectionSampleCount = totalInRing
                 let windowSize = min(allSamples.count, RoutingThresholds.targetDetectionSamples)
                 let wasAttempted = performLanguageDetection(
@@ -1115,7 +1208,8 @@ class StreamingTranscriber {
                         component: "StreamingTranscriber",
                         operation: "detectionUndecided",
                         kind: .state,
-                        metadata: ["attempt": .int(detectionAttempts), "max": .int(RoutingThresholds.maxDetectionAttempts)]
+                        metadata: ["attempt": .int(detectionAttempts),
+                                   "probes": .int(languageArbiter.probeCount)]
                     )
                 }
             }
@@ -1533,7 +1627,9 @@ class StreamingTranscriber {
         }
 
         let normalizedSamples = normalizeSamples(windowSamples)
-        let lang = effectiveLanguage
+        // Same reasoning as the eager path: a two-second preview window is the audio `.auto` is
+        // worst on, and the arbiter's running guess is available for free.
+        let lang = provisionalLanguage
 
         // Never feed WhisperKit provisional text or vocabulary prompt words into a
         // short preview window. Both strongly bias ambiguous audio. Only actual,
@@ -1978,7 +2074,15 @@ class StreamingTranscriber {
             return
         }
 
-        let lang = effectiveLanguage
+        let lang = provisionalLanguage
+        if lang != lastProvisionalLanguage {
+            lastProvisionalLanguage = lang
+            if let leading = languageArbiter.leadingCandidate, routeDecision == nil {
+                Logger.info("[\(languageRouter?.tag ?? "R?")] Eager stream now decoding as "
+                    + "\(lang.displayName) (provisional, "
+                    + "\(String(format: "%.2f", leading.confidence)))", subsystem: .transcription)
+            }
+        }
         let prompt = completedChunkTexts.last.map { String($0.suffix(100)) }
         let normalizedSamples = normalizeSamples(samples)
         let base = audioBaseIndex
@@ -2042,7 +2146,8 @@ class StreamingTranscriber {
                 Logger.debug("Eager pass: \(result.words.count) words, logProb=\(String(format: "%.2f", result.averageLogProbability))", subsystem: .transcription)
                 self.applyEagerOutcome(result: result,
                                        audioBaseIndex: base,
-                                       candidateEndIndex: endIdx)
+                                       candidateEndIndex: endIdx,
+                                       decodedLanguage: lang)
             } else {
                 // Distinguish the benign case. Every recording ends with one nil pass a few
                 // tens of ms before `Transcribing tail:` — the stop path takes `ctxLock` out
@@ -2068,10 +2173,36 @@ class StreamingTranscriber {
         }
     }
 
+    /// Whether the eager stream has waited long enough for a language that it should start
+    /// committing text anyway.
+    ///
+    /// The hold above is only safe because it is bounded. If detection never produces anything
+    /// usable — every probe dropped by the shortlist guard, a recording with no clean speech — the
+    /// recording must still end up with a transcript, so past the grace period the old behaviour
+    /// resumes. Logged at warning level once, because reaching it means detection failed outright.
+    private func unroutedGraceExpired() -> Bool {
+        let now = recordedDuration
+        guard let since = unroutedSince else {
+            unroutedSince = now
+            return false
+        }
+        guard now - since >= Self.unroutedCommitGrace else { return false }
+        if !hasWarnedAboutUnroutedCommit {
+            hasWarnedAboutUnroutedCommit = true
+            Logger.warning("No language decided after \(String(format: "%.0f", now - since))s — "
+                + "committing auto-detected text so the recording is not lost",
+                subsystem: .transcription)
+        }
+        return true
+    }
+
+    private var hasWarnedAboutUnroutedCommit = false
+
     private func applyEagerOutcome(
         result: WhisperStreamResult,
         audioBaseIndex: Int,
-        candidateEndIndex: Int
+        candidateEndIndex: Int,
+        decodedLanguage: TranscriptionLanguage
     ) {
         guard var engine = eagerEngine else { return }
         let hypothesis = result.words.map { word -> EagerStreamWord in
@@ -2082,9 +2213,17 @@ class StreamingTranscriber {
                 probability: word.probability
             )
         }
-        // Language is always locked for whisper.cpp eager (single-language model, fixed language).
+        // This used to pass `true` unconditionally, on the reasoning that whisper.cpp is a
+        // single-language model with a fixed language. It is not fixed while the route is
+        // undecided: `.auto` makes whisper re-detect on every pass, and `languageIsLocked` is what
+        // gates *confirmation* — so the first twenty seconds of a Hebrew meeting were decoded as
+        // Italian, Russian and French, confirmed, committed, and pruned from the ring, which put
+        // them permanently in the transcript before any verdict existed. Text decoded in a language
+        // nothing has established yet stays provisional: it still displays, and the audio behind it
+        // stays in the ring to be re-decoded once the language is known.
+        let languageIsLocked = decodedLanguage != .auto || unroutedGraceExpired()
         let outcome = engine.consume(hypothesis: hypothesis, audioBaseIndex: audioBaseIndex,
-            languageIsLocked: true, lastCommittedIndex: lastTranscribedSampleIndex,
+            languageIsLocked: languageIsLocked, lastCommittedIndex: lastTranscribedSampleIndex,
             windowEndIndex: candidateEndIndex)
         eagerEngine = engine
         if let reason = outcome.holdReason { onEagerPassHeld?(reason) }
@@ -3639,13 +3778,42 @@ class StreamingTranscriber {
             return true  // Detection was attempted but failed
         }
 
-        // Route through language classifier (no transcript yet — initial routing)
+        // Hand the probe to the arbiter as a distribution over a span, rather than as a single
+        // pass/fail against 0.75. The observed failure was a probe that said he 0.66 — right, and
+        // discarded, three times in a row.
+        let audioSeconds = recordedDuration
+        let windowSeconds = Double(detectionSamples.count) / sampleRate
+        let probeStart = max(0, audioSeconds - windowSeconds)
+        if !languageArbiter.recordCoarse(probabilities: allProbs, start: probeStart, end: audioSeconds) {
+            // Logged rather than dropped silently: a run of these means the shortlist and the
+            // speech disagree, which is a different problem from an ambiguous probe.
+            Logger.debug("Probe ignored: most of its mass is outside the shortlist", subsystem: .transcription)
+        }
+
+        // Ask Whisperer V3 when the cheap evidence is unclear. Fire-and-forget: its result lands
+        // in the arbiter and is picked up by the next fusion, at most a cadence away.
+        maybeConfirmWithAccurateModel(coarse: allProbs, samples: detectionSamples,
+                                      start: probeStart, end: audioSeconds, langRouter: langRouter)
+
+        // The fused verdict outranks this single probe — it is built from the same probe plus
+        // every other detector in the process.
+        if applyArbiterVerdict(pool: pool, langRouter: langRouter, mdlRouter: mdlRouter) { return true }
+
+        // Nothing fused yet. Fall back to the single-probe router, unchanged.
         guard let langDecision = langRouter.decide(allProbs: allProbs, transcriptText: "", shortWindow: isShortWindow) else {
             Logger.debug("Language router undecided, using configured language", subsystem: .transcription)
             return true  // Detection was attempted
         }
 
-        // Resolve to model profile
+        applyRoute(for: langDecision, pool: pool, mdlRouter: mdlRouter)
+        return true
+    }
+
+    /// Resolve a language decision to a model and put that model in place.
+    ///
+    /// Shared by the single-probe path and the fused-verdict path so that a verdict from the
+    /// arbiter reaches the decoder by exactly the same route as one from `LanguageRouter.decide`.
+    private func applyRoute(for langDecision: RouteDecision, pool: ModelPool, mdlRouter: ModelRouter) {
         let modelDecision = mdlRouter.resolve(decision: langDecision, warmProfiles: pool.warmProfiles)
         routeDecision = modelDecision
 
@@ -3679,7 +3847,118 @@ class StreamingTranscriber {
                 }
             }
         }
+    }
+
+    /// Fuse everything the arbiter has seen and apply the result to the router, the model route
+    /// and the Nemotron prompt.
+    ///
+    /// This is the single place where one verdict reaches both engines. Previously each engine
+    /// pinned itself from its own evidence and the wrong one wrote the meeting: whisper routed to
+    /// Hebrew at 0.801 while Nemotron pinned `it-IT`, in the same process, on the same audio.
+    ///
+    /// Returns true when a verdict exists, whether or not anything changed — the caller uses that
+    /// to decide whether the single-probe fallback is still needed.
+    @discardableResult
+    private func applyArbiterVerdict(pool: ModelPool, langRouter: LanguageRouter,
+                                     mdlRouter: ModelRouter) -> Bool {
+        // The transcript is the output of the path being corrected, so the timeline treats it as
+        // a weak prior only. Passing it is still worth it: script is the one signal that catches
+        // a decode written in the wrong alphabet.
+        let transcript = completedChunkTexts.joined(separator: " ")
+        guard let verdict = languageArbiter.fuse(transcript: transcript,
+                                                 allowedLanguages: langRouter.allowedLanguages,
+                                                 duration: recordedDuration) else { return false }
+
+        pinNemotron(to: verdict.language)
+
+        guard let decision = langRouter.adopt(verdict.language, confidence: verdict.confidence) else {
+            return true  // Already locked to this language — nothing to re-route.
+        }
+        Logger.info("Language fused to \(verdict.language.displayName) "
+            + "(conf=\(String(format: "%.3f", verdict.confidence)), \(verdict.probeCount) probe(s)"
+            + "\(verdict.usedAccurate ? ", V3-confirmed" : "")\(languageArbiter.nemotronTally.isEmpty ? "" : ", +Nemotron"))",
+            subsystem: .transcription)
+        applyRoute(for: decision, pool: pool, mdlRouter: mdlRouter)
         return true
+    }
+
+    /// Push the fused verdict to Nemotron, so the live cards are decoded in the language the whole
+    /// process agrees on rather than the one Nemotron guessed for itself.
+    private func pinNemotron(to language: TranscriptionLanguage) {
+        #if canImport(FluidAudio)
+        // An explicitly selected language is already forced at `beginSession`; overriding it here
+        // would second-guess the user.
+        guard self.language == .auto, let nemotron = nemotronBridge else { return }
+        // `adopt` is false when the pin already names this language, which is the common case once
+        // the session settles — this must not fire an actor hop on every fusion.
+        guard nemotronLanguagePinner.adopt(code: language.rawValue) else { return }
+        Task { [weak self] in
+            guard let self, !self.isStopped else { return }
+            await nemotron.pinLanguage(language.rawValue)
+            Logger.info("[Nemotron] Language pinned to \(language.rawValue) by fused verdict", subsystem: .transcription)
+            DispatchQueue.main.async { [weak self] in
+                self?.onLanguageDetected?(language)
+            }
+        }
+        #endif
+    }
+
+    /// Ask Whisperer V3 to confirm the language, when the cheap evidence is unclear enough to be
+    /// worth an encoder pass.
+    ///
+    /// This is the detector that was resident, warm and unambiguous the whole time and was never
+    /// asked. On the Hebrew meeting it returns he 0.98–0.99 at every offset while the tiny probe
+    /// wavers at 0.66 and Nemotron says Italian.
+    ///
+    /// The pass runs off the VAD scan thread — it waits on the live decoder's `ctxLock`, and
+    /// blocking the scan loop on that would stall chunking. It only *records*; the verdict is
+    /// applied by the next fusion on the scan thread, so `routeDecision` and `whisper` keep a
+    /// single writer.
+    private func maybeConfirmWithAccurateModel(coarse: [String: Float], samples: [Float],
+                                               start: Double, end: Double,
+                                               langRouter: LanguageRouter) {
+        guard let bridge = whisper as? WhisperBridge, !samples.isEmpty else { return }
+
+        var currentLock: TranscriptionLanguage?
+        if case .locked(let locked) = langRouter.state { currentLock = locked }
+
+        guard let reason = languageArbiter.escalationReason(
+            coarse: coarse,
+            nemotronCode: nemotronLanguagePinner.pinnedCode,
+            currentLock: currentLock,
+            audioSeconds: end
+        ) else { return }
+
+        accurateProbeLock.lock()
+        if accurateProbeInFlight {
+            accurateProbeLock.unlock()
+            return
+        }
+        accurateProbeInFlight = true
+        accurateProbeLock.unlock()
+
+        Task.detached(priority: .userInitiated) { [weak self] in
+            guard let self else { return }
+            defer {
+                self.accurateProbeLock.lock()
+                self.accurateProbeInFlight = false
+                self.accurateProbeLock.unlock()
+            }
+            guard !self.isStopped else { return }
+            let started = CACurrentMediaTime()
+            guard let probs = bridge.detectLanguage(samples: samples) else {
+                Logger.warning("Language confirmation (V3, \(reason.rawValue)) returned nil", subsystem: .transcription)
+                return
+            }
+            let elapsed = (CACurrentMediaTime() - started) * 1000
+            let counted = self.languageArbiter.recordAccurate(probabilities: probs, start: start, end: end)
+            let top = probs.max(by: { $0.value < $1.value })
+            Logger.info("Language confirmation (V3, \(reason.rawValue)): top=\(top?.key ?? "?") "
+                + "p=\(String(format: "%.3f", top?.value ?? 0))\(counted ? "" : " — inconclusive, not counted") "
+                + "in \(String(format: "%.0f", elapsed))ms "
+                + "(\(self.languageArbiter.accurateSpend)/\(LiveLanguageArbiter.Config.default.maxAccurateProbes) "
+                + "pass(es) this session)", subsystem: .transcription)
+        }
     }
 
     /// Drain promotion queue and swap backend if promotion is ready
@@ -3708,8 +3987,16 @@ class StreamingTranscriber {
     private func checkScriptStability(chunkText: String) {
         guard let langRouter = languageRouter,
               let pool = modelPool,
-              let mdlRouter = modelRouter,
-              case .locked(let lockedLang) = langRouter.state else { return }
+              let mdlRouter = modelRouter else { return }
+
+        // Unlocked has no language to contradict — but that was exactly the state with no way
+        // out: this method returned early, and the only other detection path had already given
+        // up after three attempts. Re-fuse instead, now that there is a chunk of transcript to
+        // weigh: the script prior is the strongest signal the arbiter gets for free.
+        guard case .locked(let lockedLang) = langRouter.state else {
+            applyArbiterVerdict(pool: pool, langRouter: langRouter, mdlRouter: mdlRouter)
+            return
+        }
 
         let scriptHints = ScriptAnalyzer.dominantScript(in: chunkText, allowedLanguages: langRouter.allowedLanguages)
         guard !scriptHints.isEmpty else { return }

@@ -66,23 +66,76 @@ enum MeetingTranscriptText {
 
     // MARK: - Writing direction
 
-    /// True when a sample of transcript text is predominantly RTL script.
+    /// The base writing direction for a whole meeting — the only correct scope for this
+    /// question, because base direction is a property of the paragraph, and these views lay
+    /// out one document.
     ///
-    /// Content wins over the configured language everywhere this is used: `meeting.language`
-    /// is the shortlist entry the session started with, not what was actually spoken.
+    /// Sampled across the **whole** transcript, not its opening. Every earlier copy of this
+    /// rule read the first three segments and, inside them, the first fifty scalars — so the
+    /// direction of a forty-minute meeting was decided by roughly its first sentence. On
+    /// 2026-08-23 a Hebrew meeting whose first three cards were mis-decoded English rendered
+    /// entirely left-to-right, punctuation on the wrong side of every Hebrew card. Those
+    /// opening windows are also the *least* trustworthy part of a transcript: they are decoded
+    /// before the language router has settled. Majority over the document has neither problem.
     ///
-    /// Lives here because three views had already grown their own copy of it and this change
-    /// would have added a fourth.
-    static func isRightToLeft(sample: String) -> Bool {
-        var rtl = 0, letters = 0
-        for scalar in sample.prefix(50).unicodeScalars {
-            let v = scalar.value
-            if scalar.properties.isAlphabetic { letters += 1 }
-            if (v >= 0x0590 && v <= 0x05FF) || (v >= 0x0600 && v <= 0x06FF) ||
-               (v >= 0x0700 && v <= 0x074F) || (v >= 0xFB50 && v <= 0xFDFF) ||
-               (v >= 0xFE70 && v <= 0xFEFF) { rtl += 1 }
+    /// - Parameters:
+    ///   - segments: the transcript, in order. Sampled with a stride, so cost does not grow
+    ///     with meeting length — this is read from a SwiftUI computed property.
+    ///   - liveTail: uncommitted live text, used only when the segments are still empty. On the
+    ///     Nemotron backend that is the whole recording, since it emits one chunk at `finish()`.
+    ///   - fallback: the meeting's language, consulted only when there is not enough text to
+    ///     judge. Without it a `he`-configured meeting flashes LTR until its first words land.
+    static func isRightToLeft(
+        segments: [MeetingSegment],
+        liveTail: String = "",
+        fallback: TranscriptionLanguage? = nil
+    ) -> Bool {
+        var tally = ScriptTally()
+        if !segments.isEmpty {
+            let step = max(1, segments.count / directionSampleSegments)
+            for index in Swift.stride(from: 0, to: segments.count, by: step) {
+                tally.count(segments[index].text, limit: directionSampleLetters)
+                if tally.letters >= directionSampleLetters { break }
+            }
         }
-        return letters > 0 && Double(rtl) / Double(letters) > 0.3
+        if tally.letters < directionMinimumLetters {
+            tally.count(liveTail, limit: directionSampleLetters)
+        }
+        if let verdict = tally.isRightToLeft { return verdict }
+        if let fallback, fallback != .auto { return fallback.isRTL }
+        return false
+    }
+
+    /// Letters to look at in total. Enough to be representative, small enough that a view can
+    /// recompute it on every render.
+    private static let directionSampleLetters = 2_000
+    /// Segments to spread that budget over, so the sample is not all from one speaker's turn.
+    private static let directionSampleSegments = 40
+    /// Below this there is no majority worth trusting; fall back to the language.
+    private static let directionMinimumLetters = 8
+
+    /// Running RTL-vs-total letter count. A majority decides, so a Hebrew meeting keeps its
+    /// direction through quoted English and Latin technical terms.
+    private struct ScriptTally {
+        private(set) var letters = 0
+        private var rtl = 0
+
+        var isRightToLeft: Bool? {
+            guard letters >= MeetingTranscriptText.directionMinimumLetters else { return nil }
+            return Double(rtl) / Double(letters) > 0.3
+        }
+
+        mutating func count(_ text: String, limit: Int) {
+            for scalar in text.unicodeScalars {
+                guard letters < limit else { return }
+                guard scalar.properties.isAlphabetic else { continue }
+                letters += 1
+                let v = scalar.value
+                if (v >= 0x0590 && v <= 0x05FF) || (v >= 0x0600 && v <= 0x06FF) ||
+                   (v >= 0x0700 && v <= 0x074F) || (v >= 0xFB50 && v <= 0xFDFF) ||
+                   (v >= 0xFE70 && v <= 0xFEFF) { rtl += 1 }
+            }
+        }
     }
 
     // MARK: - Internals

@@ -150,6 +150,11 @@ struct MeetingLanguageTimelineConfig {
     /// through a `log(0)` of negative infinity.
     var probabilityFloor: Float = 1e-4
 
+    /// A probe this certain about a language makes that language immune to the script veto. Set
+    /// where only the accurate detector reaches it: Whisperer V3 returns 0.97–0.99 on clear speech,
+    /// the tiny coarse probe wavers around 0.6 and is the signal the veto is meant to correct.
+    var vetoImmunityConfidence: Float = 0.9
+
     static let `default` = MeetingLanguageTimelineConfig()
 }
 
@@ -182,7 +187,8 @@ enum MeetingLanguageTimelineBuilder {
         let mapped = ordered.map { normalize($0.probabilities, allowed: allowed) }
 
         var candidates = topCandidates(in: mapped, limit: config.candidateLimit)
-        candidates = applyScriptVeto(candidates, transcript: transcript)
+        candidates = applyScriptVeto(candidates, transcript: transcript,
+                                     distributions: mapped, config: config)
         guard !candidates.isEmpty else { return .empty }
         guard candidates.count > 1 else {
             // Unanimous: one candidate survived, so there is nothing to smooth or compare.
@@ -258,11 +264,35 @@ enum MeetingLanguageTimelineBuilder {
     /// Deliberately permissive when the text is mixed: a transcript already corrupted into two
     /// scripts contains both families, so nothing is vetoed and the audio decides. The veto only
     /// fires against a candidate with *no* presence in the text at all.
-    static func applyScriptVeto(_ candidates: [TranscriptionLanguage], transcript: String) -> [TranscriptionLanguage] {
+    ///
+    /// **A candidate the audio is near-certain about is immune.** The veto's input is the
+    /// transcript, which is the output of the path being judged, so it cannot be allowed to
+    /// confirm itself. On 2026-08-23 a live session locked English at 46 s on one noisy probe; the
+    /// eager decoder then wrote all-Latin text, which vetoed Hebrew out of the candidate set
+    /// entirely — so four subsequent V3 probes at he 0.97–0.99 could not win, and with a single
+    /// candidate left `build` took the unanimous branch and re-affirmed the lock that had written
+    /// the text. Immunity is keyed on peak confidence rather than on rank because rank alone would
+    /// also protect a 0.6/0.4 coin flip, which is precisely the case the veto exists for: the
+    /// coarse detector wavers around 0.6 on Hebrew and Hebrew script in the text settles it. Only
+    /// the accurate detector reaches `vetoImmunityConfidence`, and when it does, it is not a
+    /// hypothesis the script hint gets to overrule.
+    static func applyScriptVeto(
+        _ candidates: [TranscriptionLanguage],
+        transcript: String,
+        distributions: [[TranscriptionLanguage: Float]] = [],
+        config: MeetingLanguageTimelineConfig = .default
+    ) -> [TranscriptionLanguage] {
         guard !candidates.isEmpty, transcript.contains(where: { $0.isLetter }) else { return candidates }
         let permitted = ScriptAnalyzer.dominantScript(in: transcript, allowedLanguages: candidates)
         guard !permitted.isEmpty else { return candidates }
-        let survivors = candidates.filter { permitted[$0] != nil }
+
+        var immune: Set<TranscriptionLanguage> = []
+        for distribution in distributions {
+            for (language, probability) in distribution where probability >= config.vetoImmunityConfidence {
+                immune.insert(language)
+            }
+        }
+        let survivors = candidates.filter { permitted[$0] != nil || immune.contains($0) }
         return survivors.isEmpty ? candidates : survivors
     }
 
@@ -316,7 +346,9 @@ enum MeetingLanguageTimelineBuilder {
     static func nemotronDistribution(tally: [String: Int], candidates: [TranscriptionLanguage]) -> [Float]? {
         var scores = [Float](repeating: 0, count: candidates.count)
         for (code, count) in tally where count > 0 {
-            guard let language = TranscriptionLanguage(rawValue: code),
+            // Nemotron's tally keys are BCP-47 (`"it-IT"`, `"he-IL"`), so `init(rawValue:)`
+            // rejected every one of them and this prior contributed nothing at all.
+            guard let language = TranscriptionLanguage.from(languageTag: code),
                   let index = candidates.firstIndex(of: language) else { continue }
             scores[index] += Float(count)
         }

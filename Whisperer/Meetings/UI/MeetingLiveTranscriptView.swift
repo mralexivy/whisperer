@@ -44,16 +44,10 @@ struct MeetingLiveTranscriptView: View {
     /// Content decides direction; the language setting is only the fallback when there is no
     /// text yet. Same rule as `MeetingTranscriptView`.
     private var isRTL: Bool {
-        var sample = segments.suffix(3).map { $0.text.prefix(150) }.joined()
-        if sample.isEmpty, isLive {
-            sample = session.currentSegmentText.prefix(150) + " " + session.livePreviewText.prefix(150)
-        }
-        let trimmed = sample.trimmingCharacters(in: .whitespacesAndNewlines)
-        if !trimmed.isEmpty { return Self.detectRTL(in: String(trimmed.prefix(150))) }
-        if let lang = TranscriptionLanguage(rawValue: meeting?.language ?? ""), lang != .auto {
-            return lang.isRTL
-        }
-        return false
+        MeetingTranscriptText.isRightToLeft(
+            segments: segments,
+            liveTail: isLive ? session.currentSegmentText + " " + session.livePreviewText : "",
+            fallback: TranscriptionLanguage(rawValue: meeting?.language ?? ""))
     }
 
     var body: some View {
@@ -311,9 +305,6 @@ struct MeetingLiveTranscriptView: View {
             : String(format: "%d:%02d", minutes, secs)
     }
 
-    private static func detectRTL(in text: String) -> Bool {
-        MeetingTranscriptText.isRightToLeft(sample: text)
-    }
 }
 
 // MARK: - Sonar dot

@@ -17,6 +17,9 @@ actor NemotronHebrewBridge {
     private var sharedModels: SharedNemotronMultilingualModels?
     private var manager: StreamingNemotronMultilingualAsrManager?
     private var _isShuttingDown = false
+    /// nil when metadata.json could not be read — bare codes are then passed through unchanged,
+    /// which is the pre-existing behaviour. See `NemotronPromptDictionary`.
+    private var promptDictionary: NemotronPromptDictionary?
 
     // MARK: - Static helpers
 
@@ -63,6 +66,7 @@ actor NemotronHebrewBridge {
         let mgr = StreamingNemotronMultilingualAsrManager()
         try await mgr.loadFromShared(shared)
         await bridge.setManager(mgr)
+        await bridge.setPromptDictionary(NemotronPromptDictionary(modelDirectory: dir))
         Logger.step(.modelLoad, .model, ["type": .string("nemotron-he")])
         return bridge
     }
@@ -73,6 +77,18 @@ actor NemotronHebrewBridge {
 
     private func setManager(_ mgr: StreamingNemotronMultilingualAsrManager) {
         manager = mgr
+    }
+
+    private func setPromptDictionary(_ dictionary: NemotronPromptDictionary?) {
+        promptDictionary = dictionary
+    }
+
+    /// The dictionary key to force for `language`. Falls back to the bare code when the dictionary
+    /// is unreadable — see `NemotronBridge.promptKey(for:)` for why the mapping matters.
+    private func promptKey(for language: TranscriptionLanguage) -> String? {
+        guard language != .auto else { return nil }
+        guard let promptDictionary else { return language.rawValue }
+        return promptDictionary.promptKey(for: language) ?? language.rawValue
     }
 
     var isContextHealthy: Bool {
@@ -89,7 +105,7 @@ actor NemotronHebrewBridge {
             return
         }
         _sessionSampleCount = 0
-        let langCode: String? = (language == .auto) ? nil : language.rawValue
+        let langCode = promptKey(for: language)
         let useForcedPrefix = language != .auto
         await manager.setForcedPrefix(useForcedPrefix)
         await manager.setLanguage(langCode)
@@ -137,8 +153,13 @@ actor NemotronHebrewBridge {
     func pinLanguage(_ code: String?) async {
         guard !_isShuttingDown, let manager else { return }
         await manager.setForcedPrefix(code != nil)
-        await manager.setLanguage(code)
-        Logger.step(.asrStart, .transcription, ["lang": .string(code ?? "auto"), "pin": .bool(true)])
+        let key = code.flatMap { promptDictionary?.promptKey(forTag: $0) ?? $0 }
+        await manager.setLanguage(key)
+        Logger.step(.asrStart, .transcription, [
+            "lang": .string(key ?? "auto"),
+            "requested": .string(code ?? "auto"),
+            "pin": .bool(true)
+        ])
     }
 
     func isForcedPrefixEnabled() async -> Bool {

@@ -53,21 +53,13 @@ struct MeetingTranscriptView: View {
 
     private var isRTL: Bool {
         // Content wins over the configured language: `meeting.language` is the shortlist
-        // entry the session started with, not what was actually spoken. `segments` stays
-        // empty until the first chunk commits — on the Nemotron backend that is the whole
-        // recording, since it emits one chunk at finish() — so the live bubble's own text
-        // has to be sampled too. Otherwise a `he`-configured user dictating English gets a
-        // right-aligned card for the entire session.
-        var sample = segments.prefix(3).map { $0.text.prefix(150) }.joined()
-        if sample.isEmpty, isLive {
-            sample = session.currentSegmentText.prefix(150) + " " + session.livePreviewText.prefix(150)
-        }
-        let trimmed = sample.trimmingCharacters(in: .whitespacesAndNewlines)
-        if !trimmed.isEmpty { return Self.detectRTL(in: String(trimmed.prefix(150))) }
-        if let lang = TranscriptionLanguage(rawValue: meeting?.language ?? ""), lang != .auto {
-            return lang.isRTL
-        }
-        return false
+        // entry the session started with, not what was actually spoken. Judged over the whole
+        // transcript — see the note on `isRightToLeft(segments:)`; sampling the opening put a
+        // Hebrew meeting with three mis-decoded English cards entirely left-to-right.
+        MeetingTranscriptText.isRightToLeft(
+            segments: segments,
+            liveTail: isLive ? session.currentSegmentText + " " + session.livePreviewText : "",
+            fallback: TranscriptionLanguage(rawValue: meeting?.language ?? ""))
     }
 
     /// True while the LLM polish pass is working on *this* meeting.
@@ -511,9 +503,6 @@ struct MeetingTranscriptView: View {
             : String(format: "%d:%02d", minutes, secs)
     }
 
-    private static func detectRTL(in text: String) -> Bool {
-        MeetingTranscriptText.isRightToLeft(sample: text)
-    }
 }
 
 // MARK: - Blinking caret

@@ -91,20 +91,13 @@ struct MeetingDetailView: View {
         MeetingTranscriptText.plainProse(from: completeSegments)
     }
 
-    /// Content decides direction; the configured language is only the fallback when there is
-    /// no text yet. Same rule as `MeetingTranscriptView`.
+    /// Content decides direction, by majority over the whole transcript; the configured
+    /// language is only the fallback when there is not enough text yet. Same rule as
+    /// `MeetingTranscriptView`, and it drives Full Text as well as Speakers.
     private var isRTL: Bool {
-        let sample = completeSegments.prefix(3)
-            .map { $0.text.prefix(150) }
-            .joined()
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-        if !sample.isEmpty {
-            return MeetingTranscriptText.isRightToLeft(sample: String(sample.prefix(150)))
-        }
-        if let lang = TranscriptionLanguage(rawValue: meeting?.language ?? ""), lang != .auto {
-            return lang.isRTL
-        }
-        return false
+        MeetingTranscriptText.isRightToLeft(
+            segments: completeSegments,
+            fallback: TranscriptionLanguage(rawValue: meeting?.language ?? ""))
     }
 
     /// The manual re-transcribe action is offered only when there is something left to correct,
@@ -513,25 +506,33 @@ struct MeetingDetailView: View {
     /// inside `SelectableTranscriptView`, which the prose path does not use — a search box
     /// that silently does nothing is worse than no search box.
     private var transcriptToolbar: some View {
-        HStack(spacing: 8) {
+        VStack(alignment: .leading, spacing: 6) {
+            // Row 1: search (speakers mode only)
             if transcriptMode == .speakers {
                 searchField
-                    .frame(maxWidth: 280)
-                    .transition(.opacity.combined(with: .move(edge: .leading)))
+                    .frame(maxWidth: .infinity)
+                    .transition(.opacity.combined(with: .move(edge: .top)))
             }
 
-            Spacer(minLength: 8)
-
-            modeToggle
-            if hasPolishedSegments {
-                polishedToggle
-                    .transition(.opacity.combined(with: .scale(scale: 0.9)))
+            // Row 2: view-mode toggles (max ~325px each row — safe at any allowed window size)
+            HStack(spacing: 8) {
+                modeToggle
+                if hasPolishedSegments {
+                    polishedToggle
+                        .transition(.opacity.combined(with: .scale(scale: 0.9)))
+                }
+                Spacer(minLength: 0)
             }
-            languageChip
-            copyButton
-            if canPolishManually {
-                cleanUpButton
-                    .transition(.opacity.combined(with: .scale(scale: 0.9)))
+
+            // Row 3: actions — language + copy + re-transcribe (max ~265px)
+            HStack(spacing: 8) {
+                languageChip
+                Spacer(minLength: 0)
+                copyButton
+                if canPolishManually {
+                    cleanUpButton
+                        .transition(.opacity.combined(with: .scale(scale: 0.9)))
+                }
             }
         }
         .animation(.easeInOut(duration: 0.2), value: hasPolishedSegments)
@@ -592,6 +593,7 @@ struct MeetingDetailView: View {
                     .font(.system(size: 10, weight: .semibold))
                 Text(didCopy ? "Copied" : "Copy")
                     .font(.system(size: 11, weight: .medium))
+                    .lineLimit(1)
             }
             .foregroundColor(didCopy ? Color(hex: "10B981") : .white.opacity(0.6))
             .padding(.horizontal, 10)
@@ -705,7 +707,11 @@ struct MeetingDetailView: View {
     /// from its raw ASR text first — see `MeetingTranscriptRefiner.run(forcedLanguage:)` — so the
     /// new pass corrects what was heard rather than a previous pass's translation of it.
     private func changeLanguage(to language: TranscriptionLanguage) {
-        guard let id = meeting?.id, language != resolvedLanguage else { return }
+        // No `language != resolvedLanguage` guard. `resolvedLanguage` is only as honest as the
+        // stamps on the cards, and a pass that decoded correctly but could not accept the result
+        // used to stamp them anyway — so re-picking the language that is already displayed, in
+        // exactly the state that needs a re-run most, did nothing at all.
+        guard let id = meeting?.id else { return }
         let segments = detailVM.allSegments
         let audioURL = meeting?.resolvedAudioURL
         Task {
@@ -715,17 +721,33 @@ struct MeetingDetailView: View {
         }
     }
 
+    /// Cards the last pass re-decoded but could not accept, for this meeting only.
+    ///
+    /// Silence here is what made the Hebrew meeting so confusing: the pass reported success while
+    /// leaving a third of the cards untouched, so the transcript came back visibly mixed with no
+    /// indication that anything had been declined.
+    private var uncorrectedCount: Int {
+        guard let uncorrected = refiner.uncorrected, uncorrected.meetingID == meeting?.id else { return 0 }
+        return uncorrected.count
+    }
+
     private var cleanUpButton: some View {
         Button {
             guard let id = meeting?.id else { return }
             MeetingTranscriptRefiner.shared.start(meetingID: id, segments: detailVM.allSegments,
-                                                  audioURL: meeting?.resolvedAudioURL)
+                                                  audioURL: meeting?.resolvedAudioURL, redoAll: true)
         } label: {
             HStack(spacing: 5) {
                 Image(systemName: "waveform.badge.magnifyingglass")
                     .font(.system(size: 10, weight: .semibold))
                 Text("Re-transcribe")
                     .font(.system(size: 11, weight: .medium))
+                    .lineLimit(1)
+                if uncorrectedCount > 0 {
+                    Text("\(uncorrectedCount) left")
+                        .font(.system(size: 10, weight: .semibold))
+                        .foregroundColor(Color(hex: "F59E0B"))
+                }
             }
             .foregroundColor(Color(hex: "5B6CF7"))
             .padding(.horizontal, 10)
@@ -734,7 +756,9 @@ struct MeetingDetailView: View {
             .clipShape(Capsule())
         }
         .buttonStyle(.plain)
-        .help("Re-transcribe the recording with a more accurate model to fix misheard words and punctuation")
+        .help(uncorrectedCount > 0
+              ? "\(uncorrectedCount) card(s) could not be corrected — their re-decode was rejected, so the original text was kept. Run again, or pick the right language."
+              : "Re-transcribe the whole recording with a more accurate model, replacing every card, to fix misheard words and punctuation")
     }
 
     // MARK: - Content

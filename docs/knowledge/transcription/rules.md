@@ -556,3 +556,132 @@ vanishing was not a crash — there is no `.ips` for the day. **Any synchronous 
 outlast a watchdog must report itself to that watchdog, and must be bounded** (`maxTailSeconds = 600`);
 an unbounded decode is an unbounded hang. A cap that trips is also a bug report: it logs at `error`,
 because reaching it means the prune path stopped working upstream.
+
+## Language codes: normalise BCP-47 at every boundary
+
+**`TranscriptionLanguage(rawValue:)` must never be called on a code that came from outside
+whisper.cpp.** Raw values are bare ISO-639-1 (`"he"`, `"it"`); FluidAudio/Nemotron reports BCP-47
+(`"he-IL"`, `"it-IT"`). Use `TranscriptionLanguage.from(languageTag:)`.
+
+This is not a hypothetical. The same mismatch disabled four separate mechanisms at once, in one
+Hebrew meeting on 2026-08-23, and **not one of them failed visibly** — each simply stopped running:
+
+| site | consequence |
+|---|---|
+| `NemotronLanguagePinner.scriptContradicts` | script veto returned `false` for every code → Italian pinned over Hebrew text for 40 minutes |
+| `StreamingTranscriber` pin callback | `onLanguageDetected` never fired → the live card never learned it was RTL |
+| `MeetingLanguageTimelineBuilder.nemotronDistribution` | the whole Nemotron prior contributed zero offline |
+| `NemotronBridge.beginSession` | sent `"he"`, which the prompt dictionary does not have, so FluidAudio silently used the `auto` prompt (id 101) |
+
+**A guard that returns the safe default when it cannot parse its input is indistinguishable from a
+guard that is working.** Prefer failing loudly, or route every external tag through one normaliser.
+
+## Nemotron's prompt dictionary is regional-only for 47 languages
+
+`metadata.json` beside the model carries `prompt_dictionary`. 121 keys; 47 languages exist **only**
+under a regional key (`he-IL`, no bare `he`), 33 have both (`it-IT` and `it`). An unknown key is a
+silent fallback to `auto`, so **"pin the language" was a no-op on this backend for those 47.**
+Resolve bare → regional (sorted, for determinism across launches) and report
+`forcedLanguageSupport(isSupported: false)` when the language genuinely is not there.
+
+## A replacement validator must judge the candidate, not compare lengths
+
+`MeetingTranscriptRefiner.isPlausible` accepted only `0.4 ≤ new/old ≤ 2.5`. The text being replaced
+is the garbage being fixed — Nemotron's Italian fragment dropped most of the speech — so the
+correct Hebrew was 3–20× longer and **was rejected for being right** (11 of 23 windows). Judge the
+candidate on its own merits: empty, repetition loop, wrong script for the pinned language. Keep a
+lower bound only against a collapse, and only when the original itself passes the script check.
+
+## Live language detection: never give up, and ask the model that knows
+
+The router stopped after `maxDetectionAttempts = 3` windows of 3–5 s at threshold 0.75. When all
+three came back sub-threshold the session ran unrouted to its end, because the only other detection
+path (`checkScriptStability`) requires a lock that could then never happen. **A meeting has forty
+minutes of evidence; do not decide it on the first nine seconds.** `LiveLanguageArbiter` now probes
+on a cadence (3 s undecided / 20 s settled) for the whole session.
+
+Three detectors are resident during a meeting and the decision was being made by the weakest one
+alone. On the same Hebrew audio, at the same moment: Nemotron `it-IT`; tiny CPU probe `he 0.66`
+(and `fr 0.55` elsewhere); **Whisperer V3 `he 0.98–0.99` at every offset** — warm, loaded, and
+never asked. Escalate to V3 on ambiguity (top < 0.85, detector disagreement, abstention, or a
+challenger to the current lock), budgeted at ≤1 per 30 s and capped per session. The first
+escalation is gated by the same 30 s interval, which keeps ordinary short dictation off the path
+entirely.
+
+**Do not up-weight the accurate probe.** Emissions are log-probabilities, so a 0.98 probe already
+outweighs a 0.66 one by the right amount; weighting it again is double-counting.
+
+## `nonisolated` on every lock-guarded helper class
+
+`SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor` gives a plain `final class` an *isolated deinit*, which
+aborts in `swift_task_deinitOnExecutor` when a synchronous XCTest method releases it — the tests do
+not fail, they vanish (xcodebuild reports them under "Failing tests" having never executed). Any
+`NSLock`-guarded, background-driven helper (`LanguageRouter`, `VADSegmenter`, `SafeLock`,
+`NemotronLanguagePinner`, `LiveLanguageArbiter`) must be declared `nonisolated final class`.
+
+## A wrong language lock is self-confirming — break every loop that feeds it
+
+Confirmed 2026-08-23, in the fix for the fix. The fused arbiter locked English at +46.3 s of a
+Hebrew meeting and held it for the whole session, while four V3 confirmations at `he 0.975–0.990`
+were recorded and ignored. Four separate defects, each individually survivable, composed into a
+trapdoor:
+
+1. **A verdict may not rest on one probe.** Viterbi over a single distribution degenerates to its
+   argmax, which is strictly weaker than the `decide` threshold it replaced. Require
+   `minProbesForVerdict` *and* an absolute confidence floor before a fused verdict may lock.
+2. **Shortlist renormalisation manufactures confidence.** `normalize` filters to the shortlist and
+   renormalises, so a probe reading `ar 0.319 / fa 0.21 / ur 0.18 / … / en 0.05` — a detector with
+   no opinion, and none of its opinion inside the shortlist — arrives as `en 0.933`. Drop any probe
+   whose shortlist share of *reported* mass is below `minRetainedMass` (0.5). Renormalisation is
+   still right when the mass is mostly inside; it is a lie when it is not.
+3. **The script veto must never be able to confirm the lock that wrote the text.** Once English was
+   locked the eager decoder emitted all-Latin text, `applyScriptVeto` removed Hebrew from the
+   candidate set entirely, `candidates.count` fell to 1, and `build` took the unanimous branch and
+   re-affirmed English. Immunity is keyed on **peak probe confidence** (`vetoImmunityConfidence`
+   0.9), not on rank: rank alone would also protect a 0.6/0.4 coin flip, and a coin flip against
+   Hebrew script is exactly what the veto is for. Only the accurate detector reaches 0.9.
+4. **Being unrouted is expensive, so confirm early.** Gating the first V3 confirmation on 30 s let
+   the wrong lock stand through the window where it did the most damage. Long-form sessions that
+   are still unlocked get `firstAccurateInterval` (10 s); short dictation keeps the full interval
+   and never reaches the path.
+
+Also: an accurate confirmation below `minAccurateConfidence` (observed `top=ja p=0.261`) is a shrug,
+not a verdict — do not record it as evidence, but **do** charge it to the budget, because the
+encoder pass cost the same. Track spend and accepted evidence as separate counters.
+
+## Never tell the eager engine the language is locked when it is not
+
+Confirmed 2026-08-23. `StreamingTranscriber.applyEagerOutcome` passed
+`languageIsLocked: true` unconditionally, on the reasoning that whisper.cpp is a
+single-language model with a fixed language. That is false while `routeDecision == nil`:
+`.auto` makes whisper **re-detect on every pass**, and the 15:37 Hebrew session came back
+`it`, `ru`, `he`, `fr` on four consecutive pre-route windows. Because `languageIsLocked`
+is what gates *confirmation*, each of those was confirmed, soft-committed into
+`completedChunkTexts`, and its audio pruned from the ring — permanent before any verdict
+existed.
+
+Two rules follow.
+
+**The gate must reflect reality.** `languageIsLocked = decodedLanguage != .auto`. Unlocked
+is not "broken", it is *provisional*: `EagerStreamEngine` still returns `displayText`, but
+`confirmedWords` stays empty, so `softCommit` cannot fire (it guards on
+`!confirmedWords.isEmpty`), the ring is not pruned, and the audio is re-decoded correctly
+the moment the language is known. The engine has always been right about this
+(`testNoConfirmationWhenLanguageNotLocked` predates the bug) — the caller was lying to it.
+
+**Never hand `.auto` to a live decoder when better evidence exists.** Whisper's per-window
+auto-detect is a fresh coin flip on 2–4 s of audio; `LiveLanguageArbiter.leadingCandidate`
+averages every probe so far. It is not a verdict — it locks nothing, pins nothing, has no
+thresholds — its only job is to be a better argument than `.auto`. A stable provisional
+guess is wrong less often, wrong *consistently* (so LocalAgreement can still converge), and
+replaced the moment a verdict lands.
+
+Pair it with a grace valve: if nothing is decided after `unroutedCommitGrace` (30 s) of
+audio, commit the auto-detected text anyway and log a warning. Guards that can refuse all
+evidence must never be able to silently discard a recording.
+
+**Log an instance tag on the router.** One `LanguageRouter` can log "Language routed to …"
+at most once — that transition leaves `.undecided` for good. The 15:37 log has two such
+lines 240 ms apart (`conf=0.818`, `conf=0.811`), i.e. two concurrent transcribers, and the
+`auto-detect` decodes interleaved after them could not be attributed to either. Router
+lines now carry `[R<n>]`.

@@ -82,9 +82,23 @@ nonisolated final class LanguageRouter {
         return lang
     }
 
+    /// Short per-instance tag for the log. One router can log "Language routed to …" at most once,
+    /// because that transition leaves `.undecided` for good — so two such lines in one session mean
+    /// two routers, and therefore two transcribers. The 2026-08-23 15:37 log has exactly that
+    /// (`conf=0.818` and `conf=0.811`, 240 ms apart) and no way to attribute the `auto-detect`
+    /// decodes interleaved after them. This makes the next log answer it outright.
+    let tag: String
+
+    private static let counterLock = NSLock()
+    private static var counter = 0
+
     init(allowed: [TranscriptionLanguage], primary: TranscriptionLanguage?) {
         self.allowedLanguages = allowed
         self.primaryLanguage = primary
+        Self.counterLock.lock()
+        Self.counter += 1
+        tag = "R\(Self.counter)"
+        Self.counterLock.unlock()
     }
 
     /// Core decision method.
@@ -150,11 +164,11 @@ nonisolated final class LanguageRouter {
                 }
                 state = .locked(top.0)
                 saveLastSessionLanguage(top.0)
-                Logger.info("Language routed to \(top.0.displayName) (conf=\(String(format: "%.3f", top.1)))", subsystem: .transcription)
+                Logger.info("[\(tag)] Language routed to \(top.0.displayName) (conf=\(String(format: "%.3f", top.1)))", subsystem: .transcription)
                 return RouteDecision(lang: top.0, confidence: top.1, source: .detection)
             }
             // Confidence too low — stay undecided
-            Logger.debug("Detection undecided: top=\(top.0.displayName) (conf=\(String(format: "%.3f", top.1)) < \(RoutingThresholds.routeThreshold))", subsystem: .transcription)
+            Logger.debug("[\(tag)] Detection undecided: top=\(top.0.displayName) (conf=\(String(format: "%.3f", top.1)) < \(RoutingThresholds.routeThreshold))", subsystem: .transcription)
             return nil
 
         case .locked(let currentLang):
@@ -195,6 +209,23 @@ nonisolated final class LanguageRouter {
                 return RouteDecision(lang: top.0, confidence: top.1, source: .sessionLock)
             }
         }
+    }
+
+    /// Lock the session to `lang` on the authority of something that saw more evidence than one
+    /// probability distribution.
+    ///
+    /// `decide` scores a single detection from a single detector, which is why it needs 0.75 and
+    /// why three sub-threshold windows used to leave a whole meeting unrouted.
+    /// `LiveLanguageArbiter` fuses every detector in the process — including the large model,
+    /// which the live path never asked — so when the two disagree the fused verdict is the one to
+    /// honour. Returns the decision to route with, or nil when the lock already says this and
+    /// there is nothing to do.
+    func adopt(_ lang: TranscriptionLanguage, confidence: Float) -> RouteDecision? {
+        if case .locked(let current) = state, current == lang { return nil }
+        state = .locked(lang)
+        lastDetectionTime = Date()
+        saveLastSessionLanguage(lang)
+        return RouteDecision(lang: lang, confidence: confidence, source: .detection)
     }
 
     /// Check if re-detection should be triggered.

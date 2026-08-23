@@ -44,6 +44,10 @@ final class MeetingTranscriptRefiner: ObservableObject {
     @Published private(set) var doneSegmentIDs: Set<UUID> = []
     /// Meeting the current run belongs to; nil when idle.
     @Published private(set) var activeMeetingID: UUID?
+    /// Cards the last completed run decoded but could not accept, and the meeting they belong to,
+    /// so the UI can say so instead of leaving the user to spot the untouched text themselves.
+    /// Cleared when a run starts.
+    @Published private(set) var uncorrected: (meetingID: UUID, count: Int)?
 
     private var runTask: Task<Void, Never>?
     private var cancelledMeetingID: UUID?
@@ -126,8 +130,12 @@ final class MeetingTranscriptRefiner: ObservableObject {
     /// - Parameter forcedLanguage: set by the user correcting the language chip. Skips detection
     ///   entirely and resets every card back to its raw ASR text first, so the re-decode starts
     ///   from what was heard rather than from a previous pass's translation of it.
+    /// - Parameter redoAll: reset and re-decode every card while still detecting the language.
+    ///   What "Re-transcribe" has always claimed to do — without it the pending filter skips every
+    ///   already-polished card, so the button could only ever fill gaps a previous pass missed.
     @discardableResult
-    func run(meetingID: UUID, segments: [MeetingSegment], forcedLanguage: TranscriptionLanguage? = nil) async -> [MeetingSegment] {
+    func run(meetingID: UUID, segments: [MeetingSegment],
+             forcedLanguage: TranscriptionLanguage? = nil, redoAll: Bool = false) async -> [MeetingSegment] {
         // Re-read from CoreData rather than trusting the caller's snapshot. The tail chunk
         // from StreamingTranscriber lands *after* stopRecording() returns and appends one more
         // segment; refining a stale array and then writing it back with updateSegments would
@@ -138,6 +146,7 @@ final class MeetingTranscriptRefiner: ObservableObject {
 
         cancelledMeetingID = nil
         activeMeetingID = meetingID
+        uncorrected = nil
         progress = 0
         activeSegmentIDs = []
         doneSegmentIDs = []
@@ -167,14 +176,18 @@ final class MeetingTranscriptRefiner: ObservableObject {
         }
 
         var working = source
-        if forcedLanguage != nil {
+        if forcedLanguage != nil || redoAll {
             // Undo the previous pass so `isPolished` goes false and every window decodes again.
             // Without this the pending filter below would skip the whole meeting, and the cards
             // that *were* re-decoded would be corrections of a translation rather than of speech.
-            for index in working.indices where working[index].rawText != nil {
+            for index in working.indices {
+                // `language` is cleared on *every* card, not only the rewritten ones: a card can
+                // carry a stamp from a pass that rejected its decode, and leaving that behind
+                // means the run it is about to start starts from a claim that was never true.
+                working[index].language = nil
+                guard working[index].rawText != nil else { continue }
                 working[index].text = working[index].rawText ?? working[index].text
                 working[index].rawText = nil
-                working[index].language = nil
             }
         }
         let windows = MeetingRefineWindow.plan(working, maxDuration: Self.windowDuration)
@@ -249,6 +262,7 @@ final class MeetingTranscriptRefiner: ObservableObject {
         let baseLanguage = forcedLanguage ?? AppState.shared.selectedLanguage
         var context = ""
         var rewritten = 0
+        var rejected = 0
         let t0 = Date()
 
         for (windowIndex, window) in windows.enumerated() {
@@ -308,20 +322,26 @@ final class MeetingTranscriptRefiner: ObservableObject {
                 .map { WhisperTimedSegment(text: $0.text, start: bufferStart + $0.start, end: bufferStart + $0.end) }
                 .filter { $0.end > window.start }
 
-            // Record what each card was decoded in, whether or not its text changed — the detail
-            // view's language chip and the "corrected, not translated" test both read this.
-            if fixedLanguage != .auto {
-                for index in pending { working[index].language = fixedLanguage.rawValue }
-            }
+            let languageSource = spanLanguage != .auto ? "timeline"
+                : (forcedLanguage != nil ? "forced" : "base")
+            Logger.debug("Transcript refine: window \(windowIndex + 1)/\(windows.count) decoded as \(fixedLanguage.displayName) (\(languageSource))", subsystem: .transcription)
 
             for (index, decoded) in MeetingRefineWindow.assign(shifted, to: window, in: working) {
                 let corrected = DictionaryManager.shared.correctText(decoded)
                     .trimmingCharacters(in: .whitespacesAndNewlines)
                 let original = working[index].text
-                guard Self.isPlausible(corrected, replacing: original) else {
-                    Logger.debug("Transcript refine: rejected replacement (\(original.count) → \(corrected.count) chars)", subsystem: .transcription)
+                if let reason = Self.rejectionReason(for: corrected, replacing: original, language: fixedLanguage) {
+                    // Named, because "rejected replacement (15 → 328 chars)" read like a success
+                    // while the pass was discarding the only correct text it had.
+                    Logger.info("Transcript refine: kept existing text for card \(index) — \(reason.rawValue) (\(original.count) → \(corrected.count) chars)", subsystem: .transcription)
+                    rejected += 1
                     continue
                 }
+                // Record what the card was decoded in only once the decode is actually kept.
+                // Stamping every pending card up front labelled rejected cards with a language
+                // their text was never in, which then made the detail view's chip lie and blocked
+                // re-picking that language as a no-op.
+                if fixedLanguage != .auto { working[index].language = fixedLanguage.rawValue }
                 guard corrected != original else { continue }
                 if working[index].rawText == nil { working[index].rawText = original }
                 working[index].text = corrected
@@ -341,7 +361,8 @@ final class MeetingTranscriptRefiner: ObservableObject {
         }
 
         let elapsed = Int(Date().timeIntervalSince(t0) * 1000)
-        Logger.info("Transcript refine: \(rewritten) segment(s) rewritten across \(windows.count) window(s) in \(elapsed)ms for \(meetingID)", subsystem: .transcription)
+        Logger.info("Transcript refine: \(rewritten) segment(s) rewritten, \(rejected) kept, across \(windows.count) window(s) in \(elapsed)ms for \(meetingID)", subsystem: .transcription)
+        uncorrected = rejected > 0 ? (meetingID: meetingID, count: rejected) : nil
 
         return finish(working, meetingID: meetingID)
     }
@@ -349,13 +370,17 @@ final class MeetingTranscriptRefiner: ObservableObject {
     /// Start a run detached from the caller — used by the manual "Re-transcribe" action and by
     /// the language chip. A forced run bypasses `shouldRun`'s "is there unpolished work" filter:
     /// the point of correcting the language is to redo cards that *are* already polished, wrongly.
-    func start(meetingID: UUID, segments: [MeetingSegment], audioURL: URL?, forcedLanguage: TranscriptionLanguage? = nil) {
+    func start(meetingID: UUID, segments: [MeetingSegment], audioURL: URL?,
+               forcedLanguage: TranscriptionLanguage? = nil, redoAll: Bool = false) {
         guard runTask == nil else { return }
-        guard forcedLanguage != nil ? canForceRun(audioURL: audioURL) : shouldRun(for: segments, audioURL: audioURL) else { return }
+        guard forcedLanguage != nil || redoAll
+                ? canForceRun(audioURL: audioURL)
+                : shouldRun(for: segments, audioURL: audioURL) else { return }
         MeetingManager.shared.setProcessing(.polishing, for: meetingID)
         runTask = Task { [weak self] in
             guard let self else { return }
-            _ = await self.run(meetingID: meetingID, segments: segments, forcedLanguage: forcedLanguage)
+            _ = await self.run(meetingID: meetingID, segments: segments,
+                               forcedLanguage: forcedLanguage, redoAll: redoAll)
             MeetingManager.shared.setProcessing(nil, for: meetingID)
             self.runTask = nil
         }
@@ -440,15 +465,65 @@ final class MeetingTranscriptRefiner: ObservableObject {
         return String((context + " " + joined).suffix(contextMaxLength * 2))
     }
 
-    /// A light sanity guard, deliberately not `TranscriptPostValidator(.strict)`: that profile
-    /// exists to catch an LLM drifting off a line it was told to preserve, and a genuine second
-    /// decode legitimately differs far more than it allows. This only rejects the two failure
-    /// modes a decode actually has — an empty result, and a hallucination spiral or a dropped
-    /// utterance that changes the length beyond recognition.
-    private static func isPlausible(_ candidate: String, replacing original: String) -> Bool {
-        guard !candidate.isEmpty else { return false }
-        guard original.count >= 8 else { return true }
-        let ratio = Double(candidate.count) / Double(original.count)
-        return ratio >= 0.4 && ratio <= 2.5
+    /// Why a re-decode was not written to its card, or nil to accept it.
+    enum RefineRejection: String {
+        case empty
+        case repetitionLoop = "repetition-loop"
+        case scriptMismatch = "script-mismatch"
+        case collapsed
+    }
+
+    /// Judges the new decode on its own merits.
+    ///
+    /// This deliberately does **not** compare lengths against the existing text, which is what the
+    /// previous `isPlausible` did. The text being replaced is usually the garbage the pass exists
+    /// to remove — in the Hebrew meeting that motivated this, live output had dropped most of the
+    /// speech, so the correct Hebrew came back 3–20× longer and was rejected *for being right*: 11
+    /// of 23 windows thrown away, leaving the visible Hebrew/Italian mix. Text that is probably
+    /// wrong gets no vote on text that is probably right.
+    ///
+    /// What is left are the failure modes a decode genuinely has, each detectable without a
+    /// reference: nothing came back, the decoder span a loop, or it ignored the language it was
+    /// given and emitted the wrong script.
+    static func rejectionReason(
+        for candidate: String,
+        replacing original: String,
+        language: TranscriptionLanguage
+    ) -> RefineRejection? {
+        let trimmed = candidate.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return .empty }
+
+        let words = trimmed.split(separator: " ")
+        if TranscriptRepetition.containsLoop(words: words) { return .repetitionLoop }
+        // `containsLoop`'s `minimumPhraseLength = 3` misses the two-word spirals whisper actually
+        // produces ("I'm okay. I'm okay. I'm okay."), so back it with a vocabulary floor.
+        if words.count >= 12 {
+            let distinct = Set(words.map { $0.lowercased() }).count
+            if Double(distinct) / Double(words.count) < 0.35 { return .repetitionLoop }
+        }
+
+        if !writtenInExpectedScript(trimmed, language: language) { return .scriptMismatch }
+
+        // The one length check worth keeping: a decode that lost nearly all of the speech. Only
+        // meaningful when the original is itself credible text in the right script — otherwise
+        // "shorter than the garbage" says nothing.
+        if original.count >= 8,
+           writtenInExpectedScript(original, language: language),
+           Double(trimmed.count) / Double(original.count) < 0.4 {
+            return .collapsed
+        }
+        return nil
+    }
+
+    /// True when `text` is written in a script the language actually uses, or when no such check
+    /// applies — an unknown language, or a Latin-script one, where the test would fire on ordinary
+    /// borrowed words and punctuation-heavy lines.
+    private static func writtenInExpectedScript(_ text: String, language: TranscriptionLanguage) -> Bool {
+        guard language != .auto else { return true }
+        let expected = ScriptAnalyzer.scriptFamilies(for: language)
+        guard !expected.isEmpty, !expected.contains(.latin) else { return true }
+        let shares = ScriptAnalyzer.scriptShares(in: text)
+        guard !shares.isEmpty else { return true }
+        return expected.reduce(Float(0)) { $0 + (shares[$1] ?? 0) } >= 0.5
     }
 }

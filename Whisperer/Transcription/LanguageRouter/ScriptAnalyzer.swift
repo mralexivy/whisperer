@@ -171,6 +171,20 @@ enum ScriptAnalyzer {
         scriptToLanguages[family] ?? []
     }
 
+    /// Every script family `language` is plausibly written in — the reverse of `languages(for:)`.
+    ///
+    /// A set rather than one family because Japanese is legitimately hiragana, katakana *and* CJK
+    /// within a single sentence, and Korean mixes hangul with CJK. Callers checking "is this text
+    /// written in the language it claims" must accept any of them, so summing the shares over the
+    /// whole set is the only correct test. Empty for a language no family lists.
+    static func scriptFamilies(for language: TranscriptionLanguage) -> Set<ScriptFamily> {
+        var families: Set<ScriptFamily> = []
+        for (family, candidates) in scriptToLanguages where candidates.contains(language) {
+            families.insert(family)
+        }
+        return families
+    }
+
     /// Every script family present in `text`, with no language mapping and no normalization.
     ///
     /// `dominantScript` answers "which language is this", which needs the shortlist and the
