@@ -338,7 +338,9 @@ struct MeetingLibraryRow: View {
                 .font(.system(size: 9, weight: .semibold))
             Text(text)
                 .font(.system(size: 10, weight: .medium))
+                .lineLimit(1)
         }
+        .fixedSize(horizontal: true, vertical: false)
         .foregroundColor(color)
         .padding(.horizontal, 6)
         .padding(.vertical, 2)
