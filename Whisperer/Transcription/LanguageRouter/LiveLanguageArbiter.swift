@@ -7,36 +7,21 @@
 
 import Foundation
 
-/// Decides what language a live session is in, using all three detectors instead of whichever one
-/// happened to be asked.
-///
-/// ### Why
-/// During a meeting three detectors are running and the decision was made by one of them, alone.
-/// On a real Hebrew recording they said, at the same moment:
-///
-/// | detector | cost | verdict |
-/// |---|---|---|
-/// | Nemotron, per 1120 ms chunk | free, already computed | `it-IT`, for forty minutes |
-/// | tiny CPU probe (`ModelPool.detectLanguage`) | ~50 ms | `he` 0.66–0.90, but also `fr` 0.55 |
-/// | Whisperer V3, the resident large bridge | one encoder pass | `he` 0.98–0.99, everywhere |
-///
-/// The live path consulted only the tiny model — which is why routing needed 0.75 and still came
-/// back undecided — never cross-checked Nemotron against anything, and never asked V3, which was
-/// loaded, warm and unambiguous. Every detector returns a full probability distribution, so none
-/// of this evidence had to be invented; it was being discarded.
+/// Decides what language a live session is in, fusing Whisperer V3 probes and Nemotron's
+/// per-chunk guesses via `MeetingLanguageTimelineBuilder`.
 ///
 /// ### What this is not
-/// It is not a new fusion algorithm. `MeetingLanguageTimelineBuilder.build` already does exactly
+/// Not a new fusion algorithm. `MeetingLanguageTimelineBuilder.build` already does exactly
 /// this job offline — Viterbi smoothing, switch cost, abstention margin, script veto, an
-/// `NLLanguageRecognizer` text prior and a Nemotron tally prior — and it is pure. This class is the
-/// evidence accumulator and the escalation policy around it; the verdict itself is that function's.
+/// `NLLanguageRecognizer` text prior and a Nemotron tally prior — and it is pure. This class is
+/// the evidence accumulator; the verdict itself is that function's output.
 ///
-/// ### Escalation
-/// V3 is the live decoder, so asking it costs one encoder pass against its `ctxLock`. It is
-/// therefore asked only when the cheap evidence is genuinely unclear, at most once per
-/// `minAccurateInterval` of audio, and never more than `maxAccurateProbes` times in a session.
-/// The first escalation cannot happen before `minAccurateInterval` either, which is what keeps
-/// ordinary short dictation entirely off this path.
+/// ### Probe cadence
+/// V3 is the live decoder, so asking it costs one encoder pass against its `ctxLock`. Cadence is
+/// certainty-driven: probe every 15 s until locked, every 30 s below 0.99 confidence, every 60 s
+/// thereafter. Below 10 s of voiced audio no probe fires. That gives ~75 probes in a 60-minute
+/// meeting — 54 s of GPU, about 1.5 % of wall clock.
+///
 /// `nonisolated` for the same reason as `LanguageRouter` — see the note on its declaration. This
 /// class is `NSLock`-guarded arithmetic driven from the transcriber's background detection path,
 /// so the project-wide `SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor` was never accurate for it, and
@@ -44,39 +29,23 @@ import Foundation
 nonisolated final class LiveLanguageArbiter: @unchecked Sendable {
 
     struct Config {
-        /// Below this top probability the cheap probe is not trusted on its own. Same number and
-        /// same rationale as `MeetingLanguageScanner.confirmBelowConfidence`.
-        var confirmBelowConfidence: Float = 0.85
-        /// Seconds of audio between two accurate confirmations, and before the first.
-        var minAccurateInterval: Double = 30
-        /// Seconds of audio before the *first* confirmation of a long-form session that is still
-        /// unrouted. Being unrouted is itself expensive — every window decoded before the first
-        /// verdict is decoded in the wrong language, or in none — so a meeting should not wait the
-        /// full interval to ask the one detector that knows. Short dictation keeps the full
-        /// interval and therefore never reaches this path at all.
-        var firstAccurateInterval: Double = 10
-        /// Hard ceiling per session, so a pathologically ambiguous recording cannot bleed latency
-        /// for its whole length.
-        var maxAccurateProbes: Int = 8
-        /// Probes needed before an abstaining timeline is itself treated as a reason to escalate.
-        var minProbesBeforeAbstentionCounts: Int = 3
         /// A probe whose mass lies mostly outside the routing shortlist is not evidence about the
         /// shortlist. `MeetingLanguageTimelineBuilder.normalize` filters then *renormalizes*, so a
         /// probe reading `ar 0.319 / fa 0.21 / ur 0.18 / … / en 0.05` — a detector with no opinion,
         /// and none of its opinion inside the shortlist — arrives at the fusion as `en 0.93`.
         /// On 2026-08-23 one such probe locked a forty-minute Hebrew meeting into English.
         var minRetainedMass: Float = 0.5
-        /// Below this the accurate detector did not confirm anything, and recording it as an
-        /// accurate probe would give a shrug the weight of a verdict. Observed: `top=ja p=0.261`.
+        /// Below this V3 did not confirm anything; recording it would give a shrug the weight
+        /// of a verdict. Observed: `top=ja p=0.261`.
         var minAccurateConfidence: Float = 0.5
-        /// A verdict locks the session and pins Nemotron, so it may not rest on one probe. Viterbi
-        /// over a single distribution degenerates to its argmax, which is strictly weaker than the
-        /// `decide` threshold it replaced.
-        var minProbesForVerdict: Int = 2
-        /// Floor on the fused confidence. Below the router's 0.75 on purpose: `decide` scores one
-        /// distribution from one detector, whereas a verdict at this point has at least two probes
-        /// and often a V3 confirmation behind it.
-        var minVerdictConfidence: Float = 0.70
+        /// One V3 probe over ≥10 s of voiced audio at ≥0.85 confidence is sufficient evidence —
+        /// Viterbi over a single strong distribution is unambiguous. The old value of 2 was set
+        /// when probes came from the tiny model, where one guess meant little.
+        var minProbesForVerdict: Int = 1
+        /// V3 at 30 s reaches 0.98–0.99 on measured data. Setting the floor to 0.85 keeps
+        /// a near-certain verdict from being blocked by the old 0.70 threshold (set for tiny-grade
+        /// evidence), while still rejecting the `en 0.443` shrug at the tail of a Hebrew meeting.
+        var minVerdictConfidence: Float = 0.85
 
         static let `default` = Config()
     }
@@ -90,25 +59,14 @@ nonisolated final class LiveLanguageArbiter: @unchecked Sendable {
         let usedAccurate: Bool
     }
 
-    /// Why the arbiter wants an accurate confirmation — logged so the budget can be audited.
-    enum EscalationReason: String {
-        case lowConfidence = "low-confidence"
-        case detectorDisagreement = "detector-disagreement"
-        case abstained
-        case challenger
-    }
-
     private let config: Config
     private let lock = NSLock()
 
     private var _probes: [MeetingLanguageProbe] = []
     private var _tally: [String: Int] = [:]
     private var _accurateCount = 0
-    private var _accurateSpend = 0
-    private var _lastAccurateAt: Double = 0
     private var _verdict: Verdict?
     private var _allowed: Set<TranscriptionLanguage> = []
-    private var _longForm = false
 
     init(config: Config = .default) {
         self.config = config
@@ -119,11 +77,9 @@ nonisolated final class LiveLanguageArbiter: @unchecked Sendable {
     /// - Parameters:
     ///   - allowedLanguages: the routing shortlist, used for the retained-mass guard. A shortlist
     ///     of one (or none) disables the guard, since there is nothing to renormalize away.
-    ///   - longForm: true for a meeting. Only this unlocks the early first confirmation.
-    func configure(allowedLanguages: [TranscriptionLanguage], longForm: Bool = false) {
+    func configure(allowedLanguages: [TranscriptionLanguage]) {
         lock.lock(); defer { lock.unlock() }
         _allowed = allowedLanguages.count > 1 ? Set(allowedLanguages).subtracting([.auto]) : []
-        _longForm = longForm
     }
 
     // MARK: - Accumulated evidence
@@ -151,13 +107,6 @@ nonisolated final class LiveLanguageArbiter: @unchecked Sendable {
         return _accurateCount
     }
 
-    /// Accurate encoder passes actually run, confident or not. This is what the budget counts —
-    /// an inconclusive pass costs exactly as much as a conclusive one.
-    var accurateSpend: Int {
-        lock.lock(); defer { lock.unlock() }
-        return _accurateSpend
-    }
-
     /// How many probes have been recorded, without copying them out — this is read once per VAD
     /// scan purely for a log field.
     var probeCount: Int {
@@ -170,8 +119,6 @@ nonisolated final class LiveLanguageArbiter: @unchecked Sendable {
         _probes = []
         _tally = [:]
         _accurateCount = 0
-        _accurateSpend = 0
-        _lastAccurateAt = 0
         _verdict = nil
     }
 
@@ -185,13 +132,7 @@ nonisolated final class LiveLanguageArbiter: @unchecked Sendable {
         _tally[code, default: 0] += 1
     }
 
-    /// One cheap (tiny CPU) detection. Dropped when the shortlist barely covers it.
-    @discardableResult
-    func recordCoarse(probabilities: [String: Float], start: Double, end: Double) -> Bool {
-        append(MeetingLanguageProbe(start: start, end: end, probabilities: probabilities))
-    }
-
-    /// One accurate (Whisperer V3) detection. Consumes budget whether or not it confirms anything.
+    /// One Whisperer V3 detection. Consumes a probe slot whether or not it confirms anything.
     ///
     /// No extra weighting for the accurate tier: emissions are log-probabilities, so a 0.98 probe
     /// already outweighs a 0.66 one by the right amount. Up-weighting it on top of that would be
@@ -199,13 +140,7 @@ nonisolated final class LiveLanguageArbiter: @unchecked Sendable {
     @discardableResult
     func recordAccurate(probabilities: [String: Float], start: Double, end: Double) -> Bool {
         let top = probabilities.values.max() ?? 0
-        lock.lock()
-        _accurateSpend += 1
-        _lastAccurateAt = end
-        let floor = config.minAccurateConfidence
-        lock.unlock()
-
-        guard top >= floor else { return false }
+        guard top >= config.minAccurateConfidence else { return false }
         guard append(MeetingLanguageProbe(start: start, end: end, probabilities: probabilities)) else {
             return false
         }
@@ -311,56 +246,4 @@ nonisolated final class LiveLanguageArbiter: @unchecked Sendable {
         return (best.key, best.value / mass)
     }
 
-    // MARK: - Escalation policy
-
-    /// Whether Whisperer V3 should be asked to confirm, and why.
-    ///
-    /// - Parameters:
-    ///   - coarse: the probe just taken, if this call follows one.
-    ///   - nemotronCode: Nemotron's current guess, if it has one.
-    ///   - currentLock: the language the router is already locked to, if any.
-    ///   - audioSeconds: audio heard so far, which is also the budget clock.
-    func escalationReason(
-        coarse: [String: Float]?,
-        nemotronCode: String?,
-        currentLock: TranscriptionLanguage?,
-        audioSeconds: Double
-    ) -> EscalationReason? {
-        lock.lock()
-        let spend = _accurateSpend
-        let lastAccurateAt = _lastAccurateAt
-        let probeCount = _probes.count
-        let verdict = _verdict
-        let longForm = _longForm
-        lock.unlock()
-
-        guard spend < config.maxAccurateProbes else { return nil }
-        // Gates the *first* confirmation as well, which is what keeps short dictation off this
-        // path entirely — a 20 s recording never reaches the interval. A long-form session that is
-        // still unrouted is the one exception: everything decoded until it routes is wasted, so
-        // the first confirmation comes early.
-        let interval = (longForm && spend == 0 && currentLock == nil)
-            ? config.firstAccurateInterval
-            : config.minAccurateInterval
-        guard audioSeconds - lastAccurateAt >= interval else { return nil }
-
-        let coarseTop = coarse?.max(by: { $0.value < $1.value })
-        if let coarseTop, coarseTop.value < config.confirmBelowConfidence { return .lowConfidence }
-
-        if let coarseTop, let nemotronCode,
-           let nemotronLanguage = TranscriptionLanguage.from(languageTag: nemotronCode),
-           let coarseLanguage = TranscriptionLanguage.from(languageTag: coarseTop.key),
-           nemotronLanguage != coarseLanguage {
-            return .detectorDisagreement
-        }
-
-        if verdict == nil, probeCount >= config.minProbesBeforeAbstentionCounts { return .abstained }
-
-        // A settled verdict that disagrees with the lock the decoder is actually using is the one
-        // case worth spending a pass on unprompted: everything decoded until it is resolved is
-        // being written in the wrong language.
-        if let currentLock, let verdict, verdict.language != currentLock { return .challenger }
-
-        return nil
-    }
 }

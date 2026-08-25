@@ -36,12 +36,11 @@ enum RoutingThresholds {
     static let redetectCooldown: TimeInterval = 8.0
     static let silenceForRedetect: TimeInterval = 3.0
 
-    // Detection window — VAD filtering provides denser signal, enabling shorter windows
-    static let targetDetectionSamples = 48000  // 3s at 16kHz (reduced from 4s with VAD filtering)
-    static let minDetectionSamples = 24000     // 1.5s minimum
-    static let maxDetectionAttempts = 3
-    static let retryGrowth = 16000             // 1s more audio per retry
-    static let minVoicedDetectionSamples = 24000  // 1.5s of voiced audio required for detection
+    // Detection window — the encoder always runs a full 30 s pass, so a longer window is free.
+    // V3 at 3 s is wrong (ro 0.58 on Hebrew); at 10 s it reaches 0.93; at 30 s it is 0.98-0.99.
+    static let minDetectionSamples  = 160_000  // 10 s — below this do not probe at all
+    static let fullDetectionSamples = 480_000  // 30 s — 0.98-0.99 on measured data
+    static let minVoicedDetectionSamples = 160_000  // 10 s of voiced audio required for detection
     static let fastPathMargin: Float = 0.30    // Top must beat runner-up by this for early lock (empirical)
 
     // Scoring weights — initial routing (no transcript yet)

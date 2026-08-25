@@ -9,11 +9,11 @@
 //  ### Why it can afford to do this
 //  Language detection is *not* a decode. `WhisperBridge.detectLanguage(samples:)` runs
 //  `whisper_pcm_to_mel` + `whisper_lang_auto_detect` and stops — one encoder pass, no decoder
-//  loop, and it returns the full probability distribution rather than a single guess. Run on the
-//  shared tiny CPU-only bridge it is a small fraction of the cost of the large-model decode the
-//  refiner is about to perform on every window anyway.
+//  loop, and it returns the full probability distribution rather than a single guess. Even with
+//  the large Whisperer V3 bridge, one pass costs ~721 ms on Apple Silicon — acceptable over the
+//  duration of the refine scan, which runs long after the meeting ends.
 //
-//  Still, "cheap" is not "free" over a 60-minute meeting, so the scan is a coarse grid, refined
+//  Still, encoder passes add up over a 60-minute meeting, so the scan is a coarse grid, refined
 //  by bisection only where two adjacent probes disagree. A single-language meeting — the common
 //  case — does zero refinement.
 //
@@ -53,6 +53,12 @@ enum MeetingLanguageScanner {
         var minProbeSamples: Int = Int(1.0 * 16000)
 
         static let `default` = Plan()
+
+        /// Accuracy-first preset for the post-meeting refine scan. Uses V3 only (`confirm: nil`)
+        /// so grid density — not model quality — controls cost. 20 probes over a 17-minute meeting
+        /// ≈ 14 s of GPU; bisection still refines wherever adjacent probes disagree.
+        static let accurate = Plan(maxProbes: 20, minSpacing: 45, maxSpacing: 120,
+                                   refinementDepth: 2, maxConfirmProbes: 0)
     }
 
     private static let sampleRate = 16000.0
@@ -62,9 +68,9 @@ enum MeetingLanguageScanner {
     /// Build the meeting's language timeline from its audio.
     ///
     /// - Parameters:
-    ///   - coarse: the cheap detector — the shared tiny CPU bridge.
-    ///   - confirm: the accurate detector — the large model the refiner already has loaded.
-    ///     Optional; when nil, the tiny model's answer stands.
+    ///   - coarse: primary detector — Whisperer V3 (the resident bridge).
+    ///   - confirm: optional second-pass detector for low-confidence windows.
+    ///     Pass `nil` when using `Plan.accurate`, which relies on V3 alone.
     ///   - transcript: current text, for the script veto and the text prior. May be corrupt.
     ///   - nemotronTally: live per-chunk detections, free evidence that would otherwise be thrown away.
     static func scan(

@@ -125,6 +125,25 @@ enum WhisperModel: String, CaseIterable, Identifiable {
         }
     }
 
+    /// Approximate on-disk file size in bytes, used for download progress weighting.
+    /// Differs from `requiredMemoryGB` (file + Metal GPU overhead). Values are the actual
+    /// quantised file sizes rounded to the nearest MB.
+    var approximateDownloadBytes: Double {
+        switch self {
+        case .tiny:            return   77_700_000
+        case .base:            return  142_000_000
+        case .small:           return  466_000_000
+        case .medium:          return 1_530_000_000
+        case .largeV3:         return 3_090_000_000
+        case .largeTurbo:      return 1_620_000_000
+        case .largeTurboQ5:    return   547_000_000
+        case .largeV3Q5:       return 1_080_000_000
+        case .distilLargeV3:   return   756_000_000
+        case .distilSmallEn:   return   166_000_000
+        case .ivritLargeTurbo: return 1_520_000_000
+        }
+    }
+
     /// Approximate memory required to load and run this model (file size + Metal GPU overhead)
     var requiredMemoryGB: Double {
         switch self {
@@ -242,9 +261,6 @@ enum WhisperModel: String, CaseIterable, Identifiable {
 
     /// Whether this model supports multilingual transcription
     var isMultilingual: Bool { !isEnglishOnly }
-
-    /// The model used for language detection (must be multilingual)
-    static let detectorModel: WhisperModel = .tiny
 
     /// Best model for a specific language from available downloaded models
     static func recommendedModel(

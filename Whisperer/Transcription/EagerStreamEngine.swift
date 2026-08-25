@@ -574,7 +574,7 @@ struct EagerStreamEngine {
             confirmedThroughIndex = max(confirmedThroughIndex ?? word.endIndex, word.endIndex)
             confirmedWords.append(word)
             guard config.suppressesRepetitionLoops else { continue }
-            if let runLength = trailingLoopRunLength() {
+            if let runLength = trailingLoopRunLength(), runLength <= confirmedWords.count {
                 confirmedWords.removeLast(runLength)
                 suppressedRepeatWords += runLength
             }

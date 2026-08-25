@@ -209,8 +209,7 @@ enum StuckStateDumper {
             lines.append("Model:           not loaded")
         }
 
-        // Tiny bridge
-        lines.append("Tiny bridge:     \(s.modelPoolForDebug?.previewBridge != nil ? "loaded (CPU-only)" : "nil")")
+        // Detection uses the resident V3 bridge — no separate detector bridge
         lines.append("VAD:             \(s.sileroVADIsNilForDebug ? "nil" : "loaded")")
         lines.append("LLM:             \(s.llmEnabledForDebug ? "enabled" : "disabled")")
 
@@ -443,19 +442,7 @@ enum StuckStateDumper {
             lines.append("- whisper.mainModel: not loaded")
         }
 
-        let tinyURL = modelDir.appendingPathComponent(WhisperModel.tiny.rawValue)
-        let tinyExists = FileManager.default.fileExists(atPath: tinyURL.path)
-        if tinyExists {
-            let tinySize = (try? FileManager.default.attributesOfItem(atPath: tinyURL.path)[.size] as? Int64) ?? -1
-            let tinyCoreMLDir = modelDir.appendingPathComponent(WhisperModel.tiny.coreMLEncoderDirectoryName ?? "")
-            let tinyHasCoreML = FileManager.default.fileExists(atPath: tinyCoreMLDir.path)
-            lines.append("- whisper.tinyBridge: \(WhisperModel.tiny.rawValue) fileSize=\(formatBytes(UInt64(max(0, tinySize)))) coreMLEncoder=\(tinyHasCoreML ? "present" : "absent") loaded=\(s.modelPoolForDebug?.previewBridge != nil)")
-        } else {
-            lines.append("- whisper.tinyBridge: not downloaded")
-        }
-
         if let pool = s.modelPoolForDebug {
-            lines.append("- modelPool.previewBridge: \(pool.previewBridge != nil ? "alive" : "nil")")
             lines.append("- modelPool.fallbackProfile: \(pool.fallbackProfile.map { $0.model.rawValue } ?? "nil")")
         } else {
             lines.append("- modelPool: nil")

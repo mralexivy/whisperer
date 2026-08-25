@@ -721,16 +721,6 @@ struct MeetingDetailView: View {
         }
     }
 
-    /// Cards the last pass re-decoded but could not accept, for this meeting only.
-    ///
-    /// Silence here is what made the Hebrew meeting so confusing: the pass reported success while
-    /// leaving a third of the cards untouched, so the transcript came back visibly mixed with no
-    /// indication that anything had been declined.
-    private var uncorrectedCount: Int {
-        guard let uncorrected = refiner.uncorrected, uncorrected.meetingID == meeting?.id else { return 0 }
-        return uncorrected.count
-    }
-
     private var cleanUpButton: some View {
         Button {
             guard let id = meeting?.id else { return }
@@ -743,11 +733,6 @@ struct MeetingDetailView: View {
                 Text("Re-transcribe")
                     .font(.system(size: 11, weight: .medium))
                     .lineLimit(1)
-                if uncorrectedCount > 0 {
-                    Text("\(uncorrectedCount) left")
-                        .font(.system(size: 10, weight: .semibold))
-                        .foregroundColor(Color(hex: "F59E0B"))
-                }
             }
             .foregroundColor(Color(hex: "5B6CF7"))
             .padding(.horizontal, 10)
@@ -756,9 +741,7 @@ struct MeetingDetailView: View {
             .clipShape(Capsule())
         }
         .buttonStyle(.plain)
-        .help(uncorrectedCount > 0
-              ? "\(uncorrectedCount) card(s) could not be corrected — their re-decode was rejected, so the original text was kept. Run again, or pick the right language."
-              : "Re-transcribe the whole recording with a more accurate model, replacing every card, to fix misheard words and punctuation")
+        .help("Re-transcribe the whole recording with the best available model for the detected language, replacing every card, to fix misheard words and punctuation")
     }
 
     // MARK: - Content

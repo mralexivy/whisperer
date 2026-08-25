@@ -44,9 +44,6 @@ enum ModelPoolError: Error, LocalizedError {
 // MARK: - ModelPool
 
 final class ModelPool {
-    // MARK: - Shared tiny bridge (CPU-only) — preview + language detection
-    private(set) var previewBridge: WhisperBridge?
-
     // MARK: - Warm backends, keyed by ModelProfile
     private var warmBackends: [ModelProfile: TranscriptionBackend] = [:]
 
@@ -66,27 +63,6 @@ final class ModelPool {
     }
 
     init() {}
-
-    // MARK: - Preview / Detection Bridge
-
-    /// Load CPU-only tiny model for live preview and language detection.
-    /// CPU-only = zero GPU contention with main model and UI rendering.
-    /// ANE handles the CoreML encoder automatically when .mlmodelc is present.
-    func loadPreviewBridge(modelPath: URL) throws {
-        let startTime = CACurrentMediaTime()
-        let bridge = try WhisperBridge(modelPath: modelPath, useGPU: false)
-        // Warm up
-        _ = bridge.transcribe(samples: [Float](repeating: 0, count: 16000))
-        previewBridge = bridge
-        let elapsed = (CACurrentMediaTime() - startTime) * 1000
-        Logger.info("Preview/detector bridge loaded (CPU) in \(String(format: "%.0f", elapsed))ms", subsystem: .model)
-    }
-
-    /// Run language detection on audio samples via shared preview bridge.
-    /// Serialized with preview transcription via ctxLock.
-    func detectLanguage(samples: [Float]) -> [String: Float]? {
-        previewBridge?.detectLanguage(samples: samples)
-    }
 
     // MARK: - Backend Lifecycle
 
@@ -251,10 +227,6 @@ final class ModelPool {
         warmBackends.removeAll()
         fallbackProfile = nil
 
-        // Shutdown preview/detector bridge
-        previewBridge?.prepareForShutdown()
-        previewBridge = nil
-
         Logger.info("ModelPool released all resources", subsystem: .model)
     }
 
@@ -269,6 +241,16 @@ final class ModelPool {
     /// queue also stops a cold target load from contending with a live meeting; the caller is
     /// already serving the fallback backend while this runs, so waiting costs nothing.
     private func loadBackend(for profile: ModelProfile) async throws -> TranscriptionBackend {
+        // Download the model file if it is not already on disk. This runs plain (not inside
+        // ModelWorkQueue) because URLSession contends with nothing; the queue is for whisper
+        // context work only, and the 120 s watchdog would fire on any multi-GB transfer.
+        if !ModelDownloader.shared.isModelDownloaded(profile.model) {
+            Logger.info("Downloading \(profile.model.displayName) for routing target", subsystem: .model)
+            try await ModelDownloader.shared.downloadModel(profile.model, progressCallback: { fraction in
+                Logger.debug("Routing target \(profile.model.displayName) download: \(Int(fraction * 100))%", subsystem: .model)
+            })
+        }
+
         let modelPath = ModelDownloader.shared.modelPath(for: profile.model)
         let startTime = CACurrentMediaTime()
 

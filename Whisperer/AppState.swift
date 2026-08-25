@@ -1250,6 +1250,11 @@ class AppState: ObservableObject {
         Task.detached(priority: .background) {
             ModelDownloader.shared.purgeCoreMLEncoderArtifacts(for: model)
             ModelDownloader.shared.purgeCoreMLEncoderArtifacts(for: .tiny)
+            // Tiny is no longer used for detection; reclaim the 77 MB if user is not on it.
+            if model != .tiny, ModelDownloader.shared.isModelDownloaded(.tiny) {
+                try? ModelDownloader.shared.deleteModel(.tiny)
+                Logger.info("Purged ggml-tiny.bin (no longer used for detection)", subsystem: .model)
+            }
         }
 
         whisperLoadTask = Task.detached(priority: .userInitiated) { [weak self] in
@@ -2501,13 +2506,8 @@ class AppState: ObservableObject {
                     }
                 }
 
-                // Download tiny model for preview/detection
-                try await ModelDownloader.shared.ensureDetectorModelDownloaded()
-
-                // Create ModelPool and load shared preview/detector bridge (CPU-only)
+                // Create ModelPool — detection now uses the resident V3 bridge directly.
                 let pool = ModelPool()
-                let tinyModelPath = ModelDownloader.shared.modelPath(for: .tiny)
-                try pool.loadPreviewBridge(modelPath: tinyModelPath)
 
                 // Register the current whisperBridge as fallback
                 await MainActor.run { [weak self] in
@@ -2645,21 +2645,10 @@ class AppState: ObservableObject {
         #endif
         if bridge is FluidAudioBridge { return bridge }
         // WhisperBridge uses eager streaming — the main model's rolling decode IS the preview.
-        // No separate tiny-model preview bridge needed; language detection still uses
-        // modelPool.previewBridge directly.
-        //
-        // Unless the eager path is rolled back. Returning nil unconditionally made
-        // `whisperCppEagerStreaming = false` mean "no live preview at all" rather than "the old
-        // tiny-model preview": the flag disabled the new path without restoring the one it
-        // replaced, so a rollback — or a stale flag left behind by a killed test run — silently
-        // killed live text. Hand back the tiny bridge on that path, which is what it was.
-        if bridge is WhisperBridge {
-            let key = "whisperCppEagerStreaming"
-            let eagerOn = UserDefaults.standard.object(forKey: key) == nil
-                || UserDefaults.standard.bool(forKey: key)
-            return eagerOn ? nil : modelPool?.previewBridge
-        }
-        return modelPool?.previewBridge
+        // Tiny model is no longer used for live preview or detection.
+        // Detection uses the resident V3 bridge; live preview on whisper.cpp is eager streaming.
+        if bridge is WhisperBridge { return nil }
+        return nil
     }
 
     // MARK: - Global Dictation Lifecycle
