@@ -6,6 +6,7 @@
 //
 
 import SwiftUI
+import AppKit
 
 // MARK: - Notification name
 
@@ -207,34 +208,57 @@ struct AskAIPane: View {
         }
     }
 
+    /// Detects RTL script (Hebrew, Arabic) from the first 50 characters of text.
+    /// Per CLAUDE.md, SwiftUI Text cannot set paragraph base writing direction reliably —
+    /// RTL text requires NSTextField via NSViewRepresentable.
+    private static func detectRTL(_ text: String) -> Bool {
+        for scalar in text.prefix(50).unicodeScalars {
+            let v = scalar.value
+            if (v >= 0x0590 && v <= 0x05FF) || (v >= 0x0600 && v <= 0x06FF) { return true }
+        }
+        return false
+    }
+
     @ViewBuilder
     private func userBubble(_ msg: MeetingChatMessage) -> some View {
+        let isRTL = Self.detectRTL(msg.text)
         HStack {
-            Spacer()
-            Text(msg.text)
-                .font(.system(size: 13))
-                .foregroundColor(.white)
-                .padding(.horizontal, 12)
-                .padding(.vertical, 8)
-                .background(Color(hex: "5B6CF7").opacity(0.25))
-                .clipShape(RoundedRectangle(cornerRadius: 10))
+            if !isRTL { Spacer() }
+            ChatBubbleTextView(
+                text: msg.text, isRTL: isRTL,
+                fontSize: 13, textColor: .white
+            )
+            .padding(.horizontal, 12)
+            .padding(.vertical, 8)
+            .background(Color(hex: "5B6CF7").opacity(0.25))
+            .clipShape(RoundedRectangle(cornerRadius: 10))
+            if isRTL { Spacer() }
         }
     }
 
     @ViewBuilder
     private func assistantBubble(_ msg: MeetingChatMessage) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
+        let isRTL = Self.detectRTL(msg.text)
+        VStack(alignment: isRTL ? .trailing : .leading, spacing: 6) {
             HStack(alignment: .top, spacing: 8) {
-                Text("✦")
-                    .font(.system(size: 12))
-                    .foregroundColor(Color(hex: "5B6CF7"))
-                    .padding(.top, 1)
-                Text(msg.text)
-                    .font(.system(size: 13))
-                    .foregroundColor(.white.opacity(0.85))
-                    .lineSpacing(3)
-                    .textSelection(.enabled)
-                Spacer()
+                if isRTL { Spacer() }
+                if !isRTL {
+                    Text("✦")
+                        .font(.system(size: 12))
+                        .foregroundColor(Color(hex: "5B6CF7"))
+                        .padding(.top, 1)
+                }
+                ChatBubbleTextView(
+                    text: msg.text, isRTL: isRTL,
+                    fontSize: 13, textColor: NSColor.white.withAlphaComponent(0.85)
+                )
+                if isRTL {
+                    Text("✦")
+                        .font(.system(size: 12))
+                        .foregroundColor(Color(hex: "5B6CF7"))
+                        .padding(.top, 1)
+                }
+                if !isRTL { Spacer() }
             }
 
             if let sources = msg.sources, !sources.isEmpty {
@@ -603,6 +627,56 @@ struct SpeakersPane: View {
             }
             .padding(14)
         }
+    }
+}
+
+// MARK: - RTL-aware chat text view
+
+/// NSTextField wrapper that sets paragraph base writing direction for RTL text.
+/// SwiftUI Text cannot set baseWritingDirection reliably (see CLAUDE.md), so Hebrew and
+/// Arabic answers would render with punctuation and [Xs] citations on the wrong side.
+/// Mirrors the pattern in MeetingSegmentTextView (MeetingSegmentRow.swift).
+private struct ChatBubbleTextView: NSViewRepresentable {
+    let text: String
+    let isRTL: Bool
+    let fontSize: CGFloat
+    let textColor: NSColor
+
+    func makeCoordinator() -> Coordinator { Coordinator() }
+
+    func makeNSView(context: Context) -> NSTextField {
+        let field = NSTextField(wrappingLabelWithString: "")
+        field.isEditable = false
+        field.isSelectable = true   // preserves text-selection behaviour
+        field.drawsBackground = false
+        field.isBordered = false
+        field.lineBreakMode = .byWordWrapping
+        field.maximumNumberOfLines = 0
+        field.cell?.truncatesLastVisibleLine = false
+        return field
+    }
+
+    func updateNSView(_ field: NSTextField, context: Context) {
+        let c = context.coordinator
+        guard text != c.lastText || isRTL != c.lastIsRTL else { return }
+        c.lastText = text
+        c.lastIsRTL = isRTL
+
+        let style = NSMutableParagraphStyle()
+        style.lineSpacing = 3
+        style.baseWritingDirection = isRTL ? .rightToLeft : .leftToRight
+        style.alignment = isRTL ? .right : .left
+
+        field.attributedStringValue = NSAttributedString(string: text, attributes: [
+            .font: NSFont.systemFont(ofSize: fontSize, weight: .regular),
+            .foregroundColor: textColor,
+            .paragraphStyle: style,
+        ])
+    }
+
+    final class Coordinator {
+        var lastText: String = ""
+        var lastIsRTL: Bool = false
     }
 }
 

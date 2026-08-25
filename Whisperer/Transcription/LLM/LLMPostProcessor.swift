@@ -56,9 +56,10 @@ struct LLMGenerationStats: Equatable {
 // Internal rather than file-private so the batched-decode benchmarks can apply the identical
 // guard per row. Reimplementing it there would mean measuring a different stopping rule.
 enum Degeneration {
-    /// Longest cycle worth looking for. A looping clause is a handful of tokens; beyond
-    /// that the repeats are more likely a real pattern (list items, parallel sentences).
-    static let maxPeriod = 8
+    /// Longest cycle worth looking for. 16 catches "**Plan:** 1." style list-item loops
+    /// (~10-token cycles) that the old limit of 8 missed. Real parallel sentences differ
+    /// in content so their token IDs diverge before 4 full cycles complete.
+    static let maxPeriod = 16
     /// How many units of history to keep. Must exceed `maxPeriod × requiredCycles`.
     static let window = 96
     /// One token repeated is only degenerate after a long run — "…", "----" and numeric

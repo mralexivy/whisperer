@@ -228,7 +228,7 @@ final class LLMModelComparisonTests: XCTestCase {
                         userMessage:    question,
                         temperature:    0.3,
                         maxTokensCap:   512,
-                        timeoutSecondsOverride: MeetingAIService.askTimeout(promptChars: system.count),
+                        timeoutSecondsOverride: MeetingAIService.askTimeout(promptChars: system.count, outputTokens: MeetingAIService.askOutputTokens, isNonLatin: false),
                         throwOnFallback: true,
                         reuseWarmCache: true
                     )

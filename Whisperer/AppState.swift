@@ -2693,6 +2693,12 @@ class AppState: ObservableObject {
         listener.onHandsFreeActivated = { [weak self] in
             Task { @MainActor in
                 guard let self = self else { return }
+                // Fn+L during a meeting starts no dictation (startRecording() refuses), so the
+                // toast and the flag would advertise a hands-free session that does not exist.
+                guard !self.isMeetingMode else {
+                    Logger.info("Hands-free activation ignored — a meeting recording is active", subsystem: .app)
+                    return
+                }
                 self.isHandsFreeRecording = true
                 self.showHandsFreeToast = true
                 Logger.info("Hands-free recording activated", subsystem: .app)
@@ -3217,6 +3223,14 @@ class AppState: ObservableObject {
     // MARK: - State Transitions
 
     func startRecording() {
+        // No dictation on top of a meeting. `state == .idle` below already swallows this while a
+        // meeting is capturing, but not while one is stopping or between its internal state hops,
+        // and a dictation started there would seize the recorder out from under the meeting.
+        if isMeetingMode {
+            Logger.info("startRecording() ignored — a meeting recording is active", subsystem: .app)
+            return
+        }
+
         // Show loading indicator if model isn't ready (works even during download)
         #if canImport(FluidAudio)
         let nemotronReady = (selectedBackendType == .nemotron && nemotronBridgeInstance != nil)
@@ -3884,14 +3898,21 @@ class AppState: ObservableObject {
     }
 
     func cancelRecording() {
+        // A meeting is never cancellable from the dictation shortcut. GlobalKeyListener tracks
+        // its own `recordingInProgress` independently of AppState.state, so an Fn+key combo typed
+        // during a meeting used to land here with state == .recording and tear the whole meeting
+        // down through abandonMeetingMode() — no audio moved into Meetings/, no summary, no title,
+        // and the live window closed mid-call. A meeting only ends through its own stop button.
+        // Mirrors the same guard in stopRecording().
+        if isMeetingMode {
+            Logger.info("cancelRecording() ignored — a meeting recording is active", subsystem: .app)
+            return
+        }
+
         guard case .recording = state else { return }
 
         Logger.debug("Recording cancelled (Fn+key combo)", subsystem: .app)
         cancelStateWatchdog()
-
-        // Cancelling out of a meeting never reaches stopInAppRecording(), so the queue gate
-        // would stay raised for the rest of the session.
-        abandonMeetingMode(reason: "recording cancelled")
 
         Task {
             // Cancel inference first so no stale progress callback can mutate the UI

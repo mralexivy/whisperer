@@ -56,6 +56,13 @@ actor MeetingAIService {
 
     private init() {}
 
+    #if DEBUG
+    /// Test seam: inject a pre-loaded processor so ask() does not try to borrow from
+    /// MeetingEngines / AppState (which require a running app). Set before calling ask(),
+    /// clear with nil after. `nonisolated(unsafe)` so tests can set it without an actor hop.
+    nonisolated(unsafe) static var _testInjectedLLM: LLMPostProcessor?
+    #endif
+
     /// Watches a streaming artifact for its first complete TITLE line, and fires once.
     ///
     /// @unchecked Sendable: `fired` is touched only from the MTP token callback, which runs
@@ -79,6 +86,9 @@ actor MeetingAIService {
     /// Acquires the meeting intelligence LLM. Returns nil when unavailable.
     /// Callers MUST call releaseLLM() on every code path after a successful acquire.
     private func acquireLLM() async -> LLMPostProcessor? {
+        #if DEBUG
+        if let injected = MeetingAIService._testInjectedLLM { return injected }
+        #endif
         #if canImport(FluidAudio)
         return await MeetingEngines.shared.borrowLLM()
         #else
@@ -91,6 +101,10 @@ actor MeetingAIService {
     }
 
     private func releaseLLM() {
+        #if DEBUG
+        // Injected test processor is owned by the test — don't unload it here.
+        if MeetingAIService._testInjectedLLM != nil { return }
+        #endif
         #if canImport(FluidAudio)
         // MeetingEngines is @MainActor — hop via Task since defer blocks cannot await.
         // Both borrowLLM() and releaseLLM() pass through the MainActor queue, so
@@ -100,6 +114,12 @@ actor MeetingAIService {
     }
 
     // MARK: - Q&A
+
+    /// Nominal output token budget for Q&A answers. Q&A output length is unrelated to
+    /// question length, so `process()` must not size it from `text`. 600 tokens covers a
+    /// multi-bullet answer in any script (Hebrew/Arabic ~2 chars/token, so the same budget
+    /// produces a shorter visible answer there but still a complete one).
+    static let askOutputTokens = 600
 
     /// Ask a question about a meeting. Passes the whole timestamped transcript in the
     /// system prompt and sets `reuseWarmCache: true` so repeated questions about the
@@ -119,13 +139,19 @@ actor MeetingAIService {
         defer { releaseLLM() }
 
         // For very long transcripts, prefilter segments to the most relevant ones so the
-        // system prompt stays within ~3,000 tokens. Log when this path is taken.
+        // system prompt stays within ~3,000 tokens. The threshold is script-aware: Hebrew
+        // and Arabic run ~2 chars/token, so the old 12,000-char limit shipped ~6,000 tokens —
+        // double the intended budget. Keyword matching is also cross-script aware: an English
+        // question against a Hebrew transcript scores zero everywhere, which falls back to a
+        // coverage sample rather than an arbitrary prefix.
         let useSegments: [MeetingSegment]
         let usedBM25: Bool
         let fullTranscript = Self.timestampedTranscript(segments)
-        if fullTranscript.count > Self.maxTranscriptChars {
-            Logger.info("Meeting Q&A: transcript \(fullTranscript.count) chars — applying BM25 prefilter", subsystem: .transcription)
-            useSegments = Self.bm25PrefilterSegments(segments, question: question)
+        let transcriptLimit = Self.maxTranscriptChars(for: fullTranscript)
+        if fullTranscript.count > transcriptLimit {
+            let (filtered, why) = Self.bm25PrefilterSegments(segments, question: question, charLimit: transcriptLimit)
+            Logger.info("Meeting Q&A: transcript \(fullTranscript.count) chars — applying BM25 prefilter (why=\(why))", subsystem: .transcription)
+            useSegments = filtered
             usedBM25 = true
         } else {
             useSegments = segments
@@ -133,26 +159,45 @@ actor MeetingAIService {
         }
 
         let transcript = Self.timestampedTranscript(useSegments)
-        let systemPrompt = Self.askSystemPrompt(transcript: transcript, language: Self.dominantLanguage(of: segments))
+        // System prompt contains only the transcript (no language pin) so the KV-cache prefix
+        // stays stable across questions in different languages about the same meeting. The
+        // language directive goes into the user message instead — see askUserMessage(_:).
+        let systemPrompt = Self.askSystemPrompt(transcript: transcript)
+        let isNonLatin = LLMPostProcessor.containsNonLatinScript(transcript)
 
         do {
             let response = try await llm.process(
                 text:           question,
                 systemPrompt:   systemPrompt,
-                userMessage:    question,
+                // Language directive travels with the question so the cached system prefix is
+                // reused on every question about the same meeting, even if the language changes.
+                userMessage:    Self.askUserMessage(question),
                 temperature:    0.3,
-                maxTokensCap:   512,
-                // `process()` sizes its default timeout from `text` — the question — which is
-                // a couple of hundred characters and buys 10s. The work is prefilling the whole
-                // transcript underneath it: measured at 16s on a 4600-token meeting, so the
-                // first question on a long meeting failed with "Sorry, I couldn't answer that"
-                // before a token was generated. Scale with the prompt that is actually decoded.
-                timeoutSecondsOverride: Self.askTimeout(promptChars: systemPrompt.count),
+                // Match generateOverview's penalty — 1.05 (the default) is too low for Q&A:
+                // the model drifts into "**Plan:** 1. **Plan:** 1." cycles after the first bullet
+                // and the degeneration guard (max period 8) misses the >8-token cycle length.
+                repetitionPenalty: 1.15,
+                // `process()` sizes maxTokens from `text` (the question) when no hint is given —
+                // 28 chars → maxTokens=15, generation stops after one bullet. Pass an explicit
+                // hint so the heuristic is bypassed entirely.
+                maxTokensCap:   768,
+                outputTokensHint: Self.askOutputTokens,
+                // Both phases contribute to wall-clock time. Sizing on prompt length alone bought
+                // 20s on a 24,077-char Hebrew transcript — barely enough for prefill at 300 tok/s,
+                // leaving zero budget for 600 tokens of generation at 20 tok/s.
+                timeoutSecondsOverride: Self.askTimeout(
+                    promptChars: systemPrompt.count,
+                    outputTokens: Self.askOutputTokens,
+                    isNonLatin: isNonLatin
+                ),
+                // Empty output → return original text (the question) shown as assistant answer.
+                // With throwOnFallback the catch block returns the proper error message instead.
+                throwOnFallback:  true,
                 // Cache only when the system prompt is stable (same full transcript every call).
                 // BM25 prefilter builds a question-specific subset, so the prompt changes on
                 // every question — reuseWarmCache would silently evict + rebuild the KV prefix
                 // each time rather than reusing it, wasting the flag's purpose.
-                reuseWarmCache: !usedBM25
+                reuseWarmCache:   !usedBM25
             )
             let answer = response.trimmingCharacters(in: .whitespacesAndNewlines)
             let sources = parseCitations(from: answer, segments: segments)
@@ -567,27 +612,48 @@ actor MeetingAIService {
         return "Write every line in \(name). The \(subject) is in \(name); where a word or a passage in it is in another language, that does not change the language you write in."
     }
 
-    /// Prefill dominates a Q&A turn — the answer is a few dozen tokens, the transcript
-    /// underneath it is thousands. Roughly 4 chars per token at ~250 tok/s of prefill, doubled
-    /// for headroom on a larger model, floored at 20s and capped at 90s so a stuck generation
-    /// still surfaces rather than hanging the pane.
-    static func askTimeout(promptChars: Int) -> Double {
-        min(90, max(20, Double(promptChars) / 500))
+    /// Budgets time for both prefill and generation.
+    ///
+    /// Measured on Qwen3.5-4B (MTP): prefill ~300 tok/s, generation ~20 tok/s.
+    /// The previous formula only scaled with promptChars and awarded 20s on a 24,077-char
+    /// Hebrew transcript — barely enough for prefill at that throughput, leaving no budget
+    /// for the answer itself. With the token cap fixed at 600 tokens, generation alone
+    /// needs ~30s; the timeout formula must account for both phases.
+    static func askTimeout(promptChars: Int, outputTokens: Int, isNonLatin: Bool) -> Double {
+        let charsPerToken: Double = isNonLatin ? 2 : 4
+        let promptTokens = Double(promptChars) / charsPerToken
+        let prefillEstimate = promptTokens / 300          // ~300 tok/s prefill (MTP)
+        let genEstimate     = Double(outputTokens) / 20  // ~20 tok/s generation (MTP)
+        return min(180, max(30, (prefillEstimate + genEstimate) * 1.5))
     }
 
     // MARK: - Ask system prompt
 
     /// System prompt for Q&A. Stable per meeting — the transcript is embedded verbatim,
     /// so every question about the same meeting hits the same KV-cache prefix.
-    static func askSystemPrompt(transcript: String, language: TranscriptionLanguage = .auto) -> String {
-        let languageLine = language == .auto
-            ? "Answer in the language of the transcript."
-            : "The transcript is in \(language.displayName). Answer in \(language.displayName)."
-        return """
-        You are an AI assistant analyzing a meeting transcript. Answer questions about this meeting concisely, citing specific moments using [Xs] timestamps from the transcript when relevant. \(languageLine)
+    ///
+    /// The language directive is intentionally absent here. Putting it in the system prompt
+    /// would invalidate the cached prefix every time the user switches language (e.g. asks
+    /// one question in English and the next in Hebrew about the same meeting). The directive
+    /// travels in the user message instead — see `askUserMessage(_:)`.
+    static func askSystemPrompt(transcript: String) -> String {
+        """
+        You are an AI assistant analyzing a meeting transcript. Answer questions concisely, citing specific moments using [Xs] timestamps from the transcript when relevant.
 
         Transcript:
         \(transcript)
+        """
+    }
+
+    /// User message for Q&A. Prepends a language directive so the answer follows the
+    /// language the user typed in — not the meeting's language. The directive travels
+    /// here (not in the system prompt) so the cached transcript prefix stays stable
+    /// even when successive questions are in different languages.
+    static func askUserMessage(_ question: String) -> String {
+        """
+        Answer in the same language this question is written in. When you quote words from the transcript, keep them in their original language.
+
+        \(question)
         """
     }
 
@@ -646,39 +712,98 @@ actor MeetingAIService {
 
     // MARK: - Long-meeting prefilter
 
-    /// Threshold above which a BM25-style prefilter is applied before building the
-    /// system prompt, to keep the context within ~3,000 tokens.
-    private static let maxTranscriptChars = 12_000
+    /// Token budget for the prefiltered transcript context (~3,000 tokens).
+    /// Converted to chars via `maxTranscriptChars(for:)`, which picks 2 or 4 chars/token
+    /// depending on whether the transcript is non-Latin (Hebrew/Arabic run ~2 chars/token).
+    /// `internal` (not private) so integration tests can verify the threshold.
+    static let askContextTokens = 3_000
 
-    /// Simple term-frequency prefilter for transcripts exceeding `maxTranscriptChars`.
-    /// Groups segments into buckets, scores each by question-word overlap, and returns
-    /// the top-5 buckets in original timestamp order. No external dependency.
+    /// Script-aware char threshold above which the BM25 prefilter activates.
+    /// The old fixed 12,000-char limit shipped ~6,000 tokens for Hebrew/Arabic — double
+    /// the intended budget — because those scripts run about 2 chars/token.
+    private static func maxTranscriptChars(for transcript: String) -> Int {
+        let charsPerToken = LLMPostProcessor.containsNonLatinScript(transcript) ? 2 : 4
+        return askContextTokens * charsPerToken
+    }
+
+    /// Term-frequency prefilter for transcripts exceeding `maxTranscriptChars(for:)`.
+    ///
+    /// Groups segments into 5-segment chunks, scores each by question-word overlap (with
+    /// Unicode folding so Hebrew niqqud and Arabic diacritics don't prevent matching), and
+    /// fills the char budget with the top-scoring chunks in original order.
+    ///
+    /// When no chunk scores above zero — cross-script query (English question over Hebrew
+    /// transcript) or generic question ("summarize", "what did we discuss") — falls back to
+    /// an evenly spaced coverage sample so the model sees beginning, middle and end instead
+    /// of an arbitrary prefix. Returns the filtered segments and a why tag for logging.
     private static func bm25PrefilterSegments(
-        _ segments: [MeetingSegment], question: String
-    ) -> [MeetingSegment] {
+        _ segments: [MeetingSegment], question: String, charLimit: Int
+    ) -> ([MeetingSegment], why: String) {
+        // Normalize question words: fold diacritics/case so Arabic شُكر matches شكر and
+        // English "Meeting" matches "meeting". Filter stop-word-length tokens.
         let questionWords = Set(
-            question.lowercased()
+            question
+                .folding(options: [.diacriticInsensitive, .caseInsensitive], locale: nil)
                 .components(separatedBy: .whitespacesAndNewlines)
                 .filter { $0.count > 2 }
         )
-        guard !questionWords.isEmpty else { return segments }
 
         let chunkSize = 5
         var groups: [(range: Range<Int>, score: Int)] = []
         var i = 0
         while i < segments.count {
             let end = min(i + chunkSize, segments.count)
-            let text = segments[i..<end].map { $0.text }.joined(separator: " ").lowercased()
-            let score = questionWords.reduce(0) { acc, word in acc + (text.contains(word) ? 1 : 0) }
+            let raw = segments[i..<end].map { $0.text }.joined(separator: " ")
+            let normalized = raw.folding(options: [.diacriticInsensitive, .caseInsensitive], locale: nil)
+            // Word-set intersection: split chunk into words so "week" doesn't match "we".
+            let chunkWords = Set(
+                normalized.components(separatedBy: .whitespacesAndNewlines).filter { $0.count > 1 }
+            )
+            let score = questionWords.isEmpty ? 0 :
+                questionWords.reduce(0) { acc, word in acc + (chunkWords.contains(word) ? 1 : 0) }
             groups.append((i..<end, score))
             i = end
         }
 
-        // Take top-5 groups by score, then restore original order.
-        let topRanges = groups.sorted { $0.score > $1.score }.prefix(5).map { $0.range }
-        return topRanges
+        let maxScore = groups.max { $0.score < $1.score }?.score ?? 0
+
+        // Cross-script or generic question: no keyword overlap. Fall back to coverage sample
+        // so the model sees a representative slice rather than an arbitrary prefix.
+        guard maxScore > 0 else {
+            return (coverageSample(segments: segments, charLimit: charLimit), why: "coverage")
+        }
+
+        // Fill char budget with highest-scoring chunks (stops as soon as budget is reached).
+        var selected: [Range<Int>] = []
+        var totalChars = 0
+        for group in groups.sorted(by: { $0.score > $1.score }) {
+            let text = segments[group.range].map { $0.text }.joined(separator: " ")
+            guard totalChars + text.count <= charLimit else { break }
+            selected.append(group.range)
+            totalChars += text.count
+        }
+
+        // If nothing fit (pathologically large individual segments), fall back to coverage.
+        guard !selected.isEmpty else {
+            return (coverageSample(segments: segments, charLimit: charLimit), why: "coverage")
+        }
+
+        let result = selected
             .flatMap { range in Array(segments[range]) }
             .sorted { $0.timestamp < $1.timestamp }
+        return (result, why: "keyword")
+    }
+
+    /// Returns segments evenly spaced across the full meeting, fitting within charLimit.
+    /// Used as a fallback when keyword scoring finds no relevant chunks, so a generic
+    /// question like "what was discussed?" covers beginning, middle and end of the meeting.
+    private static func coverageSample(segments: [MeetingSegment], charLimit: Int) -> [MeetingSegment] {
+        let avgChars = segments.map { $0.text.count }.reduce(0, +) / max(1, segments.count)
+        // +20 for the "[Ns] Speaker: " timestamp prefix per line
+        let maxCount = max(5, charLimit / max(1, avgChars + 20))
+        guard segments.count > maxCount else { return segments }
+        let stride = Double(segments.count) / Double(maxCount)
+        return (0..<maxCount).map { i in segments[min(Int(Double(i) * stride), segments.count - 1)] }
     }
 
     // MARK: - Auto-generated titles
