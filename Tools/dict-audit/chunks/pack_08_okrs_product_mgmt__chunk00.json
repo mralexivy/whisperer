@@ -1,0 +1,1169 @@
+[
+  {
+    "alias": "o k r",
+    "term": "OKR",
+    "pack": "pack_08_okrs_product_mgmt",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "oh kay are",
+    "term": "OKR",
+    "pack": "pack_08_okrs_product_mgmt",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "okay are",
+    "term": "OKR",
+    "pack": "pack_08_okrs_product_mgmt",
+    "flags": []
+  },
+  {
+    "alias": "okr",
+    "term": "OKR",
+    "pack": "pack_08_okrs_product_mgmt",
+    "flags": [
+      "identity",
+      "substring_of_term"
+    ]
+  },
+  {
+    "alias": "oak are",
+    "term": "OKR",
+    "pack": "pack_08_okrs_product_mgmt",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "o k r s",
+    "term": "OKRs",
+    "pack": "pack_08_okrs_product_mgmt",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "oh kay ours",
+    "term": "OKRs",
+    "pack": "pack_08_okrs_product_mgmt",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "okay ours",
+    "term": "OKRs",
+    "pack": "pack_08_okrs_product_mgmt",
+    "flags": []
+  },
+  {
+    "alias": "oak ours",
+    "term": "OKRs",
+    "pack": "pack_08_okrs_product_mgmt",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "ob jective",
+    "term": "objective",
+    "pack": "pack_08_okrs_product_mgmt",
+    "flags": []
+  },
+  {
+    "alias": "key re sult",
+    "term": "key result",
+    "pack": "pack_08_okrs_product_mgmt",
+    "flags": []
+  },
+  {
+    "alias": "key re sults",
+    "term": "key results",
+    "pack": "pack_08_okrs_product_mgmt",
+    "flags": []
+  },
+  {
+    "alias": "k p i",
+    "term": "KPI",
+    "pack": "pack_08_okrs_product_mgmt",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "kay pee eye",
+    "term": "KPI",
+    "pack": "pack_08_okrs_product_mgmt",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "key performance indicator",
+    "term": "KPI",
+    "pack": "pack_08_okrs_product_mgmt",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "k p eyes",
+    "term": "KPIs",
+    "pack": "pack_08_okrs_product_mgmt",
+    "flags": []
+  },
+  {
+    "alias": "kay pee eyes",
+    "term": "KPIs",
+    "pack": "pack_08_okrs_product_mgmt",
+    "flags": []
+  },
+  {
+    "alias": "k r",
+    "term": "KR",
+    "pack": "pack_08_okrs_product_mgmt",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "kay are",
+    "term": "KR",
+    "pack": "pack_08_okrs_product_mgmt",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "key result",
+    "term": "KR",
+    "pack": "pack_08_okrs_product_mgmt",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "north star metric",
+    "term": "north star metric",
+    "pack": "pack_08_okrs_product_mgmt",
+    "flags": [
+      "all_english",
+      "identity",
+      "substring_of_term"
+    ]
+  },
+  {
+    "alias": "north star",
+    "term": "north star",
+    "pack": "pack_08_okrs_product_mgmt",
+    "flags": [
+      "all_english",
+      "identity",
+      "substring_of_term"
+    ]
+  },
+  {
+    "alias": "p r d",
+    "term": "PRD",
+    "pack": "pack_08_okrs_product_mgmt",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "pee are dee",
+    "term": "PRD",
+    "pack": "pack_08_okrs_product_mgmt",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "product requirements document",
+    "term": "PRD",
+    "pack": "pack_08_okrs_product_mgmt",
+    "flags": []
+  },
+  {
+    "alias": "product requirements dock you ment",
+    "term": "product requirements document",
+    "pack": "pack_08_okrs_product_mgmt",
+    "flags": []
+  },
+  {
+    "alias": "speck",
+    "term": "spec",
+    "pack": "pack_08_okrs_product_mgmt",
+    "flags": [
+      "all_english",
+      "single_word_english"
+    ]
+  },
+  {
+    "alias": "technical speck",
+    "term": "technical spec",
+    "pack": "pack_08_okrs_product_mgmt",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "tech spec",
+    "term": "technical spec",
+    "pack": "pack_08_okrs_product_mgmt",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "tech speck",
+    "term": "technical spec",
+    "pack": "pack_08_okrs_product_mgmt",
+    "flags": [
+      "all_english",
+      "conflict"
+    ]
+  },
+  {
+    "alias": "teck speck",
+    "term": "tech spec",
+    "pack": "pack_08_okrs_product_mgmt",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "tech speck",
+    "term": "tech spec",
+    "pack": "pack_08_okrs_product_mgmt",
+    "flags": [
+      "all_english",
+      "conflict"
+    ]
+  },
+  {
+    "alias": "dee sign doc",
+    "term": "design doc",
+    "pack": "pack_08_okrs_product_mgmt",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "design dock",
+    "term": "design doc",
+    "pack": "pack_08_okrs_product_mgmt",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "r f c",
+    "term": "RFC",
+    "pack": "pack_08_okrs_product_mgmt",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "are ef see",
+    "term": "RFC",
+    "pack": "pack_08_okrs_product_mgmt",
+    "flags": []
+  },
+  {
+    "alias": "request for comments",
+    "term": "RFC",
+    "pack": "pack_08_okrs_product_mgmt",
+    "flags": []
+  },
+  {
+    "alias": "a d r",
+    "term": "ADR",
+    "pack": "pack_08_okrs_product_mgmt",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "ay dee are",
+    "term": "ADR",
+    "pack": "pack_08_okrs_product_mgmt",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "architecture decision record",
+    "term": "ADR",
+    "pack": "pack_08_okrs_product_mgmt",
+    "flags": [
+      "all_english",
+      "conflict"
+    ]
+  },
+  {
+    "alias": "architecture decision record",
+    "term": "architecture decision record",
+    "pack": "pack_08_okrs_product_mgmt",
+    "flags": [
+      "all_english",
+      "conflict",
+      "identity",
+      "substring_of_term"
+    ]
+  },
+  {
+    "alias": "one pager",
+    "term": "one-pager",
+    "pack": "pack_08_okrs_product_mgmt",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "1 pager",
+    "term": "one-pager",
+    "pack": "pack_08_okrs_product_mgmt",
+    "flags": [
+      "all_english",
+      "single_word_english"
+    ]
+  },
+  {
+    "alias": "won pager",
+    "term": "one-pager",
+    "pack": "pack_08_okrs_product_mgmt",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "two pager",
+    "term": "two-pager",
+    "pack": "pack_08_okrs_product_mgmt",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "2 pager",
+    "term": "two-pager",
+    "pack": "pack_08_okrs_product_mgmt",
+    "flags": [
+      "all_english",
+      "single_word_english"
+    ]
+  },
+  {
+    "alias": "breef",
+    "term": "brief",
+    "pack": "pack_08_okrs_product_mgmt",
+    "flags": []
+  },
+  {
+    "alias": "product breef",
+    "term": "product brief",
+    "pack": "pack_08_okrs_product_mgmt",
+    "flags": []
+  },
+  {
+    "alias": "exec you tive summary",
+    "term": "executive summary",
+    "pack": "pack_08_okrs_product_mgmt",
+    "flags": []
+  },
+  {
+    "alias": "t l d r",
+    "term": "TLDR",
+    "pack": "pack_08_okrs_product_mgmt",
+    "flags": [
+      "all_english",
+      "conflict"
+    ]
+  },
+  {
+    "alias": "tee el dee are",
+    "term": "TLDR",
+    "pack": "pack_08_okrs_product_mgmt",
+    "flags": [
+      "all_english",
+      "conflict"
+    ]
+  },
+  {
+    "alias": "too long didn't read",
+    "term": "TLDR",
+    "pack": "pack_08_okrs_product_mgmt",
+    "flags": []
+  },
+  {
+    "alias": "t l d r",
+    "term": "TL;DR",
+    "pack": "pack_08_okrs_product_mgmt",
+    "flags": [
+      "all_english",
+      "conflict"
+    ]
+  },
+  {
+    "alias": "tee el dee are",
+    "term": "TL;DR",
+    "pack": "pack_08_okrs_product_mgmt",
+    "flags": [
+      "all_english",
+      "conflict"
+    ]
+  },
+  {
+    "alias": "road map",
+    "term": "roadmap",
+    "pack": "pack_08_okrs_product_mgmt",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "product road map",
+    "term": "product roadmap",
+    "pack": "pack_08_okrs_product_mgmt",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "teck road map",
+    "term": "tech roadmap",
+    "pack": "pack_08_okrs_product_mgmt",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "mile stones",
+    "term": "milestones",
+    "pack": "pack_08_okrs_product_mgmt",
+    "flags": []
+  },
+  {
+    "alias": "mile stone",
+    "term": "milestone",
+    "pack": "pack_08_okrs_product_mgmt",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "deliver able",
+    "term": "deliverable",
+    "pack": "pack_08_okrs_product_mgmt",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "deliver ables",
+    "term": "deliverables",
+    "pack": "pack_08_okrs_product_mgmt",
+    "flags": []
+  },
+  {
+    "alias": "work stream",
+    "term": "workstream",
+    "pack": "pack_08_okrs_product_mgmt",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "work streams",
+    "term": "workstreams",
+    "pack": "pack_08_okrs_product_mgmt",
+    "flags": []
+  },
+  {
+    "alias": "in ish a tiv",
+    "term": "initiative",
+    "pack": "pack_08_okrs_product_mgmt",
+    "flags": []
+  },
+  {
+    "alias": "in ish a tivs",
+    "term": "initiatives",
+    "pack": "pack_08_okrs_product_mgmt",
+    "flags": []
+  },
+  {
+    "alias": "theme product",
+    "term": "theme",
+    "pack": "pack_08_okrs_product_mgmt",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "pill ar",
+    "term": "pillar",
+    "pack": "pack_08_okrs_product_mgmt",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "strat ee gic pill ar",
+    "term": "strategic pillar",
+    "pack": "pack_08_okrs_product_mgmt",
+    "flags": []
+  },
+  {
+    "alias": "m v p",
+    "term": "MVP",
+    "pack": "pack_08_okrs_product_mgmt",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "em vee pee",
+    "term": "MVP",
+    "pack": "pack_08_okrs_product_mgmt",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "minimum viable product",
+    "term": "MVP",
+    "pack": "pack_08_okrs_product_mgmt",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "m l p",
+    "term": "MLP",
+    "pack": "pack_08_okrs_product_mgmt",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "em el pee",
+    "term": "MLP",
+    "pack": "pack_08_okrs_product_mgmt",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "minimum lovable product",
+    "term": "MLP",
+    "pack": "pack_08_okrs_product_mgmt",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "p o c",
+    "term": "POC",
+    "pack": "pack_08_okrs_product_mgmt",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "pee oh see",
+    "term": "POC",
+    "pack": "pack_08_okrs_product_mgmt",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "proof of concept",
+    "term": "POC",
+    "pack": "pack_08_okrs_product_mgmt",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "proof of con sept",
+    "term": "proof of concept",
+    "pack": "pack_08_okrs_product_mgmt",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "proto type",
+    "term": "prototype",
+    "pack": "pack_08_okrs_product_mgmt",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "al fa",
+    "term": "alpha",
+    "pack": "pack_08_okrs_product_mgmt",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "bay ta",
+    "term": "beta",
+    "pack": "pack_08_okrs_product_mgmt",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "bee ta",
+    "term": "beta",
+    "pack": "pack_08_okrs_product_mgmt",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "g a",
+    "term": "GA",
+    "pack": "pack_08_okrs_product_mgmt",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "gee ay",
+    "term": "GA",
+    "pack": "pack_08_okrs_product_mgmt",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "general availability",
+    "term": "GA",
+    "pack": "pack_08_okrs_product_mgmt",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "general avail ability",
+    "term": "general availability",
+    "pack": "pack_08_okrs_product_mgmt",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "feature pare ity",
+    "term": "feature parity",
+    "pack": "pack_08_okrs_product_mgmt",
+    "flags": []
+  },
+  {
+    "alias": "scope",
+    "term": "scope",
+    "pack": "pack_08_okrs_product_mgmt",
+    "flags": [
+      "all_english",
+      "single_word_english",
+      "identity",
+      "substring_of_term"
+    ]
+  },
+  {
+    "alias": "scope creep",
+    "term": "scope creep",
+    "pack": "pack_08_okrs_product_mgmt",
+    "flags": [
+      "all_english",
+      "identity",
+      "substring_of_term"
+    ]
+  },
+  {
+    "alias": "dee scope",
+    "term": "descope",
+    "pack": "pack_08_okrs_product_mgmt",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "de scope",
+    "term": "descope",
+    "pack": "pack_08_okrs_product_mgmt",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "out of scope",
+    "term": "out of scope",
+    "pack": "pack_08_okrs_product_mgmt",
+    "flags": [
+      "all_english",
+      "identity",
+      "substring_of_term"
+    ]
+  },
+  {
+    "alias": "in scope",
+    "term": "in scope",
+    "pack": "pack_08_okrs_product_mgmt",
+    "flags": [
+      "all_english",
+      "identity",
+      "substring_of_term"
+    ]
+  },
+  {
+    "alias": "guard rails",
+    "term": "guardrails",
+    "pack": "pack_08_okrs_product_mgmt",
+    "flags": []
+  },
+  {
+    "alias": "non functional requirements",
+    "term": "non-functional requirements",
+    "pack": "pack_08_okrs_product_mgmt",
+    "flags": []
+  },
+  {
+    "alias": "n f r",
+    "term": "NFR",
+    "pack": "pack_08_okrs_product_mgmt",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "en ef are",
+    "term": "NFR",
+    "pack": "pack_08_okrs_product_mgmt",
+    "flags": []
+  },
+  {
+    "alias": "non functional requirement",
+    "term": "NFR",
+    "pack": "pack_08_okrs_product_mgmt",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "n f r s",
+    "term": "NFRs",
+    "pack": "pack_08_okrs_product_mgmt",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "en ef ours",
+    "term": "NFRs",
+    "pack": "pack_08_okrs_product_mgmt",
+    "flags": []
+  },
+  {
+    "alias": "functional requirements",
+    "term": "functional requirements",
+    "pack": "pack_08_okrs_product_mgmt",
+    "flags": [
+      "identity",
+      "substring_of_term"
+    ]
+  },
+  {
+    "alias": "use case",
+    "term": "use case",
+    "pack": "pack_08_okrs_product_mgmt",
+    "flags": [
+      "all_english",
+      "identity",
+      "substring_of_term"
+    ]
+  },
+  {
+    "alias": "user per sona",
+    "term": "user persona",
+    "pack": "pack_08_okrs_product_mgmt",
+    "flags": []
+  },
+  {
+    "alias": "per sona",
+    "term": "persona",
+    "pack": "pack_08_okrs_product_mgmt",
+    "flags": []
+  },
+  {
+    "alias": "user journey",
+    "term": "user journey",
+    "pack": "pack_08_okrs_product_mgmt",
+    "flags": [
+      "all_english",
+      "identity",
+      "substring_of_term"
+    ]
+  },
+  {
+    "alias": "customer journey",
+    "term": "customer journey",
+    "pack": "pack_08_okrs_product_mgmt",
+    "flags": [
+      "all_english",
+      "identity",
+      "substring_of_term"
+    ]
+  },
+  {
+    "alias": "stake holder",
+    "term": "stakeholder",
+    "pack": "pack_08_okrs_product_mgmt",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "stake holders",
+    "term": "stakeholders",
+    "pack": "pack_08_okrs_product_mgmt",
+    "flags": []
+  },
+  {
+    "alias": "cross functional",
+    "term": "cross-functional",
+    "pack": "pack_08_okrs_product_mgmt",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "a line ment",
+    "term": "alignment",
+    "pack": "pack_08_okrs_product_mgmt",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "a lined",
+    "term": "aligned",
+    "pack": "pack_08_okrs_product_mgmt",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "miss a line ment",
+    "term": "misalignment",
+    "pack": "pack_08_okrs_product_mgmt",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "sink",
+    "term": "sync",
+    "pack": "pack_08_okrs_product_mgmt",
+    "flags": [
+      "all_english",
+      "single_word_english"
+    ]
+  },
+  {
+    "alias": "sink up",
+    "term": "sync up",
+    "pack": "pack_08_okrs_product_mgmt",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "a sink",
+    "term": "async",
+    "pack": "pack_08_okrs_product_mgmt",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "ay sink",
+    "term": "async",
+    "pack": "pack_08_okrs_product_mgmt",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "stand up",
+    "term": "standup",
+    "pack": "pack_08_okrs_product_mgmt",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "one on one",
+    "term": "one-on-one",
+    "pack": "pack_08_okrs_product_mgmt",
+    "flags": [
+      "all_english",
+      "conflict"
+    ]
+  },
+  {
+    "alias": "1 on 1",
+    "term": "one-on-one",
+    "pack": "pack_08_okrs_product_mgmt",
+    "flags": [
+      "all_english",
+      "single_word_english",
+      "conflict"
+    ]
+  },
+  {
+    "alias": "one to one",
+    "term": "1:1",
+    "pack": "pack_08_okrs_product_mgmt",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "one on one",
+    "term": "1:1",
+    "pack": "pack_08_okrs_product_mgmt",
+    "flags": [
+      "all_english",
+      "conflict"
+    ]
+  },
+  {
+    "alias": "1 on 1",
+    "term": "1:1",
+    "pack": "pack_08_okrs_product_mgmt",
+    "flags": [
+      "all_english",
+      "single_word_english",
+      "conflict"
+    ]
+  },
+  {
+    "alias": "skip level",
+    "term": "skip-level",
+    "pack": "pack_08_okrs_product_mgmt",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "all hands",
+    "term": "all-hands",
+    "pack": "pack_08_okrs_product_mgmt",
+    "flags": []
+  },
+  {
+    "alias": "town hall",
+    "term": "town hall",
+    "pack": "pack_08_okrs_product_mgmt",
+    "flags": [
+      "all_english",
+      "identity",
+      "substring_of_term"
+    ]
+  },
+  {
+    "alias": "off site",
+    "term": "offsite",
+    "pack": "pack_08_okrs_product_mgmt",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "on site",
+    "term": "onsite",
+    "pack": "pack_08_okrs_product_mgmt",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "heads up",
+    "term": "heads-up",
+    "pack": "pack_08_okrs_product_mgmt",
+    "flags": []
+  },
+  {
+    "alias": "f y i",
+    "term": "FYI",
+    "pack": "pack_08_okrs_product_mgmt",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "ef why eye",
+    "term": "FYI",
+    "pack": "pack_08_okrs_product_mgmt",
+    "flags": []
+  },
+  {
+    "alias": "for your information",
+    "term": "FYI",
+    "pack": "pack_08_okrs_product_mgmt",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "a s a p",
+    "term": "ASAP",
+    "pack": "pack_08_okrs_product_mgmt",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "ay sap",
+    "term": "ASAP",
+    "pack": "pack_08_okrs_product_mgmt",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "as soon as possible",
+    "term": "ASAP",
+    "pack": "pack_08_okrs_product_mgmt",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "e t a",
+    "term": "ETA",
+    "pack": "pack_08_okrs_product_mgmt",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "ee tee ay",
+    "term": "ETA",
+    "pack": "pack_08_okrs_product_mgmt",
+    "flags": []
+  },
+  {
+    "alias": "estimated time of arrival",
+    "term": "ETA",
+    "pack": "pack_08_okrs_product_mgmt",
+    "flags": []
+  },
+  {
+    "alias": "e o d",
+    "term": "EOD",
+    "pack": "pack_08_okrs_product_mgmt",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "ee oh dee",
+    "term": "EOD",
+    "pack": "pack_08_okrs_product_mgmt",
+    "flags": []
+  },
+  {
+    "alias": "end of day",
+    "term": "EOD",
+    "pack": "pack_08_okrs_product_mgmt",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "e o w",
+    "term": "EOW",
+    "pack": "pack_08_okrs_product_mgmt",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "ee oh double you",
+    "term": "EOW",
+    "pack": "pack_08_okrs_product_mgmt",
+    "flags": []
+  },
+  {
+    "alias": "end of week",
+    "term": "EOW",
+    "pack": "pack_08_okrs_product_mgmt",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "e o m",
+    "term": "EOM",
+    "pack": "pack_08_okrs_product_mgmt",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "ee oh em",
+    "term": "EOM",
+    "pack": "pack_08_okrs_product_mgmt",
+    "flags": []
+  },
+  {
+    "alias": "end of month",
+    "term": "EOM",
+    "pack": "pack_08_okrs_product_mgmt",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "e o q",
+    "term": "EOQ",
+    "pack": "pack_08_okrs_product_mgmt",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "ee oh queue",
+    "term": "EOQ",
+    "pack": "pack_08_okrs_product_mgmt",
+    "flags": []
+  },
+  {
+    "alias": "end of quarter",
+    "term": "EOQ",
+    "pack": "pack_08_okrs_product_mgmt",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "e o y",
+    "term": "EOY",
+    "pack": "pack_08_okrs_product_mgmt",
+    "flags": [
+      "all_english"
+    ]
+  }
+]

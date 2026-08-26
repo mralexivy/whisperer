@@ -1,0 +1,1914 @@
+[
+  {
+    "alias": "micro services",
+    "term": "microservices",
+    "pack": "pack_10_architecture_sysdesign",
+    "flags": []
+  },
+  {
+    "alias": "mono lith",
+    "term": "monolith",
+    "pack": "pack_10_architecture_sysdesign",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "mono lithic",
+    "term": "monolithic",
+    "pack": "pack_10_architecture_sysdesign",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "modular mono lith",
+    "term": "modular monolith",
+    "pack": "pack_10_architecture_sysdesign",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "service oriented architecture",
+    "term": "service-oriented architecture",
+    "pack": "pack_10_architecture_sysdesign",
+    "flags": []
+  },
+  {
+    "alias": "s o a",
+    "term": "SOA",
+    "pack": "pack_10_architecture_sysdesign",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "ess oh ay",
+    "term": "SOA",
+    "pack": "pack_10_architecture_sysdesign",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "event driven architecture",
+    "term": "event-driven architecture",
+    "pack": "pack_10_architecture_sysdesign",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "e d a",
+    "term": "EDA",
+    "pack": "pack_10_architecture_sysdesign",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "ee dee ay",
+    "term": "EDA",
+    "pack": "pack_10_architecture_sysdesign",
+    "flags": []
+  },
+  {
+    "alias": "domain driven dee sign",
+    "term": "domain-driven design",
+    "pack": "pack_10_architecture_sysdesign",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "d d d",
+    "term": "DDD",
+    "pack": "pack_10_architecture_sysdesign",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "dee dee dee",
+    "term": "DDD",
+    "pack": "pack_10_architecture_sysdesign",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "bounded con text",
+    "term": "bounded context",
+    "pack": "pack_10_architecture_sysdesign",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "agg re gate",
+    "term": "aggregate",
+    "pack": "pack_10_architecture_sysdesign",
+    "flags": []
+  },
+  {
+    "alias": "agg re gate root",
+    "term": "aggregate root",
+    "pack": "pack_10_architecture_sysdesign",
+    "flags": []
+  },
+  {
+    "alias": "en tity",
+    "term": "entity",
+    "pack": "pack_10_architecture_sysdesign",
+    "flags": []
+  },
+  {
+    "alias": "value ob ject",
+    "term": "value object",
+    "pack": "pack_10_architecture_sysdesign",
+    "flags": []
+  },
+  {
+    "alias": "repository pattern",
+    "term": "repository pattern",
+    "pack": "pack_10_architecture_sysdesign",
+    "flags": [
+      "all_english",
+      "identity",
+      "substring_of_term"
+    ]
+  },
+  {
+    "alias": "hex agonal architecture",
+    "term": "hexagonal architecture",
+    "pack": "pack_10_architecture_sysdesign",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "ports and a dapters",
+    "term": "ports and adapters",
+    "pack": "pack_10_architecture_sysdesign",
+    "flags": []
+  },
+  {
+    "alias": "clean architecture",
+    "term": "clean architecture",
+    "pack": "pack_10_architecture_sysdesign",
+    "flags": [
+      "all_english",
+      "identity",
+      "substring_of_term"
+    ]
+  },
+  {
+    "alias": "onion architecture",
+    "term": "onion architecture",
+    "pack": "pack_10_architecture_sysdesign",
+    "flags": [
+      "all_english",
+      "identity",
+      "substring_of_term"
+    ]
+  },
+  {
+    "alias": "c q r s",
+    "term": "CQRS",
+    "pack": "pack_10_architecture_sysdesign",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "see queue are ess",
+    "term": "CQRS",
+    "pack": "pack_10_architecture_sysdesign",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "command query responsibility segregation",
+    "term": "CQRS",
+    "pack": "pack_10_architecture_sysdesign",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "event sourcing",
+    "term": "event sourcing",
+    "pack": "pack_10_architecture_sysdesign",
+    "flags": [
+      "identity",
+      "substring_of_term"
+    ]
+  },
+  {
+    "alias": "saga pattern",
+    "term": "saga",
+    "pack": "pack_10_architecture_sysdesign",
+    "flags": [
+      "all_english",
+      "conflict"
+    ]
+  },
+  {
+    "alias": "core ee ography",
+    "term": "choreography",
+    "pack": "pack_10_architecture_sysdesign",
+    "flags": []
+  },
+  {
+    "alias": "or kes tration",
+    "term": "orchestration",
+    "pack": "pack_10_architecture_sysdesign",
+    "flags": []
+  },
+  {
+    "alias": "pub sub",
+    "term": "pub/sub",
+    "pack": "pack_10_architecture_sysdesign",
+    "flags": [
+      "all_english",
+      "conflict"
+    ]
+  },
+  {
+    "alias": "publish subscribe",
+    "term": "pub/sub",
+    "pack": "pack_10_architecture_sysdesign",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "message queue",
+    "term": "message queue",
+    "pack": "pack_10_architecture_sysdesign",
+    "flags": [
+      "all_english",
+      "identity",
+      "substring_of_term"
+    ]
+  },
+  {
+    "alias": "message broker",
+    "term": "message broker",
+    "pack": "pack_10_architecture_sysdesign",
+    "flags": [
+      "all_english",
+      "identity",
+      "substring_of_term"
+    ]
+  },
+  {
+    "alias": "event bus",
+    "term": "event bus",
+    "pack": "pack_10_architecture_sysdesign",
+    "flags": [
+      "all_english",
+      "identity",
+      "substring_of_term"
+    ]
+  },
+  {
+    "alias": "dead letter queue",
+    "term": "dead letter queue",
+    "pack": "pack_10_architecture_sysdesign",
+    "flags": [
+      "all_english",
+      "identity",
+      "substring_of_term"
+    ]
+  },
+  {
+    "alias": "d l q",
+    "term": "DLQ",
+    "pack": "pack_10_architecture_sysdesign",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "dee el queue",
+    "term": "DLQ",
+    "pack": "pack_10_architecture_sysdesign",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "eye dem potent",
+    "term": "idempotent",
+    "pack": "pack_10_architecture_sysdesign",
+    "flags": []
+  },
+  {
+    "alias": "idem potent",
+    "term": "idempotent",
+    "pack": "pack_10_architecture_sysdesign",
+    "flags": []
+  },
+  {
+    "alias": "idem po ten see",
+    "term": "idempotency",
+    "pack": "pack_10_architecture_sysdesign",
+    "flags": []
+  },
+  {
+    "alias": "at least once delivery",
+    "term": "at-least-once delivery",
+    "pack": "pack_10_architecture_sysdesign",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "at most once delivery",
+    "term": "at-most-once delivery",
+    "pack": "pack_10_architecture_sysdesign",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "exactly once delivery",
+    "term": "exactly-once delivery",
+    "pack": "pack_10_architecture_sysdesign",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "eventual con sistency",
+    "term": "eventual consistency",
+    "pack": "pack_10_architecture_sysdesign",
+    "flags": []
+  },
+  {
+    "alias": "strong con sistency",
+    "term": "strong consistency",
+    "pack": "pack_10_architecture_sysdesign",
+    "flags": []
+  },
+  {
+    "alias": "con sistency",
+    "term": "consistency",
+    "pack": "pack_10_architecture_sysdesign",
+    "flags": []
+  },
+  {
+    "alias": "avail ability",
+    "term": "availability",
+    "pack": "pack_10_architecture_sysdesign",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "partition tolerance",
+    "term": "partition tolerance",
+    "pack": "pack_10_architecture_sysdesign",
+    "flags": [
+      "all_english",
+      "identity",
+      "substring_of_term"
+    ]
+  },
+  {
+    "alias": "cap theorem",
+    "term": "CAP theorem",
+    "pack": "pack_10_architecture_sysdesign",
+    "flags": [
+      "all_english",
+      "identity",
+      "substring_of_term"
+    ]
+  },
+  {
+    "alias": "pace el c",
+    "term": "PACELC",
+    "pack": "pack_10_architecture_sysdesign",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "distributed system",
+    "term": "distributed system",
+    "pack": "pack_10_architecture_sysdesign",
+    "flags": [
+      "all_english",
+      "identity",
+      "substring_of_term"
+    ]
+  },
+  {
+    "alias": "distributed systems",
+    "term": "distributed systems",
+    "pack": "pack_10_architecture_sysdesign",
+    "flags": [
+      "identity",
+      "substring_of_term"
+    ]
+  },
+  {
+    "alias": "con sensus",
+    "term": "consensus",
+    "pack": "pack_10_architecture_sysdesign",
+    "flags": []
+  },
+  {
+    "alias": "raft consensus",
+    "term": "Raft",
+    "pack": "pack_10_architecture_sysdesign",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "pax os",
+    "term": "Paxos",
+    "pack": "pack_10_architecture_sysdesign",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "core um",
+    "term": "quorum",
+    "pack": "pack_10_architecture_sysdesign",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "leader e lection",
+    "term": "leader election",
+    "pack": "pack_10_architecture_sysdesign",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "split brain",
+    "term": "split-brain",
+    "pack": "pack_10_architecture_sysdesign",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "fail over",
+    "term": "failover",
+    "pack": "pack_10_architecture_sysdesign",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "fail back",
+    "term": "failback",
+    "pack": "pack_10_architecture_sysdesign",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "high avail ability",
+    "term": "high availability",
+    "pack": "pack_10_architecture_sysdesign",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "h a",
+    "term": "HA",
+    "pack": "pack_10_architecture_sysdesign",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "aitch ay",
+    "term": "HA",
+    "pack": "pack_10_architecture_sysdesign",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "high availability",
+    "term": "HA",
+    "pack": "pack_10_architecture_sysdesign",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "disaster recovery",
+    "term": "disaster recovery",
+    "pack": "pack_10_architecture_sysdesign",
+    "flags": [
+      "all_english",
+      "conflict",
+      "identity",
+      "substring_of_term"
+    ]
+  },
+  {
+    "alias": "d r",
+    "term": "DR",
+    "pack": "pack_10_architecture_sysdesign",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "dee are",
+    "term": "DR",
+    "pack": "pack_10_architecture_sysdesign",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "disaster recovery",
+    "term": "DR",
+    "pack": "pack_10_architecture_sysdesign",
+    "flags": [
+      "all_english",
+      "conflict"
+    ]
+  },
+  {
+    "alias": "active active",
+    "term": "active-active",
+    "pack": "pack_10_architecture_sysdesign",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "active passive",
+    "term": "active-passive",
+    "pack": "pack_10_architecture_sysdesign",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "multi region",
+    "term": "multi-region",
+    "pack": "pack_10_architecture_sysdesign",
+    "flags": []
+  },
+  {
+    "alias": "multi a z",
+    "term": "multi-AZ",
+    "pack": "pack_10_architecture_sysdesign",
+    "flags": []
+  },
+  {
+    "alias": "multi availability zone",
+    "term": "multi-AZ",
+    "pack": "pack_10_architecture_sysdesign",
+    "flags": []
+  },
+  {
+    "alias": "avail ability zone",
+    "term": "availability zone",
+    "pack": "pack_10_architecture_sysdesign",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "a z",
+    "term": "AZ",
+    "pack": "pack_10_architecture_sysdesign",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "ay zee",
+    "term": "AZ",
+    "pack": "pack_10_architecture_sysdesign",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "region cloud",
+    "term": "region",
+    "pack": "pack_10_architecture_sysdesign",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "edge location",
+    "term": "edge",
+    "pack": "pack_10_architecture_sysdesign",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "lay ten see",
+    "term": "latency",
+    "pack": "pack_10_architecture_sysdesign",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "through put",
+    "term": "throughput",
+    "pack": "pack_10_architecture_sysdesign",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "bottle neck",
+    "term": "bottleneck",
+    "pack": "pack_10_architecture_sysdesign",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "horizontal scaling",
+    "term": "horizontal scaling",
+    "pack": "pack_10_architecture_sysdesign",
+    "flags": [
+      "all_english",
+      "identity",
+      "substring_of_term"
+    ]
+  },
+  {
+    "alias": "vertical scaling",
+    "term": "vertical scaling",
+    "pack": "pack_10_architecture_sysdesign",
+    "flags": [
+      "all_english",
+      "identity",
+      "substring_of_term"
+    ]
+  },
+  {
+    "alias": "scale out",
+    "term": "scale out",
+    "pack": "pack_10_architecture_sysdesign",
+    "flags": [
+      "all_english",
+      "identity",
+      "substring_of_term"
+    ]
+  },
+  {
+    "alias": "scale up",
+    "term": "scale up",
+    "pack": "pack_10_architecture_sysdesign",
+    "flags": [
+      "all_english",
+      "identity",
+      "substring_of_term"
+    ]
+  },
+  {
+    "alias": "auto scaling",
+    "term": "autoscaling",
+    "pack": "pack_10_architecture_sysdesign",
+    "flags": [
+      "all_english",
+      "conflict"
+    ]
+  },
+  {
+    "alias": "auto scaling",
+    "term": "auto-scaling",
+    "pack": "pack_10_architecture_sysdesign",
+    "flags": [
+      "all_english",
+      "conflict"
+    ]
+  },
+  {
+    "alias": "load balancer",
+    "term": "load balancer",
+    "pack": "pack_10_architecture_sysdesign",
+    "flags": [
+      "all_english",
+      "identity",
+      "substring_of_term"
+    ]
+  },
+  {
+    "alias": "load balancing",
+    "term": "load balancing",
+    "pack": "pack_10_architecture_sysdesign",
+    "flags": [
+      "all_english",
+      "identity",
+      "substring_of_term"
+    ]
+  },
+  {
+    "alias": "round robin",
+    "term": "round-robin",
+    "pack": "pack_10_architecture_sysdesign",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "sticky session",
+    "term": "sticky session",
+    "pack": "pack_10_architecture_sysdesign",
+    "flags": [
+      "all_english",
+      "identity",
+      "substring_of_term"
+    ]
+  },
+  {
+    "alias": "session affinity",
+    "term": "session affinity",
+    "pack": "pack_10_architecture_sysdesign",
+    "flags": [
+      "all_english",
+      "identity",
+      "substring_of_term"
+    ]
+  },
+  {
+    "alias": "rate limiting",
+    "term": "rate limiting",
+    "pack": "pack_10_architecture_sysdesign",
+    "flags": [
+      "all_english",
+      "identity",
+      "substring_of_term"
+    ]
+  },
+  {
+    "alias": "rate limiter",
+    "term": "rate limiter",
+    "pack": "pack_10_architecture_sysdesign",
+    "flags": [
+      "all_english",
+      "identity",
+      "substring_of_term"
+    ]
+  },
+  {
+    "alias": "throttle ing",
+    "term": "throttling",
+    "pack": "pack_10_architecture_sysdesign",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "back pressure",
+    "term": "backpressure",
+    "pack": "pack_10_architecture_sysdesign",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "circuit breaker",
+    "term": "circuit breaker",
+    "pack": "pack_10_architecture_sysdesign",
+    "flags": [
+      "all_english",
+      "identity",
+      "substring_of_term"
+    ]
+  },
+  {
+    "alias": "bulk head",
+    "term": "bulkhead",
+    "pack": "pack_10_architecture_sysdesign",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "re try logic",
+    "term": "retry logic",
+    "pack": "pack_10_architecture_sysdesign",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "exponential back off",
+    "term": "exponential backoff",
+    "pack": "pack_10_architecture_sysdesign",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "jitter retry",
+    "term": "jitter",
+    "pack": "pack_10_architecture_sysdesign",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "time out",
+    "term": "timeout",
+    "pack": "pack_10_architecture_sysdesign",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "connection pool",
+    "term": "connection pool",
+    "pack": "pack_10_architecture_sysdesign",
+    "flags": [
+      "all_english",
+      "identity",
+      "substring_of_term"
+    ]
+  },
+  {
+    "alias": "connection pooling",
+    "term": "connection pooling",
+    "pack": "pack_10_architecture_sysdesign",
+    "flags": [
+      "identity",
+      "substring_of_term"
+    ]
+  },
+  {
+    "alias": "thread pool",
+    "term": "thread pool",
+    "pack": "pack_10_architecture_sysdesign",
+    "flags": [
+      "all_english",
+      "identity",
+      "substring_of_term"
+    ]
+  },
+  {
+    "alias": "worker pool",
+    "term": "worker pool",
+    "pack": "pack_10_architecture_sysdesign",
+    "flags": [
+      "all_english",
+      "identity",
+      "substring_of_term"
+    ]
+  },
+  {
+    "alias": "queue data",
+    "term": "queue",
+    "pack": "pack_10_architecture_sysdesign",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "dee queue",
+    "term": "dequeue",
+    "pack": "pack_10_architecture_sysdesign",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "en queue",
+    "term": "enqueue",
+    "pack": "pack_10_architecture_sysdesign",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "fy foh queue",
+    "term": "FIFO queue",
+    "pack": "pack_10_architecture_sysdesign",
+    "flags": []
+  },
+  {
+    "alias": "first in first out queue",
+    "term": "FIFO queue",
+    "pack": "pack_10_architecture_sysdesign",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "priority queue",
+    "term": "priority queue",
+    "pack": "pack_10_architecture_sysdesign",
+    "flags": [
+      "all_english",
+      "identity",
+      "substring_of_term"
+    ]
+  },
+  {
+    "alias": "cash",
+    "term": "cache",
+    "pack": "pack_10_architecture_sysdesign",
+    "flags": [
+      "all_english",
+      "single_word_english"
+    ]
+  },
+  {
+    "alias": "cashing",
+    "term": "caching",
+    "pack": "pack_10_architecture_sysdesign",
+    "flags": []
+  },
+  {
+    "alias": "cash in validation",
+    "term": "cache invalidation",
+    "pack": "pack_10_architecture_sysdesign",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "cash miss",
+    "term": "cache miss",
+    "pack": "pack_10_architecture_sysdesign",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "cash hit",
+    "term": "cache hit",
+    "pack": "pack_10_architecture_sysdesign",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "cash eviction",
+    "term": "cache eviction",
+    "pack": "pack_10_architecture_sysdesign",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "l r u cash",
+    "term": "LRU cache",
+    "pack": "pack_10_architecture_sysdesign",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "least recently used cash",
+    "term": "LRU cache",
+    "pack": "pack_10_architecture_sysdesign",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "l r u",
+    "term": "LRU",
+    "pack": "pack_10_architecture_sysdesign",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "el are you",
+    "term": "LRU",
+    "pack": "pack_10_architecture_sysdesign",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "t t l",
+    "term": "TTL",
+    "pack": "pack_10_architecture_sysdesign",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "tee tee el",
+    "term": "TTL",
+    "pack": "pack_10_architecture_sysdesign",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "time to live",
+    "term": "TTL",
+    "pack": "pack_10_architecture_sysdesign",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "c d n",
+    "term": "CDN",
+    "pack": "pack_10_architecture_sysdesign",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "see dee en",
+    "term": "CDN",
+    "pack": "pack_10_architecture_sysdesign",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "edge cashing",
+    "term": "edge caching",
+    "pack": "pack_10_architecture_sysdesign",
+    "flags": []
+  },
+  {
+    "alias": "write through",
+    "term": "write-through",
+    "pack": "pack_10_architecture_sysdesign",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "write behind",
+    "term": "write-behind",
+    "pack": "pack_10_architecture_sysdesign",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "write back",
+    "term": "write-back",
+    "pack": "pack_10_architecture_sysdesign",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "read replica",
+    "term": "read replica",
+    "pack": "pack_10_architecture_sysdesign",
+    "flags": [
+      "all_english",
+      "identity",
+      "substring_of_term"
+    ]
+  },
+  {
+    "alias": "primary replica",
+    "term": "primary-replica",
+    "pack": "pack_10_architecture_sysdesign",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "master slave",
+    "term": "master-slave",
+    "pack": "pack_10_architecture_sysdesign",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "sharting",
+    "term": "sharding",
+    "pack": "pack_10_architecture_sysdesign",
+    "flags": []
+  },
+  {
+    "alias": "char ding",
+    "term": "sharding",
+    "pack": "pack_10_architecture_sysdesign",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "shard",
+    "term": "shard",
+    "pack": "pack_10_architecture_sysdesign",
+    "flags": [
+      "all_english",
+      "single_word_english",
+      "identity",
+      "substring_of_term"
+    ]
+  },
+  {
+    "alias": "shard key",
+    "term": "shard key",
+    "pack": "pack_10_architecture_sysdesign",
+    "flags": [
+      "all_english",
+      "identity",
+      "substring_of_term"
+    ]
+  },
+  {
+    "alias": "par tition",
+    "term": "partition",
+    "pack": "pack_10_architecture_sysdesign",
+    "flags": []
+  },
+  {
+    "alias": "par titioning",
+    "term": "partitioning",
+    "pack": "pack_10_architecture_sysdesign",
+    "flags": []
+  },
+  {
+    "alias": "hash par titioning",
+    "term": "hash partitioning",
+    "pack": "pack_10_architecture_sysdesign",
+    "flags": []
+  },
+  {
+    "alias": "range par titioning",
+    "term": "range partitioning",
+    "pack": "pack_10_architecture_sysdesign",
+    "flags": []
+  },
+  {
+    "alias": "consistent hashing",
+    "term": "consistent hashing",
+    "pack": "pack_10_architecture_sysdesign",
+    "flags": [
+      "identity",
+      "substring_of_term"
+    ]
+  },
+  {
+    "alias": "rep lih cation",
+    "term": "replication",
+    "pack": "pack_10_architecture_sysdesign",
+    "flags": []
+  },
+  {
+    "alias": "rep lih cation lag",
+    "term": "replication lag",
+    "pack": "pack_10_architecture_sysdesign",
+    "flags": []
+  },
+  {
+    "alias": "data low cal ity",
+    "term": "data locality",
+    "pack": "pack_10_architecture_sysdesign",
+    "flags": []
+  },
+  {
+    "alias": "co location",
+    "term": "colocation",
+    "pack": "pack_10_architecture_sysdesign",
+    "flags": []
+  },
+  {
+    "alias": "dee normalization",
+    "term": "denormalization",
+    "pack": "pack_10_architecture_sysdesign",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "normal ization",
+    "term": "normalization",
+    "pack": "pack_10_architecture_sysdesign",
+    "flags": []
+  },
+  {
+    "alias": "in dex",
+    "term": "index",
+    "pack": "pack_10_architecture_sysdesign",
+    "flags": []
+  },
+  {
+    "alias": "composite in dex",
+    "term": "composite index",
+    "pack": "pack_10_architecture_sysdesign",
+    "flags": []
+  },
+  {
+    "alias": "covering in dex",
+    "term": "covering index",
+    "pack": "pack_10_architecture_sysdesign",
+    "flags": []
+  },
+  {
+    "alias": "b tree",
+    "term": "B-tree",
+    "pack": "pack_10_architecture_sysdesign",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "l s m tree",
+    "term": "LSM tree",
+    "pack": "pack_10_architecture_sysdesign",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "write ahead log",
+    "term": "write-ahead log",
+    "pack": "pack_10_architecture_sysdesign",
+    "flags": [
+      "all_english",
+      "conflict"
+    ]
+  },
+  {
+    "alias": "w a l",
+    "term": "WAL",
+    "pack": "pack_10_architecture_sysdesign",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "wall",
+    "term": "WAL",
+    "pack": "pack_10_architecture_sysdesign",
+    "flags": [
+      "all_english",
+      "single_word_english"
+    ]
+  },
+  {
+    "alias": "write ahead log",
+    "term": "WAL",
+    "pack": "pack_10_architecture_sysdesign",
+    "flags": [
+      "all_english",
+      "conflict"
+    ]
+  },
+  {
+    "alias": "trans action",
+    "term": "transaction",
+    "pack": "pack_10_architecture_sysdesign",
+    "flags": []
+  },
+  {
+    "alias": "trans action isolation",
+    "term": "transaction isolation",
+    "pack": "pack_10_architecture_sysdesign",
+    "flags": []
+  },
+  {
+    "alias": "read committed",
+    "term": "read committed",
+    "pack": "pack_10_architecture_sysdesign",
+    "flags": [
+      "identity",
+      "substring_of_term"
+    ]
+  },
+  {
+    "alias": "cereal izable",
+    "term": "serializable",
+    "pack": "pack_10_architecture_sysdesign",
+    "flags": []
+  },
+  {
+    "alias": "snapshot isolation",
+    "term": "snapshot isolation",
+    "pack": "pack_10_architecture_sysdesign",
+    "flags": [
+      "all_english",
+      "identity",
+      "substring_of_term"
+    ]
+  },
+  {
+    "alias": "optimistic locking",
+    "term": "optimistic locking",
+    "pack": "pack_10_architecture_sysdesign",
+    "flags": [
+      "all_english",
+      "identity",
+      "substring_of_term"
+    ]
+  },
+  {
+    "alias": "pessimistic locking",
+    "term": "pessimistic locking",
+    "pack": "pack_10_architecture_sysdesign",
+    "flags": [
+      "all_english",
+      "identity",
+      "substring_of_term"
+    ]
+  },
+  {
+    "alias": "row level locking",
+    "term": "row-level locking",
+    "pack": "pack_10_architecture_sysdesign",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "table level locking",
+    "term": "table-level locking",
+    "pack": "pack_10_architecture_sysdesign",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "s l a",
+    "term": "SLA",
+    "pack": "pack_10_architecture_sysdesign",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "ess el ay",
+    "term": "SLA",
+    "pack": "pack_10_architecture_sysdesign",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "service level agreement",
+    "term": "SLA",
+    "pack": "pack_10_architecture_sysdesign",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "s l o",
+    "term": "SLO",
+    "pack": "pack_10_architecture_sysdesign",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "ess el oh",
+    "term": "SLO",
+    "pack": "pack_10_architecture_sysdesign",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "service level objective",
+    "term": "SLO",
+    "pack": "pack_10_architecture_sysdesign",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "s l i",
+    "term": "SLI",
+    "pack": "pack_10_architecture_sysdesign",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "ess el eye",
+    "term": "SLI",
+    "pack": "pack_10_architecture_sysdesign",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "service level indicator",
+    "term": "SLI",
+    "pack": "pack_10_architecture_sysdesign",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "nines availability",
+    "term": "nines",
+    "pack": "pack_10_architecture_sysdesign",
+    "flags": []
+  },
+  {
+    "alias": "five nines",
+    "term": "five nines",
+    "pack": "pack_10_architecture_sysdesign",
+    "flags": [
+      "identity",
+      "substring_of_term"
+    ]
+  },
+  {
+    "alias": "99.999",
+    "term": "five nines",
+    "pack": "pack_10_architecture_sysdesign",
+    "flags": []
+  },
+  {
+    "alias": "four nines",
+    "term": "four nines",
+    "pack": "pack_10_architecture_sysdesign",
+    "flags": [
+      "identity",
+      "substring_of_term"
+    ]
+  },
+  {
+    "alias": "99.99",
+    "term": "four nines",
+    "pack": "pack_10_architecture_sysdesign",
+    "flags": []
+  },
+  {
+    "alias": "three nines",
+    "term": "three nines",
+    "pack": "pack_10_architecture_sysdesign",
+    "flags": [
+      "identity",
+      "substring_of_term"
+    ]
+  },
+  {
+    "alias": "99.9",
+    "term": "three nines",
+    "pack": "pack_10_architecture_sysdesign",
+    "flags": []
+  },
+  {
+    "alias": "up time",
+    "term": "uptime",
+    "pack": "pack_10_architecture_sysdesign",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "down time",
+    "term": "downtime",
+    "pack": "pack_10_architecture_sysdesign",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "m t t r",
+    "term": "MTTR",
+    "pack": "pack_10_architecture_sysdesign",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "mean time to recovery",
+    "term": "MTTR",
+    "pack": "pack_10_architecture_sysdesign",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "m t t f",
+    "term": "MTTF",
+    "pack": "pack_10_architecture_sysdesign",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "mean time to failure",
+    "term": "MTTF",
+    "pack": "pack_10_architecture_sysdesign",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "m t b f",
+    "term": "MTBF",
+    "pack": "pack_10_architecture_sysdesign",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "mean time between failures",
+    "term": "MTBF",
+    "pack": "pack_10_architecture_sysdesign",
+    "flags": []
+  },
+  {
+    "alias": "error budget",
+    "term": "error budget",
+    "pack": "pack_10_architecture_sysdesign",
+    "flags": [
+      "all_english",
+      "identity",
+      "substring_of_term"
+    ]
+  },
+  {
+    "alias": "observe ability",
+    "term": "observability",
+    "pack": "pack_10_architecture_sysdesign",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "oh eleven y",
+    "term": "o11y",
+    "pack": "pack_10_architecture_sysdesign",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "o 11 y",
+    "term": "o11y",
+    "pack": "pack_10_architecture_sysdesign",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "observability",
+    "term": "o11y",
+    "pack": "pack_10_architecture_sysdesign",
+    "flags": [
+      "all_english",
+      "single_word_english"
+    ]
+  },
+  {
+    "alias": "tell emetry",
+    "term": "telemetry",
+    "pack": "pack_10_architecture_sysdesign",
+    "flags": []
+  },
+  {
+    "alias": "tracing",
+    "term": "tracing",
+    "pack": "pack_10_architecture_sysdesign",
+    "flags": [
+      "all_english",
+      "single_word_english",
+      "identity",
+      "substring_of_term"
+    ]
+  },
+  {
+    "alias": "distributed tracing",
+    "term": "distributed tracing",
+    "pack": "pack_10_architecture_sysdesign",
+    "flags": [
+      "all_english",
+      "identity",
+      "substring_of_term"
+    ]
+  },
+  {
+    "alias": "met ricks",
+    "term": "metrics",
+    "pack": "pack_10_architecture_sysdesign",
+    "flags": []
+  },
+  {
+    "alias": "log ging",
+    "term": "logging",
+    "pack": "pack_10_architecture_sysdesign",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "structured log ging",
+    "term": "structured logging",
+    "pack": "pack_10_architecture_sysdesign",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "a lerting",
+    "term": "alerting",
+    "pack": "pack_10_architecture_sysdesign",
+    "flags": []
+  },
+  {
+    "alias": "on call",
+    "term": "on-call",
+    "pack": "pack_10_architecture_sysdesign",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "run book",
+    "term": "runbook",
+    "pack": "pack_10_architecture_sysdesign",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "play book",
+    "term": "playbook",
+    "pack": "pack_10_architecture_sysdesign",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "incident response",
+    "term": "incident response",
+    "pack": "pack_10_architecture_sysdesign",
+    "flags": [
+      "all_english",
+      "identity",
+      "substring_of_term"
+    ]
+  },
+  {
+    "alias": "post mortem",
+    "term": "postmortem",
+    "pack": "pack_10_architecture_sysdesign",
+    "flags": []
+  },
+  {
+    "alias": "blame less post mortem",
+    "term": "blameless postmortem",
+    "pack": "pack_10_architecture_sysdesign",
+    "flags": []
+  },
+  {
+    "alias": "five whys",
+    "term": "five whys",
+    "pack": "pack_10_architecture_sysdesign",
+    "flags": [
+      "identity",
+      "substring_of_term"
+    ]
+  },
+  {
+    "alias": "5 whys",
+    "term": "five whys",
+    "pack": "pack_10_architecture_sysdesign",
+    "flags": []
+  },
+  {
+    "alias": "root cause analysis",
+    "term": "root cause analysis",
+    "pack": "pack_10_architecture_sysdesign",
+    "flags": [
+      "all_english",
+      "conflict",
+      "identity",
+      "substring_of_term"
+    ]
+  },
+  {
+    "alias": "r c a",
+    "term": "RCA",
+    "pack": "pack_10_architecture_sysdesign",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "are see ay",
+    "term": "RCA",
+    "pack": "pack_10_architecture_sysdesign",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "blast radius",
+    "term": "blast radius",
+    "pack": "pack_10_architecture_sysdesign",
+    "flags": [
+      "all_english",
+      "identity",
+      "substring_of_term"
+    ]
+  },
+  {
+    "alias": "guard rail",
+    "term": "guardrail",
+    "pack": "pack_10_architecture_sysdesign",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "guard rails",
+    "term": "guardrails",
+    "pack": "pack_10_architecture_sysdesign",
+    "flags": []
+  },
+  {
+    "alias": "traffic shaping",
+    "term": "traffic shaping",
+    "pack": "pack_10_architecture_sysdesign",
+    "flags": [
+      "all_english",
+      "identity",
+      "substring_of_term"
+    ]
+  },
+  {
+    "alias": "traffic splitting",
+    "term": "traffic splitting",
+    "pack": "pack_10_architecture_sysdesign",
+    "flags": [
+      "all_english",
+      "identity",
+      "substring_of_term"
+    ]
+  },
+  {
+    "alias": "can airy release",
+    "term": "canary release",
+    "pack": "pack_10_architecture_sysdesign",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "blue green",
+    "term": "blue-green",
+    "pack": "pack_10_architecture_sysdesign",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "rolling update",
+    "term": "rolling update",
+    "pack": "pack_10_architecture_sysdesign",
+    "flags": [
+      "all_english",
+      "identity",
+      "substring_of_term"
+    ]
+  },
+  {
+    "alias": "zero down time deployment",
+    "term": "zero downtime deployment",
+    "pack": "pack_10_architecture_sysdesign",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "im mutable infrastructure",
+    "term": "immutable infrastructure",
+    "pack": "pack_10_architecture_sysdesign",
+    "flags": []
+  },
+  {
+    "alias": "infrastructure as code",
+    "term": "infrastructure as code",
+    "pack": "pack_10_architecture_sysdesign",
+    "flags": [
+      "all_english",
+      "conflict",
+      "identity",
+      "substring_of_term"
+    ]
+  },
+  {
+    "alias": "i a c",
+    "term": "IaC",
+    "pack": "pack_10_architecture_sysdesign",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "eye ay see",
+    "term": "IaC",
+    "pack": "pack_10_architecture_sysdesign",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "cattle not pets",
+    "term": "cattle not pets",
+    "pack": "pack_10_architecture_sysdesign",
+    "flags": [
+      "identity",
+      "substring_of_term"
+    ]
+  },
+  {
+    "alias": "toil",
+    "term": "toil",
+    "pack": "pack_10_architecture_sysdesign",
+    "flags": [
+      "all_english",
+      "single_word_english",
+      "identity",
+      "substring_of_term"
+    ]
+  },
+  {
+    "alias": "toil reduction",
+    "term": "toil reduction",
+    "pack": "pack_10_architecture_sysdesign",
+    "flags": [
+      "all_english",
+      "identity",
+      "substring_of_term"
+    ]
+  },
+  {
+    "alias": "self healing",
+    "term": "self-healing",
+    "pack": "pack_10_architecture_sysdesign",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "auto remediation",
+    "term": "auto-remediation",
+    "pack": "pack_10_architecture_sysdesign",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "chaos engineering",
+    "term": "chaos engineering",
+    "pack": "pack_10_architecture_sysdesign",
+    "flags": [
+      "all_english",
+      "identity",
+      "substring_of_term"
+    ]
+  },
+  {
+    "alias": "game day",
+    "term": "game day",
+    "pack": "pack_10_architecture_sysdesign",
+    "flags": [
+      "all_english",
+      "identity",
+      "substring_of_term"
+    ]
+  },
+  {
+    "alias": "fire drill",
+    "term": "fire drill",
+    "pack": "pack_10_architecture_sysdesign",
+    "flags": [
+      "all_english",
+      "identity",
+      "substring_of_term"
+    ]
+  },
+  {
+    "alias": "table top exercise",
+    "term": "tabletop exercise",
+    "pack": "pack_10_architecture_sysdesign",
+    "flags": [
+      "all_english"
+    ]
+  }
+]

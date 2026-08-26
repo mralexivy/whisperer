@@ -1,0 +1,1825 @@
+[
+  {
+    "alias": "p r",
+    "term": "PR",
+    "pack": "pack_09_code_review_git",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "pee are",
+    "term": "PR",
+    "pack": "pack_09_code_review_git",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "pull request",
+    "term": "PR",
+    "pack": "pack_09_code_review_git",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "pool request",
+    "term": "pull request",
+    "pack": "pack_09_code_review_git",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "pull re quest",
+    "term": "pull request",
+    "pack": "pack_09_code_review_git",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "m r",
+    "term": "MR",
+    "pack": "pack_09_code_review_git",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "em are",
+    "term": "MR",
+    "pack": "pack_09_code_review_git",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "merge request",
+    "term": "MR",
+    "pack": "pack_09_code_review_git",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "merge re quest",
+    "term": "merge request",
+    "pack": "pack_09_code_review_git",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "code re view",
+    "term": "code review",
+    "pack": "pack_09_code_review_git",
+    "flags": [
+      "all_english",
+      "conflict"
+    ]
+  },
+  {
+    "alias": "c r",
+    "term": "CR",
+    "pack": "pack_09_code_review_git",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "see are",
+    "term": "CR",
+    "pack": "pack_09_code_review_git",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "code review",
+    "term": "CR",
+    "pack": "pack_09_code_review_git",
+    "flags": [
+      "all_english",
+      "conflict"
+    ]
+  },
+  {
+    "alias": "l g t m",
+    "term": "LGTM",
+    "pack": "pack_09_code_review_git",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "el gee tee em",
+    "term": "LGTM",
+    "pack": "pack_09_code_review_git",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "looks good to me",
+    "term": "LGTM",
+    "pack": "pack_09_code_review_git",
+    "flags": []
+  },
+  {
+    "alias": "p t a l",
+    "term": "PTAL",
+    "pack": "pack_09_code_review_git",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "please take a look",
+    "term": "PTAL",
+    "pack": "pack_09_code_review_git",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "s g t m",
+    "term": "SGTM",
+    "pack": "pack_09_code_review_git",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "sounds good to me",
+    "term": "SGTM",
+    "pack": "pack_09_code_review_git",
+    "flags": []
+  },
+  {
+    "alias": "w i p",
+    "term": "WIP",
+    "pack": "pack_09_code_review_git",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "work in progress",
+    "term": "WIP",
+    "pack": "pack_09_code_review_git",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "whip",
+    "term": "WIP",
+    "pack": "pack_09_code_review_git",
+    "flags": [
+      "all_english",
+      "single_word_english"
+    ]
+  },
+  {
+    "alias": "draft p r",
+    "term": "draft PR",
+    "pack": "pack_09_code_review_git",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "draft pee are",
+    "term": "draft PR",
+    "pack": "pack_09_code_review_git",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "r f c",
+    "term": "RFC",
+    "pack": "pack_09_code_review_git",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "are ef see",
+    "term": "RFC",
+    "pack": "pack_09_code_review_git",
+    "flags": []
+  },
+  {
+    "alias": "request for comments",
+    "term": "RFC",
+    "pack": "pack_09_code_review_git",
+    "flags": []
+  },
+  {
+    "alias": "knit",
+    "term": "nit",
+    "pack": "pack_09_code_review_git",
+    "flags": [
+      "all_english",
+      "single_word_english"
+    ]
+  },
+  {
+    "alias": "knit pick",
+    "term": "nitpick",
+    "pack": "pack_09_code_review_git",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "knits",
+    "term": "nits",
+    "pack": "pack_09_code_review_git",
+    "flags": []
+  },
+  {
+    "alias": "blocking com ment",
+    "term": "blocking comment",
+    "pack": "pack_09_code_review_git",
+    "flags": []
+  },
+  {
+    "alias": "non blocking",
+    "term": "non-blocking",
+    "pack": "pack_09_code_review_git",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "a prove",
+    "term": "approve",
+    "pack": "pack_09_code_review_git",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "re quest changes",
+    "term": "request changes",
+    "pack": "pack_09_code_review_git",
+    "flags": []
+  },
+  {
+    "alias": "diff file",
+    "term": "diff",
+    "pack": "pack_09_code_review_git",
+    "flags": []
+  },
+  {
+    "alias": "inter diff",
+    "term": "interdiff",
+    "pack": "pack_09_code_review_git",
+    "flags": []
+  },
+  {
+    "alias": "change set",
+    "term": "changeset",
+    "pack": "pack_09_code_review_git",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "com mit",
+    "term": "commit",
+    "pack": "pack_09_code_review_git",
+    "flags": []
+  },
+  {
+    "alias": "com mit message",
+    "term": "commit message",
+    "pack": "pack_09_code_review_git",
+    "flags": []
+  },
+  {
+    "alias": "conventional com mits",
+    "term": "conventional commits",
+    "pack": "pack_09_code_review_git",
+    "flags": []
+  },
+  {
+    "alias": "squash commit",
+    "term": "squash",
+    "pack": "pack_09_code_review_git",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "squash and merge",
+    "term": "squash and merge",
+    "pack": "pack_09_code_review_git",
+    "flags": [
+      "all_english",
+      "identity",
+      "substring_of_term"
+    ]
+  },
+  {
+    "alias": "re base",
+    "term": "rebase",
+    "pack": "pack_09_code_review_git",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "ree base",
+    "term": "rebase",
+    "pack": "pack_09_code_review_git",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "re base and merge",
+    "term": "rebase and merge",
+    "pack": "pack_09_code_review_git",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "merge con flict",
+    "term": "merge conflict",
+    "pack": "pack_09_code_review_git",
+    "flags": []
+  },
+  {
+    "alias": "con flict resolution",
+    "term": "conflict resolution",
+    "pack": "pack_09_code_review_git",
+    "flags": []
+  },
+  {
+    "alias": "cherry pick",
+    "term": "cherry-pick",
+    "pack": "pack_09_code_review_git",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "git stash",
+    "term": "git stash",
+    "pack": "pack_09_code_review_git",
+    "flags": [
+      "all_english",
+      "identity",
+      "substring_of_term"
+    ]
+  },
+  {
+    "alias": "git by sect",
+    "term": "git bisect",
+    "pack": "pack_09_code_review_git",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "git blame",
+    "term": "git blame",
+    "pack": "pack_09_code_review_git",
+    "flags": [
+      "all_english",
+      "identity",
+      "substring_of_term"
+    ]
+  },
+  {
+    "alias": "git log",
+    "term": "git log",
+    "pack": "pack_09_code_review_git",
+    "flags": [
+      "all_english",
+      "identity",
+      "substring_of_term"
+    ]
+  },
+  {
+    "alias": "git re set",
+    "term": "git reset",
+    "pack": "pack_09_code_review_git",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "git re vert",
+    "term": "git revert",
+    "pack": "pack_09_code_review_git",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "force push",
+    "term": "force push",
+    "pack": "pack_09_code_review_git",
+    "flags": [
+      "all_english",
+      "identity",
+      "substring_of_term"
+    ]
+  },
+  {
+    "alias": "fast forward",
+    "term": "fast-forward",
+    "pack": "pack_09_code_review_git",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "detached head",
+    "term": "detached HEAD",
+    "pack": "pack_09_code_review_git",
+    "flags": [
+      "all_english",
+      "identity",
+      "substring_of_term"
+    ]
+  },
+  {
+    "alias": "head git",
+    "term": "HEAD",
+    "pack": "pack_09_code_review_git",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "up stream",
+    "term": "upstream",
+    "pack": "pack_09_code_review_git",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "down stream",
+    "term": "downstream",
+    "pack": "pack_09_code_review_git",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "origin remote",
+    "term": "origin",
+    "pack": "pack_09_code_review_git",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "remote git",
+    "term": "remote",
+    "pack": "pack_09_code_review_git",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "fork repo",
+    "term": "fork",
+    "pack": "pack_09_code_review_git",
+    "flags": []
+  },
+  {
+    "alias": "clone repo",
+    "term": "clone",
+    "pack": "pack_09_code_review_git",
+    "flags": []
+  },
+  {
+    "alias": "feature branch",
+    "term": "feature branch",
+    "pack": "pack_09_code_review_git",
+    "flags": [
+      "all_english",
+      "identity",
+      "substring_of_term"
+    ]
+  },
+  {
+    "alias": "release branch",
+    "term": "release branch",
+    "pack": "pack_09_code_review_git",
+    "flags": [
+      "all_english",
+      "identity",
+      "substring_of_term"
+    ]
+  },
+  {
+    "alias": "main branch",
+    "term": "main branch",
+    "pack": "pack_09_code_review_git",
+    "flags": [
+      "all_english",
+      "identity",
+      "substring_of_term"
+    ]
+  },
+  {
+    "alias": "develop branch",
+    "term": "develop branch",
+    "pack": "pack_09_code_review_git",
+    "flags": [
+      "all_english",
+      "identity",
+      "substring_of_term"
+    ]
+  },
+  {
+    "alias": "trunk based development",
+    "term": "trunk-based development",
+    "pack": "pack_09_code_review_git",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "git flow",
+    "term": "GitFlow",
+    "pack": "pack_09_code_review_git",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "git hub flow",
+    "term": "GitHub Flow",
+    "pack": "pack_09_code_review_git",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "branch pro tection",
+    "term": "branch protection",
+    "pack": "pack_09_code_review_git",
+    "flags": []
+  },
+  {
+    "alias": "code owners",
+    "term": "CODEOWNERS",
+    "pack": "pack_09_code_review_git",
+    "flags": []
+  },
+  {
+    "alias": "pre commit hook",
+    "term": "pre-commit hook",
+    "pack": "pack_09_code_review_git",
+    "flags": []
+  },
+  {
+    "alias": "post commit hook",
+    "term": "post-commit hook",
+    "pack": "pack_09_code_review_git",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "lent",
+    "term": "lint",
+    "pack": "pack_09_code_review_git",
+    "flags": [
+      "all_english",
+      "single_word_english"
+    ]
+  },
+  {
+    "alias": "lenting",
+    "term": "linting",
+    "pack": "pack_09_code_review_git",
+    "flags": []
+  },
+  {
+    "alias": "linter tool",
+    "term": "linter",
+    "pack": "pack_09_code_review_git",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "auto format",
+    "term": "auto-format",
+    "pack": "pack_09_code_review_git",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "pretty er",
+    "term": "prettier",
+    "pack": "pack_09_code_review_git",
+    "flags": [
+      "all_english",
+      "conflict"
+    ]
+  },
+  {
+    "alias": "e s lint",
+    "term": "ESLint",
+    "pack": "pack_09_code_review_git",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "es lint",
+    "term": "ESLint",
+    "pack": "pack_09_code_review_git",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "type check",
+    "term": "type check",
+    "pack": "pack_09_code_review_git",
+    "flags": [
+      "all_english",
+      "identity",
+      "substring_of_term"
+    ]
+  },
+  {
+    "alias": "type safe",
+    "term": "type-safe",
+    "pack": "pack_09_code_review_git",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "type safety",
+    "term": "type safety",
+    "pack": "pack_09_code_review_git",
+    "flags": [
+      "all_english",
+      "identity",
+      "substring_of_term"
+    ]
+  },
+  {
+    "alias": "strongly typed",
+    "term": "strongly typed",
+    "pack": "pack_09_code_review_git",
+    "flags": [
+      "identity",
+      "substring_of_term"
+    ]
+  },
+  {
+    "alias": "loosely typed",
+    "term": "loosely typed",
+    "pack": "pack_09_code_review_git",
+    "flags": [
+      "identity",
+      "substring_of_term"
+    ]
+  },
+  {
+    "alias": "re factor",
+    "term": "refactor",
+    "pack": "pack_09_code_review_git",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "re factoring",
+    "term": "refactoring",
+    "pack": "pack_09_code_review_git",
+    "flags": []
+  },
+  {
+    "alias": "teck debt",
+    "term": "tech debt",
+    "pack": "pack_09_code_review_git",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "technical debt",
+    "term": "tech debt",
+    "pack": "pack_09_code_review_git",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "code smell",
+    "term": "code smell",
+    "pack": "pack_09_code_review_git",
+    "flags": [
+      "all_english",
+      "identity",
+      "substring_of_term"
+    ]
+  },
+  {
+    "alias": "anti pattern",
+    "term": "anti-pattern",
+    "pack": "pack_09_code_review_git",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "dee sign pattern",
+    "term": "design pattern",
+    "pack": "pack_09_code_review_git",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "single ton",
+    "term": "singleton",
+    "pack": "pack_09_code_review_git",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "factory pattern",
+    "term": "factory",
+    "pack": "pack_09_code_review_git",
+    "flags": [
+      "all_english",
+      "conflict"
+    ]
+  },
+  {
+    "alias": "a dapter",
+    "term": "adapter",
+    "pack": "pack_09_code_review_git",
+    "flags": []
+  },
+  {
+    "alias": "ob server",
+    "term": "observer",
+    "pack": "pack_09_code_review_git",
+    "flags": []
+  },
+  {
+    "alias": "strategy pattern",
+    "term": "strategy pattern",
+    "pack": "pack_09_code_review_git",
+    "flags": [
+      "all_english",
+      "identity",
+      "substring_of_term"
+    ]
+  },
+  {
+    "alias": "dependency in jection",
+    "term": "dependency injection",
+    "pack": "pack_09_code_review_git",
+    "flags": []
+  },
+  {
+    "alias": "d i",
+    "term": "DI",
+    "pack": "pack_09_code_review_git",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "dee eye",
+    "term": "DI",
+    "pack": "pack_09_code_review_git",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "in version of control",
+    "term": "inversion of control",
+    "pack": "pack_09_code_review_git",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "i o c",
+    "term": "IoC",
+    "pack": "pack_09_code_review_git",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "eye oh see",
+    "term": "IoC",
+    "pack": "pack_09_code_review_git",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "ab straction",
+    "term": "abstraction",
+    "pack": "pack_09_code_review_git",
+    "flags": []
+  },
+  {
+    "alias": "en capsule ation",
+    "term": "encapsulation",
+    "pack": "pack_09_code_review_git",
+    "flags": []
+  },
+  {
+    "alias": "poly more fizz um",
+    "term": "polymorphism",
+    "pack": "pack_09_code_review_git",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "in heritance",
+    "term": "inheritance",
+    "pack": "pack_09_code_review_git",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "composition over in heritance",
+    "term": "composition over inheritance",
+    "pack": "pack_09_code_review_git",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "inter face",
+    "term": "interface",
+    "pack": "pack_09_code_review_git",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "ab stract class",
+    "term": "abstract class",
+    "pack": "pack_09_code_review_git",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "boiler plate",
+    "term": "boilerplate",
+    "pack": "pack_09_code_review_git",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "scaf fold",
+    "term": "scaffold",
+    "pack": "pack_09_code_review_git",
+    "flags": []
+  },
+  {
+    "alias": "scaf folding",
+    "term": "scaffolding",
+    "pack": "pack_09_code_review_git",
+    "flags": []
+  },
+  {
+    "alias": "temp late",
+    "term": "template",
+    "pack": "pack_09_code_review_git",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "snip it",
+    "term": "snippet",
+    "pack": "pack_09_code_review_git",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "gist github",
+    "term": "gist",
+    "pack": "pack_09_code_review_git",
+    "flags": []
+  },
+  {
+    "alias": "code base",
+    "term": "codebase",
+    "pack": "pack_09_code_review_git",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "repo git",
+    "term": "repo",
+    "pack": "pack_09_code_review_git",
+    "flags": []
+  },
+  {
+    "alias": "re po",
+    "term": "repo",
+    "pack": "pack_09_code_review_git",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "re pos itory",
+    "term": "repository",
+    "pack": "pack_09_code_review_git",
+    "flags": []
+  },
+  {
+    "alias": "mono repo",
+    "term": "monorepo",
+    "pack": "pack_09_code_review_git",
+    "flags": []
+  },
+  {
+    "alias": "poly repo",
+    "term": "polyrepo",
+    "pack": "pack_09_code_review_git",
+    "flags": []
+  },
+  {
+    "alias": "multi repo",
+    "term": "multi-repo",
+    "pack": "pack_09_code_review_git",
+    "flags": []
+  },
+  {
+    "alias": "see eye pipeline",
+    "term": "CI pipeline",
+    "pack": "pack_09_code_review_git",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "c i pipeline",
+    "term": "CI pipeline",
+    "pack": "pack_09_code_review_git",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "see dee pipeline",
+    "term": "CD pipeline",
+    "pack": "pack_09_code_review_git",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "c d pipeline",
+    "term": "CD pipeline",
+    "pack": "pack_09_code_review_git",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "see eye see dee pipeline",
+    "term": "CI/CD pipeline",
+    "pack": "pack_09_code_review_git",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "build pipe line",
+    "term": "build pipeline",
+    "pack": "pack_09_code_review_git",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "deployment pipe line",
+    "term": "deployment pipeline",
+    "pack": "pack_09_code_review_git",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "art ih fact",
+    "term": "artifact",
+    "pack": "pack_09_code_review_git",
+    "flags": []
+  },
+  {
+    "alias": "build art ih fact",
+    "term": "build artifact",
+    "pack": "pack_09_code_review_git",
+    "flags": []
+  },
+  {
+    "alias": "container image",
+    "term": "container image",
+    "pack": "pack_09_code_review_git",
+    "flags": [
+      "all_english",
+      "identity",
+      "substring_of_term"
+    ]
+  },
+  {
+    "alias": "docker image",
+    "term": "Docker image",
+    "pack": "pack_09_code_review_git",
+    "flags": [
+      "all_english",
+      "identity",
+      "substring_of_term"
+    ]
+  },
+  {
+    "alias": "tag release",
+    "term": "tag",
+    "pack": "pack_09_code_review_git",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "release tag",
+    "term": "release tag",
+    "pack": "pack_09_code_review_git",
+    "flags": [
+      "all_english",
+      "identity",
+      "substring_of_term"
+    ]
+  },
+  {
+    "alias": "semantic ver shun ing",
+    "term": "semantic versioning",
+    "pack": "pack_09_code_review_git",
+    "flags": []
+  },
+  {
+    "alias": "sem ver",
+    "term": "semver",
+    "pack": "pack_09_code_review_git",
+    "flags": [
+      "conflict"
+    ]
+  },
+  {
+    "alias": "sem ver",
+    "term": "semver",
+    "pack": "pack_09_code_review_git",
+    "flags": [
+      "conflict"
+    ]
+  },
+  {
+    "alias": "sem ver",
+    "term": "SemVer",
+    "pack": "pack_09_code_review_git",
+    "flags": [
+      "conflict"
+    ]
+  },
+  {
+    "alias": "breaking change",
+    "term": "breaking change",
+    "pack": "pack_09_code_review_git",
+    "flags": [
+      "all_english",
+      "identity",
+      "substring_of_term"
+    ]
+  },
+  {
+    "alias": "backward compatible",
+    "term": "backward compatible",
+    "pack": "pack_09_code_review_git",
+    "flags": [
+      "all_english",
+      "identity",
+      "substring_of_term"
+    ]
+  },
+  {
+    "alias": "backward compat ibility",
+    "term": "backward compatibility",
+    "pack": "pack_09_code_review_git",
+    "flags": []
+  },
+  {
+    "alias": "dep re cation",
+    "term": "deprecation",
+    "pack": "pack_09_code_review_git",
+    "flags": []
+  },
+  {
+    "alias": "dep re cated",
+    "term": "deprecated",
+    "pack": "pack_09_code_review_git",
+    "flags": []
+  },
+  {
+    "alias": "sun set",
+    "term": "sunset",
+    "pack": "pack_09_code_review_git",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "sun setting",
+    "term": "sunsetting",
+    "pack": "pack_09_code_review_git",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "change log",
+    "term": "changelog",
+    "pack": "pack_09_code_review_git",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "release notes",
+    "term": "release notes",
+    "pack": "pack_09_code_review_git",
+    "flags": [
+      "identity",
+      "substring_of_term"
+    ]
+  },
+  {
+    "alias": "my gration",
+    "term": "migration",
+    "pack": "pack_09_code_review_git",
+    "flags": []
+  },
+  {
+    "alias": "database my gration",
+    "term": "database migration",
+    "pack": "pack_09_code_review_git",
+    "flags": []
+  },
+  {
+    "alias": "skee ma my gration",
+    "term": "schema migration",
+    "pack": "pack_09_code_review_git",
+    "flags": []
+  },
+  {
+    "alias": "data my gration",
+    "term": "data migration",
+    "pack": "pack_09_code_review_git",
+    "flags": []
+  },
+  {
+    "alias": "run book",
+    "term": "runbook",
+    "pack": "pack_09_code_review_git",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "play book",
+    "term": "playbook",
+    "pack": "pack_09_code_review_git",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "s o p",
+    "term": "SOP",
+    "pack": "pack_09_code_review_git",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "ess oh pee",
+    "term": "SOP",
+    "pack": "pack_09_code_review_git",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "standard operating procedure",
+    "term": "SOP",
+    "pack": "pack_09_code_review_git",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "read me",
+    "term": "README",
+    "pack": "pack_09_code_review_git",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "read me dot m d",
+    "term": "README.md",
+    "pack": "pack_09_code_review_git",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "contributing guide",
+    "term": "contributing guide",
+    "pack": "pack_09_code_review_git",
+    "flags": [
+      "identity",
+      "substring_of_term"
+    ]
+  },
+  {
+    "alias": "code of con duct",
+    "term": "code of conduct",
+    "pack": "pack_09_code_review_git",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "pair programming",
+    "term": "pair programming",
+    "pack": "pack_09_code_review_git",
+    "flags": [
+      "identity",
+      "substring_of_term"
+    ]
+  },
+  {
+    "alias": "mob programming",
+    "term": "mob programming",
+    "pack": "pack_09_code_review_git",
+    "flags": [
+      "identity",
+      "substring_of_term"
+    ]
+  },
+  {
+    "alias": "paring",
+    "term": "pairing",
+    "pack": "pack_09_code_review_git",
+    "flags": [
+      "all_english",
+      "single_word_english"
+    ]
+  },
+  {
+    "alias": "rubber ducking",
+    "term": "rubber ducking",
+    "pack": "pack_09_code_review_git",
+    "flags": [
+      "all_english",
+      "identity",
+      "substring_of_term"
+    ]
+  },
+  {
+    "alias": "white board",
+    "term": "whiteboard",
+    "pack": "pack_09_code_review_git",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "white boarding",
+    "term": "whiteboarding",
+    "pack": "pack_09_code_review_git",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "architecture re view",
+    "term": "architecture review",
+    "pack": "pack_09_code_review_git",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "dee sign re view",
+    "term": "design review",
+    "pack": "pack_09_code_review_git",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "teck re view",
+    "term": "tech review",
+    "pack": "pack_09_code_review_git",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "peer re view",
+    "term": "peer review",
+    "pack": "pack_09_code_review_git",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "system dee sign",
+    "term": "system design",
+    "pack": "pack_09_code_review_git",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "a p i dee sign",
+    "term": "API design",
+    "pack": "pack_09_code_review_git",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "skee ma dee sign",
+    "term": "schema design",
+    "pack": "pack_09_code_review_git",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "data model",
+    "term": "data model",
+    "pack": "pack_09_code_review_git",
+    "flags": [
+      "all_english",
+      "identity",
+      "substring_of_term"
+    ]
+  },
+  {
+    "alias": "data modeling",
+    "term": "data modeling",
+    "pack": "pack_09_code_review_git",
+    "flags": [
+      "all_english",
+      "identity",
+      "substring_of_term"
+    ]
+  },
+  {
+    "alias": "e r diagram",
+    "term": "ER diagram",
+    "pack": "pack_09_code_review_git",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "e r d",
+    "term": "ERD",
+    "pack": "pack_09_code_review_git",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "ee are dee",
+    "term": "ERD",
+    "pack": "pack_09_code_review_git",
+    "flags": []
+  },
+  {
+    "alias": "sequence diagram",
+    "term": "sequence diagram",
+    "pack": "pack_09_code_review_git",
+    "flags": [
+      "all_english",
+      "identity",
+      "substring_of_term"
+    ]
+  },
+  {
+    "alias": "class diagram",
+    "term": "class diagram",
+    "pack": "pack_09_code_review_git",
+    "flags": [
+      "all_english",
+      "identity",
+      "substring_of_term"
+    ]
+  },
+  {
+    "alias": "flow chart",
+    "term": "flowchart",
+    "pack": "pack_09_code_review_git",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "swim lane diagram",
+    "term": "swimlane diagram",
+    "pack": "pack_09_code_review_git",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "architecture diagram",
+    "term": "architecture diagram",
+    "pack": "pack_09_code_review_git",
+    "flags": [
+      "all_english",
+      "identity",
+      "substring_of_term"
+    ]
+  },
+  {
+    "alias": "infra diagram",
+    "term": "infra diagram",
+    "pack": "pack_09_code_review_git",
+    "flags": [
+      "all_english",
+      "identity",
+      "substring_of_term"
+    ]
+  },
+  {
+    "alias": "mermaid diagram",
+    "term": "Mermaid",
+    "pack": "pack_09_code_review_git",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "plant u m l",
+    "term": "PlantUML",
+    "pack": "pack_09_code_review_git",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "lucid chart",
+    "term": "Lucidchart",
+    "pack": "pack_09_code_review_git",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "ex cali draw",
+    "term": "Excalidraw",
+    "pack": "pack_09_code_review_git",
+    "flags": []
+  },
+  {
+    "alias": "draw io",
+    "term": "draw.io",
+    "pack": "pack_09_code_review_git",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "draw eye oh",
+    "term": "draw.io",
+    "pack": "pack_09_code_review_git",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "diagrams dot net",
+    "term": "diagrams.net",
+    "pack": "pack_09_code_review_git",
+    "flags": []
+  },
+  {
+    "alias": "fig ma",
+    "term": "Figma",
+    "pack": "pack_09_code_review_git",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "fig jam",
+    "term": "Figjam",
+    "pack": "pack_09_code_review_git",
+    "flags": [
+      "all_english",
+      "conflict"
+    ]
+  },
+  {
+    "alias": "fig jam",
+    "term": "FigJam",
+    "pack": "pack_09_code_review_git",
+    "flags": [
+      "all_english",
+      "conflict"
+    ]
+  },
+  {
+    "alias": "mee ro",
+    "term": "Miro",
+    "pack": "pack_09_code_review_git",
+    "flags": []
+  },
+  {
+    "alias": "mirror",
+    "term": "Miro",
+    "pack": "pack_09_code_review_git",
+    "flags": [
+      "all_english",
+      "single_word_english"
+    ]
+  },
+  {
+    "alias": "loom video",
+    "term": "Loom",
+    "pack": "pack_09_code_review_git",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "a sink video",
+    "term": "async video",
+    "pack": "pack_09_code_review_git",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "screen share",
+    "term": "screen share",
+    "pack": "pack_09_code_review_git",
+    "flags": [
+      "all_english",
+      "conflict",
+      "identity",
+      "substring_of_term"
+    ]
+  },
+  {
+    "alias": "screen share",
+    "term": "screenshare",
+    "pack": "pack_09_code_review_git",
+    "flags": [
+      "all_english",
+      "conflict"
+    ]
+  },
+  {
+    "alias": "live share",
+    "term": "live share",
+    "pack": "pack_09_code_review_git",
+    "flags": [
+      "all_english",
+      "identity",
+      "substring_of_term"
+    ]
+  },
+  {
+    "alias": "v s code live share",
+    "term": "VS Code Live Share",
+    "pack": "pack_09_code_review_git",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "dee bugger",
+    "term": "debugger",
+    "pack": "pack_09_code_review_git",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "break point",
+    "term": "breakpoint",
+    "pack": "pack_09_code_review_git",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "stack trace",
+    "term": "stack trace",
+    "pack": "pack_09_code_review_git",
+    "flags": [
+      "all_english",
+      "conflict",
+      "identity",
+      "substring_of_term"
+    ]
+  },
+  {
+    "alias": "stack trace",
+    "term": "stacktrace",
+    "pack": "pack_09_code_review_git",
+    "flags": [
+      "all_english",
+      "conflict"
+    ]
+  },
+  {
+    "alias": "trace back",
+    "term": "traceback",
+    "pack": "pack_09_code_review_git",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "error log",
+    "term": "error log",
+    "pack": "pack_09_code_review_git",
+    "flags": [
+      "all_english",
+      "identity",
+      "substring_of_term"
+    ]
+  },
+  {
+    "alias": "dee bug log",
+    "term": "debug log",
+    "pack": "pack_09_code_review_git",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "ver bose",
+    "term": "verbose",
+    "pack": "pack_09_code_review_git",
+    "flags": []
+  },
+  {
+    "alias": "standard out",
+    "term": "stdout",
+    "pack": "pack_09_code_review_git",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "standard error",
+    "term": "stderr",
+    "pack": "pack_09_code_review_git",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "seg fault",
+    "term": "segfault",
+    "pack": "pack_09_code_review_git",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "segmentation fault",
+    "term": "segfault",
+    "pack": "pack_09_code_review_git",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "null pointer",
+    "term": "null pointer",
+    "pack": "pack_09_code_review_git",
+    "flags": [
+      "all_english",
+      "identity",
+      "substring_of_term"
+    ]
+  },
+  {
+    "alias": "n p e",
+    "term": "NPE",
+    "pack": "pack_09_code_review_git",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "null pointer exception",
+    "term": "NPE",
+    "pack": "pack_09_code_review_git",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "o o m",
+    "term": "OOM",
+    "pack": "pack_09_code_review_git",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "out of memory",
+    "term": "OOM",
+    "pack": "pack_09_code_review_git",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "memory leak",
+    "term": "memory leak",
+    "pack": "pack_09_code_review_git",
+    "flags": [
+      "all_english",
+      "identity",
+      "substring_of_term"
+    ]
+  },
+  {
+    "alias": "race condition",
+    "term": "race condition",
+    "pack": "pack_09_code_review_git",
+    "flags": [
+      "all_english",
+      "identity",
+      "substring_of_term"
+    ]
+  },
+  {
+    "alias": "dead lock",
+    "term": "deadlock",
+    "pack": "pack_09_code_review_git",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "thread safety",
+    "term": "thread safety",
+    "pack": "pack_09_code_review_git",
+    "flags": [
+      "all_english",
+      "identity",
+      "substring_of_term"
+    ]
+  },
+  {
+    "alias": "thread safe",
+    "term": "thread-safe",
+    "pack": "pack_09_code_review_git",
+    "flags": [
+      "all_english"
+    ]
+  }
+]

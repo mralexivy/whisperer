@@ -1,0 +1,1815 @@
+[
+  {
+    "alias": "stand up",
+    "term": "standup",
+    "pack": "pack_07_agile_scrum",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "stand-up",
+    "term": "standup",
+    "pack": "pack_07_agile_scrum",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "stand app",
+    "term": "standup",
+    "pack": "pack_07_agile_scrum",
+    "flags": []
+  },
+  {
+    "alias": "daily stand up",
+    "term": "daily standup",
+    "pack": "pack_07_agile_scrum",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "daily stand-up",
+    "term": "daily standup",
+    "pack": "pack_07_agile_scrum",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "a sync stand up",
+    "term": "async standup",
+    "pack": "pack_07_agile_scrum",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "a sink stand up",
+    "term": "async standup",
+    "pack": "pack_07_agile_scrum",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "sprints",
+    "term": "sprint",
+    "pack": "pack_07_agile_scrum",
+    "flags": []
+  },
+  {
+    "alias": "sprint planing",
+    "term": "sprint planning",
+    "pack": "pack_07_agile_scrum",
+    "flags": []
+  },
+  {
+    "alias": "sprint re view",
+    "term": "sprint review",
+    "pack": "pack_07_agile_scrum",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "sprint re throw",
+    "term": "sprint retro",
+    "pack": "pack_07_agile_scrum",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "sprint ret row",
+    "term": "sprint retro",
+    "pack": "pack_07_agile_scrum",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "retro spective",
+    "term": "retrospective",
+    "pack": "pack_07_agile_scrum",
+    "flags": []
+  },
+  {
+    "alias": "retro spec tiv",
+    "term": "retrospective",
+    "pack": "pack_07_agile_scrum",
+    "flags": []
+  },
+  {
+    "alias": "ret row",
+    "term": "retro",
+    "pack": "pack_07_agile_scrum",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "re throw",
+    "term": "retro",
+    "pack": "pack_07_agile_scrum",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "back log",
+    "term": "backlog",
+    "pack": "pack_07_agile_scrum",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "back logged",
+    "term": "backlog",
+    "pack": "pack_07_agile_scrum",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "back log grooming",
+    "term": "backlog grooming",
+    "pack": "pack_07_agile_scrum",
+    "flags": []
+  },
+  {
+    "alias": "back log refinement",
+    "term": "backlog refinement",
+    "pack": "pack_07_agile_scrum",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "scrum methodology",
+    "term": "Scrum",
+    "pack": "pack_07_agile_scrum",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "scrum master",
+    "term": "Scrum Master",
+    "pack": "pack_07_agile_scrum",
+    "flags": [
+      "all_english",
+      "identity",
+      "substring_of_term"
+    ]
+  },
+  {
+    "alias": "scrum ban",
+    "term": "Scrumban",
+    "pack": "pack_07_agile_scrum",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "scrum band",
+    "term": "Scrumban",
+    "pack": "pack_07_agile_scrum",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "con bon",
+    "term": "Kanban",
+    "pack": "pack_07_agile_scrum",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "can ban",
+    "term": "Kanban",
+    "pack": "pack_07_agile_scrum",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "khan ban",
+    "term": "Kanban",
+    "pack": "pack_07_agile_scrum",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "con bon board",
+    "term": "Kanban board",
+    "pack": "pack_07_agile_scrum",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "can ban board",
+    "term": "Kanban board",
+    "pack": "pack_07_agile_scrum",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "safe framework",
+    "term": "SAFe",
+    "pack": "pack_07_agile_scrum",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "s a f e",
+    "term": "SAFe",
+    "pack": "pack_07_agile_scrum",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "safe agile",
+    "term": "SAFe",
+    "pack": "pack_07_agile_scrum",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "scaled a jile",
+    "term": "Scaled Agile",
+    "pack": "pack_07_agile_scrum",
+    "flags": []
+  },
+  {
+    "alias": "scaled agile framework",
+    "term": "Scaled Agile",
+    "pack": "pack_07_agile_scrum",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "product owner",
+    "term": "Product Owner",
+    "pack": "pack_07_agile_scrum",
+    "flags": [
+      "all_english",
+      "conflict",
+      "identity",
+      "substring_of_term"
+    ]
+  },
+  {
+    "alias": "po",
+    "term": "Product Owner",
+    "pack": "pack_07_agile_scrum",
+    "flags": [
+      "all_english",
+      "single_word_english"
+    ]
+  },
+  {
+    "alias": "p o",
+    "term": "PO",
+    "pack": "pack_07_agile_scrum",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "pee oh",
+    "term": "PO",
+    "pack": "pack_07_agile_scrum",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "product owner",
+    "term": "PO",
+    "pack": "pack_07_agile_scrum",
+    "flags": [
+      "all_english",
+      "conflict"
+    ]
+  },
+  {
+    "alias": "scrum of scrums",
+    "term": "Scrum of Scrums",
+    "pack": "pack_07_agile_scrum",
+    "flags": [
+      "identity",
+      "substring_of_term"
+    ]
+  },
+  {
+    "alias": "sarah money",
+    "term": "ceremony",
+    "pack": "pack_07_agile_scrum",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "ceremony agile",
+    "term": "ceremony",
+    "pack": "pack_07_agile_scrum",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "story point",
+    "term": "story points",
+    "pack": "pack_07_agile_scrum",
+    "flags": [
+      "all_english",
+      "substring_of_term"
+    ]
+  },
+  {
+    "alias": "storey points",
+    "term": "story points",
+    "pack": "pack_07_agile_scrum",
+    "flags": []
+  },
+  {
+    "alias": "vuh loss ity",
+    "term": "velocity",
+    "pack": "pack_07_agile_scrum",
+    "flags": []
+  },
+  {
+    "alias": "sprint vuh loss ity",
+    "term": "sprint velocity",
+    "pack": "pack_07_agile_scrum",
+    "flags": []
+  },
+  {
+    "alias": "burn down",
+    "term": "burndown",
+    "pack": "pack_07_agile_scrum",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "burn down chart",
+    "term": "burndown",
+    "pack": "pack_07_agile_scrum",
+    "flags": [
+      "all_english",
+      "conflict"
+    ]
+  },
+  {
+    "alias": "burn down chart",
+    "term": "burndown chart",
+    "pack": "pack_07_agile_scrum",
+    "flags": [
+      "all_english",
+      "conflict"
+    ]
+  },
+  {
+    "alias": "burn up chart",
+    "term": "burnup chart",
+    "pack": "pack_07_agile_scrum",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "w i p",
+    "term": "WIP",
+    "pack": "pack_07_agile_scrum",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "double you eye pee",
+    "term": "WIP",
+    "pack": "pack_07_agile_scrum",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "work in progress",
+    "term": "WIP",
+    "pack": "pack_07_agile_scrum",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "whip",
+    "term": "WIP",
+    "pack": "pack_07_agile_scrum",
+    "flags": [
+      "all_english",
+      "single_word_english"
+    ]
+  },
+  {
+    "alias": "whip limit",
+    "term": "WIP limit",
+    "pack": "pack_07_agile_scrum",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "w i p limit",
+    "term": "WIP limit",
+    "pack": "pack_07_agile_scrum",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "work in progress limit",
+    "term": "WIP limit",
+    "pack": "pack_07_agile_scrum",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "swim lane",
+    "term": "swimlane",
+    "pack": "pack_07_agile_scrum",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "swim lain",
+    "term": "swimlane",
+    "pack": "pack_07_agile_scrum",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "epic ticket",
+    "term": "epic",
+    "pack": "pack_07_agile_scrum",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "user storey",
+    "term": "user story",
+    "pack": "pack_07_agile_scrum",
+    "flags": []
+  },
+  {
+    "alias": "acceptance cry tear ia",
+    "term": "acceptance criteria",
+    "pack": "pack_07_agile_scrum",
+    "flags": []
+  },
+  {
+    "alias": "acceptance cry tieria",
+    "term": "acceptance criteria",
+    "pack": "pack_07_agile_scrum",
+    "flags": []
+  },
+  {
+    "alias": "a c",
+    "term": "AC",
+    "pack": "pack_07_agile_scrum",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "ay see",
+    "term": "AC",
+    "pack": "pack_07_agile_scrum",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "acceptance criteria",
+    "term": "AC",
+    "pack": "pack_07_agile_scrum",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "definition of dun",
+    "term": "definition of done",
+    "pack": "pack_07_agile_scrum",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "d o d",
+    "term": "DoD",
+    "pack": "pack_07_agile_scrum",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "dee oh dee",
+    "term": "DoD",
+    "pack": "pack_07_agile_scrum",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "definition of done",
+    "term": "DoD",
+    "pack": "pack_07_agile_scrum",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "definition of ready",
+    "term": "definition of ready",
+    "pack": "pack_07_agile_scrum",
+    "flags": [
+      "all_english",
+      "conflict",
+      "identity",
+      "substring_of_term"
+    ]
+  },
+  {
+    "alias": "d o r",
+    "term": "DoR",
+    "pack": "pack_07_agile_scrum",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "dee oh are",
+    "term": "DoR",
+    "pack": "pack_07_agile_scrum",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "definition of ready",
+    "term": "DoR",
+    "pack": "pack_07_agile_scrum",
+    "flags": [
+      "all_english",
+      "conflict"
+    ]
+  },
+  {
+    "alias": "spike ticket",
+    "term": "spike",
+    "pack": "pack_07_agile_scrum",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "spyke",
+    "term": "spike",
+    "pack": "pack_07_agile_scrum",
+    "flags": []
+  },
+  {
+    "alias": "teck debt",
+    "term": "tech debt",
+    "pack": "pack_07_agile_scrum",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "technical debt",
+    "term": "tech debt",
+    "pack": "pack_07_agile_scrum",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "teck nical debt",
+    "term": "technical debt",
+    "pack": "pack_07_agile_scrum",
+    "flags": []
+  },
+  {
+    "alias": "im pediment",
+    "term": "impediment",
+    "pack": "pack_07_agile_scrum",
+    "flags": []
+  },
+  {
+    "alias": "impede ment",
+    "term": "impediment",
+    "pack": "pack_07_agile_scrum",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "block er",
+    "term": "blocker",
+    "pack": "pack_07_agile_scrum",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "block d",
+    "term": "blocked",
+    "pack": "pack_07_agile_scrum",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "un block d",
+    "term": "unblocked",
+    "pack": "pack_07_agile_scrum",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "un blocked",
+    "term": "unblocked",
+    "pack": "pack_07_agile_scrum",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "depend ency",
+    "term": "dependency",
+    "pack": "pack_07_agile_scrum",
+    "flags": []
+  },
+  {
+    "alias": "dee pendency",
+    "term": "dependency",
+    "pack": "pack_07_agile_scrum",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "cross functional",
+    "term": "cross-functional",
+    "pack": "pack_07_agile_scrum",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "t shirt sizing",
+    "term": "T-shirt sizing",
+    "pack": "pack_07_agile_scrum",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "tee shirt sizing",
+    "term": "T-shirt sizing",
+    "pack": "pack_07_agile_scrum",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "fib oh nah chee",
+    "term": "Fibonacci",
+    "pack": "pack_07_agile_scrum",
+    "flags": []
+  },
+  {
+    "alias": "fib a nah chi",
+    "term": "Fibonacci",
+    "pack": "pack_07_agile_scrum",
+    "flags": []
+  },
+  {
+    "alias": "fibonacci sequence",
+    "term": "Fibonacci",
+    "pack": "pack_07_agile_scrum",
+    "flags": []
+  },
+  {
+    "alias": "planing poker",
+    "term": "planning poker",
+    "pack": "pack_07_agile_scrum",
+    "flags": []
+  },
+  {
+    "alias": "time boxed",
+    "term": "timeboxed",
+    "pack": "pack_07_agile_scrum",
+    "flags": []
+  },
+  {
+    "alias": "time box",
+    "term": "timeboxed",
+    "pack": "pack_07_agile_scrum",
+    "flags": [
+      "conflict"
+    ]
+  },
+  {
+    "alias": "time box",
+    "term": "timebox",
+    "pack": "pack_07_agile_scrum",
+    "flags": [
+      "conflict"
+    ]
+  },
+  {
+    "alias": "ink re ment",
+    "term": "increment",
+    "pack": "pack_07_agile_scrum",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "it er ation",
+    "term": "iteration",
+    "pack": "pack_07_agile_scrum",
+    "flags": []
+  },
+  {
+    "alias": "k dance",
+    "term": "cadence",
+    "pack": "pack_07_agile_scrum",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "cay dance",
+    "term": "cadence",
+    "pack": "pack_07_agile_scrum",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "by weekly",
+    "term": "biweekly",
+    "pack": "pack_07_agile_scrum",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "bi weekly",
+    "term": "biweekly",
+    "pack": "pack_07_agile_scrum",
+    "flags": []
+  },
+  {
+    "alias": "jeer a",
+    "term": "Jira",
+    "pack": "pack_07_agile_scrum",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "gear a",
+    "term": "Jira",
+    "pack": "pack_07_agile_scrum",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "jeera",
+    "term": "Jira",
+    "pack": "pack_07_agile_scrum",
+    "flags": []
+  },
+  {
+    "alias": "gyra",
+    "term": "Jira",
+    "pack": "pack_07_agile_scrum",
+    "flags": []
+  },
+  {
+    "alias": "jeer a ticket",
+    "term": "Jira ticket",
+    "pack": "pack_07_agile_scrum",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "gear a ticket",
+    "term": "Jira ticket",
+    "pack": "pack_07_agile_scrum",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "jeer a board",
+    "term": "Jira board",
+    "pack": "pack_07_agile_scrum",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "gear a board",
+    "term": "Jira board",
+    "pack": "pack_07_agile_scrum",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "jeer a epic",
+    "term": "Jira epic",
+    "pack": "pack_07_agile_scrum",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "jeer a sprint",
+    "term": "Jira sprint",
+    "pack": "pack_07_agile_scrum",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "con flew ence",
+    "term": "Confluence",
+    "pack": "pack_07_agile_scrum",
+    "flags": []
+  },
+  {
+    "alias": "con flu ence",
+    "term": "Confluence",
+    "pack": "pack_07_agile_scrum",
+    "flags": []
+  },
+  {
+    "alias": "con flew ence page",
+    "term": "Confluence page",
+    "pack": "pack_07_agile_scrum",
+    "flags": []
+  },
+  {
+    "alias": "linear app",
+    "term": "Linear",
+    "pack": "pack_07_agile_scrum",
+    "flags": []
+  },
+  {
+    "alias": "shortcut app",
+    "term": "Shortcut",
+    "pack": "pack_07_agile_scrum",
+    "flags": []
+  },
+  {
+    "alias": "no shun",
+    "term": "Notion",
+    "pack": "pack_07_agile_scrum",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "no shin",
+    "term": "Notion",
+    "pack": "pack_07_agile_scrum",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "a sana",
+    "term": "Asana",
+    "pack": "pack_07_agile_scrum",
+    "flags": []
+  },
+  {
+    "alias": "ah sauna",
+    "term": "Asana",
+    "pack": "pack_07_agile_scrum",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "monday dot com",
+    "term": "Monday.com",
+    "pack": "pack_07_agile_scrum",
+    "flags": []
+  },
+  {
+    "alias": "click up",
+    "term": "ClickUp",
+    "pack": "pack_07_agile_scrum",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "trel oh",
+    "term": "Trello",
+    "pack": "pack_07_agile_scrum",
+    "flags": []
+  },
+  {
+    "alias": "sub task",
+    "term": "subtask",
+    "pack": "pack_07_agile_scrum",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "super task",
+    "term": "supertask",
+    "pack": "pack_07_agile_scrum",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "parent tick it",
+    "term": "parent ticket",
+    "pack": "pack_07_agile_scrum",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "child tick it",
+    "term": "child ticket",
+    "pack": "pack_07_agile_scrum",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "linked ish you",
+    "term": "linked issue",
+    "pack": "pack_07_agile_scrum",
+    "flags": []
+  },
+  {
+    "alias": "a sign ee",
+    "term": "assignee",
+    "pack": "pack_07_agile_scrum",
+    "flags": []
+  },
+  {
+    "alias": "re porter",
+    "term": "reporter",
+    "pack": "pack_07_agile_scrum",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "watch er",
+    "term": "watcher",
+    "pack": "pack_07_agile_scrum",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "do date",
+    "term": "due date",
+    "pack": "pack_07_agile_scrum",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "prior ity",
+    "term": "priority",
+    "pack": "pack_07_agile_scrum",
+    "flags": []
+  },
+  {
+    "alias": "p zero",
+    "term": "P0",
+    "pack": "pack_07_agile_scrum",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "pee zero",
+    "term": "P0",
+    "pack": "pack_07_agile_scrum",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "priority zero",
+    "term": "P0",
+    "pack": "pack_07_agile_scrum",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "p one",
+    "term": "P1",
+    "pack": "pack_07_agile_scrum",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "pee one",
+    "term": "P1",
+    "pack": "pack_07_agile_scrum",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "priority one",
+    "term": "P1",
+    "pack": "pack_07_agile_scrum",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "p two",
+    "term": "P2",
+    "pack": "pack_07_agile_scrum",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "pee two",
+    "term": "P2",
+    "pack": "pack_07_agile_scrum",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "priority two",
+    "term": "P2",
+    "pack": "pack_07_agile_scrum",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "p three",
+    "term": "P3",
+    "pack": "pack_07_agile_scrum",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "pee three",
+    "term": "P3",
+    "pack": "pack_07_agile_scrum",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "priority three",
+    "term": "P3",
+    "pack": "pack_07_agile_scrum",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "sev one",
+    "term": "sev1",
+    "pack": "pack_07_agile_scrum",
+    "flags": []
+  },
+  {
+    "alias": "severity one",
+    "term": "sev1",
+    "pack": "pack_07_agile_scrum",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "sev two",
+    "term": "sev2",
+    "pack": "pack_07_agile_scrum",
+    "flags": []
+  },
+  {
+    "alias": "severity two",
+    "term": "sev2",
+    "pack": "pack_07_agile_scrum",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "sev three",
+    "term": "sev3",
+    "pack": "pack_07_agile_scrum",
+    "flags": []
+  },
+  {
+    "alias": "severity three",
+    "term": "sev3",
+    "pack": "pack_07_agile_scrum",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "sev",
+    "term": "SEV",
+    "pack": "pack_07_agile_scrum",
+    "flags": [
+      "identity",
+      "substring_of_term"
+    ]
+  },
+  {
+    "alias": "severity",
+    "term": "SEV",
+    "pack": "pack_07_agile_scrum",
+    "flags": [
+      "all_english",
+      "single_word_english"
+    ]
+  },
+  {
+    "alias": "crit ical",
+    "term": "critical",
+    "pack": "pack_07_agile_scrum",
+    "flags": []
+  },
+  {
+    "alias": "show stopper",
+    "term": "showstopper",
+    "pack": "pack_07_agile_scrum",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "work flow",
+    "term": "workflow",
+    "pack": "pack_07_agile_scrum",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "swim lane",
+    "term": "swimlane",
+    "pack": "pack_07_agile_scrum",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "lay bell",
+    "term": "label",
+    "pack": "pack_07_agile_scrum",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "com po nent",
+    "term": "component",
+    "pack": "pack_07_agile_scrum",
+    "flags": []
+  },
+  {
+    "alias": "fix ver shun",
+    "term": "fix version",
+    "pack": "pack_07_agile_scrum",
+    "flags": []
+  },
+  {
+    "alias": "affected ver shun",
+    "term": "affected version",
+    "pack": "pack_07_agile_scrum",
+    "flags": []
+  },
+  {
+    "alias": "to do",
+    "term": "To Do",
+    "pack": "pack_07_agile_scrum",
+    "flags": [
+      "all_english",
+      "conflict",
+      "identity",
+      "substring_of_term"
+    ]
+  },
+  {
+    "alias": "to dew",
+    "term": "To Do",
+    "pack": "pack_07_agile_scrum",
+    "flags": [
+      "all_english",
+      "conflict"
+    ]
+  },
+  {
+    "alias": "in progress",
+    "term": "In Progress",
+    "pack": "pack_07_agile_scrum",
+    "flags": [
+      "all_english",
+      "identity",
+      "substring_of_term"
+    ]
+  },
+  {
+    "alias": "in pro gress",
+    "term": "In Progress",
+    "pack": "pack_07_agile_scrum",
+    "flags": []
+  },
+  {
+    "alias": "in review",
+    "term": "In Review",
+    "pack": "pack_07_agile_scrum",
+    "flags": [
+      "all_english",
+      "identity",
+      "substring_of_term"
+    ]
+  },
+  {
+    "alias": "in re view",
+    "term": "In Review",
+    "pack": "pack_07_agile_scrum",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "code review",
+    "term": "Code Review",
+    "pack": "pack_07_agile_scrum",
+    "flags": [
+      "all_english",
+      "conflict",
+      "identity",
+      "substring_of_term"
+    ]
+  },
+  {
+    "alias": "code re view",
+    "term": "Code Review",
+    "pack": "pack_07_agile_scrum",
+    "flags": [
+      "all_english",
+      "conflict"
+    ]
+  },
+  {
+    "alias": "q a",
+    "term": "QA",
+    "pack": "pack_07_agile_scrum",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "queue ay",
+    "term": "QA",
+    "pack": "pack_07_agile_scrum",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "quality assurance",
+    "term": "QA",
+    "pack": "pack_07_agile_scrum",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "q a testing",
+    "term": "QA testing",
+    "pack": "pack_07_agile_scrum",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "queue ay testing",
+    "term": "QA testing",
+    "pack": "pack_07_agile_scrum",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "u a t",
+    "term": "UAT",
+    "pack": "pack_07_agile_scrum",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "you ay tee",
+    "term": "UAT",
+    "pack": "pack_07_agile_scrum",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "user acceptance testing",
+    "term": "UAT",
+    "pack": "pack_07_agile_scrum",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "stay ging",
+    "term": "staging",
+    "pack": "pack_07_agile_scrum",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "pro duck shun",
+    "term": "production",
+    "pack": "pack_07_agile_scrum",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "prod environment",
+    "term": "prod",
+    "pack": "pack_07_agile_scrum",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "pre prod",
+    "term": "pre-prod",
+    "pack": "pack_07_agile_scrum",
+    "flags": []
+  },
+  {
+    "alias": "pre production",
+    "term": "pre-prod",
+    "pack": "pack_07_agile_scrum",
+    "flags": []
+  },
+  {
+    "alias": "dev and virement",
+    "term": "dev environment",
+    "pack": "pack_07_agile_scrum",
+    "flags": []
+  },
+  {
+    "alias": "sand box",
+    "term": "sandbox",
+    "pack": "pack_07_agile_scrum",
+    "flags": []
+  },
+  {
+    "alias": "hot fix",
+    "term": "hotfix",
+    "pack": "pack_07_agile_scrum",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "bug fix",
+    "term": "bugfix",
+    "pack": "pack_07_agile_scrum",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "re gression",
+    "term": "regression",
+    "pack": "pack_07_agile_scrum",
+    "flags": []
+  },
+  {
+    "alias": "re gression testing",
+    "term": "regression testing",
+    "pack": "pack_07_agile_scrum",
+    "flags": []
+  },
+  {
+    "alias": "smoke test",
+    "term": "smoke test",
+    "pack": "pack_07_agile_scrum",
+    "flags": [
+      "all_english",
+      "identity",
+      "substring_of_term"
+    ]
+  },
+  {
+    "alias": "sanity check",
+    "term": "sanity check",
+    "pack": "pack_07_agile_scrum",
+    "flags": [
+      "all_english",
+      "identity",
+      "substring_of_term"
+    ]
+  },
+  {
+    "alias": "edge case",
+    "term": "edge case",
+    "pack": "pack_07_agile_scrum",
+    "flags": [
+      "all_english",
+      "identity",
+      "substring_of_term"
+    ]
+  },
+  {
+    "alias": "happy path",
+    "term": "happy path",
+    "pack": "pack_07_agile_scrum",
+    "flags": [
+      "all_english",
+      "identity",
+      "substring_of_term"
+    ]
+  },
+  {
+    "alias": "sad path",
+    "term": "sad path",
+    "pack": "pack_07_agile_scrum",
+    "flags": [
+      "all_english",
+      "identity",
+      "substring_of_term"
+    ]
+  },
+  {
+    "alias": "golden path",
+    "term": "golden path",
+    "pack": "pack_07_agile_scrum",
+    "flags": [
+      "all_english",
+      "identity",
+      "substring_of_term"
+    ]
+  },
+  {
+    "alias": "flakey test",
+    "term": "flaky test",
+    "pack": "pack_07_agile_scrum",
+    "flags": []
+  },
+  {
+    "alias": "flaky test",
+    "term": "flaky test",
+    "pack": "pack_07_agile_scrum",
+    "flags": [
+      "all_english",
+      "identity",
+      "substring_of_term"
+    ]
+  },
+  {
+    "alias": "test sweet",
+    "term": "test suite",
+    "pack": "pack_07_agile_scrum",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "test cov erage",
+    "term": "test coverage",
+    "pack": "pack_07_agile_scrum",
+    "flags": []
+  },
+  {
+    "alias": "you nit test",
+    "term": "unit test",
+    "pack": "pack_07_agile_scrum",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "integration test",
+    "term": "integration test",
+    "pack": "pack_07_agile_scrum",
+    "flags": [
+      "all_english",
+      "identity",
+      "substring_of_term"
+    ]
+  },
+  {
+    "alias": "e to e test",
+    "term": "e2e test",
+    "pack": "pack_07_agile_scrum",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "end to end test",
+    "term": "e2e test",
+    "pack": "pack_07_agile_scrum",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "e 2 e test",
+    "term": "e2e test",
+    "pack": "pack_07_agile_scrum",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "end to end",
+    "term": "end-to-end",
+    "pack": "pack_07_agile_scrum",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "and to and",
+    "term": "end-to-end",
+    "pack": "pack_07_agile_scrum",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "e two e",
+    "term": "E2E",
+    "pack": "pack_07_agile_scrum",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "e 2 e",
+    "term": "E2E",
+    "pack": "pack_07_agile_scrum",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "ee two ee",
+    "term": "E2E",
+    "pack": "pack_07_agile_scrum",
+    "flags": []
+  },
+  {
+    "alias": "load test",
+    "term": "load test",
+    "pack": "pack_07_agile_scrum",
+    "flags": [
+      "all_english",
+      "identity",
+      "substring_of_term"
+    ]
+  },
+  {
+    "alias": "stress test",
+    "term": "stress test",
+    "pack": "pack_07_agile_scrum",
+    "flags": [
+      "all_english",
+      "identity",
+      "substring_of_term"
+    ]
+  },
+  {
+    "alias": "chaos engineering",
+    "term": "chaos engineering",
+    "pack": "pack_07_agile_scrum",
+    "flags": [
+      "all_english",
+      "identity",
+      "substring_of_term"
+    ]
+  },
+  {
+    "alias": "can airy",
+    "term": "canary",
+    "pack": "pack_07_agile_scrum",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "canary release",
+    "term": "canary",
+    "pack": "pack_07_agile_scrum",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "roll back",
+    "term": "rollback",
+    "pack": "pack_07_agile_scrum",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "roll forward",
+    "term": "rollforward",
+    "pack": "pack_07_agile_scrum",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "feature tog el",
+    "term": "feature toggle",
+    "pack": "pack_07_agile_scrum",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "feature flag",
+    "term": "feature flag",
+    "pack": "pack_07_agile_scrum",
+    "flags": [
+      "all_english",
+      "identity",
+      "substring_of_term"
+    ]
+  },
+  {
+    "alias": "dark launch",
+    "term": "dark launch",
+    "pack": "pack_07_agile_scrum",
+    "flags": [
+      "all_english",
+      "identity",
+      "substring_of_term"
+    ]
+  },
+  {
+    "alias": "a b test",
+    "term": "A/B test",
+    "pack": "pack_07_agile_scrum",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "ay bee test",
+    "term": "A/B test",
+    "pack": "pack_07_agile_scrum",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "multi vary it test",
+    "term": "multivariate test",
+    "pack": "pack_07_agile_scrum",
+    "flags": []
+  },
+  {
+    "alias": "on call",
+    "term": "on-call",
+    "pack": "pack_07_agile_scrum",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "on-call rotation",
+    "term": "on-call",
+    "pack": "pack_07_agile_scrum",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "page er",
+    "term": "pager",
+    "pack": "pack_07_agile_scrum",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "in cident",
+    "term": "incident",
+    "pack": "pack_07_agile_scrum",
+    "flags": []
+  },
+  {
+    "alias": "post mortem",
+    "term": "postmortem",
+    "pack": "pack_07_agile_scrum",
+    "flags": []
+  },
+  {
+    "alias": "post more tem",
+    "term": "postmortem",
+    "pack": "pack_07_agile_scrum",
+    "flags": []
+  },
+  {
+    "alias": "blame less post mortem",
+    "term": "blameless postmortem",
+    "pack": "pack_07_agile_scrum",
+    "flags": []
+  },
+  {
+    "alias": "r c a",
+    "term": "RCA",
+    "pack": "pack_07_agile_scrum",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "are see ay",
+    "term": "RCA",
+    "pack": "pack_07_agile_scrum",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "root cause analysis",
+    "term": "RCA",
+    "pack": "pack_07_agile_scrum",
+    "flags": [
+      "all_english",
+      "conflict"
+    ]
+  },
+  {
+    "alias": "root cause",
+    "term": "root cause",
+    "pack": "pack_07_agile_scrum",
+    "flags": [
+      "all_english",
+      "identity",
+      "substring_of_term"
+    ]
+  }
+]

@@ -1,0 +1,1605 @@
+[
+  {
+    "alias": "p r",
+    "term": "PR",
+    "pack": "pack_09_code_review_git",
+    "verdict": "KEEP",
+    "reason": "Phonetic letter-by-letter spelling of the abbreviation PR with no ordinary English meaning."
+  },
+  {
+    "alias": "pee are",
+    "term": "PR",
+    "pack": "pack_09_code_review_git",
+    "verdict": "KEEP",
+    "reason": "Phonetic letter-by-letter rendering of PR; cannot appear in normal English without meaning the abbreviation."
+  },
+  {
+    "alias": "pull request",
+    "term": "PR",
+    "pack": "pack_09_code_review_git",
+    "verdict": "DROP",
+    "reason": "Common English phrase; converting it to an abbreviation changes what the user said and breaks normal dictation."
+  },
+  {
+    "alias": "pool request",
+    "term": "pull request",
+    "pack": "pack_09_code_review_git",
+    "verdict": "KEEP",
+    "reason": "Whisper mishearing of 'pull request'; 'pool request' is not natural English and unambiguously means the git concept."
+  },
+  {
+    "alias": "pull re quest",
+    "term": "pull request",
+    "pack": "pack_09_code_review_git",
+    "verdict": "KEEP",
+    "reason": "Whisper splitting 'request' into 're quest'; valid compound-word restoration."
+  },
+  {
+    "alias": "m r",
+    "term": "MR",
+    "pack": "pack_09_code_review_git",
+    "verdict": "KEEP",
+    "reason": "Letter-by-letter abbreviation spelling with no independent English meaning in isolation."
+  },
+  {
+    "alias": "em are",
+    "term": "MR",
+    "pack": "pack_09_code_review_git",
+    "verdict": "KEEP",
+    "reason": "Phonetic letter-by-letter rendering of MR; unambiguous in this form."
+  },
+  {
+    "alias": "merge request",
+    "term": "MR",
+    "pack": "pack_09_code_review_git",
+    "verdict": "DROP",
+    "reason": "Normal English phrase; silently abbreviating it to MR would corrupt natural dictation."
+  },
+  {
+    "alias": "merge re quest",
+    "term": "merge request",
+    "pack": "pack_09_code_review_git",
+    "verdict": "KEEP",
+    "reason": "Whisper splitting 'request'; restores compound word without changing meaning."
+  },
+  {
+    "alias": "code re view",
+    "term": "code review",
+    "pack": "pack_09_code_review_git",
+    "verdict": "KEEP",
+    "reason": "Whisper splitting 'review' into 're view'; valid split-word restoration."
+  },
+  {
+    "alias": "c r",
+    "term": "CR",
+    "pack": "pack_09_code_review_git",
+    "verdict": "KEEP",
+    "reason": "Phonetic letter-by-letter abbreviation with no standalone English meaning."
+  },
+  {
+    "alias": "see are",
+    "term": "CR",
+    "pack": "pack_09_code_review_git",
+    "verdict": "KEEP",
+    "reason": "Phonetic letter-by-letter rendering of CR; unambiguous."
+  },
+  {
+    "alias": "code review",
+    "term": "CR",
+    "pack": "pack_09_code_review_git",
+    "verdict": "DROP",
+    "reason": "Normal English phrase; silently replacing it with the abbreviation CR corrupts natural dictation."
+  },
+  {
+    "alias": "l g t m",
+    "term": "LGTM",
+    "pack": "pack_09_code_review_git",
+    "verdict": "KEEP",
+    "reason": "Phonetic letter-by-letter spelling of LGTM; cannot appear in ordinary English with another meaning."
+  },
+  {
+    "alias": "el gee tee em",
+    "term": "LGTM",
+    "pack": "pack_09_code_review_git",
+    "verdict": "KEEP",
+    "reason": "Phonetic letter-by-letter rendering of LGTM; unambiguous."
+  },
+  {
+    "alias": "looks good to me",
+    "term": "LGTM",
+    "pack": "pack_09_code_review_git",
+    "verdict": "DROP",
+    "reason": "Very common English phrase with obvious non-technical use; silently replacing it with an acronym would corrupt normal speech."
+  },
+  {
+    "alias": "p t a l",
+    "term": "PTAL",
+    "pack": "pack_09_code_review_git",
+    "verdict": "KEEP",
+    "reason": "Phonetic letter-by-letter spelling of PTAL; no ordinary English meaning."
+  },
+  {
+    "alias": "please take a look",
+    "term": "PTAL",
+    "pack": "pack_09_code_review_git",
+    "verdict": "DROP",
+    "reason": "Common English phrase; silently abbreviating to PTAL corrupts normal speech."
+  },
+  {
+    "alias": "s g t m",
+    "term": "SGTM",
+    "pack": "pack_09_code_review_git",
+    "verdict": "KEEP",
+    "reason": "Phonetic letter-by-letter spelling of SGTM; no ordinary English meaning."
+  },
+  {
+    "alias": "sounds good to me",
+    "term": "SGTM",
+    "pack": "pack_09_code_review_git",
+    "verdict": "DROP",
+    "reason": "Very common English phrase; silently abbreviating to SGTM corrupts normal speech."
+  },
+  {
+    "alias": "w i p",
+    "term": "WIP",
+    "pack": "pack_09_code_review_git",
+    "verdict": "KEEP",
+    "reason": "Phonetic letter-by-letter spelling of WIP; no ordinary English meaning."
+  },
+  {
+    "alias": "work in progress",
+    "term": "WIP",
+    "pack": "pack_09_code_review_git",
+    "verdict": "DROP",
+    "reason": "Common English phrase; silently abbreviating to WIP corrupts normal dictation."
+  },
+  {
+    "alias": "whip",
+    "term": "WIP",
+    "pack": "pack_09_code_review_git",
+    "verdict": "DROP",
+    "reason": "Single common English word (a lashing tool); flagged single_word_english."
+  },
+  {
+    "alias": "draft p r",
+    "term": "draft PR",
+    "pack": "pack_09_code_review_git",
+    "verdict": "KEEP",
+    "reason": "Phonetic letter-by-letter for 'PR' with disambiguating 'draft' prefix; unambiguous technical phrase."
+  },
+  {
+    "alias": "draft pee are",
+    "term": "draft PR",
+    "pack": "pack_09_code_review_git",
+    "verdict": "KEEP",
+    "reason": "Phonetic letter-by-letter rendering of 'draft PR'; unambiguous."
+  },
+  {
+    "alias": "r f c",
+    "term": "RFC",
+    "pack": "pack_09_code_review_git",
+    "verdict": "KEEP",
+    "reason": "Phonetic letter-by-letter spelling of RFC; no ordinary English meaning."
+  },
+  {
+    "alias": "are ef see",
+    "term": "RFC",
+    "pack": "pack_09_code_review_git",
+    "verdict": "KEEP",
+    "reason": "Phonetic letter-by-letter rendering of RFC; unambiguous."
+  },
+  {
+    "alias": "request for comments",
+    "term": "RFC",
+    "pack": "pack_09_code_review_git",
+    "verdict": "DROP",
+    "reason": "Normal English phrase; silently abbreviating to RFC corrupts natural dictation."
+  },
+  {
+    "alias": "knit",
+    "term": "nit",
+    "pack": "pack_09_code_review_git",
+    "verdict": "DROP",
+    "reason": "Single common English word (to knit yarn); flagged single_word_english."
+  },
+  {
+    "alias": "knit pick",
+    "term": "nitpick",
+    "pack": "pack_09_code_review_git",
+    "verdict": "KEEP",
+    "reason": "'Knit pick' has no independent English meaning as a two-word phrase; Whisper mishearing of 'nitpick' is the only plausible reading."
+  },
+  {
+    "alias": "knits",
+    "term": "nits",
+    "pack": "pack_09_code_review_git",
+    "verdict": "DROP",
+    "reason": "Real English word (third-person singular of 'to knit'); would corrupt normal speech."
+  },
+  {
+    "alias": "blocking com ment",
+    "term": "blocking comment",
+    "pack": "pack_09_code_review_git",
+    "verdict": "KEEP",
+    "reason": "Whisper splitting 'comment' into 'com ment'; valid split-word restoration."
+  },
+  {
+    "alias": "non blocking",
+    "term": "non-blocking",
+    "pack": "pack_09_code_review_git",
+    "verdict": "DROP",
+    "reason": "Common English phrase; adding a hyphen is a formatting change that doesn't justify a dictionary rule."
+  },
+  {
+    "alias": "a prove",
+    "term": "approve",
+    "pack": "pack_09_code_review_git",
+    "verdict": "KEEP",
+    "reason": "Whisper splitting 'approve' into 'a prove'; 'a prove' is not natural English."
+  },
+  {
+    "alias": "re quest changes",
+    "term": "request changes",
+    "pack": "pack_09_code_review_git",
+    "verdict": "KEEP",
+    "reason": "Whisper splitting 'request' into 're quest'; valid split-word restoration."
+  },
+  {
+    "alias": "diff file",
+    "term": "diff",
+    "pack": "pack_09_code_review_git",
+    "verdict": "DROP",
+    "reason": "Removes the word 'file' from what the user said; information loss."
+  },
+  {
+    "alias": "inter diff",
+    "term": "interdiff",
+    "pack": "pack_09_code_review_git",
+    "verdict": "KEEP",
+    "reason": "Whisper splitting the compound technical tool name 'interdiff'; 'inter diff' has no ordinary English meaning."
+  },
+  {
+    "alias": "change set",
+    "term": "changeset",
+    "pack": "pack_09_code_review_git",
+    "verdict": "KEEP",
+    "reason": "Compound word restoration for a version-control technical term; 'change set' as two words is the expected Whisper output."
+  },
+  {
+    "alias": "com mit",
+    "term": "commit",
+    "pack": "pack_09_code_review_git",
+    "verdict": "KEEP",
+    "reason": "Whisper splitting 'commit' into 'com mit'; valid compound restoration."
+  },
+  {
+    "alias": "com mit message",
+    "term": "commit message",
+    "pack": "pack_09_code_review_git",
+    "verdict": "KEEP",
+    "reason": "Whisper splitting 'commit'; valid split-word restoration."
+  },
+  {
+    "alias": "conventional com mits",
+    "term": "conventional commits",
+    "pack": "pack_09_code_review_git",
+    "verdict": "KEEP",
+    "reason": "Whisper splitting 'commits'; valid split-word restoration."
+  },
+  {
+    "alias": "squash commit",
+    "term": "squash",
+    "pack": "pack_09_code_review_git",
+    "verdict": "DROP",
+    "reason": "Removes the word 'commit' from what the user said; information loss."
+  },
+  {
+    "alias": "squash and merge",
+    "term": "squash and merge",
+    "pack": "pack_09_code_review_git",
+    "verdict": "DROP",
+    "reason": "Identity flag; alias equals term, rule does nothing."
+  },
+  {
+    "alias": "re base",
+    "term": "rebase",
+    "pack": "pack_09_code_review_git",
+    "verdict": "KEEP",
+    "reason": "Whisper splitting 'rebase' into 're base'; valid compound restoration."
+  },
+  {
+    "alias": "ree base",
+    "term": "rebase",
+    "pack": "pack_09_code_review_git",
+    "verdict": "KEEP",
+    "reason": "Phonetic variant of 'rebase'; 'ree base' is not natural English."
+  },
+  {
+    "alias": "re base and merge",
+    "term": "rebase and merge",
+    "pack": "pack_09_code_review_git",
+    "verdict": "KEEP",
+    "reason": "Whisper splitting 'rebase'; valid split-word restoration in a git-specific phrase."
+  },
+  {
+    "alias": "merge con flict",
+    "term": "merge conflict",
+    "pack": "pack_09_code_review_git",
+    "verdict": "KEEP",
+    "reason": "Whisper splitting 'conflict' into 'con flict'; valid split-word restoration."
+  },
+  {
+    "alias": "con flict resolution",
+    "term": "conflict resolution",
+    "pack": "pack_09_code_review_git",
+    "verdict": "KEEP",
+    "reason": "Whisper splitting 'conflict' into 'con flict'; valid split-word restoration."
+  },
+  {
+    "alias": "cherry pick",
+    "term": "cherry-pick",
+    "pack": "pack_09_code_review_git",
+    "verdict": "DROP",
+    "reason": "Very common English phrase (picking cherries); adding a hyphen doesn't justify a dictionary rule."
+  },
+  {
+    "alias": "git stash",
+    "term": "git stash",
+    "pack": "pack_09_code_review_git",
+    "verdict": "DROP",
+    "reason": "Identity flag; alias equals term."
+  },
+  {
+    "alias": "git by sect",
+    "term": "git bisect",
+    "pack": "pack_09_code_review_git",
+    "verdict": "KEEP",
+    "reason": "Whisper mishearing 'bisect' as 'by sect'; 'git by sect' has no ordinary English meaning."
+  },
+  {
+    "alias": "git blame",
+    "term": "git blame",
+    "pack": "pack_09_code_review_git",
+    "verdict": "DROP",
+    "reason": "Identity flag; alias equals term."
+  },
+  {
+    "alias": "git log",
+    "term": "git log",
+    "pack": "pack_09_code_review_git",
+    "verdict": "DROP",
+    "reason": "Identity flag; alias equals term."
+  },
+  {
+    "alias": "git re set",
+    "term": "git reset",
+    "pack": "pack_09_code_review_git",
+    "verdict": "KEEP",
+    "reason": "Whisper splitting 'reset' into 're set'; valid split-word restoration."
+  },
+  {
+    "alias": "git re vert",
+    "term": "git revert",
+    "pack": "pack_09_code_review_git",
+    "verdict": "KEEP",
+    "reason": "Whisper splitting 'revert' into 're vert'; valid split-word restoration."
+  },
+  {
+    "alias": "force push",
+    "term": "force push",
+    "pack": "pack_09_code_review_git",
+    "verdict": "DROP",
+    "reason": "Identity flag; alias equals term."
+  },
+  {
+    "alias": "fast forward",
+    "term": "fast-forward",
+    "pack": "pack_09_code_review_git",
+    "verdict": "DROP",
+    "reason": "Very common English phrase; adding a hyphen doesn't justify a dictionary rule and risks corrupting normal speech."
+  },
+  {
+    "alias": "detached head",
+    "term": "detached HEAD",
+    "pack": "pack_09_code_review_git",
+    "verdict": "DROP",
+    "reason": "Identity flag; alias equals term modulo capitalization of HEAD."
+  },
+  {
+    "alias": "head git",
+    "term": "HEAD",
+    "pack": "pack_09_code_review_git",
+    "verdict": "KEEP",
+    "reason": "'Head git' is not natural English; the only plausible reading is the git HEAD reference."
+  },
+  {
+    "alias": "up stream",
+    "term": "upstream",
+    "pack": "pack_09_code_review_git",
+    "verdict": "KEEP",
+    "reason": "Whisper splitting compound word 'upstream'; valid restoration."
+  },
+  {
+    "alias": "down stream",
+    "term": "downstream",
+    "pack": "pack_09_code_review_git",
+    "verdict": "KEEP",
+    "reason": "Whisper splitting compound word 'downstream'; valid restoration."
+  },
+  {
+    "alias": "origin remote",
+    "term": "origin",
+    "pack": "pack_09_code_review_git",
+    "verdict": "DROP",
+    "reason": "Removes the word 'remote' from what the user said; information loss."
+  },
+  {
+    "alias": "remote git",
+    "term": "remote",
+    "pack": "pack_09_code_review_git",
+    "verdict": "DROP",
+    "reason": "Removes 'git' from what the user said; information loss."
+  },
+  {
+    "alias": "fork repo",
+    "term": "fork",
+    "pack": "pack_09_code_review_git",
+    "verdict": "DROP",
+    "reason": "Removes 'repo' from what the user said; information loss."
+  },
+  {
+    "alias": "clone repo",
+    "term": "clone",
+    "pack": "pack_09_code_review_git",
+    "verdict": "DROP",
+    "reason": "Removes 'repo' from what the user said; information loss."
+  },
+  {
+    "alias": "feature branch",
+    "term": "feature branch",
+    "pack": "pack_09_code_review_git",
+    "verdict": "DROP",
+    "reason": "Identity flag; alias equals term."
+  },
+  {
+    "alias": "release branch",
+    "term": "release branch",
+    "pack": "pack_09_code_review_git",
+    "verdict": "DROP",
+    "reason": "Identity flag; alias equals term."
+  },
+  {
+    "alias": "main branch",
+    "term": "main branch",
+    "pack": "pack_09_code_review_git",
+    "verdict": "DROP",
+    "reason": "Identity flag; alias equals term."
+  },
+  {
+    "alias": "develop branch",
+    "term": "develop branch",
+    "pack": "pack_09_code_review_git",
+    "verdict": "DROP",
+    "reason": "Identity flag; alias equals term."
+  },
+  {
+    "alias": "trunk based development",
+    "term": "trunk-based development",
+    "pack": "pack_09_code_review_git",
+    "verdict": "KEEP",
+    "reason": "Restores the standard hyphenation of the tech term 'trunk-based development'; the alias form is the natural Whisper output."
+  },
+  {
+    "alias": "git flow",
+    "term": "GitFlow",
+    "pack": "pack_09_code_review_git",
+    "verdict": "KEEP",
+    "reason": "'Git flow' spoken aloud is the phonetic form of the GitFlow branching model; the capitalized compound is the standard form."
+  },
+  {
+    "alias": "git hub flow",
+    "term": "GitHub Flow",
+    "pack": "pack_09_code_review_git",
+    "verdict": "KEEP",
+    "reason": "Whisper splitting 'GitHub' into 'git hub'; valid restoration of a proper-noun tech term."
+  },
+  {
+    "alias": "branch pro tection",
+    "term": "branch protection",
+    "pack": "pack_09_code_review_git",
+    "verdict": "KEEP",
+    "reason": "Whisper splitting 'protection' into 'pro tection'; valid split-word restoration."
+  },
+  {
+    "alias": "code owners",
+    "term": "CODEOWNERS",
+    "pack": "pack_09_code_review_git",
+    "verdict": "KEEP",
+    "reason": "In a git context, 'code owners' unambiguously refers to the CODEOWNERS file; the all-caps compound is the canonical form."
+  },
+  {
+    "alias": "pre commit hook",
+    "term": "pre-commit hook",
+    "pack": "pack_09_code_review_git",
+    "verdict": "KEEP",
+    "reason": "Restores the standard hyphenation of the technical term 'pre-commit hook'."
+  },
+  {
+    "alias": "post commit hook",
+    "term": "post-commit hook",
+    "pack": "pack_09_code_review_git",
+    "verdict": "KEEP",
+    "reason": "Restores the standard hyphenation of the technical term 'post-commit hook'."
+  },
+  {
+    "alias": "lent",
+    "term": "lint",
+    "pack": "pack_09_code_review_git",
+    "verdict": "DROP",
+    "reason": "Single common English word (past tense of 'lend'; the Lenten season); flagged single_word_english."
+  },
+  {
+    "alias": "lenting",
+    "term": "linting",
+    "pack": "pack_09_code_review_git",
+    "verdict": "KEEP",
+    "reason": "'Lenting' is not a real English word; the only plausible reading is a Whisper mishearing of 'linting'."
+  },
+  {
+    "alias": "linter tool",
+    "term": "linter",
+    "pack": "pack_09_code_review_git",
+    "verdict": "DROP",
+    "reason": "Removes 'tool' from what the user said; information loss."
+  },
+  {
+    "alias": "auto format",
+    "term": "auto-format",
+    "pack": "pack_09_code_review_git",
+    "verdict": "DROP",
+    "reason": "Common English compound; adding a hyphen is a minor formatting change that doesn't justify a dictionary rule."
+  },
+  {
+    "alias": "pretty er",
+    "term": "prettier",
+    "pack": "pack_09_code_review_git",
+    "verdict": "KEEP",
+    "reason": "Whisper splitting 'Prettier' into 'pretty er'; 'pretty er' is not standard English (the comparative is 'prettier' as one word)."
+  },
+  {
+    "alias": "e s lint",
+    "term": "ESLint",
+    "pack": "pack_09_code_review_git",
+    "verdict": "KEEP",
+    "reason": "Phonetic letter-by-letter spelling of ESLint; cannot appear in ordinary English with another meaning."
+  },
+  {
+    "alias": "es lint",
+    "term": "ESLint",
+    "pack": "pack_09_code_review_git",
+    "verdict": "KEEP",
+    "reason": "Whisper splitting 'ESLint'; 'es lint' has no ordinary English meaning."
+  },
+  {
+    "alias": "type check",
+    "term": "type check",
+    "pack": "pack_09_code_review_git",
+    "verdict": "DROP",
+    "reason": "Identity flag; alias equals term."
+  },
+  {
+    "alias": "type safe",
+    "term": "type-safe",
+    "pack": "pack_09_code_review_git",
+    "verdict": "DROP",
+    "reason": "Common English adjective phrase; adding a hyphen doesn't justify a dictionary rule."
+  },
+  {
+    "alias": "type safety",
+    "term": "type safety",
+    "pack": "pack_09_code_review_git",
+    "verdict": "DROP",
+    "reason": "Identity flag; alias equals term."
+  },
+  {
+    "alias": "strongly typed",
+    "term": "strongly typed",
+    "pack": "pack_09_code_review_git",
+    "verdict": "DROP",
+    "reason": "Identity flag; alias equals term."
+  },
+  {
+    "alias": "loosely typed",
+    "term": "loosely typed",
+    "pack": "pack_09_code_review_git",
+    "verdict": "DROP",
+    "reason": "Identity flag; alias equals term."
+  },
+  {
+    "alias": "re factor",
+    "term": "refactor",
+    "pack": "pack_09_code_review_git",
+    "verdict": "KEEP",
+    "reason": "Whisper splitting 'refactor' into 're factor'; valid compound restoration."
+  },
+  {
+    "alias": "re factoring",
+    "term": "refactoring",
+    "pack": "pack_09_code_review_git",
+    "verdict": "KEEP",
+    "reason": "Whisper splitting 'refactoring' into 're factoring'; valid compound restoration."
+  },
+  {
+    "alias": "teck debt",
+    "term": "tech debt",
+    "pack": "pack_09_code_review_git",
+    "verdict": "KEEP",
+    "reason": "Whisper misspelling 'tech' as 'teck'; valid phonetic correction."
+  },
+  {
+    "alias": "technical debt",
+    "term": "tech debt",
+    "pack": "pack_09_code_review_git",
+    "verdict": "DROP",
+    "reason": "Common English phrase; abbreviating to 'tech debt' changes what the user said."
+  },
+  {
+    "alias": "code smell",
+    "term": "code smell",
+    "pack": "pack_09_code_review_git",
+    "verdict": "DROP",
+    "reason": "Identity flag; alias equals term."
+  },
+  {
+    "alias": "anti pattern",
+    "term": "anti-pattern",
+    "pack": "pack_09_code_review_git",
+    "verdict": "DROP",
+    "reason": "Common English compound phrase; adding a hyphen doesn't justify a dictionary rule."
+  },
+  {
+    "alias": "dee sign pattern",
+    "term": "design pattern",
+    "pack": "pack_09_code_review_git",
+    "verdict": "KEEP",
+    "reason": "Whisper splitting 'design' into 'dee sign'; valid phonetic split-word restoration."
+  },
+  {
+    "alias": "single ton",
+    "term": "singleton",
+    "pack": "pack_09_code_review_git",
+    "verdict": "KEEP",
+    "reason": "Whisper splitting 'singleton' into 'single ton'; valid compound restoration."
+  },
+  {
+    "alias": "factory pattern",
+    "term": "factory",
+    "pack": "pack_09_code_review_git",
+    "verdict": "DROP",
+    "reason": "Removes 'pattern' from what the user said; information loss."
+  },
+  {
+    "alias": "a dapter",
+    "term": "adapter",
+    "pack": "pack_09_code_review_git",
+    "verdict": "KEEP",
+    "reason": "Whisper splitting 'adapter' into 'a dapter'; 'a dapter' is not natural English."
+  },
+  {
+    "alias": "ob server",
+    "term": "observer",
+    "pack": "pack_09_code_review_git",
+    "verdict": "KEEP",
+    "reason": "Whisper splitting 'observer' into 'ob server'; 'ob server' is not natural English."
+  },
+  {
+    "alias": "strategy pattern",
+    "term": "strategy pattern",
+    "pack": "pack_09_code_review_git",
+    "verdict": "DROP",
+    "reason": "Identity flag; alias equals term."
+  },
+  {
+    "alias": "dependency in jection",
+    "term": "dependency injection",
+    "pack": "pack_09_code_review_git",
+    "verdict": "KEEP",
+    "reason": "Whisper splitting 'injection' into 'in jection'; valid split-word restoration."
+  },
+  {
+    "alias": "d i",
+    "term": "DI",
+    "pack": "pack_09_code_review_git",
+    "verdict": "KEEP",
+    "reason": "Phonetic letter-by-letter spelling of the DI abbreviation; no ordinary English meaning."
+  },
+  {
+    "alias": "dee eye",
+    "term": "DI",
+    "pack": "pack_09_code_review_git",
+    "verdict": "KEEP",
+    "reason": "Phonetic letter-by-letter rendering of DI; unambiguous."
+  },
+  {
+    "alias": "in version of control",
+    "term": "inversion of control",
+    "pack": "pack_09_code_review_git",
+    "verdict": "KEEP",
+    "reason": "Whisper splitting 'inversion' into 'in version'; 'in version of control' is not natural English."
+  },
+  {
+    "alias": "i o c",
+    "term": "IoC",
+    "pack": "pack_09_code_review_git",
+    "verdict": "KEEP",
+    "reason": "Phonetic letter-by-letter spelling of IoC; no ordinary English meaning."
+  },
+  {
+    "alias": "eye oh see",
+    "term": "IoC",
+    "pack": "pack_09_code_review_git",
+    "verdict": "KEEP",
+    "reason": "Phonetic letter-by-letter rendering of IoC; unambiguous."
+  },
+  {
+    "alias": "ab straction",
+    "term": "abstraction",
+    "pack": "pack_09_code_review_git",
+    "verdict": "KEEP",
+    "reason": "Whisper splitting 'abstraction' into 'ab straction'; valid split-word restoration."
+  },
+  {
+    "alias": "en capsule ation",
+    "term": "encapsulation",
+    "pack": "pack_09_code_review_git",
+    "verdict": "KEEP",
+    "reason": "Whisper splitting 'encapsulation'; 'en capsule ation' is not natural English."
+  },
+  {
+    "alias": "poly more fizz um",
+    "term": "polymorphism",
+    "pack": "pack_09_code_review_git",
+    "verdict": "KEEP",
+    "reason": "Heavy phonetic mangle of 'polymorphism'; 'poly more fizz um' has no ordinary English meaning."
+  },
+  {
+    "alias": "in heritance",
+    "term": "inheritance",
+    "pack": "pack_09_code_review_git",
+    "verdict": "KEEP",
+    "reason": "Whisper splitting 'inheritance' into 'in heritance'; valid split-word restoration."
+  },
+  {
+    "alias": "composition over in heritance",
+    "term": "composition over inheritance",
+    "pack": "pack_09_code_review_git",
+    "verdict": "KEEP",
+    "reason": "Whisper splitting 'inheritance'; valid split-word restoration of a standard OOP principle."
+  },
+  {
+    "alias": "inter face",
+    "term": "interface",
+    "pack": "pack_09_code_review_git",
+    "verdict": "KEEP",
+    "reason": "Whisper splitting 'interface' into 'inter face'; valid compound restoration."
+  },
+  {
+    "alias": "ab stract class",
+    "term": "abstract class",
+    "pack": "pack_09_code_review_git",
+    "verdict": "KEEP",
+    "reason": "Whisper splitting 'abstract' into 'ab stract'; valid split-word restoration."
+  },
+  {
+    "alias": "boiler plate",
+    "term": "boilerplate",
+    "pack": "pack_09_code_review_git",
+    "verdict": "KEEP",
+    "reason": "Whisper splitting compound word 'boilerplate' into 'boiler plate'; valid compound restoration."
+  },
+  {
+    "alias": "scaf fold",
+    "term": "scaffold",
+    "pack": "pack_09_code_review_git",
+    "verdict": "KEEP",
+    "reason": "Whisper splitting 'scaffold' into 'scaf fold'; valid compound restoration."
+  },
+  {
+    "alias": "scaf folding",
+    "term": "scaffolding",
+    "pack": "pack_09_code_review_git",
+    "verdict": "KEEP",
+    "reason": "Whisper splitting 'scaffolding' into 'scaf folding'; valid split-word restoration."
+  },
+  {
+    "alias": "temp late",
+    "term": "template",
+    "pack": "pack_09_code_review_git",
+    "verdict": "KEEP",
+    "reason": "Whisper splitting 'template' into 'temp late'; 'temp late' is not natural English."
+  },
+  {
+    "alias": "snip it",
+    "term": "snippet",
+    "pack": "pack_09_code_review_git",
+    "verdict": "KEEP",
+    "reason": "Whisper mishearing 'snippet' as 'snip it'; 'snip it' alone is ambiguous but the correction is accurate."
+  },
+  {
+    "alias": "gist github",
+    "term": "gist",
+    "pack": "pack_09_code_review_git",
+    "verdict": "DROP",
+    "reason": "Removes 'github' from what the user said; information loss."
+  },
+  {
+    "alias": "code base",
+    "term": "codebase",
+    "pack": "pack_09_code_review_git",
+    "verdict": "KEEP",
+    "reason": "Restores the standard compound word 'codebase' from Whisper's split output; tech-specific compound restoration."
+  },
+  {
+    "alias": "repo git",
+    "term": "repo",
+    "pack": "pack_09_code_review_git",
+    "verdict": "DROP",
+    "reason": "Removes 'git' from what the user said; information loss."
+  },
+  {
+    "alias": "re po",
+    "term": "repo",
+    "pack": "pack_09_code_review_git",
+    "verdict": "KEEP",
+    "reason": "Whisper splitting 'repo' into 're po'; valid split-word restoration."
+  },
+  {
+    "alias": "re pos itory",
+    "term": "repository",
+    "pack": "pack_09_code_review_git",
+    "verdict": "KEEP",
+    "reason": "Whisper splitting 'repository'; 're pos itory' is not natural English."
+  },
+  {
+    "alias": "mono repo",
+    "term": "monorepo",
+    "pack": "pack_09_code_review_git",
+    "verdict": "KEEP",
+    "reason": "Whisper splitting the tech compound 'monorepo'; valid restoration."
+  },
+  {
+    "alias": "poly repo",
+    "term": "polyrepo",
+    "pack": "pack_09_code_review_git",
+    "verdict": "KEEP",
+    "reason": "Whisper splitting the tech compound 'polyrepo'; valid restoration."
+  },
+  {
+    "alias": "multi repo",
+    "term": "multi-repo",
+    "pack": "pack_09_code_review_git",
+    "verdict": "KEEP",
+    "reason": "Restores the standard hyphenated form 'multi-repo' from Whisper's split output."
+  },
+  {
+    "alias": "see eye pipeline",
+    "term": "CI pipeline",
+    "pack": "pack_09_code_review_git",
+    "verdict": "KEEP",
+    "reason": "Phonetic letter-by-letter rendering of 'CI' with 'pipeline'; unambiguous technical phrase."
+  },
+  {
+    "alias": "c i pipeline",
+    "term": "CI pipeline",
+    "pack": "pack_09_code_review_git",
+    "verdict": "KEEP",
+    "reason": "Phonetic letter-by-letter spelling of 'CI' with 'pipeline'; unambiguous."
+  },
+  {
+    "alias": "see dee pipeline",
+    "term": "CD pipeline",
+    "pack": "pack_09_code_review_git",
+    "verdict": "KEEP",
+    "reason": "Phonetic letter-by-letter rendering of 'CD' with 'pipeline'; unambiguous technical phrase."
+  },
+  {
+    "alias": "c d pipeline",
+    "term": "CD pipeline",
+    "pack": "pack_09_code_review_git",
+    "verdict": "KEEP",
+    "reason": "Phonetic letter-by-letter spelling of 'CD' with 'pipeline'; unambiguous."
+  },
+  {
+    "alias": "see eye see dee pipeline",
+    "term": "CI/CD pipeline",
+    "pack": "pack_09_code_review_git",
+    "verdict": "KEEP",
+    "reason": "Phonetic letter-by-letter rendering of 'CI/CD'; cannot appear in ordinary English with another meaning."
+  },
+  {
+    "alias": "build pipe line",
+    "term": "build pipeline",
+    "pack": "pack_09_code_review_git",
+    "verdict": "KEEP",
+    "reason": "Whisper splitting 'pipeline' into 'pipe line'; valid compound restoration."
+  },
+  {
+    "alias": "deployment pipe line",
+    "term": "deployment pipeline",
+    "pack": "pack_09_code_review_git",
+    "verdict": "KEEP",
+    "reason": "Whisper splitting 'pipeline' into 'pipe line'; valid compound restoration."
+  },
+  {
+    "alias": "art ih fact",
+    "term": "artifact",
+    "pack": "pack_09_code_review_git",
+    "verdict": "KEEP",
+    "reason": "Phonetic mangle of 'artifact'; 'art ih fact' is not natural English."
+  },
+  {
+    "alias": "build art ih fact",
+    "term": "build artifact",
+    "pack": "pack_09_code_review_git",
+    "verdict": "KEEP",
+    "reason": "Phonetic mangle of 'artifact' in a technical compound; unambiguous."
+  },
+  {
+    "alias": "container image",
+    "term": "container image",
+    "pack": "pack_09_code_review_git",
+    "verdict": "DROP",
+    "reason": "Identity flag; alias equals term."
+  },
+  {
+    "alias": "docker image",
+    "term": "Docker image",
+    "pack": "pack_09_code_review_git",
+    "verdict": "DROP",
+    "reason": "Identity flag; alias equals term modulo capitalization."
+  },
+  {
+    "alias": "tag release",
+    "term": "tag",
+    "pack": "pack_09_code_review_git",
+    "verdict": "DROP",
+    "reason": "Removes 'release' from what the user said; information loss."
+  },
+  {
+    "alias": "release tag",
+    "term": "release tag",
+    "pack": "pack_09_code_review_git",
+    "verdict": "DROP",
+    "reason": "Identity flag; alias equals term."
+  },
+  {
+    "alias": "semantic ver shun ing",
+    "term": "semantic versioning",
+    "pack": "pack_09_code_review_git",
+    "verdict": "KEEP",
+    "reason": "Heavy phonetic mangle of 'versioning' as 'ver shun ing'; 'semantic ver shun ing' is not natural English."
+  },
+  {
+    "alias": "sem ver",
+    "term": "semver",
+    "pack": "pack_09_code_review_git",
+    "verdict": "DEDUPE",
+    "reason": "Conflict: same alias maps to 'semver' (twice) and 'SemVer'. Winner is 'SemVer' — the official capitalization from semver.org."
+  },
+  {
+    "alias": "sem ver",
+    "term": "semver",
+    "pack": "pack_09_code_review_git",
+    "verdict": "DEDUPE",
+    "reason": "Conflict: duplicate row for 'semver'; winner is 'SemVer'."
+  },
+  {
+    "alias": "sem ver",
+    "term": "SemVer",
+    "pack": "pack_09_code_review_git",
+    "verdict": "DEDUPE",
+    "reason": "Conflict winner row; 'SemVer' is the canonical capitalization."
+  },
+  {
+    "alias": "breaking change",
+    "term": "breaking change",
+    "pack": "pack_09_code_review_git",
+    "verdict": "DROP",
+    "reason": "Identity flag; alias equals term."
+  },
+  {
+    "alias": "backward compatible",
+    "term": "backward compatible",
+    "pack": "pack_09_code_review_git",
+    "verdict": "DROP",
+    "reason": "Identity flag; alias equals term."
+  },
+  {
+    "alias": "backward compat ibility",
+    "term": "backward compatibility",
+    "pack": "pack_09_code_review_git",
+    "verdict": "KEEP",
+    "reason": "Whisper splitting 'compatibility' into 'compat ibility'; valid split-word restoration."
+  },
+  {
+    "alias": "dep re cation",
+    "term": "deprecation",
+    "pack": "pack_09_code_review_git",
+    "verdict": "KEEP",
+    "reason": "Whisper splitting 'deprecation' into 'dep re cation'; valid split-word restoration."
+  },
+  {
+    "alias": "dep re cated",
+    "term": "deprecated",
+    "pack": "pack_09_code_review_git",
+    "verdict": "KEEP",
+    "reason": "Whisper splitting 'deprecated' into 'dep re cated'; valid split-word restoration."
+  },
+  {
+    "alias": "sun set",
+    "term": "sunset",
+    "pack": "pack_09_code_review_git",
+    "verdict": "DROP",
+    "reason": "Very common English word (the sun setting); the split form 'sun set' would be restored to the same meaning as the alias — no tech-specific change needed."
+  },
+  {
+    "alias": "sun setting",
+    "term": "sunsetting",
+    "pack": "pack_09_code_review_git",
+    "verdict": "DROP",
+    "reason": "Common English word form; alias and term have identical meaning, just spacing."
+  },
+  {
+    "alias": "change log",
+    "term": "changelog",
+    "pack": "pack_09_code_review_git",
+    "verdict": "KEEP",
+    "reason": "Restores the standard tech compound 'changelog' from Whisper's two-word split output."
+  },
+  {
+    "alias": "release notes",
+    "term": "release notes",
+    "pack": "pack_09_code_review_git",
+    "verdict": "DROP",
+    "reason": "Identity flag; alias equals term."
+  },
+  {
+    "alias": "my gration",
+    "term": "migration",
+    "pack": "pack_09_code_review_git",
+    "verdict": "KEEP",
+    "reason": "Phonetic mangle of 'migration' as 'my gration'; not natural English."
+  },
+  {
+    "alias": "database my gration",
+    "term": "database migration",
+    "pack": "pack_09_code_review_git",
+    "verdict": "KEEP",
+    "reason": "Phonetic mangle of 'migration'; valid correction in a technical compound phrase."
+  },
+  {
+    "alias": "skee ma my gration",
+    "term": "schema migration",
+    "pack": "pack_09_code_review_git",
+    "verdict": "KEEP",
+    "reason": "Phonetic mangling of both 'schema' and 'migration'; 'skee ma my gration' is not natural English."
+  },
+  {
+    "alias": "data my gration",
+    "term": "data migration",
+    "pack": "pack_09_code_review_git",
+    "verdict": "KEEP",
+    "reason": "Phonetic mangle of 'migration'; valid correction."
+  },
+  {
+    "alias": "run book",
+    "term": "runbook",
+    "pack": "pack_09_code_review_git",
+    "verdict": "KEEP",
+    "reason": "Whisper splitting the tech compound 'runbook'; restores the standard single-word form."
+  },
+  {
+    "alias": "play book",
+    "term": "playbook",
+    "pack": "pack_09_code_review_git",
+    "verdict": "DROP",
+    "reason": "'Playbook' is very common English (sports, business, general use); compound restoration doesn't justify a dictionary rule."
+  },
+  {
+    "alias": "s o p",
+    "term": "SOP",
+    "pack": "pack_09_code_review_git",
+    "verdict": "KEEP",
+    "reason": "Phonetic letter-by-letter spelling of SOP; no ordinary English meaning."
+  },
+  {
+    "alias": "ess oh pee",
+    "term": "SOP",
+    "pack": "pack_09_code_review_git",
+    "verdict": "KEEP",
+    "reason": "Phonetic letter-by-letter rendering of SOP; unambiguous."
+  },
+  {
+    "alias": "standard operating procedure",
+    "term": "SOP",
+    "pack": "pack_09_code_review_git",
+    "verdict": "DROP",
+    "reason": "Normal English phrase; silently abbreviating to SOP corrupts natural dictation."
+  },
+  {
+    "alias": "read me",
+    "term": "README",
+    "pack": "pack_09_code_review_git",
+    "verdict": "DROP",
+    "reason": "Common English phrase with non-technical use ('please read me that note'); would corrupt normal speech."
+  },
+  {
+    "alias": "read me dot m d",
+    "term": "README.md",
+    "pack": "pack_09_code_review_git",
+    "verdict": "KEEP",
+    "reason": "Spoken-aloud form of the filename 'README.md'; cannot appear in normal English without referring to that file."
+  },
+  {
+    "alias": "contributing guide",
+    "term": "contributing guide",
+    "pack": "pack_09_code_review_git",
+    "verdict": "DROP",
+    "reason": "Identity flag; alias equals term."
+  },
+  {
+    "alias": "code of con duct",
+    "term": "code of conduct",
+    "pack": "pack_09_code_review_git",
+    "verdict": "KEEP",
+    "reason": "Whisper splitting 'conduct' into 'con duct'; valid split-word restoration."
+  },
+  {
+    "alias": "pair programming",
+    "term": "pair programming",
+    "pack": "pack_09_code_review_git",
+    "verdict": "DROP",
+    "reason": "Identity flag; alias equals term."
+  },
+  {
+    "alias": "mob programming",
+    "term": "mob programming",
+    "pack": "pack_09_code_review_git",
+    "verdict": "DROP",
+    "reason": "Identity flag; alias equals term."
+  },
+  {
+    "alias": "paring",
+    "term": "pairing",
+    "pack": "pack_09_code_review_git",
+    "verdict": "DROP",
+    "reason": "Real English word (paring a fruit or vegetable); flagged single_word_english."
+  },
+  {
+    "alias": "rubber ducking",
+    "term": "rubber ducking",
+    "pack": "pack_09_code_review_git",
+    "verdict": "DROP",
+    "reason": "Identity flag; alias equals term."
+  },
+  {
+    "alias": "white board",
+    "term": "whiteboard",
+    "pack": "pack_09_code_review_git",
+    "verdict": "KEEP",
+    "reason": "Restores the standard compound word 'whiteboard' from Whisper's split output."
+  },
+  {
+    "alias": "white boarding",
+    "term": "whiteboarding",
+    "pack": "pack_09_code_review_git",
+    "verdict": "KEEP",
+    "reason": "Restores the standard compound 'whiteboarding' from Whisper's split output."
+  },
+  {
+    "alias": "architecture re view",
+    "term": "architecture review",
+    "pack": "pack_09_code_review_git",
+    "verdict": "KEEP",
+    "reason": "Whisper splitting 'review' into 're view'; valid split-word restoration."
+  },
+  {
+    "alias": "dee sign re view",
+    "term": "design review",
+    "pack": "pack_09_code_review_git",
+    "verdict": "KEEP",
+    "reason": "Whisper splitting 'design' and 'review'; valid split-word restoration."
+  },
+  {
+    "alias": "teck re view",
+    "term": "tech review",
+    "pack": "pack_09_code_review_git",
+    "verdict": "KEEP",
+    "reason": "Whisper misspelling 'tech' as 'teck' and splitting 'review'; valid phonetic correction."
+  },
+  {
+    "alias": "peer re view",
+    "term": "peer review",
+    "pack": "pack_09_code_review_git",
+    "verdict": "KEEP",
+    "reason": "Whisper splitting 'review' into 're view'; valid split-word restoration."
+  },
+  {
+    "alias": "system dee sign",
+    "term": "system design",
+    "pack": "pack_09_code_review_git",
+    "verdict": "KEEP",
+    "reason": "Whisper splitting 'design' into 'dee sign'; valid phonetic split-word restoration."
+  },
+  {
+    "alias": "a p i dee sign",
+    "term": "API design",
+    "pack": "pack_09_code_review_git",
+    "verdict": "KEEP",
+    "reason": "Phonetic letter-by-letter for 'API' plus phonetic split of 'design'; unambiguous technical phrase."
+  },
+  {
+    "alias": "skee ma dee sign",
+    "term": "schema design",
+    "pack": "pack_09_code_review_git",
+    "verdict": "KEEP",
+    "reason": "Phonetic mangling of 'schema' and 'design'; 'skee ma dee sign' is not natural English."
+  },
+  {
+    "alias": "data model",
+    "term": "data model",
+    "pack": "pack_09_code_review_git",
+    "verdict": "DROP",
+    "reason": "Identity flag; alias equals term."
+  },
+  {
+    "alias": "data modeling",
+    "term": "data modeling",
+    "pack": "pack_09_code_review_git",
+    "verdict": "DROP",
+    "reason": "Identity flag; alias equals term."
+  },
+  {
+    "alias": "e r diagram",
+    "term": "ER diagram",
+    "pack": "pack_09_code_review_git",
+    "verdict": "KEEP",
+    "reason": "Phonetic letter-by-letter spelling of 'ER' with 'diagram'; unambiguous technical phrase."
+  },
+  {
+    "alias": "e r d",
+    "term": "ERD",
+    "pack": "pack_09_code_review_git",
+    "verdict": "KEEP",
+    "reason": "Phonetic letter-by-letter spelling of ERD; no ordinary English meaning."
+  },
+  {
+    "alias": "ee are dee",
+    "term": "ERD",
+    "pack": "pack_09_code_review_git",
+    "verdict": "KEEP",
+    "reason": "Phonetic letter-by-letter rendering of ERD; unambiguous."
+  },
+  {
+    "alias": "sequence diagram",
+    "term": "sequence diagram",
+    "pack": "pack_09_code_review_git",
+    "verdict": "DROP",
+    "reason": "Identity flag; alias equals term."
+  },
+  {
+    "alias": "class diagram",
+    "term": "class diagram",
+    "pack": "pack_09_code_review_git",
+    "verdict": "DROP",
+    "reason": "Identity flag; alias equals term."
+  },
+  {
+    "alias": "flow chart",
+    "term": "flowchart",
+    "pack": "pack_09_code_review_git",
+    "verdict": "KEEP",
+    "reason": "Restores the standard compound word 'flowchart' from Whisper's two-word split output."
+  },
+  {
+    "alias": "swim lane diagram",
+    "term": "swimlane diagram",
+    "pack": "pack_09_code_review_git",
+    "verdict": "KEEP",
+    "reason": "Restores the compound 'swimlane' from Whisper's split output."
+  },
+  {
+    "alias": "architecture diagram",
+    "term": "architecture diagram",
+    "pack": "pack_09_code_review_git",
+    "verdict": "DROP",
+    "reason": "Identity flag; alias equals term."
+  },
+  {
+    "alias": "infra diagram",
+    "term": "infra diagram",
+    "pack": "pack_09_code_review_git",
+    "verdict": "DROP",
+    "reason": "Identity flag; alias equals term."
+  },
+  {
+    "alias": "mermaid diagram",
+    "term": "Mermaid",
+    "pack": "pack_09_code_review_git",
+    "verdict": "DROP",
+    "reason": "Removes 'diagram' from what the user said; also 'mermaid' is a common English word that would corrupt non-technical contexts."
+  },
+  {
+    "alias": "plant u m l",
+    "term": "PlantUML",
+    "pack": "pack_09_code_review_git",
+    "verdict": "KEEP",
+    "reason": "Phonetic letter-by-letter rendering of 'PlantUML'; cannot appear in ordinary English with another meaning."
+  },
+  {
+    "alias": "lucid chart",
+    "term": "Lucidchart",
+    "pack": "pack_09_code_review_git",
+    "verdict": "KEEP",
+    "reason": "Whisper splitting the proper noun 'Lucidchart'; valid compound proper-noun restoration."
+  },
+  {
+    "alias": "ex cali draw",
+    "term": "Excalidraw",
+    "pack": "pack_09_code_review_git",
+    "verdict": "KEEP",
+    "reason": "Phonetic splitting of the app name 'Excalidraw'; 'ex cali draw' is not natural English."
+  },
+  {
+    "alias": "draw io",
+    "term": "draw.io",
+    "pack": "pack_09_code_review_git",
+    "verdict": "KEEP",
+    "reason": "Whisper output for the domain-name tool 'draw.io'; restores the dot-notation form."
+  },
+  {
+    "alias": "draw eye oh",
+    "term": "draw.io",
+    "pack": "pack_09_code_review_git",
+    "verdict": "KEEP",
+    "reason": "Phonetic letter-by-letter rendering of 'draw.io'; unambiguous."
+  },
+  {
+    "alias": "diagrams dot net",
+    "term": "diagrams.net",
+    "pack": "pack_09_code_review_git",
+    "verdict": "KEEP",
+    "reason": "Spoken-aloud form of the domain 'diagrams.net'; cannot appear in ordinary English without referring to that tool."
+  },
+  {
+    "alias": "fig ma",
+    "term": "Figma",
+    "pack": "pack_09_code_review_git",
+    "verdict": "KEEP",
+    "reason": "Whisper splitting the proper noun 'Figma' into 'fig ma'; 'fig ma' is not natural English."
+  },
+  {
+    "alias": "fig jam",
+    "term": "Figjam",
+    "pack": "pack_09_code_review_git",
+    "verdict": "DEDUPE",
+    "reason": "Conflict: same alias maps to 'Figjam' and 'FigJam'. Winner is 'FigJam' — the official capitalization used by Figma."
+  },
+  {
+    "alias": "fig jam",
+    "term": "FigJam",
+    "pack": "pack_09_code_review_git",
+    "verdict": "DEDUPE",
+    "reason": "Conflict winner row; 'FigJam' is the official Figma product name capitalization."
+  },
+  {
+    "alias": "mee ro",
+    "term": "Miro",
+    "pack": "pack_09_code_review_git",
+    "verdict": "KEEP",
+    "reason": "Phonetic splitting of the proper noun 'Miro'; 'mee ro' is not natural English."
+  },
+  {
+    "alias": "mirror",
+    "term": "Miro",
+    "pack": "pack_09_code_review_git",
+    "verdict": "DROP",
+    "reason": "Single common English word (a reflective surface); flagged single_word_english."
+  },
+  {
+    "alias": "loom video",
+    "term": "Loom",
+    "pack": "pack_09_code_review_git",
+    "verdict": "DROP",
+    "reason": "Removes 'video' from what the user said; also 'loom' is a common English word (a weaving device)."
+  },
+  {
+    "alias": "a sink video",
+    "term": "async video",
+    "pack": "pack_09_code_review_git",
+    "verdict": "KEEP",
+    "reason": "Whisper mishearing 'async' as 'a sink'; 'a sink video' is not natural English."
+  },
+  {
+    "alias": "screen share",
+    "term": "screen share",
+    "pack": "pack_09_code_review_git",
+    "verdict": "DEDUPE",
+    "reason": "Conflict: same alias maps to 'screen share' (identity) and 'screenshare'. Winner is 'screenshare' — the standard tech compound form."
+  },
+  {
+    "alias": "screen share",
+    "term": "screenshare",
+    "pack": "pack_09_code_review_git",
+    "verdict": "DEDUPE",
+    "reason": "Conflict winner row; 'screenshare' is the standard compound form."
+  },
+  {
+    "alias": "live share",
+    "term": "live share",
+    "pack": "pack_09_code_review_git",
+    "verdict": "DROP",
+    "reason": "Identity flag; alias equals term."
+  },
+  {
+    "alias": "v s code live share",
+    "term": "VS Code Live Share",
+    "pack": "pack_09_code_review_git",
+    "verdict": "KEEP",
+    "reason": "Phonetic letter-by-letter for 'VS' with 'Code Live Share'; unambiguous reference to the Microsoft tool."
+  },
+  {
+    "alias": "dee bugger",
+    "term": "debugger",
+    "pack": "pack_09_code_review_git",
+    "verdict": "KEEP",
+    "reason": "Whisper splitting 'debugger' into 'dee bugger'; 'dee bugger' is not natural English."
+  },
+  {
+    "alias": "break point",
+    "term": "breakpoint",
+    "pack": "pack_09_code_review_git",
+    "verdict": "KEEP",
+    "reason": "Restores the tech compound 'breakpoint' from Whisper's split output."
+  },
+  {
+    "alias": "stack trace",
+    "term": "stack trace",
+    "pack": "pack_09_code_review_git",
+    "verdict": "DEDUPE",
+    "reason": "Conflict: same alias maps to 'stack trace' (identity) and 'stacktrace'. Winner is 'stacktrace' — the standard compound form in most ecosystems."
+  },
+  {
+    "alias": "stack trace",
+    "term": "stacktrace",
+    "pack": "pack_09_code_review_git",
+    "verdict": "DEDUPE",
+    "reason": "Conflict winner row; 'stacktrace' is the standard compound form."
+  },
+  {
+    "alias": "trace back",
+    "term": "traceback",
+    "pack": "pack_09_code_review_git",
+    "verdict": "KEEP",
+    "reason": "Restores the Python-standard compound 'traceback' from Whisper's split output."
+  },
+  {
+    "alias": "error log",
+    "term": "error log",
+    "pack": "pack_09_code_review_git",
+    "verdict": "DROP",
+    "reason": "Identity flag; alias equals term."
+  },
+  {
+    "alias": "dee bug log",
+    "term": "debug log",
+    "pack": "pack_09_code_review_git",
+    "verdict": "KEEP",
+    "reason": "Whisper splitting 'debug' into 'dee bug'; valid phonetic split-word restoration."
+  },
+  {
+    "alias": "ver bose",
+    "term": "verbose",
+    "pack": "pack_09_code_review_git",
+    "verdict": "KEEP",
+    "reason": "Whisper splitting 'verbose' into 'ver bose'; valid split-word restoration."
+  },
+  {
+    "alias": "standard out",
+    "term": "stdout",
+    "pack": "pack_09_code_review_git",
+    "verdict": "KEEP",
+    "reason": "'Standard out' in a technical context unambiguously refers to stdout; the spoken-aloud form has no other plausible meaning."
+  },
+  {
+    "alias": "standard error",
+    "term": "stderr",
+    "pack": "pack_09_code_review_git",
+    "verdict": "DROP",
+    "reason": "'Standard error' is also a statistics term (SE); converting it to 'stderr' would corrupt non-Unix dictation."
+  },
+  {
+    "alias": "seg fault",
+    "term": "segfault",
+    "pack": "pack_09_code_review_git",
+    "verdict": "KEEP",
+    "reason": "Restores the standard compound tech term 'segfault' from Whisper's split output."
+  },
+  {
+    "alias": "segmentation fault",
+    "term": "segfault",
+    "pack": "pack_09_code_review_git",
+    "verdict": "DROP",
+    "reason": "Abbreviates the full technical phrase to a shorter form; changes what the user said."
+  },
+  {
+    "alias": "null pointer",
+    "term": "null pointer",
+    "pack": "pack_09_code_review_git",
+    "verdict": "DROP",
+    "reason": "Identity flag; alias equals term."
+  },
+  {
+    "alias": "n p e",
+    "term": "NPE",
+    "pack": "pack_09_code_review_git",
+    "verdict": "KEEP",
+    "reason": "Phonetic letter-by-letter spelling of NPE; no ordinary English meaning."
+  },
+  {
+    "alias": "null pointer exception",
+    "term": "NPE",
+    "pack": "pack_09_code_review_git",
+    "verdict": "DROP",
+    "reason": "Full technical phrase; silently abbreviating to NPE changes what the user said."
+  },
+  {
+    "alias": "o o m",
+    "term": "OOM",
+    "pack": "pack_09_code_review_git",
+    "verdict": "KEEP",
+    "reason": "Phonetic letter-by-letter spelling of OOM; no ordinary English meaning."
+  },
+  {
+    "alias": "out of memory",
+    "term": "OOM",
+    "pack": "pack_09_code_review_git",
+    "verdict": "DROP",
+    "reason": "Common English phrase; silently abbreviating to OOM corrupts natural dictation."
+  },
+  {
+    "alias": "memory leak",
+    "term": "memory leak",
+    "pack": "pack_09_code_review_git",
+    "verdict": "DROP",
+    "reason": "Identity flag; alias equals term."
+  },
+  {
+    "alias": "race condition",
+    "term": "race condition",
+    "pack": "pack_09_code_review_git",
+    "verdict": "DROP",
+    "reason": "Identity flag; alias equals term."
+  },
+  {
+    "alias": "dead lock",
+    "term": "deadlock",
+    "pack": "pack_09_code_review_git",
+    "verdict": "KEEP",
+    "reason": "Restores the standard tech compound 'deadlock' from Whisper's split output."
+  },
+  {
+    "alias": "thread safety",
+    "term": "thread safety",
+    "pack": "pack_09_code_review_git",
+    "verdict": "DROP",
+    "reason": "Identity flag; alias equals term."
+  },
+  {
+    "alias": "thread safe",
+    "term": "thread-safe",
+    "pack": "pack_09_code_review_git",
+    "verdict": "DROP",
+    "reason": "Common English adjective phrase; adding a hyphen is a minor formatting change that doesn't justify a dictionary rule."
+  }
+]

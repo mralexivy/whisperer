@@ -1,0 +1,1840 @@
+[
+  {
+    "alias": "mac os",
+    "term": "macOS",
+    "pack": "pack_06_os_security_mobile",
+    "verdict": "KEEP",
+    "reason": "No fluent English speaker says 'mac os' without meaning macOS."
+  },
+  {
+    "alias": "mac o s",
+    "term": "macOS",
+    "pack": "pack_06_os_security_mobile",
+    "verdict": "KEEP",
+    "reason": "Letter-by-letter phonetic spelling of the abbreviation; no ordinary meaning."
+  },
+  {
+    "alias": "mack os",
+    "term": "macOS",
+    "pack": "pack_06_os_security_mobile",
+    "verdict": "KEEP",
+    "reason": "Phonetic misspelling of macOS; no ordinary English meaning."
+  },
+  {
+    "alias": "i o s",
+    "term": "iOS",
+    "pack": "pack_06_os_security_mobile",
+    "verdict": "KEEP",
+    "reason": "Letter-by-letter spelling of the abbreviation iOS."
+  },
+  {
+    "alias": "eye oh ess",
+    "term": "iOS",
+    "pack": "pack_06_os_security_mobile",
+    "verdict": "KEEP",
+    "reason": "Phonetic letter-by-letter spelling of iOS; no ordinary meaning."
+  },
+  {
+    "alias": "i pad os",
+    "term": "iPadOS",
+    "pack": "pack_06_os_security_mobile",
+    "verdict": "KEEP",
+    "reason": "Compound of tech terms; no ordinary English meaning."
+  },
+  {
+    "alias": "eye pad oh ess",
+    "term": "iPadOS",
+    "pack": "pack_06_os_security_mobile",
+    "verdict": "KEEP",
+    "reason": "Phonetic letter-by-letter spelling of iPadOS; no ordinary meaning."
+  },
+  {
+    "alias": "watch os",
+    "term": "watchOS",
+    "pack": "pack_06_os_security_mobile",
+    "verdict": "KEEP",
+    "reason": "The phrase 'watch os' in dictation unambiguously means watchOS; 'os' is not ordinary English."
+  },
+  {
+    "alias": "watch oh ess",
+    "term": "watchOS",
+    "pack": "pack_06_os_security_mobile",
+    "verdict": "KEEP",
+    "reason": "Phonetic letter-by-letter spelling of OS combined with watch; no ordinary meaning."
+  },
+  {
+    "alias": "tv os",
+    "term": "tvOS",
+    "pack": "pack_06_os_security_mobile",
+    "verdict": "KEEP",
+    "reason": "'tv os' is unambiguously tvOS; 'tv' is an abbreviation, not ordinary speech."
+  },
+  {
+    "alias": "tee vee oh ess",
+    "term": "tvOS",
+    "pack": "pack_06_os_security_mobile",
+    "verdict": "KEEP",
+    "reason": "Phonetic letter-by-letter spelling of tvOS; no ordinary meaning."
+  },
+  {
+    "alias": "vision os",
+    "term": "visionOS",
+    "pack": "pack_06_os_security_mobile",
+    "verdict": "KEEP",
+    "reason": "'vision os' combines a word with the non-English abbreviation 'os'; unambiguous tech reference."
+  },
+  {
+    "alias": "vision oh ess",
+    "term": "visionOS",
+    "pack": "pack_06_os_security_mobile",
+    "verdict": "KEEP",
+    "reason": "Phonetic letter-by-letter spelling of visionOS; no ordinary meaning."
+  },
+  {
+    "alias": "ann droid",
+    "term": "Android",
+    "pack": "pack_06_os_security_mobile",
+    "verdict": "KEEP",
+    "reason": "Phonetic mis-transcription of Android; no ordinary English meaning."
+  },
+  {
+    "alias": "lin ux",
+    "term": "Linux",
+    "pack": "pack_06_os_security_mobile",
+    "verdict": "KEEP",
+    "reason": "Phonetic mis-transcription of Linux; no ordinary English meaning."
+  },
+  {
+    "alias": "lie nux",
+    "term": "Linux",
+    "pack": "pack_06_os_security_mobile",
+    "verdict": "KEEP",
+    "reason": "Phonetic mis-transcription of Linux; no ordinary English meaning."
+  },
+  {
+    "alias": "oo bun too",
+    "term": "Ubuntu",
+    "pack": "pack_06_os_security_mobile",
+    "verdict": "KEEP",
+    "reason": "Phonetic spelling of Ubuntu; no ordinary English meaning."
+  },
+  {
+    "alias": "oo bun tu",
+    "term": "Ubuntu",
+    "pack": "pack_06_os_security_mobile",
+    "verdict": "KEEP",
+    "reason": "Phonetic spelling of Ubuntu; no ordinary English meaning."
+  },
+  {
+    "alias": "you bun two",
+    "term": "Ubuntu",
+    "pack": "pack_06_os_security_mobile",
+    "verdict": "KEEP",
+    "reason": "Phonetic spelling of Ubuntu; the combination has no ordinary English meaning."
+  },
+  {
+    "alias": "deb ee in",
+    "term": "Debian",
+    "pack": "pack_06_os_security_mobile",
+    "verdict": "KEEP",
+    "reason": "Phonetic spelling of Debian; no ordinary English meaning."
+  },
+  {
+    "alias": "dee bee in",
+    "term": "Debian",
+    "pack": "pack_06_os_security_mobile",
+    "verdict": "KEEP",
+    "reason": "Phonetic spelling of Debian; no ordinary English meaning."
+  },
+  {
+    "alias": "feh door a",
+    "term": "Fedora",
+    "pack": "pack_06_os_security_mobile",
+    "verdict": "KEEP",
+    "reason": "Phonetic mis-transcription of Fedora; no ordinary English meaning."
+  },
+  {
+    "alias": "sent os",
+    "term": "CentOS",
+    "pack": "pack_06_os_security_mobile",
+    "verdict": "KEEP",
+    "reason": "'sent os' together has no ordinary English meaning; clearly CentOS mis-transcription."
+  },
+  {
+    "alias": "cent os",
+    "term": "CentOS",
+    "pack": "pack_06_os_security_mobile",
+    "verdict": "KEEP",
+    "reason": "'cent os' together has no ordinary English meaning; clearly CentOS mis-transcription."
+  },
+  {
+    "alias": "arch linux",
+    "term": "Arch Linux",
+    "pack": "pack_06_os_security_mobile",
+    "verdict": "DROP",
+    "reason": "Flagged identity/substring_of_term; alias equals the term, rule does nothing."
+  },
+  {
+    "alias": "nix os",
+    "term": "NixOS",
+    "pack": "pack_06_os_security_mobile",
+    "verdict": "KEEP",
+    "reason": "'nix os' as two words has no ordinary English meaning; unambiguous NixOS reference."
+  },
+  {
+    "alias": "nicks os",
+    "term": "NixOS",
+    "pack": "pack_06_os_security_mobile",
+    "verdict": "KEEP",
+    "reason": "Phonetic spelling of NixOS; no ordinary English meaning."
+  },
+  {
+    "alias": "alpine linux",
+    "term": "Alpine",
+    "pack": "pack_06_os_security_mobile",
+    "verdict": "KEEP",
+    "reason": "'alpine linux' is a specific tech phrase; disambiguated from the adjective 'alpine' by 'linux'."
+  },
+  {
+    "alias": "r h e l",
+    "term": "RHEL",
+    "pack": "pack_06_os_security_mobile",
+    "verdict": "KEEP",
+    "reason": "Letter-by-letter abbreviation spelling; no ordinary meaning."
+  },
+  {
+    "alias": "are aitch ee el",
+    "term": "RHEL",
+    "pack": "pack_06_os_security_mobile",
+    "verdict": "KEEP",
+    "reason": "Phonetic letter-by-letter spelling of RHEL; no ordinary meaning."
+  },
+  {
+    "alias": "red hat",
+    "term": "RHEL",
+    "pack": "pack_06_os_security_mobile",
+    "verdict": "DROP",
+    "reason": "'red hat' is a common English phrase (a hat that is red); would corrupt 'the man in the red hat'."
+  },
+  {
+    "alias": "sue zuh",
+    "term": "SUSE",
+    "pack": "pack_06_os_security_mobile",
+    "verdict": "KEEP",
+    "reason": "Phonetic spelling of SUSE; no ordinary English meaning."
+  },
+  {
+    "alias": "soo za",
+    "term": "SUSE",
+    "pack": "pack_06_os_security_mobile",
+    "verdict": "KEEP",
+    "reason": "Phonetic spelling of SUSE; no ordinary English meaning."
+  },
+  {
+    "alias": "free b s d",
+    "term": "FreeBSD",
+    "pack": "pack_06_os_security_mobile",
+    "verdict": "KEEP",
+    "reason": "Letter-by-letter BSD spelling with 'free' prefix; no ordinary English meaning."
+  },
+  {
+    "alias": "free bee ess dee",
+    "term": "FreeBSD",
+    "pack": "pack_06_os_security_mobile",
+    "verdict": "KEEP",
+    "reason": "Phonetic letter-by-letter spelling of FreeBSD; no ordinary meaning."
+  },
+  {
+    "alias": "w s l",
+    "term": "WSL",
+    "pack": "pack_06_os_security_mobile",
+    "verdict": "KEEP",
+    "reason": "Letter-by-letter abbreviation; no ordinary English meaning."
+  },
+  {
+    "alias": "double you ess el",
+    "term": "WSL",
+    "pack": "pack_06_os_security_mobile",
+    "verdict": "KEEP",
+    "reason": "Phonetic letter-by-letter spelling of WSL; no ordinary meaning."
+  },
+  {
+    "alias": "windows subsystem for linux",
+    "term": "WSL",
+    "pack": "pack_06_os_security_mobile",
+    "verdict": "KEEP",
+    "reason": "Specific technical phrase; a fluent speaker would never say this in a non-technical context."
+  },
+  {
+    "alias": "w s l 2",
+    "term": "WSL2",
+    "pack": "pack_06_os_security_mobile",
+    "verdict": "KEEP",
+    "reason": "Letter-by-letter abbreviation with version number; no ordinary meaning."
+  },
+  {
+    "alias": "double you ess el two",
+    "term": "WSL2",
+    "pack": "pack_06_os_security_mobile",
+    "verdict": "KEEP",
+    "reason": "Phonetic letter-by-letter spelling of WSL2; no ordinary meaning."
+  },
+  {
+    "alias": "hyper v",
+    "term": "Hyper-V",
+    "pack": "pack_06_os_security_mobile",
+    "verdict": "KEEP",
+    "reason": "'hyper v' as a compound has no ordinary English meaning; unambiguous Hyper-V reference."
+  },
+  {
+    "alias": "hyper vee",
+    "term": "Hyper-V",
+    "pack": "pack_06_os_security_mobile",
+    "verdict": "KEEP",
+    "reason": "Phonetic spelling of Hyper-V; no ordinary English meaning."
+  },
+  {
+    "alias": "v m ware",
+    "term": "VMware",
+    "pack": "pack_06_os_security_mobile",
+    "verdict": "KEEP",
+    "reason": "Letter-by-letter VM with 'ware'; no ordinary English meaning."
+  },
+  {
+    "alias": "vee em ware",
+    "term": "VMware",
+    "pack": "pack_06_os_security_mobile",
+    "verdict": "KEEP",
+    "reason": "Phonetic spelling of VMware; no ordinary English meaning."
+  },
+  {
+    "alias": "virtual box",
+    "term": "VirtualBox",
+    "pack": "pack_06_os_security_mobile",
+    "verdict": "KEEP",
+    "reason": "'virtual box' as a product name is overwhelmingly dominant in tech dictation; rarely used as a literal English phrase."
+  },
+  {
+    "alias": "q e m u",
+    "term": "QEMU",
+    "pack": "pack_06_os_security_mobile",
+    "verdict": "KEEP",
+    "reason": "Letter-by-letter abbreviation; no ordinary meaning."
+  },
+  {
+    "alias": "queue ee em you",
+    "term": "QEMU",
+    "pack": "pack_06_os_security_mobile",
+    "verdict": "KEEP",
+    "reason": "Phonetic letter-by-letter spelling of QEMU; no ordinary meaning."
+  },
+  {
+    "alias": "prox mox",
+    "term": "Proxmox",
+    "pack": "pack_06_os_security_mobile",
+    "verdict": "KEEP",
+    "reason": "Phonetic mis-transcription of Proxmox; no ordinary English meaning."
+  },
+  {
+    "alias": "prox mocks",
+    "term": "Proxmox",
+    "pack": "pack_06_os_security_mobile",
+    "verdict": "KEEP",
+    "reason": "Phonetic mis-transcription of Proxmox; no ordinary English meaning."
+  },
+  {
+    "alias": "a r m",
+    "term": "ARM",
+    "pack": "pack_06_os_security_mobile",
+    "verdict": "KEEP",
+    "reason": "Letter-by-letter abbreviation spelling; no ordinary speaker spells out 'a r m' without meaning the architecture."
+  },
+  {
+    "alias": "ay are em",
+    "term": "ARM",
+    "pack": "pack_06_os_security_mobile",
+    "verdict": "KEEP",
+    "reason": "Phonetic letter-by-letter spelling of ARM; no ordinary meaning."
+  },
+  {
+    "alias": "arm 64",
+    "term": "ARM64",
+    "pack": "pack_06_os_security_mobile",
+    "verdict": "KEEP",
+    "reason": "'arm 64' with a number is specifically a CPU architecture; no ordinary English meaning as a phrase."
+  },
+  {
+    "alias": "arm sixty four",
+    "term": "ARM64",
+    "pack": "pack_06_os_security_mobile",
+    "verdict": "KEEP",
+    "reason": "Phonetic spelling of ARM64; no ordinary meaning."
+  },
+  {
+    "alias": "x 86",
+    "term": "x86",
+    "pack": "pack_06_os_security_mobile",
+    "verdict": "KEEP",
+    "reason": "'x 86' with a number is unambiguously a CPU architecture; no ordinary English meaning."
+  },
+  {
+    "alias": "ex eighty six",
+    "term": "x86",
+    "pack": "pack_06_os_security_mobile",
+    "verdict": "KEEP",
+    "reason": "Phonetic spelling of x86; no ordinary meaning."
+  },
+  {
+    "alias": "x 86 64",
+    "term": "x86_64",
+    "pack": "pack_06_os_security_mobile",
+    "verdict": "KEEP",
+    "reason": "Clearly technical; no ordinary English meaning."
+  },
+  {
+    "alias": "ex eighty six sixty four",
+    "term": "x86_64",
+    "pack": "pack_06_os_security_mobile",
+    "verdict": "KEEP",
+    "reason": "Phonetic spelling of x86_64; no ordinary meaning."
+  },
+  {
+    "alias": "a arch 64",
+    "term": "aarch64",
+    "pack": "pack_06_os_security_mobile",
+    "verdict": "KEEP",
+    "reason": "Phonetic spelling of aarch64 (ARM 64-bit architecture identifier); no ordinary meaning."
+  },
+  {
+    "alias": "ay arch sixty four",
+    "term": "aarch64",
+    "pack": "pack_06_os_security_mobile",
+    "verdict": "KEEP",
+    "reason": "Phonetic spelling of aarch64; no ordinary meaning."
+  },
+  {
+    "alias": "risk five",
+    "term": "RISC-V",
+    "pack": "pack_06_os_security_mobile",
+    "verdict": "KEEP",
+    "reason": "'risk five' is the standard spoken form of RISC-V; the two-word phrase has no ordinary English meaning."
+  },
+  {
+    "alias": "risk v",
+    "term": "RISC-V",
+    "pack": "pack_06_os_security_mobile",
+    "verdict": "KEEP",
+    "reason": "'risk v' as a compound has no ordinary English meaning; clearly RISC-V."
+  },
+  {
+    "alias": "r i s c v",
+    "term": "RISC-V",
+    "pack": "pack_06_os_security_mobile",
+    "verdict": "KEEP",
+    "reason": "Letter-by-letter spelling of RISC-V; no ordinary meaning."
+  },
+  {
+    "alias": "s o c",
+    "term": "SoC",
+    "pack": "pack_06_os_security_mobile",
+    "verdict": "DEDUPE",
+    "new_alias": "s o c",
+    "reason": "Conflict flag: pick SoC (System on a Chip) as the more specific and common tech meaning."
+  },
+  {
+    "alias": "system on chip",
+    "term": "SoC",
+    "pack": "pack_06_os_security_mobile",
+    "verdict": "KEEP",
+    "reason": "Specific technical phrase; a fluent speaker would not say 'system on chip' in a non-technical context."
+  },
+  {
+    "alias": "f p g a",
+    "term": "FPGA",
+    "pack": "pack_06_os_security_mobile",
+    "verdict": "KEEP",
+    "reason": "Letter-by-letter abbreviation; no ordinary meaning."
+  },
+  {
+    "alias": "ef pee gee ay",
+    "term": "FPGA",
+    "pack": "pack_06_os_security_mobile",
+    "verdict": "KEEP",
+    "reason": "Phonetic letter-by-letter spelling of FPGA; no ordinary meaning."
+  },
+  {
+    "alias": "ay sick",
+    "term": "ASIC",
+    "pack": "pack_06_os_security_mobile",
+    "verdict": "KEEP",
+    "reason": "'ay sick' as a two-word phrase has no ordinary English meaning; phonetic for ASIC."
+  },
+  {
+    "alias": "a s i c",
+    "term": "ASIC",
+    "pack": "pack_06_os_security_mobile",
+    "verdict": "KEEP",
+    "reason": "Letter-by-letter abbreviation; no ordinary meaning."
+  },
+  {
+    "alias": "p c i e",
+    "term": "PCIe",
+    "pack": "pack_06_os_security_mobile",
+    "verdict": "KEEP",
+    "reason": "Letter-by-letter abbreviation; no ordinary meaning."
+  },
+  {
+    "alias": "pee see eye ee",
+    "term": "PCIe",
+    "pack": "pack_06_os_security_mobile",
+    "verdict": "KEEP",
+    "reason": "Phonetic letter-by-letter spelling of PCIe; no ordinary meaning."
+  },
+  {
+    "alias": "n v m e",
+    "term": "NVMe",
+    "pack": "pack_06_os_security_mobile",
+    "verdict": "KEEP",
+    "reason": "Letter-by-letter abbreviation; no ordinary meaning."
+  },
+  {
+    "alias": "en vee em ee",
+    "term": "NVMe",
+    "pack": "pack_06_os_security_mobile",
+    "verdict": "KEEP",
+    "reason": "Phonetic letter-by-letter spelling of NVMe; no ordinary meaning."
+  },
+  {
+    "alias": "raid",
+    "term": "RAID",
+    "pack": "pack_06_os_security_mobile",
+    "verdict": "DROP",
+    "reason": "Flagged identity; alias equals term. Also a common English word (police raid, bug spray brand)."
+  },
+  {
+    "alias": "r a i d",
+    "term": "RAID",
+    "pack": "pack_06_os_security_mobile",
+    "verdict": "KEEP",
+    "reason": "Letter-by-letter spelling; no ordinary speaker spells out 'r a i d' without meaning the acronym."
+  },
+  {
+    "alias": "s s d",
+    "term": "SSD",
+    "pack": "pack_06_os_security_mobile",
+    "verdict": "KEEP",
+    "reason": "Letter-by-letter abbreviation; no ordinary meaning."
+  },
+  {
+    "alias": "ess ess dee",
+    "term": "SSD",
+    "pack": "pack_06_os_security_mobile",
+    "verdict": "KEEP",
+    "reason": "Phonetic letter-by-letter spelling of SSD; no ordinary meaning."
+  },
+  {
+    "alias": "h d d",
+    "term": "HDD",
+    "pack": "pack_06_os_security_mobile",
+    "verdict": "KEEP",
+    "reason": "Letter-by-letter abbreviation; no ordinary meaning."
+  },
+  {
+    "alias": "aitch dee dee",
+    "term": "HDD",
+    "pack": "pack_06_os_security_mobile",
+    "verdict": "KEEP",
+    "reason": "Phonetic letter-by-letter spelling of HDD; no ordinary meaning."
+  },
+  {
+    "alias": "buy os",
+    "term": "BIOS",
+    "pack": "pack_06_os_security_mobile",
+    "verdict": "KEEP",
+    "reason": "'buy os' has no ordinary English meaning; unambiguous phonetic mis-transcription of BIOS."
+  },
+  {
+    "alias": "bio s",
+    "term": "BIOS",
+    "pack": "pack_06_os_security_mobile",
+    "verdict": "KEEP",
+    "reason": "'bio s' as a split phrase has no ordinary English meaning; clearly BIOS."
+  },
+  {
+    "alias": "you ef eye",
+    "term": "UEFI",
+    "pack": "pack_06_os_security_mobile",
+    "verdict": "KEEP",
+    "reason": "Phonetic letter-by-letter spelling of UEFI; no ordinary meaning."
+  },
+  {
+    "alias": "u e f i",
+    "term": "UEFI",
+    "pack": "pack_06_os_security_mobile",
+    "verdict": "KEEP",
+    "reason": "Letter-by-letter abbreviation; no ordinary meaning."
+  },
+  {
+    "alias": "terra form",
+    "term": "Terraform",
+    "pack": "pack_06_os_security_mobile",
+    "verdict": "KEEP",
+    "reason": "'terra form' as two words has no ordinary English meaning in dictation; clearly Terraform the tool."
+  },
+  {
+    "alias": "block chain",
+    "term": "blockchain",
+    "pack": "pack_06_os_security_mobile",
+    "verdict": "KEEP",
+    "reason": "'block chain' as a compound is overwhelmingly associated with blockchain; rarely used as a generic English phrase."
+  },
+  {
+    "alias": "ether ee um",
+    "term": "Ethereum",
+    "pack": "pack_06_os_security_mobile",
+    "verdict": "KEEP",
+    "reason": "Phonetic mis-transcription of Ethereum; no ordinary English meaning."
+  },
+  {
+    "alias": "e thereum",
+    "term": "Ethereum",
+    "pack": "pack_06_os_security_mobile",
+    "verdict": "KEEP",
+    "reason": "Phonetic mis-transcription of Ethereum; no ordinary English meaning."
+  },
+  {
+    "alias": "so lana",
+    "term": "Solana",
+    "pack": "pack_06_os_security_mobile",
+    "verdict": "KEEP",
+    "reason": "'so lana' has no ordinary English meaning; phonetic for Solana."
+  },
+  {
+    "alias": "so lon a",
+    "term": "Solana",
+    "pack": "pack_06_os_security_mobile",
+    "verdict": "KEEP",
+    "reason": "Phonetic spelling of Solana; no ordinary English meaning."
+  },
+  {
+    "alias": "polygon crypto",
+    "term": "Polygon",
+    "pack": "pack_06_os_security_mobile",
+    "verdict": "KEEP",
+    "reason": "Disambiguated by 'crypto'; the full phrase unambiguously means the Polygon blockchain."
+  },
+  {
+    "alias": "n f t",
+    "term": "NFT",
+    "pack": "pack_06_os_security_mobile",
+    "verdict": "KEEP",
+    "reason": "Letter-by-letter abbreviation; no ordinary meaning."
+  },
+  {
+    "alias": "en ef tee",
+    "term": "NFT",
+    "pack": "pack_06_os_security_mobile",
+    "verdict": "KEEP",
+    "reason": "Phonetic letter-by-letter spelling of NFT; no ordinary meaning."
+  },
+  {
+    "alias": "dee fy",
+    "term": "DeFi",
+    "pack": "pack_06_os_security_mobile",
+    "verdict": "KEEP",
+    "reason": "'dee fy' has no ordinary English meaning; phonetic for DeFi."
+  },
+  {
+    "alias": "d fi",
+    "term": "DeFi",
+    "pack": "pack_06_os_security_mobile",
+    "verdict": "KEEP",
+    "reason": "'d fi' has no ordinary English meaning; phonetic for DeFi."
+  },
+  {
+    "alias": "decentralized finance",
+    "term": "DeFi",
+    "pack": "pack_06_os_security_mobile",
+    "verdict": "KEEP",
+    "reason": "Specific technical phrase; no ordinary English usage."
+  },
+  {
+    "alias": "web three",
+    "term": "Web3",
+    "pack": "pack_06_os_security_mobile",
+    "verdict": "KEEP",
+    "reason": "'web three' in tech dictation overwhelmingly means Web3; the risk of 'the web three times' is low as that would transcribe differently."
+  },
+  {
+    "alias": "web 3",
+    "term": "Web3",
+    "pack": "pack_06_os_security_mobile",
+    "verdict": "KEEP",
+    "reason": "'web 3' with numeral is unambiguously a tech reference to Web3."
+  },
+  {
+    "alias": "d app",
+    "term": "dApp",
+    "pack": "pack_06_os_security_mobile",
+    "verdict": "KEEP",
+    "reason": "'d app' has no ordinary English meaning; clearly dApp."
+  },
+  {
+    "alias": "dee app",
+    "term": "dApp",
+    "pack": "pack_06_os_security_mobile",
+    "verdict": "KEEP",
+    "reason": "'dee app' has no ordinary English meaning; phonetic for dApp."
+  },
+  {
+    "alias": "decentralized app",
+    "term": "dApp",
+    "pack": "pack_06_os_security_mobile",
+    "verdict": "KEEP",
+    "reason": "Specific technical phrase; no ordinary English usage."
+  },
+  {
+    "alias": "smart contract",
+    "term": "smart contract",
+    "pack": "pack_06_os_security_mobile",
+    "verdict": "DROP",
+    "reason": "Flagged identity; alias equals term, rule does nothing."
+  },
+  {
+    "alias": "e v m",
+    "term": "EVM",
+    "pack": "pack_06_os_security_mobile",
+    "verdict": "KEEP",
+    "reason": "Letter-by-letter abbreviation; no ordinary meaning."
+  },
+  {
+    "alias": "ee vee em",
+    "term": "EVM",
+    "pack": "pack_06_os_security_mobile",
+    "verdict": "KEEP",
+    "reason": "Phonetic letter-by-letter spelling of EVM; no ordinary meaning."
+  },
+  {
+    "alias": "ethereum virtual machine",
+    "term": "EVM",
+    "pack": "pack_06_os_security_mobile",
+    "verdict": "KEEP",
+    "reason": "Specific technical phrase; no ordinary English usage."
+  },
+  {
+    "alias": "hard hat",
+    "term": "Hardhat",
+    "pack": "pack_06_os_security_mobile",
+    "verdict": "DROP",
+    "reason": "'hard hat' is a very common English phrase (construction safety helmet); would corrupt 'she's wearing a hard hat'."
+  },
+  {
+    "alias": "foundry solidity",
+    "term": "Foundry",
+    "pack": "pack_06_os_security_mobile",
+    "verdict": "KEEP",
+    "reason": "Disambiguated by 'solidity'; the phrase unambiguously means the Foundry blockchain dev tool."
+  },
+  {
+    "alias": "truffle ethereum",
+    "term": "Truffle",
+    "pack": "pack_06_os_security_mobile",
+    "verdict": "KEEP",
+    "reason": "Disambiguated by 'ethereum'; unambiguously the Truffle development framework."
+  },
+  {
+    "alias": "gah nosh",
+    "term": "Ganache",
+    "pack": "pack_06_os_security_mobile",
+    "verdict": "KEEP",
+    "reason": "Phonetic mis-transcription of Ganache; no ordinary English meaning."
+  },
+  {
+    "alias": "gah nash",
+    "term": "Ganache",
+    "pack": "pack_06_os_security_mobile",
+    "verdict": "KEEP",
+    "reason": "Phonetic mis-transcription of Ganache; no ordinary English meaning."
+  },
+  {
+    "alias": "meta mask",
+    "term": "MetaMask",
+    "pack": "pack_06_os_security_mobile",
+    "verdict": "KEEP",
+    "reason": "'meta mask' as a two-word compound has no ordinary English meaning; unambiguously MetaMask."
+  },
+  {
+    "alias": "i p f s",
+    "term": "IPFS",
+    "pack": "pack_06_os_security_mobile",
+    "verdict": "KEEP",
+    "reason": "Letter-by-letter abbreviation; no ordinary meaning."
+  },
+  {
+    "alias": "eye pee ef ess",
+    "term": "IPFS",
+    "pack": "pack_06_os_security_mobile",
+    "verdict": "KEEP",
+    "reason": "Phonetic letter-by-letter spelling of IPFS; no ordinary meaning."
+  },
+  {
+    "alias": "i o t",
+    "term": "IoT",
+    "pack": "pack_06_os_security_mobile",
+    "verdict": "KEEP",
+    "reason": "Letter-by-letter abbreviation; no ordinary meaning."
+  },
+  {
+    "alias": "eye oh tee",
+    "term": "IoT",
+    "pack": "pack_06_os_security_mobile",
+    "verdict": "KEEP",
+    "reason": "Phonetic letter-by-letter spelling of IoT; no ordinary meaning."
+  },
+  {
+    "alias": "internet of things",
+    "term": "IoT",
+    "pack": "pack_06_os_security_mobile",
+    "verdict": "KEEP",
+    "reason": "Specific technical phrase; no ordinary English usage."
+  },
+  {
+    "alias": "m q t t",
+    "term": "MQTT",
+    "pack": "pack_06_os_security_mobile",
+    "verdict": "KEEP",
+    "reason": "Letter-by-letter abbreviation; no ordinary meaning."
+  },
+  {
+    "alias": "em queue tee tee",
+    "term": "MQTT",
+    "pack": "pack_06_os_security_mobile",
+    "verdict": "KEEP",
+    "reason": "Phonetic letter-by-letter spelling of MQTT; no ordinary meaning."
+  },
+  {
+    "alias": "zig bee",
+    "term": "Zigbee",
+    "pack": "pack_06_os_security_mobile",
+    "verdict": "KEEP",
+    "reason": "'zig bee' has no ordinary English meaning; phonetic mis-transcription of Zigbee."
+  },
+  {
+    "alias": "laura wan",
+    "term": "LoRaWAN",
+    "pack": "pack_06_os_security_mobile",
+    "verdict": "KEEP",
+    "reason": "'laura wan' is a phonetic mis-transcription of LoRaWAN with no ordinary English meaning."
+  },
+  {
+    "alias": "lora wan",
+    "term": "LoRaWAN",
+    "pack": "pack_06_os_security_mobile",
+    "verdict": "KEEP",
+    "reason": "'lora wan' has no ordinary English meaning; phonetic for LoRaWAN."
+  },
+  {
+    "alias": "low ra wan",
+    "term": "LoRaWAN",
+    "pack": "pack_06_os_security_mobile",
+    "verdict": "KEEP",
+    "reason": "'low ra wan' has no ordinary English meaning; phonetic for LoRaWAN."
+  },
+  {
+    "alias": "b l e",
+    "term": "BLE",
+    "pack": "pack_06_os_security_mobile",
+    "verdict": "KEEP",
+    "reason": "Letter-by-letter abbreviation; no ordinary meaning."
+  },
+  {
+    "alias": "bee el ee",
+    "term": "BLE",
+    "pack": "pack_06_os_security_mobile",
+    "verdict": "KEEP",
+    "reason": "Phonetic letter-by-letter spelling of BLE; no ordinary meaning."
+  },
+  {
+    "alias": "bluetooth low energy",
+    "term": "BLE",
+    "pack": "pack_06_os_security_mobile",
+    "verdict": "KEEP",
+    "reason": "Specific technical phrase; no ordinary English usage."
+  },
+  {
+    "alias": "raspberry pie",
+    "term": "Raspberry Pi",
+    "pack": "pack_06_os_security_mobile",
+    "verdict": "DROP",
+    "reason": "'raspberry pie' is a common food item; would corrupt 'I baked a raspberry pie'."
+  },
+  {
+    "alias": "raz berry pie",
+    "term": "Raspberry Pi",
+    "pack": "pack_06_os_security_mobile",
+    "verdict": "DROP",
+    "reason": "Phonetic spelling of 'raspberry pie' (the food); same false-positive risk as above."
+  },
+  {
+    "alias": "are dween oh",
+    "term": "Arduino",
+    "pack": "pack_06_os_security_mobile",
+    "verdict": "KEEP",
+    "reason": "Phonetic mis-transcription of Arduino; no ordinary English meaning."
+  },
+  {
+    "alias": "are doo ee no",
+    "term": "Arduino",
+    "pack": "pack_06_os_security_mobile",
+    "verdict": "KEEP",
+    "reason": "Phonetic mis-transcription of Arduino; no ordinary English meaning."
+  },
+  {
+    "alias": "e s p thirty two",
+    "term": "ESP32",
+    "pack": "pack_06_os_security_mobile",
+    "verdict": "KEEP",
+    "reason": "Letter-by-letter + number; unambiguously the ESP32 microcontroller."
+  },
+  {
+    "alias": "esp thirty two",
+    "term": "ESP32",
+    "pack": "pack_06_os_security_mobile",
+    "verdict": "KEEP",
+    "reason": "'esp thirty two' has no ordinary English meaning; clearly ESP32."
+  },
+  {
+    "alias": "home assistant",
+    "term": "Home Assistant",
+    "pack": "pack_06_os_security_mobile",
+    "verdict": "DROP",
+    "reason": "Flagged identity; alias equals term, rule does nothing."
+  },
+  {
+    "alias": "gra fauna",
+    "term": "Grafana",
+    "pack": "pack_06_os_security_mobile",
+    "verdict": "KEEP",
+    "reason": "'gra fauna' has no ordinary English meaning; phonetic mis-transcription of Grafana."
+  },
+  {
+    "alias": "gra fana",
+    "term": "Grafana",
+    "pack": "pack_06_os_security_mobile",
+    "verdict": "KEEP",
+    "reason": "Phonetic mis-transcription of Grafana; no ordinary English meaning."
+  },
+  {
+    "alias": "influx db",
+    "term": "InfluxDB",
+    "pack": "pack_06_os_security_mobile",
+    "verdict": "KEEP",
+    "reason": "'influx db' together is an unambiguous tech reference; 'influx' alone is English but 'influx db' is not."
+  },
+  {
+    "alias": "pro me thee us",
+    "term": "Prometheus",
+    "pack": "pack_06_os_security_mobile",
+    "verdict": "KEEP",
+    "reason": "Phonetic mis-transcription of Prometheus; the correction capitalizes it correctly in any context."
+  },
+  {
+    "alias": "wire shark",
+    "term": "Wireshark",
+    "pack": "pack_06_os_security_mobile",
+    "verdict": "KEEP",
+    "reason": "'wire shark' has no ordinary English meaning as a compound; unambiguously Wireshark."
+  },
+  {
+    "alias": "n map",
+    "term": "Nmap",
+    "pack": "pack_06_os_security_mobile",
+    "verdict": "DEDUPE",
+    "new_alias": "n map",
+    "reason": "Conflict flag: Nmap (network scanner) is the correct winner; it is the established tool name."
+  },
+  {
+    "alias": "en map",
+    "term": "Nmap",
+    "pack": "pack_06_os_security_mobile",
+    "verdict": "DEDUPE",
+    "new_alias": "en map",
+    "reason": "Conflict flag: same alias, same winner Nmap as more specific/common term."
+  },
+  {
+    "alias": "meta sploit",
+    "term": "Metasploit",
+    "pack": "pack_06_os_security_mobile",
+    "verdict": "KEEP",
+    "reason": "Phonetic mis-transcription of Metasploit; no ordinary English meaning."
+  },
+  {
+    "alias": "meta s ploit",
+    "term": "Metasploit",
+    "pack": "pack_06_os_security_mobile",
+    "verdict": "KEEP",
+    "reason": "Phonetic mis-transcription of Metasploit; no ordinary English meaning."
+  },
+  {
+    "alias": "burp suite",
+    "term": "Burp Suite",
+    "pack": "pack_06_os_security_mobile",
+    "verdict": "DROP",
+    "reason": "Flagged identity; alias equals term, rule does nothing."
+  },
+  {
+    "alias": "burp sweet",
+    "term": "Burp Suite",
+    "pack": "pack_06_os_security_mobile",
+    "verdict": "KEEP",
+    "reason": "'burp sweet' has no ordinary English meaning as a compound; phonetic mis-transcription of Burp Suite."
+  },
+  {
+    "alias": "collie linux",
+    "term": "Kali Linux",
+    "pack": "pack_06_os_security_mobile",
+    "verdict": "KEEP",
+    "reason": "'collie linux' has no ordinary meaning; phonetic mis-transcription (collie ≈ Kali) of Kali Linux."
+  },
+  {
+    "alias": "kali linux",
+    "term": "Kali Linux",
+    "pack": "pack_06_os_security_mobile",
+    "verdict": "DROP",
+    "reason": "Flagged identity; alias equals term, rule does nothing."
+  },
+  {
+    "alias": "open ssl",
+    "term": "OpenSSL",
+    "pack": "pack_06_os_security_mobile",
+    "verdict": "KEEP",
+    "reason": "'open ssl' is unambiguously the cryptographic library; 'ssl' is not ordinary English."
+  },
+  {
+    "alias": "open ess ess el",
+    "term": "OpenSSL",
+    "pack": "pack_06_os_security_mobile",
+    "verdict": "KEEP",
+    "reason": "Phonetic letter-by-letter spelling of SSL with 'open'; no ordinary meaning."
+  },
+  {
+    "alias": "lets encrypt",
+    "term": "Let's Encrypt",
+    "pack": "pack_06_os_security_mobile",
+    "verdict": "KEEP",
+    "reason": "'lets encrypt' in tech dictation overwhelmingly means the CA; the phrase is very specifically associated with this product."
+  },
+  {
+    "alias": "let's encrypt",
+    "term": "Let's Encrypt",
+    "pack": "pack_06_os_security_mobile",
+    "verdict": "DROP",
+    "reason": "Flagged identity; alias equals term, rule does nothing."
+  },
+  {
+    "alias": "cert bot",
+    "term": "certbot",
+    "pack": "pack_06_os_security_mobile",
+    "verdict": "KEEP",
+    "reason": "'cert bot' has no ordinary English meaning; clearly the certificate management tool."
+  },
+  {
+    "alias": "wire guard",
+    "term": "Wireguard",
+    "pack": "pack_06_os_security_mobile",
+    "verdict": "DROP",
+    "reason": "'wire guard' is a real English compound (a guard made of wire); could corrupt 'install a wire guard on the outlet'."
+  },
+  {
+    "alias": "open vpn",
+    "term": "OpenVPN",
+    "pack": "pack_06_os_security_mobile",
+    "verdict": "KEEP",
+    "reason": "'open vpn' is unambiguously OpenVPN; 'vpn' is not ordinary English."
+  },
+  {
+    "alias": "open v p n",
+    "term": "OpenVPN",
+    "pack": "pack_06_os_security_mobile",
+    "verdict": "KEEP",
+    "reason": "Letter-by-letter VPN spelling with 'open'; no ordinary meaning."
+  },
+  {
+    "alias": "tail scale",
+    "term": "Tailscale",
+    "pack": "pack_06_os_security_mobile",
+    "verdict": "KEEP",
+    "reason": "'tail scale' has no ordinary English meaning as a compound; unambiguously Tailscale."
+  },
+  {
+    "alias": "zero tier",
+    "term": "Zerotier",
+    "pack": "pack_06_os_security_mobile",
+    "verdict": "KEEP",
+    "reason": "'zero tier' as a compound has no ordinary English meaning; unambiguously Zerotier."
+  },
+  {
+    "alias": "vault secrets",
+    "term": "Vault",
+    "pack": "pack_06_os_security_mobile",
+    "verdict": "KEEP",
+    "reason": "Disambiguated by 'secrets'; 'vault secrets' unambiguously means HashiCorp Vault."
+  },
+  {
+    "alias": "sops",
+    "term": "SOPS",
+    "pack": "pack_06_os_security_mobile",
+    "verdict": "DROP",
+    "reason": "Flagged identity; alias equals term, rule does nothing."
+  },
+  {
+    "alias": "s o p s",
+    "term": "SOPS",
+    "pack": "pack_06_os_security_mobile",
+    "verdict": "KEEP",
+    "reason": "Letter-by-letter abbreviation; no ordinary meaning."
+  },
+  {
+    "alias": "age encryption",
+    "term": "age",
+    "pack": "pack_06_os_security_mobile",
+    "verdict": "KEEP",
+    "reason": "Disambiguated by 'encryption'; 'age encryption' unambiguously means the age encryption tool."
+  },
+  {
+    "alias": "p g p",
+    "term": "PGP",
+    "pack": "pack_06_os_security_mobile",
+    "verdict": "KEEP",
+    "reason": "Letter-by-letter abbreviation; no ordinary meaning."
+  },
+  {
+    "alias": "pee gee pee",
+    "term": "PGP",
+    "pack": "pack_06_os_security_mobile",
+    "verdict": "KEEP",
+    "reason": "Phonetic letter-by-letter spelling of PGP; no ordinary meaning."
+  },
+  {
+    "alias": "g p g",
+    "term": "GPG",
+    "pack": "pack_06_os_security_mobile",
+    "verdict": "KEEP",
+    "reason": "Letter-by-letter abbreviation; no ordinary meaning."
+  },
+  {
+    "alias": "gee pee gee",
+    "term": "GPG",
+    "pack": "pack_06_os_security_mobile",
+    "verdict": "KEEP",
+    "reason": "Phonetic letter-by-letter spelling of GPG; no ordinary meaning."
+  },
+  {
+    "alias": "bit warden",
+    "term": "Bitwarden",
+    "pack": "pack_06_os_security_mobile",
+    "verdict": "KEEP",
+    "reason": "'bit warden' has no ordinary English meaning as a compound; unambiguously Bitwarden."
+  },
+  {
+    "alias": "one password",
+    "term": "1Password",
+    "pack": "pack_06_os_security_mobile",
+    "verdict": "DROP",
+    "reason": "'one password' is ordinary English ('use one password for everything'); would corrupt normal dictation."
+  },
+  {
+    "alias": "1 password",
+    "term": "1Password",
+    "pack": "pack_06_os_security_mobile",
+    "verdict": "KEEP",
+    "reason": "'1 password' with numeral is unambiguously the 1Password product; no ordinary English usage."
+  },
+  {
+    "alias": "pass key",
+    "term": "Passkey",
+    "pack": "pack_06_os_security_mobile",
+    "verdict": "DROP",
+    "reason": "'pass key' is a common English phrase (a key that opens something); would corrupt 'give me the pass key'."
+  },
+  {
+    "alias": "fido two",
+    "term": "FIDO2",
+    "pack": "pack_06_os_security_mobile",
+    "verdict": "KEEP",
+    "reason": "'fido two' has no ordinary English meaning as a compound; phonetic for FIDO2."
+  },
+  {
+    "alias": "f i d o 2",
+    "term": "FIDO2",
+    "pack": "pack_06_os_security_mobile",
+    "verdict": "KEEP",
+    "reason": "Letter-by-letter abbreviation with number; no ordinary meaning."
+  },
+  {
+    "alias": "web auth n",
+    "term": "WebAuthn",
+    "pack": "pack_06_os_security_mobile",
+    "verdict": "KEEP",
+    "reason": "'web auth n' is unambiguously WebAuthn; no ordinary English phrase."
+  },
+  {
+    "alias": "web authn",
+    "term": "WebAuthn",
+    "pack": "pack_06_os_security_mobile",
+    "verdict": "KEEP",
+    "reason": "'web authn' is unambiguously WebAuthn; 'authn' is not an English word."
+  },
+  {
+    "alias": "swift ui",
+    "term": "SwiftUI",
+    "pack": "pack_06_os_security_mobile",
+    "verdict": "KEEP",
+    "reason": "'swift ui' is not a common English phrase; unambiguously the Apple framework in tech dictation."
+  },
+  {
+    "alias": "swift you eye",
+    "term": "SwiftUI",
+    "pack": "pack_06_os_security_mobile",
+    "verdict": "KEEP",
+    "reason": "Phonetic letter-by-letter spelling of UI with 'swift'; no ordinary meaning."
+  },
+  {
+    "alias": "u i kit",
+    "term": "UIKit",
+    "pack": "pack_06_os_security_mobile",
+    "verdict": "KEEP",
+    "reason": "'u i kit' with letter-by-letter UI has no ordinary meaning; unambiguously UIKit."
+  },
+  {
+    "alias": "you eye kit",
+    "term": "UIKit",
+    "pack": "pack_06_os_security_mobile",
+    "verdict": "KEEP",
+    "reason": "Phonetic letter-by-letter spelling of UIKit; no ordinary meaning."
+  },
+  {
+    "alias": "app kit",
+    "term": "AppKit",
+    "pack": "pack_06_os_security_mobile",
+    "verdict": "KEEP",
+    "reason": "'app kit' as a compound unambiguously means Apple's AppKit framework in tech dictation."
+  },
+  {
+    "alias": "core data",
+    "term": "CoreData",
+    "pack": "pack_06_os_security_mobile",
+    "verdict": "DROP",
+    "reason": "'core data' is a very common English phrase ('the core data of our analysis'); would corrupt normal speech."
+  },
+  {
+    "alias": "swift data",
+    "term": "SwiftData",
+    "pack": "pack_06_os_security_mobile",
+    "verdict": "KEEP",
+    "reason": "'swift data' as a compound is not a natural English phrase; unambiguously Apple's SwiftData framework."
+  },
+  {
+    "alias": "combine framework",
+    "term": "Combine",
+    "pack": "pack_06_os_security_mobile",
+    "verdict": "KEEP",
+    "reason": "Disambiguated by 'framework'; 'combine framework' unambiguously means Apple's Combine."
+  },
+  {
+    "alias": "async await",
+    "term": "async/await",
+    "pack": "pack_06_os_security_mobile",
+    "verdict": "KEEP",
+    "reason": "'async await' is a programming pattern term; not ordinary English speech."
+  },
+  {
+    "alias": "a sync a wait",
+    "term": "async/await",
+    "pack": "pack_06_os_security_mobile",
+    "verdict": "KEEP",
+    "reason": "Phonetic rendering of async/await; no ordinary English meaning."
+  },
+  {
+    "alias": "x code",
+    "term": "Xcode",
+    "pack": "pack_06_os_security_mobile",
+    "verdict": "KEEP",
+    "reason": "'x code' is unambiguously Xcode in tech dictation; no ordinary English meaning."
+  },
+  {
+    "alias": "ex code",
+    "term": "Xcode",
+    "pack": "pack_06_os_security_mobile",
+    "verdict": "KEEP",
+    "reason": "Phonetic spelling of Xcode; no ordinary English meaning."
+  },
+  {
+    "alias": "test flight",
+    "term": "TestFlight",
+    "pack": "pack_06_os_security_mobile",
+    "verdict": "DROP",
+    "reason": "'test flight' is a very common English phrase ('the test flight of the new aircraft'); would corrupt normal speech."
+  },
+  {
+    "alias": "cocoa pods",
+    "term": "CocoaPods",
+    "pack": "pack_06_os_security_mobile",
+    "verdict": "KEEP",
+    "reason": "'cocoa pods' in tech dictation unambiguously means CocoaPods; the literal botanical meaning is rare in this context."
+  },
+  {
+    "alias": "car thage",
+    "term": "Carthage",
+    "pack": "pack_06_os_security_mobile",
+    "verdict": "KEEP",
+    "reason": "'car thage' is a phonetic mis-transcription of Carthage (the dependency manager); no ordinary two-word English meaning."
+  },
+  {
+    "alias": "s p m",
+    "term": "SPM",
+    "pack": "pack_06_os_security_mobile",
+    "verdict": "KEEP",
+    "reason": "Letter-by-letter abbreviation; no ordinary meaning."
+  },
+  {
+    "alias": "swift package manager",
+    "term": "SPM",
+    "pack": "pack_06_os_security_mobile",
+    "verdict": "KEEP",
+    "reason": "Specific technical phrase; no ordinary English usage."
+  },
+  {
+    "alias": "jet pack compose",
+    "term": "Jetpack Compose",
+    "pack": "pack_06_os_security_mobile",
+    "verdict": "KEEP",
+    "reason": "'jet pack compose' together is unambiguously the Android UI toolkit; not a natural English phrase."
+  },
+  {
+    "alias": "view model",
+    "term": "ViewModel",
+    "pack": "pack_06_os_security_mobile",
+    "verdict": "DROP",
+    "reason": "'view model' is ordinary English ('let me view the model'); would corrupt normal speech."
+  },
+  {
+    "alias": "live data",
+    "term": "LiveData",
+    "pack": "pack_06_os_security_mobile",
+    "verdict": "DROP",
+    "reason": "'live data' is a very common English phrase ('we need live data from the sensors'); would corrupt normal speech."
+  },
+  {
+    "alias": "room database",
+    "term": "Room",
+    "pack": "pack_06_os_security_mobile",
+    "verdict": "KEEP",
+    "reason": "Disambiguated by 'database'; 'room database' unambiguously means Android's Room ORM."
+  },
+  {
+    "alias": "retro fit",
+    "term": "Retrofit",
+    "pack": "pack_06_os_security_mobile",
+    "verdict": "KEEP",
+    "reason": "When Whisper mis-transcribes 'Retrofit' as 'retro fit', the two-word form is the target; someone saying 'retrofit' naturally gets the one-word form from Whisper."
+  },
+  {
+    "alias": "ok http",
+    "term": "OkHttp",
+    "pack": "pack_06_os_security_mobile",
+    "verdict": "KEEP",
+    "reason": "'ok http' has no ordinary English meaning as a phrase; unambiguously OkHttp."
+  },
+  {
+    "alias": "okay http",
+    "term": "OkHttp",
+    "pack": "pack_06_os_security_mobile",
+    "verdict": "KEEP",
+    "reason": "'okay http' has no ordinary English meaning; phonetic for OkHttp."
+  },
+  {
+    "alias": "dagger hilt",
+    "term": "Dagger",
+    "pack": "pack_06_os_security_mobile",
+    "verdict": "KEEP",
+    "reason": "While 'dagger hilt' has a literal meaning, in tech dictation it overwhelmingly refers to the Android DI framework; very low false positive risk."
+  },
+  {
+    "alias": "hilt di",
+    "term": "Hilt",
+    "pack": "pack_06_os_security_mobile",
+    "verdict": "KEEP",
+    "reason": "'hilt di' has no ordinary English meaning; 'di' is not a common English word in this combination."
+  },
+  {
+    "alias": "coin",
+    "term": "Koin",
+    "pack": "pack_06_os_security_mobile",
+    "verdict": "DROP",
+    "reason": "Flagged single_word_english and identity (case-insensitive); 'coin' is a common English word with many non-tech uses."
+  },
+  {
+    "alias": "co in",
+    "term": "Koin",
+    "pack": "pack_06_os_security_mobile",
+    "verdict": "KEEP",
+    "reason": "'co in' as a spelled-out word has no ordinary English meaning; phonetic mis-transcription of Koin."
+  },
+  {
+    "alias": "k tor",
+    "term": "Ktor",
+    "pack": "pack_06_os_security_mobile",
+    "verdict": "KEEP",
+    "reason": "'k tor' has no ordinary English meaning; phonetic mis-transcription of Ktor."
+  },
+  {
+    "alias": "kay tor",
+    "term": "Ktor",
+    "pack": "pack_06_os_security_mobile",
+    "verdict": "KEEP",
+    "reason": "Phonetic spelling of Ktor; no ordinary English meaning."
+  },
+  {
+    "alias": "k m m",
+    "term": "KMM",
+    "pack": "pack_06_os_security_mobile",
+    "verdict": "KEEP",
+    "reason": "Letter-by-letter abbreviation; no ordinary meaning."
+  },
+  {
+    "alias": "kotlin multiplatform mobile",
+    "term": "KMM",
+    "pack": "pack_06_os_security_mobile",
+    "verdict": "KEEP",
+    "reason": "Specific technical phrase; no ordinary English usage."
+  },
+  {
+    "alias": "k m p",
+    "term": "KMP",
+    "pack": "pack_06_os_security_mobile",
+    "verdict": "KEEP",
+    "reason": "Letter-by-letter abbreviation; no ordinary meaning."
+  },
+  {
+    "alias": "kotlin multiplatform",
+    "term": "KMP",
+    "pack": "pack_06_os_security_mobile",
+    "verdict": "KEEP",
+    "reason": "Specific technical phrase; no ordinary English usage."
+  },
+  {
+    "alias": "compose multi platform",
+    "term": "Compose Multiplatform",
+    "pack": "pack_06_os_security_mobile",
+    "verdict": "KEEP",
+    "reason": "'compose multi platform' is a specific tech phrase; not a natural English expression."
+  },
+  {
+    "alias": "a r",
+    "term": "AR",
+    "pack": "pack_06_os_security_mobile",
+    "verdict": "DROP",
+    "reason": "Two-letter abbreviation is too short and ambiguous; 'a r' could appear in many non-tech contexts and 'AR' has many meanings."
+  },
+  {
+    "alias": "augmented reality",
+    "term": "AR",
+    "pack": "pack_06_os_security_mobile",
+    "verdict": "KEEP",
+    "reason": "Specific technical phrase; no ordinary English usage."
+  },
+  {
+    "alias": "v r",
+    "term": "VR",
+    "pack": "pack_06_os_security_mobile",
+    "verdict": "DROP",
+    "reason": "Two-letter abbreviation is too short and ambiguous; 'v r' could appear in many non-tech contexts."
+  },
+  {
+    "alias": "virtual reality",
+    "term": "VR",
+    "pack": "pack_06_os_security_mobile",
+    "verdict": "KEEP",
+    "reason": "Specific technical phrase; no ordinary English usage."
+  },
+  {
+    "alias": "x r",
+    "term": "XR",
+    "pack": "pack_06_os_security_mobile",
+    "verdict": "DROP",
+    "reason": "Two-letter abbreviation is too short and ambiguous; 'x r' could appear in many non-tech contexts."
+  },
+  {
+    "alias": "extended reality",
+    "term": "XR",
+    "pack": "pack_06_os_security_mobile",
+    "verdict": "KEEP",
+    "reason": "Specific technical phrase; no ordinary English usage."
+  },
+  {
+    "alias": "ar kit",
+    "term": "ARKit",
+    "pack": "pack_06_os_security_mobile",
+    "verdict": "KEEP",
+    "reason": "'ar kit' unambiguously means Apple's ARKit in tech dictation; the combination has no ordinary meaning."
+  },
+  {
+    "alias": "a r kit",
+    "term": "ARKit",
+    "pack": "pack_06_os_security_mobile",
+    "verdict": "KEEP",
+    "reason": "Letter-by-letter AR with 'kit'; no ordinary English meaning."
+  },
+  {
+    "alias": "ar core",
+    "term": "ARCore",
+    "pack": "pack_06_os_security_mobile",
+    "verdict": "KEEP",
+    "reason": "'ar core' unambiguously means Google's ARCore; the combination has no ordinary English meaning."
+  },
+  {
+    "alias": "a r core",
+    "term": "ARCore",
+    "pack": "pack_06_os_security_mobile",
+    "verdict": "KEEP",
+    "reason": "Letter-by-letter AR with 'core'; no ordinary English meaning as a compound."
+  },
+  {
+    "alias": "reality kit",
+    "term": "RealityKit",
+    "pack": "pack_06_os_security_mobile",
+    "verdict": "DROP",
+    "reason": "'reality kit' could appear in ordinary English ('a reality kit for therapy'); when in doubt, DROP."
+  },
+  {
+    "alias": "scene kit",
+    "term": "SceneKit",
+    "pack": "pack_06_os_security_mobile",
+    "verdict": "DROP",
+    "reason": "'scene kit' is ordinary English ('a scene kit for theater production'); would corrupt normal speech."
+  },
+  {
+    "alias": "sprite kit",
+    "term": "SpriteKit",
+    "pack": "pack_06_os_security_mobile",
+    "verdict": "DROP",
+    "reason": "'sprite kit' could appear in ordinary English contexts (craft kits, gaming hobbyist speech); when in doubt, DROP."
+  },
+  {
+    "alias": "metal api",
+    "term": "Metal",
+    "pack": "pack_06_os_security_mobile",
+    "verdict": "KEEP",
+    "reason": "Disambiguated by 'api'; 'metal api' unambiguously means Apple's Metal graphics API."
+  },
+  {
+    "alias": "vulken",
+    "term": "Vulkan",
+    "pack": "pack_06_os_security_mobile",
+    "verdict": "KEEP",
+    "reason": "Phonetic mis-transcription of Vulkan; no ordinary English meaning."
+  },
+  {
+    "alias": "vulcan",
+    "term": "Vulkan",
+    "pack": "pack_06_os_security_mobile",
+    "verdict": "DROP",
+    "reason": "'Vulcan' is a proper noun with non-tech uses (Roman god, Star Trek character, place name); a homophone of a real word."
+  },
+  {
+    "alias": "open g l",
+    "term": "OpenGL",
+    "pack": "pack_06_os_security_mobile",
+    "verdict": "KEEP",
+    "reason": "Letter-by-letter GL with 'open'; no ordinary English meaning."
+  },
+  {
+    "alias": "open gee el",
+    "term": "OpenGL",
+    "pack": "pack_06_os_security_mobile",
+    "verdict": "KEEP",
+    "reason": "Phonetic letter-by-letter spelling of OpenGL; no ordinary meaning."
+  },
+  {
+    "alias": "web g l",
+    "term": "WebGL",
+    "pack": "pack_06_os_security_mobile",
+    "verdict": "KEEP",
+    "reason": "Letter-by-letter GL with 'web'; no ordinary English meaning."
+  },
+  {
+    "alias": "web gee el",
+    "term": "WebGL",
+    "pack": "pack_06_os_security_mobile",
+    "verdict": "KEEP",
+    "reason": "Phonetic letter-by-letter spelling of WebGL; no ordinary meaning."
+  },
+  {
+    "alias": "web g p u",
+    "term": "WebGPU",
+    "pack": "pack_06_os_security_mobile",
+    "verdict": "KEEP",
+    "reason": "Letter-by-letter GPU with 'web'; no ordinary English meaning."
+  },
+  {
+    "alias": "web gee pee you",
+    "term": "WebGPU",
+    "pack": "pack_06_os_security_mobile",
+    "verdict": "KEEP",
+    "reason": "Phonetic letter-by-letter spelling of WebGPU; no ordinary meaning."
+  },
+  {
+    "alias": "direct x",
+    "term": "DirectX",
+    "pack": "pack_06_os_security_mobile",
+    "verdict": "KEEP",
+    "reason": "'direct x' has no ordinary English meaning; unambiguously DirectX."
+  },
+  {
+    "alias": "direct ex",
+    "term": "DirectX",
+    "pack": "pack_06_os_security_mobile",
+    "verdict": "KEEP",
+    "reason": "Phonetic spelling of DirectX; no ordinary English meaning."
+  },
+  {
+    "alias": "unity engine",
+    "term": "Unity",
+    "pack": "pack_06_os_security_mobile",
+    "verdict": "KEEP",
+    "reason": "Disambiguated by 'engine'; 'unity engine' unambiguously means the Unity game engine."
+  },
+  {
+    "alias": "unreal engine",
+    "term": "Unreal Engine",
+    "pack": "pack_06_os_security_mobile",
+    "verdict": "DROP",
+    "reason": "Flagged identity; alias equals term, rule does nothing."
+  },
+  {
+    "alias": "go dot",
+    "term": "Godot",
+    "pack": "pack_06_os_security_mobile",
+    "verdict": "DROP",
+    "reason": "'go dot' is ordinary English ('go dot com', or just 'go' + 'dot'); both words are extremely common and the phrase would corrupt normal speech."
+  },
+  {
+    "alias": "guh doh",
+    "term": "Godot",
+    "pack": "pack_06_os_security_mobile",
+    "verdict": "KEEP",
+    "reason": "Phonetic mis-transcription of Godot; no ordinary English meaning."
+  },
+  {
+    "alias": "bev ee",
+    "term": "Bevy",
+    "pack": "pack_06_os_security_mobile",
+    "verdict": "KEEP",
+    "reason": "'bev ee' has no ordinary English meaning; phonetic for Bevy."
+  },
+  {
+    "alias": "bevy engine",
+    "term": "Bevy",
+    "pack": "pack_06_os_security_mobile",
+    "verdict": "KEEP",
+    "reason": "Disambiguated by 'engine'; 'bevy engine' unambiguously means the Bevy game engine."
+  },
+  {
+    "alias": "s d l",
+    "term": "SDL",
+    "pack": "pack_06_os_security_mobile",
+    "verdict": "KEEP",
+    "reason": "Letter-by-letter abbreviation; no ordinary meaning."
+  },
+  {
+    "alias": "ess dee el",
+    "term": "SDL",
+    "pack": "pack_06_os_security_mobile",
+    "verdict": "KEEP",
+    "reason": "Phonetic letter-by-letter spelling of SDL; no ordinary meaning."
+  },
+  {
+    "alias": "w g s l",
+    "term": "WGSL",
+    "pack": "pack_06_os_security_mobile",
+    "verdict": "KEEP",
+    "reason": "Letter-by-letter abbreviation; no ordinary meaning."
+  },
+  {
+    "alias": "g l s l",
+    "term": "GLSL",
+    "pack": "pack_06_os_security_mobile",
+    "verdict": "KEEP",
+    "reason": "Letter-by-letter abbreviation; no ordinary meaning."
+  },
+  {
+    "alias": "gee el ess el",
+    "term": "GLSL",
+    "pack": "pack_06_os_security_mobile",
+    "verdict": "KEEP",
+    "reason": "Phonetic letter-by-letter spelling of GLSL; no ordinary meaning."
+  },
+  {
+    "alias": "h l s l",
+    "term": "HLSL",
+    "pack": "pack_06_os_security_mobile",
+    "verdict": "KEEP",
+    "reason": "Letter-by-letter abbreviation; no ordinary meaning."
+  },
+  {
+    "alias": "aitch el ess el",
+    "term": "HLSL",
+    "pack": "pack_06_os_security_mobile",
+    "verdict": "KEEP",
+    "reason": "Phonetic letter-by-letter spelling of HLSL; no ordinary meaning."
+  },
+  {
+    "alias": "m s l",
+    "term": "MSL",
+    "pack": "pack_06_os_security_mobile",
+    "verdict": "KEEP",
+    "reason": "Letter-by-letter abbreviation; no ordinary meaning."
+  },
+  {
+    "alias": "em ess el",
+    "term": "MSL",
+    "pack": "pack_06_os_security_mobile",
+    "verdict": "KEEP",
+    "reason": "Phonetic letter-by-letter spelling of MSL; no ordinary meaning."
+  },
+  {
+    "alias": "metal shading language",
+    "term": "MSL",
+    "pack": "pack_06_os_security_mobile",
+    "verdict": "KEEP",
+    "reason": "Specific technical phrase; no ordinary English usage."
+  },
+  {
+    "alias": "c i c d",
+    "term": "CI/CD",
+    "pack": "pack_06_os_security_mobile",
+    "verdict": "KEEP",
+    "reason": "Letter-by-letter abbreviation; no ordinary meaning."
+  },
+  {
+    "alias": "see eye see dee",
+    "term": "CI/CD",
+    "pack": "pack_06_os_security_mobile",
+    "verdict": "KEEP",
+    "reason": "Phonetic letter-by-letter spelling of CI/CD; no ordinary meaning."
+  },
+  {
+    "alias": "i a c",
+    "term": "IaC",
+    "pack": "pack_06_os_security_mobile",
+    "verdict": "KEEP",
+    "reason": "Letter-by-letter abbreviation; no ordinary meaning."
+  },
+  {
+    "alias": "eye ay see",
+    "term": "IaC",
+    "pack": "pack_06_os_security_mobile",
+    "verdict": "KEEP",
+    "reason": "Phonetic letter-by-letter spelling of IaC; no ordinary meaning."
+  },
+  {
+    "alias": "infrastructure as code",
+    "term": "IaC",
+    "pack": "pack_06_os_security_mobile",
+    "verdict": "DEDUPE",
+    "new_alias": "infrastructure as code",
+    "reason": "Conflict flag: IaC is the correct and specific winner for this well-known DevOps abbreviation."
+  },
+  {
+    "alias": "git ops",
+    "term": "GitOps",
+    "pack": "pack_06_os_security_mobile",
+    "verdict": "KEEP",
+    "reason": "'git ops' is unambiguously GitOps in tech dictation; 'git' is a tech term and 'git ops' together has no ordinary meaning."
+  },
+  {
+    "alias": "chat ops",
+    "term": "ChatOps",
+    "pack": "pack_06_os_security_mobile",
+    "verdict": "KEEP",
+    "reason": "'chat ops' has no ordinary English meaning; unambiguously ChatOps."
+  },
+  {
+    "alias": "no ops",
+    "term": "NoOps",
+    "pack": "pack_06_os_security_mobile",
+    "verdict": "DROP",
+    "reason": "'no ops' is ordinary English ('we have no ops team', 'no operations'); would corrupt normal speech."
+  },
+  {
+    "alias": "observe ability",
+    "term": "observability",
+    "pack": "pack_06_os_security_mobile",
+    "verdict": "KEEP",
+    "reason": "'observe ability' as two words has no ordinary English meaning; phonetic mis-transcription of observability."
+  },
+  {
+    "alias": "tell em a tree",
+    "term": "telemetry",
+    "pack": "pack_06_os_security_mobile",
+    "verdict": "KEEP",
+    "reason": "'tell em a tree' is a phonetic mis-transcription of telemetry; no ordinary English meaning."
+  },
+  {
+    "alias": "tell emetry",
+    "term": "telemetry",
+    "pack": "pack_06_os_security_mobile",
+    "verdict": "KEEP",
+    "reason": "'tell emetry' is a phonetic mis-transcription of telemetry; no ordinary English meaning."
+  },
+  {
+    "alias": "tracing distributed",
+    "term": "tracing",
+    "pack": "pack_06_os_security_mobile",
+    "verdict": "DROP",
+    "reason": "The replacement drops the word 'distributed', corrupting phrases like 'tracing distributed systems'. The alias is ordinary English."
+  },
+  {
+    "alias": "span tracing",
+    "term": "span",
+    "pack": "pack_06_os_security_mobile",
+    "verdict": "DROP",
+    "reason": "The replacement drops the word 'tracing' and changes 'span' which is ordinary English ('the span tracing the bridge'); would corrupt normal speech."
+  },
+  {
+    "alias": "eggs emplar",
+    "term": "exemplar",
+    "pack": "pack_06_os_security_mobile",
+    "verdict": "KEEP",
+    "reason": "'eggs emplar' is a phonetic mis-transcription of exemplar; no ordinary English meaning."
+  },
+  {
+    "alias": "s l o",
+    "term": "SLO",
+    "pack": "pack_06_os_security_mobile",
+    "verdict": "KEEP",
+    "reason": "Letter-by-letter abbreviation; no ordinary meaning."
+  },
+  {
+    "alias": "ess el oh",
+    "term": "SLO",
+    "pack": "pack_06_os_security_mobile",
+    "verdict": "KEEP",
+    "reason": "Phonetic letter-by-letter spelling of SLO; no ordinary meaning."
+  },
+  {
+    "alias": "error budget",
+    "term": "error budget",
+    "pack": "pack_06_os_security_mobile",
+    "verdict": "DROP",
+    "reason": "Flagged identity; alias equals term, rule does nothing."
+  },
+  {
+    "alias": "toil sre",
+    "term": "toil",
+    "pack": "pack_06_os_security_mobile",
+    "verdict": "DROP",
+    "reason": "The replacement drops 'sre' and leaves 'toil', a common English word. Would corrupt 'the toil SREs face' and lose information."
+  }
+]

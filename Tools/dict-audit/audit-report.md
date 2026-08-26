@@ -1,0 +1,1149 @@
+# Dictionary Audit Report
+Rules dropped, rewritten, or deduped by the LLM audit.
+
+## pack_01_languages_frameworks — Programming Languages & Frameworks
+- **DROP** `javascript` → `JavaScript`: Identity flag — alias equals term.
+- **DROP** `typescript` → `TypeScript`: Identity flag — alias equals term.
+- **DROP** `tight script` → `TypeScript`: Ordinary English phrase — 'a tight script' is common usage (e.g., a well-written screenplay).
+- **DROP** `pie then` → `Python`: Ordinary English — 'pie then cake' or similar constructions are common in speech.
+- **DROP** `python` → `Python`: Identity flag — alias equals term.
+- **DROP** `rusted` → `Rust`: Ordinary English — past tense of 'rust' (e.g., 'the gate rusted shut').
+- **DROP** `rusk` → `Rust`: Common English word — a type of hard, dry bread/biscuit.
+- **DEDUPE/DROP** `go lang` → `Go` (loser, winner=`Golang`): Conflict: maps to both Go and Golang. Golang is the winner — 'go lang' phonetically spells out 'Golang'.
+- **DEDUPE/DROP** `go laying` → `Go` (loser, winner=`Golang`): Conflict: maps to both Go and Golang. Golang is the winner.
+- **DEDUPE/KEEP** `go lang` → `Golang` (winner): Conflict: maps to both Go and Golang. Golang is the winner — 'go lang' phonetically spells out 'Golang'.
+- **DEDUPE/KEEP** `go laying` → `Golang` (winner): Conflict: maps to both Go and Golang. Golang is the winner.
+- **DROP** `go long` → `Golang`: Ordinary English — 'go long' is a very common sports phrase (e.g., football: 'go long!').
+- **DROP** `cotton` → `Kotlin`: Very common English word — the fabric.
+- **DROP** `scholar` → `Scala`: Very common English word — an academic or learned person.
+- **DROP** `scale a` → `Scala`: Ordinary English — 'scale a wall' or 'on a scale a to b' are common constructions.
+- **DROP** `scaler` → `Scala`: Common English word — a tool or device used for scaling.
+- **DROP** `hassle` → `Haskell`: Very common English word — a troublesome situation or inconvenience.
+- **DROP** `elixir` → `Elixir`: Identity flag — alias equals term.
+- **DROP** `closure` → `Clojure`: Very common English word — the act of closing or resolving; also a standard programming concept independent of Clojure.
+- **DROP** `close your` → `Clojure`: Ordinary English — 'close your eyes' and similar constructions are extremely common.
+- **DROP** `closure script` → `ClojureScript`: Ordinary English — a programmer could naturally say 'closure script' to mean a script that uses closures.
+- **DROP** `close your script` → `ClojureScript`: Ordinary English — 'close your script and listen' is a perfectly natural sentence.
+- **DROP** `c++` → `C++`: Identity flag — alias equals term.
+- **DROP** `cobalt` → `COBOL`: Very common English word — a metallic element and a shade of blue.
+- **DROP** `fort ran` → `Fortran`: Ordinary English — 'the fort ran out of supplies' is a natural sentence.
+- **DROP** `pearl` → `Perl`: Very common English word — a gem; explicit homophone-of-real-word case per the rules.
+- **DROP** `purl` → `Perl`: Common English word — a knitting stitch.
+- **DROP** `darts` → `Dart`: Common English word — the throwing game and the projectiles.
+- **DROP** `racquets` → `Racket`: Common English word — plural of racquet, the sports equipment.
+- **DROP** `prologue` → `Prolog`: Very common English word — the introductory section of a play or book.
+- **DROP** `viper` → `Vyper`: Common English word — a venomous snake; also a well-known car model.
+- **DEDUPE/DROP** `wasm` → `WebAssembly` (loser, winner=`WASM`): Conflict + identity: maps to both WASM and WebAssembly. WASM is the winner as the more specific abbreviation.
+- **DROP** `was um` → `WASM`: Ordinary English — 'was um' is a natural filler pattern in speech (e.g., 'it was um, like that').
+- **DEDUPE/KEEP** `wasm` → `WASM` (winner): Conflict + identity: maps to both WASM and WebAssembly. WASM is the winner as the more specific abbreviation.
+- **DEDUPE/DROP** `next js` → `Next.js` (loser, winner=`Nuxt.js`): Conflict: maps to both Next.js and Nuxt.js. Next.js is the winner.
+- **DEDUPE/KEEP** `next js` → `Nuxt.js` (winner): Conflict: maps to both Next.js and Nuxt.js. Next.js is the winner.
+- **DEDUPE/DROP** `angular js` → `Angular` (loser, winner=`AngularJS`): Conflict: maps to both Angular and AngularJS. AngularJS is the winner.
+- **DEDUPE/KEEP** `angular js` → `AngularJS` (winner): Conflict: maps to both Angular and AngularJS. AngularJS is the winner.
+- **DROP** `re mix` → `Remix`: Ordinary English — 'remix' (to mix again) is a very common word in music and everyday speech.
+- **DEDUPE/DROP** `solid js` → `Solid.js` (loser, winner=`SolidJS`): Conflict: maps to both Solid.js and SolidJS. Solid.js is the winner.
+- **DEDUPE/DROP** `solid jay es` → `Solid.js` (loser, winner=`SolidJS`): Conflict: maps to both Solid.js and SolidJS. Solid.js is the winner.
+- **DEDUPE/KEEP** `solid jay es` → `SolidJS` (winner): Conflict: maps to both Solid.js and SolidJS. Solid.js is the winner.
+- **DEDUPE/KEEP** `solid js` → `SolidJS` (winner): Conflict: maps to both Solid.js and SolidJS. Solid.js is the winner.
+- **DROP** `quick` → `Qwik`: Very common English word — 'that was quick', 'quick question', etc.
+- **DEDUPE/DROP** `express js` → `Express.js` (loser, winner=`Express`): Conflict: same alias maps to both Express.js and Express. Express.js is the more specific winner.
+- **DEDUPE/KEEP** `express js` → `Express` (winner): Conflict: same alias maps to both Express.js and Express. Express.js is the more specific winner.
+- **DROP** `jan go` → `Django`: 'Jan go' is plausible ordinary English (a name 'Jan' followed by 'go'), creating false-positive risk.
+- **DROP** `star let` → `Starlette`: 'starlet' is a very common English word meaning a young actress; high false-positive risk.
+- **DROP** `star light` → `Starlette`: 'starlight' is ordinary English (light from stars); would corrupt normal speech.
+- **DROP** `salary` → `Celery`: Single common English word meaning wages; high false-positive risk in any dictation.
+- **DROP** `rail` → `Rails`: Single very common English word (a bar, to rail against); extremely high false-positive risk.
+- **DROP** `spring booted` → `Spring Boot`: 'spring booted' is ordinary English past tense (e.g., 'she spring booted the car'); high false-positive risk.
+- **DROP** `cork us` → `Quarkus`: 'cork us' is plausible ordinary English (e.g., 'don't cork us up'); too much false-positive risk.
+- **DROP** `micro not` → `Micronaut`: 'micro not' is ordinary English (e.g., 'micro, not macro'); would corrupt normal dictation.
+- **DROP** `symphony` → `Symfony`: 'symphony' is a very common English word (orchestral music); would corrupt normal speech.
+- **DROP** `blaze or` → `Blazor`: 'blaze or' is ordinary English (e.g., 'does it blaze or not'); high false-positive risk in dictation.
+- **DROP** `blazer` → `Blazor`: Very common English word (a jacket); would corrupt normal speech.
+- **DROP** `flutters` → `Flutter`: Common English word (third-person singular of 'to flutter'); would corrupt normal speech.
+- **DROP** `tory` → `Tauri`: Common English word/proper noun (Conservative Party member); high false-positive risk.
+- **DROP** `capacity or` → `Capacitor`: 'capacity or' is ordinary English (e.g., 'capacity or capability'); high false-positive risk.
+- **DROP** `tail wind` → `Tailwind`: 'tailwind' is a real English word (wind from behind an aircraft); would corrupt normal dictation.
+- **DROP** `ant design` → `Ant Design`: Identity rule: alias equals the term (case-insensitive). Mandatory DROP.
+- **DROP** `styled components` → `Styled Components`: Identity rule: alias equals the term (case-insensitive). Mandatory DROP.
+- **DROP** `roll up` → `Rollup`: Very common English phrasal verb (e.g., 'roll up your sleeves'); high false-positive risk.
+- **DROP** `babble` → `Babel`: Very common English word meaning to talk incoherently; would corrupt normal speech.
+- **DROP** `pretty er` → `Prettier`: 'pretty er' is ordinary English (e.g., a hesitation 'pretty, er, good'); also flagged conflict but the alias itself is too risky.
+- **DROP** `mock a` → `Mocha`: 'mock a' is ordinary English (e.g., 'mock a person'); would corrupt normal dictation.
+- **DROP** `play right` → `Playwright`: 'play right' is ordinary English (e.g., 'play right field', 'you should play right'); high false-positive risk.
+- **DROP** `play write` → `Playwright`: 'play write' is ordinary English (someone who writes plays, or 'play, write it down'); would corrupt normal speech.
+- **DROP** `play wright` → `Playwright`: "playwright" is a common English word (a person who writes plays). The split form would incorrectly replace natural dictation like "she is a playwright" or "the play wright".
+- **DROP** `selenium` → `Selenium`: Identity flag — alias equals the term (case-insensitive). Always drop.
+- **DROP** `story book` → `Storybook`: "story book" is common English (a book of stories). Would break natural phrases like "read me a story book".
+- **DROP** `re dux` → `Redux`: "redux" is a real English/Latin word meaning "brought back" (e.g., "Apocalypse Now Redux"). The split form would incorrectly replace ordinary usage.
+- **DROP** `zoo stand` → `Zustand`: "zoo stand" is plausible ordinary English (a stand at a zoo). Would break natural dictation.
+- **DROP** `joe tie` → `Jotai`: "joe tie" is ordinary English — could appear in natural dictation such as "Joe, tie your shoes" or references to a person named Joe.
+- **DROP** `joe thai` → `Jotai`: "Thai" is a real adjective in common use (Thai food, Thai culture). "joe thai" could naturally appear when dictating about Thai restaurants or a person named Joe.
+- **DROP** `re coil` → `Recoil`: "recoil" is common English (gun recoil, to recoil in horror). The split form would incorrectly replace natural phrases like "the gun had significant re coil".
+- **DROP** `x state` → `XState`: "x state" is ordinary English; could appear in phrases like "x state of the art" or in political/geographic contexts.
+- **DROP** `ex state` → `XState`: "ex state" is natural English meaning "former state" (e.g., "ex-state department"). Very likely to appear in ordinary dictation.
+- **DROP** `tan stack` → `TanStack`: "tan stack" is ordinary English — could appear in phrases like "a tan stack of folders" or similar descriptions.
+- **DROP** `tan stacked` → `TanStack`: "tan stacked" uses two ordinary English words in a plausible combination (describing color and arrangement). Risk of collision in natural speech.
+- **DROP** `react query` → `React Query`: Identity flag — alias is a case-insensitive match of the term. Always drop.
+- **DROP** `react quarry` → `React Query`: Both "react" and "quarry" are common English words; "react quarry" could appear in natural dictation about animal behavior or mining contexts.
+- **DROP** `trpc` → `tRPC`: Identity flag — "trpc" is a case-insensitive match of the term. Always drop.
+- **DROP** `prison a` → `Prisma`: "prison" is a very common English word; "prison a" could naturally appear in dictation such as "Prison A had maximum security" or "I visited prison, a difficult experience".
+- **DROP** `sequel eyes` → `Sequelize`: "sequel" and "eyes" are both very common English words; "sequel eyes" could naturally appear in sentences about movie sequels or descriptions.
+- **DROP** `connects` → `Knex`: "connects" is an extremely common English verb. Would break countless natural sentences like "she connects with her team" or "it connects to the server".
+- **DROP** `for mick` → `Formik`: "for Mick" is natural English (a personal name in a prepositional phrase). Would break dictation like "I did this for Mick" or "a gift for Mick".
+- **DROP** `react hook form` → `React Hook Form`: Identity flag — alias is a case-insensitive match of the term. Always drop.
+- **DROP** `dee three` → `D3.js`: "dee three" naturally appears in common dictation about vitamin D3, D3 formats, or other non-tech D3 references. Too broad.
+- **DROP** `re charts` → `Recharts`: "re charts" functions as natural English meaning "to chart again" — could appear in phrases like "she re charts the course".
+- **DROP** `low dash` → `Lodash`: "low dash" is ordinary English — both words are common and the phrase could appear in natural dictation about movement, punctuation, or typography.
+- **DROP** `date functions` → `date-fns`: "date functions" is natural English in any software or spreadsheet context. Would break common phrases like "date functions in Excel" or "built-in date functions".
+- **DROP** `tor so` → `Turso`: "torso" is a very common English word (the trunk of the body). The split "tor so" would incorrectly replace natural dictation like "the sculpture's torso" or "a human torso".
+- **DROP** `strappy` → `Strapi`: "strappy" is a real English adjective (having straps, e.g., "strappy sandals"). Would break natural dictation about footwear or accessories.
+
+## pack_02_cloud_devops_infra — Cloud, DevOps & Infrastructure
+- **DROP** `kates` → `K8s`: Common English word/name (plural of Kate) with no reliable K8s-specific signal.
+- **DROP** `pot man` → `Podman`: 'Potman' is real archaic/British English for a pub assistant; too common a word to keep.
+- **DROP** `linked` → `Linkerd`: Very common English word (past tense of 'link'); breaks normal speech constantly.
+- **DROP** `customize` → `Kustomize`: Extremely common English verb; would break countless ordinary utterances like 'you can customize it'.
+- **DROP** `easy too` → `Amazon EC2`: Extremely common English phrase ('it's easy too'); would break normal speech constantly.
+- **DROP** `ex` → `Amazon EKS`: Extremely common English word with many meanings; single_word_english flag confirms this.
+- **DROP** `lambda` → `Amazon Lambda`: Common word with multiple non-AWS meanings: Greek letter, math/physics term, general programming lambda functions. Too broad.
+- **DROP** `cloud watch` → `Amazon CloudWatch`: 'Cloud watch' / cloud watching is a real hobby; breaks phrases like 'let's go cloud watch'.
+- **DROP** `sage maker` → `Amazon SageMaker`: Two common English words ('sage' herb/wise person + 'maker'); would break phrases like 'a sage maker of decisions'.
+- **DROP** `bed rock` → `Amazon Bedrock`: 'Bedrock' is a very common English word (foundation rock, basic principle); breaks ordinary speech constantly.
+- **DROP** `red shift` → `Amazon Redshift`: 'Redshift' is a well-known astronomy term; breaks phrases like 'the red shift of distant galaxies'.
+- **DROP** `genesis` → `Amazon Kinesis`: Very common English word (origin/beginning) and biblical book; breaks ordinary speech constantly.
+- **DROP** `route 53` → `Amazon Route 53`: Could easily refer to a highway route number; breaks phrases like 'take Route 53 north'.
+- **DROP** `route fifty three` → `Amazon Route 53`: Refers to a highway route in ordinary English; breaks navigation/travel speech.
+- **DROP** `i am` → `Amazon IAM`: Extremely common English phrase; breaks nearly every sentence beginning with 'I am'.
+- **DROP** `cloud formation` → `Amazon CloudFormation`: Common English phrase referring to cloud shapes in the sky; breaks phrases like 'that cloud formation is beautiful'.
+- **DROP** `step functions` → `Amazon Step Functions`: 'Step functions' is a legitimate mathematics term; breaks phrases like 'the step functions in calculus'.
+- **DROP** `as your` → `Azure`: Extremely common English phrase; breaks sentences like 'as your friend would say'.
+- **DEDUPE/DROP** `google cloud platform` → `GCP` (loser, winner=`Google Cloud`): Same alias maps to both GCP and Google Cloud. GCP wins as it is literally the acronym for 'Google Cloud Platform'.
+- **DEDUPE/KEEP** `google cloud platform` → `Google Cloud` (winner): Same alias maps to both GCP and Google Cloud. GCP wins as it is literally the acronym for 'Google Cloud Platform'.
+- **DROP** `big query` → `BigQuery`: Ordinary English phrase ('that's a big query') that could appear in non-tech speech about large questions or database queries in general.
+- **DROP** `big quarry` → `BigQuery`: A quarry is a real stone pit; 'big quarry' breaks phrases like 'the big quarry outside of town'.
+- **DROP** `cloud run` → `Cloud Run`: Identity flag: alias equals the term. Mandatory DROP.
+- **DROP** `fire base` → `Firebase`: 'Firebase' / 'fire base' is a real military term (forward operating base); breaks related speech.
+- **DEDUPE/KEEP** `pub sub` → `Pub/Sub` (winner): Duplicate entry: identical alias and term appear twice in the file. Retaining Pub/Sub as the canonical term.
+- **DEDUPE/KEEP** `pub sub` → `Pub/Sub` (winner): Duplicate entry: identical alias and term appear twice in the file. Retaining Pub/Sub as the canonical term.
+- **DROP** `r 2` → `Cloudflare R2`: Too generic; 'r 2' could refer to Star Wars R2-D2, vitamins, road designations, or any other 'R2' abbreviation.
+- **DROP** `vulture` → `Vultr`: Common English word (a scavenging bird); single_word_english flag confirms; breaks natural speech constantly.
+- **DROP** `rail way` → `Railway`: 'Railway' is a very common English word for a train system; breaks phrases like 'take the railway'.
+- **DROP** `super base` → `Supabase`: Two common English words ('super' + 'base'); breaks phrases like 'that's our super base of operations'.
+- **DROP** `planet scale` → `PlanetScale`: Ordinary English phrase; breaks sentences like 'problems at planet scale' or 'a planet-scale event'.
+- **DROP** `planet scaled` → `PlanetScale`: Ordinary English adjective/verb form; breaks phrases like 'planet-scaled infrastructure'.
+- **DROP** `up stash` → `Upstash`: 'Up stash' has ordinary English meaning ('increase the stash' or 'stash something upward'); too ambiguous.
+- **DROP** `tear a form` → `Terraform`: Plain English phrase: 'tear a form' (to rip a form apart) is natural speech that would be wrongly replaced.
+- **DROP** `terra formed` → `Terraform`: 'Terraformed' is a real English past-tense verb used in sci-fi contexts ('the planet was terraformed'); breaks natural speech.
+- **DROP** `open tofu` → `OpenTofu`: 'Open tofu' is natural English ('open the tofu package'); both words are common with no tech-exclusive meaning together.
+- **DROP** `chef automation` → `Chef`: 'Chef' is a very common English word (a cook); 'chef automation' plausibly means automating culinary work.
+- **DROP** `puppet automation` → `Puppet`: 'Puppet' is a common English word (marionette); 'puppet automation' plausibly refers to animatronic puppets.
+- **DROP** `salt stack` → `SaltStack`: 'Salt stack' is natural English (a stack of salt blocks); both words are common with clear non-tech meanings.
+- **DROP** `vague rant` → `Vagrant`: 'Vague rant' is very natural English ('that was a vague rant'); breaks ordinary speech about complaints.
+- **DROP** `pack er` → `Packer`: 'Packer' is a common English word (one who packs); spoken as 'pack er' it still maps to an ordinary noun.
+- **DROP** `travis ci` → `Travis CI`: Identity flag: alias equals the term (case-insensitively); no-op rule.
+- **DROP** `team city` → `TeamCity`: 'Team city' is common English ('Pittsburgh is a team city'); breaks ordinary speech.
+- **DROP** `build kite` → `Buildkite`: 'Build a kite' / 'build kite' is natural English; breaks common craft or hobbyist speech.
+- **DROP** `a patchy` → `Apache`: 'A patchy' is very common English ('a patchy lawn', 'a patchy signal'); breaks ordinary adjective use constantly.
+- **DROP** `traffic` → `Traefik`: Single common English word with a very frequent non-tech meaning (road/network traffic); would corrupt most sentences.
+- **DROP** `new relick` → `New Relic`: Sounds identical to 'new relic' (an old artifact newly found), which is natural English; breaks historical/archaeological speech.
+- **DROP** `new rellick` → `New Relic`: Phonetically identical to 'new relic'; same natural English conflict as 'new relick'.
+- **DROP** `elk stack` → `ELK Stack`: Identity flag: alias matches the term; also 'elk stack' could describe a pile of elk antlers.
+- **DROP** `elastic search` → `Elasticsearch`: 'Elastic search' is plausible English (a flexible or elastic search mechanism); breaks tech-adjacent non-product speech.
+- **DROP** `log stash` → `Logstash`: 'Log stash' is natural English (a hidden supply of logs for firewood); breaks ordinary speech.
+- **DROP** `oh tell` → `OTel`: 'Oh, tell' is extremely natural English ('oh, tell me more'); would break conversational speech constantly.
+- **DEDUPE/KEEP** `pager duty` → `PagerDuty` (winner): Conflict flag: alias maps to two terms. PagerDuty is the more specific term (full product name). Mark both rows DEDUPE; winner is PagerDuty.
+- **DROP** `honey comb` → `Honeycomb`: 'Honeycomb' is a very common English word (beehive structure, food pattern); breaks ordinary speech about nature or food.
+- **DROP** `low key` → `Loki`: 'Low key' is extremely common English slang (understated, subtle); would break countless everyday sentences.
+- **DROP** `vault secrets` → `Vault`: 'Vault secrets' is natural English (secrets kept in a vault); breaks speech about security, history, or finance.
+- **DROP** `zoo keeper` → `ZooKeeper`: 'Zookeeper' is a very common English word (person who cares for zoo animals); breaks speech about animals and zoos.
+- **DROP** `zookeeper` → `ZooKeeper`: Identity flag: alias equals the term; also a very common English word that would break ordinary speech.
+- **DROP** `kafka` → `Apache Kafka`: 'Kafka' is primarily a famous author's surname (Franz Kafka); single proper noun with a well-known non-tech meaning.
+- **DEDUPE/DROP** `kaf ka` → `Apache Kafka` (loser, winner=`Kafka`): Conflict: same alias maps to both 'Apache Kafka' and 'Kafka'. Winner is 'Kafka'; this row is the surviving entry.
+- **DEDUPE/KEEP** `kaf ka` → `Kafka` (winner): Conflict: same alias maps to both 'Apache Kafka' and 'Kafka'. Winner is 'Kafka'; this row is the surviving entry.
+- **DROP** `gnats` → `NATS`: 'Gnats' is a very common English word (small flying insects); would break any speech about nature or insects.
+- **DROP** `red is` → `Redis`: 'Red is' is among the most frequent English two-word combinations ('red is my favorite color'); would break countless sentences.
+- **DROP** `valley key` → `Valkey`: 'Valley key' is natural English (a key associated with a valley, or a geographic place name); breaks ordinary geographic speech.
+- **DROP** `o off` → `OAuth`: 'O, off' is natural English ('o, off you go'); breaks ordinary speech with this very common two-word combination.
+- **DROP** `jot` → `JWT`: 'Jot' is a very common English word (to write a brief note); would break common speech ('let me jot that down').
+- **DROP** `rest full` → `RESTful`: 'Restful' is a common English adjective (a restful vacation). This would corrupt ordinary speech.
+- **DROP** `rest ful` → `RESTful`: Same as 'rest full': 'restful' is ordinary English and this mis-transcription would fire on non-tech use.
+- **DROP** `air flow` → `Apache Airflow`: 'Airflow' (and 'air flow') is a common English noun used in HVAC, aerodynamics, and everyday speech. Would corrupt non-tech dictation.
+- **DROP** `airflow` → `Apache Airflow`: 'Airflow' is a common English word; single-word-english rule applies.
+- **DROP** `pre fect` → `Prefect`: 'Prefect' is a real English word (school administrator, Roman official). 'Pre fect' is its Whisper mis-transcription and would corrupt non-tech dictation.
+- **DROP** `perfect` → `Prefect`: Flagged single_word_english. 'Perfect' is one of the most common English adjectives; would corrupt everyday dictation constantly.
+- **DROP** `air bite` → `Airbyte`: 'Air bite' is a plausible ordinary English phrase (fishing, hunting). Would corrupt non-tech dictation.
+- **DROP** `snow flake` → `Snowflake`: 'Snowflake' (and 'snow flake') is a very common English word. Would corrupt weather, nature, and colloquial speech constantly.
+- **DROP** `spark` → `Apache Spark`: Flagged single_word_english. 'Spark' is extremely common English (spark of fire, inspiration, etc.). Would corrupt everyday speech constantly.
+- **DROP** `a patchy spark` → `Apache Spark`: 'A patchy spark' is a plausible English phrase (describing an erratic spark). Applying 'when in doubt, DROP'.
+- **DROP** `beam` → `Apache Beam`: Flagged single_word_english. 'Beam' is a very common English word (light beam, structural beam, etc.). Would corrupt everyday speech.
+- **DROP** `hive` → `Apache Hive`: Flagged single_word_english. 'Hive' is a very common English word (beehive, hive of activity). Would corrupt everyday speech.
+- **DROP** `iceberg` → `Apache Iceberg`: Flagged single_word_english. 'Iceberg' is a very common English word. Would corrupt everyday speech.
+- **DROP** `delta lake` → `Delta Lake`: Flagged identity (alias equals term modulo capitalization). Also, 'delta lake' is a real geographic/ecological concept and common English phrase.
+- **DROP** `par kay` → `Apache Parquet`: 'Parquet' is a real English word (parquet flooring) pronounced 'par-KAY'. This alias would corrupt dictation about floors and interior design.
+- **DROP** `par quet` → `Apache Parquet`: 'Parquet' is a real English word; 'par quet' is its Whisper mis-transcription and would corrupt non-tech dictation about flooring.
+- **DROP** `parquet` → `Apache Parquet`: Flagged single_word_english. 'Parquet' is a standard English word (parquet flooring). Would corrupt interior design and architecture dictation.
+- **DROP** `snick` → `Snyk`: Flagged single_word_english. 'Snick' is a real English word (a small cut or notch). Would corrupt non-tech dictation.
+- **DROP** `reno vate` → `Renovate`: 'Renovate' is a common English verb; 'reno vate' is its Whisper mis-transcription and would corrupt dictation about home improvement.
+
+## pack_03_databases_ai_ml — Databases, AI/ML & Data Science
+- **DEDUPE/DROP** `post gress` → `PostgreSQL` (loser, winner=`Postgres`): Conflict with PostgreSQL row for same alias; PostgreSQL wins as the canonical full name.
+- **DEDUPE/KEEP** `post gress` → `Postgres` (winner): Conflict with PostgreSQL row for same alias; PostgreSQL wins as the canonical full name.
+- **DROP** `post grease` → `Postgres`: 'post grease' is plausible ordinary English (e.g., 'after greasing the axle').
+- **DROP** `post grass` → `Postgres`: 'post grass' reads as ordinary English (e.g., 'after the grass was laid').
+- **DROP** `my sequel` → `MySQL`: 'sequel' is a very common English word; 'my sequel' breaks naturally in film/book context.
+- **DROP** `sequel lite` → `SQLite`: 'sequel' and 'lite' are both common English words; 'sequel lite' could describe a lighter follow-up film.
+- **DROP** `click house` → `ClickHouse`: 'click' and 'house' are both common English words and 'click house' could appear naturally in speech.
+- **DROP** `pine cone` → `Pinecone`: 'pine cone' is a very common English compound noun (seed cone of a pine tree).
+- **DROP** `quadrant` → `Qdrant`: Single common English word (geometry, navigation); breaks naturally in any technical or general speech.
+- **DROP** `face` → `FAISS`: Extremely common single English word; breaks constantly in natural speech.
+- **DROP** `sequel` → `SQL`: Very common single English word (follow-up film/book); breaks constantly in natural speech.
+- **DROP** `no sequel` → `NoSQL`: 'no sequel' is a common phrase in film/book contexts.
+- **DROP** `crud` → `CRUD`: Identity rule: alias equals term (case-insensitive). Also a common English slang word.
+- **DROP** `acid compliance` → `ACID`: 'acid' is a common word and 'acid compliance' appears naturally in chemistry/regulatory contexts; also destroys 'compliance' from the output.
+- **DROP** `cap theorem` → `CAP theorem`: Identity rule: alias is a substring of the term and effectively identical.
+- **DROP** `clod` → `Claude`: Common single English word (lump of earth; dull person); breaks naturally in ordinary speech.
+- **DROP** `clawed` → `Claude`: Common past-tense English verb (past tense of 'claw'); breaks naturally in any description of animal behavior.
+- **DROP** `claude sonnet` → `Claude Sonnet`: Identity rule: alias equals term.
+- **DROP** `clod sonnet` → `Claude Sonnet`: 'clod' and 'sonnet' are both common English words; in poetry/literature discussions 'clod sonnet' could appear naturally.
+- **DROP** `claude opus` → `Claude Opus`: Identity rule: alias equals term.
+- **DROP** `clod opus` → `Claude Opus`: 'clod' and 'opus' are both common English words; the phrase could appear naturally in music/literary contexts.
+- **DROP** `gem in eye` → `Gemini`: 'gem in eye' can plausibly appear in ordinary English (e.g., describing an embedded gem sculpture detail).
+- **DROP** `llama` → `LLaMA`: Identity rule and single common English word (the animal); breaks constantly in ordinary speech.
+- **DROP** `llama three` → `Llama 3`: 'llama three' can plausibly appear in ordinary English (e.g., 'the third llama in the herd').
+- **DROP** `deep seek` → `DeepSeek`: 'deep' and 'seek' are both common English words; 'deep seek' could appear naturally ('to deep seek the truth').
+- **DROP** `hugging face` → `Hugging Face`: Identity rule: alias equals term. Also both words are common English.
+- **DROP** `jacks` → `JAX`: Very common English word (the game, plural of jack); breaks naturally in many ordinary contexts.
+- **DROP** `care as` → `Keras`: 'care as' can appear in ordinary English ('I care as much as you do').
+- **DROP** `psychic learn` → `scikit-learn`: 'psychic learn' can appear in ordinary English contexts (discussing psychic abilities or intuitive learning).
+- **DROP** `on x` → `ONNX`: 'on x' is extremely common in ordinary English (e.g., 'on x-axis', 'on X platform', 'on x days').
+- **DROP** `on ex` → `ONNX`: Both 'on' and 'ex' are extremely common English words; 'on ex-[something]' would be misreplaced, e.g. 'working on ex-wife's car'.
+- **DROP** `language chain` → `LangChain`: Both words are common English; 'a language chain' could appear naturally in linguistics contexts.
+- **DROP** `laying chain` → `LangChain`: 'Laying chain' is plain English ('laying chain on the deck'); would break non-tech speech.
+- **DROP** `language graph` → `LangGraph`: 'language graph' is plain English and could appear in linguistics or network discussions.
+- **DROP** `language smith` → `LangSmith`: 'language smith' reads like a variant of 'wordsmith' and could appear naturally in English.
+- **DROP** `llama index` → `LlamaIndex`: Both 'llama' and 'index' are common English words; 'the llama index' could appear in non-tech speech.
+- **DROP** `auto gen` → `AutoGen`: 'auto gen' is generic tech jargon meaning 'auto-generate'; would fire on phrases like 'I auto gen the code'.
+- **DROP** `auto gen ai` → `AutoGen`: 'auto gen ai' is still too generic; 'auto-generate AI' could be said about any AI auto-generation workflow.
+- **DROP** `semantic kernel` → `Semantic Kernel`: Identity flag: alias equals the term (case-folded). No substitution occurs.
+- **DROP** `hay stack` → `Haystack`: 'haystack' is an extremely common English word ('needle in a haystack'); would break everyday speech.
+- **DROP** `weights and biases` → `Weights & Biases`: Very common English phrase in ML discussion ('model weights and biases'); would mis-replace generic neural network parameter descriptions.
+- **DEDUPE/DROP** `w and b` → `Weights & Biases` (loser, winner=`W&B`): Conflict: alias mapped to both 'Weights & Biases' and 'W&B'; W&B is the canonical short form.
+- **DEDUPE/DROP** `w & b` → `Weights & Biases` (loser, winner=`W&B`): Conflict: alias mapped to both 'Weights & Biases' and 'W&B'; W&B is the canonical short form.
+- **DEDUPE/KEEP** `w and b` → `W&B` (winner): Conflict: alias mapped to both 'Weights & Biases' and 'W&B'; W&B is the canonical short form.
+- **DEDUPE/KEEP** `w & b` → `W&B` (winner): Conflict: alias mapped to both 'Weights & Biases' and 'W&B'; W&B is the canonical short form.
+- **DEDUPE/KEEP** `sage maker` → `SageMaker` (winner): Conflict flag present; SageMaker is the correct canonical term.
+- **DEDUPE/KEEP** `sage make her` → `SageMaker` (winner): Conflict flag present; SageMaker is the correct canonical term.
+- **DROP** `vertex ai` → `Vertex AI`: Identity flag: alias equals the term (case-folded). No substitution occurs.
+- **DROP** `flops` → `FLOPS`: Identity flag and common English word; 'flops' means failures in everyday English and would break many sentences.
+- **DROP** `tops` → `TOPS`: Identity flag and very common English word ('tops' as in shirts, first place, or limits); would break everyday speech.
+- **DROP** `rag` → `RAG`: Identity flag and very common English word (a piece of cloth); would break sentences like 'grab a rag'.
+- **DROP** `retrieval augmented generation` → `Retrieval Augmented Generation`: Identity flag: alias equals the term (case-folded). No substitution occurs.
+- **DROP** `fine tuning` → `fine-tuning`: Very common English phrase ('fine tuning the engine', 'fine tuning an instrument'); would break many non-tech sentences.
+- **DROP** `laura` → `LoRA`: Single-word English flag and extremely common proper name; would break any sentence mentioning someone named Laura.
+- **DROP** `transformers` → `transformer`: 'Transformers' is a very common English word (electrical devices, the movie/toy franchise); would break many non-tech sentences.
+- **DROP** `drop out` → `dropout`: 'Drop out' is an extremely common English phrase ('she decided to drop out of school'); would break many non-ML sentences.
+- **DROP** `over fitting` → `overfitting`: 'Over fitting' is natural English (a garment that fits too tightly, 'this jacket is over-fitting'); would break non-tech speech.
+- **DROP** `under fitting` → `underfitting`: 'Under fitting' is natural English (a garment that fits too loosely); would break non-tech speech.
+- **DROP** `diffusion model` → `diffusion model`: Identity flag: alias equals the term. No substitution occurs.
+- **DROP** `stable diffusion` → `Stable Diffusion`: Identity flag: alias equals the term (case-folded). No substitution occurs.
+- **DROP** `dolly` → `DALL-E`: Single-word English flag; 'dolly' is a very common English word (a cart, a toy, a name) and would break many non-tech sentences.
+- **DROP** `mid journey` → `Midjourney`: 'Mid journey' (or 'mid-journey') is common English for 'in the middle of a trip'; would break non-tech speech.
+- **DROP** `whisper model` → `Whisper`: 'Whisper model' is a generic English phrase that could refer to any model involving whispering; breaks non-tech contexts.
+- **DROP** `numpy` → `NumPy`: Identity flag: alias equals the term (case-folded). No substitution occurs.
+- **DROP** `sea born` → `Seaborn`: 'Sea-born' is a real English adjective (born from the sea, as in a sea-born creature); would break poetic or literary speech.
+- **DROP** `pollers` → `Polars`: 'Pollers' is a real English word (people who poll, or trees that have been pollarded); would break non-tech speech.
+- **DROP** `arrow` → `Apache Arrow`: Single-word English flag; 'arrow' is an extremely common English word and would break countless non-tech sentences.
+- **DROP** `a patchy arrow` → `Apache Arrow`: 'A patchy arrow' is natural English ('an arrow with patches'); would break non-tech speech even though it phonetically renders 'Apache Arrow'.
+- **DROP** `jupiter` → `Jupyter`: Single-word English flag; 'Jupiter' is the planet name and a common proper noun; would break any mention of the planet.
+- **DROP** `jupiter lab` → `JupyterLab`: 'Jupiter lab' is natural English ('a laboratory studying the planet Jupiter'); would break non-tech speech.
+- **DROP** `stream lit` → `Streamlit`: 'Stream lit' is natural English (a stream that is lit up, or a lit stream); would break non-tech speech.
+- **DROP** `spacey` → `spaCy`: 'Spacey' is common English slang meaning distracted or disoriented, and is also a well-known surname; would break non-tech speech.
+- **DROP** `hugging face transformers` → `Hugging Face Transformers`: Identity flag: alias equals the term (case-folded). No substitution occurs.
+- **DROP** `roberta` → `RoBERTa`: Flagged identity and single_word_english. 'Roberta' is a common given name and would corrupt sentences like 'I spoke with Roberta'.
+- **DROP** `open router` → `OpenRouter`: 'Open router' is a common English phrase in networking contexts (open-source router, open the router) and would corrupt sentences like 'using an open router for our network'.
+- **DROP** `together ai` → `Together AI`: Flagged identity and substring_of_term; alias and term differ only in case, making this a no-op replacement.
+- **DROP** `any scale` → `Anyscale`: 'Any scale' is an extremely common English phrase ('this works at any scale', 'at any scale of deployment') and would corrupt ordinary sentences.
+- **DROP** `vex` → `Vaex`: Flagged single_word_english. 'Vex' is a common English verb ('that really vexed me') and would corrupt ordinary sentences.
+
+## pack_04_devtools_companies — Developer Tools, Version Control & Companies
+- **DROP** `source tree` → `Sourcetree`: 'Source tree' is a common developer phrase meaning the directory tree of source files ('navigate the source tree'); would corrupt legitimate technical speech.
+- **DEDUPE/DROP** `v s code` → `VS Code` (loser, winner=`VSCode`): Conflict with 'VS Code' entry. Losing side: 'VSCode'. Winner is 'VS Code' (official Microsoft branding with space).
+- **DEDUPE/DROP** `vee ess code` → `VS Code` (loser, winner=`VSCode`): Conflict with 'VS Code' entry. Losing side: 'VSCode'. Winner is 'VS Code'.
+- **DEDUPE/KEEP** `v s code` → `VSCode` (winner): Conflict with 'VS Code' entry. Losing side: 'VSCode'. Winner is 'VS Code' (official Microsoft branding with space).
+- **DEDUPE/KEEP** `vee ess code` → `VSCode` (winner): Conflict with 'VS Code' entry. Losing side: 'VSCode'. Winner is 'VS Code'.
+- **DROP** `visual studio` → `Visual Studio`: Identity flag: alias is the same as the term (case-insensitive). No correction needed.
+- **DROP** `web storm` → `WebStorm`: 'Web storm' can appear in ordinary English as a metaphor for a storm of internet activity or controversy; too risky.
+- **DROP** `e max` → `Emacs`: 'E-max' is a real brand name (dental crowns) and 'e max' (abbreviation for electronic maximum) could appear in engineering or business contexts.
+- **DROP** `wind surf` → `Windsurf`: 'Wind surf' / 'windsurf' is a real English word for the water sport; would corrupt legitimate speech about windsurfing.
+- **DROP** `windsurfer` → `Windsurf`: 'Windsurfer' is a standard English word for a person who windsurfs; common in ordinary speech.
+- **DROP** `co pilot` → `Copilot`: 'Co-pilot' / 'copilot' is standard English for a secondary pilot; would corrupt aviation and general speech.
+- **DROP** `co-pilot` → `Copilot`: Same as 'co pilot'; 'co-pilot' is the standard hyphenated form for an aircraft co-pilot.
+- **DROP** `codium` → `Codeium`: 'Codium' is a real genus of green algae used in biology and scientific contexts; single-word English with non-tech meaning.
+- **DROP** `tab nine` → `Tabnine`: 'Tab nine' is ordinary English (pressing the tab key nine times, or tab number nine in a UI); would corrupt natural speech.
+- **DROP** `tab 9` → `Tabnine`: 'Tab 9' refers naturally to a browser or UI tab numbered 9; common in ordinary English.
+- **DROP** `claude code` → `Claude Code`: Identity flag: 'claude code' maps to 'Claude Code' — same text, only casing differs. Drop per mandatory identity rule.
+- **DROP** `aid er` → `Aider`: 'Aider' is a real English word meaning one who aids; 'aid er' as a two-word split would corrupt legitimate speech about helping someone.
+- **DROP** `u v` → `uv`: 'UV' / 'u v' is extremely common English for ultraviolet radiation ('UV rays', 'UV index'); would corrupt everyday speech.
+- **DROP** `you vee` → `uv`: 'You vee' is the phonetic spelling of 'UV' (ultraviolet) which appears constantly in everyday conversation about sunscreen, light, etc.
+- **DROP** `home brew` → `Homebrew`: 'Home brew' / 'homebrew' is very common English for beer brewed at home; would corrupt speech about brewing.
+- **DROP** `cargo rust` → `Cargo`: 'Cargo rust' can naturally appear in maritime or logistics contexts ('the cargo rust damage was severe'); both words are common English with clear non-tech meanings.
+- **DROP** `cocoa pods` → `CocoaPods`: 'Cocoa pods' are the actual pods that grow on the cocoa tree; extremely common in food/agriculture contexts. Would corrupt speech about chocolate production.
+- **DROP** `x code` → `Xcode`: 'X code' can naturally appear in ordinary English to mean a code starting with X, a secret code, or an error code prefix ('the x code was listed in the manual').
+- **DROP** `ex code` → `Xcode`: 'Ex code' can naturally appear as 'former code' or a code prefixed with 'ex'; would corrupt ordinary speech.
+- **DROP** `android studio` → `Android Studio`: Identity flag: 'android studio' maps to 'Android Studio' — same text, only casing differs. Drop per mandatory identity rule.
+- **DROP** `post man` → `Postman`: 'Postman' / 'post man' is standard English for a mail carrier; extremely common in everyday speech.
+- **DROP** `curl` → `cURL`: Identity flag plus extremely common English word ('curl your hair', 'do a curl'); would corrupt everyday speech constantly.
+- **DROP** `see url` → `cURL`: 'See URL' is a very natural English phrase ('see URL in the browser'); would corrupt instructions to look at a URL.
+- **DROP** `mirror` → `Miro`: 'Mirror' is an extremely common English word (looking glass, to reflect); would corrupt everyday speech constantly. Single-word English flagged.
+- **DROP** `jeer a` → `Jira`: 'Jeer a' can appear naturally in ordinary English ('they jeer a lot', 'don't jeer a person'); would corrupt legitimate speech.
+- **DROP** `jeera` → `Jira`: 'Jeera' is the common Hindi/Urdu word for cumin, widely used in English-language cooking contexts ('add jeera to the curry').
+- **DROP** `send grid` → `SendGrid`: 'Send grid' can appear naturally in technical or logistics speech ('send grid coordinates', 'send grid data to the server'); both words are common English.
+- **DROP** `re send` → `Resend`: 'Resend' / 're-send' is a very common English action word ('I need to re send that email'); would corrupt ordinary speech about email.
+- **DROP** `off zero` → `Auth0`: 'Off zero' can appear naturally in ordinary English ('we're off zero now', 'starting off zero'); would corrupt legitimate speech.
+- **DROP** `ok ta` → `Okta`: 'OK ta' is used in British English slang as an affirmative ('ok ta' meaning 'okay, thanks'); could appear in ordinary speech.
+- **DROP** `one login` → `OneLogin`: 'One login' is an extremely common English phrase in everyday tech usage ('use one login for everything'); would corrupt ordinary speech.
+- **DROP** `melee search` → `Meilisearch`: 'Melee' is a real English word for a confused fight or brawl; 'melee search' could naturally appear ('a melee search for survivors') and would corrupt legitimate speech.
+- **DROP** `century` → `Sentry`: 'Century' is an extremely common English word (100 years, a military unit); would corrupt everyday speech constantly. Single-word English flagged.
+- **DROP** `full story` → `FullStory`: 'The full story' is an extremely common English phrase ('tell me the full story'); would corrupt everyday speech constantly.
+- **DROP** `google` → `Google`: Identity flag: 'google' maps to 'Google' — same text, only casing differs. Drop per mandatory identity rule.
+- **DROP** `intel` → `Intel`: Flagged identity; alias equals term. Also, 'intel' is a common English word for intelligence/information.
+- **DROP** `snow flake` → `Snowflake`: 'Snowflake' is an extremely common English word (frozen precipitation, the insult); 'snow flake' would fire constantly in ordinary speech.
+- **DROP** `palo alto networks` → `Palo Alto Networks`: Flagged identity; alias is identical to term.
+- **DROP** `forty net` → `Fortinet`: 'Forty net' is ordinary English (e.g., 'forty net units', 'forty net profit'); would fire on non-tech speech.
+- **DROP** `cloud flare` → `Cloudflare`: 'Cloud flare' is natural English (atmospheric/solar flare near clouds, lens flare from clouds); breaks ordinary speech.
+- **DROP** `cloud flair` → `Cloudflare`: 'Cloud flair' (style/flair related to cloud) is ordinary English and would cause false positives.
+- **DROP** `aka my` → `Akamai`: 'Aka my' reads as 'also known as my' and would fire frequently in ordinary speech (e.g., 'aka my other project').
+- **DROP** `shop if eye` → `Shopify`: 'Shop if eye' is a phonetic rendering of 'shop if I' (as in 'shop if I go downtown'), a very common English construction; would cause false positives.
+- **DROP** `content full` → `Contentful`: 'Content full' is ordinary English meaning filled with content (e.g., 'the presentation was content full'); would break natural speech.
+- **DROP** `story block` → `Storyblok`: 'Story block' is natural English (a block in a story, a story segment, a writer's block variant); would fire on non-tech speech.
+- **DROP** `high graph` → `Hygraph`: 'High graph' is natural English (a graph with high values, a high-resolution graph); would fire on non-tech speech.
+- **DROP** `word press` → `WordPress`: 'Word press' is natural English (a printing press, 'press of words'); extremely common and would break ordinary speech.
+- **DROP** `web flow` → `Webflow`: 'Web flow' is natural English meaning the flow of web traffic or how a webpage flows; common in tech and non-tech speech.
+- **DROP** `square space` → `Squarespace`: 'Square space' is natural English (a space that is square-shaped); would fire on ordinary speech.
+- **DROP** `wicks` → `Wix`: 'Wicks' is a common English word (candle wicks); single common word with a clear non-tech meaning.
+- **DROP** `lazy git` → `lazygit`: 'Lazy git' is a common British English insult meaning a lazy person ('git' = British slang); would fire on non-tech speech.
+- **DROP** `lazy docker` → `lazydocker`: 'Lazy docker' is natural English (a lazy dock worker, or lazy Docker user); has a clear non-technical meaning.
+- **DEDUPE/KEEP** `n map` → `nmap` (winner): Conflict flag present; two aliases ('n map' and 'en map') both target nmap. Keeping nmap as the winner since both rows already agree on nmap.
+- **DEDUPE/KEEP** `en map` → `nmap` (winner): Conflict flag present; paired with 'n map' → nmap. Keeping nmap as the winner for both rows.
+- **DROP** `docker compose` → `Docker Compose`: Flagged identity; alias is identical to term (case-insensitive).
+- **DROP** `make file` → `Makefile`: 'Make file' is extremely natural English (to create a file, to make a file transfer); would fire constantly in ordinary tech and non-tech speech.
+- **DROP** `learn a` → `Lerna`: 'Learn a' is extremely common English ('learn a new skill', 'learn a language'); would fire constantly on ordinary speech.
+- **DROP** `server less` → `serverless`: 'Server less' is natural English meaning 'without a server' or 'the server, less than...'; would fire on ordinary tech speech outside the computing paradigm name.
+- **DROP** `edge computing` → `edge computing`: Flagged identity; alias is identical to term.
+- **DROP** `web assembly` → `WebAssembly`: 'Web assembly' can read as ordinary English ('the assembly of a web', 'web page assembly process'); would cause false positives.
+- **DEDUPE/KEEP** `wasm` → `WebAssembly` (winner): Flagged conflict; 'wasm' maps to WebAssembly here. WebAssembly is the full canonical name and the more specific term; retaining it as the winner.
+- **DROP** `live view` → `LiveView`: 'Live view' is extremely common English (camera live view, live feed); would fire constantly on ordinary speech.
+- **DROP** `hot wire` → `Hotwire`: 'Hotwire' (to start a vehicle without a key) is a very common English word; would cause frequent false positives.
+- **DROP** `double verify` → `DoubleVerify`: 'Double verify' is natural English meaning to verify twice (e.g., 'let me double verify that'); would fire on ordinary speech.
+- **DEDUPE/DROP** `d v` → `DoubleVerify` (loser, winner=`DV`): Conflict flag: same alias 'd v' maps to both DoubleVerify and DV. Retaining DV as the winner since letter-spelling 'd v' most naturally expands to the abbreviation DV.
+- **DEDUPE/KEEP** `d v` → `DV` (winner): Conflict flag: same alias 'd v' maps to both DoubleVerify and DV. Retaining DV as the winner since letter-spelling 'd v' most naturally expands to the abbreviation DV.
+
+## pack_05_concepts_acronyms — Programming Concepts, Acronyms & General Tech Terms
+- **DROP** `gooey` → `GUI`: Common English adjective meaning sticky or messy; breaks natural sentences like 'it felt gooey'.
+- **DROP** `sass` → `SaaS`: Common English noun meaning impudence or cheekiness; breaks natural sentences like 'stop giving me sass'. Also the name of a CSS preprocessor, creating additional ambiguity.
+- **DROP** `pass` → `PaaS`: Extremely common English word with many non-tech meanings; breaks natural sentences like 'pass the ball' or 'let it pass'.
+- **DROP** `eye as` → `IaaS`: Ordinary English phrase; breaks natural sentences like 'using my eye as a reference point'.
+- **DROP** `r back` → `RBAC`: Sounds like 'are back', an extremely common English phrase; breaks sentences like 'they r back in town'.
+- **DROP** `are back` → `RBAC`: Extremely common English phrase ('they are back!'); breaks natural speech constantly.
+- **DROP** `a back` → `ABAC`: Common English phrase ('give a back rub', 'take a back seat'); too ambiguous.
+- **DROP** `cores` → `CORS`: Very common English word (plural of core, Apple Cores); breaks natural sentences like 'the CPU has eight cores'.
+- **DROP** `sea surf` → `CSRF`: Ordinary English phrase describing ocean waves; breaks natural sentences like 'the sea surf was loud'.
+- **DROP** `sequel injection` → `SQL injection`: 'sequel' is a common English word (movie follow-up); 'sequel injection' could plausibly appear in non-tech speech about movie franchises.
+- **DROP** `waf` → `WAF`: Flagged identity (waf→WAF is effectively case-normalization with no value). Also flagged as identity.
+- **DROP** `seem` → `SIEM`: Extremely common English verb; breaks natural sentences like 'it doesn't seem right'.
+- **DROP** `soar` → `SOAR`: Flagged identity and common English verb meaning to fly high; breaks natural sentences like 'the eagle will soar'.
+- **DROP** `sock` → `SOC`: Very common English word (clothing item); breaks natural sentences like 'put on a sock'.
+- **DEDUPE/KEEP** `s o c` → `SOC` (winner): Conflict flag; letter-by-letter spelling is safe. Pick SOC (Security Operations Center) as the winner — more specific and widely recognized meaning.
+- **DROP** `shaw` → `SHA`: Real English word (a thicket of trees or bushes) and a common surname; breaks natural speech.
+- **DEDUPE/DROP** `regular expression` → `regex` (loser, winner=`RegExp`): Conflict: same alias maps to both 'regex' and 'RegExp'. Pick 'regex' as winner — more universal and language-agnostic term.
+- **DEDUPE/KEEP** `regular expression` → `RegExp` (winner): Conflict: same alias maps to both 'regex' and 'RegExp'. Pick 'regex' as winner — more universal and language-agnostic term.
+- **DROP** `chrome` → `cron`: Very common English word (Google Chrome browser, also a metallic finish); breaks natural sentences like 'open chrome' or 'the chrome finish'.
+- **DEDUPE/DROP** `cron job` → `cron` (loser, winner=`CronJob`): Conflict flag — two packs map this alias to different terms. CronJob (Kubernetes) is the more specific technical term and wins.
+- **DROP** `chrome tab` → `crontab`: Ordinary English phrase referring to a browser tab in Google Chrome; breaks natural sentences like 'close the chrome tab'.
+- **DROP** `race condition` → `race condition`: Flagged identity (alias equals term exactly); no value in a no-op substitution.
+- **DROP** `thread pool` → `thread pool`: Flagged identity (alias equals term exactly); no value in a no-op substitution.
+- **DROP** `a sync` → `async`: Common English phrase; breaks natural sentences like 'let's schedule a sync' or 'after a sync meeting'.
+- **DROP** `a wait` → `await`: Common English phrase ('after a wait of two hours'); breaks natural sentences about periods of waiting.
+- **DROP** `call back` → `callback`: Very common English phrase ('I'll call back later', 'give them a call back'); breaks natural non-tech speech constantly.
+- **DROP** `end point` → `endpoint`: 'End point' is ordinary English used in many non-tech contexts ('the end point of the experiment', 'the end point of the line').
+- **DROP** `jay son` → `JSON`: 'Jay son' is how Whisper might transcribe the common proper name 'Jason'; would corrupt 'Jason wrote this function' → 'JSON wrote this function'.
+- **DROP** `jason` → `JSON`: Single-word English proper name flagged as single_word_english; extremely common given name — breaks all mentions of anyone named Jason.
+- **DROP** `mark down` → `Markdown`: 'Mark down' is very common ordinary English ('mark down the price', 'mark it down in your notes') — would corrupt many non-tech sentences.
+- **DROP** `la tech` → `LaTeX`: 'La Tech' is the common nickname for Louisiana Tech University; collides with non-tech usage.
+- **DROP** `la tex` → `LaTeX`: 'Latex' is a very common English word (latex gloves, latex paint); 'la tex' is how Whisper would split it and must not be remapped to LaTeX.
+- **DROP** `acid` → `ACID`: Identity flag; 'acid' is a very common English word (chemistry, taste, slang) — would corrupt every non-tech use of the word.
+- **DROP** `base` → `BASE`: Identity flag; 'base' is an extremely common English word with many non-tech meanings.
+- **DROP** `cap` → `CAP`: Identity flag; 'cap' is a very common English word (hat, limit, salary cap) — would corrupt every non-tech use.
+- **DROP** `event sourcing` → `event sourcing`: Identity flag; alias equals term exactly — no correction needed.
+- **DROP** `saga pattern` → `saga pattern`: Identity flag; alias equals term. Also, 'saga' is common English for a long story.
+- **DROP** `circuit breaker` → `circuit breaker`: Identity flag; alias equals term exactly.
+- **DROP** `load balancer` → `load balancer`: Identity flag; alias equals term exactly.
+- **DROP** `reverse proxy` → `reverse proxy`: Identity flag; alias equals term exactly.
+- **DROP** `api gateway` → `API gateway`: Identity flag (case-insensitive); alias equals term exactly.
+- **DROP** `service mesh` → `service mesh`: Identity flag; alias equals term exactly.
+- **DROP** `canary deployment` → `canary deployment`: Identity flag; alias equals term exactly.
+- **DROP** `rolling deployment` → `rolling deployment`: Identity flag; alias equals term exactly.
+- **DROP** `feature flag` → `feature flag`: Identity flag; alias equals term exactly.
+- **DROP** `hot reload` → `hot reload`: Identity flag; alias equals term exactly.
+- **DROP** `accessibility` → `a11y`: Common English word flagged as single_word_english; would replace 'accessibility' with 'a11y' in all non-technical contexts where the full word is intended.
+- **DROP** `internationalization` → `i18n`: Common English word flagged as single_word_english; replaces a fully valid English word with a numeronym in all contexts.
+- **DROP** `localization` → `l10n`: Common English word flagged as single_word_english; replaces a fully valid English word with a numeronym in all contexts.
+- **DROP** `solid principles` → `SOLID`: 'Solid principles' is common English ('these are solid principles') and would corrupt non-tech sentences where 'solid' means reliable or firm.
+- **DROP** `keep it simple` → `KISS`: 'Keep it simple' is extremely common ordinary English and would corrupt any sentence where someone says to keep something simple.
+- **DROP** `you aint gonna need it` → `YAGNI`: Meaningful ordinary English sentence; a user saying 'you ain't gonna need it' may mean it literally and not intend the YAGNI acronym.
+- **DROP** `ahead of time` → `AOT`: 'Ahead of time' is very common ordinary English ('we finished ahead of time') — would corrupt countless non-tech sentences.
+- **DROP** `just in time` → `JIT`: 'Just in time' is extremely common ordinary English ('we made it just in time') — would corrupt many non-tech sentences.
+- **DROP** `garbage collection` → `GC`: Common English phrase meaning trash/refuse pickup service; breaks sentences like 'the garbage collection schedule was changed'.
+- **DROP** `docker image` → `Docker image`: Identity rule — alias equals term.
+- **DEDUPE/KEEP** `cron job` → `CronJob` (winner): Conflict flag — two packs map this alias to different terms. CronJob (Kubernetes) is the more specific technical term and wins.
+- **DROP** `chrome job` → `CronJob`: Ordinary English phrase: 'chrome job' means chrome-plating work (automotive). Breaks sentences like 'nice chrome job on that bumper'.
+- **DROP** `cube control` → `kubectl`: Ordinary English phrase meaning control of a cube (robotics, games, etc.). Breaks sentences like 'cube control was precise'.
+- **DROP** `cube config` → `kubeconfig`: Ordinary English possible: 'cube config' could refer to configuration of a physical cube (toy, game, device). Ambiguous without 'kube' prefix.
+- **DROP** `mini cube` → `minikube`: Ordinary English: 'mini cube' means a small cube. Breaks sentences like 'pass me a mini cube of cheese'.
+- **DROP** `open shift` → `OpenShift`: Ordinary English phrase: 'open shift' means a work shift that is available. Breaks sentences like 'there is an open shift on Tuesday'.
+- **DEDUPE/KEEP** `e c s` → `ECS` (winner): Conflict flag — letter spelling mapped to multiple terms in different packs. ECS wins as the standard acronym.
+- **DEDUPE/KEEP** `ee see ess` → `ECS` (winner): Conflict flag — phonetic letter spelling mapped to multiple terms. ECS wins as the standard acronym.
+- **DEDUPE/KEEP** `e k s` → `EKS` (winner): Conflict flag — letter spelling mapped to multiple terms. EKS wins as the standard acronym.
+- **DEDUPE/KEEP** `ee kay ess` → `EKS` (winner): Conflict flag — phonetic letter spelling mapped to multiple terms. EKS wins as the standard acronym.
+- **DEDUPE/KEEP** `a k s` → `AKS` (winner): Conflict flag — letter spelling mapped to multiple terms. AKS wins as the standard acronym.
+- **DEDUPE/KEEP** `ay kay ess` → `AKS` (winner): Conflict flag — phonetic letter spelling mapped to multiple terms. AKS wins as the standard acronym.
+- **DROP** `cider` → `CIDR`: Single common English word meaning apple cider. Breaks sentences like 'I ordered a pint of cider'.
+- **DROP** `nat` → `NAT`: Identity rule (case-insensitive) plus single common English word (a name, or a unit of information).
+- **DEDUPE/KEEP** `v p c` → `VPC` (winner): Conflict flag — letter spelling mapped to multiple terms. VPC wins as the more widely recognized acronym.
+- **DEDUPE/KEEP** `vee pee see` → `VPC` (winner): Conflict flag — phonetic letter spelling mapped to multiple terms. VPC wins as the more widely recognized acronym.
+- **DROP** `see name` → `CNAME`: Ordinary English phrase: 'see name' means to observe a name. Breaks sentences like 'can you see name on the label?'
+- **DROP** `a record` → `A record`: Identity rule — alias equals term.
+- **DROP** `time to live` → `TTL`: Ordinary English phrase. Breaks sentences like 'the time to live in this city is limited'.
+- **DROP** `single ton` → `singleton`: Ordinary English: 'a single ton' means one unit of weight (one ton). Breaks sentences like 'this weighs a single ton'.
+- **DROP** `factory pattern` → `factory pattern`: Identity rule — alias equals term.
+- **DROP** `observer pattern` → `observer pattern`: Identity rule — alias equals term.
+- **DEDUPE/KEEP** `pub sub` → `pub/sub` (winner): Conflict flag — two packs map this alias to different terms. pub/sub wins as it is the canonical representation of the pattern.
+- **DROP** `fan out` → `fanout`: Ordinary English verb phrase: 'fan out' means to spread out in different directions. Breaks sentences like 'the search team fanned out'.
+- **DROP** `poly fill` → `polyfill`: Ordinary English: 'poly fill' refers to polyester fiberfill used in crafting/upholstery. Breaks sentences like 'stuff the pillow with poly fill'.
+- **DROP** `tree shaking` → `tree-shaking`: Ordinary English phrase meaning physically shaking a tree. Breaks sentences like 'the wind caused tree shaking'.
+- **DROP** `code splitting` → `code splitting`: Identity rule — alias equals term.
+- **DROP** `lazy loading` → `lazy loading`: Identity rule — alias equals term.
+- **DROP** `memorization` → `memoization`: Common English word meaning the act of memorizing. Breaks sentences like 'memorization is key to learning vocabulary'.
+- **DROP** `throttle function` → `throttle`: Ordinary English possible: 'throttle function' can refer to a mechanical throttle's function on a vehicle. Breaks non-tech sentences.
+- **DROP** `standard in` → `stdin`: Ordinary English phrase. Breaks sentences like 'that is standard in our industry'.
+- **DROP** `standard out` → `stdout`: Ordinary English phrase. Breaks sentences like 'that is standard out here' or 'the standard out-of-box configuration'.
+- **DROP** `standard error` → `stderr`: Common statistics term (standard error of the mean). Breaks sentences like 'the standard error was 0.05'.
+
+## pack_06_os_security_mobile — Operating Systems, Security, Mobile & Emerging Tech
+- **DROP** `arch linux` → `Arch Linux`: Flagged identity/substring_of_term; alias equals the term, rule does nothing.
+- **DROP** `red hat` → `RHEL`: 'red hat' is a common English phrase (a hat that is red); would corrupt 'the man in the red hat'.
+- **DEDUPE/KEEP** `s o c` → `SoC` (winner): Conflict flag: pick SoC (System on a Chip) as the more specific and common tech meaning.
+- **DROP** `raid` → `RAID`: Flagged identity; alias equals term. Also a common English word (police raid, bug spray brand).
+- **DROP** `smart contract` → `smart contract`: Flagged identity; alias equals term, rule does nothing.
+- **DROP** `hard hat` → `Hardhat`: 'hard hat' is a very common English phrase (construction safety helmet); would corrupt 'she's wearing a hard hat'.
+- **DROP** `raspberry pie` → `Raspberry Pi`: 'raspberry pie' is a common food item; would corrupt 'I baked a raspberry pie'.
+- **DROP** `raz berry pie` → `Raspberry Pi`: Phonetic spelling of 'raspberry pie' (the food); same false-positive risk as above.
+- **DROP** `home assistant` → `Home Assistant`: Flagged identity; alias equals term, rule does nothing.
+- **DEDUPE/KEEP** `n map` → `Nmap` (winner): Conflict flag: Nmap (network scanner) is the correct winner; it is the established tool name.
+- **DEDUPE/KEEP** `en map` → `Nmap` (winner): Conflict flag: same alias, same winner Nmap as more specific/common term.
+- **DROP** `burp suite` → `Burp Suite`: Flagged identity; alias equals term, rule does nothing.
+- **DROP** `kali linux` → `Kali Linux`: Flagged identity; alias equals term, rule does nothing.
+- **DROP** `let's encrypt` → `Let's Encrypt`: Flagged identity; alias equals term, rule does nothing.
+- **DROP** `wire guard` → `Wireguard`: 'wire guard' is a real English compound (a guard made of wire); could corrupt 'install a wire guard on the outlet'.
+- **DROP** `sops` → `SOPS`: Flagged identity; alias equals term, rule does nothing.
+- **DROP** `one password` → `1Password`: 'one password' is ordinary English ('use one password for everything'); would corrupt normal dictation.
+- **DROP** `pass key` → `Passkey`: 'pass key' is a common English phrase (a key that opens something); would corrupt 'give me the pass key'.
+- **DROP** `core data` → `CoreData`: 'core data' is a very common English phrase ('the core data of our analysis'); would corrupt normal speech.
+- **DROP** `test flight` → `TestFlight`: 'test flight' is a very common English phrase ('the test flight of the new aircraft'); would corrupt normal speech.
+- **DROP** `view model` → `ViewModel`: 'view model' is ordinary English ('let me view the model'); would corrupt normal speech.
+- **DROP** `live data` → `LiveData`: 'live data' is a very common English phrase ('we need live data from the sensors'); would corrupt normal speech.
+- **DROP** `coin` → `Koin`: Flagged single_word_english and identity (case-insensitive); 'coin' is a common English word with many non-tech uses.
+- **DROP** `a r` → `AR`: Two-letter abbreviation is too short and ambiguous; 'a r' could appear in many non-tech contexts and 'AR' has many meanings.
+- **DROP** `v r` → `VR`: Two-letter abbreviation is too short and ambiguous; 'v r' could appear in many non-tech contexts.
+- **DROP** `x r` → `XR`: Two-letter abbreviation is too short and ambiguous; 'x r' could appear in many non-tech contexts.
+- **DROP** `reality kit` → `RealityKit`: 'reality kit' could appear in ordinary English ('a reality kit for therapy'); when in doubt, DROP.
+- **DROP** `scene kit` → `SceneKit`: 'scene kit' is ordinary English ('a scene kit for theater production'); would corrupt normal speech.
+- **DROP** `sprite kit` → `SpriteKit`: 'sprite kit' could appear in ordinary English contexts (craft kits, gaming hobbyist speech); when in doubt, DROP.
+- **DROP** `vulcan` → `Vulkan`: 'Vulcan' is a proper noun with non-tech uses (Roman god, Star Trek character, place name); a homophone of a real word.
+- **DROP** `unreal engine` → `Unreal Engine`: Flagged identity; alias equals term, rule does nothing.
+- **DROP** `go dot` → `Godot`: 'go dot' is ordinary English ('go dot com', or just 'go' + 'dot'); both words are extremely common and the phrase would corrupt normal speech.
+- **DEDUPE/KEEP** `infrastructure as code` → `IaC` (winner): Conflict flag: IaC is the correct and specific winner for this well-known DevOps abbreviation.
+- **DROP** `no ops` → `NoOps`: 'no ops' is ordinary English ('we have no ops team', 'no operations'); would corrupt normal speech.
+- **DROP** `tracing distributed` → `tracing`: The replacement drops the word 'distributed', corrupting phrases like 'tracing distributed systems'. The alias is ordinary English.
+- **DROP** `span tracing` → `span`: The replacement drops the word 'tracing' and changes 'span' which is ordinary English ('the span tracing the bridge'); would corrupt normal speech.
+- **DROP** `error budget` → `error budget`: Flagged identity; alias equals term, rule does nothing.
+- **DROP** `toil sre` → `toil`: The replacement drops 'sre' and leaves 'toil', a common English word. Would corrupt 'the toil SREs face' and lose information.
+
+## pack_07_agile_scrum — Agile, Scrum & Sprint Methodology
+- **DROP** `stand up` → `standup`: Ordinary English phrase with many non-tech uses (stand up comedy, stand up and fight).
+- **DROP** `stand-up` → `standup`: Same as 'stand up' — common English with non-tech meaning.
+- **DROP** `daily stand up` → `daily standup`: Ordinary English phrase that would corrupt natural speech.
+- **DROP** `daily stand-up` → `daily standup`: Ordinary English phrase with non-tech meaning.
+- **DROP** `a sync stand up` → `async standup`: 'A sync' and 'stand up' are both ordinary English; the phrase would corrupt normal speech.
+- **DROP** `a sink stand up` → `async standup`: 'A sink' is a common English noun; the phrase would corrupt sentences like 'a sink stand up pipe'.
+- **DROP** `sprints` → `sprint`: 'Sprints' is a common English verb/noun with many non-tech uses.
+- **DROP** `sprint re view` → `sprint review`: 'Sprint' and 're view' are ordinary English; would corrupt sentences like 'a sprint to review the contract'.
+- **DROP** `re throw` → `retro`: 'Re throw' is a real programming/English term (rethrowing an exception); would corrupt technical speech.
+- **DROP** `back log` → `backlog`: 'Back log' is ordinary English (a log at the back of a fire); would corrupt non-tech speech.
+- **DROP** `back logged` → `backlog`: 'Backlogged' is a common English adjective; the form mismatch also makes this a poor correction.
+- **DROP** `scrum methodology` → `Scrum`: Correction drops 'methodology' and 'scrum' is common English (rugby); phrase has non-tech interpretations.
+- **DROP** `scrum master` → `Scrum Master`: Identity flag — alias equals term; rule does nothing useful.
+- **DROP** `scrum band` → `Scrumban`: 'Scrum band' could appear naturally ('the scrum band played'); too risky.
+- **DROP** `can ban` → `Kanban`: 'Can ban' is valid English ('a moderator can ban users'); would corrupt normal speech.
+- **DROP** `can ban board` → `Kanban board`: 'Can ban board' reads as ordinary English ('can ban a board member'); too risky.
+- **DROP** `safe framework` → `SAFe`: 'Safe framework' is ordinary English ('we need a safe framework'); would corrupt non-tech speech.
+- **DROP** `safe agile` → `SAFe`: 'Safe agile' could appear in natural speech ('how do we make agile safe'); correction also loses a word.
+- **DROP** `scaled agile framework` → `Scaled Agile`: Ordinary English phrase; correction also drops 'framework'.
+- **DROP** `product owner` → `Product Owner`: Common English phrase; conflict partner is identity (already dropped); 'product owner' would corrupt normal speech.
+- **DROP** `po` → `Product Owner`: Single common English word ('po' as in chamber pot, river Po); single_word_english flag.
+- **DROP** `product owner` → `PO`: Common English phrase; conflict partner is identity (already dropped); 'product owner' would corrupt normal speech.
+- **DROP** `scrum of scrums` → `Scrum of Scrums`: Identity flag — alias equals term.
+- **DROP** `ceremony agile` → `ceremony`: 'Ceremony' is a common English word with many non-tech uses; correction also drops 'agile'.
+- **DROP** `story point` → `story points`: 'Story point' is ordinary English ('a point in the story'); would corrupt non-tech speech.
+- **DROP** `burn down` → `burndown`: 'Burn down' is ordinary English ('burn down a building'); would corrupt normal speech.
+- **DEDUPE/DROP** `burn down chart` → `burndown` (loser, winner=`burndown chart`): Conflict winner is 'burndown chart' (more specific than bare 'burndown').
+- **DEDUPE/KEEP** `burn down chart` → `burndown chart` (winner): Conflict winner is 'burndown chart' (more specific than bare 'burndown').
+- **DROP** `burn up chart` → `burnup chart`: 'Burn up chart' reads as ordinary English ('burn up the chart'); would corrupt normal speech.
+- **DROP** `work in progress` → `WIP`: 'Work in progress' is ordinary English used in many non-tech contexts.
+- **DROP** `whip` → `WIP`: Single common English word (a whip); single_word_english flag.
+- **DROP** `whip limit` → `WIP limit`: 'Whip limit' is plausible English; 'whip' is a real word that would be corrupted.
+- **DROP** `work in progress limit` → `WIP limit`: Ordinary English phrase; would corrupt non-tech speech.
+- **DROP** `swim lane` → `swimlane`: Duplicate entry — 'swim lane' is ordinary English (swimming pool lane); already dropped above.
+- **DROP** `epic ticket` → `epic`: 'Epic' is a common English word; the correction also drops 'ticket'.
+- **DROP** `a c` → `AC`: Extremely ambiguous two-letter abbreviation (air conditioning, alternating current, etc.); too broad to safely use.
+- **DROP** `acceptance criteria` → `AC`: Ordinary English phrase; correction loses almost the entire phrase.
+- **DROP** `definition of dun` → `definition of done`: 'Dun' is a real English word (dull color, to demand payment); 'definition of dun' has an English meaning.
+- **DROP** `definition of done` → `DoD`: Ordinary English phrase; correction loses the full phrase.
+- **DROP** `definition of ready` → `definition of ready`: Ordinary English phrase; conflict partner is identity (already dropped); phrase would corrupt normal speech.
+- **DROP** `definition of ready` → `DoR`: Ordinary English phrase; conflict partner is identity (already dropped); phrase would corrupt normal speech.
+- **DROP** `spike ticket` → `spike`: 'Spike' is a common English word; correction also drops 'ticket'.
+- **DROP** `technical debt` → `tech debt`: 'Technical debt' is ordinary English; correction shortens the phrase unnecessarily.
+- **DROP** `cross functional` → `cross-functional`: 'Cross functional' is ordinary English; correction only adds a hyphen, risking normal speech like 'cross-functional team'.
+- **DROP** `t shirt sizing` → `T-shirt sizing`: 'T shirt sizing' is ordinary English (literally sizing for T-shirts); would corrupt normal speech.
+- **DROP** `tee shirt sizing` → `T-shirt sizing`: 'Tee shirt sizing' is ordinary English; would corrupt garment-related speech.
+- **DROP** `fibonacci sequence` → `Fibonacci`: The alias is the correct full term; correction drops 'sequence' unnecessarily.
+- **DROP** `time boxed` → `timeboxed`: 'Time boxed' is ordinary English; correction only removes a space.
+- **DEDUPE/DROP** `time box` → `timeboxed` (loser, winner=`timebox`): Conflict winner is 'timebox' (noun, more fundamental than the adjective 'timeboxed').
+- **DEDUPE/KEEP** `time box` → `timebox` (winner): Conflict winner is 'timebox' (noun, more fundamental than the adjective 'timeboxed').
+- **DROP** `by weekly` → `biweekly`: 'By weekly' could appear naturally ('I check it by weekly reports'); correction only normalizes spelling.
+- **DROP** `bi weekly` → `biweekly`: 'Bi weekly' is just 'biweekly' with a space; ordinary English, correction is trivial.
+- **DROP** `jeer a` → `Jira`: 'Jeer a' is valid English ('don't jeer a teammate'); would corrupt normal speech.
+- **DROP** `jeera` → `Jira`: 'Jeera' is a real English loanword for cumin used in cooking; would corrupt recipe dictation.
+- **DROP** `jeer a ticket` → `Jira ticket`: 'Jeer a ticket' is plausible English ('jeer a ticket scalper'); would corrupt normal speech.
+- **DROP** `jeer a board` → `Jira board`: 'Jeer a board' is plausible English; would corrupt normal speech.
+- **DROP** `gear a board` → `Jira board`: 'Gear a board' while unusual could appear in speech; too risky for a common word like 'gear'.
+- **DROP** `con flu ence` → `Confluence`: 'Con flu ence' is effectively 'confluence' (a real English word for rivers converging); would corrupt non-tech speech.
+- **DROP** `shortcut app` → `Shortcut`: 'Shortcut app' is ordinary English (an app that creates shortcuts); correction also drops 'app'.
+- **DROP** `no shun` → `Notion`: 'No shun' could appear naturally ('no shun policy'); would corrupt normal speech.
+- **DROP** `no shin` → `Notion`: 'No shin' is plausible English ('no shin guards required'); would corrupt normal speech.
+- **DROP** `a sana` → `Asana`: 'Asana' is a real English loanword from yoga (a pose); someone dictating yoga content would have 'asana' corrupted.
+- **DROP** `ah sauna` → `Asana`: 'Ah sauna' is plausible English ('ah, a sauna'); would corrupt normal speech.
+- **DROP** `click up` → `ClickUp`: 'Click up' is ordinary English ('click the up button'); would corrupt normal speech.
+- **DROP** `sub task` → `subtask`: 'Sub task' is ordinary English; correction only removes a space.
+- **DROP** `super task` → `supertask`: 'Super task' is ordinary English ('a super task'); would corrupt normal speech.
+- **DROP** `re porter` → `reporter`: 'Reporter' is a very common English word (journalist); 're porter' would corrupt normal speech.
+- **DROP** `watch er` → `watcher`: 'Watcher' is a common English word; the split 'watch er' would corrupt normal speech.
+- **DROP** `do date` → `due date`: 'Do date' is plausible English; 'due date' is also extremely common English that needs no correction.
+- **DROP** `priority zero` → `P0`: 'Priority zero' is ordinary English; correction also loses the full phrase.
+- **DROP** `priority one` → `P1`: 'Priority one' is ordinary English; correction loses the full phrase.
+- **DROP** `priority two` → `P2`: 'Priority two' is ordinary English; correction loses the full phrase.
+- **DROP** `priority three` → `P3`: 'Priority three' is ordinary English; correction loses the full phrase.
+- **DROP** `severity one` → `sev1`: 'Severity one' is ordinary English; correction also shortens the phrase.
+- **DROP** `severity two` → `sev2`: 'Severity two' is ordinary English; correction shortens the phrase.
+- **DROP** `severity three` → `sev3`: 'Severity three' is ordinary English; correction shortens the phrase.
+- **DROP** `sev` → `SEV`: Identity flag — alias equals term (case-only difference); rule does nothing.
+- **DROP** `severity` → `SEV`: Single common English word; single_word_english flag; would corrupt normal speech.
+- **DROP** `show stopper` → `showstopper`: 'Showstopper' is a common English word (something spectacular); 'show stopper' would corrupt normal speech.
+- **DROP** `work flow` → `workflow`: 'Work flow' is ordinary English; correction only removes a space.
+- **DROP** `swim lane` → `swimlane`: Duplicate entry — 'swim lane' is ordinary English (swimming pool lane); already dropped above.
+- **DROP** `to do` → `To Do`: Identity flag — alias equals term; also breaks 'I have to do this'.
+- **DROP** `to dew` → `To Do`: 'Dew' is a common English word; 'to dew' could appear naturally; conflict partner is identity (already dropped).
+- **DROP** `in progress` → `In Progress`: Identity flag — alias equals term (case-only).
+- **DROP** `in review` → `In Review`: Identity flag — alias equals term (case-only).
+- **DROP** `in re view` → `In Review`: 'In re view' is effectively 'in review' with a space; ordinary English phrase.
+- **DROP** `code review` → `Code Review`: Identity flag — alias equals term (case-only).
+- **DROP** `code re view` → `Code Review`: 'Code re view' is effectively 'code review' with a space; ordinary English; conflict partner is identity (dropped).
+- **DROP** `quality assurance` → `QA`: 'Quality assurance' is ordinary English; correction loses the full phrase.
+- **DROP** `user acceptance testing` → `UAT`: 'User acceptance testing' is ordinary English; correction loses the full phrase.
+- **DROP** `prod environment` → `prod`: Correction drops 'environment'; 'prod' is also a real English word (to prod someone).
+- **DROP** `pre production` → `pre-prod`: 'Pre production' is ordinary English (film/media context); correction also shortens the phrase.
+- **DROP** `sand box` → `sandbox`: 'Sand box' is ordinary English (a literal box of sand for children); would corrupt non-tech speech.
+- **DROP** `hot fix` → `hotfix`: 'Hot fix' is ordinary English ('a hot fix to the problem'); would corrupt normal speech.
+- **DROP** `bug fix` → `bugfix`: 'Bug fix' is ordinary English; correction only removes a space.
+- **DROP** `smoke test` → `smoke test`: Identity flag — alias equals term.
+- **DROP** `sanity check` → `sanity check`: Identity flag — alias equals term.
+- **DROP** `edge case` → `edge case`: Identity flag — alias equals term.
+- **DROP** `happy path` → `happy path`: Identity flag — alias equals term.
+- **DROP** `sad path` → `sad path`: Identity flag — alias equals term.
+- **DROP** `golden path` → `golden path`: Identity flag — alias equals term.
+- **DROP** `flaky test` → `flaky test`: Identity flag — alias equals term.
+- **DROP** `integration test` → `integration test`: Identity flag — alias equals term.
+- **DROP** `end to end test` → `e2e test`: 'End to end test' is ordinary English; correction converts natural phrase to abbreviation.
+- **DROP** `end to end` → `end-to-end`: 'End to end' is ordinary English; correction only adds hyphens.
+- **DROP** `and to and` → `end-to-end`: 'And to and' could appear in English grammar discussions; too risky for a common word like 'and'.
+- **DROP** `load test` → `load test`: Identity flag — alias equals term.
+- **DROP** `stress test` → `stress test`: Identity flag — alias equals term.
+- **DROP** `chaos engineering` → `chaos engineering`: Identity flag — alias equals term.
+- **DROP** `can airy` → `canary`: 'Can airy' is plausible English ('the room can airy out'); 'can' and 'airy' are both common words.
+- **DROP** `canary release` → `canary`: 'Canary release' is ordinary English; correction also drops 'release'.
+- **DROP** `roll back` → `rollback`: 'Roll back' is ordinary English ('roll back the clock'); would corrupt normal speech.
+- **DROP** `roll forward` → `rollforward`: 'Roll forward' is ordinary English; would corrupt normal speech.
+- **DROP** `feature flag` → `feature flag`: Identity flag — alias equals term.
+- **DROP** `dark launch` → `dark launch`: Identity flag — alias equals term.
+- **DROP** `on call` → `on-call`: 'On call' is ordinary English; correction only adds a hyphen.
+- **DROP** `on-call rotation` → `on-call`: 'On-call rotation' is ordinary English; correction also drops 'rotation'.
+- **DROP** `page er` → `pager`: 'Pager' is a common English word (a beeper device); 'page er' would corrupt normal speech.
+- **DROP** `post mortem` → `postmortem`: 'Post mortem' is a very common English/Latin phrase used in many non-tech contexts; would corrupt normal speech.
+- **DROP** `root cause analysis` → `RCA`: 'Root cause analysis' is ordinary English; correction loses the full phrase.
+- **DROP** `root cause` → `root cause`: Identity flag — alias equals term.
+
+## pack_08_okrs_product_mgmt — OKRs, Product Management, Strategy & Business Metrics
+- **DROP** `okay are` → `OKR`: Common English words that appear naturally in speech ('okay, are you ready?'); would corrupt normal dictation.
+- **DROP** `okr` → `OKR`: Identity rule — mandatory drop.
+- **DROP** `oak are` → `OKR`: Both words are common English ('Those oak are tall'); would corrupt natural speech.
+- **DROP** `okay ours` → `OKRs`: Common English words appearing naturally in speech ('okay, ours is better'); would corrupt dictation.
+- **DROP** `oak ours` → `OKRs`: Both words are common English; 'oak' and 'ours' can appear naturally together; when in doubt, drop.
+- **DROP** `north star metric` → `north star metric`: Identity rule — alias equals term; mandatory drop.
+- **DROP** `north star` → `north star`: Identity rule — alias equals term; mandatory drop.
+- **DROP** `speck` → `spec`: 'Speck' is a common English word ('a speck of dust'); would corrupt natural speech.
+- **DEDUPE/DROP** `tech speck` → `technical spec` (loser, winner=`tech spec`): Conflict: same alias maps to both 'technical spec' and 'tech spec'. 'Tech spec' wins as the more natural shorter form.
+- **DEDUPE/KEEP** `tech speck` → `tech spec` (winner): Conflict: same alias maps to both 'technical spec' and 'tech spec'. 'Tech spec' wins as the more natural shorter form.
+- **DEDUPE/DROP** `architecture decision record` → `ADR` (loser, winner=`architecture decision record`): Conflict: identity rule plus conflicts with ADR mapping. 'ADR' wins; this identity row is dropped.
+- **DEDUPE/KEEP** `architecture decision record` → `architecture decision record` (winner): Conflict: identity rule plus conflicts with ADR mapping. 'ADR' wins; this identity row is dropped.
+- **DEDUPE/DROP** `t l d r` → `TLDR` (loser, winner=`TL;DR`): Conflict: same alias maps to both 'TLDR' and 'TL;DR'. 'TL;DR' wins as the more formal standard form.
+- **DEDUPE/DROP** `tee el dee are` → `TLDR` (loser, winner=`TL;DR`): Conflict: same alias maps to both 'TLDR' and 'TL;DR'. 'TL;DR' wins as the more formal standard form.
+- **DEDUPE/KEEP** `t l d r` → `TL;DR` (winner): Conflict: same alias maps to both 'TLDR' and 'TL;DR'. 'TL;DR' wins as the more formal standard form.
+- **DEDUPE/KEEP** `tee el dee are` → `TL;DR` (winner): Conflict: same alias maps to both 'TLDR' and 'TL;DR'. 'TL;DR' wins as the more formal standard form.
+- **DROP** `theme product` → `theme`: The mapping drops the word 'product', corrupting the user's text; 'theme product' is also ordinary English.
+- **DROP** `scope` → `scope`: Identity rule — mandatory drop.
+- **DROP** `scope creep` → `scope creep`: Identity rule — mandatory drop.
+- **DROP** `out of scope` → `out of scope`: Identity rule — mandatory drop.
+- **DROP** `in scope` → `in scope`: Identity rule — mandatory drop.
+- **DROP** `functional requirements` → `functional requirements`: Identity rule — mandatory drop.
+- **DROP** `use case` → `use case`: Identity rule — mandatory drop.
+- **DROP** `user journey` → `user journey`: Identity rule — mandatory drop.
+- **DROP** `customer journey` → `customer journey`: Identity rule — mandatory drop.
+- **DROP** `a lined` → `aligned`: 'A lined' is common English ('a lined jacket', 'a lined notebook'); would corrupt natural dictation.
+- **DROP** `sink` → `sync`: 'Sink' is an extremely common English word (kitchen sink, to sink); would corrupt natural speech.
+- **DROP** `a sink` → `async`: 'A sink' is very common English ('I need a sink'); would produce catastrophic substitutions.
+- **DROP** `stand up` → `standup`: 'Stand up' is extremely common English ('please stand up', 'stand up comedy'); would corrupt dictation constantly.
+- **DEDUPE/DROP** `one on one` → `one-on-one` (loser, winner=`1:1`): Conflict: same alias maps to both 'one-on-one' and '1:1'. 'One-on-one' wins; this '1:1' row is the loser.
+- **DEDUPE/DROP** `1 on 1` → `one-on-one` (loser, winner=`1:1`): Conflict: same alias maps to both 'one-on-one' and '1:1'. 'One-on-one' wins; this '1:1' row is the loser.
+- **DEDUPE/KEEP** `one on one` → `1:1` (winner): Conflict: same alias maps to both 'one-on-one' and '1:1'. 'One-on-one' wins; this '1:1' row is the loser.
+- **DEDUPE/KEEP** `1 on 1` → `1:1` (winner): Conflict: same alias maps to both 'one-on-one' and '1:1'. 'One-on-one' wins; this '1:1' row is the loser.
+- **DROP** `town hall` → `town hall`: Identity rule — mandatory drop.
+- **DROP** `end of year` → `EOY`: Common English phrase; fires in 'end of year party', 'end of year review', etc.
+- **DROP** `queue one` → `Q1`: 'queue' is a common English word; 'queue one' can mean 'the first queue/line' in ordinary speech.
+- **DROP** `quarter one` → `Q1`: Ordinary English; 'quarter one' can refer to the first quarter of many things, not just fiscal Q1.
+- **DROP** `queue two` → `Q2`: 'queue two' can mean 'the second queue' in ordinary speech.
+- **DROP** `quarter two` → `Q2`: Ordinary English phrase; 'quarter two' is ambiguous outside a fiscal context.
+- **DROP** `queue three` → `Q3`: 'queue three' can mean 'the third queue' in ordinary speech.
+- **DROP** `quarter three` → `Q3`: Ordinary English phrase; ambiguous outside fiscal context.
+- **DROP** `queue four` → `Q4`: 'queue four' can mean 'the fourth queue' in ordinary speech.
+- **DROP** `quarter four` → `Q4`: Ordinary English phrase; ambiguous outside fiscal context.
+- **DROP** `half one` → `H1`: In British English 'half one' means 1:30; fires constantly in casual speech.
+- **DROP** `half two` → `H2`: In British English 'half two' means 2:30; fires constantly in casual speech.
+- **DROP** `fiscal year` → `FY`: Common English phrase used in many natural sentences (e.g. 'start next fiscal year'); converting to FY would be disruptive.
+- **DROP** `fiscal year twenty five` → `FY25`: All ordinary English words; someone saying this naturally would have the full phrase converted to an abbreviation unexpectedly.
+- **DROP** `fiscal year twenty six` → `FY26`: All ordinary English words; same issue as 'fiscal year twenty five'.
+- **DROP** `why oh why` → `YoY`: 'Why oh why' is an extremely common English exclamation of exasperation; fires constantly in ordinary speech.
+- **DROP** `year over year` → `YoY`: Common English phrase; 'year over year, the garden grows' would be corrupted to 'YoY, the garden grows'.
+- **DROP** `quarter over quarter` → `QoQ`: Ordinary English phrase; same structural problem as 'year over year' and 'month over month'.
+- **DROP** `month over month` → `MoM`: Common English phrase; 'month over month the improvements compound' would become 'MoM the improvements compound'.
+- **DROP** `week over week` → `WoW`: Common English phrase; same structural problem as other 'X over X' phrases.
+- **DROP** `day over day` → `DoD`: Common English phrase; 'day over day it gets harder' would be corrupted to 'DoD it gets harder'.
+- **DROP** `lifetime value` → `LTV`: 'Lifetime value' is ordinary English used in many contexts (e.g. 'the lifetime value of a friendship'); fires outside business contexts.
+- **DROP** `customer satisfaction` → `CSAT`: 'Customer satisfaction' is ordinary English used naturally in non-abbreviation contexts (e.g. 'improve customer satisfaction by listening better').
+- **DROP** `churn rate` → `churn`: Identity rule: alias equals term.
+- **DROP** `churn rate` → `churn rate`: Identity rule: alias equals term.
+- **DROP** `to fu` → `TOFU`: 'To fu' is a phonetic rendering of 'tofu' the food; 'I had to fu for lunch' would be corrupted to 'I had TOFU for lunch' — the acronym, not the food correction.
+- **DROP** `top of funnel` → `TOFU`: 'Top of funnel' is ordinary English; converting it to the acronym TOFU is disruptive in any context where the full phrase is desired.
+- **DROP** `middle of funnel` → `MOFU`: 'Middle of funnel' is ordinary English; converting to the acronym MOFU is disruptive when the full phrase is intended.
+- **DROP** `bottom of funnel` → `BOFU`: 'Bottom of funnel' is ordinary English; converting to the acronym BOFU is disruptive when the full phrase is intended.
+- **DROP** `time to value` → `time to value`: 'Time to value' is ordinary English that appears in natural sentences; converting it to TTV would be unexpected in most contexts.
+- **DROP** `time to value` → `TTV`: 'Time to value' is ordinary English that appears in natural sentences; converting it to TTV would be unexpected in most contexts.
+- **DEDUPE/DROP** `product market fit` → `product-market fit` (loser, winner=`PMF`): Conflict: same alias maps to both 'product-market fit' and 'PMF'. Winner is 'product-market fit'; this row is the loser.
+- **DEDUPE/KEEP** `product market fit` → `PMF` (winner): Conflict: same alias maps to both 'product-market fit' and 'PMF'. Winner is 'product-market fit'; this row is the loser.
+- **DROP** `go to market` → `GTM`: Ordinary English phrase with a literal meaning independent of the business term; same collision risk as the GTM row.
+- **DROP** `go to market` → `go-to-market`: Ordinary English phrase with a literal meaning independent of the business term; same collision risk as the GTM row.
+- **DROP** `cogs` → `COGS`: Identity rule: lowercase alias equals uppercase term. Also 'cogs' is an ordinary English word (gears).
+- **DROP** `burn rate` → `burn rate`: Identity rule: alias equals term.
+- **DROP** `headcount` → `HC`: 'Headcount' is ordinary English; converting it silently to 'HC' is disruptive in natural sentences like 'we need to track headcount'.
+- **DROP** `eye see` → `IC`: 'Eye see' is phonetically identical to 'I see', an extremely common English acknowledgment; 'I see what you mean' would become 'IC what you mean'.
+- **DROP** `product manager` → `PM`: Ordinary English phrase users would want written out verbatim; replacing with abbreviation breaks natural dictation.
+- **DROP** `product marketing manager` → `PMM`: Ordinary English phrase users would want written out verbatim; replacing with abbreviation breaks natural dictation.
+- **DROP** `technical program manager` → `TPM`: Ordinary English phrase users would want written out; replacing with abbreviation breaks natural dictation.
+- **DROP** `engineering manager` → `EM`: Ordinary English phrase users would want written out verbatim; breaks natural dictation.
+- **DROP** `vice president` → `VP`: Very common English phrase ('the vice president of the committee'); replacing with VP breaks natural dictation.
+- **DROP** `chief technology officer` → `CTO`: Ordinary English phrase users would want written out; breaks natural dictation.
+- **DROP** `chief executive officer` → `CEO`: Ordinary English phrase users would want written out; breaks natural dictation.
+- **DROP** `chief product officer` → `CPO`: Ordinary English phrase users would want written out; breaks natural dictation.
+- **DROP** `chief marketing officer` → `CMO`: Ordinary English phrase users would want written out; breaks natural dictation.
+- **DROP** `chief financial officer` → `CFO`: Ordinary English phrase users would want written out; breaks natural dictation.
+- **DROP** `see so` → `CISO`: Common English fragment ('I see, so what happened...'); replacing with CISO would corrupt ordinary speech mid-sentence.
+- **DROP** `chief information security officer` → `CISO`: Ordinary English phrase users would want written out; breaks natural dictation.
+- **DROP** `software engineer` → `SWE`: Very common English phrase users would want written out; breaks natural dictation.
+- **DROP** `software development engineer` → `SDE`: Ordinary English phrase users would want written out; breaks natural dictation.
+- **DROP** `senior software engineer` → `SSE`: Ordinary English phrase users would want written out; breaks natural dictation.
+- **DROP** `technical lead` → `tech lead`: Ordinary English phrase that maps to an abbreviated form; user saying 'technical lead' likely wants those words written out.
+- **DROP** `tech lead` → `TL`: Common English phrase; user saying 'tech lead' wants those words, not the initialism TL.
+- **DROP** `directly responsible individual` → `DRI`: Ordinary English phrase users would want written out; breaks natural dictation.
+- **DROP** `responsible accountable consulted informed` → `RACI`: Full English expansion users would want written out verbatim (e.g. when explaining RACI); replacing with acronym loses meaning.
+- **DROP** `wreck` → `req`: Single common English word ('that was a complete wreck'); flagged single_word_english; breaks ordinary speech.
+- **DROP** `request` → `req`: Extremely common English word; flagged single_word_english; breaks ordinary speech constantly.
+- **DROP** `performance review` → `perf review`: Very common English phrase users would want written out verbatim; abbreviated replacement breaks natural dictation.
+- **DROP** `calibration meeting` → `calibration`: Silently drops the word 'meeting' from the output; user saying 'calibration meeting' wants both words.
+- **DROP** `promotion` → `promo`: Very common English word with many non-promo meanings ('I got a promotion', 'sales promotion'); flagged single_word_english; breaks ordinary speech.
+- **DROP** `career ladder` → `career ladder`: Identity rule; flagged identity.
+- **DROP** `growth plan` → `growth plan`: Identity rule; flagged identity.
+- **DROP** `performance improvement plan` → `PIP`: Ordinary English phrase users would want written out verbatim; breaks natural dictation.
+
+## pack_09_code_review_git — Code Review, PRs, Git Workflow & Engineering Process
+- **DROP** `pull request` → `PR`: Common English phrase; converting it to an abbreviation changes what the user said and breaks normal dictation.
+- **DROP** `merge request` → `MR`: Normal English phrase; silently abbreviating it to MR would corrupt natural dictation.
+- **DROP** `code review` → `CR`: Normal English phrase; silently replacing it with the abbreviation CR corrupts natural dictation.
+- **DROP** `looks good to me` → `LGTM`: Very common English phrase with obvious non-technical use; silently replacing it with an acronym would corrupt normal speech.
+- **DROP** `please take a look` → `PTAL`: Common English phrase; silently abbreviating to PTAL corrupts normal speech.
+- **DROP** `sounds good to me` → `SGTM`: Very common English phrase; silently abbreviating to SGTM corrupts normal speech.
+- **DROP** `work in progress` → `WIP`: Common English phrase; silently abbreviating to WIP corrupts normal dictation.
+- **DROP** `whip` → `WIP`: Single common English word (a lashing tool); flagged single_word_english.
+- **DROP** `request for comments` → `RFC`: Normal English phrase; silently abbreviating to RFC corrupts natural dictation.
+- **DROP** `knit` → `nit`: Single common English word (to knit yarn); flagged single_word_english.
+- **DROP** `knits` → `nits`: Real English word (third-person singular of 'to knit'); would corrupt normal speech.
+- **DROP** `non blocking` → `non-blocking`: Common English phrase; adding a hyphen is a formatting change that doesn't justify a dictionary rule.
+- **DROP** `diff file` → `diff`: Removes the word 'file' from what the user said; information loss.
+- **DROP** `squash commit` → `squash`: Removes the word 'commit' from what the user said; information loss.
+- **DROP** `squash and merge` → `squash and merge`: Identity flag; alias equals term, rule does nothing.
+- **DROP** `cherry pick` → `cherry-pick`: Very common English phrase (picking cherries); adding a hyphen doesn't justify a dictionary rule.
+- **DROP** `git stash` → `git stash`: Identity flag; alias equals term.
+- **DROP** `git blame` → `git blame`: Identity flag; alias equals term.
+- **DROP** `git log` → `git log`: Identity flag; alias equals term.
+- **DROP** `force push` → `force push`: Identity flag; alias equals term.
+- **DROP** `fast forward` → `fast-forward`: Very common English phrase; adding a hyphen doesn't justify a dictionary rule and risks corrupting normal speech.
+- **DROP** `detached head` → `detached HEAD`: Identity flag; alias equals term modulo capitalization of HEAD.
+- **DROP** `origin remote` → `origin`: Removes the word 'remote' from what the user said; information loss.
+- **DROP** `remote git` → `remote`: Removes 'git' from what the user said; information loss.
+- **DROP** `fork repo` → `fork`: Removes 'repo' from what the user said; information loss.
+- **DROP** `clone repo` → `clone`: Removes 'repo' from what the user said; information loss.
+- **DROP** `feature branch` → `feature branch`: Identity flag; alias equals term.
+- **DROP** `release branch` → `release branch`: Identity flag; alias equals term.
+- **DROP** `main branch` → `main branch`: Identity flag; alias equals term.
+- **DROP** `develop branch` → `develop branch`: Identity flag; alias equals term.
+- **DROP** `lent` → `lint`: Single common English word (past tense of 'lend'; the Lenten season); flagged single_word_english.
+- **DROP** `linter tool` → `linter`: Removes 'tool' from what the user said; information loss.
+- **DROP** `auto format` → `auto-format`: Common English compound; adding a hyphen is a minor formatting change that doesn't justify a dictionary rule.
+- **DROP** `type check` → `type check`: Identity flag; alias equals term.
+- **DROP** `type safe` → `type-safe`: Common English adjective phrase; adding a hyphen doesn't justify a dictionary rule.
+- **DROP** `type safety` → `type safety`: Identity flag; alias equals term.
+- **DROP** `strongly typed` → `strongly typed`: Identity flag; alias equals term.
+- **DROP** `loosely typed` → `loosely typed`: Identity flag; alias equals term.
+- **DROP** `technical debt` → `tech debt`: Common English phrase; abbreviating to 'tech debt' changes what the user said.
+- **DROP** `code smell` → `code smell`: Identity flag; alias equals term.
+- **DROP** `anti pattern` → `anti-pattern`: Common English compound phrase; adding a hyphen doesn't justify a dictionary rule.
+- **DROP** `factory pattern` → `factory`: Removes 'pattern' from what the user said; information loss.
+- **DROP** `strategy pattern` → `strategy pattern`: Identity flag; alias equals term.
+- **DROP** `gist github` → `gist`: Removes 'github' from what the user said; information loss.
+- **DROP** `repo git` → `repo`: Removes 'git' from what the user said; information loss.
+- **DROP** `container image` → `container image`: Identity flag; alias equals term.
+- **DROP** `docker image` → `Docker image`: Identity flag; alias equals term modulo capitalization.
+- **DROP** `tag release` → `tag`: Removes 'release' from what the user said; information loss.
+- **DROP** `release tag` → `release tag`: Identity flag; alias equals term.
+- **DEDUPE/DROP** `sem ver` → `semver` (loser, winner=`SemVer`): Conflict winner row; 'SemVer' is the canonical capitalization.
+- **DEDUPE/DROP** `sem ver` → `semver` (loser, winner=`SemVer`): Conflict winner row; 'SemVer' is the canonical capitalization.
+- **DEDUPE/KEEP** `sem ver` → `SemVer` (winner): Conflict winner row; 'SemVer' is the canonical capitalization.
+- **DROP** `breaking change` → `breaking change`: Identity flag; alias equals term.
+- **DROP** `backward compatible` → `backward compatible`: Identity flag; alias equals term.
+- **DROP** `sun set` → `sunset`: Very common English word (the sun setting); the split form 'sun set' would be restored to the same meaning as the alias — no tech-specific change needed.
+- **DROP** `sun setting` → `sunsetting`: Common English word form; alias and term have identical meaning, just spacing.
+- **DROP** `release notes` → `release notes`: Identity flag; alias equals term.
+- **DROP** `play book` → `playbook`: 'Playbook' is very common English (sports, business, general use); compound restoration doesn't justify a dictionary rule.
+- **DROP** `standard operating procedure` → `SOP`: Normal English phrase; silently abbreviating to SOP corrupts natural dictation.
+- **DROP** `read me` → `README`: Common English phrase with non-technical use ('please read me that note'); would corrupt normal speech.
+- **DROP** `contributing guide` → `contributing guide`: Identity flag; alias equals term.
+- **DROP** `pair programming` → `pair programming`: Identity flag; alias equals term.
+- **DROP** `mob programming` → `mob programming`: Identity flag; alias equals term.
+- **DROP** `paring` → `pairing`: Real English word (paring a fruit or vegetable); flagged single_word_english.
+- **DROP** `rubber ducking` → `rubber ducking`: Identity flag; alias equals term.
+- **DROP** `data model` → `data model`: Identity flag; alias equals term.
+- **DROP** `data modeling` → `data modeling`: Identity flag; alias equals term.
+- **DROP** `sequence diagram` → `sequence diagram`: Identity flag; alias equals term.
+- **DROP** `class diagram` → `class diagram`: Identity flag; alias equals term.
+- **DROP** `architecture diagram` → `architecture diagram`: Identity flag; alias equals term.
+- **DROP** `infra diagram` → `infra diagram`: Identity flag; alias equals term.
+- **DROP** `mermaid diagram` → `Mermaid`: Removes 'diagram' from what the user said; also 'mermaid' is a common English word that would corrupt non-technical contexts.
+- **DEDUPE/DROP** `fig jam` → `Figjam` (loser, winner=`FigJam`): Conflict winner row; 'FigJam' is the official Figma product name capitalization.
+- **DEDUPE/KEEP** `fig jam` → `FigJam` (winner): Conflict winner row; 'FigJam' is the official Figma product name capitalization.
+- **DROP** `mirror` → `Miro`: Single common English word (a reflective surface); flagged single_word_english.
+- **DROP** `loom video` → `Loom`: Removes 'video' from what the user said; also 'loom' is a common English word (a weaving device).
+- **DEDUPE/DROP** `screen share` → `screen share` (loser, winner=`screenshare`): Conflict winner row; 'screenshare' is the standard compound form.
+- **DEDUPE/KEEP** `screen share` → `screenshare` (winner): Conflict winner row; 'screenshare' is the standard compound form.
+- **DROP** `live share` → `live share`: Identity flag; alias equals term.
+- **DEDUPE/DROP** `stack trace` → `stack trace` (loser, winner=`stacktrace`): Conflict winner row; 'stacktrace' is the standard compound form.
+- **DEDUPE/KEEP** `stack trace` → `stacktrace` (winner): Conflict winner row; 'stacktrace' is the standard compound form.
+- **DROP** `error log` → `error log`: Identity flag; alias equals term.
+- **DROP** `standard error` → `stderr`: 'Standard error' is also a statistics term (SE); converting it to 'stderr' would corrupt non-Unix dictation.
+- **DROP** `segmentation fault` → `segfault`: Abbreviates the full technical phrase to a shorter form; changes what the user said.
+- **DROP** `null pointer` → `null pointer`: Identity flag; alias equals term.
+- **DROP** `null pointer exception` → `NPE`: Full technical phrase; silently abbreviating to NPE changes what the user said.
+- **DROP** `out of memory` → `OOM`: Common English phrase; silently abbreviating to OOM corrupts natural dictation.
+- **DROP** `memory leak` → `memory leak`: Identity flag; alias equals term.
+- **DROP** `race condition` → `race condition`: Identity flag; alias equals term.
+- **DROP** `thread safety` → `thread safety`: Identity flag; alias equals term.
+- **DROP** `thread safe` → `thread-safe`: Common English adjective phrase; adding a hyphen is a minor formatting change that doesn't justify a dictionary rule.
+
+## pack_10_architecture_sysdesign — Architecture, System Design & Engineering Discussion
+- **DROP** `repository pattern` → `repository pattern`: Identity rule: alias equals term, correction is a no-op.
+- **DROP** `clean architecture` → `clean architecture`: Identity rule: alias equals term, correction is a no-op.
+- **DROP** `onion architecture` → `onion architecture`: Identity rule: alias equals term, correction is a no-op.
+- **DROP** `event sourcing` → `event sourcing`: Identity rule: alias equals term, correction is a no-op.
+- **DROP** `message queue` → `message queue`: Identity rule: alias equals term, correction is a no-op.
+- **DROP** `message broker` → `message broker`: Identity rule: alias equals term, correction is a no-op.
+- **DROP** `event bus` → `event bus`: Identity rule: alias equals term, correction is a no-op.
+- **DROP** `dead letter queue` → `dead letter queue`: Identity rule: alias equals term, correction is a no-op.
+- **DROP** `partition tolerance` → `partition tolerance`: Identity rule: alias equals term, correction is a no-op.
+- **DROP** `distributed system` → `distributed system`: Identity rule: alias equals term, correction is a no-op.
+- **DROP** `distributed systems` → `distributed systems`: Identity rule: alias equals term, correction is a no-op.
+- **DROP** `h a` → `HA`: 'h a' is too easily produced from 'ha' (laughter/exclamation), causing frequent false positives in normal speech.
+- **DROP** `high availability` → `HA`: Abbreviates a perfectly clear phrase to an acronym, corrupting natural dictation like 'I need high availability'.
+- **DEDUPE/KEEP** `disaster recovery` → `disaster recovery` (winner): Conflict with identity row. Winner is 'disaster recovery'; abbreviating a clear phrase to DR is harmful.
+- **DROP** `d r` → `DR`: 'd r' is indistinguishable from Whisper splitting 'Dr.' (doctor) or 'dear'; too many false positives.
+- **DROP** `dee are` → `DR`: 'dee are' phonetically matches 'dear' and 'Dr.' pronunciations; too many false positives in normal speech.
+- **DEDUPE/DROP** `disaster recovery` → `DR` (loser, winner=`disaster recovery`): Conflict with identity row. Winner is 'disaster recovery'; abbreviating a clear phrase to DR is harmful.
+- **DROP** `a z` → `AZ`: 'a z' is produced by 'A to Z' (extremely common English) and state abbreviation 'AZ' in many other contexts.
+- **DROP** `ay zee` → `AZ`: 'ay zee' phonetically matches 'A to Z' (alphabet reference), a very common English phrase.
+- **DROP** `region cloud` → `region`: Bizarre alias that drops 'cloud'; 'region' alone is far too common an English word.
+- **DROP** `edge location` → `edge`: Drops 'location' information and maps to the overly common word 'edge'.
+- **DROP** `horizontal scaling` → `horizontal scaling`: Identity rule: alias equals term, correction is a no-op.
+- **DROP** `vertical scaling` → `vertical scaling`: Identity rule: alias equals term, correction is a no-op.
+- **DROP** `scale out` → `scale out`: Identity rule: alias equals term, correction is a no-op.
+- **DROP** `scale up` → `scale up`: Identity rule: alias equals term, correction is a no-op.
+- **DEDUPE/DROP** `auto scaling` → `autoscaling` (loser, winner=`auto-scaling`): Conflict between 'autoscaling' and 'auto-scaling'. Winner is 'autoscaling' (no hyphen is the more standard form).
+- **DEDUPE/KEEP** `auto scaling` → `auto-scaling` (winner): Conflict between 'autoscaling' and 'auto-scaling'. Winner is 'autoscaling' (no hyphen is the more standard form).
+- **DROP** `load balancer` → `load balancer`: Identity rule: alias equals term, correction is a no-op.
+- **DROP** `load balancing` → `load balancing`: Identity rule: alias equals term, correction is a no-op.
+- **DROP** `sticky session` → `sticky session`: Identity rule: alias equals term, correction is a no-op.
+- **DROP** `session affinity` → `session affinity`: Identity rule: alias equals term, correction is a no-op.
+- **DROP** `rate limiting` → `rate limiting`: Identity rule: alias equals term, correction is a no-op.
+- **DROP** `rate limiter` → `rate limiter`: Identity rule: alias equals term, correction is a no-op.
+- **DROP** `circuit breaker` → `circuit breaker`: Identity rule: alias equals term, correction is a no-op.
+- **DROP** `jitter retry` → `jitter`: 'jitter' is a common English word (nervous trembling, audio jitter). Dropping 'retry' also loses information.
+- **DROP** `time out` → `timeout`: 'time out' is an extremely common English phrase (sports, children's discipline) that would be corrupted to 'timeout'.
+- **DROP** `connection pool` → `connection pool`: Identity rule: alias equals term, correction is a no-op.
+- **DROP** `connection pooling` → `connection pooling`: Identity rule: alias equals term, correction is a no-op.
+- **DROP** `thread pool` → `thread pool`: Identity rule: alias equals term, correction is a no-op.
+- **DROP** `worker pool` → `worker pool`: Identity rule: alias equals term, correction is a no-op.
+- **DROP** `queue data` → `queue`: Bizarre alias that drops 'data'; 'queue' alone is too common an English word.
+- **DROP** `priority queue` → `priority queue`: Identity rule: alias equals term, correction is a no-op.
+- **DROP** `cash` → `cache`: Mandatory single_word_english rule: 'cash' (money) is an extremely common English word that would be corrupted constantly.
+- **DROP** `cashing` → `caching`: 'cashing' is a common English word (cashing a check, cashing in) that would be corrupted to 'caching'.
+- **DROP** `write back` → `write-back`: 'write back' is an extremely common English phrase ('I'll write back to you') that would be corrupted.
+- **DROP** `read replica` → `read replica`: Identity rule: alias equals term, correction is a no-op.
+- **DROP** `shard` → `shard`: Identity rule: alias equals term, correction is a no-op.
+- **DROP** `shard key` → `shard key`: Identity rule: alias equals term, correction is a no-op.
+- **DROP** `consistent hashing` → `consistent hashing`: Identity rule: alias equals term, correction is a no-op.
+- **DEDUPE/DROP** `write ahead log` → `write-ahead log` (loser, winner=`WAL`): Conflict with 'write-ahead log' row. Winner is 'write-ahead log'; abbreviating to WAL is worse than the full hyphenated form.
+- **DROP** `wall` → `WAL`: Mandatory single_word_english rule: 'wall' is an extremely common English word that would be corrupted constantly.
+- **DEDUPE/KEEP** `write ahead log` → `WAL` (winner): Conflict with 'write-ahead log' row. Winner is 'write-ahead log'; abbreviating to WAL is worse than the full hyphenated form.
+- **DROP** `read committed` → `read committed`: Identity rule: alias equals term, correction is a no-op.
+- **DROP** `snapshot isolation` → `snapshot isolation`: Identity rule: alias equals term, correction is a no-op.
+- **DROP** `optimistic locking` → `optimistic locking`: Identity rule: alias equals term, correction is a no-op.
+- **DROP** `pessimistic locking` → `pessimistic locking`: Identity rule: alias equals term, correction is a no-op.
+- **DROP** `nines availability` → `nines`: Maps to 'nines', a common English word, and drops 'availability' context. Too lossy and risky.
+- **DROP** `five nines` → `five nines`: Identity rule: alias equals term, correction is a no-op.
+- **DROP** `four nines` → `four nines`: Identity rule: alias equals term, correction is a no-op.
+- **DROP** `three nines` → `three nines`: Identity rule: alias equals term, correction is a no-op.
+- **DROP** `error budget` → `error budget`: Identity rule: alias equals term, correction is a no-op.
+- **DROP** `observability` → `o11y`: Abbreviates the full word to a numeronym, corrupting natural dictation like 'discuss observability'.
+- **DROP** `tracing` → `tracing`: Identity rule plus single_word_english: 'tracing' is a common English word and the alias equals the term.
+- **DROP** `distributed tracing` → `distributed tracing`: Identity rule: alias equals term, correction is a no-op.
+- **DROP** `incident response` → `incident response`: Identity rule: alias equals term, correction is a no-op.
+- **DROP** `five whys` → `five whys`: Identity rule: alias equals term, correction is a no-op.
+- **DROP** `root cause analysis` → `root cause analysis`: Identity rule: alias equals term, correction is a no-op.
+- **DROP** `blast radius` → `blast radius`: Identity rule: alias equals term, correction is a no-op.
+- **DROP** `traffic shaping` → `traffic shaping`: Identity rule: alias equals term, correction is a no-op.
+- **DROP** `traffic splitting` → `traffic splitting`: Identity rule: alias equals term, correction is a no-op.
+- **DROP** `blue green` → `blue-green`: 'blue green' is a very common English color description that would be corrupted in natural speech.
+- **DROP** `rolling update` → `rolling update`: Identity rule: alias equals term, correction is a no-op.
+- **DROP** `infrastructure as code` → `infrastructure as code`: Identity rule: alias equals term, correction is a no-op.
+- **DROP** `cattle not pets` → `cattle not pets`: Identity rule: alias equals term, correction is a no-op.
+- **DROP** `toil` → `toil`: Identity rule plus single_word_english: 'toil' (hard labor) is a common English word and alias equals term.
+- **DROP** `toil reduction` → `toil reduction`: Identity rule: alias equals term, correction is a no-op.
+- **DROP** `self healing` → `self-healing`: 'self healing' is a common English phrase (wounds, materials) that would be corrupted in normal speech.
+- **DROP** `chaos engineering` → `chaos engineering`: Identity rule: alias equals term, correction is a no-op.
+- **DROP** `game day` → `game day`: Identity rule: alias equals term and 'game day' is an extremely common English phrase (sports, etc.).
+- **DROP** `fire drill` → `fire drill`: Identity rule: alias equals term and 'fire drill' is an extremely common English phrase (literal fire safety drills).
+
+## pack_11_spoken_phrases — Spoken Developer Phrases, Verbal Shortcuts & Common Dictation Patterns
+- **DROP** `to do` → `TODO`: Ordinary English phrase ('I have to do this'). Textbook broken rule from the prompt examples.
+- **DROP** `to dew` → `TODO`: 'dew' is a real English word; 'to dew' is ordinary English and would corrupt normal dictation.
+- **DROP** `two dew` → `TODO`: Both words are common English with obvious non-tech meanings.
+- **DROP** `fix me` → `FIXME`: Ordinary English phrase ('can you fix me a sandwich').
+- **DROP** `hack comment` → `HACK`: Both words are common English; 'hack comment' has clear non-tech meaning.
+- **DROP** `won't fix` → `WONTFIX`: Ordinary English phrase with obvious non-tech meaning.
+- **DROP** `wont fix` → `WONTFIX`: 'Wont' is an English word (habit/custom); phrase has non-tech meaning.
+- **DROP** `not a bug` → `NOTABUG`: Ordinary English phrase that appears constantly in normal conversation.
+- **DROP** `your mileage may vary` → `YMMV`: Complete ordinary English phrase a speaker may intend literally.
+- **DROP** `in my humble opinion` → `IMHO`: Ordinary English phrase; speaker may intend it written out.
+- **DROP** `as far as i know` → `AFAIK`: Very common ordinary English phrase; speaker may intend it written out.
+- **DROP** `as far as i can tell` → `AFAICT`: Ordinary English phrase; speaker may intend it written out.
+- **DROP** `for what its worth` → `FWIW`: Ordinary English phrase; speaker may intend it written out.
+- **DROP** `today i learned` → `TIL`: Ordinary English phrase; speaker may intend it written out.
+- **DROP** `in my opinion` → `IMO`: Extremely common ordinary English phrase; speaker may intend it written out.
+- **DROP** `if i remember correctly` → `IIRC`: Ordinary English phrase; speaker may intend it written out.
+- **DROP** `to be determined` → `TBD`: Ordinary English phrase; speaker may intend it written out.
+- **DROP** `to be honest` → `TBH`: Ordinary English phrase used constantly in normal conversation.
+- **DROP** `not applicable` → `N/A`: Ordinary English phrase; speaker may intend it written out.
+- **DROP** `with respect to` → `WRT`: Common English phrase; speaker may intend it written out.
+- **DROP** `what do you think` → `WDYT`: Extremely common English question; would corrupt normal conversation.
+- **DROP** `in case you missed it` → `ICYMI`: Ordinary English phrase; speaker may intend it written out.
+- **DROP** `oh oh oh` → `OOO`: 'Oh oh oh' is a natural spoken exclamation with no connection to the acronym.
+- **DROP** `out of office` → `OOO`: Ordinary English phrase; speaker may intend it written out.
+- **DROP** `paid time off` → `PTO`: Ordinary English phrase; speaker may intend it written out.
+- **DROP** `away from keyboard` → `AFK`: Ordinary English phrase; speaker may intend it written out.
+- **DROP** `be right back` → `BRB`: Ordinary English phrase used constantly in normal conversation.
+- **DROP** `direct message` → `DM`: Ordinary English phrase; speaker may intend it written out.
+- **DROP** `ping me` → `ping me`: Identity flag: rule does nothing.
+- **DROP** `ping` → `ping`: Identity flag: rule does nothing.
+- **DROP** `slack me` → `slack me`: Identity flag: rule does nothing.
+- **DROP** `slack` → `Slack`: 'slack' is a common English word (loose, not taut); would corrupt 'the rope was slack'.
+- **DROP** `slack thread` → `Slack thread`: 'slack thread' has obvious non-tech meaning (a thread that is slack/loose).
+- **DROP** `thread` → `thread`: Identity flag: rule does nothing.
+- **DEDUPE/DROP** `at mention` → `at-mention` (loser, winner=`@mention`): Conflict between at-mention and @mention; @mention is the more precise and standard form.
+- **DEDUPE/KEEP** `at mention` → `@mention` (winner): Conflict between at-mention and @mention; @mention is the more precise and standard form.
+- **DROP** `thumbs up` → `thumbs up`: Identity flag: rule does nothing.
+- **DROP** `ship it` → `ship it`: Identity flag: rule does nothing.
+- **DROP** `looks good to me` → `LGTM`: Ordinary English phrase used constantly in normal conversation.
+- **DROP** `sounds good to me` → `SGTM`: Ordinary English phrase used constantly in normal conversation.
+- **DROP** `ack` → `ACK`: Identity flag (case-only difference): rule does nothing useful.
+- **DROP** `acknowledged` → `ACK`: 'acknowledged' is a common English word with clear non-tech meaning.
+- **DROP** `nack` → `NACK`: Identity flag (case-only difference): rule does nothing useful.
+- **DROP** `not acknowledged` → `NACK`: Ordinary English phrase; speaker may intend it written out.
+- **DROP** `end of day` → `EOD`: Ordinary English phrase used constantly in normal conversation.
+- **DROP** `estimated time` → `ETA`: Ordinary English phrase and only a partial match for the full acronym phrase.
+- **DROP** `un block` → `unblock`: 'unblock' is an ordinary English word; spacing correction of a common word.
+- **DROP** `un blocked` → `unblocked`: 'unblocked' is an ordinary English word; spacing correction of a common word.
+- **DROP** `block er` → `blocker`: 'blocker' is a common English word (football blocker, physical obstruction).
+- **DROP** `hard block er` → `hard blocker`: 'hard blocker' is ordinary English that could appear in many non-tech contexts.
+- **DROP** `soft block er` → `soft blocker`: 'soft blocker' is ordinary English that could appear in many non-tech contexts.
+- **DROP** `up stream dependency` → `upstream dependency`: 'upstream' and 'dependency' are ordinary English words; phrase has non-tech meaning.
+- **DROP** `down stream` → `downstream`: 'downstream' is common English (water flows downstream); spacing-only correction.
+- **DROP** `context switch` → `context switch`: Identity flag: rule does nothing.
+- **DROP** `context switching` → `context switching`: Identity flag: rule does nothing.
+- **DROP** `deep work` → `deep work`: Identity flag: rule does nothing.
+- **DROP** `flow state` → `flow state`: Identity flag: rule does nothing.
+- **DROP** `heads down` → `heads down`: Identity flag: rule does nothing.
+- **DROP** `green field` → `greenfield`: 'green field' is a real English phrase (a literal green field); spacing-only correction.
+- **DROP** `brown field` → `brownfield`: 'brown field' is common English (contaminated land term); spacing-only correction.
+- **DROP** `net new` → `net new`: Identity flag: rule does nothing.
+- **DROP** `from scratch` → `from scratch`: Identity flag: rule does nothing.
+- **DROP** `rip and replace` → `rip and replace`: Identity flag: rule does nothing.
+- **DROP** `lift and shift` → `lift and shift`: Identity flag: rule does nothing.
+- **DROP** `strangler fig` → `strangler fig`: Identity flag: rule does nothing.
+- **DROP** `strangler pattern` → `strangler pattern`: Identity flag: rule does nothing.
+- **DROP** `bite sized` → `bite-sized`: 'bite sized' is ordinary English; hyphenation-only correction of a common phrase.
+- **DROP** `low hanging fruit` → `low-hanging fruit`: Common English idiom used in many non-tech contexts; hyphenation-only correction.
+- **DROP** `quick win` → `quick win`: Identity flag: rule does nothing.
+- **DROP** `table stakes` → `table stakes`: Identity flag: rule does nothing.
+- **DROP** `north star` → `north star`: Identity flag: rule does nothing.
+- **DROP** `ten ex` → `10x`: 'ex' is a real common English word (former partner, letter X); 'ten ex' has clear non-tech meaning.
+- **DEDUPE/DROP** `full stack` → `full-stack` (loser, winner=`fullstack`): Conflict between full-stack and fullstack; full-stack (hyphenated) is the more standard form.
+- **DROP** `front end` → `frontend`: 'front end' is ordinary English (the front end of a car/building); spacing-only correction.
+- **DROP** `back end` → `backend`: 'back end' is ordinary English (the back end of a building); spacing-only correction.
+- **DEDUPE/KEEP** `full stack` → `fullstack` (winner): Conflict between full-stack and fullstack; full-stack (hyphenated) is the more standard form.
+- **DROP** `dev` → `dev`: Identity flag: rule does nothing.
+- **DROP** `devs` → `devs`: Identity flag: rule does nothing.
+- **DROP** `eng` → `eng`: Identity flag: rule does nothing.
+- **DROP** `infra` → `infra`: Identity flag: rule does nothing.
+- **DROP** `ops` → `ops`: Identity flag: rule does nothing.
+- **DROP** `site reliability` → `SRE`: Incomplete English phrase ('site reliability engineering' is the full term); ordinary English words.
+- **DROP** `on call rotation` → `on-call rotation`: Ordinary English phrase; hyphenation-only correction.
+- **DROP** `pager duty` → `pager duty`: Identity flag: rule does nothing.
+- **DROP** `fire fighting` → `firefighting`: 'firefighting' is ordinary English (literal fighting of fires); spacing-only correction.
+- **DROP** `yak shaving` → `yak shaving`: Identity flag: rule does nothing.
+- **DEDUPE/DROP** `bike shedding` → `bike shedding` (loser, winner=`bikeshedding`): Conflict between 'bike shedding' (identity) and 'bikeshedding'; 'bikeshedding' is the more standard single-word form.
+- **DEDUPE/KEEP** `bike shedding` → `bikeshedding` (winner): Conflict between 'bike shedding' (identity) and 'bikeshedding'; 'bikeshedding' is the more standard single-word form.
+- **DROP** `over engineering` → `over-engineering`: 'over engineering' is ordinary English describing excessive engineering; hyphenation-only correction.
+- **DROP** `under engineering` → `under-engineering`: 'under engineering' is ordinary English; hyphenation-only correction.
+- **DROP** `gold plating` → `gold plating`: Identity flag: rule does nothing.
+- **DROP** `you aren't gonna need it` → `YAGNI`: Ordinary English phrase a speaker may genuinely intend to write out.
+- **DROP** `keep it simple` → `KISS`: Ordinary English phrase used constantly in normal conversation.
+- **DROP** `don't repeat yourself` → `DRY`: Ordinary English phrase a speaker may genuinely intend to write out.
+- **DROP** `write everything twice` → `WET`: Ordinary English phrase a speaker may genuinely intend to write out.
+- **DROP** `solid principles` → `SOLID`: 'solid principles' is ordinary English ('she had solid principles'); would corrupt normal speech.
+- **DROP** `dog fooding` → `dogfooding`: 'dog fooding' spacing-corrects to 'dogfooding' but both refer to an ordinary concept; 'dog fooding' could mean feeding dogs.
+- **DROP** `dog food` → `dogfood`: 'dog food' is a real thing (food for dogs) with clear non-tech meaning.
+- **DROP** `eat our own dog food` → `eat our own dog food`: Identity flag: rule does nothing.
+- **DROP** `rubber stamp` → `rubber stamp`: Identity flag: rule does nothing.
+- **DROP** `sanity check` → `sanity check`: Identity flag: rule does nothing.
+- **DROP** `gut check` → `gut check`: Identity flag: rule does nothing.
+- **DROP** `smell test` → `smell test`: Identity flag: rule does nothing.
+- **DROP** `sniff test` → `sniff test`: Identity flag: rule does nothing.
+- **DROP** `back of the envelope` → `back of the envelope`: Identity flag: rule does nothing.
+- **DROP** `ball park` → `ballpark`: 'ball park' is ordinary English (a baseball park); spacing-only correction.
+- **DROP** `rough estimate` → `rough estimate`: Identity flag: rule does nothing.
+- **DROP** `t shirt size` → `T-shirt size`: 't shirt size' is ordinary English that would appear in clothing contexts.
+- **DROP** `sizing` → `sizing`: Identity flag: rule does nothing.
+- **DEDUPE/DROP** `level of effort` → `LOE` (loser, winner=`level of effort`): Conflict between LOE and 'level of effort' (identity); LOE is the more specific non-identity form.
+- **DEDUPE/KEEP** `level of effort` → `level of effort` (winner): Conflict between LOE and 'level of effort' (identity); LOE is the more specific non-identity form.
+- **DROP** `spike it` → `spike it`: Identity flag: rule does nothing.
+- **DROP** `spiking` → `spiking`: Identity flag: rule does nothing.
+- **DROP** `proof of concept` → `POC`: Ordinary English phrase; speaker may intend it written out.
+- **DROP** `throw away code` → `throw away code`: Identity flag: rule does nothing.
+- **DROP** `production ready` → `production ready`: Identity flag: rule does nothing.
+- **DROP** `prod ready` → `prod ready`: Identity flag: rule does nothing.
+- **DROP** `battle tested` → `battle tested`: Identity flag: rule does nothing.
+- **DROP** `hardened` → `hardened`: Identity flag: rule does nothing.
+- **DROP** `enterprise grade` → `enterprise grade`: Identity flag: rule does nothing.
+- **DROP** `fault tolerant` → `fault tolerant`: Identity flag: rule does nothing.
+- **DROP** `mew table` → `mutable`: 'mew' is a real English word (hawk cage, cat cry, mews lane); 'mew table' has plausible non-tech interpretation.
+- **DROP** `convention over configuration` → `convention over configuration`: Identity flag: rule does nothing.
+- **DROP** `environment variable` → `env var`: Ordinary English phrase; speaker may intend it written out.
+- **DROP** `environment variables` → `env vars`: Ordinary English phrase; speaker may intend it written out.
+- **DEDUPE/DROP** `dot env` → `dotenv` (loser, winner=`.env`): Conflict between dotenv (library) and .env (file); .env is more precise and common as a file reference.
+- **DEDUPE/KEEP** `dot env` → `.env` (winner): Conflict between dotenv (library) and .env (file); .env is more precise and common as a file reference.
+- **DROP** `git ignore` → `gitignore`: 'git' is a real English word (British slang); 'git ignore' is a plausible natural English phrase.
+- **DEDUPE/DROP** `dot git ignore` → `gitignore` (loser, winner=`.gitignore`): Conflict between gitignore and .gitignore; .gitignore is more precise (the actual filename).
+- **DEDUPE/KEEP** `dot git ignore` → `.gitignore` (winner): Conflict between gitignore and .gitignore; .gitignore is more precise (the actual filename).
+- **DROP** `yaml file` → `YAML file`: Identity flag (case-only difference): rule does nothing useful.
+- **DROP** `jason file` → `JSON file`: 'Jason' is a real proper name; 'jason file' is homophonous with 'Jason's file' and would corrupt natural speech.
+- **DROP** `package jason` → `package.json`: 'Jason' is a real proper name; 'package jason' is homophonous with 'package for Jason' and would corrupt natural speech.
+- **DROP** `vendor folder` → `vendor`: 'vendor folder' is ordinary English (a folder belonging to a vendor at a market); and the term drops 'folder' entirely.
+- **DROP** `build folder` → `build`: 'build folder' is ordinary English; dropping 'folder' in the term is also lossy.
+- **DROP** `source` → `src`: 'source' is an extremely common English word with many non-tech meanings; would corrupt 'the source of the problem'.
+- **DROP** `utilities` → `utils`: 'utilities' is a very common English word (electricity, gas, water utilities).
+- **DROP** `service layer` → `service layer`: Identity flag: rule does nothing.
+- **DROP** `data layer` → `data layer`: Identity flag: rule does nothing.
+- **DROP** `presentation layer` → `presentation layer`: Identity flag: rule does nothing.
+- **DROP** `business logic` → `business logic`: Identity flag: rule does nothing.
+- **DROP** `domain logic` → `domain logic`: Identity flag: rule does nothing.
+- **DROP** `edge case` → `edge case`: Identity flag: rule does nothing.
+- **DROP** `corner case` → `corner case`: Identity flag: rule does nothing.
+- **DROP** `off by one` → `off-by-one`: 'off by one' is ordinary English with obvious non-tech meaning; hyphenation-only correction.
+- **DROP** `off by one error` → `off-by-one error`: Ordinary English phrase; hyphenation-only correction.
+- **DROP** `null check` → `null check`: Identity flag: rule does nothing.
+- **DROP** `nil check` → `nil check`: Identity flag: rule does nothing.
+- **DROP** `guard clause` → `guard clause`: Identity flag: rule does nothing.
+- **DROP** `early return` → `early return`: Identity flag: rule does nothing.
+- **DROP** `happy path` → `happy path`: Identity flag: rule does nothing.
+- **DROP** `sad path` → `sad path`: Identity flag: rule does nothing.
+- **DROP** `error handling` → `error handling`: Identity flag: rule does nothing.
+- **DROP** `try catch` → `try-catch`: 'try catch' is ordinary English; hyphenation-only correction of a common phrase.
+- **DROP** `exception handling` → `exception handling`: Identity flag: rule does nothing.
+- **DROP** `error boundary` → `error boundary`: Identity flag: rule does nothing.
+- **DROP** `fall back` → `fallback`: 'fall back' is very common English ('fall back on plan B'); spacing-only correction.
+- **DROP** `graceful degradation` → `graceful degradation`: Identity flag: rule does nothing.
+- **DROP** `progressive enhancement` → `progressive enhancement`: Identity flag: rule does nothing.
+- **DROP** `backwards compatible` → `backwards compatible`: Identity flag: rule does nothing.
+- **DROP** `forward compatible` → `forward compatible`: Identity flag: rule does nothing.
+- **DROP** `breaking change` → `breaking change`: Identity flag: rule does nothing.
+- **DROP** `non breaking change` → `non-breaking change`: Ordinary English phrase; hyphenation-only correction.
+- **DROP** `additive change` → `additive change`: Identity flag: rule does nothing.
+- **DROP** `hot fix` → `hotfix`: 'hot fix' is ordinary English in many contexts; spacing-only correction.
+- **DROP** `patch fix` → `patch`: 'patch fix' is ordinary English; dropping 'fix' in the term is also lossy.
+- **DROP** `work around` → `workaround`: 'work around' is very common English ('work around the problem'); spacing-only correction.
+- **DROP** `hack fix` → `hack`: 'hack fix' is ordinary English; dropping 'fix' in the term is also lossy.
+- **DROP** `band aid fix` → `band-aid fix`: 'band aid fix' is ordinary English describing a temporary solution; hyphenation-only correction.
+- **DROP** `duct tape fix` → `duct tape fix`: Identity flag: rule does nothing.
+- **DROP** `proper fix` → `proper fix`: Identity flag: rule does nothing.
+- **DROP** `root cause fix` → `root cause fix`: Identity flag: rule does nothing.
+- **DROP** `follow up` → `followup`: 'follow up' is extremely common English; spacing-only correction.
+- **DROP** `follow up ticket` → `follow-up ticket`: 'follow up ticket' is ordinary English; hyphenation-only correction.
+- **DROP** `clean up ticket` → `cleanup ticket`: 'clean up ticket' is ordinary English; spacing-only correction.
+- **DROP** `chore ticket` → `chore`: 'chore ticket' is ordinary English; the term also drops 'ticket' which is lossy.
+
+## pack_12_adtech_saas_enterprise — AdTech, Brand Safety, SaaS, Enterprise & Industry Terms
+- **DEDUPE/DROP** `real time bidding` → `RTB` (loser, winner=`real-time bidding`): Conflict: same alias maps to both RTB and real-time bidding. Winner is real-time bidding — it preserves user intent and is just a hyphenation fix.
+- **DEDUPE/KEEP** `real time bidding` → `real-time bidding` (winner): Conflict: same alias maps to both RTB and real-time bidding. Winner is real-time bidding — it preserves user intent and is just a hyphenation fix.
+- **DROP** `row as` → `ROAS`: 'row as' is ordinary English — 'row as fast as you can', 'row as a team' — and would corrupt normal sentences.
+- **DROP** `brand safety` → `brand safety`: Identity rule: alias equals term.
+- **DROP** `brand lift` → `brand lift`: Identity rule: alias equals term.
+- **DEDUPE/DROP** `invalid traffic` → `invalid traffic` (loser, winner=`IVT`): Conflict: same alias maps to both 'invalid traffic' (identity) and IVT. Winner is IVT as more specific term; both rows deduplicated.
+- **DEDUPE/KEEP** `invalid traffic` → `IVT` (winner): Conflict: same alias maps to both 'invalid traffic' (identity) and IVT. Winner is IVT as more specific term; both rows deduplicated.
+- **DROP** `bot traffic` → `bot traffic`: Identity rule: alias equals term.
+- **DROP** `click fraud` → `click fraud`: Identity rule: alias equals term.
+- **DROP** `impression fraud` → `impression fraud`: Identity rule: alias equals term.
+- **DROP** `domain spoofing` → `domain spoofing`: Identity rule: alias equals term.
+- **DROP** `pixel stuffing` → `pixel stuffing`: Identity rule: alias equals term.
+- **DROP** `contextual targeting` → `contextual targeting`: Identity rule: alias equals term.
+- **DROP** `contextual analysis` → `contextual analysis`: Identity rule: alias equals term.
+- **DROP** `garm` → `GARM`: Identity rule: alias is just a lowercase rendering of the term with no meaningful correction; flagged identity.
+- **DROP** `supply chain` → `supply chain`: Identity rule: alias equals term.
+- **DROP** `supply path optimization` → `supply path optimization`: Identity rule: alias equals term.
+- **DROP** `header bidding` → `header bidding`: Identity rule: alias equals term.
+- **DROP** `pre bid` → `prebid`: 'pre bid' is ordinary English meaning 'before the bid' (e.g., pre-bid conference, pre-bid meeting) and would corrupt those sentences.
+- **DROP** `over the top` → `OTT`: 'Over the top' is extremely common English meaning excessive or exaggerated; would corrupt many ordinary sentences.
+- **DROP** `out of home` → `OOH`: 'Out of home' is common ordinary English — 'I was out of home all day', 'out of home care' — and would corrupt many sentences.
+- **DROP** `reach metric` → `reach`: 'Reach metric' is ordinary English, and the replacement drops the word 'metric', losing information and potentially corrupting natural sentences.
+- **DROP** `pixel tracking` → `pixel`: 'Pixel tracking' is ordinary English and the replacement drops the word 'tracking', losing information and corrupting natural sentences like 'pixel tracking on images'.
+- **DROP** `tracking pixel` → `tracking pixel`: Identity rule: alias equals term.
+- **DROP** `tag manager` → `tag manager`: Identity rule: alias equals term.
+- **DROP** `double verify` → `DoubleVerify`: 'Double verify' is ordinary English meaning to verify twice — 'let me double verify that' — and would corrupt natural sentences.
+- **DEDUPE/DROP** `d v` → `DoubleVerify` (loser, winner=`DV`): Conflict: 'd v' maps to both DoubleVerify and DV. Winner is DoubleVerify (more specific proper noun in this adtech domain pack).
+- **DEDUPE/KEEP** `d v` → `DV` (winner): Conflict: 'd v' maps to both DoubleVerify and DV. Winner is DoubleVerify (more specific proper noun in this adtech domain pack).
+- **DROP** `moat` → `MOAT`: Single common English word with a well-known non-tech meaning (the water-filled ditch around a castle). Flagged single_word_english and identity.
+- **DROP** `oracle advertising` → `Oracle Advertising`: Identity rule: alias is just a lowercase rendering of the proper noun term with no meaningful correction.
+- **DROP** `sass` → `SaaS`: 'Sass' is a very common English word meaning impudence ('don't give me sass'); also the name of a CSS preprocessor. Flagged single_word_english.
+- **DEDUPE/DROP** `product led growth` → `PLG` (loser, winner=`product-led growth`): Conflict: same alias maps to PLG and product-led growth. Winner is product-led growth. Both conflict rows get DEDUPE.
+- **DEDUPE/KEEP** `product led growth` → `product-led growth` (winner): Conflict: same alias maps to PLG and product-led growth. Winner is product-led growth. Both conflict rows get DEDUPE.
+- **DEDUPE/DROP** `sales led growth` → `SLG` (loser, winner=`sales-led growth`): Conflict: same alias maps to SLG and sales-led growth. Winner is sales-led growth. Both conflict rows get DEDUPE.
+- **DEDUPE/KEEP** `sales led growth` → `sales-led growth` (winner): Conflict: same alias maps to SLG and sales-led growth. Winner is sales-led growth. Both conflict rows get DEDUPE.
+- **DROP** `community led growth` → `CLG`: All ordinary English words; 'our community led growth this quarter' is valid natural speech that would be incorrectly replaced.
+- **DROP** `free trial` → `free trial`: Identity rule: alias equals term exactly.
+- **DROP** `self serve` → `self-serve`: Ordinary English phrase used in everyday contexts (restaurants, buffets); would break natural speech.
+- **DROP** `proof of concept` → `POC`: All ordinary English words; speaker saying 'proof of concept' wants those words written out, not silently collapsed to an acronym.
+- **DROP** `pilot program` → `pilot`: Ordinary English phrase; correction drops a word and changes meaning, breaking 'our pilot program starts Monday'.
+- **DROP** `land and expand` → `land and expand`: Identity rule: alias equals term exactly.
+- **DROP** `up sell` → `upsell`: 'up' and 'sell' are common English words; 'we need to up sell count' could be broken.
+- **DROP** `cross sell` → `cross-sell`: Ordinary English words; 'cross' and 'sell' appear independently in normal speech, making this too broad.
+- **DROP** `expansion revenue` → `expansion revenue`: Identity rule: alias equals term exactly.
+- **DROP** `qualified lead` → `qualified lead`: Identity rule: alias equals term exactly.
+- **DROP** `marketing qualified lead` → `MQL`: All ordinary English words; speaker saying the full phrase wants it written out, not collapsed to an acronym.
+- **DROP** `sales qualified lead` → `SQL`: Expanding 'sales qualified lead' to SQL is dangerous — SQL primarily means Structured Query Language; any tech speaker would be confused by the substitution.
+- **DROP** `product qualified lead` → `PQL`: All ordinary English words; speaker saying the full phrase wants it written out, not collapsed to an acronym.
+- **DROP** `win rate` → `win rate`: Identity rule: alias equals term exactly.
+- **DROP** `deal size` → `deal size`: Identity rule: alias equals term exactly.
+- **DROP** `sales cycle` → `sales cycle`: Identity rule: alias equals term exactly.
+- **DROP** `master service agreement` → `MSA`: All ordinary English words; speaker saying the full phrase wants it written out, not collapsed to an acronym.
+- **DROP** `statement of work` → `SOW`: All ordinary English words; speaker saying the full phrase wants it written out, not collapsed to an acronym.
+- **DROP** `non disclosure agreement` → `NDA`: All ordinary English words; speaker saying the full phrase wants it written out, not collapsed to an acronym.
+- **DROP** `pci` → `PCI DSS`: PCI alone is ambiguous (Peripheral Component Interconnect is another common meaning); expanding a three-letter acronym to the full 'PCI DSS' is overreach and would corrupt legitimate uses of 'PCI' in other senses.
+- **DROP** `audit` → `audit`: Identity rule: alias equals term exactly; also a common single English word.
+- **DROP** `audit trail` → `audit trail`: Identity rule: alias equals term exactly.
+- **DROP** `audit log` → `audit log`: Identity rule: alias equals term exactly.
+- **DROP** `data residency` → `data residency`: Identity rule: alias equals term exactly.
+- **DROP** `data sovereignty` → `data sovereignty`: Identity rule: alias equals term exactly.
+- **DROP** `personally identifiable information` → `PII`: All ordinary English words; speaker saying the full phrase wants it written out, not collapsed to an acronym.
+- **DROP** `protected health information` → `PHI`: All ordinary English words; speaker saying the full phrase wants it written out, not collapsed to an acronym.
+- **DROP** `encryption at rest` → `encryption at rest`: Identity rule: alias equals term exactly.
+- **DROP** `encryption in transit` → `encryption in transit`: Identity rule: alias equals term exactly.
+- **DROP** `customer success` → `customer success`: Ordinary English phrase; silently collapsing 'customer success' to 'CS' would surprise the speaker and conflicts with the identity entry above.
+- **DROP** `customer success` → `CS`: Ordinary English phrase; silently collapsing 'customer success' to 'CS' would surprise the speaker and conflicts with the identity entry above.
+- **DROP** `customer success manager` → `CSM`: All ordinary English words; speaker saying the full phrase wants it written out, not collapsed to an acronym.
+- **DROP** `technical account manager` → `TAM`: All ordinary English words; speaker saying the full phrase wants it written out, not collapsed to an acronym.
+- **DROP** `solution engineer` → `solution engineer`: Ordinary English phrase; silently collapsing 'solution engineer' to 'SE' would surprise the speaker. Also conflicts with the identity entry.
+- **DROP** `solution engineer` → `SE`: Ordinary English phrase; silently collapsing 'solution engineer' to 'SE' would surprise the speaker. Also conflicts with the identity entry.
+- **DROP** `account executive` → `AE`: All ordinary English words; speaker saying the full phrase wants it written out, not collapsed to an acronym.
+- **DROP** `sales development rep` → `SDR`: All ordinary English words; speaker saying the full phrase wants it written out, not collapsed to an acronym.
+- **DROP** `business development rep` → `BDR`: All ordinary English words; speaker saying the full phrase wants it written out, not collapsed to an acronym.
+- **DROP** `annual recurring revenue` → `ARR`: All ordinary English words; speaker saying the full phrase wants it written out, not collapsed to an acronym.
+- **DROP** `monthly recurring revenue` → `MRR`: All ordinary English words; speaker saying the full phrase wants it written out, not collapsed to an acronym.
+- **DROP** `gross revenue retention` → `GRR`: All ordinary English words; speaker saying the full phrase wants it written out, not collapsed to an acronym.
+- **DROP** `net revenue retention` → `NRR`: All ordinary English words; speaker saying the full phrase wants it written out, not collapsed to an acronym.
+- **DROP** `net dollar retention` → `NDR`: All ordinary English words; speaker saying the full phrase wants it written out, not collapsed to an acronym.
+- **DROP** `logo retention` → `logo retention`: Identity rule: alias equals term exactly.
+- **DROP** `churn` → `churn`: Identity rule: alias equals term exactly; also a common single English word.
+- **DROP** `single tenant` → `single-tenant`: 'Single tenant' is ordinary English in real-estate and property contexts ('a single tenant in the building'); would break normal speech.
+- **DROP** `on premise` → `on-prem`: 'On premise' is ordinary English (logical premise, a building premise); 'the argument is built on premise' would be incorrectly replaced.
+- **DROP** `hybrid cloud` → `hybrid cloud`: Identity rule: alias equals term exactly.
+- **DROP** `cloud agnostic` → `cloud agnostic`: Identity rule: alias equals term exactly.
+- **DROP** `data lake` → `data lake`: Identity rule: alias equals term exactly.
+- **DROP** `data mesh` → `data mesh`: Identity rule: alias equals term exactly.
+- **DROP** `data fabric` → `data fabric`: Identity rule: alias equals term exactly.
+- **DROP** `data catalog` → `data catalog`: Identity rule: alias equals term exactly.
+- **DROP** `data lineage` → `data lineage`: Identity rule: alias equals term exactly.
+- **DROP** `data quality` → `data quality`: Identity rule: alias equals term exactly.
+- **DROP** `data governance` → `data governance`: Identity rule: alias equals term exactly.
+- **DROP** `batch processing` → `batch processing`: Identity rule: alias equals term exactly.
+- **DROP** `stream processing` → `stream processing`: Identity rule: alias equals term exactly.
+- **DROP** `real time` → `real-time`: 'Real time' is very common ordinary English ('in real time', 'we watched in real time'); forcing a hyphen breaks natural adverbial uses.
+- **DROP** `50th percentile` → `P50`: '50th percentile' is common, natural English used in education, medicine, and general statistics contexts (e.g. 'she scored in the 50th percentile'). Silently replacing it with 'P50' would break non-tech dictation.
+- **DROP** `90th percentile` → `P90`: '90th percentile' is natural English used freely in education, health, and general statistics (e.g. 'scored in the 90th percentile on the test'). Replacing it silently with 'P90' would break non-tech dictation.
+
+---
+
+**Summary:** 2651 KEEP, 1006 DROP, 0 REWRITE, 113 DEDUPE

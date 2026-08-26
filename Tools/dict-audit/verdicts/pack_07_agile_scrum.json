@@ -1,0 +1,1644 @@
+[
+  {
+    "alias": "stand up",
+    "term": "standup",
+    "pack": "pack_07_agile_scrum",
+    "verdict": "DROP",
+    "reason": "Ordinary English phrase with many non-tech uses (stand up comedy, stand up and fight)."
+  },
+  {
+    "alias": "stand-up",
+    "term": "standup",
+    "pack": "pack_07_agile_scrum",
+    "verdict": "DROP",
+    "reason": "Same as 'stand up' — common English with non-tech meaning."
+  },
+  {
+    "alias": "stand app",
+    "term": "standup",
+    "pack": "pack_07_agile_scrum",
+    "verdict": "KEEP",
+    "reason": "Phonetic mishearing with no natural English phrase meaning."
+  },
+  {
+    "alias": "daily stand up",
+    "term": "daily standup",
+    "pack": "pack_07_agile_scrum",
+    "verdict": "DROP",
+    "reason": "Ordinary English phrase that would corrupt natural speech."
+  },
+  {
+    "alias": "daily stand-up",
+    "term": "daily standup",
+    "pack": "pack_07_agile_scrum",
+    "verdict": "DROP",
+    "reason": "Ordinary English phrase with non-tech meaning."
+  },
+  {
+    "alias": "a sync stand up",
+    "term": "async standup",
+    "pack": "pack_07_agile_scrum",
+    "verdict": "DROP",
+    "reason": "'A sync' and 'stand up' are both ordinary English; the phrase would corrupt normal speech."
+  },
+  {
+    "alias": "a sink stand up",
+    "term": "async standup",
+    "pack": "pack_07_agile_scrum",
+    "verdict": "DROP",
+    "reason": "'A sink' is a common English noun; the phrase would corrupt sentences like 'a sink stand up pipe'."
+  },
+  {
+    "alias": "sprints",
+    "term": "sprint",
+    "pack": "pack_07_agile_scrum",
+    "verdict": "DROP",
+    "reason": "'Sprints' is a common English verb/noun with many non-tech uses."
+  },
+  {
+    "alias": "sprint planing",
+    "term": "sprint planning",
+    "pack": "pack_07_agile_scrum",
+    "verdict": "KEEP",
+    "reason": "Phonetic mishearing (dropped syllable) of the Agile term; 'sprint planing' has no natural English meaning."
+  },
+  {
+    "alias": "sprint re view",
+    "term": "sprint review",
+    "pack": "pack_07_agile_scrum",
+    "verdict": "DROP",
+    "reason": "'Sprint' and 're view' are ordinary English; would corrupt sentences like 'a sprint to review the contract'."
+  },
+  {
+    "alias": "sprint re throw",
+    "term": "sprint retro",
+    "pack": "pack_07_agile_scrum",
+    "verdict": "KEEP",
+    "reason": "'Sprint re throw' has no natural English meaning as a phrase."
+  },
+  {
+    "alias": "sprint ret row",
+    "term": "sprint retro",
+    "pack": "pack_07_agile_scrum",
+    "verdict": "KEEP",
+    "reason": "'Ret row' has no natural English meaning; clearly a mishearing of 'retro'."
+  },
+  {
+    "alias": "retro spective",
+    "term": "retrospective",
+    "pack": "pack_07_agile_scrum",
+    "verdict": "KEEP",
+    "reason": "Phonetic split of 'retrospective'; no independent English phrase meaning."
+  },
+  {
+    "alias": "retro spec tiv",
+    "term": "retrospective",
+    "pack": "pack_07_agile_scrum",
+    "verdict": "KEEP",
+    "reason": "Phonetic mishearing with no natural English phrase meaning."
+  },
+  {
+    "alias": "ret row",
+    "term": "retro",
+    "pack": "pack_07_agile_scrum",
+    "verdict": "KEEP",
+    "reason": "'Ret row' has no natural English phrase meaning."
+  },
+  {
+    "alias": "re throw",
+    "term": "retro",
+    "pack": "pack_07_agile_scrum",
+    "verdict": "DROP",
+    "reason": "'Re throw' is a real programming/English term (rethrowing an exception); would corrupt technical speech."
+  },
+  {
+    "alias": "back log",
+    "term": "backlog",
+    "pack": "pack_07_agile_scrum",
+    "verdict": "DROP",
+    "reason": "'Back log' is ordinary English (a log at the back of a fire); would corrupt non-tech speech."
+  },
+  {
+    "alias": "back logged",
+    "term": "backlog",
+    "pack": "pack_07_agile_scrum",
+    "verdict": "DROP",
+    "reason": "'Backlogged' is a common English adjective; the form mismatch also makes this a poor correction."
+  },
+  {
+    "alias": "back log grooming",
+    "term": "backlog grooming",
+    "pack": "pack_07_agile_scrum",
+    "verdict": "KEEP",
+    "reason": "The split 'back log grooming' signals a Whisper mishearing of the Agile compound; no natural non-tech meaning."
+  },
+  {
+    "alias": "back log refinement",
+    "term": "backlog refinement",
+    "pack": "pack_07_agile_scrum",
+    "verdict": "KEEP",
+    "reason": "'Back log refinement' as a phrase has no plausible non-tech meaning; clearly targets the Agile ceremony."
+  },
+  {
+    "alias": "scrum methodology",
+    "term": "Scrum",
+    "pack": "pack_07_agile_scrum",
+    "verdict": "DROP",
+    "reason": "Correction drops 'methodology' and 'scrum' is common English (rugby); phrase has non-tech interpretations."
+  },
+  {
+    "alias": "scrum master",
+    "term": "Scrum Master",
+    "pack": "pack_07_agile_scrum",
+    "verdict": "DROP",
+    "reason": "Identity flag — alias equals term; rule does nothing useful."
+  },
+  {
+    "alias": "scrum ban",
+    "term": "Scrumban",
+    "pack": "pack_07_agile_scrum",
+    "verdict": "KEEP",
+    "reason": "'Scrum ban' as a phrase has no natural English meaning outside the Agile hybrid methodology."
+  },
+  {
+    "alias": "scrum band",
+    "term": "Scrumban",
+    "pack": "pack_07_agile_scrum",
+    "verdict": "DROP",
+    "reason": "'Scrum band' could appear naturally ('the scrum band played'); too risky."
+  },
+  {
+    "alias": "con bon",
+    "term": "Kanban",
+    "pack": "pack_07_agile_scrum",
+    "verdict": "KEEP",
+    "reason": "'Con bon' has no English meaning; purely a phonetic mishearing of 'Kanban'."
+  },
+  {
+    "alias": "can ban",
+    "term": "Kanban",
+    "pack": "pack_07_agile_scrum",
+    "verdict": "DROP",
+    "reason": "'Can ban' is valid English ('a moderator can ban users'); would corrupt normal speech."
+  },
+  {
+    "alias": "khan ban",
+    "term": "Kanban",
+    "pack": "pack_07_agile_scrum",
+    "verdict": "KEEP",
+    "reason": "'Khan ban' has no common English meaning; a phonetic rendering of Kanban."
+  },
+  {
+    "alias": "con bon board",
+    "term": "Kanban board",
+    "pack": "pack_07_agile_scrum",
+    "verdict": "KEEP",
+    "reason": "'Con bon board' has no English meaning; phonetic mishearing of 'Kanban board'."
+  },
+  {
+    "alias": "can ban board",
+    "term": "Kanban board",
+    "pack": "pack_07_agile_scrum",
+    "verdict": "DROP",
+    "reason": "'Can ban board' reads as ordinary English ('can ban a board member'); too risky."
+  },
+  {
+    "alias": "safe framework",
+    "term": "SAFe",
+    "pack": "pack_07_agile_scrum",
+    "verdict": "DROP",
+    "reason": "'Safe framework' is ordinary English ('we need a safe framework'); would corrupt non-tech speech."
+  },
+  {
+    "alias": "s a f e",
+    "term": "SAFe",
+    "pack": "pack_07_agile_scrum",
+    "verdict": "KEEP",
+    "reason": "Phonetic letter-by-letter spelling of the abbreviation; no ordinary spoken English meaning."
+  },
+  {
+    "alias": "safe agile",
+    "term": "SAFe",
+    "pack": "pack_07_agile_scrum",
+    "verdict": "DROP",
+    "reason": "'Safe agile' could appear in natural speech ('how do we make agile safe'); correction also loses a word."
+  },
+  {
+    "alias": "scaled a jile",
+    "term": "Scaled Agile",
+    "pack": "pack_07_agile_scrum",
+    "verdict": "KEEP",
+    "reason": "'A jile' is a phonetic mishearing of 'agile'; 'scaled a jile' has no English meaning."
+  },
+  {
+    "alias": "scaled agile framework",
+    "term": "Scaled Agile",
+    "pack": "pack_07_agile_scrum",
+    "verdict": "DROP",
+    "reason": "Ordinary English phrase; correction also drops 'framework'."
+  },
+  {
+    "alias": "product owner",
+    "term": "Product Owner",
+    "pack": "pack_07_agile_scrum",
+    "verdict": "DROP",
+    "reason": "Identity flag (case-only difference); rule does nothing useful."
+  },
+  {
+    "alias": "po",
+    "term": "Product Owner",
+    "pack": "pack_07_agile_scrum",
+    "verdict": "DROP",
+    "reason": "Single common English word ('po' as in chamber pot, river Po); single_word_english flag."
+  },
+  {
+    "alias": "p o",
+    "term": "PO",
+    "pack": "pack_07_agile_scrum",
+    "verdict": "KEEP",
+    "reason": "Letter-by-letter spelling of the abbreviation; no natural spoken English meaning."
+  },
+  {
+    "alias": "pee oh",
+    "term": "PO",
+    "pack": "pack_07_agile_scrum",
+    "verdict": "KEEP",
+    "reason": "Phonetic letter spelling of 'PO'; no natural English phrase meaning."
+  },
+  {
+    "alias": "product owner",
+    "term": "PO",
+    "pack": "pack_07_agile_scrum",
+    "verdict": "DROP",
+    "reason": "Common English phrase; conflict partner is identity (already dropped); 'product owner' would corrupt normal speech."
+  },
+  {
+    "alias": "scrum of scrums",
+    "term": "Scrum of Scrums",
+    "pack": "pack_07_agile_scrum",
+    "verdict": "DROP",
+    "reason": "Identity flag — alias equals term."
+  },
+  {
+    "alias": "sarah money",
+    "term": "ceremony",
+    "pack": "pack_07_agile_scrum",
+    "verdict": "KEEP",
+    "reason": "'Sarah money' has no English meaning; purely a phonetic mishearing of 'ceremony'."
+  },
+  {
+    "alias": "ceremony agile",
+    "term": "ceremony",
+    "pack": "pack_07_agile_scrum",
+    "verdict": "DROP",
+    "reason": "'Ceremony' is a common English word with many non-tech uses; correction also drops 'agile'."
+  },
+  {
+    "alias": "story point",
+    "term": "story points",
+    "pack": "pack_07_agile_scrum",
+    "verdict": "DROP",
+    "reason": "'Story point' is ordinary English ('a point in the story'); would corrupt non-tech speech."
+  },
+  {
+    "alias": "storey points",
+    "term": "story points",
+    "pack": "pack_07_agile_scrum",
+    "verdict": "KEEP",
+    "reason": "'Storey points' (British floor spelling) has no natural English meaning as a phrase; Whisper spelling variant."
+  },
+  {
+    "alias": "vuh loss ity",
+    "term": "velocity",
+    "pack": "pack_07_agile_scrum",
+    "verdict": "KEEP",
+    "reason": "Phonetic mishearing of 'velocity'; no English phrase meaning."
+  },
+  {
+    "alias": "sprint vuh loss ity",
+    "term": "sprint velocity",
+    "pack": "pack_07_agile_scrum",
+    "verdict": "KEEP",
+    "reason": "Phonetic mishearing of 'sprint velocity'; no natural English meaning."
+  },
+  {
+    "alias": "burn down",
+    "term": "burndown",
+    "pack": "pack_07_agile_scrum",
+    "verdict": "DROP",
+    "reason": "'Burn down' is ordinary English ('burn down a building'); would corrupt normal speech."
+  },
+  {
+    "alias": "burn down chart",
+    "term": "burndown",
+    "pack": "pack_07_agile_scrum",
+    "verdict": "DEDUPE",
+    "new_alias": "burn down chart",
+    "reason": "Conflict between 'burndown' and 'burndown chart'; 'burndown chart' is more specific and preserves the full term."
+  },
+  {
+    "alias": "burn down chart",
+    "term": "burndown chart",
+    "pack": "pack_07_agile_scrum",
+    "verdict": "DEDUPE",
+    "new_alias": "burn down chart",
+    "reason": "Conflict winner is 'burndown chart' (more specific than bare 'burndown')."
+  },
+  {
+    "alias": "burn up chart",
+    "term": "burnup chart",
+    "pack": "pack_07_agile_scrum",
+    "verdict": "DROP",
+    "reason": "'Burn up chart' reads as ordinary English ('burn up the chart'); would corrupt normal speech."
+  },
+  {
+    "alias": "w i p",
+    "term": "WIP",
+    "pack": "pack_07_agile_scrum",
+    "verdict": "KEEP",
+    "reason": "Letter-by-letter spelling of the abbreviation; no natural spoken English meaning."
+  },
+  {
+    "alias": "double you eye pee",
+    "term": "WIP",
+    "pack": "pack_07_agile_scrum",
+    "verdict": "KEEP",
+    "reason": "Phonetic letter spelling of 'WIP'; no natural English phrase meaning."
+  },
+  {
+    "alias": "work in progress",
+    "term": "WIP",
+    "pack": "pack_07_agile_scrum",
+    "verdict": "DROP",
+    "reason": "'Work in progress' is ordinary English used in many non-tech contexts."
+  },
+  {
+    "alias": "whip",
+    "term": "WIP",
+    "pack": "pack_07_agile_scrum",
+    "verdict": "DROP",
+    "reason": "Single common English word (a whip); single_word_english flag."
+  },
+  {
+    "alias": "whip limit",
+    "term": "WIP limit",
+    "pack": "pack_07_agile_scrum",
+    "verdict": "DROP",
+    "reason": "'Whip limit' is plausible English; 'whip' is a real word that would be corrupted."
+  },
+  {
+    "alias": "w i p limit",
+    "term": "WIP limit",
+    "pack": "pack_07_agile_scrum",
+    "verdict": "KEEP",
+    "reason": "Letter-by-letter abbreviation plus 'limit'; no natural spoken English meaning."
+  },
+  {
+    "alias": "work in progress limit",
+    "term": "WIP limit",
+    "pack": "pack_07_agile_scrum",
+    "verdict": "DROP",
+    "reason": "Ordinary English phrase; would corrupt non-tech speech."
+  },
+  {
+    "alias": "swim lane",
+    "term": "swimlane",
+    "pack": "pack_07_agile_scrum",
+    "verdict": "DROP",
+    "reason": "'Swim lane' is ordinary English (a lane in a swimming pool); would corrupt normal speech."
+  },
+  {
+    "alias": "swim lain",
+    "term": "swimlane",
+    "pack": "pack_07_agile_scrum",
+    "verdict": "KEEP",
+    "reason": "'Swim lain' has no natural English meaning; phonetic mishearing of 'swimlane'."
+  },
+  {
+    "alias": "epic ticket",
+    "term": "epic",
+    "pack": "pack_07_agile_scrum",
+    "verdict": "DROP",
+    "reason": "'Epic' is a common English word; the correction also drops 'ticket'."
+  },
+  {
+    "alias": "user storey",
+    "term": "user story",
+    "pack": "pack_07_agile_scrum",
+    "verdict": "KEEP",
+    "reason": "'Storey' (British spelling of floor level) in 'user storey' has no natural meaning; clearly a spelling variant of 'user story'."
+  },
+  {
+    "alias": "acceptance cry tear ia",
+    "term": "acceptance criteria",
+    "pack": "pack_07_agile_scrum",
+    "verdict": "KEEP",
+    "reason": "Phonetic mishearing of 'acceptance criteria'; no English phrase meaning."
+  },
+  {
+    "alias": "acceptance cry tieria",
+    "term": "acceptance criteria",
+    "pack": "pack_07_agile_scrum",
+    "verdict": "KEEP",
+    "reason": "Phonetic mishearing of 'acceptance criteria'; no English phrase meaning."
+  },
+  {
+    "alias": "a c",
+    "term": "AC",
+    "pack": "pack_07_agile_scrum",
+    "verdict": "DROP",
+    "reason": "Extremely ambiguous two-letter abbreviation (air conditioning, alternating current, etc.); too broad to safely use."
+  },
+  {
+    "alias": "ay see",
+    "term": "AC",
+    "pack": "pack_07_agile_scrum",
+    "verdict": "KEEP",
+    "reason": "Phonetic letter spelling of 'AC'; no natural English phrase meaning in isolation."
+  },
+  {
+    "alias": "acceptance criteria",
+    "term": "AC",
+    "pack": "pack_07_agile_scrum",
+    "verdict": "DROP",
+    "reason": "Ordinary English phrase; correction loses almost the entire phrase."
+  },
+  {
+    "alias": "definition of dun",
+    "term": "definition of done",
+    "pack": "pack_07_agile_scrum",
+    "verdict": "DROP",
+    "reason": "'Dun' is a real English word (dull color, to demand payment); 'definition of dun' has an English meaning."
+  },
+  {
+    "alias": "d o d",
+    "term": "DoD",
+    "pack": "pack_07_agile_scrum",
+    "verdict": "KEEP",
+    "reason": "Letter-by-letter spelling; no natural spoken English meaning."
+  },
+  {
+    "alias": "dee oh dee",
+    "term": "DoD",
+    "pack": "pack_07_agile_scrum",
+    "verdict": "KEEP",
+    "reason": "Phonetic letter spelling; no natural English phrase meaning."
+  },
+  {
+    "alias": "definition of done",
+    "term": "DoD",
+    "pack": "pack_07_agile_scrum",
+    "verdict": "DROP",
+    "reason": "Ordinary English phrase; correction loses the full phrase."
+  },
+  {
+    "alias": "definition of ready",
+    "term": "definition of ready",
+    "pack": "pack_07_agile_scrum",
+    "verdict": "DROP",
+    "reason": "Identity flag — alias equals term; rule does nothing."
+  },
+  {
+    "alias": "d o r",
+    "term": "DoR",
+    "pack": "pack_07_agile_scrum",
+    "verdict": "KEEP",
+    "reason": "Letter-by-letter spelling of the abbreviation; no natural spoken English meaning."
+  },
+  {
+    "alias": "dee oh are",
+    "term": "DoR",
+    "pack": "pack_07_agile_scrum",
+    "verdict": "KEEP",
+    "reason": "Phonetic letter spelling; no natural English phrase meaning."
+  },
+  {
+    "alias": "definition of ready",
+    "term": "DoR",
+    "pack": "pack_07_agile_scrum",
+    "verdict": "DROP",
+    "reason": "Ordinary English phrase; conflict partner is identity (already dropped); phrase would corrupt normal speech."
+  },
+  {
+    "alias": "spike ticket",
+    "term": "spike",
+    "pack": "pack_07_agile_scrum",
+    "verdict": "DROP",
+    "reason": "'Spike' is a common English word; correction also drops 'ticket'."
+  },
+  {
+    "alias": "spyke",
+    "term": "spike",
+    "pack": "pack_07_agile_scrum",
+    "verdict": "KEEP",
+    "reason": "'Spyke' has no English meaning; clearly a phonetic/spelling variant of 'spike'."
+  },
+  {
+    "alias": "teck debt",
+    "term": "tech debt",
+    "pack": "pack_07_agile_scrum",
+    "verdict": "KEEP",
+    "reason": "'Teck debt' has no natural English meaning; phonetic mishearing of 'tech debt'."
+  },
+  {
+    "alias": "technical debt",
+    "term": "tech debt",
+    "pack": "pack_07_agile_scrum",
+    "verdict": "DROP",
+    "reason": "'Technical debt' is ordinary English; correction shortens the phrase unnecessarily."
+  },
+  {
+    "alias": "teck nical debt",
+    "term": "technical debt",
+    "pack": "pack_07_agile_scrum",
+    "verdict": "KEEP",
+    "reason": "Phonetic mishearing of 'technical'; 'teck nical debt' has no English meaning."
+  },
+  {
+    "alias": "im pediment",
+    "term": "impediment",
+    "pack": "pack_07_agile_scrum",
+    "verdict": "KEEP",
+    "reason": "Phonetic split of 'impediment'; no independent English phrase meaning."
+  },
+  {
+    "alias": "impede ment",
+    "term": "impediment",
+    "pack": "pack_07_agile_scrum",
+    "verdict": "KEEP",
+    "reason": "Phonetic split of 'impediment'; no natural phrase meaning."
+  },
+  {
+    "alias": "block er",
+    "term": "blocker",
+    "pack": "pack_07_agile_scrum",
+    "verdict": "KEEP",
+    "reason": "'Block er' is a space-split of 'blocker' that Whisper might produce; no independent phrase meaning."
+  },
+  {
+    "alias": "block d",
+    "term": "blocked",
+    "pack": "pack_07_agile_scrum",
+    "verdict": "KEEP",
+    "reason": "'Block d' has no natural English meaning; phonetic mishearing of 'blocked'."
+  },
+  {
+    "alias": "un block d",
+    "term": "unblocked",
+    "pack": "pack_07_agile_scrum",
+    "verdict": "KEEP",
+    "reason": "'Un block d' has no natural English meaning; phonetic mishearing of 'unblocked'."
+  },
+  {
+    "alias": "un blocked",
+    "term": "unblocked",
+    "pack": "pack_07_agile_scrum",
+    "verdict": "KEEP",
+    "reason": "Space-split of 'unblocked'; no ambiguity with ordinary English at the phrase level."
+  },
+  {
+    "alias": "depend ency",
+    "term": "dependency",
+    "pack": "pack_07_agile_scrum",
+    "verdict": "KEEP",
+    "reason": "Phonetic split of 'dependency'; no independent phrase meaning."
+  },
+  {
+    "alias": "dee pendency",
+    "term": "dependency",
+    "pack": "pack_07_agile_scrum",
+    "verdict": "KEEP",
+    "reason": "'Dee pendency' has no natural English meaning; phonetic mishearing of 'dependency'."
+  },
+  {
+    "alias": "cross functional",
+    "term": "cross-functional",
+    "pack": "pack_07_agile_scrum",
+    "verdict": "DROP",
+    "reason": "'Cross functional' is ordinary English; correction only adds a hyphen, risking normal speech like 'cross-functional team'."
+  },
+  {
+    "alias": "t shirt sizing",
+    "term": "T-shirt sizing",
+    "pack": "pack_07_agile_scrum",
+    "verdict": "DROP",
+    "reason": "'T shirt sizing' is ordinary English (literally sizing for T-shirts); would corrupt normal speech."
+  },
+  {
+    "alias": "tee shirt sizing",
+    "term": "T-shirt sizing",
+    "pack": "pack_07_agile_scrum",
+    "verdict": "DROP",
+    "reason": "'Tee shirt sizing' is ordinary English; would corrupt garment-related speech."
+  },
+  {
+    "alias": "fib oh nah chee",
+    "term": "Fibonacci",
+    "pack": "pack_07_agile_scrum",
+    "verdict": "KEEP",
+    "reason": "Phonetic mishearing of 'Fibonacci'; no English phrase meaning."
+  },
+  {
+    "alias": "fib a nah chi",
+    "term": "Fibonacci",
+    "pack": "pack_07_agile_scrum",
+    "verdict": "KEEP",
+    "reason": "Phonetic mishearing of 'Fibonacci'; no English phrase meaning."
+  },
+  {
+    "alias": "fibonacci sequence",
+    "term": "Fibonacci",
+    "pack": "pack_07_agile_scrum",
+    "verdict": "DROP",
+    "reason": "The alias is the correct full term; correction drops 'sequence' unnecessarily."
+  },
+  {
+    "alias": "planing poker",
+    "term": "planning poker",
+    "pack": "pack_07_agile_scrum",
+    "verdict": "KEEP",
+    "reason": "'Planing poker' has no natural English meaning (planing = woodworking); clearly a mishearing of 'planning poker'."
+  },
+  {
+    "alias": "time boxed",
+    "term": "timeboxed",
+    "pack": "pack_07_agile_scrum",
+    "verdict": "DROP",
+    "reason": "'Time boxed' is ordinary English; correction only removes a space."
+  },
+  {
+    "alias": "time box",
+    "term": "timeboxed",
+    "pack": "pack_07_agile_scrum",
+    "verdict": "DEDUPE",
+    "new_alias": "time box",
+    "reason": "Conflict between 'timeboxed' and 'timebox'; 'timebox' (noun) is more fundamental and the better winner."
+  },
+  {
+    "alias": "time box",
+    "term": "timebox",
+    "pack": "pack_07_agile_scrum",
+    "verdict": "DEDUPE",
+    "new_alias": "time box",
+    "reason": "Conflict winner is 'timebox' (noun, more fundamental than the adjective 'timeboxed')."
+  },
+  {
+    "alias": "ink re ment",
+    "term": "increment",
+    "pack": "pack_07_agile_scrum",
+    "verdict": "KEEP",
+    "reason": "'Ink re ment' has no natural English meaning; phonetic mishearing of 'increment'."
+  },
+  {
+    "alias": "it er ation",
+    "term": "iteration",
+    "pack": "pack_07_agile_scrum",
+    "verdict": "KEEP",
+    "reason": "Phonetic split of 'iteration'; no independent phrase meaning."
+  },
+  {
+    "alias": "k dance",
+    "term": "cadence",
+    "pack": "pack_07_agile_scrum",
+    "verdict": "KEEP",
+    "reason": "'K dance' has no natural English meaning; phonetic mishearing of 'cadence'."
+  },
+  {
+    "alias": "cay dance",
+    "term": "cadence",
+    "pack": "pack_07_agile_scrum",
+    "verdict": "KEEP",
+    "reason": "'Cay dance' (cay = small island + dance) is not a natural English phrase; phonetic mishearing of 'cadence'."
+  },
+  {
+    "alias": "by weekly",
+    "term": "biweekly",
+    "pack": "pack_07_agile_scrum",
+    "verdict": "DROP",
+    "reason": "'By weekly' could appear naturally ('I check it by weekly reports'); correction only normalizes spelling."
+  },
+  {
+    "alias": "bi weekly",
+    "term": "biweekly",
+    "pack": "pack_07_agile_scrum",
+    "verdict": "DROP",
+    "reason": "'Bi weekly' is just 'biweekly' with a space; ordinary English, correction is trivial."
+  },
+  {
+    "alias": "jeer a",
+    "term": "Jira",
+    "pack": "pack_07_agile_scrum",
+    "verdict": "DROP",
+    "reason": "'Jeer a' is valid English ('don't jeer a teammate'); would corrupt normal speech."
+  },
+  {
+    "alias": "gear a",
+    "term": "Jira",
+    "pack": "pack_07_agile_scrum",
+    "verdict": "KEEP",
+    "reason": "'Gear a' is not a natural English phrase; phonetic mishearing of 'Jira'."
+  },
+  {
+    "alias": "jeera",
+    "term": "Jira",
+    "pack": "pack_07_agile_scrum",
+    "verdict": "DROP",
+    "reason": "'Jeera' is a real English loanword for cumin used in cooking; would corrupt recipe dictation."
+  },
+  {
+    "alias": "gyra",
+    "term": "Jira",
+    "pack": "pack_07_agile_scrum",
+    "verdict": "KEEP",
+    "reason": "'Gyra' has no English meaning; phonetic mishearing of 'Jira'."
+  },
+  {
+    "alias": "jeer a ticket",
+    "term": "Jira ticket",
+    "pack": "pack_07_agile_scrum",
+    "verdict": "DROP",
+    "reason": "'Jeer a ticket' is plausible English ('jeer a ticket scalper'); would corrupt normal speech."
+  },
+  {
+    "alias": "gear a ticket",
+    "term": "Jira ticket",
+    "pack": "pack_07_agile_scrum",
+    "verdict": "KEEP",
+    "reason": "'Gear a ticket' is not a natural English phrase; phonetic mishearing of 'Jira ticket'."
+  },
+  {
+    "alias": "jeer a board",
+    "term": "Jira board",
+    "pack": "pack_07_agile_scrum",
+    "verdict": "DROP",
+    "reason": "'Jeer a board' is plausible English; would corrupt normal speech."
+  },
+  {
+    "alias": "gear a board",
+    "term": "Jira board",
+    "pack": "pack_07_agile_scrum",
+    "verdict": "DROP",
+    "reason": "'Gear a board' while unusual could appear in speech; too risky for a common word like 'gear'."
+  },
+  {
+    "alias": "jeer a epic",
+    "term": "Jira epic",
+    "pack": "pack_07_agile_scrum",
+    "verdict": "KEEP",
+    "reason": "'Jeer a epic' is grammatically awkward English; primarily a phonetic mishearing of 'Jira epic'."
+  },
+  {
+    "alias": "jeer a sprint",
+    "term": "Jira sprint",
+    "pack": "pack_07_agile_scrum",
+    "verdict": "KEEP",
+    "reason": "'Jeer a sprint' is not natural English; phonetic mishearing of 'Jira sprint'."
+  },
+  {
+    "alias": "con flew ence",
+    "term": "Confluence",
+    "pack": "pack_07_agile_scrum",
+    "verdict": "KEEP",
+    "reason": "'Con flew ence' has no English meaning; 'flew' distinguishes it from the real word 'confluence'."
+  },
+  {
+    "alias": "con flu ence",
+    "term": "Confluence",
+    "pack": "pack_07_agile_scrum",
+    "verdict": "DROP",
+    "reason": "'Con flu ence' is effectively 'confluence' (a real English word for rivers converging); would corrupt non-tech speech."
+  },
+  {
+    "alias": "con flew ence page",
+    "term": "Confluence page",
+    "pack": "pack_07_agile_scrum",
+    "verdict": "KEEP",
+    "reason": "'Con flew ence page' has no English meaning; phonetic mishearing of 'Confluence page'."
+  },
+  {
+    "alias": "linear app",
+    "term": "Linear",
+    "pack": "pack_07_agile_scrum",
+    "verdict": "KEEP",
+    "reason": "'Linear app' is specific enough to identify the project management tool; not a natural non-tech phrase."
+  },
+  {
+    "alias": "shortcut app",
+    "term": "Shortcut",
+    "pack": "pack_07_agile_scrum",
+    "verdict": "DROP",
+    "reason": "'Shortcut app' is ordinary English (an app that creates shortcuts); correction also drops 'app'."
+  },
+  {
+    "alias": "no shun",
+    "term": "Notion",
+    "pack": "pack_07_agile_scrum",
+    "verdict": "DROP",
+    "reason": "'No shun' could appear naturally ('no shun policy'); would corrupt normal speech."
+  },
+  {
+    "alias": "no shin",
+    "term": "Notion",
+    "pack": "pack_07_agile_scrum",
+    "verdict": "DROP",
+    "reason": "'No shin' is plausible English ('no shin guards required'); would corrupt normal speech."
+  },
+  {
+    "alias": "a sana",
+    "term": "Asana",
+    "pack": "pack_07_agile_scrum",
+    "verdict": "DROP",
+    "reason": "'Asana' is a real English loanword from yoga (a pose); someone dictating yoga content would have 'asana' corrupted."
+  },
+  {
+    "alias": "ah sauna",
+    "term": "Asana",
+    "pack": "pack_07_agile_scrum",
+    "verdict": "DROP",
+    "reason": "'Ah sauna' is plausible English ('ah, a sauna'); would corrupt normal speech."
+  },
+  {
+    "alias": "monday dot com",
+    "term": "Monday.com",
+    "pack": "pack_07_agile_scrum",
+    "verdict": "KEEP",
+    "reason": "Domain name pronunciation; specifically identifies the SaaS tool with no ambiguity."
+  },
+  {
+    "alias": "click up",
+    "term": "ClickUp",
+    "pack": "pack_07_agile_scrum",
+    "verdict": "DROP",
+    "reason": "'Click up' is ordinary English ('click the up button'); would corrupt normal speech."
+  },
+  {
+    "alias": "trel oh",
+    "term": "Trello",
+    "pack": "pack_07_agile_scrum",
+    "verdict": "KEEP",
+    "reason": "'Trel oh' has no English meaning; phonetic mishearing of 'Trello'."
+  },
+  {
+    "alias": "sub task",
+    "term": "subtask",
+    "pack": "pack_07_agile_scrum",
+    "verdict": "DROP",
+    "reason": "'Sub task' is ordinary English; correction only removes a space."
+  },
+  {
+    "alias": "super task",
+    "term": "supertask",
+    "pack": "pack_07_agile_scrum",
+    "verdict": "DROP",
+    "reason": "'Super task' is ordinary English ('a super task'); would corrupt normal speech."
+  },
+  {
+    "alias": "parent tick it",
+    "term": "parent ticket",
+    "pack": "pack_07_agile_scrum",
+    "verdict": "KEEP",
+    "reason": "'Parent tick it' is not natural English; phonetic mishearing of 'parent ticket'."
+  },
+  {
+    "alias": "child tick it",
+    "term": "child ticket",
+    "pack": "pack_07_agile_scrum",
+    "verdict": "KEEP",
+    "reason": "'Child tick it' is not natural English; phonetic mishearing of 'child ticket'."
+  },
+  {
+    "alias": "linked ish you",
+    "term": "linked issue",
+    "pack": "pack_07_agile_scrum",
+    "verdict": "KEEP",
+    "reason": "'Ish you' is a phonetic mishearing of 'issue'; 'linked ish you' has no natural English meaning."
+  },
+  {
+    "alias": "a sign ee",
+    "term": "assignee",
+    "pack": "pack_07_agile_scrum",
+    "verdict": "KEEP",
+    "reason": "Phonetic split of 'assignee'; no independent English phrase meaning."
+  },
+  {
+    "alias": "re porter",
+    "term": "reporter",
+    "pack": "pack_07_agile_scrum",
+    "verdict": "DROP",
+    "reason": "'Reporter' is a very common English word (journalist); 're porter' would corrupt normal speech."
+  },
+  {
+    "alias": "watch er",
+    "term": "watcher",
+    "pack": "pack_07_agile_scrum",
+    "verdict": "DROP",
+    "reason": "'Watcher' is a common English word; the split 'watch er' would corrupt normal speech."
+  },
+  {
+    "alias": "do date",
+    "term": "due date",
+    "pack": "pack_07_agile_scrum",
+    "verdict": "DROP",
+    "reason": "'Do date' is plausible English; 'due date' is also extremely common English that needs no correction."
+  },
+  {
+    "alias": "prior ity",
+    "term": "priority",
+    "pack": "pack_07_agile_scrum",
+    "verdict": "KEEP",
+    "reason": "Phonetic split of 'priority'; no independent phrase meaning."
+  },
+  {
+    "alias": "p zero",
+    "term": "P0",
+    "pack": "pack_07_agile_scrum",
+    "verdict": "KEEP",
+    "reason": "'P zero' as a phrase has no common non-tech English meaning; phonetic rendering of the priority level."
+  },
+  {
+    "alias": "pee zero",
+    "term": "P0",
+    "pack": "pack_07_agile_scrum",
+    "verdict": "KEEP",
+    "reason": "Phonetic letter + number; no natural English meaning."
+  },
+  {
+    "alias": "priority zero",
+    "term": "P0",
+    "pack": "pack_07_agile_scrum",
+    "verdict": "DROP",
+    "reason": "'Priority zero' is ordinary English; correction also loses the full phrase."
+  },
+  {
+    "alias": "p one",
+    "term": "P1",
+    "pack": "pack_07_agile_scrum",
+    "verdict": "KEEP",
+    "reason": "'P one' has no common non-tech English meaning; phonetic rendering of priority level P1."
+  },
+  {
+    "alias": "pee one",
+    "term": "P1",
+    "pack": "pack_07_agile_scrum",
+    "verdict": "KEEP",
+    "reason": "Phonetic letter + number; no natural English phrase meaning."
+  },
+  {
+    "alias": "priority one",
+    "term": "P1",
+    "pack": "pack_07_agile_scrum",
+    "verdict": "DROP",
+    "reason": "'Priority one' is ordinary English; correction loses the full phrase."
+  },
+  {
+    "alias": "p two",
+    "term": "P2",
+    "pack": "pack_07_agile_scrum",
+    "verdict": "KEEP",
+    "reason": "'P two' has no common non-tech English meaning; phonetic rendering of P2."
+  },
+  {
+    "alias": "pee two",
+    "term": "P2",
+    "pack": "pack_07_agile_scrum",
+    "verdict": "KEEP",
+    "reason": "Phonetic letter + number; no natural English phrase meaning."
+  },
+  {
+    "alias": "priority two",
+    "term": "P2",
+    "pack": "pack_07_agile_scrum",
+    "verdict": "DROP",
+    "reason": "'Priority two' is ordinary English; correction loses the full phrase."
+  },
+  {
+    "alias": "p three",
+    "term": "P3",
+    "pack": "pack_07_agile_scrum",
+    "verdict": "KEEP",
+    "reason": "'P three' has no common non-tech English meaning; phonetic rendering of P3."
+  },
+  {
+    "alias": "pee three",
+    "term": "P3",
+    "pack": "pack_07_agile_scrum",
+    "verdict": "KEEP",
+    "reason": "Phonetic letter + number; no natural English phrase meaning."
+  },
+  {
+    "alias": "priority three",
+    "term": "P3",
+    "pack": "pack_07_agile_scrum",
+    "verdict": "DROP",
+    "reason": "'Priority three' is ordinary English; correction loses the full phrase."
+  },
+  {
+    "alias": "sev one",
+    "term": "sev1",
+    "pack": "pack_07_agile_scrum",
+    "verdict": "KEEP",
+    "reason": "'Sev one' has no common non-tech English meaning; phonetic rendering of severity level sev1."
+  },
+  {
+    "alias": "severity one",
+    "term": "sev1",
+    "pack": "pack_07_agile_scrum",
+    "verdict": "DROP",
+    "reason": "'Severity one' is ordinary English; correction also shortens the phrase."
+  },
+  {
+    "alias": "sev two",
+    "term": "sev2",
+    "pack": "pack_07_agile_scrum",
+    "verdict": "KEEP",
+    "reason": "'Sev two' has no common non-tech English meaning; phonetic rendering of sev2."
+  },
+  {
+    "alias": "severity two",
+    "term": "sev2",
+    "pack": "pack_07_agile_scrum",
+    "verdict": "DROP",
+    "reason": "'Severity two' is ordinary English; correction shortens the phrase."
+  },
+  {
+    "alias": "sev three",
+    "term": "sev3",
+    "pack": "pack_07_agile_scrum",
+    "verdict": "KEEP",
+    "reason": "'Sev three' has no common non-tech English meaning; phonetic rendering of sev3."
+  },
+  {
+    "alias": "severity three",
+    "term": "sev3",
+    "pack": "pack_07_agile_scrum",
+    "verdict": "DROP",
+    "reason": "'Severity three' is ordinary English; correction shortens the phrase."
+  },
+  {
+    "alias": "sev",
+    "term": "SEV",
+    "pack": "pack_07_agile_scrum",
+    "verdict": "DROP",
+    "reason": "Identity flag — alias equals term (case-only difference); rule does nothing."
+  },
+  {
+    "alias": "severity",
+    "term": "SEV",
+    "pack": "pack_07_agile_scrum",
+    "verdict": "DROP",
+    "reason": "Single common English word; single_word_english flag; would corrupt normal speech."
+  },
+  {
+    "alias": "crit ical",
+    "term": "critical",
+    "pack": "pack_07_agile_scrum",
+    "verdict": "KEEP",
+    "reason": "Phonetic split of 'critical'; no independent phrase meaning."
+  },
+  {
+    "alias": "show stopper",
+    "term": "showstopper",
+    "pack": "pack_07_agile_scrum",
+    "verdict": "DROP",
+    "reason": "'Showstopper' is a common English word (something spectacular); 'show stopper' would corrupt normal speech."
+  },
+  {
+    "alias": "work flow",
+    "term": "workflow",
+    "pack": "pack_07_agile_scrum",
+    "verdict": "DROP",
+    "reason": "'Work flow' is ordinary English; correction only removes a space."
+  },
+  {
+    "alias": "swim lane",
+    "term": "swimlane",
+    "pack": "pack_07_agile_scrum",
+    "verdict": "DROP",
+    "reason": "Duplicate entry — 'swim lane' is ordinary English (swimming pool lane); already dropped above."
+  },
+  {
+    "alias": "lay bell",
+    "term": "label",
+    "pack": "pack_07_agile_scrum",
+    "verdict": "KEEP",
+    "reason": "'Lay bell' has no natural English meaning as a phrase; phonetic mishearing of 'label'."
+  },
+  {
+    "alias": "com po nent",
+    "term": "component",
+    "pack": "pack_07_agile_scrum",
+    "verdict": "KEEP",
+    "reason": "Phonetic split of 'component'; no independent phrase meaning."
+  },
+  {
+    "alias": "fix ver shun",
+    "term": "fix version",
+    "pack": "pack_07_agile_scrum",
+    "verdict": "KEEP",
+    "reason": "'Ver shun' is a phonetic mishearing of 'version'; 'fix ver shun' has no natural English meaning."
+  },
+  {
+    "alias": "affected ver shun",
+    "term": "affected version",
+    "pack": "pack_07_agile_scrum",
+    "verdict": "KEEP",
+    "reason": "'Ver shun' is a phonetic mishearing of 'version'; 'affected ver shun' has no natural English meaning."
+  },
+  {
+    "alias": "to do",
+    "term": "To Do",
+    "pack": "pack_07_agile_scrum",
+    "verdict": "DROP",
+    "reason": "Identity flag — alias equals term; also breaks 'I have to do this'."
+  },
+  {
+    "alias": "to dew",
+    "term": "To Do",
+    "pack": "pack_07_agile_scrum",
+    "verdict": "DROP",
+    "reason": "'Dew' is a common English word; 'to dew' could appear naturally; conflict partner is identity (already dropped)."
+  },
+  {
+    "alias": "in progress",
+    "term": "In Progress",
+    "pack": "pack_07_agile_scrum",
+    "verdict": "DROP",
+    "reason": "Identity flag — alias equals term (case-only)."
+  },
+  {
+    "alias": "in pro gress",
+    "term": "In Progress",
+    "pack": "pack_07_agile_scrum",
+    "verdict": "KEEP",
+    "reason": "'In pro gress' has no natural English meaning; phonetic split clearly targeting the Jira status label."
+  },
+  {
+    "alias": "in review",
+    "term": "In Review",
+    "pack": "pack_07_agile_scrum",
+    "verdict": "DROP",
+    "reason": "Identity flag — alias equals term (case-only)."
+  },
+  {
+    "alias": "in re view",
+    "term": "In Review",
+    "pack": "pack_07_agile_scrum",
+    "verdict": "DROP",
+    "reason": "'In re view' is effectively 'in review' with a space; ordinary English phrase."
+  },
+  {
+    "alias": "code review",
+    "term": "Code Review",
+    "pack": "pack_07_agile_scrum",
+    "verdict": "DROP",
+    "reason": "Identity flag — alias equals term (case-only)."
+  },
+  {
+    "alias": "code re view",
+    "term": "Code Review",
+    "pack": "pack_07_agile_scrum",
+    "verdict": "DROP",
+    "reason": "'Code re view' is effectively 'code review' with a space; ordinary English; conflict partner is identity (dropped)."
+  },
+  {
+    "alias": "q a",
+    "term": "QA",
+    "pack": "pack_07_agile_scrum",
+    "verdict": "KEEP",
+    "reason": "Letter-by-letter spelling of the abbreviation; no natural spoken English meaning."
+  },
+  {
+    "alias": "queue ay",
+    "term": "QA",
+    "pack": "pack_07_agile_scrum",
+    "verdict": "KEEP",
+    "reason": "Phonetic letter spelling of 'QA'; no natural English phrase meaning."
+  },
+  {
+    "alias": "quality assurance",
+    "term": "QA",
+    "pack": "pack_07_agile_scrum",
+    "verdict": "DROP",
+    "reason": "'Quality assurance' is ordinary English; correction loses the full phrase."
+  },
+  {
+    "alias": "q a testing",
+    "term": "QA testing",
+    "pack": "pack_07_agile_scrum",
+    "verdict": "KEEP",
+    "reason": "Letter-by-letter abbreviation plus 'testing'; no natural spoken English meaning."
+  },
+  {
+    "alias": "queue ay testing",
+    "term": "QA testing",
+    "pack": "pack_07_agile_scrum",
+    "verdict": "KEEP",
+    "reason": "Phonetic letter spelling plus 'testing'; no natural English phrase meaning."
+  },
+  {
+    "alias": "u a t",
+    "term": "UAT",
+    "pack": "pack_07_agile_scrum",
+    "verdict": "KEEP",
+    "reason": "Letter-by-letter spelling of the abbreviation; no natural spoken English meaning."
+  },
+  {
+    "alias": "you ay tee",
+    "term": "UAT",
+    "pack": "pack_07_agile_scrum",
+    "verdict": "KEEP",
+    "reason": "Phonetic letter spelling; no natural English phrase meaning."
+  },
+  {
+    "alias": "user acceptance testing",
+    "term": "UAT",
+    "pack": "pack_07_agile_scrum",
+    "verdict": "DROP",
+    "reason": "'User acceptance testing' is ordinary English; correction loses the full phrase."
+  },
+  {
+    "alias": "stay ging",
+    "term": "staging",
+    "pack": "pack_07_agile_scrum",
+    "verdict": "KEEP",
+    "reason": "'Stay ging' has no natural English meaning; phonetic mishearing of 'staging'."
+  },
+  {
+    "alias": "pro duck shun",
+    "term": "production",
+    "pack": "pack_07_agile_scrum",
+    "verdict": "KEEP",
+    "reason": "'Pro duck shun' has no English meaning; phonetic mishearing of 'production'."
+  },
+  {
+    "alias": "prod environment",
+    "term": "prod",
+    "pack": "pack_07_agile_scrum",
+    "verdict": "DROP",
+    "reason": "Correction drops 'environment'; 'prod' is also a real English word (to prod someone)."
+  },
+  {
+    "alias": "pre prod",
+    "term": "pre-prod",
+    "pack": "pack_07_agile_scrum",
+    "verdict": "KEEP",
+    "reason": "'Pre prod' is a tech-specific compound; correction only adds a hyphen and the phrase is unambiguous in context."
+  },
+  {
+    "alias": "pre production",
+    "term": "pre-prod",
+    "pack": "pack_07_agile_scrum",
+    "verdict": "DROP",
+    "reason": "'Pre production' is ordinary English (film/media context); correction also shortens the phrase."
+  },
+  {
+    "alias": "dev and virement",
+    "term": "dev environment",
+    "pack": "pack_07_agile_scrum",
+    "verdict": "KEEP",
+    "reason": "'Dev and virement' has no natural English meaning; clearly a phonetic mishearing of 'dev environment'."
+  },
+  {
+    "alias": "sand box",
+    "term": "sandbox",
+    "pack": "pack_07_agile_scrum",
+    "verdict": "DROP",
+    "reason": "'Sand box' is ordinary English (a literal box of sand for children); would corrupt non-tech speech."
+  },
+  {
+    "alias": "hot fix",
+    "term": "hotfix",
+    "pack": "pack_07_agile_scrum",
+    "verdict": "DROP",
+    "reason": "'Hot fix' is ordinary English ('a hot fix to the problem'); would corrupt normal speech."
+  },
+  {
+    "alias": "bug fix",
+    "term": "bugfix",
+    "pack": "pack_07_agile_scrum",
+    "verdict": "DROP",
+    "reason": "'Bug fix' is ordinary English; correction only removes a space."
+  },
+  {
+    "alias": "re gression",
+    "term": "regression",
+    "pack": "pack_07_agile_scrum",
+    "verdict": "KEEP",
+    "reason": "Phonetic split of 'regression'; no independent phrase meaning."
+  },
+  {
+    "alias": "re gression testing",
+    "term": "regression testing",
+    "pack": "pack_07_agile_scrum",
+    "verdict": "KEEP",
+    "reason": "Phonetic split of 'regression' plus 'testing'; no independent phrase meaning."
+  },
+  {
+    "alias": "smoke test",
+    "term": "smoke test",
+    "pack": "pack_07_agile_scrum",
+    "verdict": "DROP",
+    "reason": "Identity flag — alias equals term."
+  },
+  {
+    "alias": "sanity check",
+    "term": "sanity check",
+    "pack": "pack_07_agile_scrum",
+    "verdict": "DROP",
+    "reason": "Identity flag — alias equals term."
+  },
+  {
+    "alias": "edge case",
+    "term": "edge case",
+    "pack": "pack_07_agile_scrum",
+    "verdict": "DROP",
+    "reason": "Identity flag — alias equals term."
+  },
+  {
+    "alias": "happy path",
+    "term": "happy path",
+    "pack": "pack_07_agile_scrum",
+    "verdict": "DROP",
+    "reason": "Identity flag — alias equals term."
+  },
+  {
+    "alias": "sad path",
+    "term": "sad path",
+    "pack": "pack_07_agile_scrum",
+    "verdict": "DROP",
+    "reason": "Identity flag — alias equals term."
+  },
+  {
+    "alias": "golden path",
+    "term": "golden path",
+    "pack": "pack_07_agile_scrum",
+    "verdict": "DROP",
+    "reason": "Identity flag — alias equals term."
+  },
+  {
+    "alias": "flakey test",
+    "term": "flaky test",
+    "pack": "pack_07_agile_scrum",
+    "verdict": "KEEP",
+    "reason": "'Flakey' is a variant spelling; 'flakey test' unambiguously targets the QA term."
+  },
+  {
+    "alias": "flaky test",
+    "term": "flaky test",
+    "pack": "pack_07_agile_scrum",
+    "verdict": "DROP",
+    "reason": "Identity flag — alias equals term."
+  },
+  {
+    "alias": "test sweet",
+    "term": "test suite",
+    "pack": "pack_07_agile_scrum",
+    "verdict": "KEEP",
+    "reason": "'Sweet' sounds like 'suite'; 'test sweet' has no natural English meaning as a phrase."
+  },
+  {
+    "alias": "test cov erage",
+    "term": "test coverage",
+    "pack": "pack_07_agile_scrum",
+    "verdict": "KEEP",
+    "reason": "Phonetic split of 'coverage'; no independent phrase meaning."
+  },
+  {
+    "alias": "you nit test",
+    "term": "unit test",
+    "pack": "pack_07_agile_scrum",
+    "verdict": "KEEP",
+    "reason": "'You nit test' is not natural English; phonetic mishearing of 'unit test'."
+  },
+  {
+    "alias": "integration test",
+    "term": "integration test",
+    "pack": "pack_07_agile_scrum",
+    "verdict": "DROP",
+    "reason": "Identity flag — alias equals term."
+  },
+  {
+    "alias": "e to e test",
+    "term": "e2e test",
+    "pack": "pack_07_agile_scrum",
+    "verdict": "KEEP",
+    "reason": "'E to e test' is a phonetic rendering of 'e2e test'; no natural English meaning."
+  },
+  {
+    "alias": "end to end test",
+    "term": "e2e test",
+    "pack": "pack_07_agile_scrum",
+    "verdict": "DROP",
+    "reason": "'End to end test' is ordinary English; correction converts natural phrase to abbreviation."
+  },
+  {
+    "alias": "e 2 e test",
+    "term": "e2e test",
+    "pack": "pack_07_agile_scrum",
+    "verdict": "KEEP",
+    "reason": "Letter-number-letter format with no natural English meaning."
+  },
+  {
+    "alias": "end to end",
+    "term": "end-to-end",
+    "pack": "pack_07_agile_scrum",
+    "verdict": "DROP",
+    "reason": "'End to end' is ordinary English; correction only adds hyphens."
+  },
+  {
+    "alias": "and to and",
+    "term": "end-to-end",
+    "pack": "pack_07_agile_scrum",
+    "verdict": "DROP",
+    "reason": "'And to and' could appear in English grammar discussions; too risky for a common word like 'and'."
+  },
+  {
+    "alias": "e two e",
+    "term": "E2E",
+    "pack": "pack_07_agile_scrum",
+    "verdict": "KEEP",
+    "reason": "'E two e' is a phonetic rendering of 'E2E'; no natural English phrase meaning."
+  },
+  {
+    "alias": "e 2 e",
+    "term": "E2E",
+    "pack": "pack_07_agile_scrum",
+    "verdict": "KEEP",
+    "reason": "Letter-number-letter format; no natural spoken English meaning."
+  },
+  {
+    "alias": "ee two ee",
+    "term": "E2E",
+    "pack": "pack_07_agile_scrum",
+    "verdict": "KEEP",
+    "reason": "Phonetic letter-number-letter; no natural English phrase meaning."
+  },
+  {
+    "alias": "load test",
+    "term": "load test",
+    "pack": "pack_07_agile_scrum",
+    "verdict": "DROP",
+    "reason": "Identity flag — alias equals term."
+  },
+  {
+    "alias": "stress test",
+    "term": "stress test",
+    "pack": "pack_07_agile_scrum",
+    "verdict": "DROP",
+    "reason": "Identity flag — alias equals term."
+  },
+  {
+    "alias": "chaos engineering",
+    "term": "chaos engineering",
+    "pack": "pack_07_agile_scrum",
+    "verdict": "DROP",
+    "reason": "Identity flag — alias equals term."
+  },
+  {
+    "alias": "can airy",
+    "term": "canary",
+    "pack": "pack_07_agile_scrum",
+    "verdict": "DROP",
+    "reason": "'Can airy' is plausible English ('the room can airy out'); 'can' and 'airy' are both common words."
+  },
+  {
+    "alias": "canary release",
+    "term": "canary",
+    "pack": "pack_07_agile_scrum",
+    "verdict": "DROP",
+    "reason": "'Canary release' is ordinary English; correction also drops 'release'."
+  },
+  {
+    "alias": "roll back",
+    "term": "rollback",
+    "pack": "pack_07_agile_scrum",
+    "verdict": "DROP",
+    "reason": "'Roll back' is ordinary English ('roll back the clock'); would corrupt normal speech."
+  },
+  {
+    "alias": "roll forward",
+    "term": "rollforward",
+    "pack": "pack_07_agile_scrum",
+    "verdict": "DROP",
+    "reason": "'Roll forward' is ordinary English; would corrupt normal speech."
+  },
+  {
+    "alias": "feature tog el",
+    "term": "feature toggle",
+    "pack": "pack_07_agile_scrum",
+    "verdict": "KEEP",
+    "reason": "'Tog el' is a phonetic mishearing of 'toggle'; 'feature tog el' has no natural English meaning."
+  },
+  {
+    "alias": "feature flag",
+    "term": "feature flag",
+    "pack": "pack_07_agile_scrum",
+    "verdict": "DROP",
+    "reason": "Identity flag — alias equals term."
+  },
+  {
+    "alias": "dark launch",
+    "term": "dark launch",
+    "pack": "pack_07_agile_scrum",
+    "verdict": "DROP",
+    "reason": "Identity flag — alias equals term."
+  },
+  {
+    "alias": "a b test",
+    "term": "A/B test",
+    "pack": "pack_07_agile_scrum",
+    "verdict": "KEEP",
+    "reason": "Letter-by-letter plus 'test'; no natural spoken English meaning."
+  },
+  {
+    "alias": "ay bee test",
+    "term": "A/B test",
+    "pack": "pack_07_agile_scrum",
+    "verdict": "KEEP",
+    "reason": "Phonetic letter spelling plus 'test'; no natural English phrase meaning."
+  },
+  {
+    "alias": "multi vary it test",
+    "term": "multivariate test",
+    "pack": "pack_07_agile_scrum",
+    "verdict": "KEEP",
+    "reason": "Phonetic mishearing of 'multivariate'; no natural English meaning."
+  },
+  {
+    "alias": "on call",
+    "term": "on-call",
+    "pack": "pack_07_agile_scrum",
+    "verdict": "DROP",
+    "reason": "'On call' is ordinary English; correction only adds a hyphen."
+  },
+  {
+    "alias": "on-call rotation",
+    "term": "on-call",
+    "pack": "pack_07_agile_scrum",
+    "verdict": "DROP",
+    "reason": "'On-call rotation' is ordinary English; correction also drops 'rotation'."
+  },
+  {
+    "alias": "page er",
+    "term": "pager",
+    "pack": "pack_07_agile_scrum",
+    "verdict": "DROP",
+    "reason": "'Pager' is a common English word (a beeper device); 'page er' would corrupt normal speech."
+  },
+  {
+    "alias": "in cident",
+    "term": "incident",
+    "pack": "pack_07_agile_scrum",
+    "verdict": "KEEP",
+    "reason": "Phonetic split of 'incident'; no independent phrase meaning."
+  },
+  {
+    "alias": "post mortem",
+    "term": "postmortem",
+    "pack": "pack_07_agile_scrum",
+    "verdict": "DROP",
+    "reason": "'Post mortem' is a very common English/Latin phrase used in many non-tech contexts; would corrupt normal speech."
+  },
+  {
+    "alias": "post more tem",
+    "term": "postmortem",
+    "pack": "pack_07_agile_scrum",
+    "verdict": "KEEP",
+    "reason": "'Post more tem' has no natural English meaning; phonetic mishearing of 'postmortem'."
+  },
+  {
+    "alias": "blame less post mortem",
+    "term": "blameless postmortem",
+    "pack": "pack_07_agile_scrum",
+    "verdict": "KEEP",
+    "reason": "'Blameless post mortem' is a specific SRE/Agile term; no ambiguous non-tech meaning."
+  },
+  {
+    "alias": "r c a",
+    "term": "RCA",
+    "pack": "pack_07_agile_scrum",
+    "verdict": "KEEP",
+    "reason": "Letter-by-letter spelling of the abbreviation; no natural spoken English meaning."
+  },
+  {
+    "alias": "are see ay",
+    "term": "RCA",
+    "pack": "pack_07_agile_scrum",
+    "verdict": "KEEP",
+    "reason": "Phonetic letter spelling; no natural English phrase meaning."
+  },
+  {
+    "alias": "root cause analysis",
+    "term": "RCA",
+    "pack": "pack_07_agile_scrum",
+    "verdict": "DROP",
+    "reason": "'Root cause analysis' is ordinary English; correction loses the full phrase."
+  },
+  {
+    "alias": "root cause",
+    "term": "root cause",
+    "pack": "pack_07_agile_scrum",
+    "verdict": "DROP",
+    "reason": "Identity flag — alias equals term."
+  }
+]

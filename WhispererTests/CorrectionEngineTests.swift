@@ -399,6 +399,102 @@ final class CorrectionEngineTests: XCTestCase {
         XCTAssertFalse(output.contains("traffic"), output)
     }
 
+    // MARK: - Built-in English-word guard (Phase 3 engine safety)
+
+    /// A built-in entry whose alias is a valid English word must NOT fire.
+    /// Without the guard, "closure" → Clojure would mangle normal speech.
+    func testBuiltInEnglishWordAliasIsBlocked() {
+        let entry = DictionaryEntry(
+            incorrectForm: "closure",
+            correctForm: "Clojure",
+            category: "Programming",
+            isBuiltIn: true
+        )
+        let engine = makeEngine([entry])
+        let input = "the closure of that method was tricky"
+        let result = engine.applyCorrections(input, maxEditDistance: 0, usePhonetic: false)
+        XCTAssertEqual(result.text, input, "built-in English-word alias must be skipped")
+        XCTAssertTrue(result.corrections.isEmpty)
+    }
+
+    /// A user-created entry with the same alias MUST still fire — user rules are always honoured.
+    func testUserCreatedEnglishWordAliasStillFires() {
+        let entry = DictionaryEntry(
+            incorrectForm: "closure",
+            correctForm: "Clojure",
+            category: "Programming",
+            isBuiltIn: false   // user-created
+        )
+        let engine = makeEngine([entry])
+        let result = engine.applyCorrections("closure pattern", maxEditDistance: 0, usePhonetic: false)
+        XCTAssertEqual(result.text, "Clojure pattern")
+    }
+
+    /// Multi-word phrase rules fire regardless of whether the tokens are English words.
+    /// The engine does NOT apply a phrase-level English-word guard — ambiguous phrase rules
+    /// (like "to do" → TODO) are removed by the data audit, not blocked by the engine.
+    /// This avoids false negatives such as "java script" → JavaScript being incorrectly blocked.
+    func testBuiltInPhraseRuleFiresForPhoneticMisspelling() {
+        let entry = DictionaryEntry(
+            incorrectForm: "post gress",
+            correctForm: "PostgreSQL",
+            category: "Programming",
+            isBuiltIn: true
+        )
+        let engine = makeEngine([entry])
+        let result = engine.applyCorrections("I use post gress for storage", maxEditDistance: 0, usePhonetic: false)
+        XCTAssertEqual(result.text, "I use PostgreSQL for storage")
+    }
+
+    /// Phrase rules with common English tokens also fire — it's the data audit's job to remove
+    /// bad phrase rules, not the engine's.  If "java script" is in the dictionary it must correct.
+    func testBuiltInPhraseWithEnglishTokensAlsoFires() {
+        let entry = DictionaryEntry(
+            incorrectForm: "java script",
+            correctForm: "JavaScript",
+            category: "Programming",
+            isBuiltIn: true
+        )
+        let engine = makeEngine([entry])
+        let result = engine.applyCorrections("I write java script every day", maxEditDistance: 0, usePhonetic: false)
+        XCTAssertEqual(result.text, "I write JavaScript every day",
+                       "phrase rules with English tokens must still fire — audit removes bad ones from data")
+    }
+
+    /// Identity rules (incorrectForm == correctForm exactly, after lowercasing) must be silently
+    /// dropped at rebuild time — they can never produce any change.
+    ///
+    /// "python" → "python" (both lowercase, identical string) is a true identity.
+    /// "python" → "Python" is NOT identity and must still fire (it normalises casing).
+    func testTrueIdentityRulesAreDroppedAtRebuild() {
+        // True no-op: incorrectForm (stored as "noopword") == correctForm ("noopword")
+        let entry = DictionaryEntry(
+            incorrectForm: "noopword",
+            correctForm: "noopword",   // same as stored incorrectForm → never changes anything
+            category: "Test",
+            isBuiltIn: true
+        )
+        let engine = makeEngine([entry])
+        // Even if the word appears, the entry is not in the index so nothing changes.
+        let result = engine.applyCorrections("the noopword is dropped", maxEditDistance: 0, usePhonetic: false)
+        XCTAssertEqual(result.text, "the noopword is dropped",
+                       "identity rule must never fire")
+        XCTAssertTrue(result.corrections.isEmpty)
+    }
+
+    /// Case-normalising rules (alias → Title-case) are NOT identity and must still work.
+    func testCaseNormalisingRuleIsNotDropped() {
+        let entry = DictionaryEntry(
+            incorrectForm: "xyzlang",   // stored as "xyzlang"
+            correctForm: "XyzLang",     // different string → not identity
+            category: "Test",
+            isBuiltIn: false
+        )
+        let engine = makeEngine([entry])
+        let result = engine.applyCorrections("I use xyzlang daily", maxEditDistance: 0, usePhonetic: false)
+        XCTAssertEqual(result.text, "I use XyzLang daily")
+    }
+
     // MARK: - Assertions
 
     private func assertRangesAreValid(in result: CorrectionResult,

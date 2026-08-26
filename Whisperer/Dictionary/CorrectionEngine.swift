@@ -45,6 +45,11 @@ class CorrectionEngine {
         for entry in entries where entry.isEnabled {
             let incorrect = entry.incorrectForm.lowercased()
 
+            // Drop identity rules at index time — they can never produce a non-equal substitution
+            // because the replacement is literally the same string. Note: incorrectForm is stored
+            // lowercased (see DictionaryEntry.init), so "a" → "A" is NOT identity ("a" != "A").
+            guard incorrect != entry.correctForm else { continue }
+
             // Check if it's a multi-word phrase
             if incorrect.contains(" ") {
                 phraseLookup[incorrect] = entry
@@ -70,15 +75,17 @@ class CorrectionEngine {
         // Tokenize the input text while preserving punctuation and spacing
         var result = text
 
-        // First pass: multi-word phrases (longer matches first)
+        // First pass: multi-word phrases (longer matches first).
+        // Ambiguous all-English phrase aliases (e.g. "to do" → TODO, "not a bug" → NOTABUG) are
+        // removed by the LLM data audit rather than blocked here. A phrase-level engine guard was
+        // tried and produced false negatives: phonetic spellings like "java script" → JavaScript
+        // and "type script" → TypeScript use common English tokens and were incorrectly blocked.
         let inputTokens = Set(searchTokens(in: result.lowercased()))
         let candidatePhrases = Set(inputTokens.flatMap { phraseKeysByFirstToken[$0] ?? [] })
         let sortedPhrases = candidatePhrases.sorted { $0.count > $1.count }
         for phrase in sortedPhrases {
             guard let entry = phraseLookup[phrase] else { continue }
-            let replacement = entry.correctForm
-
-            result = replaceAllOccurrences(in: result, of: phrase, with: replacement, entry: entry, corrections: &corrections)
+            result = replaceAllOccurrences(in: result, of: phrase, with: entry.correctForm, entry: entry, corrections: &corrections)
         }
 
         // Second pass: compound word segmentation errors (e.g., "post gres" -> "PostgreSQL")
@@ -103,9 +110,14 @@ class CorrectionEngine {
             guard handledWords.insert(wordLower).inserted else { continue }
             let wordLength = wordLower.count
 
-            // Try exact match first (works for any word length)
+            // Try exact match first (works for any word length).
+            // Safety gate for built-in entries: if the alias is a valid English word, skip.
+            // User-created entries (isBuiltIn == false) always fire — the user explicitly asked for it.
             if let entry = exactLookup[wordLower] {
-                processedText = replaceWord(processedText, word: String(word), entry: entry, corrections: &corrections)
+                let shouldApply = !entry.isBuiltIn || !isValidEnglishAlias(wordLower)
+                if shouldApply {
+                    processedText = replaceWord(processedText, word: String(word), entry: entry, corrections: &corrections)
+                }
                 continue
             }
 
@@ -148,6 +160,13 @@ class CorrectionEngine {
         }
 
         return CorrectionResult(text: processedText, corrections: corrections)
+    }
+
+    /// Returns true if the single-word alias is a valid English word.
+    /// Used to gate built-in exact-match corrections so ordinary words like "closure" or
+    /// "hassle" are never replaced by tech terms in normal dictation.
+    private func isValidEnglishAlias(_ word: String) -> Bool {
+        spellValidator.isLatinWord(word) && spellValidator.isValidEnglishWord(word)
     }
 
     private func searchTokens(in text: String) -> [String] {

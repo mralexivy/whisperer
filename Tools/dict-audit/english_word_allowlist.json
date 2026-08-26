@@ -1,0 +1,7 @@
+[
+  {
+    "alias": "swift",
+    "term": "Swift",
+    "reason": "Swift is both the Apple programming language and a common English adjective/adverb, but as a single word it is the most common tech meaning in developer dictation contexts — keeping it avoids missing all Swift references. Monitor for false positives."
+  }
+]

@@ -1,0 +1,1827 @@
+[
+  {
+    "alias": "to do",
+    "term": "TODO",
+    "pack": "pack_11_spoken_phrases",
+    "verdict": "DROP",
+    "reason": "Ordinary English phrase ('I have to do this'). Textbook broken rule from the prompt examples."
+  },
+  {
+    "alias": "to dew",
+    "term": "TODO",
+    "pack": "pack_11_spoken_phrases",
+    "verdict": "DROP",
+    "reason": "'dew' is a real English word; 'to dew' is ordinary English and would corrupt normal dictation."
+  },
+  {
+    "alias": "two dew",
+    "term": "TODO",
+    "pack": "pack_11_spoken_phrases",
+    "verdict": "DROP",
+    "reason": "Both words are common English with obvious non-tech meanings."
+  },
+  {
+    "alias": "fix me",
+    "term": "FIXME",
+    "pack": "pack_11_spoken_phrases",
+    "verdict": "DROP",
+    "reason": "Ordinary English phrase ('can you fix me a sandwich')."
+  },
+  {
+    "alias": "hack comment",
+    "term": "HACK",
+    "pack": "pack_11_spoken_phrases",
+    "verdict": "DROP",
+    "reason": "Both words are common English; 'hack comment' has clear non-tech meaning."
+  },
+  {
+    "alias": "won't fix",
+    "term": "WONTFIX",
+    "pack": "pack_11_spoken_phrases",
+    "verdict": "DROP",
+    "reason": "Ordinary English phrase with obvious non-tech meaning."
+  },
+  {
+    "alias": "wont fix",
+    "term": "WONTFIX",
+    "pack": "pack_11_spoken_phrases",
+    "verdict": "DROP",
+    "reason": "'Wont' is an English word (habit/custom); phrase has non-tech meaning."
+  },
+  {
+    "alias": "not a bug",
+    "term": "NOTABUG",
+    "pack": "pack_11_spoken_phrases",
+    "verdict": "DROP",
+    "reason": "Ordinary English phrase that appears constantly in normal conversation."
+  },
+  {
+    "alias": "y m m v",
+    "term": "YMMV",
+    "pack": "pack_11_spoken_phrases",
+    "verdict": "KEEP",
+    "reason": "Letter-by-letter phonetic spelling of the acronym; no natural English meaning."
+  },
+  {
+    "alias": "your mileage may vary",
+    "term": "YMMV",
+    "pack": "pack_11_spoken_phrases",
+    "verdict": "DROP",
+    "reason": "Complete ordinary English phrase a speaker may intend literally."
+  },
+  {
+    "alias": "i m h o",
+    "term": "IMHO",
+    "pack": "pack_11_spoken_phrases",
+    "verdict": "KEEP",
+    "reason": "Letter-by-letter spelling of IMHO; no natural English meaning as spoken letters."
+  },
+  {
+    "alias": "in my humble opinion",
+    "term": "IMHO",
+    "pack": "pack_11_spoken_phrases",
+    "verdict": "DROP",
+    "reason": "Ordinary English phrase; speaker may intend it written out."
+  },
+  {
+    "alias": "a f a i k",
+    "term": "AFAIK",
+    "pack": "pack_11_spoken_phrases",
+    "verdict": "KEEP",
+    "reason": "Letter-by-letter spelling of the acronym with no natural English meaning."
+  },
+  {
+    "alias": "as far as i know",
+    "term": "AFAIK",
+    "pack": "pack_11_spoken_phrases",
+    "verdict": "DROP",
+    "reason": "Very common ordinary English phrase; speaker may intend it written out."
+  },
+  {
+    "alias": "a f a i c t",
+    "term": "AFAICT",
+    "pack": "pack_11_spoken_phrases",
+    "verdict": "KEEP",
+    "reason": "Letter-by-letter spelling of the acronym with no natural English meaning."
+  },
+  {
+    "alias": "as far as i can tell",
+    "term": "AFAICT",
+    "pack": "pack_11_spoken_phrases",
+    "verdict": "DROP",
+    "reason": "Ordinary English phrase; speaker may intend it written out."
+  },
+  {
+    "alias": "f w i w",
+    "term": "FWIW",
+    "pack": "pack_11_spoken_phrases",
+    "verdict": "KEEP",
+    "reason": "Letter-by-letter spelling of the acronym with no natural English meaning."
+  },
+  {
+    "alias": "for what its worth",
+    "term": "FWIW",
+    "pack": "pack_11_spoken_phrases",
+    "verdict": "DROP",
+    "reason": "Ordinary English phrase; speaker may intend it written out."
+  },
+  {
+    "alias": "t i l",
+    "term": "TIL",
+    "pack": "pack_11_spoken_phrases",
+    "verdict": "KEEP",
+    "reason": "Letter-by-letter spelling of the acronym with no natural English meaning."
+  },
+  {
+    "alias": "today i learned",
+    "term": "TIL",
+    "pack": "pack_11_spoken_phrases",
+    "verdict": "DROP",
+    "reason": "Ordinary English phrase; speaker may intend it written out."
+  },
+  {
+    "alias": "i m o",
+    "term": "IMO",
+    "pack": "pack_11_spoken_phrases",
+    "verdict": "KEEP",
+    "reason": "Letter-by-letter spelling of the acronym with no natural English meaning."
+  },
+  {
+    "alias": "in my opinion",
+    "term": "IMO",
+    "pack": "pack_11_spoken_phrases",
+    "verdict": "DROP",
+    "reason": "Extremely common ordinary English phrase; speaker may intend it written out."
+  },
+  {
+    "alias": "i i r c",
+    "term": "IIRC",
+    "pack": "pack_11_spoken_phrases",
+    "verdict": "KEEP",
+    "reason": "Letter-by-letter spelling of the acronym with no natural English meaning."
+  },
+  {
+    "alias": "if i remember correctly",
+    "term": "IIRC",
+    "pack": "pack_11_spoken_phrases",
+    "verdict": "DROP",
+    "reason": "Ordinary English phrase; speaker may intend it written out."
+  },
+  {
+    "alias": "t b d",
+    "term": "TBD",
+    "pack": "pack_11_spoken_phrases",
+    "verdict": "KEEP",
+    "reason": "Letter-by-letter spelling of the acronym with no natural English meaning."
+  },
+  {
+    "alias": "tee bee dee",
+    "term": "TBD",
+    "pack": "pack_11_spoken_phrases",
+    "verdict": "KEEP",
+    "reason": "Phonetic letter-by-letter spelling of TBD; no natural English meaning."
+  },
+  {
+    "alias": "to be determined",
+    "term": "TBD",
+    "pack": "pack_11_spoken_phrases",
+    "verdict": "DROP",
+    "reason": "Ordinary English phrase; speaker may intend it written out."
+  },
+  {
+    "alias": "t b h",
+    "term": "TBH",
+    "pack": "pack_11_spoken_phrases",
+    "verdict": "KEEP",
+    "reason": "Letter-by-letter spelling of the acronym with no natural English meaning."
+  },
+  {
+    "alias": "to be honest",
+    "term": "TBH",
+    "pack": "pack_11_spoken_phrases",
+    "verdict": "DROP",
+    "reason": "Ordinary English phrase used constantly in normal conversation."
+  },
+  {
+    "alias": "n a",
+    "term": "N/A",
+    "pack": "pack_11_spoken_phrases",
+    "verdict": "KEEP",
+    "reason": "Letter-by-letter spelling of the abbreviation N/A; no natural two-word English meaning."
+  },
+  {
+    "alias": "not applicable",
+    "term": "N/A",
+    "pack": "pack_11_spoken_phrases",
+    "verdict": "DROP",
+    "reason": "Ordinary English phrase; speaker may intend it written out."
+  },
+  {
+    "alias": "w r t",
+    "term": "WRT",
+    "pack": "pack_11_spoken_phrases",
+    "verdict": "KEEP",
+    "reason": "Letter-by-letter spelling of the acronym with no natural English meaning."
+  },
+  {
+    "alias": "with respect to",
+    "term": "WRT",
+    "pack": "pack_11_spoken_phrases",
+    "verdict": "DROP",
+    "reason": "Common English phrase; speaker may intend it written out."
+  },
+  {
+    "alias": "w d y t",
+    "term": "WDYT",
+    "pack": "pack_11_spoken_phrases",
+    "verdict": "KEEP",
+    "reason": "Letter-by-letter spelling of the acronym with no natural English meaning."
+  },
+  {
+    "alias": "what do you think",
+    "term": "WDYT",
+    "pack": "pack_11_spoken_phrases",
+    "verdict": "DROP",
+    "reason": "Extremely common English question; would corrupt normal conversation."
+  },
+  {
+    "alias": "i c y m i",
+    "term": "ICYMI",
+    "pack": "pack_11_spoken_phrases",
+    "verdict": "KEEP",
+    "reason": "Letter-by-letter spelling of the acronym with no natural English meaning."
+  },
+  {
+    "alias": "in case you missed it",
+    "term": "ICYMI",
+    "pack": "pack_11_spoken_phrases",
+    "verdict": "DROP",
+    "reason": "Ordinary English phrase; speaker may intend it written out."
+  },
+  {
+    "alias": "o o o",
+    "term": "OOO",
+    "pack": "pack_11_spoken_phrases",
+    "verdict": "KEEP",
+    "reason": "Letter-by-letter spelling of the OOO acronym; no other English meaning."
+  },
+  {
+    "alias": "oh oh oh",
+    "term": "OOO",
+    "pack": "pack_11_spoken_phrases",
+    "verdict": "DROP",
+    "reason": "'Oh oh oh' is a natural spoken exclamation with no connection to the acronym."
+  },
+  {
+    "alias": "out of office",
+    "term": "OOO",
+    "pack": "pack_11_spoken_phrases",
+    "verdict": "DROP",
+    "reason": "Ordinary English phrase; speaker may intend it written out."
+  },
+  {
+    "alias": "p t o",
+    "term": "PTO",
+    "pack": "pack_11_spoken_phrases",
+    "verdict": "KEEP",
+    "reason": "Letter-by-letter spelling of the abbreviation with no natural English meaning."
+  },
+  {
+    "alias": "pee tee oh",
+    "term": "PTO",
+    "pack": "pack_11_spoken_phrases",
+    "verdict": "KEEP",
+    "reason": "Phonetic letter-by-letter spelling of PTO with no natural English meaning."
+  },
+  {
+    "alias": "paid time off",
+    "term": "PTO",
+    "pack": "pack_11_spoken_phrases",
+    "verdict": "DROP",
+    "reason": "Ordinary English phrase; speaker may intend it written out."
+  },
+  {
+    "alias": "a f k",
+    "term": "AFK",
+    "pack": "pack_11_spoken_phrases",
+    "verdict": "KEEP",
+    "reason": "Letter-by-letter spelling of the acronym with no natural English meaning."
+  },
+  {
+    "alias": "away from keyboard",
+    "term": "AFK",
+    "pack": "pack_11_spoken_phrases",
+    "verdict": "DROP",
+    "reason": "Ordinary English phrase; speaker may intend it written out."
+  },
+  {
+    "alias": "b r b",
+    "term": "BRB",
+    "pack": "pack_11_spoken_phrases",
+    "verdict": "KEEP",
+    "reason": "Letter-by-letter spelling of the acronym with no natural English meaning."
+  },
+  {
+    "alias": "be right back",
+    "term": "BRB",
+    "pack": "pack_11_spoken_phrases",
+    "verdict": "DROP",
+    "reason": "Ordinary English phrase used constantly in normal conversation."
+  },
+  {
+    "alias": "d m",
+    "term": "DM",
+    "pack": "pack_11_spoken_phrases",
+    "verdict": "KEEP",
+    "reason": "Letter-by-letter spelling of the abbreviation with no natural English meaning."
+  },
+  {
+    "alias": "dee em",
+    "term": "DM",
+    "pack": "pack_11_spoken_phrases",
+    "verdict": "KEEP",
+    "reason": "Phonetic letter-by-letter spelling of DM with no natural English meaning."
+  },
+  {
+    "alias": "direct message",
+    "term": "DM",
+    "pack": "pack_11_spoken_phrases",
+    "verdict": "DROP",
+    "reason": "Ordinary English phrase; speaker may intend it written out."
+  },
+  {
+    "alias": "ping me",
+    "term": "ping me",
+    "pack": "pack_11_spoken_phrases",
+    "verdict": "DROP",
+    "reason": "Identity flag: rule does nothing."
+  },
+  {
+    "alias": "ping",
+    "term": "ping",
+    "pack": "pack_11_spoken_phrases",
+    "verdict": "DROP",
+    "reason": "Identity flag: rule does nothing."
+  },
+  {
+    "alias": "slack me",
+    "term": "slack me",
+    "pack": "pack_11_spoken_phrases",
+    "verdict": "DROP",
+    "reason": "Identity flag: rule does nothing."
+  },
+  {
+    "alias": "slack",
+    "term": "Slack",
+    "pack": "pack_11_spoken_phrases",
+    "verdict": "DROP",
+    "reason": "'slack' is a common English word (loose, not taut); would corrupt 'the rope was slack'."
+  },
+  {
+    "alias": "slack thread",
+    "term": "Slack thread",
+    "pack": "pack_11_spoken_phrases",
+    "verdict": "DROP",
+    "reason": "'slack thread' has obvious non-tech meaning (a thread that is slack/loose)."
+  },
+  {
+    "alias": "thread",
+    "term": "thread",
+    "pack": "pack_11_spoken_phrases",
+    "verdict": "DROP",
+    "reason": "Identity flag: rule does nothing."
+  },
+  {
+    "alias": "at mention",
+    "term": "at-mention",
+    "pack": "pack_11_spoken_phrases",
+    "verdict": "DEDUPE",
+    "reason": "Conflict between at-mention and @mention; @mention is the more precise and standard form.",
+    "new_alias": "at mention"
+  },
+  {
+    "alias": "at mention",
+    "term": "@mention",
+    "pack": "pack_11_spoken_phrases",
+    "verdict": "DEDUPE",
+    "reason": "Conflict between at-mention and @mention; @mention is the more precise and standard form.",
+    "new_alias": "at mention"
+  },
+  {
+    "alias": "emoji re act",
+    "term": "emoji react",
+    "pack": "pack_11_spoken_phrases",
+    "verdict": "KEEP",
+    "reason": "'emoji re act' is a phonetic mis-transcription split with no natural English meaning as written."
+  },
+  {
+    "alias": "thumbs up",
+    "term": "thumbs up",
+    "pack": "pack_11_spoken_phrases",
+    "verdict": "DROP",
+    "reason": "Identity flag: rule does nothing."
+  },
+  {
+    "alias": "ship it",
+    "term": "ship it",
+    "pack": "pack_11_spoken_phrases",
+    "verdict": "DROP",
+    "reason": "Identity flag: rule does nothing."
+  },
+  {
+    "alias": "l g t m",
+    "term": "LGTM",
+    "pack": "pack_11_spoken_phrases",
+    "verdict": "KEEP",
+    "reason": "Letter-by-letter spelling of the acronym with no natural English meaning."
+  },
+  {
+    "alias": "looks good to me",
+    "term": "LGTM",
+    "pack": "pack_11_spoken_phrases",
+    "verdict": "DROP",
+    "reason": "Ordinary English phrase used constantly in normal conversation."
+  },
+  {
+    "alias": "s g t m",
+    "term": "SGTM",
+    "pack": "pack_11_spoken_phrases",
+    "verdict": "KEEP",
+    "reason": "Letter-by-letter spelling of the acronym with no natural English meaning."
+  },
+  {
+    "alias": "sounds good to me",
+    "term": "SGTM",
+    "pack": "pack_11_spoken_phrases",
+    "verdict": "DROP",
+    "reason": "Ordinary English phrase used constantly in normal conversation."
+  },
+  {
+    "alias": "ack",
+    "term": "ACK",
+    "pack": "pack_11_spoken_phrases",
+    "verdict": "DROP",
+    "reason": "Identity flag (case-only difference): rule does nothing useful."
+  },
+  {
+    "alias": "acknowledged",
+    "term": "ACK",
+    "pack": "pack_11_spoken_phrases",
+    "verdict": "DROP",
+    "reason": "'acknowledged' is a common English word with clear non-tech meaning."
+  },
+  {
+    "alias": "nack",
+    "term": "NACK",
+    "pack": "pack_11_spoken_phrases",
+    "verdict": "DROP",
+    "reason": "Identity flag (case-only difference): rule does nothing useful."
+  },
+  {
+    "alias": "not acknowledged",
+    "term": "NACK",
+    "pack": "pack_11_spoken_phrases",
+    "verdict": "DROP",
+    "reason": "Ordinary English phrase; speaker may intend it written out."
+  },
+  {
+    "alias": "e o d",
+    "term": "EOD",
+    "pack": "pack_11_spoken_phrases",
+    "verdict": "KEEP",
+    "reason": "Letter-by-letter spelling of the acronym with no natural English meaning."
+  },
+  {
+    "alias": "end of day",
+    "term": "EOD",
+    "pack": "pack_11_spoken_phrases",
+    "verdict": "DROP",
+    "reason": "Ordinary English phrase used constantly in normal conversation."
+  },
+  {
+    "alias": "e t a",
+    "term": "ETA",
+    "pack": "pack_11_spoken_phrases",
+    "verdict": "KEEP",
+    "reason": "Letter-by-letter spelling of the acronym with no natural English meaning."
+  },
+  {
+    "alias": "estimated time",
+    "term": "ETA",
+    "pack": "pack_11_spoken_phrases",
+    "verdict": "DROP",
+    "reason": "Ordinary English phrase and only a partial match for the full acronym phrase."
+  },
+  {
+    "alias": "un block",
+    "term": "unblock",
+    "pack": "pack_11_spoken_phrases",
+    "verdict": "DROP",
+    "reason": "'unblock' is an ordinary English word; spacing correction of a common word."
+  },
+  {
+    "alias": "un blocked",
+    "term": "unblocked",
+    "pack": "pack_11_spoken_phrases",
+    "verdict": "DROP",
+    "reason": "'unblocked' is an ordinary English word; spacing correction of a common word."
+  },
+  {
+    "alias": "block er",
+    "term": "blocker",
+    "pack": "pack_11_spoken_phrases",
+    "verdict": "DROP",
+    "reason": "'blocker' is a common English word (football blocker, physical obstruction)."
+  },
+  {
+    "alias": "hard block er",
+    "term": "hard blocker",
+    "pack": "pack_11_spoken_phrases",
+    "verdict": "DROP",
+    "reason": "'hard blocker' is ordinary English that could appear in many non-tech contexts."
+  },
+  {
+    "alias": "soft block er",
+    "term": "soft blocker",
+    "pack": "pack_11_spoken_phrases",
+    "verdict": "DROP",
+    "reason": "'soft blocker' is ordinary English that could appear in many non-tech contexts."
+  },
+  {
+    "alias": "up stream dependency",
+    "term": "upstream dependency",
+    "pack": "pack_11_spoken_phrases",
+    "verdict": "DROP",
+    "reason": "'upstream' and 'dependency' are ordinary English words; phrase has non-tech meaning."
+  },
+  {
+    "alias": "down stream",
+    "term": "downstream",
+    "pack": "pack_11_spoken_phrases",
+    "verdict": "DROP",
+    "reason": "'downstream' is common English (water flows downstream); spacing-only correction."
+  },
+  {
+    "alias": "context switch",
+    "term": "context switch",
+    "pack": "pack_11_spoken_phrases",
+    "verdict": "DROP",
+    "reason": "Identity flag: rule does nothing."
+  },
+  {
+    "alias": "context switching",
+    "term": "context switching",
+    "pack": "pack_11_spoken_phrases",
+    "verdict": "DROP",
+    "reason": "Identity flag: rule does nothing."
+  },
+  {
+    "alias": "deep work",
+    "term": "deep work",
+    "pack": "pack_11_spoken_phrases",
+    "verdict": "DROP",
+    "reason": "Identity flag: rule does nothing."
+  },
+  {
+    "alias": "flow state",
+    "term": "flow state",
+    "pack": "pack_11_spoken_phrases",
+    "verdict": "DROP",
+    "reason": "Identity flag: rule does nothing."
+  },
+  {
+    "alias": "heads down",
+    "term": "heads down",
+    "pack": "pack_11_spoken_phrases",
+    "verdict": "DROP",
+    "reason": "Identity flag: rule does nothing."
+  },
+  {
+    "alias": "green field",
+    "term": "greenfield",
+    "pack": "pack_11_spoken_phrases",
+    "verdict": "DROP",
+    "reason": "'green field' is a real English phrase (a literal green field); spacing-only correction."
+  },
+  {
+    "alias": "brown field",
+    "term": "brownfield",
+    "pack": "pack_11_spoken_phrases",
+    "verdict": "DROP",
+    "reason": "'brown field' is common English (contaminated land term); spacing-only correction."
+  },
+  {
+    "alias": "net new",
+    "term": "net new",
+    "pack": "pack_11_spoken_phrases",
+    "verdict": "DROP",
+    "reason": "Identity flag: rule does nothing."
+  },
+  {
+    "alias": "from scratch",
+    "term": "from scratch",
+    "pack": "pack_11_spoken_phrases",
+    "verdict": "DROP",
+    "reason": "Identity flag: rule does nothing."
+  },
+  {
+    "alias": "rip and replace",
+    "term": "rip and replace",
+    "pack": "pack_11_spoken_phrases",
+    "verdict": "DROP",
+    "reason": "Identity flag: rule does nothing."
+  },
+  {
+    "alias": "lift and shift",
+    "term": "lift and shift",
+    "pack": "pack_11_spoken_phrases",
+    "verdict": "DROP",
+    "reason": "Identity flag: rule does nothing."
+  },
+  {
+    "alias": "strangler fig",
+    "term": "strangler fig",
+    "pack": "pack_11_spoken_phrases",
+    "verdict": "DROP",
+    "reason": "Identity flag: rule does nothing."
+  },
+  {
+    "alias": "strangler pattern",
+    "term": "strangler pattern",
+    "pack": "pack_11_spoken_phrases",
+    "verdict": "DROP",
+    "reason": "Identity flag: rule does nothing."
+  },
+  {
+    "alias": "big bang my gration",
+    "term": "big bang migration",
+    "pack": "pack_11_spoken_phrases",
+    "verdict": "KEEP",
+    "reason": "'my gration' is a phonetic mis-transcription of 'migration'; no natural English meaning as written."
+  },
+  {
+    "alias": "ink re mental",
+    "term": "incremental",
+    "pack": "pack_11_spoken_phrases",
+    "verdict": "KEEP",
+    "reason": "Phonetic mis-transcription split with no natural English meaning as 'ink re mental'."
+  },
+  {
+    "alias": "it er a tiv",
+    "term": "iterative",
+    "pack": "pack_11_spoken_phrases",
+    "verdict": "KEEP",
+    "reason": "Phonetic mis-transcription split with no natural English meaning as 'it er a tiv'."
+  },
+  {
+    "alias": "bite sized",
+    "term": "bite-sized",
+    "pack": "pack_11_spoken_phrases",
+    "verdict": "DROP",
+    "reason": "'bite sized' is ordinary English; hyphenation-only correction of a common phrase."
+  },
+  {
+    "alias": "low hanging fruit",
+    "term": "low-hanging fruit",
+    "pack": "pack_11_spoken_phrases",
+    "verdict": "DROP",
+    "reason": "Common English idiom used in many non-tech contexts; hyphenation-only correction."
+  },
+  {
+    "alias": "quick win",
+    "term": "quick win",
+    "pack": "pack_11_spoken_phrases",
+    "verdict": "DROP",
+    "reason": "Identity flag: rule does nothing."
+  },
+  {
+    "alias": "table stakes",
+    "term": "table stakes",
+    "pack": "pack_11_spoken_phrases",
+    "verdict": "DROP",
+    "reason": "Identity flag: rule does nothing."
+  },
+  {
+    "alias": "north star",
+    "term": "north star",
+    "pack": "pack_11_spoken_phrases",
+    "verdict": "DROP",
+    "reason": "Identity flag: rule does nothing."
+  },
+  {
+    "alias": "ten x",
+    "term": "10x",
+    "pack": "pack_11_spoken_phrases",
+    "verdict": "KEEP",
+    "reason": "'ten x' with x as a multiplier symbol is specific to tech/math; a fluent speaker would say 'ten times' not 'ten x' in normal conversation."
+  },
+  {
+    "alias": "ten ex",
+    "term": "10x",
+    "pack": "pack_11_spoken_phrases",
+    "verdict": "DROP",
+    "reason": "'ex' is a real common English word (former partner, letter X); 'ten ex' has clear non-tech meaning."
+  },
+  {
+    "alias": "ten x engineer",
+    "term": "10x engineer",
+    "pack": "pack_11_spoken_phrases",
+    "verdict": "KEEP",
+    "reason": "'ten x engineer' is a specific tech-culture term; a speaker would not say this phrase in a non-technical context."
+  },
+  {
+    "alias": "full stack",
+    "term": "full-stack",
+    "pack": "pack_11_spoken_phrases",
+    "verdict": "DEDUPE",
+    "reason": "Conflict between full-stack and fullstack; full-stack (hyphenated) is the more standard form.",
+    "new_alias": "full stack"
+  },
+  {
+    "alias": "front end",
+    "term": "frontend",
+    "pack": "pack_11_spoken_phrases",
+    "verdict": "DROP",
+    "reason": "'front end' is ordinary English (the front end of a car/building); spacing-only correction."
+  },
+  {
+    "alias": "back end",
+    "term": "backend",
+    "pack": "pack_11_spoken_phrases",
+    "verdict": "DROP",
+    "reason": "'back end' is ordinary English (the back end of a building); spacing-only correction."
+  },
+  {
+    "alias": "full stack",
+    "term": "fullstack",
+    "pack": "pack_11_spoken_phrases",
+    "verdict": "DEDUPE",
+    "reason": "Conflict between full-stack and fullstack; full-stack (hyphenated) is the more standard form.",
+    "new_alias": "full stack"
+  },
+  {
+    "alias": "dev",
+    "term": "dev",
+    "pack": "pack_11_spoken_phrases",
+    "verdict": "DROP",
+    "reason": "Identity flag: rule does nothing."
+  },
+  {
+    "alias": "devs",
+    "term": "devs",
+    "pack": "pack_11_spoken_phrases",
+    "verdict": "DROP",
+    "reason": "Identity flag: rule does nothing."
+  },
+  {
+    "alias": "eng",
+    "term": "eng",
+    "pack": "pack_11_spoken_phrases",
+    "verdict": "DROP",
+    "reason": "Identity flag: rule does nothing."
+  },
+  {
+    "alias": "infra",
+    "term": "infra",
+    "pack": "pack_11_spoken_phrases",
+    "verdict": "DROP",
+    "reason": "Identity flag: rule does nothing."
+  },
+  {
+    "alias": "ops",
+    "term": "ops",
+    "pack": "pack_11_spoken_phrases",
+    "verdict": "DROP",
+    "reason": "Identity flag: rule does nothing."
+  },
+  {
+    "alias": "plat form",
+    "term": "platform",
+    "pack": "pack_11_spoken_phrases",
+    "verdict": "KEEP",
+    "reason": "'plat form' as two words has no natural English meaning; it is a Whisper mis-transcription split of 'platform'."
+  },
+  {
+    "alias": "plat form team",
+    "term": "platform team",
+    "pack": "pack_11_spoken_phrases",
+    "verdict": "KEEP",
+    "reason": "Same reasoning as 'plat form'; the split has no natural English meaning."
+  },
+  {
+    "alias": "s r e",
+    "term": "SRE",
+    "pack": "pack_11_spoken_phrases",
+    "verdict": "KEEP",
+    "reason": "Letter-by-letter spelling of the acronym with no natural English meaning."
+  },
+  {
+    "alias": "site reliability",
+    "term": "SRE",
+    "pack": "pack_11_spoken_phrases",
+    "verdict": "DROP",
+    "reason": "Incomplete English phrase ('site reliability engineering' is the full term); ordinary English words."
+  },
+  {
+    "alias": "on call rotation",
+    "term": "on-call rotation",
+    "pack": "pack_11_spoken_phrases",
+    "verdict": "DROP",
+    "reason": "Ordinary English phrase; hyphenation-only correction."
+  },
+  {
+    "alias": "pager duty",
+    "term": "pager duty",
+    "pack": "pack_11_spoken_phrases",
+    "verdict": "DROP",
+    "reason": "Identity flag: rule does nothing."
+  },
+  {
+    "alias": "fire fighting",
+    "term": "firefighting",
+    "pack": "pack_11_spoken_phrases",
+    "verdict": "DROP",
+    "reason": "'firefighting' is ordinary English (literal fighting of fires); spacing-only correction."
+  },
+  {
+    "alias": "yak shaving",
+    "term": "yak shaving",
+    "pack": "pack_11_spoken_phrases",
+    "verdict": "DROP",
+    "reason": "Identity flag: rule does nothing."
+  },
+  {
+    "alias": "bike shedding",
+    "term": "bike shedding",
+    "pack": "pack_11_spoken_phrases",
+    "verdict": "DEDUPE",
+    "reason": "Conflict between 'bike shedding' (identity) and 'bikeshedding'; 'bikeshedding' is the more standard single-word form.",
+    "new_alias": "bike shedding"
+  },
+  {
+    "alias": "bike shedding",
+    "term": "bikeshedding",
+    "pack": "pack_11_spoken_phrases",
+    "verdict": "DEDUPE",
+    "reason": "Conflict between 'bike shedding' (identity) and 'bikeshedding'; 'bikeshedding' is the more standard single-word form.",
+    "new_alias": "bike shedding"
+  },
+  {
+    "alias": "pre mature optimization",
+    "term": "premature optimization",
+    "pack": "pack_11_spoken_phrases",
+    "verdict": "KEEP",
+    "reason": "'pre mature optimization' as written has no natural English meaning; it is a Whisper split of 'premature'."
+  },
+  {
+    "alias": "over engineering",
+    "term": "over-engineering",
+    "pack": "pack_11_spoken_phrases",
+    "verdict": "DROP",
+    "reason": "'over engineering' is ordinary English describing excessive engineering; hyphenation-only correction."
+  },
+  {
+    "alias": "under engineering",
+    "term": "under-engineering",
+    "pack": "pack_11_spoken_phrases",
+    "verdict": "DROP",
+    "reason": "'under engineering' is ordinary English; hyphenation-only correction."
+  },
+  {
+    "alias": "gold plating",
+    "term": "gold plating",
+    "pack": "pack_11_spoken_phrases",
+    "verdict": "DROP",
+    "reason": "Identity flag: rule does nothing."
+  },
+  {
+    "alias": "yag knee",
+    "term": "YAGNI",
+    "pack": "pack_11_spoken_phrases",
+    "verdict": "KEEP",
+    "reason": "'yag knee' is a phonetic mis-transcription of YAGNI with no natural English meaning."
+  },
+  {
+    "alias": "you aren't gonna need it",
+    "term": "YAGNI",
+    "pack": "pack_11_spoken_phrases",
+    "verdict": "DROP",
+    "reason": "Ordinary English phrase a speaker may genuinely intend to write out."
+  },
+  {
+    "alias": "k i s s",
+    "term": "KISS",
+    "pack": "pack_11_spoken_phrases",
+    "verdict": "KEEP",
+    "reason": "Letter-by-letter spelling of the acronym; spoken as initials, not as the word 'kiss'."
+  },
+  {
+    "alias": "keep it simple",
+    "term": "KISS",
+    "pack": "pack_11_spoken_phrases",
+    "verdict": "DROP",
+    "reason": "Ordinary English phrase used constantly in normal conversation."
+  },
+  {
+    "alias": "d r y",
+    "term": "DRY",
+    "pack": "pack_11_spoken_phrases",
+    "verdict": "KEEP",
+    "reason": "Letter-by-letter spelling of the DRY acronym; spoken as initials, not as the word 'dry'."
+  },
+  {
+    "alias": "don't repeat yourself",
+    "term": "DRY",
+    "pack": "pack_11_spoken_phrases",
+    "verdict": "DROP",
+    "reason": "Ordinary English phrase a speaker may genuinely intend to write out."
+  },
+  {
+    "alias": "w e t",
+    "term": "WET",
+    "pack": "pack_11_spoken_phrases",
+    "verdict": "KEEP",
+    "reason": "Letter-by-letter spelling of the WET acronym; spoken as initials, not as the word 'wet'."
+  },
+  {
+    "alias": "write everything twice",
+    "term": "WET",
+    "pack": "pack_11_spoken_phrases",
+    "verdict": "DROP",
+    "reason": "Ordinary English phrase a speaker may genuinely intend to write out."
+  },
+  {
+    "alias": "solid principles",
+    "term": "SOLID",
+    "pack": "pack_11_spoken_phrases",
+    "verdict": "DROP",
+    "reason": "'solid principles' is ordinary English ('she had solid principles'); would corrupt normal speech."
+  },
+  {
+    "alias": "dog fooding",
+    "term": "dogfooding",
+    "pack": "pack_11_spoken_phrases",
+    "verdict": "DROP",
+    "reason": "'dog fooding' spacing-corrects to 'dogfooding' but both refer to an ordinary concept; 'dog fooding' could mean feeding dogs."
+  },
+  {
+    "alias": "dog food",
+    "term": "dogfood",
+    "pack": "pack_11_spoken_phrases",
+    "verdict": "DROP",
+    "reason": "'dog food' is a real thing (food for dogs) with clear non-tech meaning."
+  },
+  {
+    "alias": "eat our own dog food",
+    "term": "eat our own dog food",
+    "pack": "pack_11_spoken_phrases",
+    "verdict": "DROP",
+    "reason": "Identity flag: rule does nothing."
+  },
+  {
+    "alias": "rubber stamp",
+    "term": "rubber stamp",
+    "pack": "pack_11_spoken_phrases",
+    "verdict": "DROP",
+    "reason": "Identity flag: rule does nothing."
+  },
+  {
+    "alias": "sanity check",
+    "term": "sanity check",
+    "pack": "pack_11_spoken_phrases",
+    "verdict": "DROP",
+    "reason": "Identity flag: rule does nothing."
+  },
+  {
+    "alias": "gut check",
+    "term": "gut check",
+    "pack": "pack_11_spoken_phrases",
+    "verdict": "DROP",
+    "reason": "Identity flag: rule does nothing."
+  },
+  {
+    "alias": "smell test",
+    "term": "smell test",
+    "pack": "pack_11_spoken_phrases",
+    "verdict": "DROP",
+    "reason": "Identity flag: rule does nothing."
+  },
+  {
+    "alias": "sniff test",
+    "term": "sniff test",
+    "pack": "pack_11_spoken_phrases",
+    "verdict": "DROP",
+    "reason": "Identity flag: rule does nothing."
+  },
+  {
+    "alias": "back of the envelope",
+    "term": "back of the envelope",
+    "pack": "pack_11_spoken_phrases",
+    "verdict": "DROP",
+    "reason": "Identity flag: rule does nothing."
+  },
+  {
+    "alias": "ball park",
+    "term": "ballpark",
+    "pack": "pack_11_spoken_phrases",
+    "verdict": "DROP",
+    "reason": "'ball park' is ordinary English (a baseball park); spacing-only correction."
+  },
+  {
+    "alias": "rough estimate",
+    "term": "rough estimate",
+    "pack": "pack_11_spoken_phrases",
+    "verdict": "DROP",
+    "reason": "Identity flag: rule does nothing."
+  },
+  {
+    "alias": "t shirt size",
+    "term": "T-shirt size",
+    "pack": "pack_11_spoken_phrases",
+    "verdict": "DROP",
+    "reason": "'t shirt size' is ordinary English that would appear in clothing contexts."
+  },
+  {
+    "alias": "sizing",
+    "term": "sizing",
+    "pack": "pack_11_spoken_phrases",
+    "verdict": "DROP",
+    "reason": "Identity flag: rule does nothing."
+  },
+  {
+    "alias": "l o e",
+    "term": "LOE",
+    "pack": "pack_11_spoken_phrases",
+    "verdict": "KEEP",
+    "reason": "Letter-by-letter spelling of the acronym with no natural English meaning."
+  },
+  {
+    "alias": "el oh ee",
+    "term": "LOE",
+    "pack": "pack_11_spoken_phrases",
+    "verdict": "KEEP",
+    "reason": "Phonetic letter-by-letter spelling of LOE with no natural English meaning."
+  },
+  {
+    "alias": "level of effort",
+    "term": "LOE",
+    "pack": "pack_11_spoken_phrases",
+    "verdict": "DEDUPE",
+    "reason": "Conflict between LOE and 'level of effort' (identity); LOE is the more specific non-identity form.",
+    "new_alias": "level of effort"
+  },
+  {
+    "alias": "level of effort",
+    "term": "level of effort",
+    "pack": "pack_11_spoken_phrases",
+    "verdict": "DEDUPE",
+    "reason": "Conflict between LOE and 'level of effort' (identity); LOE is the more specific non-identity form.",
+    "new_alias": "level of effort"
+  },
+  {
+    "alias": "spike it",
+    "term": "spike it",
+    "pack": "pack_11_spoken_phrases",
+    "verdict": "DROP",
+    "reason": "Identity flag: rule does nothing."
+  },
+  {
+    "alias": "spiking",
+    "term": "spiking",
+    "pack": "pack_11_spoken_phrases",
+    "verdict": "DROP",
+    "reason": "Identity flag: rule does nothing."
+  },
+  {
+    "alias": "p o c",
+    "term": "POC",
+    "pack": "pack_11_spoken_phrases",
+    "verdict": "KEEP",
+    "reason": "Letter-by-letter spelling of the acronym with no natural English meaning."
+  },
+  {
+    "alias": "proof of concept",
+    "term": "POC",
+    "pack": "pack_11_spoken_phrases",
+    "verdict": "DROP",
+    "reason": "Ordinary English phrase; speaker may intend it written out."
+  },
+  {
+    "alias": "proto type",
+    "term": "prototype",
+    "pack": "pack_11_spoken_phrases",
+    "verdict": "KEEP",
+    "reason": "'proto type' as two words has no natural English meaning; it is a Whisper mis-transcription split of 'prototype'."
+  },
+  {
+    "alias": "throw away code",
+    "term": "throw away code",
+    "pack": "pack_11_spoken_phrases",
+    "verdict": "DROP",
+    "reason": "Identity flag: rule does nothing."
+  },
+  {
+    "alias": "production ready",
+    "term": "production ready",
+    "pack": "pack_11_spoken_phrases",
+    "verdict": "DROP",
+    "reason": "Identity flag: rule does nothing."
+  },
+  {
+    "alias": "prod ready",
+    "term": "prod ready",
+    "pack": "pack_11_spoken_phrases",
+    "verdict": "DROP",
+    "reason": "Identity flag: rule does nothing."
+  },
+  {
+    "alias": "battle tested",
+    "term": "battle tested",
+    "pack": "pack_11_spoken_phrases",
+    "verdict": "DROP",
+    "reason": "Identity flag: rule does nothing."
+  },
+  {
+    "alias": "hardened",
+    "term": "hardened",
+    "pack": "pack_11_spoken_phrases",
+    "verdict": "DROP",
+    "reason": "Identity flag: rule does nothing."
+  },
+  {
+    "alias": "enterprise grade",
+    "term": "enterprise grade",
+    "pack": "pack_11_spoken_phrases",
+    "verdict": "DROP",
+    "reason": "Identity flag: rule does nothing."
+  },
+  {
+    "alias": "scale able",
+    "term": "scalable",
+    "pack": "pack_11_spoken_phrases",
+    "verdict": "KEEP",
+    "reason": "'scale able' as two words has no natural English meaning; it is a Whisper mis-transcription split of 'scalable'."
+  },
+  {
+    "alias": "per form ant",
+    "term": "performant",
+    "pack": "pack_11_spoken_phrases",
+    "verdict": "KEEP",
+    "reason": "'per form ant' as written has no natural English meaning; it is a Whisper mis-transcription split of 'performant'."
+  },
+  {
+    "alias": "re silient",
+    "term": "resilient",
+    "pack": "pack_11_spoken_phrases",
+    "verdict": "KEEP",
+    "reason": "'re silient' as two words has no natural English meaning; it is a Whisper mis-transcription split of 'resilient'."
+  },
+  {
+    "alias": "fault tolerant",
+    "term": "fault tolerant",
+    "pack": "pack_11_spoken_phrases",
+    "verdict": "DROP",
+    "reason": "Identity flag: rule does nothing."
+  },
+  {
+    "alias": "eye dem potent",
+    "term": "idempotent",
+    "pack": "pack_11_spoken_phrases",
+    "verdict": "KEEP",
+    "reason": "Phonetic mis-transcription of 'idempotent' with no natural English meaning."
+  },
+  {
+    "alias": "deter min istic",
+    "term": "deterministic",
+    "pack": "pack_11_spoken_phrases",
+    "verdict": "KEEP",
+    "reason": "Phonetic mis-transcription split with no natural English meaning as written."
+  },
+  {
+    "alias": "non deter min istic",
+    "term": "non-deterministic",
+    "pack": "pack_11_spoken_phrases",
+    "verdict": "KEEP",
+    "reason": "Phonetic mis-transcription split with no natural English meaning as written."
+  },
+  {
+    "alias": "state less",
+    "term": "stateless",
+    "pack": "pack_11_spoken_phrases",
+    "verdict": "KEEP",
+    "reason": "'state less' as two words has no natural English meaning; it is a Whisper mis-transcription split of 'stateless'."
+  },
+  {
+    "alias": "state full",
+    "term": "stateful",
+    "pack": "pack_11_spoken_phrases",
+    "verdict": "KEEP",
+    "reason": "'state full' as two words has no natural English meaning; it is a Whisper mis-transcription split of 'stateful'."
+  },
+  {
+    "alias": "im mutable",
+    "term": "immutable",
+    "pack": "pack_11_spoken_phrases",
+    "verdict": "KEEP",
+    "reason": "'im mutable' as two words has no natural English meaning; it is a Whisper mis-transcription split of 'immutable'."
+  },
+  {
+    "alias": "mew table",
+    "term": "mutable",
+    "pack": "pack_11_spoken_phrases",
+    "verdict": "DROP",
+    "reason": "'mew' is a real English word (hawk cage, cat cry, mews lane); 'mew table' has plausible non-tech interpretation."
+  },
+  {
+    "alias": "deck lair a tiv",
+    "term": "declarative",
+    "pack": "pack_11_spoken_phrases",
+    "verdict": "KEEP",
+    "reason": "Phonetic mis-transcription split with no natural English meaning as written."
+  },
+  {
+    "alias": "im pear a tiv",
+    "term": "imperative",
+    "pack": "pack_11_spoken_phrases",
+    "verdict": "KEEP",
+    "reason": "Phonetic mis-transcription split with no natural English meaning as written."
+  },
+  {
+    "alias": "opinion ated",
+    "term": "opinionated",
+    "pack": "pack_11_spoken_phrases",
+    "verdict": "KEEP",
+    "reason": "'opinion ated' as two words has no natural English meaning; it is a Whisper mis-transcription split of 'opinionated'."
+  },
+  {
+    "alias": "un opinion ated",
+    "term": "unopinionated",
+    "pack": "pack_11_spoken_phrases",
+    "verdict": "KEEP",
+    "reason": "'un opinion ated' as written has no natural English meaning; it is a Whisper mis-transcription split."
+  },
+  {
+    "alias": "convention over configuration",
+    "term": "convention over configuration",
+    "pack": "pack_11_spoken_phrases",
+    "verdict": "DROP",
+    "reason": "Identity flag: rule does nothing."
+  },
+  {
+    "alias": "con fig",
+    "term": "config",
+    "pack": "pack_11_spoken_phrases",
+    "verdict": "KEEP",
+    "reason": "'con fig' as two words has no natural English meaning; it is a Whisper mis-transcription split of 'config'."
+  },
+  {
+    "alias": "en var",
+    "term": "env var",
+    "pack": "pack_11_spoken_phrases",
+    "verdict": "KEEP",
+    "reason": "'en var' is a phonetic approximation of 'env var' with no natural English meaning."
+  },
+  {
+    "alias": "environment variable",
+    "term": "env var",
+    "pack": "pack_11_spoken_phrases",
+    "verdict": "DROP",
+    "reason": "Ordinary English phrase; speaker may intend it written out."
+  },
+  {
+    "alias": "en vars",
+    "term": "env vars",
+    "pack": "pack_11_spoken_phrases",
+    "verdict": "KEEP",
+    "reason": "'en vars' is a phonetic approximation of 'env vars' with no natural English meaning."
+  },
+  {
+    "alias": "environment variables",
+    "term": "env vars",
+    "pack": "pack_11_spoken_phrases",
+    "verdict": "DROP",
+    "reason": "Ordinary English phrase; speaker may intend it written out."
+  },
+  {
+    "alias": "dot env",
+    "term": "dotenv",
+    "pack": "pack_11_spoken_phrases",
+    "verdict": "DEDUPE",
+    "reason": "Conflict between dotenv (library) and .env (file); .env is more precise and common as a file reference.",
+    "new_alias": "dot env"
+  },
+  {
+    "alias": "dot e n v",
+    "term": "dotenv",
+    "pack": "pack_11_spoken_phrases",
+    "verdict": "KEEP",
+    "reason": "'dot e n v' is a phonetic letter-by-letter rendering with no natural English meaning."
+  },
+  {
+    "alias": "dot env",
+    "term": ".env",
+    "pack": "pack_11_spoken_phrases",
+    "verdict": "DEDUPE",
+    "reason": "Conflict between dotenv (library) and .env (file); .env is more precise and common as a file reference.",
+    "new_alias": "dot env"
+  },
+  {
+    "alias": "dot env file",
+    "term": ".env file",
+    "pack": "pack_11_spoken_phrases",
+    "verdict": "KEEP",
+    "reason": "'dot env file' specifically renders the filename '.env file'; no natural English meaning as a phrase."
+  },
+  {
+    "alias": "git ignore",
+    "term": "gitignore",
+    "pack": "pack_11_spoken_phrases",
+    "verdict": "DROP",
+    "reason": "'git' is a real English word (British slang); 'git ignore' is a plausible natural English phrase."
+  },
+  {
+    "alias": "dot git ignore",
+    "term": "gitignore",
+    "pack": "pack_11_spoken_phrases",
+    "verdict": "DEDUPE",
+    "reason": "Conflict between gitignore and .gitignore; .gitignore is more precise (the actual filename).",
+    "new_alias": "dot git ignore"
+  },
+  {
+    "alias": "dot git ignore",
+    "term": ".gitignore",
+    "pack": "pack_11_spoken_phrases",
+    "verdict": "DEDUPE",
+    "reason": "Conflict between gitignore and .gitignore; .gitignore is more precise (the actual filename).",
+    "new_alias": "dot git ignore"
+  },
+  {
+    "alias": "docker file",
+    "term": "Dockerfile",
+    "pack": "pack_11_spoken_phrases",
+    "verdict": "KEEP",
+    "reason": "'docker file' in modern usage almost exclusively refers to the Docker configuration file; no plausible non-tech meaning."
+  },
+  {
+    "alias": "docker compose yaml",
+    "term": "docker-compose.yml",
+    "pack": "pack_11_spoken_phrases",
+    "verdict": "KEEP",
+    "reason": "'docker compose yaml' specifically refers to the Docker Compose config file; no natural English meaning otherwise."
+  },
+  {
+    "alias": "yaml file",
+    "term": "YAML file",
+    "pack": "pack_11_spoken_phrases",
+    "verdict": "DROP",
+    "reason": "Identity flag (case-only difference): rule does nothing useful."
+  },
+  {
+    "alias": "yam el file",
+    "term": "YAML file",
+    "pack": "pack_11_spoken_phrases",
+    "verdict": "KEEP",
+    "reason": "'yam el file' is a phonetic mis-transcription of 'YAML file' with no natural English meaning."
+  },
+  {
+    "alias": "jason file",
+    "term": "JSON file",
+    "pack": "pack_11_spoken_phrases",
+    "verdict": "DROP",
+    "reason": "'Jason' is a real proper name; 'jason file' is homophonous with 'Jason's file' and would corrupt natural speech."
+  },
+  {
+    "alias": "jay son file",
+    "term": "JSON file",
+    "pack": "pack_11_spoken_phrases",
+    "verdict": "KEEP",
+    "reason": "'jay son file' as three words has no natural English meaning; it is a phonetic mis-transcription of 'JSON file'."
+  },
+  {
+    "alias": "con fig file",
+    "term": "config file",
+    "pack": "pack_11_spoken_phrases",
+    "verdict": "KEEP",
+    "reason": "'con fig file' as written has no natural English meaning; it is a Whisper mis-transcription split of 'config file'."
+  },
+  {
+    "alias": "t s config",
+    "term": "tsconfig",
+    "pack": "pack_11_spoken_phrases",
+    "verdict": "KEEP",
+    "reason": "'t s config' specifically refers to the TypeScript configuration; no natural English meaning."
+  },
+  {
+    "alias": "tee ess config",
+    "term": "tsconfig",
+    "pack": "pack_11_spoken_phrases",
+    "verdict": "KEEP",
+    "reason": "Phonetic letter-by-letter spelling of 'tsconfig' with no natural English meaning."
+  },
+  {
+    "alias": "package jason",
+    "term": "package.json",
+    "pack": "pack_11_spoken_phrases",
+    "verdict": "DROP",
+    "reason": "'Jason' is a real proper name; 'package jason' is homophonous with 'package for Jason' and would corrupt natural speech."
+  },
+  {
+    "alias": "package jay son",
+    "term": "package.json",
+    "pack": "pack_11_spoken_phrases",
+    "verdict": "KEEP",
+    "reason": "'package jay son' as three words has no natural English meaning; it is a phonetic mis-transcription of 'package.json'."
+  },
+  {
+    "alias": "node modules",
+    "term": "node_modules",
+    "pack": "pack_11_spoken_phrases",
+    "verdict": "KEEP",
+    "reason": "'node modules' specifically refers to the npm directory; while 'node' can mean a network point, 'node modules' in practice is unambiguous tech."
+  },
+  {
+    "alias": "vendor folder",
+    "term": "vendor",
+    "pack": "pack_11_spoken_phrases",
+    "verdict": "DROP",
+    "reason": "'vendor folder' is ordinary English (a folder belonging to a vendor at a market); and the term drops 'folder' entirely."
+  },
+  {
+    "alias": "dist folder",
+    "term": "dist",
+    "pack": "pack_11_spoken_phrases",
+    "verdict": "KEEP",
+    "reason": "'dist folder' specifically refers to the distribution output directory; 'dist' as abbreviation is not a natural spoken English word."
+  },
+  {
+    "alias": "build folder",
+    "term": "build",
+    "pack": "pack_11_spoken_phrases",
+    "verdict": "DROP",
+    "reason": "'build folder' is ordinary English; dropping 'folder' in the term is also lossy."
+  },
+  {
+    "alias": "source",
+    "term": "src",
+    "pack": "pack_11_spoken_phrases",
+    "verdict": "DROP",
+    "reason": "'source' is an extremely common English word with many non-tech meanings; would corrupt 'the source of the problem'."
+  },
+  {
+    "alias": "s r c",
+    "term": "src",
+    "pack": "pack_11_spoken_phrases",
+    "verdict": "KEEP",
+    "reason": "Letter-by-letter spelling of the directory abbreviation with no natural English meaning."
+  },
+  {
+    "alias": "lib folder",
+    "term": "lib",
+    "pack": "pack_11_spoken_phrases",
+    "verdict": "KEEP",
+    "reason": "'lib folder' specifically refers to the library directory; 'lib' as a standalone abbreviation is not natural spoken English."
+  },
+  {
+    "alias": "you tills",
+    "term": "utils",
+    "pack": "pack_11_spoken_phrases",
+    "verdict": "KEEP",
+    "reason": "'you tills' is a phonetic mis-transcription of 'utils' with no natural English meaning."
+  },
+  {
+    "alias": "utilities",
+    "term": "utils",
+    "pack": "pack_11_spoken_phrases",
+    "verdict": "DROP",
+    "reason": "'utilities' is a very common English word (electricity, gas, water utilities)."
+  },
+  {
+    "alias": "help ers",
+    "term": "helpers",
+    "pack": "pack_11_spoken_phrases",
+    "verdict": "KEEP",
+    "reason": "'help ers' as two words has no natural English meaning; it is a Whisper mis-transcription split of 'helpers'."
+  },
+  {
+    "alias": "middle ware",
+    "term": "middleware",
+    "pack": "pack_11_spoken_phrases",
+    "verdict": "KEEP",
+    "reason": "'middle ware' as two words has no natural English meaning; it is a Whisper mis-transcription split of 'middleware'."
+  },
+  {
+    "alias": "hand ler",
+    "term": "handler",
+    "pack": "pack_11_spoken_phrases",
+    "verdict": "KEEP",
+    "reason": "'hand ler' as two words has no natural English meaning ('ler' is not a word); it is a Whisper mis-transcription split of 'handler'."
+  },
+  {
+    "alias": "control er",
+    "term": "controller",
+    "pack": "pack_11_spoken_phrases",
+    "verdict": "KEEP",
+    "reason": "'control er' as two words has no natural English meaning; it is a Whisper mis-transcription split of 'controller'."
+  },
+  {
+    "alias": "service layer",
+    "term": "service layer",
+    "pack": "pack_11_spoken_phrases",
+    "verdict": "DROP",
+    "reason": "Identity flag: rule does nothing."
+  },
+  {
+    "alias": "data layer",
+    "term": "data layer",
+    "pack": "pack_11_spoken_phrases",
+    "verdict": "DROP",
+    "reason": "Identity flag: rule does nothing."
+  },
+  {
+    "alias": "presentation layer",
+    "term": "presentation layer",
+    "pack": "pack_11_spoken_phrases",
+    "verdict": "DROP",
+    "reason": "Identity flag: rule does nothing."
+  },
+  {
+    "alias": "business logic",
+    "term": "business logic",
+    "pack": "pack_11_spoken_phrases",
+    "verdict": "DROP",
+    "reason": "Identity flag: rule does nothing."
+  },
+  {
+    "alias": "domain logic",
+    "term": "domain logic",
+    "pack": "pack_11_spoken_phrases",
+    "verdict": "DROP",
+    "reason": "Identity flag: rule does nothing."
+  },
+  {
+    "alias": "edge case",
+    "term": "edge case",
+    "pack": "pack_11_spoken_phrases",
+    "verdict": "DROP",
+    "reason": "Identity flag: rule does nothing."
+  },
+  {
+    "alias": "corner case",
+    "term": "corner case",
+    "pack": "pack_11_spoken_phrases",
+    "verdict": "DROP",
+    "reason": "Identity flag: rule does nothing."
+  },
+  {
+    "alias": "off by one",
+    "term": "off-by-one",
+    "pack": "pack_11_spoken_phrases",
+    "verdict": "DROP",
+    "reason": "'off by one' is ordinary English with obvious non-tech meaning; hyphenation-only correction."
+  },
+  {
+    "alias": "off by one error",
+    "term": "off-by-one error",
+    "pack": "pack_11_spoken_phrases",
+    "verdict": "DROP",
+    "reason": "Ordinary English phrase; hyphenation-only correction."
+  },
+  {
+    "alias": "null check",
+    "term": "null check",
+    "pack": "pack_11_spoken_phrases",
+    "verdict": "DROP",
+    "reason": "Identity flag: rule does nothing."
+  },
+  {
+    "alias": "nil check",
+    "term": "nil check",
+    "pack": "pack_11_spoken_phrases",
+    "verdict": "DROP",
+    "reason": "Identity flag: rule does nothing."
+  },
+  {
+    "alias": "guard clause",
+    "term": "guard clause",
+    "pack": "pack_11_spoken_phrases",
+    "verdict": "DROP",
+    "reason": "Identity flag: rule does nothing."
+  },
+  {
+    "alias": "early return",
+    "term": "early return",
+    "pack": "pack_11_spoken_phrases",
+    "verdict": "DROP",
+    "reason": "Identity flag: rule does nothing."
+  },
+  {
+    "alias": "happy path",
+    "term": "happy path",
+    "pack": "pack_11_spoken_phrases",
+    "verdict": "DROP",
+    "reason": "Identity flag: rule does nothing."
+  },
+  {
+    "alias": "sad path",
+    "term": "sad path",
+    "pack": "pack_11_spoken_phrases",
+    "verdict": "DROP",
+    "reason": "Identity flag: rule does nothing."
+  },
+  {
+    "alias": "error handling",
+    "term": "error handling",
+    "pack": "pack_11_spoken_phrases",
+    "verdict": "DROP",
+    "reason": "Identity flag: rule does nothing."
+  },
+  {
+    "alias": "try catch",
+    "term": "try-catch",
+    "pack": "pack_11_spoken_phrases",
+    "verdict": "DROP",
+    "reason": "'try catch' is ordinary English; hyphenation-only correction of a common phrase."
+  },
+  {
+    "alias": "exception handling",
+    "term": "exception handling",
+    "pack": "pack_11_spoken_phrases",
+    "verdict": "DROP",
+    "reason": "Identity flag: rule does nothing."
+  },
+  {
+    "alias": "error boundary",
+    "term": "error boundary",
+    "pack": "pack_11_spoken_phrases",
+    "verdict": "DROP",
+    "reason": "Identity flag: rule does nothing."
+  },
+  {
+    "alias": "fall back",
+    "term": "fallback",
+    "pack": "pack_11_spoken_phrases",
+    "verdict": "DROP",
+    "reason": "'fall back' is very common English ('fall back on plan B'); spacing-only correction."
+  },
+  {
+    "alias": "graceful degradation",
+    "term": "graceful degradation",
+    "pack": "pack_11_spoken_phrases",
+    "verdict": "DROP",
+    "reason": "Identity flag: rule does nothing."
+  },
+  {
+    "alias": "progressive enhancement",
+    "term": "progressive enhancement",
+    "pack": "pack_11_spoken_phrases",
+    "verdict": "DROP",
+    "reason": "Identity flag: rule does nothing."
+  },
+  {
+    "alias": "backwards compatible",
+    "term": "backwards compatible",
+    "pack": "pack_11_spoken_phrases",
+    "verdict": "DROP",
+    "reason": "Identity flag: rule does nothing."
+  },
+  {
+    "alias": "backwards compat ibility",
+    "term": "backwards compatibility",
+    "pack": "pack_11_spoken_phrases",
+    "verdict": "KEEP",
+    "reason": "'compat ibility' as split has no natural English meaning; it is a Whisper mis-transcription split of 'compatibility'."
+  },
+  {
+    "alias": "forward compatible",
+    "term": "forward compatible",
+    "pack": "pack_11_spoken_phrases",
+    "verdict": "DROP",
+    "reason": "Identity flag: rule does nothing."
+  },
+  {
+    "alias": "ver shun ing",
+    "term": "versioning",
+    "pack": "pack_11_spoken_phrases",
+    "verdict": "KEEP",
+    "reason": "'ver shun ing' is a phonetic mis-transcription of 'versioning' with no natural English meaning."
+  },
+  {
+    "alias": "a p i ver shun ing",
+    "term": "API versioning",
+    "pack": "pack_11_spoken_phrases",
+    "verdict": "KEEP",
+    "reason": "Letter-by-letter API combined with phonetic mis-transcription of 'versioning'; no natural English meaning."
+  },
+  {
+    "alias": "breaking change",
+    "term": "breaking change",
+    "pack": "pack_11_spoken_phrases",
+    "verdict": "DROP",
+    "reason": "Identity flag: rule does nothing."
+  },
+  {
+    "alias": "non breaking change",
+    "term": "non-breaking change",
+    "pack": "pack_11_spoken_phrases",
+    "verdict": "DROP",
+    "reason": "Ordinary English phrase; hyphenation-only correction."
+  },
+  {
+    "alias": "additive change",
+    "term": "additive change",
+    "pack": "pack_11_spoken_phrases",
+    "verdict": "DROP",
+    "reason": "Identity flag: rule does nothing."
+  },
+  {
+    "alias": "hot fix",
+    "term": "hotfix",
+    "pack": "pack_11_spoken_phrases",
+    "verdict": "DROP",
+    "reason": "'hot fix' is ordinary English in many contexts; spacing-only correction."
+  },
+  {
+    "alias": "patch fix",
+    "term": "patch",
+    "pack": "pack_11_spoken_phrases",
+    "verdict": "DROP",
+    "reason": "'patch fix' is ordinary English; dropping 'fix' in the term is also lossy."
+  },
+  {
+    "alias": "work around",
+    "term": "workaround",
+    "pack": "pack_11_spoken_phrases",
+    "verdict": "DROP",
+    "reason": "'work around' is very common English ('work around the problem'); spacing-only correction."
+  },
+  {
+    "alias": "hack fix",
+    "term": "hack",
+    "pack": "pack_11_spoken_phrases",
+    "verdict": "DROP",
+    "reason": "'hack fix' is ordinary English; dropping 'fix' in the term is also lossy."
+  },
+  {
+    "alias": "band aid fix",
+    "term": "band-aid fix",
+    "pack": "pack_11_spoken_phrases",
+    "verdict": "DROP",
+    "reason": "'band aid fix' is ordinary English describing a temporary solution; hyphenation-only correction."
+  },
+  {
+    "alias": "duct tape fix",
+    "term": "duct tape fix",
+    "pack": "pack_11_spoken_phrases",
+    "verdict": "DROP",
+    "reason": "Identity flag: rule does nothing."
+  },
+  {
+    "alias": "proper fix",
+    "term": "proper fix",
+    "pack": "pack_11_spoken_phrases",
+    "verdict": "DROP",
+    "reason": "Identity flag: rule does nothing."
+  },
+  {
+    "alias": "root cause fix",
+    "term": "root cause fix",
+    "pack": "pack_11_spoken_phrases",
+    "verdict": "DROP",
+    "reason": "Identity flag: rule does nothing."
+  },
+  {
+    "alias": "follow up",
+    "term": "followup",
+    "pack": "pack_11_spoken_phrases",
+    "verdict": "DROP",
+    "reason": "'follow up' is extremely common English; spacing-only correction."
+  },
+  {
+    "alias": "follow up ticket",
+    "term": "follow-up ticket",
+    "pack": "pack_11_spoken_phrases",
+    "verdict": "DROP",
+    "reason": "'follow up ticket' is ordinary English; hyphenation-only correction."
+  },
+  {
+    "alias": "teck debt ticket",
+    "term": "tech debt ticket",
+    "pack": "pack_11_spoken_phrases",
+    "verdict": "KEEP",
+    "reason": "'teck' is a phonetic mis-transcription of 'tech'; the full phrase 'teck debt ticket' has no natural English meaning as written."
+  },
+  {
+    "alias": "clean up ticket",
+    "term": "cleanup ticket",
+    "pack": "pack_11_spoken_phrases",
+    "verdict": "DROP",
+    "reason": "'clean up ticket' is ordinary English; spacing-only correction."
+  },
+  {
+    "alias": "chore ticket",
+    "term": "chore",
+    "pack": "pack_11_spoken_phrases",
+    "verdict": "DROP",
+    "reason": "'chore ticket' is ordinary English; the term also drops 'ticket' which is lossy."
+  }
+]
