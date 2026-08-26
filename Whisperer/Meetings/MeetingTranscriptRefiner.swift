@@ -64,6 +64,10 @@ final class MeetingTranscriptRefiner: ObservableObject {
     private static let minAvailableGB = 2.0
     /// A decode shorter than this is silence or a read error, not speech.
     private static let minWindowSamples = Int(0.2 * 16000.0)
+    /// Minimum gap between full-array `updateSegments` writes. Bounds how much decoded work an
+    /// interrupted run can lose, while keeping a long meeting from doing one whole-array write
+    /// per 30-second window on the main actor.
+    private static let persistInterval: TimeInterval = 2.0
 
     /// Baseline model for language scanning and for languages with no specialist.
     /// Per-language specialist selection happens via `RefineModelTable.model(for:)` at run time,
@@ -128,6 +132,26 @@ final class MeetingTranscriptRefiner: ObservableObject {
     @discardableResult
     func run(meetingID: UUID, segments: [MeetingSegment],
              forcedLanguage: TranscriptionLanguage? = nil, redoAll: Bool = false) async -> [MeetingSegment] {
+        // Single-flight, claimed before the first `await` so the check and the claim are one
+        // main-actor turn. The guard used to live in `start()`, but `MeetingSession` calls `run`
+        // directly (it needs the returned segments), so a manual "Re-transcribe" overlapping the
+        // end-of-meeting polish put two passes on the same meeting: both mutate `activeSegmentIDs`
+        // /`doneSegmentIDs`, both `updateSegments` the whole array, and the slower one's stale
+        // snapshot wins the last write. Returning the caller's segments unrefined is correct —
+        // the in-flight pass will post its own `.meetingSegmentsDidRefine` when it lands. No
+        // `finish()` here: posting a stale array would clobber that pass's UI.
+        guard activeMeetingID == nil else {
+            Logger.warning("Transcript refine: already running for \(activeMeetingID?.uuidString ?? "?") — skipping \(meetingID)", subsystem: .transcription)
+            return segments
+        }
+        activeMeetingID = meetingID
+        defer {
+            progress = nil
+            activeSegmentIDs = []
+            doneSegmentIDs = []
+            activeMeetingID = nil
+        }
+
         // Re-read from CoreData rather than trusting the caller's snapshot. The tail chunk
         // from StreamingTranscriber lands *after* stopRecording() returns and appends one more
         // segment; refining a stale array and then writing it back with updateSegments would
@@ -137,16 +161,9 @@ final class MeetingTranscriptRefiner: ObservableObject {
         let source = persisted.count >= segments.count ? persisted : segments
 
         cancelledMeetingID = nil
-        activeMeetingID = meetingID
         progress = 0
         activeSegmentIDs = []
         doneSegmentIDs = []
-        defer {
-            progress = nil
-            activeSegmentIDs = []
-            doneSegmentIDs = []
-            activeMeetingID = nil
-        }
 
         guard let audioURL = record?.resolvedAudioURL,
               FileManager.default.fileExists(atPath: audioURL.path) else {
@@ -166,17 +183,14 @@ final class MeetingTranscriptRefiner: ObservableObject {
         }
 
         var working = source
-        if forcedLanguage != nil || redoAll {
-            // Undo the previous pass so `isPolished` goes false and every window decodes again.
-            // Without this the pending filter below would skip the whole meeting, and the cards
-            // that *were* re-decoded would be corrections of a translation rather than of speech.
-            for index in working.indices {
-                working[index].language = nil
-                guard working[index].rawText != nil else { continue }
-                working[index].text = working[index].rawText ?? working[index].text
-                working[index].rawText = nil
-            }
-        }
+        // Every window must decode again, ignoring `isPolished`. The unwind itself is deliberately
+        // NOT done here: it used to reset all cards up front, and since the first completed window
+        // persists the whole array, a crash or cancel at window 44/88 left the other 44 windows
+        // stripped back to raw live-ASR text with no way back — the polished text the overview and
+        // Ask-AI were built from was simply gone. Each window now unwinds its own cards immediately
+        // before decoding them (see `unwindPreviousPass`), so an interrupted run leaves every
+        // not-yet-reached card exactly as it was.
+        let redoEverything = forcedLanguage != nil || redoAll
         let windows = MeetingRefineWindow.plan(working, maxDuration: Self.windowDuration)
         guard !windows.isEmpty else {
             Logger.info("Transcript refine: nothing to do for \(meetingID)", subsystem: .transcription)
@@ -209,8 +223,7 @@ final class MeetingTranscriptRefiner: ObservableObject {
             }
             ownsDetectBridge = true
         }
-        // Abort flag may be stale from a previous owner.
-        detectBridge.resetAbort()
+        Self.clearStaleAbort(detectBridge, owned: ownsDetectBridge)
 
         let timeline: MeetingLanguageTimeline
         if let forcedLanguage, forcedLanguage != .auto {
@@ -291,6 +304,12 @@ final class MeetingTranscriptRefiner: ObservableObject {
         var totalRewritten = 0
         var totalSilent = 0
         let t0 = Date()
+        // See the throttled `updateSegments` in the window loop. `unpersistedWork` is set at every
+        // site that mutates `working`, including the ones that change no visible text (the
+        // `rawText` stamp that marks a card converged, and the per-card language) — those still
+        // have to reach disk or the meeting refines again on the next pass.
+        var unpersistedWork = false
+        var lastPersist = Date()
 
         Logger.info("Transcript refine: \(plan.groups.count) group(s), \(totalWindows) window(s), \(working.count) segment(s) for \(meetingID)", subsystem: .transcription)
 
@@ -317,7 +336,7 @@ final class MeetingTranscriptRefiner: ObservableObject {
                 }
                 ownsGroupBridge = true
             }
-            groupBridge.resetAbort()
+            Self.clearStaleAbort(groupBridge, owned: ownsGroupBridge)
 
             Logger.info("Transcript refine: \(group.windows.count) window(s) with \(group.model.displayName) (\(group.language.displayName)) for \(meetingID)", subsystem: .transcription)
 
@@ -329,9 +348,12 @@ final class MeetingTranscriptRefiner: ObservableObject {
                 if Task.isCancelled || cancelledMeetingID == meetingID { break }
 
                 // Per-group pending filter: cards in this group that still need polishing.
-                // A `redoAll` run has already cleared `isPolished` above, so this only skips
-                // windows where every card was already handled by a previous pass (e.g. a resume).
-                let pending = window.segmentIndices.filter { !working[$0].isPolished }
+                // A `redoEverything` run treats every card as pending — its cards have NOT been
+                // unwound yet, so `isPolished` is still true for them and filtering here would
+                // skip the whole meeting.
+                let pending = redoEverything
+                    ? window.segmentIndices
+                    : window.segmentIndices.filter { !working[$0].isPolished }
                 guard !pending.isEmpty else {
                     groupContext = Self.carry(groupContext, appending: window.segmentIndices.map { working[$0].text })
                     markDone(window, in: working)
@@ -357,6 +379,14 @@ final class MeetingTranscriptRefiner: ObservableObject {
                     continue
                 }
 
+                // Past the point of no return for this window: audio is readable and we are about
+                // to decode. Only now is it safe to discard the previous pass for these cards —
+                // every `continue` above leaves them polished and intact.
+                if redoEverything {
+                    Self.unwindPreviousPass(&working, indices: window.segmentIndices)
+                    unpersistedWork = true
+                }
+
                 let prompt = groupContext.isEmpty ? nil : String(groupContext.suffix(Self.contextMaxLength))
                 // Use the group's forced language; fall back to the timeline span; fall back to
                 // the user's configured language. Per-group context keeps this in the right script.
@@ -370,13 +400,28 @@ final class MeetingTranscriptRefiner: ObservableObject {
                     fixedLanguage = forcedLanguage ?? AppState.shared.selectedLanguage
                 }
 
+                // Checked variant: a bridge that is shutting down, uninitialized, or whose context
+                // lock timed out used to come back as an empty array and be recorded as silence,
+                // which marked the window handled and left the card holding whatever the unwind
+                // above had reduced it to. Those are now errors and end the group instead.
                 let timed: [WhisperTimedSegment]
                 do {
                     timed = try await ModelWorkQueue.shared.runBlocking("meeting-refine") {
-                        groupBridge.transcribeTimestamped(samples: samples, initialPrompt: prompt, language: fixedLanguage)
+                        try groupBridge.transcribeTimestampedChecked(samples: samples, initialPrompt: prompt, language: fixedLanguage)
                     }
                 } catch {
-                    Logger.warning("Transcript refine: window at \(window.start)s cancelled", subsystem: .transcription)
+                    Logger.warning("Transcript refine: window at \(window.start)s did not decode — \(error.localizedDescription)", subsystem: .transcription)
+                    break
+                }
+
+                // An abort truncates the decode wherever it happened to be, and whisper still
+                // returns the segments it had already emitted. Those are a fragment of the
+                // window, not a refinement of it — persisting them (with `rawText` stamped, which
+                // marks the card permanently polished) replaces good live text with half a
+                // sentence. The usual source is a dictation `stopAsync()` on the borrowed
+                // resident bridge. Drop the window and leave the group for a later pass.
+                if groupBridge.shouldAbort {
+                    Logger.warning("Transcript refine: window at \(window.start)s aborted mid-decode — discarding partial output", subsystem: .transcription)
                     break
                 }
 
@@ -411,7 +456,10 @@ final class MeetingTranscriptRefiner: ObservableObject {
                     // The refine output always wins. With the correct per-language model there is
                     // no longer a reason to distrust the output's script or length.
                     for (index, decoded) in MeetingRefineWindow.assign(accepted, to: window, in: working) {
-                        var corrected = DictionaryManager.shared.correctText(decoded)
+                        // Capturing variant: a refine corrects hundreds of cards, and each
+                        // `correctText` would overwrite the process-wide `lastCorrections` a
+                        // concurrent dictation's history save is about to read.
+                        var corrected = DictionaryManager.shared.correctTextCapturing(decoded).text
                             .trimmingCharacters(in: .whitespacesAndNewlines)
                         // Strip leading punctuation artifacts: model sometimes starts a window with
                         // ", " or ". " when the audio boundary falls mid-utterance after a pause.
@@ -429,12 +477,28 @@ final class MeetingTranscriptRefiner: ObservableObject {
                             }).trimmingCharacters(in: .whitespacesAndNewlines)
                         }
                         guard !corrected.isEmpty else { continue }
-                        if fixedLanguage != .auto { working[index].language = fixedLanguage.rawValue }
+                        if fixedLanguage != .auto {
+                            working[index].language = fixedLanguage.rawValue
+                            unpersistedWork = true
+                        }
                         let original = working[index].text
-                        guard corrected != original else { continue }
+                        guard corrected != original else {
+                            // A re-decode that agrees with the live text is still a completed
+                            // decode. `isPolished` is derived from `rawText != nil`, so leaving it
+                            // nil here means the card is pending forever: every subsequent refine
+                            // re-decodes it, and a meeting where the live ASR was already right
+                            // never converges. Stamping the identical text costs nothing — an
+                            // unwind restores the same string.
+                            if working[index].rawText == nil {
+                                working[index].rawText = original
+                                unpersistedWork = true
+                            }
+                            continue
+                        }
                         if working[index].rawText == nil { working[index].rawText = original }
                         working[index].text = corrected
                         groupRewritten += 1
+                        unpersistedWork = true
                     }
                 }
 
@@ -444,7 +508,18 @@ final class MeetingTranscriptRefiner: ObservableObject {
                 completedWindows += 1
                 progress = Double(completedWindows) / Double(totalWindows)
 
-                await MeetingManager.shared.updateSegments(meetingID: meetingID, segments: working)
+                // Persistence is throttled, not per-window. `updateSegments` rewrites the entire
+                // segment array, so a 90-minute meeting used to do ~90 full-array writes on the
+                // main actor — quadratic, and the visible source of the UI hitching during a
+                // refine. Writing at most every `persistInterval` keeps the crash-resilience the
+                // per-window write was there for (an interrupted run loses at most that much
+                // work) at a fraction of the cost. Windows that changed nothing are not dirty and
+                // never trigger a write at all.
+                if unpersistedWork, Date().timeIntervalSince(lastPersist) >= Self.persistInterval {
+                    await MeetingManager.shared.updateSegments(meetingID: meetingID, segments: working)
+                    unpersistedWork = false
+                    lastPersist = Date()
+                }
                 await Task.yield()
             }
 
@@ -461,6 +536,12 @@ final class MeetingTranscriptRefiner: ObservableObject {
         }
 
         if ownsDetectBridge { detectBridge.prepareForShutdown() }
+
+        // Flush whatever the throttle was still holding. Reached on every exit from the group
+        // loop, including the cancel and abort `break`s, so nothing decoded is ever dropped.
+        if unpersistedWork {
+            await MeetingManager.shared.updateSegments(meetingID: meetingID, segments: working)
+        }
 
         let elapsed = Int(Date().timeIntervalSince(t0) * 1000)
         Logger.info("Transcript refine: \(totalRewritten) segment(s) rewritten across \(totalWindows) window(s) in \(elapsed)ms for \(meetingID)", subsystem: .transcription)
@@ -554,6 +635,34 @@ final class MeetingTranscriptRefiner: ObservableObject {
 
     private func markDone(_ window: MeetingRefineWindow, in segments: [MeetingSegment]) {
         for index in window.segmentIndices { doneSegmentIDs.insert(segments[index].id) }
+    }
+
+    /// Clears a bridge's abort flag, but only when that cannot cancel someone else's stop.
+    ///
+    /// A bridge this refine loaded is ours alone. The *borrowed* resident bridge is the live
+    /// dictation bridge, and `requestAbort()` from `stopAsync()` is how a key release ends a
+    /// recording — resetting the flag underneath it swallows the user's stop and the dictation
+    /// keeps decoding. A borrowed bridge is therefore only cleared when no decode is in flight,
+    /// where a set flag can only be left over from an operation that has already returned.
+    private static func clearStaleAbort(_ bridge: WhisperBridge, owned: Bool) {
+        guard owned || !WhisperBridge.isDecoding else { return }
+        bridge.resetAbort()
+    }
+
+    /// Reverts one window's cards to their pre-refine state so they decode again.
+    ///
+    /// This is the old up-front `redoAll` reset, narrowed to a single window and moved to the
+    /// point where the decode is certain to happen. Restoring `text` from `rawText` and clearing
+    /// `rawText` is what makes `isPolished` false; clearing `language` stops a stale per-card
+    /// language from overriding the new pass's routing. Idempotent: a card with no `rawText` is
+    /// already raw and is left alone.
+    private static func unwindPreviousPass(_ segments: inout [MeetingSegment], indices: [Int]) {
+        for index in indices where segments.indices.contains(index) {
+            segments[index].language = nil
+            guard let raw = segments[index].rawText else { continue }
+            segments[index].text = raw
+            segments[index].rawText = nil
+        }
     }
 
     private static func carry(_ context: String, appending texts: [String]) -> String {

@@ -2896,45 +2896,51 @@ class AppState: ObservableObject {
                 }
                 #endif
 
+                // `WhisperBridge.transcribeAsync` invokes this completion on its private decode
+                // queue, so the ENTIRE body has to hop before it touches anything on `self` —
+                // `diarizerFeedTask` and `retainForPolish`'s `committedChunks.append` are both
+                // main-actor state, and an unsynchronized append racing the `sorted()` in
+                // `committedChunks(matching:)` corrupts the array's storage rather than merely
+                // losing a write. Hopping once here also makes the `diarizerFeedTask` chain below
+                // a genuine read-modify-write instead of a racy one.
                 streamingTranscriber?.onChunkCompleted = { [weak self] chunk in
-                    guard let self else { return }
-                    // Meeting mode — route chunk to session instead of history.
-                    // Prefer the live property; fall back to the capture for the tail chunk
-                    // that arrives while stopInAppRecording()'s Task is still running.
-                    let meetingSession = self.activeMeetingSession ?? capturedMeetingSession
-                    if let meetingSession = meetingSession {
-                        #if canImport(FluidAudio)
-                        // With a coordinator active, this final text goes through the same diff
-                        // as the partials — sending it to onNewChunk as well would append the
-                        // whole meeting a second time.
-                        if let coordinator = self.meetingSpeakerCoordinator {
-                            let finalText = chunk.text
-                            self.diarizerFeedTask = Task { [previous = self.diarizerFeedTask] in
-                                await previous?.value
-                                await coordinator.onFinalText(finalText)
+                    Task { @MainActor in
+                        guard let self else { return }
+                        // Meeting mode — route chunk to session instead of history.
+                        // Prefer the live property; fall back to the capture for the tail chunk
+                        // that arrives while stopInAppRecording()'s Task is still running.
+                        let meetingSession = self.activeMeetingSession ?? capturedMeetingSession
+                        if let meetingSession = meetingSession {
+                            #if canImport(FluidAudio)
+                            // With a coordinator active, this final text goes through the same diff
+                            // as the partials — sending it to onNewChunk as well would append the
+                            // whole meeting a second time.
+                            if let coordinator = self.meetingSpeakerCoordinator {
+                                let finalText = chunk.text
+                                self.diarizerFeedTask = Task { [previous = self.diarizerFeedTask] in
+                                    await previous?.value
+                                    await coordinator.onFinalText(finalText)
+                                }
+                                return
                             }
-                            return
-                        }
-                        #endif
-                        Task { @MainActor in
+                            #endif
                             // Reject stale chunks from a previous recording that completed
                             // before this session's startRecording() incremented chunkGeneration.
                             guard meetingSession.chunkGeneration == capturedGeneration else { return }
                             meetingSession.onNewChunk(text: chunk.text, start: chunk.start, end: chunk.end)
+                            return
                         }
-                        return
-                    }
-                    guard let id = self.currentSessionID else { return }
-                    let chunkText = chunk.text
-                    Task { await HistoryManager.shared.appendChunk(sessionID: id, chunkText: chunkText, totalDuration: chunk.recordedDuration) }
-                    self.retainForPolish(chunk)
-                    Task { @MainActor [weak self] in
+                        guard let id = self.currentSessionID else { return }
+                        let chunkText = chunk.text
+                        Task { await HistoryManager.shared.appendChunk(sessionID: id, chunkText: chunkText, totalDuration: chunk.recordedDuration) }
+                        self.retainForPolish(chunk)
+
                         // `deterministicPolishHandlesPostProcessing` short-circuits the whole
                         // per-chunk arm: the stop path no longer drains the coordinator when arm B
                         // owns the mode, so enqueuing here would polish every chunk in isolation
                         // and throw the result away — wasted work and a `polish:` line per chunk
                         // that describes output nobody sees.
-                        guard let self, self.llmEnabled,
+                        guard self.llmEnabled,
                               !self.deterministicPolishHandlesPostProcessing else { return }
                         let mode = AIModeManager.shared.postProcessMode
                         // Nemotron fires onChunkCompleted once with the full session text at stop time.
@@ -3337,25 +3343,26 @@ class AppState: ObservableObject {
                 // Wire incremental CoreData persistence for crash recovery
                 // and per-chunk LLM correction (runs during audio collection windows).
                 streamingTranscriber?.onChunkCompleted = { [weak self] chunk in
-                    guard let self else { return }
-                    // Meeting mode — route chunk to session instead of history
-                    if let meetingSession = self.activeMeetingSession {
-                        Task { @MainActor in
+                    // Fires on `WhisperBridge`'s decode queue — hop before touching `self`.
+                    // See the matching comment on the other `onChunkCompleted` assignment.
+                    Task { @MainActor in
+                        guard let self else { return }
+                        // Meeting mode — route chunk to session instead of history
+                        if let meetingSession = self.activeMeetingSession {
                             meetingSession.onNewChunk(text: chunk.text, start: chunk.start, end: chunk.end)
+                            return
                         }
-                        return
-                    }
-                    guard let id = self.currentSessionID else { return }
-                    let chunkText = chunk.text
-                    Task { await HistoryManager.shared.appendChunk(sessionID: id, chunkText: chunkText, totalDuration: chunk.recordedDuration) }
-                    self.retainForPolish(chunk)
-                    Task { @MainActor [weak self] in
+                        guard let id = self.currentSessionID else { return }
+                        let chunkText = chunk.text
+                        Task { await HistoryManager.shared.appendChunk(sessionID: id, chunkText: chunkText, totalDuration: chunk.recordedDuration) }
+                        self.retainForPolish(chunk)
+
                         // `deterministicPolishHandlesPostProcessing` short-circuits the whole
                         // per-chunk arm: the stop path no longer drains the coordinator when arm B
                         // owns the mode, so enqueuing here would polish every chunk in isolation
                         // and throw the result away — wasted work and a `polish:` line per chunk
                         // that describes output nobody sees.
-                        guard let self, self.llmEnabled,
+                        guard self.llmEnabled,
                               !self.deterministicPolishHandlesPostProcessing else { return }
                         let mode = AIModeManager.shared.postProcessMode
                         // Nemotron fires onChunkCompleted once with the full session text at stop time.
@@ -3543,7 +3550,7 @@ class AppState: ObservableObject {
                 if finalText.isEmpty {
                     let streamingResult = transcriber.currentTranscription
                     if !streamingResult.isEmpty {
-                        finalText = DictionaryManager.shared.correctText(streamingResult)
+                        finalText = transcriber.applyDictionary(streamingResult)
                         if fillerWordRemovalEnabled {
                             finalText = FillerWordFilter.removeFillers(from: finalText)
                         }
@@ -4036,7 +4043,7 @@ class AppState: ObservableObject {
                         duration: transcriber.recordedDuration,
                         language: recordedLanguage,
                         modelUsed: activeModelDisplayName,
-                        corrections: DictionaryManager.shared.lastCorrections,
+                        corrections: transcriber.lastAppliedCorrections,
                         targetAppName: self.lastTargetAppName
                     )
                     try await HistoryManager.shared.saveTranscription(record)

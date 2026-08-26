@@ -102,3 +102,37 @@
     meetings seam: a VAD chunk wants sentence-initial capitals (not a fragment) but its *end* is a
     cut whose finality is only knowable from the silence the next chunk carries. Overloading
     `isFragment` for both would have cost meetings their capitalisation to buy correct termination.
+
+18. **Never derive a `String.Index` from one string and apply it to another.** A `String.Index`
+    encodes a UTF-8 offset and is only valid in the exact instance it came from. Two variants of
+    this shipped simultaneously and both trapped in production:
+    - Searching a `lowercased()` snapshot and slicing the original. `İ` (U+0130), `Ⱥ` (U+023A) and
+      `Ⱦ` (U+023E) grow by a byte when lowercased, so one of them anywhere ahead of a match shifts
+      every later index past its counterpart — silently garbling the extraction, then trapping.
+    - Holding indices across a `replaceSubrange`. Any resize invalidates every outstanding index,
+      so the *second* occurrence of a term whose replacement has a different length is
+      out of bounds. This is the reported meeting-retranscribe crash.
+
+    Carry positions as integer offsets across mutations, and convert between a string and its
+    case-mapped copy through a Character distance (case mapping preserves grapheme count) with a
+    `limitedBy:` backstop — `ListFormatter.mapIndex`.
+
+19. **A range built from two independently-derived bounds needs an ordering guard, not just a
+    bounds guard.** `tryPrefixedGroups` checked `pwStart < lastStart` and sliced
+    `lower[firstEnd..<pwStart]`; on `"one one two"` the second marker's preceding word lands
+    *inside* the first marker, so the range inverts and traps while both bounds are individually
+    in range. Assert the two bounds' order explicitly.
+
+20. **Integer accumulators over a user-supplied token stream need overflow-reporting arithmetic.**
+    `SpokenNumberConverter`'s grammar accepts a scale after a scale, so ten "hundred"s in a row is
+    a well-formed run and overflows Int64 — which traps in Swift rather than wrapping. Use
+    `multipliedReportingOverflow`/`addingReportingOverflow` and end the run at the overflow, so the
+    words parsed so far still convert. Check *before* mutating the accumulator, or the emitted
+    value stops matching the span.
+
+21. **A replace-all helper must be called once per distinct term, not once per occurrence.** The
+    third correction pass iterated the word list and called a replace-every-occurrence helper for
+    each. For ordinary entries the repeat visits are no-ops, but an entry whose replacement
+    contains its own search term (`gpt → GPT model`) matches its own output, so N occurrences
+    produced an N-fold expansion. Deduplicate the word list case-insensitively, matching the
+    helper's own case-insensitive search.

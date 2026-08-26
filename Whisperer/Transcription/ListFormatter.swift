@@ -402,7 +402,11 @@ struct ListFormatter {
             if sequential.count == 2 {
                 let firstEnd = sequential[0].markerRange.upperBound
                 let lastStart = sequential[1].markerRange.lowerBound
-                if let pwStart = sequential[1].precedingWordStart, pwStart < lastStart {
+                // `firstEnd <= pwStart` is not implied by `pwStart < lastStart`: the second
+                // marker's preceding word can sit *inside* the first marker when the same word is
+                // both a marker and a preceding word ("one one two"), which makes the range
+                // inverted and `lower[firstEnd..<pwStart]` trap.
+                if let pwStart = sequential[1].precedingWordStart, pwStart < lastStart, firstEnd <= pwStart {
                     let span = String(lower[firstEnd..<pwStart])
                     if !span.contains(".") && !span.contains("!") && !span.contains("?") {
                         let spanWords = span.split(separator: " ").map {
@@ -656,23 +660,18 @@ struct ListFormatter {
 
         // Extract prefix text (everything before the first item start)
         let firstItemStart = itemStarts[0]
-        let prefixOffset = lower.distance(from: lower.startIndex, to: firstItemStart)
-        let rawPrefix = String(text[text.startIndex..<text.index(text.startIndex, offsetBy: prefixOffset)])
+        let rawPrefix = String(text[text.startIndex..<mapIndex(firstItemStart, from: lower, to: text)])
             .trimmingCharacters(in: .whitespacesAndNewlines)
         let prefix = stripPreambleFillers(rawPrefix)
 
         // Extract items: text after each marker until the next item start (or end)
         var items: [(index: Int, text: String)] = []
         for i in 0..<markers.count {
-            let markerEnd = markers[i].markerRange.upperBound
-            let markerEndOffset = lower.distance(from: lower.startIndex, to: markerEnd)
-            let itemTextStart = text.index(text.startIndex, offsetBy: markerEndOffset)
+            let itemTextStart = mapIndex(markers[i].markerRange.upperBound, from: lower, to: text)
 
             let itemTextEnd: String.Index
             if i + 1 < markers.count {
-                let nextStart = itemStarts[i + 1]
-                let nextOffset = lower.distance(from: lower.startIndex, to: nextStart)
-                itemTextEnd = text.index(text.startIndex, offsetBy: nextOffset)
+                itemTextEnd = mapIndex(itemStarts[i + 1], from: lower, to: text)
             } else {
                 itemTextEnd = text.endIndex
             }
@@ -773,18 +772,19 @@ struct ListFormatter {
         // Sort by position
         matches.sort { $0.range.lowerBound < $1.range.lowerBound }
 
-        // Extract prefix and items
-        let firstMatchStart = matches[0].range.lowerBound
+        // Extract prefix and items. Trigger ranges were found in `lower`, so every index has to be
+        // mapped back before it touches `text` — see `mapIndex(_:from:to:)`.
+        let firstMatchStart = mapIndex(matches[0].range.lowerBound, from: lower, to: text)
         let rawPrefix = String(text[text.startIndex..<firstMatchStart])
             .trimmingCharacters(in: .whitespacesAndNewlines)
         let prefix = stripPreambleFillers(rawPrefix)
 
         var items: [String] = []
         for i in 0..<matches.count {
-            let itemTextStart = matches[i].range.upperBound
+            let itemTextStart = mapIndex(matches[i].range.upperBound, from: lower, to: text)
             let itemTextEnd: String.Index
             if i + 1 < matches.count {
-                itemTextEnd = matches[i + 1].range.lowerBound
+                itemTextEnd = mapIndex(matches[i + 1].range.lowerBound, from: lower, to: text)
             } else {
                 itemTextEnd = text.endIndex
             }
@@ -820,6 +820,19 @@ struct ListFormatter {
     }
 
     // MARK: - Helpers
+
+    /// Translates an index found in `lower` (a `lowercased()` copy) into the equivalent index in `text`.
+    ///
+    /// `String.Index` encodes a UTF-8 offset, and three scalars — `İ` U+0130, `Ⱥ` U+023A, `Ⱦ` U+023E —
+    /// grow by a byte when lowercased. One of them anywhere ahead of a trigger shifts every later
+    /// index in `lower` past its counterpart in `text`, which silently garbles the extracted item and,
+    /// with enough of them, traps with "String index range is out of bounds". Case mapping preserves
+    /// *grapheme* count, so round-tripping through a Character distance is exact; `limitedBy:` is a
+    /// backstop in case some future Unicode revision breaks that.
+    private static func mapIndex(_ index: String.Index, from lower: String, to text: String) -> String.Index {
+        let offset = lower.distance(from: lower.startIndex, to: index)
+        return text.index(text.startIndex, offsetBy: offset, limitedBy: text.endIndex) ?? text.endIndex
+    }
 
     private enum ListStyle {
         case numbered

@@ -536,3 +536,43 @@
     The variable must be prefixed `TEST_RUNNER_`, which xcodebuild strips before the test sees it:
     `TEST_RUNNER_MEETING_LANG_TESTS=1`. A gate that fails open into a green run is indistinguishable
     from a passing suite.
+
+69. **A destructive reset must be scoped to the unit of work that is about to redo it, not applied
+    up front.** The refine's `redoAll`/forced-language path used to unwind every card to raw ASR
+    text before the first window decoded, and the first completed window persists the whole array.
+    A crash at window 44 of 88 therefore left the other 44 stripped of the polished text the
+    overview and Ask-AI were built from, with no way back. Unwind each window immediately before
+    its decode, after every `continue` that could skip it, so an interrupted run leaves
+    not-yet-reached cards exactly as they were.
+
+70. **Do not reset a borrowed bridge's abort flag.** The refine borrows the resident dictation
+    bridge, and `requestAbort()` from `stopAsync()` is how a key release ends a recording — a
+    blind `resetAbort()` swallows the user's stop. Only clear the flag on a bridge this run
+    loaded, or on a borrowed one when `WhisperBridge.isDecoding` is false.
+
+71. **Check the abort flag after a decode before persisting its output.** An abort truncates the
+    decode wherever it was and whisper still returns the segments already emitted. Persisting them
+    — with `rawText` stamped, which marks the card permanently polished — replaces good live text
+    with half a sentence. Discard the window instead.
+
+72. **"Decode returned nothing" and "decode did not run" must be distinguishable at the call site.**
+    `transcribeTimestamped` collapsed shutdown, not-initialized, lock timeout and genuine silence
+    into `[]`, so a lock timeout was logged as "window decoded to silence" and marked handled.
+    `transcribeTimestampedChecked` throws for the first three; only real silence is empty.
+
+73. **A card whose re-decode matches its existing text is still converged — stamp it.** `isPolished`
+    derives from `rawText != nil`, so skipping the stamp when nothing changed leaves the card
+    pending forever and a meeting whose live ASR was already right re-refines on every pass.
+
+74. **`run` must hold its own single-flight guard.** The guard lived in `start()`, but
+    `MeetingSession` calls `run` directly (it needs the returned segments), so a manual
+    "Re-transcribe" overlapping the end-of-meeting polish put two passes on one meeting, both
+    writing the whole array — the slower one's stale snapshot won. Claim `activeMeetingID` before
+    the first `await` so the check and the claim are one main-actor turn.
+
+75. **Throttle whole-array persistence, and key the dirty flag on mutations rather than on the
+    rewrite counter.** `updateSegments` rewrites every segment, so a per-window write is quadratic
+    in meeting length on the main actor. Writing at most every 2s bounds interrupted-run loss to
+    that much work. The flag must be set at *every* site that mutates the array, including the ones
+    that change no visible text — the `rawText` convergence stamp and the per-card language — or
+    those never reach disk and rule 73's fix is undone.

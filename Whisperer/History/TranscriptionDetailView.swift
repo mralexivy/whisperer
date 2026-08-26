@@ -681,7 +681,7 @@ struct TranscriptionDetailView: View {
                 }
 
                 // Apply dictionary corrections
-                let finalText = DictionaryManager.shared.correctText(rawText)
+                let finalText = DictionaryManager.shared.correctTextCapturing(rawText).text
 
                 guard !finalText.isEmpty else {
                     Logger.warning("Re-transcription produced empty result", subsystem: .transcription)

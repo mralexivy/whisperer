@@ -246,7 +246,7 @@ class FileTranscriptionManager: ObservableObject {
                 }
 
                 // Apply dictionary corrections
-                let finalText = DictionaryManager.shared.correctText(accumulatedText)
+                let finalText = DictionaryManager.shared.correctTextCapturing(accumulatedText).text
 
                 await MainActor.run {
                     self.transcriptionResult = finalText

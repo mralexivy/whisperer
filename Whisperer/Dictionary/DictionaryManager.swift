@@ -39,7 +39,6 @@ class DictionaryManager: ObservableObject {
             UserDefaults.standard.set(usePhoneticMatching, forKey: "usePhoneticMatching")
         }
     }
-    @Published var lastCorrections: [AppliedCorrection] = []
     @Published var selectedEntryId: UUID? = nil  // For navigation from correction popover
 
     private let database = HistoryDatabase.shared
@@ -710,17 +709,24 @@ class DictionaryManager: ObservableObject {
 
     // MARK: - Correction Engine
 
-    func correctText(_ text: String) -> String {
+    /// Applies the dictionary and hands the applied corrections back to the caller.
+    ///
+    /// This replaced a `correctText` that left its result in a process-wide `lastCorrections`
+    /// slot. The slot cross-attributed: a meeting refine correcting its 88th window overwrote
+    /// what a finishing dictation's history save was about to read, so a record was stamped with
+    /// another job's terms. Callers now own the list, which makes that impossible by construction.
+    func correctTextCapturing(_ text: String) -> (text: String, corrections: [AppliedCorrection]) {
         guard isEnabled, let engine = correctionEngine else {
-            return text
+            return (text, [])
         }
 
         // Use the new sensitivity settings (0 = exact match only, 1-3 = edit distance)
         let maxEditDistance = fuzzyMatchingSensitivity
         let result = engine.applyCorrections(text, maxEditDistance: maxEditDistance, usePhonetic: usePhoneticMatching)
 
-        // Store corrections for UI display
-        lastCorrections = result.corrections.map { AppliedCorrection(original: $0.original, replacement: $0.replacement, category: $0.category, notes: $0.notes, entryId: $0.entryId) }
+        let applied = result.corrections.map {
+            AppliedCorrection(original: $0.original, replacement: $0.replacement, category: $0.category, notes: $0.notes, entryId: $0.entryId)
+        }
 
         // Log corrections for debugging
         if !result.corrections.isEmpty {
@@ -737,7 +743,7 @@ class DictionaryManager: ObservableObject {
             }
         }
 
-        return result.text
+        return (result.text, applied)
     }
 
     // MARK: - Navigation
