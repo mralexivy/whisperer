@@ -1,0 +1,60 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<!--
+  LaunchAgent: daily Wispr corpus export
+  Phase 7 — keeps ~/wispr_corpus/ growing as Wispr purges audio blobs after ~2 weeks.
+
+  Install:
+    cp com.ivy.whisperer.wispr-corpus-export.plist ~/Library/LaunchAgents/
+    launchctl load ~/Library/LaunchAgents/com.ivy.whisperer.wispr-corpus-export.plist
+
+  Uninstall:
+    launchctl unload ~/Library/LaunchAgents/com.ivy.whisperer.wispr-corpus-export.plist
+    rm ~/Library/LaunchAgents/com.ivy.whisperer.wispr-corpus-export.plist
+
+  The export script (~wispr_corpus/export_wispr_corpus.py) is idempotent —
+  running it again just skips already-exported rows and audio files.
+  Log tail: tail -f ~/wispr_corpus/export.log
+-->
+<dict>
+    <key>Label</key>
+    <string>com.ivy.whisperer.wispr-corpus-export</string>
+
+    <key>ProgramArguments</key>
+    <array>
+        <string>/usr/bin/python3</string>
+        <string>/Users/alexanderi/wispr_corpus/export_wispr_corpus.py</string>
+        <string>--accumulate</string>
+        <string>--out</string>
+        <string>/Users/alexanderi/wispr_corpus</string>
+    </array>
+
+    <!-- Run once a day at 02:00 local time -->
+    <key>StartCalendarInterval</key>
+    <dict>
+        <key>Hour</key>
+        <integer>2</integer>
+        <key>Minute</key>
+        <integer>0</integer>
+    </dict>
+
+    <key>StandardOutPath</key>
+    <string>/Users/alexanderi/wispr_corpus/export.log</string>
+    <key>StandardErrorPath</key>
+    <string>/Users/alexanderi/wispr_corpus/export.log</string>
+
+    <!-- Run on next opportunity if missed (machine was asleep) -->
+    <key>RunAtLoad</key>
+    <false/>
+
+    <key>Nice</key>
+    <integer>10</integer>
+
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>PATH</key>
+        <string>/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+    </dict>
+</dict>
+</plist>
