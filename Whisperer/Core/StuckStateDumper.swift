@@ -67,10 +67,15 @@ enum StuckStateDumper {
         // the whole target process — including the whisper.cpp decode queue and the audio tap.
         // Running it mid-recording therefore freezes the app it is meant to diagnose. Skip it
         // while audio is in flight; every other section of the dump is captured either way.
+        //
+        // `AppState.state` alone is not enough. Meeting transcript refine and file transcription
+        // both run long `whisper_full` decodes while the app sits at `.idle`, so a refine window
+        // that tripped the stall threshold would get sampled — and the sampling is what turned a
+        // slow window into a 10s one. Ask the bridge directly.
         let audioInFlight: Bool
         switch AppState.shared.state {
         case .recording, .stopping, .transcribing: audioInFlight = true
-        default: audioInFlight = false
+        default: audioInFlight = WhisperBridge.isDecoding
         }
 
         // Background half: thread sample + log extraction + disk writes.

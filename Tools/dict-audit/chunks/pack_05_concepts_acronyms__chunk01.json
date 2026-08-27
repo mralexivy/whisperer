@@ -1,0 +1,1202 @@
+[
+  {
+    "alias": "middle ware",
+    "term": "middleware",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "mid el ware",
+    "term": "middleware",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "web hook",
+    "term": "webhook",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "end point",
+    "term": "endpoint",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "pay load",
+    "term": "payload",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "cereal ization",
+    "term": "serialization",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": []
+  },
+  {
+    "alias": "serial ization",
+    "term": "serialization",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": []
+  },
+  {
+    "alias": "de cereal ization",
+    "term": "deserialization",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": []
+  },
+  {
+    "alias": "dee serial ization",
+    "term": "deserialization",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": []
+  },
+  {
+    "alias": "mar shalling",
+    "term": "marshalling",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": []
+  },
+  {
+    "alias": "j son",
+    "term": "JSON",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "jay son",
+    "term": "JSON",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "jason",
+    "term": "JSON",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": [
+      "all_english",
+      "single_word_english"
+    ]
+  },
+  {
+    "alias": "yam el",
+    "term": "YAML",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "yah mel",
+    "term": "YAML",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "y a m l",
+    "term": "YAML",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "tom el",
+    "term": "TOML",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "t o m l",
+    "term": "TOML",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "x m l",
+    "term": "XML",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "ex em el",
+    "term": "XML",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "c s v",
+    "term": "CSV",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "see ess vee",
+    "term": "CSV",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "mark down",
+    "term": "Markdown",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "la tech",
+    "term": "LaTeX",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "lay tech",
+    "term": "LaTeX",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "la tex",
+    "term": "LaTeX",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": []
+  },
+  {
+    "alias": "mermaid diagram",
+    "term": "Mermaid",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "plant u m l",
+    "term": "PlantUML",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "plant you em el",
+    "term": "PlantUML",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "u m l",
+    "term": "UML",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "you em el",
+    "term": "UML",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "unified modeling language",
+    "term": "UML",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "e r d",
+    "term": "ERD",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "entity relationship diagram",
+    "term": "ERD",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "e t l",
+    "term": "ETL",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "ee tee el",
+    "term": "ETL",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": []
+  },
+  {
+    "alias": "extract transform load",
+    "term": "ETL",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "e l t",
+    "term": "ELT",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "ee el tee",
+    "term": "ELT",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": []
+  },
+  {
+    "alias": "oh lap",
+    "term": "OLAP",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "o l a p",
+    "term": "OLAP",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "oh l t p",
+    "term": "OLTP",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "o l t p",
+    "term": "OLTP",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "acid",
+    "term": "ACID",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": [
+      "all_english",
+      "single_word_english",
+      "identity",
+      "substring_of_term"
+    ]
+  },
+  {
+    "alias": "a c i d",
+    "term": "ACID",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "base",
+    "term": "BASE",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": [
+      "all_english",
+      "single_word_english",
+      "identity",
+      "substring_of_term"
+    ]
+  },
+  {
+    "alias": "b a s e",
+    "term": "BASE",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "basically available soft state",
+    "term": "BASE",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "cap",
+    "term": "CAP",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": [
+      "all_english",
+      "single_word_english",
+      "identity",
+      "substring_of_term"
+    ]
+  },
+  {
+    "alias": "c a p",
+    "term": "CAP",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "c q r s",
+    "term": "CQRS",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "see queue are ess",
+    "term": "CQRS",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "event sourcing",
+    "term": "event sourcing",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": [
+      "identity",
+      "substring_of_term"
+    ]
+  },
+  {
+    "alias": "saga pattern",
+    "term": "saga pattern",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": [
+      "all_english",
+      "conflict",
+      "identity",
+      "substring_of_term"
+    ]
+  },
+  {
+    "alias": "circuit breaker",
+    "term": "circuit breaker",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": [
+      "all_english",
+      "identity",
+      "substring_of_term"
+    ]
+  },
+  {
+    "alias": "load balancer",
+    "term": "load balancer",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": [
+      "all_english",
+      "identity",
+      "substring_of_term"
+    ]
+  },
+  {
+    "alias": "reverse proxy",
+    "term": "reverse proxy",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": [
+      "all_english",
+      "identity",
+      "substring_of_term"
+    ]
+  },
+  {
+    "alias": "api gateway",
+    "term": "API gateway",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": [
+      "identity",
+      "substring_of_term"
+    ]
+  },
+  {
+    "alias": "a p i gateway",
+    "term": "API gateway",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "service mesh",
+    "term": "service mesh",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": [
+      "all_english",
+      "identity",
+      "substring_of_term"
+    ]
+  },
+  {
+    "alias": "side car",
+    "term": "sidecar",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "canary deployment",
+    "term": "canary deployment",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": [
+      "all_english",
+      "identity",
+      "substring_of_term"
+    ]
+  },
+  {
+    "alias": "blue green deployment",
+    "term": "blue-green deployment",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "rolling deployment",
+    "term": "rolling deployment",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": [
+      "all_english",
+      "identity",
+      "substring_of_term"
+    ]
+  },
+  {
+    "alias": "feature flag",
+    "term": "feature flag",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": [
+      "all_english",
+      "identity",
+      "substring_of_term"
+    ]
+  },
+  {
+    "alias": "a b testing",
+    "term": "A/B testing",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "ab testing",
+    "term": "A/B testing",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "hot reload",
+    "term": "hot reload",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": [
+      "all_english",
+      "identity",
+      "substring_of_term"
+    ]
+  },
+  {
+    "alias": "hot re load",
+    "term": "hot reload",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "h m r",
+    "term": "HMR",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "aitch em are",
+    "term": "HMR",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "hot module replacement",
+    "term": "HMR",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "s s r",
+    "term": "SSR",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "ess ess are",
+    "term": "SSR",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "server side rendering",
+    "term": "SSR",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "s s g",
+    "term": "SSG",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "ess ess gee",
+    "term": "SSG",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "static site generation",
+    "term": "SSG",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "i s r",
+    "term": "ISR",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "eye ess are",
+    "term": "ISR",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "incremental static regeneration",
+    "term": "ISR",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "c s r",
+    "term": "CSR",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "see ess are",
+    "term": "CSR",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "client side rendering",
+    "term": "CSR",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "s p a",
+    "term": "SPA",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "ess pee ay",
+    "term": "SPA",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "single page application",
+    "term": "SPA",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "m p a",
+    "term": "MPA",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "em pee ay",
+    "term": "MPA",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "multi page application",
+    "term": "MPA",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": []
+  },
+  {
+    "alias": "p w a",
+    "term": "PWA",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "pee double you ay",
+    "term": "PWA",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "progressive web app",
+    "term": "PWA",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": []
+  },
+  {
+    "alias": "s e o",
+    "term": "SEO",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "ess ee oh",
+    "term": "SEO",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": []
+  },
+  {
+    "alias": "search engine optimization",
+    "term": "SEO",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "w cag",
+    "term": "WCAG",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "double you cag",
+    "term": "WCAG",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "web content accessibility",
+    "term": "WCAG",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "a eleven y",
+    "term": "a11y",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "a 11 y",
+    "term": "a11y",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "accessibility",
+    "term": "a11y",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": [
+      "all_english",
+      "single_word_english"
+    ]
+  },
+  {
+    "alias": "i eighteen n",
+    "term": "i18n",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "i 18 n",
+    "term": "i18n",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "internationalization",
+    "term": "i18n",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": [
+      "all_english",
+      "single_word_english"
+    ]
+  },
+  {
+    "alias": "l ten n",
+    "term": "l10n",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "l 10 n",
+    "term": "l10n",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "localization",
+    "term": "l10n",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": [
+      "all_english",
+      "single_word_english"
+    ]
+  },
+  {
+    "alias": "d r y",
+    "term": "DRY",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "don't repeat yourself",
+    "term": "DRY",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "solid principles",
+    "term": "SOLID",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": []
+  },
+  {
+    "alias": "s o l i d",
+    "term": "SOLID",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "k i s s",
+    "term": "KISS",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "keep it simple",
+    "term": "KISS",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "yag knee",
+    "term": "YAGNI",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": []
+  },
+  {
+    "alias": "you aint gonna need it",
+    "term": "YAGNI",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": []
+  },
+  {
+    "alias": "t d d",
+    "term": "TDD",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "tee dee dee",
+    "term": "TDD",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "test driven development",
+    "term": "TDD",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "b d d",
+    "term": "BDD",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "bee dee dee",
+    "term": "BDD",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "behavior driven development",
+    "term": "BDD",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "d d d",
+    "term": "DDD",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "dee dee dee",
+    "term": "DDD",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "domain driven design",
+    "term": "DDD",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "o o p",
+    "term": "OOP",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "oh oh pee",
+    "term": "OOP",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "object oriented programming",
+    "term": "OOP",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": []
+  },
+  {
+    "alias": "f p",
+    "term": "FP",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "ef pee",
+    "term": "FP",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": []
+  },
+  {
+    "alias": "functional programming",
+    "term": "FP",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": []
+  },
+  {
+    "alias": "i o c",
+    "term": "IoC",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "eye oh see",
+    "term": "IoC",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "inversion of control",
+    "term": "IoC",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "d i",
+    "term": "DI",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "dee eye",
+    "term": "DI",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "dependency injection",
+    "term": "DI",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "m v v m",
+    "term": "MVVM",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "model view view model",
+    "term": "MVVM",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "m v c",
+    "term": "MVC",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "em vee see",
+    "term": "MVC",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "model view controller",
+    "term": "MVC",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "m v p",
+    "term": "MVP",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "em vee pee",
+    "term": "MVP",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "a o t",
+    "term": "AOT",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "ay oh tee",
+    "term": "AOT",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "ahead of time",
+    "term": "AOT",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "j i t",
+    "term": "JIT",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "jay eye tee",
+    "term": "JIT",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "just in time",
+    "term": "JIT",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": [
+      "all_english"
+    ]
+  }
+]

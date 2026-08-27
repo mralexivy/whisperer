@@ -1,0 +1,523 @@
+[
+  {
+    "alias": "tee see pee",
+    "term": "TCP",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "u d p",
+    "term": "UDP",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "you dee pee",
+    "term": "UDP",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "h t t p",
+    "term": "HTTP",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "aitch tee tee pee",
+    "term": "HTTP",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "h t t p s",
+    "term": "HTTPS",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "aitch tee tee pee ess",
+    "term": "HTTPS",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "g r p c",
+    "term": "gRPC",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "gee are pee see",
+    "term": "gRPC",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "g rpc",
+    "term": "gRPC",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": []
+  },
+  {
+    "alias": "rest api",
+    "term": "REST",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": []
+  },
+  {
+    "alias": "representational state transfer",
+    "term": "REST",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "rest full",
+    "term": "RESTful",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "rest ful",
+    "term": "RESTful",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": []
+  },
+  {
+    "alias": "graph q l",
+    "term": "GraphQL",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "graph queue el",
+    "term": "GraphQL",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "graphic ul",
+    "term": "GraphQL",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": []
+  },
+  {
+    "alias": "graph ql",
+    "term": "GraphQL",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": []
+  },
+  {
+    "alias": "web socket",
+    "term": "WebSocket",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "web sock it",
+    "term": "WebSocket",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "web r t c",
+    "term": "WebRTC",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "web are tee see",
+    "term": "WebRTC",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "m q t t",
+    "term": "MQTT",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "em queue tee tee",
+    "term": "MQTT",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "a m q p",
+    "term": "AMQP",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "ay em queue pee",
+    "term": "AMQP",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "proto buff",
+    "term": "Protobuf",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "proto buf",
+    "term": "Protobuf",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": []
+  },
+  {
+    "alias": "protocol buffer",
+    "term": "Protocol Buffers",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": [
+      "all_english",
+      "substring_of_term"
+    ]
+  },
+  {
+    "alias": "proto buffers",
+    "term": "Protocol Buffers",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": []
+  },
+  {
+    "alias": "air flow",
+    "term": "Apache Airflow",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "airflow",
+    "term": "Apache Airflow",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": [
+      "substring_of_term"
+    ]
+  },
+  {
+    "alias": "dag ster",
+    "term": "Dagster",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": []
+  },
+  {
+    "alias": "pre fect",
+    "term": "Prefect",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": []
+  },
+  {
+    "alias": "perfect",
+    "term": "Prefect",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": [
+      "all_english",
+      "single_word_english"
+    ]
+  },
+  {
+    "alias": "loo ee gee",
+    "term": "Luigi",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": []
+  },
+  {
+    "alias": "d b t",
+    "term": "dbt",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "dee bee tee",
+    "term": "dbt",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "data build tool",
+    "term": "dbt",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "air byte",
+    "term": "Airbyte",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": []
+  },
+  {
+    "alias": "air bite",
+    "term": "Airbyte",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "five tran",
+    "term": "Fivetran",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "five tren",
+    "term": "Fivetran",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": []
+  },
+  {
+    "alias": "snow flake",
+    "term": "Snowflake",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "data bricks",
+    "term": "Databricks",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": []
+  },
+  {
+    "alias": "spark",
+    "term": "Apache Spark",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": [
+      "all_english",
+      "single_word_english",
+      "substring_of_term"
+    ]
+  },
+  {
+    "alias": "a patchy spark",
+    "term": "Apache Spark",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "flink",
+    "term": "Apache Flink",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": [
+      "substring_of_term"
+    ]
+  },
+  {
+    "alias": "beam",
+    "term": "Apache Beam",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": [
+      "all_english",
+      "single_word_english",
+      "substring_of_term"
+    ]
+  },
+  {
+    "alias": "hive",
+    "term": "Apache Hive",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": [
+      "all_english",
+      "single_word_english",
+      "substring_of_term"
+    ]
+  },
+  {
+    "alias": "iceberg",
+    "term": "Apache Iceberg",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": [
+      "all_english",
+      "single_word_english",
+      "substring_of_term"
+    ]
+  },
+  {
+    "alias": "delta lake",
+    "term": "Delta Lake",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": [
+      "all_english",
+      "identity",
+      "substring_of_term"
+    ]
+  },
+  {
+    "alias": "par kay",
+    "term": "Apache Parquet",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "par quet",
+    "term": "Apache Parquet",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "parquet",
+    "term": "Apache Parquet",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": [
+      "all_english",
+      "single_word_english",
+      "substring_of_term"
+    ]
+  },
+  {
+    "alias": "av row",
+    "term": "Apache Avro",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": []
+  },
+  {
+    "alias": "avro",
+    "term": "Apache Avro",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": [
+      "substring_of_term"
+    ]
+  },
+  {
+    "alias": "trivvy",
+    "term": "Trivy",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": []
+  },
+  {
+    "alias": "try vee",
+    "term": "Trivy",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "tri vee",
+    "term": "Trivy",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "fall co",
+    "term": "Falco",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": []
+  },
+  {
+    "alias": "snick",
+    "term": "Snyk",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": [
+      "all_english",
+      "single_word_english"
+    ]
+  },
+  {
+    "alias": "snik",
+    "term": "Snyk",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": []
+  },
+  {
+    "alias": "sonar cube",
+    "term": "SonarQube",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "sonar queue be",
+    "term": "SonarQube",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "reno vate",
+    "term": "Renovate",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": []
+  },
+  {
+    "alias": "depend a bot",
+    "term": "Dependabot",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "depends bot",
+    "term": "Dependabot",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": []
+  }
+]

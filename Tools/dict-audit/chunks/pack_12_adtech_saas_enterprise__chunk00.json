@@ -1,0 +1,1191 @@
+[
+  {
+    "alias": "ad tech",
+    "term": "AdTech",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "add tech",
+    "term": "AdTech",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "pro gram atic",
+    "term": "programmatic",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "flags": []
+  },
+  {
+    "alias": "pro gram atic advertising",
+    "term": "programmatic advertising",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "flags": []
+  },
+  {
+    "alias": "d s p",
+    "term": "DSP",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "dee ess pee",
+    "term": "DSP",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "demand side platform",
+    "term": "DSP",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "s s p",
+    "term": "SSP",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "ess ess pee",
+    "term": "SSP",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "supply side platform",
+    "term": "SSP",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "d m p",
+    "term": "DMP",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "dee em pee",
+    "term": "DMP",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "data management platform",
+    "term": "DMP",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "c d p",
+    "term": "CDP",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "see dee pee",
+    "term": "CDP",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "customer data platform",
+    "term": "CDP",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "r t b",
+    "term": "RTB",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "are tee bee",
+    "term": "RTB",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "real time bidding",
+    "term": "RTB",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "flags": [
+      "all_english",
+      "conflict"
+    ]
+  },
+  {
+    "alias": "real time bidding",
+    "term": "real-time bidding",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "flags": [
+      "all_english",
+      "conflict"
+    ]
+  },
+  {
+    "alias": "c p m",
+    "term": "CPM",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "see pee em",
+    "term": "CPM",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "cost per mille",
+    "term": "CPM",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "c p c",
+    "term": "CPC",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "see pee see",
+    "term": "CPC",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "cost per click",
+    "term": "CPC",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "c p a",
+    "term": "CPA",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "see pee ay",
+    "term": "CPA",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "cost per acquisition",
+    "term": "CPA",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "c p v",
+    "term": "CPV",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "see pee vee",
+    "term": "CPV",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "cost per view",
+    "term": "CPV",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "row as",
+    "term": "ROAS",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "r o a s",
+    "term": "ROAS",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "return on ad spend",
+    "term": "ROAS",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "c t r",
+    "term": "CTR",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "see tee are",
+    "term": "CTR",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "click through rate",
+    "term": "CTR",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "view ability",
+    "term": "viewability",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "brand safety",
+    "term": "brand safety",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "flags": [
+      "all_english",
+      "identity",
+      "substring_of_term"
+    ]
+  },
+  {
+    "alias": "brand suit ability",
+    "term": "brand suitability",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "brand lift",
+    "term": "brand lift",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "flags": [
+      "all_english",
+      "identity",
+      "substring_of_term"
+    ]
+  },
+  {
+    "alias": "add fraud",
+    "term": "ad fraud",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "invalid traffic",
+    "term": "invalid traffic",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "flags": [
+      "all_english",
+      "conflict",
+      "identity",
+      "substring_of_term"
+    ]
+  },
+  {
+    "alias": "i v t",
+    "term": "IVT",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "eye vee tee",
+    "term": "IVT",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "invalid traffic",
+    "term": "IVT",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "flags": [
+      "all_english",
+      "conflict"
+    ]
+  },
+  {
+    "alias": "g i v t",
+    "term": "GIVT",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "general invalid traffic",
+    "term": "GIVT",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "s i v t",
+    "term": "SIVT",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "sophisticated invalid traffic",
+    "term": "SIVT",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "bot traffic",
+    "term": "bot traffic",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "flags": [
+      "all_english",
+      "identity",
+      "substring_of_term"
+    ]
+  },
+  {
+    "alias": "click fraud",
+    "term": "click fraud",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "flags": [
+      "all_english",
+      "identity",
+      "substring_of_term"
+    ]
+  },
+  {
+    "alias": "impression fraud",
+    "term": "impression fraud",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "flags": [
+      "all_english",
+      "identity",
+      "substring_of_term"
+    ]
+  },
+  {
+    "alias": "domain spoofing",
+    "term": "domain spoofing",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "flags": [
+      "identity",
+      "substring_of_term"
+    ]
+  },
+  {
+    "alias": "add stacking",
+    "term": "ad stacking",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "flags": []
+  },
+  {
+    "alias": "pixel stuffing",
+    "term": "pixel stuffing",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "flags": [
+      "identity",
+      "substring_of_term"
+    ]
+  },
+  {
+    "alias": "content class if ication",
+    "term": "content classification",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "flags": []
+  },
+  {
+    "alias": "contextual targeting",
+    "term": "contextual targeting",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "flags": [
+      "identity",
+      "substring_of_term"
+    ]
+  },
+  {
+    "alias": "contextual analysis",
+    "term": "contextual analysis",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "flags": [
+      "all_english",
+      "identity",
+      "substring_of_term"
+    ]
+  },
+  {
+    "alias": "tax on o me",
+    "term": "taxonomy",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "i a b",
+    "term": "IAB",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "eye ay bee",
+    "term": "IAB",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "i a b tax on o me",
+    "term": "IAB taxonomy",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "g a r m",
+    "term": "GARM",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "garm",
+    "term": "GARM",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "flags": [
+      "identity",
+      "substring_of_term"
+    ]
+  },
+  {
+    "alias": "m r c",
+    "term": "MRC",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "em are see",
+    "term": "MRC",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "media rating council",
+    "term": "MRC",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "m r c accredited",
+    "term": "MRC accredited",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "t a g",
+    "term": "TAG",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "trustworthy accountability group",
+    "term": "TAG",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "ads dot text",
+    "term": "ads.txt",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "flags": []
+  },
+  {
+    "alias": "ads txt",
+    "term": "ads.txt",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "flags": []
+  },
+  {
+    "alias": "app ads dot text",
+    "term": "app-ads.txt",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "flags": []
+  },
+  {
+    "alias": "sellers jason",
+    "term": "sellers.json",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "flags": []
+  },
+  {
+    "alias": "sellers jay son",
+    "term": "sellers.json",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "flags": []
+  },
+  {
+    "alias": "supply chain",
+    "term": "supply chain",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "flags": [
+      "all_english",
+      "identity",
+      "substring_of_term"
+    ]
+  },
+  {
+    "alias": "supply path optimization",
+    "term": "supply path optimization",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "flags": [
+      "all_english",
+      "identity",
+      "substring_of_term"
+    ]
+  },
+  {
+    "alias": "s p o",
+    "term": "SPO",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "ess pee oh",
+    "term": "SPO",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "header bidding",
+    "term": "header bidding",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "flags": [
+      "all_english",
+      "identity",
+      "substring_of_term"
+    ]
+  },
+  {
+    "alias": "pre bid",
+    "term": "prebid",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "flags": []
+  },
+  {
+    "alias": "pre bid js",
+    "term": "Prebid.js",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "flags": []
+  },
+  {
+    "alias": "open r t b",
+    "term": "OpenRTB",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "open real time bidding",
+    "term": "OpenRTB",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "v a s t",
+    "term": "VAST",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "vast tag",
+    "term": "VAST",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "v paid",
+    "term": "VPAID",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "flags": []
+  },
+  {
+    "alias": "vee paid",
+    "term": "VPAID",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "flags": []
+  },
+  {
+    "alias": "m raid",
+    "term": "MRAID",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "em raid",
+    "term": "MRAID",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "c t v",
+    "term": "CTV",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "see tee vee",
+    "term": "CTV",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "connected tv",
+    "term": "CTV",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "flags": []
+  },
+  {
+    "alias": "o t t",
+    "term": "OTT",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "oh tee tee",
+    "term": "OTT",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "over the top",
+    "term": "OTT",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "d o o h",
+    "term": "DOOH",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "digital out of home",
+    "term": "DOOH",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "o o h",
+    "term": "OOH",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "out of home",
+    "term": "OOH",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "im pression",
+    "term": "impression",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "flags": []
+  },
+  {
+    "alias": "reach metric",
+    "term": "reach",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "free quency",
+    "term": "frequency",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "flags": []
+  },
+  {
+    "alias": "free quency capping",
+    "term": "frequency capping",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "flags": []
+  },
+  {
+    "alias": "at tribution",
+    "term": "attribution",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "flags": []
+  },
+  {
+    "alias": "multi touch at tribution",
+    "term": "multi-touch attribution",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "flags": []
+  },
+  {
+    "alias": "m t a",
+    "term": "MTA",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "em tee ay",
+    "term": "MTA",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "multi touch attribution",
+    "term": "MTA",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "flags": []
+  },
+  {
+    "alias": "last click at tribution",
+    "term": "last-click attribution",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "flags": []
+  },
+  {
+    "alias": "first click at tribution",
+    "term": "first-click attribution",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "flags": []
+  },
+  {
+    "alias": "con version",
+    "term": "conversion",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "pixel tracking",
+    "term": "pixel",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "flags": []
+  },
+  {
+    "alias": "tracking pixel",
+    "term": "tracking pixel",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "flags": [
+      "identity",
+      "substring_of_term"
+    ]
+  },
+  {
+    "alias": "s d k integration",
+    "term": "SDK integration",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "tag manager",
+    "term": "tag manager",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "flags": [
+      "all_english",
+      "identity",
+      "substring_of_term"
+    ]
+  },
+  {
+    "alias": "g t m",
+    "term": "GTM",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "google tag manager",
+    "term": "GTM",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "flags": []
+  },
+  {
+    "alias": "double verify",
+    "term": "DoubleVerify",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "dv",
+    "term": "DoubleVerify",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "flags": []
+  },
+  {
+    "alias": "d v",
+    "term": "DoubleVerify",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "flags": [
+      "all_english",
+      "conflict"
+    ]
+  },
+  {
+    "alias": "double very fly",
+    "term": "DoubleVerify",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "d v",
+    "term": "DV",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "flags": [
+      "all_english",
+      "conflict"
+    ]
+  },
+  {
+    "alias": "dee vee",
+    "term": "DV",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "moat",
+    "term": "MOAT",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "flags": [
+      "all_english",
+      "single_word_english",
+      "identity",
+      "substring_of_term"
+    ]
+  },
+  {
+    "alias": "m o a t",
+    "term": "MOAT",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "i a s",
+    "term": "IAS",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "eye ay ess",
+    "term": "IAS",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "integral ad science",
+    "term": "IAS",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "integral add science",
+    "term": "Integral Ad Science",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "oracle advertising",
+    "term": "Oracle Advertising",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "flags": [
+      "all_english",
+      "identity",
+      "substring_of_term"
+    ]
+  },
+  {
+    "alias": "grape shot",
+    "term": "Grapeshot",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "sass",
+    "term": "SaaS",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "flags": [
+      "all_english",
+      "single_word_english"
+    ]
+  },
+  {
+    "alias": "s a a s",
+    "term": "SaaS",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "b to b",
+    "term": "B2B",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "b 2 b",
+    "term": "B2B",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "business to business",
+    "term": "B2B",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "b to c",
+    "term": "B2C",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "b 2 c",
+    "term": "B2C",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "business to consumer",
+    "term": "B2C",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "b to b to c",
+    "term": "B2B2C",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "b 2 b 2 c",
+    "term": "B2B2C",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "enter prize",
+    "term": "enterprise",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "mid market",
+    "term": "mid-market",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "s m b",
+    "term": "SMB",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "ess em bee",
+    "term": "SMB",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "small medium business",
+    "term": "SMB",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "p l g",
+    "term": "PLG",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "flags": [
+      "all_english"
+    ]
+  }
+]

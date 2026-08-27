@@ -1,0 +1,1011 @@
+[
+  {
+    "alias": "g c",
+    "term": "GC",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "gee see",
+    "term": "GC",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "garbage collection",
+    "term": "GC",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "rep el",
+    "term": "REPL",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "r e p l",
+    "term": "REPL",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "read eval print loop",
+    "term": "REPL",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": []
+  },
+  {
+    "alias": "a s t",
+    "term": "AST",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "ay ess tee",
+    "term": "AST",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "abstract syntax tree",
+    "term": "AST",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "i r",
+    "term": "IR",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "eye are",
+    "term": "IR",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "intermediate representation",
+    "term": "IR",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "l l v m",
+    "term": "LLVM",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "el el vee em",
+    "term": "LLVM",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "a b i",
+    "term": "ABI",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "ay bee eye",
+    "term": "ABI",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "application binary interface",
+    "term": "ABI",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "f f i",
+    "term": "FFI",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "ef ef eye",
+    "term": "FFI",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": []
+  },
+  {
+    "alias": "foreign function interface",
+    "term": "FFI",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "wah zee",
+    "term": "WASI",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "w a s i",
+    "term": "WASI",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "docker image",
+    "term": "Docker image",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": [
+      "all_english",
+      "identity",
+      "substring_of_term"
+    ]
+  },
+  {
+    "alias": "contain er",
+    "term": "container",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "kubernetes pod",
+    "term": "pod",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": []
+  },
+  {
+    "alias": "name space",
+    "term": "namespace",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "in gress",
+    "term": "ingress",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": []
+  },
+  {
+    "alias": "e gress",
+    "term": "egress",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": []
+  },
+  {
+    "alias": "ee gress",
+    "term": "egress",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": []
+  },
+  {
+    "alias": "config map",
+    "term": "ConfigMap",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": []
+  },
+  {
+    "alias": "state full set",
+    "term": "StatefulSet",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "stateful set",
+    "term": "StatefulSet",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "demon set",
+    "term": "DaemonSet",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "daemon set",
+    "term": "DaemonSet",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "cron job",
+    "term": "CronJob",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": [
+      "conflict"
+    ]
+  },
+  {
+    "alias": "chrome job",
+    "term": "CronJob",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "cube cuttle",
+    "term": "kubectl",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "cube control",
+    "term": "kubectl",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "cube c t l",
+    "term": "kubectl",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "kube cuttle",
+    "term": "kubectl",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": []
+  },
+  {
+    "alias": "kube c t l",
+    "term": "kubectl",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": []
+  },
+  {
+    "alias": "cube config",
+    "term": "kubeconfig",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": []
+  },
+  {
+    "alias": "kube config",
+    "term": "kubeconfig",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": []
+  },
+  {
+    "alias": "mini cube",
+    "term": "minikube",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": []
+  },
+  {
+    "alias": "mini kube",
+    "term": "minikube",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": []
+  },
+  {
+    "alias": "kind kubernetes",
+    "term": "kind",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": []
+  },
+  {
+    "alias": "k three s",
+    "term": "k3s",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "k 3 s",
+    "term": "k3s",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "k three d",
+    "term": "k3d",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "k 3 d",
+    "term": "k3d",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "ran cher",
+    "term": "Rancher",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": []
+  },
+  {
+    "alias": "open shift",
+    "term": "OpenShift",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "tan zoo",
+    "term": "Tanzu",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "tan zu",
+    "term": "Tanzu",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": []
+  },
+  {
+    "alias": "far gate",
+    "term": "Fargate",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "e c s",
+    "term": "ECS",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": [
+      "all_english",
+      "conflict"
+    ]
+  },
+  {
+    "alias": "ee see ess",
+    "term": "ECS",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": [
+      "conflict"
+    ]
+  },
+  {
+    "alias": "e k s",
+    "term": "EKS",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": [
+      "all_english",
+      "conflict"
+    ]
+  },
+  {
+    "alias": "ee kay ess",
+    "term": "EKS",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": [
+      "conflict"
+    ]
+  },
+  {
+    "alias": "g k e",
+    "term": "GKE",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "gee kay ee",
+    "term": "GKE",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": []
+  },
+  {
+    "alias": "a k s",
+    "term": "AKS",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": [
+      "all_english",
+      "conflict"
+    ]
+  },
+  {
+    "alias": "ay kay ess",
+    "term": "AKS",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": [
+      "all_english",
+      "conflict"
+    ]
+  },
+  {
+    "alias": "cider",
+    "term": "CIDR",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": [
+      "all_english",
+      "single_word_english"
+    ]
+  },
+  {
+    "alias": "c i d r",
+    "term": "CIDR",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "sub net",
+    "term": "subnet",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "n a t",
+    "term": "NAT",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "nat",
+    "term": "NAT",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": [
+      "all_english",
+      "single_word_english",
+      "identity",
+      "substring_of_term"
+    ]
+  },
+  {
+    "alias": "v p c",
+    "term": "VPC",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": [
+      "all_english",
+      "conflict"
+    ]
+  },
+  {
+    "alias": "vee pee see",
+    "term": "VPC",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": [
+      "all_english",
+      "conflict"
+    ]
+  },
+  {
+    "alias": "b g p",
+    "term": "BGP",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "bee gee pee",
+    "term": "BGP",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "d h c p",
+    "term": "DHCP",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "dee aitch see pee",
+    "term": "DHCP",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "i c m p",
+    "term": "ICMP",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "i p v four",
+    "term": "IPv4",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "eye pee vee four",
+    "term": "IPv4",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "i p v six",
+    "term": "IPv6",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "eye pee vee six",
+    "term": "IPv6",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "c name",
+    "term": "CNAME",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "see name",
+    "term": "CNAME",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "a record",
+    "term": "A record",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": [
+      "all_english",
+      "identity",
+      "substring_of_term"
+    ]
+  },
+  {
+    "alias": "t t l",
+    "term": "TTL",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "tee tee el",
+    "term": "TTL",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "time to live",
+    "term": "TTL",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "eye ops",
+    "term": "IOPS",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": []
+  },
+  {
+    "alias": "i o p s",
+    "term": "IOPS",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "lay ten see",
+    "term": "latency",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "through put",
+    "term": "throughput",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "band width",
+    "term": "bandwidth",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "eye dem potent",
+    "term": "idempotent",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": []
+  },
+  {
+    "alias": "idem potent",
+    "term": "idempotent",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": []
+  },
+  {
+    "alias": "eye dem poe ten see",
+    "term": "idempotency",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": []
+  },
+  {
+    "alias": "idem po ten see",
+    "term": "idempotency",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": []
+  },
+  {
+    "alias": "poly more fism",
+    "term": "polymorphism",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": []
+  },
+  {
+    "alias": "en capsule ation",
+    "term": "encapsulation",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": []
+  },
+  {
+    "alias": "ab straction",
+    "term": "abstraction",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": []
+  },
+  {
+    "alias": "in heritage",
+    "term": "inheritance",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "in hair it ance",
+    "term": "inheritance",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": []
+  },
+  {
+    "alias": "single ton",
+    "term": "singleton",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "factory pattern",
+    "term": "factory pattern",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": [
+      "all_english",
+      "conflict",
+      "identity",
+      "substring_of_term"
+    ]
+  },
+  {
+    "alias": "observer pattern",
+    "term": "observer pattern",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": [
+      "all_english",
+      "identity",
+      "substring_of_term"
+    ]
+  },
+  {
+    "alias": "pub sub",
+    "term": "pub/sub",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": [
+      "all_english",
+      "conflict"
+    ]
+  },
+  {
+    "alias": "publish subscribe",
+    "term": "pub/sub",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "fan out",
+    "term": "fanout",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "shim polyfill",
+    "term": "shim",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": []
+  },
+  {
+    "alias": "poly fill",
+    "term": "polyfill",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "trans pile",
+    "term": "transpile",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": []
+  },
+  {
+    "alias": "mini fy",
+    "term": "minify",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": []
+  },
+  {
+    "alias": "tree shaking",
+    "term": "tree-shaking",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "code splitting",
+    "term": "code splitting",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": [
+      "all_english",
+      "identity",
+      "substring_of_term"
+    ]
+  },
+  {
+    "alias": "lazy loading",
+    "term": "lazy loading",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": [
+      "all_english",
+      "identity",
+      "substring_of_term"
+    ]
+  },
+  {
+    "alias": "memo ization",
+    "term": "memoization",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": []
+  },
+  {
+    "alias": "memorization",
+    "term": "memoization",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": [
+      "all_english",
+      "single_word_english"
+    ]
+  },
+  {
+    "alias": "dee bounce",
+    "term": "debounce",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "de bounce",
+    "term": "debounce",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "throttle function",
+    "term": "throttle",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "standard in",
+    "term": "stdin",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "std in",
+    "term": "stdin",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": []
+  },
+  {
+    "alias": "standard out",
+    "term": "stdout",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "std out",
+    "term": "stdout",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": []
+  },
+  {
+    "alias": "standard error",
+    "term": "stderr",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "std error",
+    "term": "stderr",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": []
+  },
+  {
+    "alias": "e o f",
+    "term": "EOF",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "ee oh ef",
+    "term": "EOF",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": []
+  },
+  {
+    "alias": "end of file",
+    "term": "EOF",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "fy foh",
+    "term": "FIFO",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": []
+  },
+  {
+    "alias": "f i f o",
+    "term": "FIFO",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "first in first out",
+    "term": "FIFO",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "lie foh",
+    "term": "LIFO",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": []
+  },
+  {
+    "alias": "l i f o",
+    "term": "LIFO",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "last in first out",
+    "term": "LIFO",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": [
+      "all_english"
+    ]
+  }
+]

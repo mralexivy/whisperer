@@ -1,0 +1,1109 @@
+[
+  {
+    "alias": "postgress queue el",
+    "term": "PostgreSQL",
+    "pack": "pack_03_databases_ai_ml",
+    "flags": []
+  },
+  {
+    "alias": "post gres q l",
+    "term": "PostgreSQL",
+    "pack": "pack_03_databases_ai_ml",
+    "flags": []
+  },
+  {
+    "alias": "post gress",
+    "term": "PostgreSQL",
+    "pack": "pack_03_databases_ai_ml",
+    "flags": [
+      "conflict"
+    ]
+  },
+  {
+    "alias": "postgres",
+    "term": "PostgreSQL",
+    "pack": "pack_03_databases_ai_ml",
+    "flags": [
+      "substring_of_term"
+    ]
+  },
+  {
+    "alias": "postgres sql",
+    "term": "PostgreSQL",
+    "pack": "pack_03_databases_ai_ml",
+    "flags": []
+  },
+  {
+    "alias": "post grey sql",
+    "term": "PostgreSQL",
+    "pack": "pack_03_databases_ai_ml",
+    "flags": []
+  },
+  {
+    "alias": "post gre sequel",
+    "term": "PostgreSQL",
+    "pack": "pack_03_databases_ai_ml",
+    "flags": []
+  },
+  {
+    "alias": "post gress",
+    "term": "Postgres",
+    "pack": "pack_03_databases_ai_ml",
+    "flags": [
+      "conflict"
+    ]
+  },
+  {
+    "alias": "post grease",
+    "term": "Postgres",
+    "pack": "pack_03_databases_ai_ml",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "post grass",
+    "term": "Postgres",
+    "pack": "pack_03_databases_ai_ml",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "my s q l",
+    "term": "MySQL",
+    "pack": "pack_03_databases_ai_ml",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "my sequel",
+    "term": "MySQL",
+    "pack": "pack_03_databases_ai_ml",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "my sql",
+    "term": "MySQL",
+    "pack": "pack_03_databases_ai_ml",
+    "flags": []
+  },
+  {
+    "alias": "my ess queue el",
+    "term": "MySQL",
+    "pack": "pack_03_databases_ai_ml",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "maria d b",
+    "term": "MariaDB",
+    "pack": "pack_03_databases_ai_ml",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "maria db",
+    "term": "MariaDB",
+    "pack": "pack_03_databases_ai_ml",
+    "flags": []
+  },
+  {
+    "alias": "maria dee bee",
+    "term": "MariaDB",
+    "pack": "pack_03_databases_ai_ml",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "sql lite",
+    "term": "SQLite",
+    "pack": "pack_03_databases_ai_ml",
+    "flags": []
+  },
+  {
+    "alias": "sequel lite",
+    "term": "SQLite",
+    "pack": "pack_03_databases_ai_ml",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "s q lite",
+    "term": "SQLite",
+    "pack": "pack_03_databases_ai_ml",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "sq lite",
+    "term": "SQLite",
+    "pack": "pack_03_databases_ai_ml",
+    "flags": []
+  },
+  {
+    "alias": "mongo d b",
+    "term": "MongoDB",
+    "pack": "pack_03_databases_ai_ml",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "mongo db",
+    "term": "MongoDB",
+    "pack": "pack_03_databases_ai_ml",
+    "flags": []
+  },
+  {
+    "alias": "mongo dee bee",
+    "term": "MongoDB",
+    "pack": "pack_03_databases_ai_ml",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "couch d b",
+    "term": "CouchDB",
+    "pack": "pack_03_databases_ai_ml",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "couch db",
+    "term": "CouchDB",
+    "pack": "pack_03_databases_ai_ml",
+    "flags": []
+  },
+  {
+    "alias": "ka sandra",
+    "term": "Cassandra",
+    "pack": "pack_03_databases_ai_ml",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "cassandra db",
+    "term": "Cassandra",
+    "pack": "pack_03_databases_ai_ml",
+    "flags": []
+  },
+  {
+    "alias": "scilla db",
+    "term": "ScyllaDB",
+    "pack": "pack_03_databases_ai_ml",
+    "flags": []
+  },
+  {
+    "alias": "sill a db",
+    "term": "ScyllaDB",
+    "pack": "pack_03_databases_ai_ml",
+    "flags": []
+  },
+  {
+    "alias": "scylla d b",
+    "term": "ScyllaDB",
+    "pack": "pack_03_databases_ai_ml",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "cockroach d b",
+    "term": "CockroachDB",
+    "pack": "pack_03_databases_ai_ml",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "cockroach db",
+    "term": "CockroachDB",
+    "pack": "pack_03_databases_ai_ml",
+    "flags": []
+  },
+  {
+    "alias": "t i d b",
+    "term": "TiDB",
+    "pack": "pack_03_databases_ai_ml",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "tee eye dee bee",
+    "term": "TiDB",
+    "pack": "pack_03_databases_ai_ml",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "tie db",
+    "term": "TiDB",
+    "pack": "pack_03_databases_ai_ml",
+    "flags": []
+  },
+  {
+    "alias": "yuga byte db",
+    "term": "YugabyteDB",
+    "pack": "pack_03_databases_ai_ml",
+    "flags": []
+  },
+  {
+    "alias": "you ga bite db",
+    "term": "YugabyteDB",
+    "pack": "pack_03_databases_ai_ml",
+    "flags": []
+  },
+  {
+    "alias": "click house",
+    "term": "ClickHouse",
+    "pack": "pack_03_databases_ai_ml",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "time scale db",
+    "term": "TimescaleDB",
+    "pack": "pack_03_databases_ai_ml",
+    "flags": []
+  },
+  {
+    "alias": "timescale d b",
+    "term": "TimescaleDB",
+    "pack": "pack_03_databases_ai_ml",
+    "flags": []
+  },
+  {
+    "alias": "influx d b",
+    "term": "InfluxDB",
+    "pack": "pack_03_databases_ai_ml",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "influx db",
+    "term": "InfluxDB",
+    "pack": "pack_03_databases_ai_ml",
+    "flags": []
+  },
+  {
+    "alias": "neo four j",
+    "term": "Neo4j",
+    "pack": "pack_03_databases_ai_ml",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "neo for jay",
+    "term": "Neo4j",
+    "pack": "pack_03_databases_ai_ml",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "nee oh 4 j",
+    "term": "Neo4j",
+    "pack": "pack_03_databases_ai_ml",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "a rango db",
+    "term": "ArangoDB",
+    "pack": "pack_03_databases_ai_ml",
+    "flags": []
+  },
+  {
+    "alias": "arango d b",
+    "term": "ArangoDB",
+    "pack": "pack_03_databases_ai_ml",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "d graph",
+    "term": "DGraph",
+    "pack": "pack_03_databases_ai_ml",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "dee graph",
+    "term": "DGraph",
+    "pack": "pack_03_databases_ai_ml",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "fauna d b",
+    "term": "FaunaDB",
+    "pack": "pack_03_databases_ai_ml",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "fauna db",
+    "term": "FaunaDB",
+    "pack": "pack_03_databases_ai_ml",
+    "flags": []
+  },
+  {
+    "alias": "surreal d b",
+    "term": "SurrealDB",
+    "pack": "pack_03_databases_ai_ml",
+    "flags": []
+  },
+  {
+    "alias": "surreal db",
+    "term": "SurrealDB",
+    "pack": "pack_03_databases_ai_ml",
+    "flags": []
+  },
+  {
+    "alias": "pine cone",
+    "term": "Pinecone",
+    "pack": "pack_03_databases_ai_ml",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "wee vee ate",
+    "term": "Weaviate",
+    "pack": "pack_03_databases_ai_ml",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "weave ee ate",
+    "term": "Weaviate",
+    "pack": "pack_03_databases_ai_ml",
+    "flags": []
+  },
+  {
+    "alias": "weave iate",
+    "term": "Weaviate",
+    "pack": "pack_03_databases_ai_ml",
+    "flags": []
+  },
+  {
+    "alias": "cue drant",
+    "term": "Qdrant",
+    "pack": "pack_03_databases_ai_ml",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "q drant",
+    "term": "Qdrant",
+    "pack": "pack_03_databases_ai_ml",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "quadrant",
+    "term": "Qdrant",
+    "pack": "pack_03_databases_ai_ml",
+    "flags": [
+      "all_english",
+      "single_word_english"
+    ]
+  },
+  {
+    "alias": "mil vus",
+    "term": "Milvus",
+    "pack": "pack_03_databases_ai_ml",
+    "flags": []
+  },
+  {
+    "alias": "mill vus",
+    "term": "Milvus",
+    "pack": "pack_03_databases_ai_ml",
+    "flags": []
+  },
+  {
+    "alias": "chrome a",
+    "term": "Chroma",
+    "pack": "pack_03_databases_ai_ml",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "chroma db",
+    "term": "Chroma",
+    "pack": "pack_03_databases_ai_ml",
+    "flags": []
+  },
+  {
+    "alias": "p g vector",
+    "term": "pgvector",
+    "pack": "pack_03_databases_ai_ml",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "pee gee vector",
+    "term": "pgvector",
+    "pack": "pack_03_databases_ai_ml",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "face",
+    "term": "FAISS",
+    "pack": "pack_03_databases_ai_ml",
+    "flags": [
+      "all_english",
+      "single_word_english"
+    ]
+  },
+  {
+    "alias": "fays",
+    "term": "FAISS",
+    "pack": "pack_03_databases_ai_ml",
+    "flags": []
+  },
+  {
+    "alias": "f a i s s",
+    "term": "FAISS",
+    "pack": "pack_03_databases_ai_ml",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "s q l",
+    "term": "SQL",
+    "pack": "pack_03_databases_ai_ml",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "ess queue el",
+    "term": "SQL",
+    "pack": "pack_03_databases_ai_ml",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "sequel",
+    "term": "SQL",
+    "pack": "pack_03_databases_ai_ml",
+    "flags": [
+      "all_english",
+      "single_word_english"
+    ]
+  },
+  {
+    "alias": "no s q l",
+    "term": "NoSQL",
+    "pack": "pack_03_databases_ai_ml",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "no sequel",
+    "term": "NoSQL",
+    "pack": "pack_03_databases_ai_ml",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "no sql",
+    "term": "NoSQL",
+    "pack": "pack_03_databases_ai_ml",
+    "flags": []
+  },
+  {
+    "alias": "crud",
+    "term": "CRUD",
+    "pack": "pack_03_databases_ai_ml",
+    "flags": [
+      "identity",
+      "substring_of_term"
+    ]
+  },
+  {
+    "alias": "c r u d",
+    "term": "CRUD",
+    "pack": "pack_03_databases_ai_ml",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "o r m",
+    "term": "ORM",
+    "pack": "pack_03_databases_ai_ml",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "oh are em",
+    "term": "ORM",
+    "pack": "pack_03_databases_ai_ml",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "a c i d",
+    "term": "ACID",
+    "pack": "pack_03_databases_ai_ml",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "acid compliance",
+    "term": "ACID",
+    "pack": "pack_03_databases_ai_ml",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "cap theorem",
+    "term": "CAP theorem",
+    "pack": "pack_03_databases_ai_ml",
+    "flags": [
+      "all_english",
+      "identity",
+      "substring_of_term"
+    ]
+  },
+  {
+    "alias": "c a p theorem",
+    "term": "CAP theorem",
+    "pack": "pack_03_databases_ai_ml",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "sharting",
+    "term": "sharding",
+    "pack": "pack_03_databases_ai_ml",
+    "flags": []
+  },
+  {
+    "alias": "char ding",
+    "term": "sharding",
+    "pack": "pack_03_databases_ai_ml",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "dee normalization",
+    "term": "denormalization",
+    "pack": "pack_03_databases_ai_ml",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "open a i",
+    "term": "OpenAI",
+    "pack": "pack_03_databases_ai_ml",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "open ay eye",
+    "term": "OpenAI",
+    "pack": "pack_03_databases_ai_ml",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "open ai",
+    "term": "OpenAI",
+    "pack": "pack_03_databases_ai_ml",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "chat g p t",
+    "term": "ChatGPT",
+    "pack": "pack_03_databases_ai_ml",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "chat gee pee tee",
+    "term": "ChatGPT",
+    "pack": "pack_03_databases_ai_ml",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "chat gpt",
+    "term": "ChatGPT",
+    "pack": "pack_03_databases_ai_ml",
+    "flags": []
+  },
+  {
+    "alias": "g p t four",
+    "term": "GPT-4",
+    "pack": "pack_03_databases_ai_ml",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "gee pee tee four",
+    "term": "GPT-4",
+    "pack": "pack_03_databases_ai_ml",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "gpt four",
+    "term": "GPT-4",
+    "pack": "pack_03_databases_ai_ml",
+    "flags": []
+  },
+  {
+    "alias": "g p t four oh",
+    "term": "GPT-4o",
+    "pack": "pack_03_databases_ai_ml",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "gee pee tee four oh",
+    "term": "GPT-4o",
+    "pack": "pack_03_databases_ai_ml",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "g p t three",
+    "term": "GPT-3",
+    "pack": "pack_03_databases_ai_ml",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "gee pee tee three",
+    "term": "GPT-3",
+    "pack": "pack_03_databases_ai_ml",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "an throw pick",
+    "term": "Anthropic",
+    "pack": "pack_03_databases_ai_ml",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "an thropic",
+    "term": "Anthropic",
+    "pack": "pack_03_databases_ai_ml",
+    "flags": []
+  },
+  {
+    "alias": "anthro pick",
+    "term": "Anthropic",
+    "pack": "pack_03_databases_ai_ml",
+    "flags": []
+  },
+  {
+    "alias": "antro pic",
+    "term": "Anthropic",
+    "pack": "pack_03_databases_ai_ml",
+    "flags": []
+  },
+  {
+    "alias": "clod",
+    "term": "Claude",
+    "pack": "pack_03_databases_ai_ml",
+    "flags": [
+      "all_english",
+      "single_word_english"
+    ]
+  },
+  {
+    "alias": "clawed",
+    "term": "Claude",
+    "pack": "pack_03_databases_ai_ml",
+    "flags": [
+      "all_english",
+      "single_word_english"
+    ]
+  },
+  {
+    "alias": "claude sonnet",
+    "term": "Claude Sonnet",
+    "pack": "pack_03_databases_ai_ml",
+    "flags": [
+      "all_english",
+      "identity",
+      "substring_of_term"
+    ]
+  },
+  {
+    "alias": "clod sonnet",
+    "term": "Claude Sonnet",
+    "pack": "pack_03_databases_ai_ml",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "claude opus",
+    "term": "Claude Opus",
+    "pack": "pack_03_databases_ai_ml",
+    "flags": [
+      "all_english",
+      "identity",
+      "substring_of_term"
+    ]
+  },
+  {
+    "alias": "clod opus",
+    "term": "Claude Opus",
+    "pack": "pack_03_databases_ai_ml",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "claude hi coo",
+    "term": "Claude Haiku",
+    "pack": "pack_03_databases_ai_ml",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "clod hi coo",
+    "term": "Claude Haiku",
+    "pack": "pack_03_databases_ai_ml",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "gem in eye",
+    "term": "Gemini",
+    "pack": "pack_03_databases_ai_ml",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "gem in ee",
+    "term": "Gemini",
+    "pack": "pack_03_databases_ai_ml",
+    "flags": []
+  },
+  {
+    "alias": "llama",
+    "term": "LLaMA",
+    "pack": "pack_03_databases_ai_ml",
+    "flags": [
+      "all_english",
+      "single_word_english",
+      "identity",
+      "substring_of_term"
+    ]
+  },
+  {
+    "alias": "lah ma",
+    "term": "LLaMA",
+    "pack": "pack_03_databases_ai_ml",
+    "flags": []
+  },
+  {
+    "alias": "llama three",
+    "term": "Llama 3",
+    "pack": "pack_03_databases_ai_ml",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "lah ma three",
+    "term": "Llama 3",
+    "pack": "pack_03_databases_ai_ml",
+    "flags": []
+  },
+  {
+    "alias": "miss tral",
+    "term": "Mistral",
+    "pack": "pack_03_databases_ai_ml",
+    "flags": []
+  },
+  {
+    "alias": "mist ral",
+    "term": "Mistral",
+    "pack": "pack_03_databases_ai_ml",
+    "flags": []
+  },
+  {
+    "alias": "mix tral",
+    "term": "Mixtral",
+    "pack": "pack_03_databases_ai_ml",
+    "flags": []
+  },
+  {
+    "alias": "mixed ral",
+    "term": "Mixtral",
+    "pack": "pack_03_databases_ai_ml",
+    "flags": []
+  },
+  {
+    "alias": "deep seek",
+    "term": "DeepSeek",
+    "pack": "pack_03_databases_ai_ml",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "co here",
+    "term": "Cohere",
+    "pack": "pack_03_databases_ai_ml",
+    "flags": []
+  },
+  {
+    "alias": "co hear",
+    "term": "Cohere",
+    "pack": "pack_03_databases_ai_ml",
+    "flags": []
+  },
+  {
+    "alias": "grock",
+    "term": "Groq",
+    "pack": "pack_03_databases_ai_ml",
+    "flags": []
+  },
+  {
+    "alias": "g rock",
+    "term": "Groq",
+    "pack": "pack_03_databases_ai_ml",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "per plexity",
+    "term": "Perplexity",
+    "pack": "pack_03_databases_ai_ml",
+    "flags": []
+  },
+  {
+    "alias": "per plex ity",
+    "term": "Perplexity",
+    "pack": "pack_03_databases_ai_ml",
+    "flags": []
+  },
+  {
+    "alias": "hugging face",
+    "term": "Hugging Face",
+    "pack": "pack_03_databases_ai_ml",
+    "flags": [
+      "all_english",
+      "identity",
+      "substring_of_term"
+    ]
+  },
+  {
+    "alias": "hugging faze",
+    "term": "Hugging Face",
+    "pack": "pack_03_databases_ai_ml",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "tensor flow",
+    "term": "TensorFlow",
+    "pack": "pack_03_databases_ai_ml",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "tenser flow",
+    "term": "TensorFlow",
+    "pack": "pack_03_databases_ai_ml",
+    "flags": []
+  },
+  {
+    "alias": "pie torch",
+    "term": "PyTorch",
+    "pack": "pack_03_databases_ai_ml",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "pi torch",
+    "term": "PyTorch",
+    "pack": "pack_03_databases_ai_ml",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "py torch",
+    "term": "PyTorch",
+    "pack": "pack_03_databases_ai_ml",
+    "flags": []
+  },
+  {
+    "alias": "jacks",
+    "term": "JAX",
+    "pack": "pack_03_databases_ai_ml",
+    "flags": []
+  },
+  {
+    "alias": "care as",
+    "term": "Keras",
+    "pack": "pack_03_databases_ai_ml",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "care us",
+    "term": "Keras",
+    "pack": "pack_03_databases_ai_ml",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "kerras",
+    "term": "Keras",
+    "pack": "pack_03_databases_ai_ml",
+    "flags": []
+  },
+  {
+    "alias": "psy kit learn",
+    "term": "scikit-learn",
+    "pack": "pack_03_databases_ai_ml",
+    "flags": []
+  },
+  {
+    "alias": "sigh kit learn",
+    "term": "scikit-learn",
+    "pack": "pack_03_databases_ai_ml",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "ski kit learn",
+    "term": "scikit-learn",
+    "pack": "pack_03_databases_ai_ml",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "psychic learn",
+    "term": "scikit-learn",
+    "pack": "pack_03_databases_ai_ml",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "x g boost",
+    "term": "XGBoost",
+    "pack": "pack_03_databases_ai_ml",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "ex gee boost",
+    "term": "XGBoost",
+    "pack": "pack_03_databases_ai_ml",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "light g b m",
+    "term": "LightGBM",
+    "pack": "pack_03_databases_ai_ml",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "light gee bee em",
+    "term": "LightGBM",
+    "pack": "pack_03_databases_ai_ml",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "cat boost",
+    "term": "CatBoost",
+    "pack": "pack_03_databases_ai_ml",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "on x",
+    "term": "ONNX",
+    "pack": "pack_03_databases_ai_ml",
+    "flags": [
+      "all_english"
+    ]
+  }
+]

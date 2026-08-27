@@ -1,0 +1,2762 @@
+[
+  {
+    "alias": "individual con trib you tor",
+    "term": "individual contributor",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "KEEP",
+    "reason": "Multi-word phonetic mis-transcription with no plausible ordinary-English meaning."
+  },
+  {
+    "alias": "p m",
+    "term": "PM",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "KEEP",
+    "reason": "Letter-by-letter spelling of the abbreviation."
+  },
+  {
+    "alias": "pee em",
+    "term": "PM",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "KEEP",
+    "reason": "Phonetic letter spelling of PM; no common English phrase."
+  },
+  {
+    "alias": "product manager",
+    "term": "PM",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "DROP",
+    "reason": "Ordinary English phrase users would want written out verbatim; replacing with abbreviation breaks natural dictation."
+  },
+  {
+    "alias": "p m m",
+    "term": "PMM",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "KEEP",
+    "reason": "Letter-by-letter spelling of the abbreviation."
+  },
+  {
+    "alias": "pee em em",
+    "term": "PMM",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "KEEP",
+    "reason": "Phonetic letter spelling of PMM; no common English phrase."
+  },
+  {
+    "alias": "product marketing manager",
+    "term": "PMM",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "DROP",
+    "reason": "Ordinary English phrase users would want written out verbatim; replacing with abbreviation breaks natural dictation."
+  },
+  {
+    "alias": "t p m",
+    "term": "TPM",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "KEEP",
+    "reason": "Letter-by-letter spelling of the abbreviation."
+  },
+  {
+    "alias": "tee pee em",
+    "term": "TPM",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "KEEP",
+    "reason": "Phonetic letter spelling of TPM; no common English phrase."
+  },
+  {
+    "alias": "technical program manager",
+    "term": "TPM",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "DROP",
+    "reason": "Ordinary English phrase users would want written out; replacing with abbreviation breaks natural dictation."
+  },
+  {
+    "alias": "e m",
+    "term": "EM",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "KEEP",
+    "reason": "Letter-by-letter spelling of the abbreviation."
+  },
+  {
+    "alias": "ee em",
+    "term": "EM",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "KEEP",
+    "reason": "Phonetic letter spelling of EM; no common English phrase."
+  },
+  {
+    "alias": "engineering manager",
+    "term": "EM",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "DROP",
+    "reason": "Ordinary English phrase users would want written out verbatim; breaks natural dictation."
+  },
+  {
+    "alias": "v p",
+    "term": "VP",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "KEEP",
+    "reason": "Letter-by-letter spelling of the abbreviation."
+  },
+  {
+    "alias": "vee pee",
+    "term": "VP",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "KEEP",
+    "reason": "Phonetic letter spelling of VP; no common English meaning."
+  },
+  {
+    "alias": "vice president",
+    "term": "VP",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "DROP",
+    "reason": "Very common English phrase ('the vice president of the committee'); replacing with VP breaks natural dictation."
+  },
+  {
+    "alias": "vee pee of engineering",
+    "term": "VP of Engineering",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "KEEP",
+    "reason": "Phonetic letter rendering anchored to a specific role title; not a plausible ordinary-English phrase."
+  },
+  {
+    "alias": "v p e",
+    "term": "VPE",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "KEEP",
+    "reason": "Letter-by-letter spelling of the abbreviation."
+  },
+  {
+    "alias": "vee pee ee",
+    "term": "VPE",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "KEEP",
+    "reason": "Phonetic letter spelling of VPE; no common English phrase."
+  },
+  {
+    "alias": "c t o",
+    "term": "CTO",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "KEEP",
+    "reason": "Letter-by-letter spelling of the abbreviation."
+  },
+  {
+    "alias": "see tee oh",
+    "term": "CTO",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "KEEP",
+    "reason": "Phonetic letter spelling of CTO; no common English phrase."
+  },
+  {
+    "alias": "chief technology officer",
+    "term": "CTO",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "DROP",
+    "reason": "Ordinary English phrase users would want written out; breaks natural dictation."
+  },
+  {
+    "alias": "c e o",
+    "term": "CEO",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "KEEP",
+    "reason": "Letter-by-letter spelling of the abbreviation."
+  },
+  {
+    "alias": "see ee oh",
+    "term": "CEO",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "KEEP",
+    "reason": "Phonetic letter spelling of CEO; no common English phrase."
+  },
+  {
+    "alias": "chief executive officer",
+    "term": "CEO",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "DROP",
+    "reason": "Ordinary English phrase users would want written out; breaks natural dictation."
+  },
+  {
+    "alias": "c p o",
+    "term": "CPO",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "KEEP",
+    "reason": "Letter-by-letter spelling of the abbreviation."
+  },
+  {
+    "alias": "see pee oh",
+    "term": "CPO",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "KEEP",
+    "reason": "Phonetic letter spelling of CPO; no common English phrase."
+  },
+  {
+    "alias": "chief product officer",
+    "term": "CPO",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "DROP",
+    "reason": "Ordinary English phrase users would want written out; breaks natural dictation."
+  },
+  {
+    "alias": "c m o",
+    "term": "CMO",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "KEEP",
+    "reason": "Letter-by-letter spelling of the abbreviation."
+  },
+  {
+    "alias": "see em oh",
+    "term": "CMO",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "KEEP",
+    "reason": "Phonetic letter spelling of CMO; no common English phrase."
+  },
+  {
+    "alias": "chief marketing officer",
+    "term": "CMO",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "DROP",
+    "reason": "Ordinary English phrase users would want written out; breaks natural dictation."
+  },
+  {
+    "alias": "c f o",
+    "term": "CFO",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "KEEP",
+    "reason": "Letter-by-letter spelling of the abbreviation."
+  },
+  {
+    "alias": "see ef oh",
+    "term": "CFO",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "KEEP",
+    "reason": "Phonetic letter spelling of CFO; no common English phrase."
+  },
+  {
+    "alias": "chief financial officer",
+    "term": "CFO",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "DROP",
+    "reason": "Ordinary English phrase users would want written out; breaks natural dictation."
+  },
+  {
+    "alias": "see so",
+    "term": "CISO",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "DROP",
+    "reason": "Common English fragment ('I see, so what happened...'); replacing with CISO would corrupt ordinary speech mid-sentence."
+  },
+  {
+    "alias": "c i s o",
+    "term": "CISO",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "KEEP",
+    "reason": "Letter-by-letter spelling of the abbreviation."
+  },
+  {
+    "alias": "chief information security officer",
+    "term": "CISO",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "DROP",
+    "reason": "Ordinary English phrase users would want written out; breaks natural dictation."
+  },
+  {
+    "alias": "s w e",
+    "term": "SWE",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "KEEP",
+    "reason": "Letter-by-letter spelling of the abbreviation."
+  },
+  {
+    "alias": "ess double you ee",
+    "term": "SWE",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "KEEP",
+    "reason": "Phonetic letter spelling of SWE; no ordinary English meaning."
+  },
+  {
+    "alias": "software engineer",
+    "term": "SWE",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "DROP",
+    "reason": "Very common English phrase users would want written out; breaks natural dictation."
+  },
+  {
+    "alias": "s d e",
+    "term": "SDE",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "KEEP",
+    "reason": "Letter-by-letter spelling of the abbreviation."
+  },
+  {
+    "alias": "ess dee ee",
+    "term": "SDE",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "KEEP",
+    "reason": "Phonetic letter spelling of SDE; no ordinary English meaning."
+  },
+  {
+    "alias": "software development engineer",
+    "term": "SDE",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "DROP",
+    "reason": "Ordinary English phrase users would want written out; breaks natural dictation."
+  },
+  {
+    "alias": "s s e",
+    "term": "SSE",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "KEEP",
+    "reason": "Letter-by-letter spelling of the abbreviation."
+  },
+  {
+    "alias": "senior software engineer",
+    "term": "SSE",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "DROP",
+    "reason": "Ordinary English phrase users would want written out; breaks natural dictation."
+  },
+  {
+    "alias": "staff eng in ear",
+    "term": "staff engineer",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "KEEP",
+    "reason": "Phonetic mis-transcription of 'engineer' (eng in ear); not plausible ordinary English."
+  },
+  {
+    "alias": "prin cipal eng in ear",
+    "term": "principal engineer",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "KEEP",
+    "reason": "Phonetic mis-transcription of 'principal engineer'; not plausible ordinary English."
+  },
+  {
+    "alias": "teck lead",
+    "term": "tech lead",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "KEEP",
+    "reason": "Phonetic mis-spelling of 'tech'; corrects a Whisper error without ambiguity."
+  },
+  {
+    "alias": "technical lead",
+    "term": "tech lead",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "DROP",
+    "reason": "Ordinary English phrase that maps to an abbreviated form; user saying 'technical lead' likely wants those words written out."
+  },
+  {
+    "alias": "t l",
+    "term": "TL",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "KEEP",
+    "reason": "Letter-by-letter spelling of the abbreviation."
+  },
+  {
+    "alias": "tee el",
+    "term": "TL",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "KEEP",
+    "reason": "Phonetic letter spelling of TL; no common English phrase."
+  },
+  {
+    "alias": "tech lead",
+    "term": "TL",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "DROP",
+    "reason": "Common English phrase; user saying 'tech lead' wants those words, not the initialism TL."
+  },
+  {
+    "alias": "d r i",
+    "term": "DRI",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "KEEP",
+    "reason": "Letter-by-letter spelling of the abbreviation."
+  },
+  {
+    "alias": "dee are eye",
+    "term": "DRI",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "KEEP",
+    "reason": "Phonetic letter spelling of DRI; no common English phrase."
+  },
+  {
+    "alias": "directly responsible individual",
+    "term": "DRI",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "DROP",
+    "reason": "Ordinary English phrase users would want written out; breaks natural dictation."
+  },
+  {
+    "alias": "ray see",
+    "term": "RACI",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "KEEP",
+    "reason": "Phonetic pronunciation of the RACI acronym; not a plausible standalone ordinary-English phrase."
+  },
+  {
+    "alias": "r a c i",
+    "term": "RACI",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "KEEP",
+    "reason": "Letter-by-letter spelling of the abbreviation."
+  },
+  {
+    "alias": "responsible accountable consulted informed",
+    "term": "RACI",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "DROP",
+    "reason": "Full English expansion users would want written out verbatim (e.g. when explaining RACI); replacing with acronym loses meaning."
+  },
+  {
+    "alias": "re spon sible",
+    "term": "responsible",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "KEEP",
+    "reason": "Phonetic mis-split of a single word; corrects a Whisper segmentation error."
+  },
+  {
+    "alias": "a count able",
+    "term": "accountable",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "KEEP",
+    "reason": "Phonetic mis-split of a single word; corrects a Whisper segmentation error."
+  },
+  {
+    "alias": "con sulted",
+    "term": "consulted",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "KEEP",
+    "reason": "Phonetic mis-split of a single word; corrects a Whisper segmentation error."
+  },
+  {
+    "alias": "in formed",
+    "term": "informed",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "KEEP",
+    "reason": "Phonetic mis-split of a single word; corrects a Whisper segmentation error."
+  },
+  {
+    "alias": "band width",
+    "term": "bandwidth",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "KEEP",
+    "reason": "Word-compounding correction; Whisper splits 'bandwidth' with a space."
+  },
+  {
+    "alias": "cap pass ity",
+    "term": "capacity",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "KEEP",
+    "reason": "Phonetic mis-transcription of 'capacity'; not plausible ordinary English."
+  },
+  {
+    "alias": "cap pass ity planning",
+    "term": "capacity planning",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "KEEP",
+    "reason": "Phonetic mis-transcription of 'capacity planning'; not plausible ordinary English."
+  },
+  {
+    "alias": "re sourcing",
+    "term": "resourcing",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "KEEP",
+    "reason": "Word-split correction; preserves the same term."
+  },
+  {
+    "alias": "head count planning",
+    "term": "headcount planning",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "KEEP",
+    "reason": "Word-compounding correction ('head count' → 'headcount'); meaning preserved."
+  },
+  {
+    "alias": "hiring pipe line",
+    "term": "hiring pipeline",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "KEEP",
+    "reason": "Word-split correction ('pipe line' → 'pipeline'); meaning preserved."
+  },
+  {
+    "alias": "wreck",
+    "term": "req",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "DROP",
+    "reason": "Single common English word ('that was a complete wreck'); flagged single_word_english; breaks ordinary speech."
+  },
+  {
+    "alias": "request",
+    "term": "req",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "DROP",
+    "reason": "Extremely common English word; flagged single_word_english; breaks ordinary speech constantly."
+  },
+  {
+    "alias": "open wreck",
+    "term": "open req",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "KEEP",
+    "reason": "Whisper mis-transcription of 'open req' as 'open wreck'; the phrase 'open wreck' is rare in ordinary English, making this a safe correction."
+  },
+  {
+    "alias": "back fill",
+    "term": "backfill",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "KEEP",
+    "reason": "Word-compounding correction; meaning preserved."
+  },
+  {
+    "alias": "ramp up",
+    "term": "ramp-up",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "KEEP",
+    "reason": "Hyphen-normalization only; same semantic content, no term substitution."
+  },
+  {
+    "alias": "on boarding",
+    "term": "onboarding",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "KEEP",
+    "reason": "Word-compounding correction; meaning preserved."
+  },
+  {
+    "alias": "off boarding",
+    "term": "offboarding",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "KEEP",
+    "reason": "Word-compounding correction; meaning preserved."
+  },
+  {
+    "alias": "perf re view",
+    "term": "perf review",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "KEEP",
+    "reason": "Phonetic mis-split of 'review'; corrects a Whisper segmentation error."
+  },
+  {
+    "alias": "performance review",
+    "term": "perf review",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "DROP",
+    "reason": "Very common English phrase users would want written out verbatim; abbreviated replacement breaks natural dictation."
+  },
+  {
+    "alias": "per form ance re view",
+    "term": "performance review",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "KEEP",
+    "reason": "Phonetic mis-split of 'performance review'; corrects a Whisper segmentation error."
+  },
+  {
+    "alias": "cal ih bration",
+    "term": "calibration",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "KEEP",
+    "reason": "Phonetic mis-transcription of 'calibration'; not plausible ordinary English."
+  },
+  {
+    "alias": "calibration meeting",
+    "term": "calibration",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "DROP",
+    "reason": "Silently drops the word 'meeting' from the output; user saying 'calibration meeting' wants both words."
+  },
+  {
+    "alias": "pro mo",
+    "term": "promo",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "KEEP",
+    "reason": "Word-compounding correction; meaning preserved."
+  },
+  {
+    "alias": "promotion",
+    "term": "promo",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "DROP",
+    "reason": "Very common English word with many non-promo meanings ('I got a promotion', 'sales promotion'); flagged single_word_english; breaks ordinary speech."
+  },
+  {
+    "alias": "pro mo shin packet",
+    "term": "promotion packet",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "KEEP",
+    "reason": "Phonetic mis-transcription of 'promotion packet'; not plausible ordinary English."
+  },
+  {
+    "alias": "level ing",
+    "term": "leveling",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "KEEP",
+    "reason": "Word-split correction; meaning preserved."
+  },
+  {
+    "alias": "career ladder",
+    "term": "career ladder",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "DROP",
+    "reason": "Identity rule; flagged identity."
+  },
+  {
+    "alias": "growth plan",
+    "term": "growth plan",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "DROP",
+    "reason": "Identity rule; flagged identity."
+  },
+  {
+    "alias": "p i p",
+    "term": "PIP",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "KEEP",
+    "reason": "Letter-by-letter spelling of the abbreviation."
+  },
+  {
+    "alias": "pee eye pee",
+    "term": "PIP",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "KEEP",
+    "reason": "Phonetic letter spelling of PIP; no common English phrase."
+  },
+  {
+    "alias": "performance improvement plan",
+    "term": "PIP",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "DROP",
+    "reason": "Ordinary English phrase users would want written out verbatim; breaks natural dictation."
+  },
+  {
+    "alias": "self assessment",
+    "term": "self-assessment",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "KEEP",
+    "reason": "Hyphen-normalization only; same semantic content, no term substitution."
+  },
+  {
+    "alias": "peer feed back",
+    "term": "peer feedback",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "KEEP",
+    "reason": "Word-split correction ('feed back' → 'feedback'); meaning preserved."
+  },
+  {
+    "alias": "three sixty review",
+    "term": "360 review",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "KEEP",
+    "reason": "Spoken-number form of '360 review'; natural dictation of a specific term."
+  },
+  {
+    "alias": "360 re view",
+    "term": "360 review",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "KEEP",
+    "reason": "Phonetic mis-split of 'review'; corrects a Whisper segmentation error."
+  },
+  {
+    "alias": "upward feed back",
+    "term": "upward feedback",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "KEEP",
+    "reason": "Word-split correction ('feed back' → 'feedback'); meaning preserved."
+  },
+  {
+    "alias": "o k r",
+    "term": "OKR",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "KEEP",
+    "reason": "Letter-by-letter spelling of the abbreviation; no ordinary English meaning."
+  },
+  {
+    "alias": "oh kay are",
+    "term": "OKR",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "KEEP",
+    "reason": "Phonetic letter-by-letter rendering of O-K-R; not a natural English phrase."
+  },
+  {
+    "alias": "okay are",
+    "term": "OKR",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "DROP",
+    "reason": "Common English words that appear naturally in speech ('okay, are you ready?'); would corrupt normal dictation."
+  },
+  {
+    "alias": "okr",
+    "term": "OKR",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "DROP",
+    "reason": "Identity rule — mandatory drop."
+  },
+  {
+    "alias": "oak are",
+    "term": "OKR",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "DROP",
+    "reason": "Both words are common English ('Those oak are tall'); would corrupt natural speech."
+  },
+  {
+    "alias": "o k r s",
+    "term": "OKRs",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "KEEP",
+    "reason": "Letter-by-letter spelling of the plural abbreviation; no ordinary English meaning."
+  },
+  {
+    "alias": "oh kay ours",
+    "term": "OKRs",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "KEEP",
+    "reason": "Phonetic letter-by-letter rendering of O-K-R-s; not a natural English phrase."
+  },
+  {
+    "alias": "okay ours",
+    "term": "OKRs",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "DROP",
+    "reason": "Common English words appearing naturally in speech ('okay, ours is better'); would corrupt dictation."
+  },
+  {
+    "alias": "oak ours",
+    "term": "OKRs",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "DROP",
+    "reason": "Both words are common English; 'oak' and 'ours' can appear naturally together; when in doubt, drop."
+  },
+  {
+    "alias": "ob jective",
+    "term": "objective",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "KEEP",
+    "reason": "Phonetic mis-transcription with a mid-word space; 'ob jective' does not occur in natural English."
+  },
+  {
+    "alias": "key re sult",
+    "term": "key result",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "KEEP",
+    "reason": "Mid-word space insertion in 'result'; 're sult' as two words does not occur naturally."
+  },
+  {
+    "alias": "key re sults",
+    "term": "key results",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "KEEP",
+    "reason": "Mid-word space insertion in 'results'; does not occur naturally."
+  },
+  {
+    "alias": "k p i",
+    "term": "KPI",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "KEEP",
+    "reason": "Letter-by-letter spelling of the abbreviation."
+  },
+  {
+    "alias": "kay pee eye",
+    "term": "KPI",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "KEEP",
+    "reason": "Phonetic letter-by-letter rendering of K-P-I."
+  },
+  {
+    "alias": "key performance indicator",
+    "term": "KPI",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "KEEP",
+    "reason": "Standard full expansion of KPI; a speaker saying this phrase intends the abbreviation."
+  },
+  {
+    "alias": "k p eyes",
+    "term": "KPIs",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "KEEP",
+    "reason": "Letter-by-letter spelling of the plural abbreviation."
+  },
+  {
+    "alias": "kay pee eyes",
+    "term": "KPIs",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "KEEP",
+    "reason": "Phonetic letter-by-letter rendering of K-P-Is."
+  },
+  {
+    "alias": "k r",
+    "term": "KR",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "KEEP",
+    "reason": "Letter-by-letter spelling of the abbreviation."
+  },
+  {
+    "alias": "kay are",
+    "term": "KR",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "KEEP",
+    "reason": "Phonetic letter-by-letter rendering of K-R."
+  },
+  {
+    "alias": "key result",
+    "term": "KR",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "KEEP",
+    "reason": "Standard full expansion of KR; speaker intends the abbreviation."
+  },
+  {
+    "alias": "north star metric",
+    "term": "north star metric",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "DROP",
+    "reason": "Identity rule — alias equals term; mandatory drop."
+  },
+  {
+    "alias": "north star",
+    "term": "north star",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "DROP",
+    "reason": "Identity rule — alias equals term; mandatory drop."
+  },
+  {
+    "alias": "p r d",
+    "term": "PRD",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "KEEP",
+    "reason": "Letter-by-letter spelling of the abbreviation."
+  },
+  {
+    "alias": "pee are dee",
+    "term": "PRD",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "KEEP",
+    "reason": "Phonetic letter-by-letter rendering of P-R-D."
+  },
+  {
+    "alias": "product requirements document",
+    "term": "PRD",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "KEEP",
+    "reason": "Standard full expansion of PRD; speaker intends the abbreviation."
+  },
+  {
+    "alias": "product requirements dock you ment",
+    "term": "product requirements document",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "KEEP",
+    "reason": "Phonetic mis-transcription of 'document' as 'dock you ment'; corrects a clear Whisper error."
+  },
+  {
+    "alias": "speck",
+    "term": "spec",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "DROP",
+    "reason": "'Speck' is a common English word ('a speck of dust'); would corrupt natural speech."
+  },
+  {
+    "alias": "technical speck",
+    "term": "technical spec",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "KEEP",
+    "reason": "'Technical speck' is not natural English; clearly a Whisper mis-transcription of 'technical spec'."
+  },
+  {
+    "alias": "tech spec",
+    "term": "technical spec",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "KEEP",
+    "reason": "'Tech spec' is an accepted spoken abbreviation; normalizing to full form is reasonable."
+  },
+  {
+    "alias": "tech speck",
+    "term": "technical spec",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "DEDUPE",
+    "reason": "Conflict: same alias maps to both 'technical spec' and 'tech spec'. 'Tech spec' is the more natural shorter form; keep that mapping."
+  },
+  {
+    "alias": "teck speck",
+    "term": "tech spec",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "KEEP",
+    "reason": "Phonetic mis-transcription ('teck' for 'tech', 'speck' for 'spec'); 'teck speck' has no ordinary English meaning."
+  },
+  {
+    "alias": "tech speck",
+    "term": "tech spec",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "DEDUPE",
+    "reason": "Conflict: same alias maps to both 'technical spec' and 'tech spec'. 'Tech spec' wins as the more natural shorter form."
+  },
+  {
+    "alias": "dee sign doc",
+    "term": "design doc",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "KEEP",
+    "reason": "Phonetic mis-transcription of 'design doc'; 'dee sign doc' as three words does not occur in natural English."
+  },
+  {
+    "alias": "design dock",
+    "term": "design doc",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "KEEP",
+    "reason": "'Dock' mis-transcribing 'doc' is a clear Whisper error; 'design dock' is not an established English phrase."
+  },
+  {
+    "alias": "r f c",
+    "term": "RFC",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "KEEP",
+    "reason": "Letter-by-letter spelling of the abbreviation."
+  },
+  {
+    "alias": "are ef see",
+    "term": "RFC",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "KEEP",
+    "reason": "Phonetic letter-by-letter rendering of R-F-C."
+  },
+  {
+    "alias": "request for comments",
+    "term": "RFC",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "KEEP",
+    "reason": "Standard full expansion of RFC; speaker intends the abbreviation."
+  },
+  {
+    "alias": "a d r",
+    "term": "ADR",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "KEEP",
+    "reason": "Letter-by-letter spelling of the abbreviation."
+  },
+  {
+    "alias": "ay dee are",
+    "term": "ADR",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "KEEP",
+    "reason": "Phonetic letter-by-letter rendering of A-D-R."
+  },
+  {
+    "alias": "architecture decision record",
+    "term": "ADR",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "DEDUPE",
+    "reason": "Conflict: same alias maps to both 'ADR' and 'architecture decision record' (identity). 'ADR' wins; the identity row must drop."
+  },
+  {
+    "alias": "architecture decision record",
+    "term": "architecture decision record",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "DEDUPE",
+    "reason": "Conflict: identity rule plus conflicts with ADR mapping. 'ADR' wins; this identity row is dropped."
+  },
+  {
+    "alias": "one pager",
+    "term": "one-pager",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "KEEP",
+    "reason": "Hyphenation normalization of a product management term; speech cannot convey the hyphen."
+  },
+  {
+    "alias": "1 pager",
+    "term": "one-pager",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "KEEP",
+    "reason": "Numeric form of 'one-pager'; reasonable normalization."
+  },
+  {
+    "alias": "won pager",
+    "term": "one-pager",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "KEEP",
+    "reason": "'Won pager' is not a natural English phrase; clearly a Whisper homophone error for 'one-pager'."
+  },
+  {
+    "alias": "two pager",
+    "term": "two-pager",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "KEEP",
+    "reason": "Hyphenation normalization; speech cannot convey the hyphen."
+  },
+  {
+    "alias": "2 pager",
+    "term": "two-pager",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "KEEP",
+    "reason": "Numeric form of 'two-pager'; reasonable normalization."
+  },
+  {
+    "alias": "breef",
+    "term": "brief",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "KEEP",
+    "reason": "'Breef' is not a real English word; clear Whisper phonetic mis-transcription of 'brief'."
+  },
+  {
+    "alias": "product breef",
+    "term": "product brief",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "KEEP",
+    "reason": "Phonetic mis-transcription of 'product brief'; 'breef' is not a real word."
+  },
+  {
+    "alias": "exec you tive summary",
+    "term": "executive summary",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "KEEP",
+    "reason": "Phonetic mis-transcription of 'executive summary'; 'exec you tive' does not occur naturally."
+  },
+  {
+    "alias": "t l d r",
+    "term": "TLDR",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "DEDUPE",
+    "reason": "Conflict: same alias maps to both 'TLDR' and 'TL;DR'. 'TL;DR' is the more formal standard form and wins."
+  },
+  {
+    "alias": "tee el dee are",
+    "term": "TLDR",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "DEDUPE",
+    "reason": "Conflict: same alias maps to both 'TLDR' and 'TL;DR'. 'TL;DR' wins as the more standard form."
+  },
+  {
+    "alias": "too long didn't read",
+    "term": "TLDR",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "KEEP",
+    "reason": "Full expansion of TLDR/TL;DR; speaker clearly intends the abbreviation."
+  },
+  {
+    "alias": "t l d r",
+    "term": "TL;DR",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "DEDUPE",
+    "reason": "Conflict: same alias maps to both 'TLDR' and 'TL;DR'. 'TL;DR' wins as the more formal standard form."
+  },
+  {
+    "alias": "tee el dee are",
+    "term": "TL;DR",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "DEDUPE",
+    "reason": "Conflict: same alias maps to both 'TLDR' and 'TL;DR'. 'TL;DR' wins as the more formal standard form."
+  },
+  {
+    "alias": "road map",
+    "term": "roadmap",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "KEEP",
+    "reason": "Compound-word normalization; 'roadmap' is the standard single-word form in tech writing."
+  },
+  {
+    "alias": "product road map",
+    "term": "product roadmap",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "KEEP",
+    "reason": "Compound-word normalization for the specific product management term."
+  },
+  {
+    "alias": "teck road map",
+    "term": "tech roadmap",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "KEEP",
+    "reason": "Phonetic mis-transcription of 'tech' as 'teck' plus compound-word normalization."
+  },
+  {
+    "alias": "mile stones",
+    "term": "milestones",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "KEEP",
+    "reason": "Mid-word space inserted by Whisper; 'mile stones' as two words is not natural speech."
+  },
+  {
+    "alias": "mile stone",
+    "term": "milestone",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "KEEP",
+    "reason": "Mid-word space inserted by Whisper; 'mile stone' as two words is not natural prose usage."
+  },
+  {
+    "alias": "deliver able",
+    "term": "deliverable",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "KEEP",
+    "reason": "Mid-word space inserted by Whisper; 'deliver able' as two words does not occur naturally."
+  },
+  {
+    "alias": "deliver ables",
+    "term": "deliverables",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "KEEP",
+    "reason": "Mid-word space inserted by Whisper; does not occur naturally."
+  },
+  {
+    "alias": "work stream",
+    "term": "workstream",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "KEEP",
+    "reason": "Compound-word normalization; 'workstream' is the standard single-word form in product management."
+  },
+  {
+    "alias": "work streams",
+    "term": "workstreams",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "KEEP",
+    "reason": "Compound-word normalization; plural form."
+  },
+  {
+    "alias": "in ish a tiv",
+    "term": "initiative",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "KEEP",
+    "reason": "Phonetic mis-transcription of 'initiative' broken into syllables; not natural English."
+  },
+  {
+    "alias": "in ish a tivs",
+    "term": "initiatives",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "KEEP",
+    "reason": "Phonetic mis-transcription of 'initiatives'; not natural English."
+  },
+  {
+    "alias": "theme product",
+    "term": "theme",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "DROP",
+    "reason": "The mapping drops the word 'product', corrupting the user's text; 'theme product' is also ordinary English."
+  },
+  {
+    "alias": "pill ar",
+    "term": "pillar",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "KEEP",
+    "reason": "Mid-word space inserted by Whisper; 'pill ar' as two words does not occur naturally."
+  },
+  {
+    "alias": "strat ee gic pill ar",
+    "term": "strategic pillar",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "KEEP",
+    "reason": "Phonetic mis-transcription of 'strategic pillar'; not natural English."
+  },
+  {
+    "alias": "m v p",
+    "term": "MVP",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "KEEP",
+    "reason": "Letter-by-letter spelling of the abbreviation."
+  },
+  {
+    "alias": "em vee pee",
+    "term": "MVP",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "KEEP",
+    "reason": "Phonetic letter-by-letter rendering of M-V-P."
+  },
+  {
+    "alias": "minimum viable product",
+    "term": "MVP",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "KEEP",
+    "reason": "Standard full expansion of MVP; speaker intends the abbreviation."
+  },
+  {
+    "alias": "m l p",
+    "term": "MLP",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "KEEP",
+    "reason": "Letter-by-letter spelling of the abbreviation."
+  },
+  {
+    "alias": "em el pee",
+    "term": "MLP",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "KEEP",
+    "reason": "Phonetic letter-by-letter rendering of M-L-P."
+  },
+  {
+    "alias": "minimum lovable product",
+    "term": "MLP",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "KEEP",
+    "reason": "Standard full expansion of MLP; speaker intends the abbreviation."
+  },
+  {
+    "alias": "p o c",
+    "term": "POC",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "KEEP",
+    "reason": "Letter-by-letter spelling of the abbreviation."
+  },
+  {
+    "alias": "pee oh see",
+    "term": "POC",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "KEEP",
+    "reason": "Phonetic letter-by-letter rendering of P-O-C."
+  },
+  {
+    "alias": "proof of concept",
+    "term": "POC",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "KEEP",
+    "reason": "Standard full expansion of POC; speaker intends the abbreviation."
+  },
+  {
+    "alias": "proof of con sept",
+    "term": "proof of concept",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "KEEP",
+    "reason": "Phonetic mis-transcription of 'concept' as 'con sept'; not natural English."
+  },
+  {
+    "alias": "proto type",
+    "term": "prototype",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "KEEP",
+    "reason": "Mid-word space inserted by Whisper; 'proto type' as two words does not occur naturally."
+  },
+  {
+    "alias": "al fa",
+    "term": "alpha",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "KEEP",
+    "reason": "Phonetic mis-transcription of 'alpha' as two syllables; 'al fa' is not natural English."
+  },
+  {
+    "alias": "bay ta",
+    "term": "beta",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "KEEP",
+    "reason": "Phonetic mis-transcription of 'beta'; 'bay ta' is not natural English."
+  },
+  {
+    "alias": "bee ta",
+    "term": "beta",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "KEEP",
+    "reason": "Phonetic mis-transcription of 'beta'; 'bee ta' is not natural English."
+  },
+  {
+    "alias": "g a",
+    "term": "GA",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "KEEP",
+    "reason": "Letter-by-letter spelling of the abbreviation."
+  },
+  {
+    "alias": "gee ay",
+    "term": "GA",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "KEEP",
+    "reason": "Phonetic letter-by-letter rendering of G-A."
+  },
+  {
+    "alias": "general availability",
+    "term": "GA",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "KEEP",
+    "reason": "Standard full expansion of GA; speaker intends the abbreviation."
+  },
+  {
+    "alias": "general avail ability",
+    "term": "general availability",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "KEEP",
+    "reason": "Phonetic mis-transcription of 'availability' with mid-word space; does not occur naturally."
+  },
+  {
+    "alias": "feature pare ity",
+    "term": "feature parity",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "KEEP",
+    "reason": "Phonetic mis-transcription of 'parity' as 'pare ity'; not natural English."
+  },
+  {
+    "alias": "scope",
+    "term": "scope",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "DROP",
+    "reason": "Identity rule — mandatory drop."
+  },
+  {
+    "alias": "scope creep",
+    "term": "scope creep",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "DROP",
+    "reason": "Identity rule — mandatory drop."
+  },
+  {
+    "alias": "dee scope",
+    "term": "descope",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "KEEP",
+    "reason": "Phonetic mis-transcription of 'descope'; 'dee scope' as two words is not natural English."
+  },
+  {
+    "alias": "de scope",
+    "term": "descope",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "KEEP",
+    "reason": "Space-insertion mis-transcription of 'descope'; not a natural English phrase."
+  },
+  {
+    "alias": "out of scope",
+    "term": "out of scope",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "DROP",
+    "reason": "Identity rule — mandatory drop."
+  },
+  {
+    "alias": "in scope",
+    "term": "in scope",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "DROP",
+    "reason": "Identity rule — mandatory drop."
+  },
+  {
+    "alias": "guard rails",
+    "term": "guardrails",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "KEEP",
+    "reason": "Compound-word normalization; 'guardrails' is the standard single-word form in product/AI contexts."
+  },
+  {
+    "alias": "non functional requirements",
+    "term": "non-functional requirements",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "KEEP",
+    "reason": "Hyphenation normalization; speech cannot convey the hyphen in 'non-functional'."
+  },
+  {
+    "alias": "n f r",
+    "term": "NFR",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "KEEP",
+    "reason": "Letter-by-letter spelling of the abbreviation."
+  },
+  {
+    "alias": "en ef are",
+    "term": "NFR",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "KEEP",
+    "reason": "Phonetic letter-by-letter rendering of N-F-R."
+  },
+  {
+    "alias": "non functional requirement",
+    "term": "NFR",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "KEEP",
+    "reason": "Standard full expansion of NFR; speaker intends the abbreviation."
+  },
+  {
+    "alias": "n f r s",
+    "term": "NFRs",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "KEEP",
+    "reason": "Letter-by-letter spelling of the plural abbreviation."
+  },
+  {
+    "alias": "en ef ours",
+    "term": "NFRs",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "KEEP",
+    "reason": "Phonetic letter-by-letter rendering of N-F-Rs."
+  },
+  {
+    "alias": "functional requirements",
+    "term": "functional requirements",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "DROP",
+    "reason": "Identity rule — mandatory drop."
+  },
+  {
+    "alias": "use case",
+    "term": "use case",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "DROP",
+    "reason": "Identity rule — mandatory drop."
+  },
+  {
+    "alias": "user per sona",
+    "term": "user persona",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "KEEP",
+    "reason": "Mid-word space in 'persona'; 'per sona' as two words does not occur naturally."
+  },
+  {
+    "alias": "per sona",
+    "term": "persona",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "KEEP",
+    "reason": "Mid-word space in 'persona'; 'per sona' as two words does not occur naturally."
+  },
+  {
+    "alias": "user journey",
+    "term": "user journey",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "DROP",
+    "reason": "Identity rule — mandatory drop."
+  },
+  {
+    "alias": "customer journey",
+    "term": "customer journey",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "DROP",
+    "reason": "Identity rule — mandatory drop."
+  },
+  {
+    "alias": "stake holder",
+    "term": "stakeholder",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "KEEP",
+    "reason": "Mid-word space insertion; 'stake holder' as two words is a clear Whisper compound-split error."
+  },
+  {
+    "alias": "stake holders",
+    "term": "stakeholders",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "KEEP",
+    "reason": "Mid-word space insertion; plural form."
+  },
+  {
+    "alias": "cross functional",
+    "term": "cross-functional",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "KEEP",
+    "reason": "Hyphenation normalization; speech cannot convey the hyphen in 'cross-functional'."
+  },
+  {
+    "alias": "a line ment",
+    "term": "alignment",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "KEEP",
+    "reason": "Phonetic mis-transcription of 'alignment' broken into syllables; 'a line ment' does not occur naturally."
+  },
+  {
+    "alias": "a lined",
+    "term": "aligned",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "DROP",
+    "reason": "'A lined' is common English ('a lined jacket', 'a lined notebook'); would corrupt natural dictation."
+  },
+  {
+    "alias": "miss a line ment",
+    "term": "misalignment",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "KEEP",
+    "reason": "Phonetic mis-transcription of 'misalignment'; 'miss a line ment' does not occur naturally."
+  },
+  {
+    "alias": "sink",
+    "term": "sync",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "DROP",
+    "reason": "'Sink' is an extremely common English word (kitchen sink, to sink); would corrupt natural speech."
+  },
+  {
+    "alias": "sink up",
+    "term": "sync up",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "KEEP",
+    "reason": "'Sink up' is not a natural English phrase; clearly a Whisper homophone error for 'sync up'."
+  },
+  {
+    "alias": "a sink",
+    "term": "async",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "DROP",
+    "reason": "'A sink' is very common English ('I need a sink'); would produce catastrophic substitutions."
+  },
+  {
+    "alias": "ay sink",
+    "term": "async",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "KEEP",
+    "reason": "'Ay sink' is not natural English; phonetic rendering of the prefix 'a-' plus 'sync'."
+  },
+  {
+    "alias": "stand up",
+    "term": "standup",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "DROP",
+    "reason": "'Stand up' is extremely common English ('please stand up', 'stand up comedy'); would corrupt dictation constantly."
+  },
+  {
+    "alias": "one on one",
+    "term": "one-on-one",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "DEDUPE",
+    "reason": "Conflict: same alias maps to both 'one-on-one' and '1:1'. 'One-on-one' is the more natural English rendering and wins."
+  },
+  {
+    "alias": "1 on 1",
+    "term": "one-on-one",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "DEDUPE",
+    "reason": "Conflict: same alias maps to both 'one-on-one' and '1:1'. 'One-on-one' wins as the more natural form."
+  },
+  {
+    "alias": "one to one",
+    "term": "1:1",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "KEEP",
+    "reason": "Spoken expansion of the '1:1' notation; common in tech writing for both meetings and ratios."
+  },
+  {
+    "alias": "one on one",
+    "term": "1:1",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "DEDUPE",
+    "reason": "Conflict: same alias maps to both 'one-on-one' and '1:1'. 'One-on-one' wins; this '1:1' row is the loser."
+  },
+  {
+    "alias": "1 on 1",
+    "term": "1:1",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "DEDUPE",
+    "reason": "Conflict: same alias maps to both 'one-on-one' and '1:1'. 'One-on-one' wins; this '1:1' row is the loser."
+  },
+  {
+    "alias": "skip level",
+    "term": "skip-level",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "KEEP",
+    "reason": "Hyphenation normalization for the management term; speech cannot convey the hyphen."
+  },
+  {
+    "alias": "all hands",
+    "term": "all-hands",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "KEEP",
+    "reason": "Hyphenation normalization for the meeting type; 'all-hands' is the standard written form."
+  },
+  {
+    "alias": "town hall",
+    "term": "town hall",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "DROP",
+    "reason": "Identity rule — mandatory drop."
+  },
+  {
+    "alias": "off site",
+    "term": "offsite",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "KEEP",
+    "reason": "Compound-word normalization; 'offsite' is the standard single-word form."
+  },
+  {
+    "alias": "on site",
+    "term": "onsite",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "KEEP",
+    "reason": "Compound-word normalization; 'onsite' is the standard single-word form."
+  },
+  {
+    "alias": "heads up",
+    "term": "heads-up",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "KEEP",
+    "reason": "Hyphenation normalization; 'heads-up' is the standard written compound form."
+  },
+  {
+    "alias": "f y i",
+    "term": "FYI",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "KEEP",
+    "reason": "Letter-by-letter spelling of the abbreviation."
+  },
+  {
+    "alias": "ef why eye",
+    "term": "FYI",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "KEEP",
+    "reason": "Phonetic letter-by-letter rendering of F-Y-I."
+  },
+  {
+    "alias": "for your information",
+    "term": "FYI",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "KEEP",
+    "reason": "Standard full expansion of FYI; speaker intends the abbreviation."
+  },
+  {
+    "alias": "a s a p",
+    "term": "ASAP",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "KEEP",
+    "reason": "Letter-by-letter spelling of the abbreviation."
+  },
+  {
+    "alias": "ay sap",
+    "term": "ASAP",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "KEEP",
+    "reason": "Phonetic rendering of A-S-A-P; 'ay sap' is not natural English."
+  },
+  {
+    "alias": "as soon as possible",
+    "term": "ASAP",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "KEEP",
+    "reason": "Standard full expansion of ASAP; speaker intends the abbreviation."
+  },
+  {
+    "alias": "e t a",
+    "term": "ETA",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "KEEP",
+    "reason": "Letter-by-letter spelling of the abbreviation."
+  },
+  {
+    "alias": "ee tee ay",
+    "term": "ETA",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "KEEP",
+    "reason": "Phonetic letter-by-letter rendering of E-T-A."
+  },
+  {
+    "alias": "estimated time of arrival",
+    "term": "ETA",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "KEEP",
+    "reason": "Standard full expansion of ETA; speaker intends the abbreviation."
+  },
+  {
+    "alias": "e o d",
+    "term": "EOD",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "KEEP",
+    "reason": "Letter-by-letter spelling of the abbreviation."
+  },
+  {
+    "alias": "ee oh dee",
+    "term": "EOD",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "KEEP",
+    "reason": "Phonetic letter-by-letter rendering of E-O-D."
+  },
+  {
+    "alias": "end of day",
+    "term": "EOD",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "KEEP",
+    "reason": "Standard full expansion of EOD; speaker intends the abbreviation."
+  },
+  {
+    "alias": "e o w",
+    "term": "EOW",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "KEEP",
+    "reason": "Letter-by-letter spelling of the abbreviation."
+  },
+  {
+    "alias": "ee oh double you",
+    "term": "EOW",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "KEEP",
+    "reason": "Phonetic letter-by-letter rendering of E-O-W."
+  },
+  {
+    "alias": "end of week",
+    "term": "EOW",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "KEEP",
+    "reason": "Standard full expansion of EOW; speaker intends the abbreviation."
+  },
+  {
+    "alias": "e o m",
+    "term": "EOM",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "KEEP",
+    "reason": "Letter-by-letter spelling of the abbreviation."
+  },
+  {
+    "alias": "ee oh em",
+    "term": "EOM",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "KEEP",
+    "reason": "Phonetic letter-by-letter rendering of E-O-M."
+  },
+  {
+    "alias": "end of month",
+    "term": "EOM",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "KEEP",
+    "reason": "Standard full expansion of EOM; speaker intends the abbreviation."
+  },
+  {
+    "alias": "e o q",
+    "term": "EOQ",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "KEEP",
+    "reason": "Letter-by-letter spelling of the abbreviation."
+  },
+  {
+    "alias": "ee oh queue",
+    "term": "EOQ",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "KEEP",
+    "reason": "Phonetic letter-by-letter rendering of E-O-Q."
+  },
+  {
+    "alias": "end of quarter",
+    "term": "EOQ",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "KEEP",
+    "reason": "Standard full expansion of EOQ; speaker intends the abbreviation."
+  },
+  {
+    "alias": "e o y",
+    "term": "EOY",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "KEEP",
+    "reason": "Letter-by-letter spelling of the abbreviation."
+  },
+  {
+    "alias": "ee oh why",
+    "term": "EOY",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "KEEP",
+    "reason": "Pure letter-by-letter spelling of E-O-Y; no ordinary English meaning."
+  },
+  {
+    "alias": "end of year",
+    "term": "EOY",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "DROP",
+    "reason": "Common English phrase; fires in 'end of year party', 'end of year review', etc."
+  },
+  {
+    "alias": "q one",
+    "term": "Q1",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "KEEP",
+    "reason": "'q' is not an English word; 'q one' has no ordinary English meaning and is a phonetic rendering of Q1."
+  },
+  {
+    "alias": "queue one",
+    "term": "Q1",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "DROP",
+    "reason": "'queue' is a common English word; 'queue one' can mean 'the first queue/line' in ordinary speech."
+  },
+  {
+    "alias": "quarter one",
+    "term": "Q1",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "DROP",
+    "reason": "Ordinary English; 'quarter one' can refer to the first quarter of many things, not just fiscal Q1."
+  },
+  {
+    "alias": "q two",
+    "term": "Q2",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "KEEP",
+    "reason": "Same as 'q one': 'q' has no English meaning; phonetic rendering of Q2."
+  },
+  {
+    "alias": "queue two",
+    "term": "Q2",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "DROP",
+    "reason": "'queue two' can mean 'the second queue' in ordinary speech."
+  },
+  {
+    "alias": "quarter two",
+    "term": "Q2",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "DROP",
+    "reason": "Ordinary English phrase; 'quarter two' is ambiguous outside a fiscal context."
+  },
+  {
+    "alias": "q three",
+    "term": "Q3",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "KEEP",
+    "reason": "Phonetic rendering of Q3; no ordinary English meaning."
+  },
+  {
+    "alias": "queue three",
+    "term": "Q3",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "DROP",
+    "reason": "'queue three' can mean 'the third queue' in ordinary speech."
+  },
+  {
+    "alias": "quarter three",
+    "term": "Q3",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "DROP",
+    "reason": "Ordinary English phrase; ambiguous outside fiscal context."
+  },
+  {
+    "alias": "q four",
+    "term": "Q4",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "KEEP",
+    "reason": "Phonetic rendering of Q4; no ordinary English meaning."
+  },
+  {
+    "alias": "queue four",
+    "term": "Q4",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "DROP",
+    "reason": "'queue four' can mean 'the fourth queue' in ordinary speech."
+  },
+  {
+    "alias": "quarter four",
+    "term": "Q4",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "DROP",
+    "reason": "Ordinary English phrase; ambiguous outside fiscal context."
+  },
+  {
+    "alias": "h one",
+    "term": "H1",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "KEEP",
+    "reason": "Letter-plus-number rendering of H1; 'h' alone is not a common English word."
+  },
+  {
+    "alias": "aitch one",
+    "term": "H1",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "KEEP",
+    "reason": "Phonetic letter-spelling of H1; no ordinary English meaning."
+  },
+  {
+    "alias": "half one",
+    "term": "H1",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "DROP",
+    "reason": "In British English 'half one' means 1:30; fires constantly in casual speech."
+  },
+  {
+    "alias": "h two",
+    "term": "H2",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "KEEP",
+    "reason": "Letter-plus-number rendering of H2; no common English phrase meaning."
+  },
+  {
+    "alias": "aitch two",
+    "term": "H2",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "KEEP",
+    "reason": "Phonetic letter-spelling of H2; no ordinary English meaning."
+  },
+  {
+    "alias": "half two",
+    "term": "H2",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "DROP",
+    "reason": "In British English 'half two' means 2:30; fires constantly in casual speech."
+  },
+  {
+    "alias": "f y",
+    "term": "FY",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "KEEP",
+    "reason": "Letter-by-letter spelling of FY; no ordinary English meaning."
+  },
+  {
+    "alias": "ef why",
+    "term": "FY",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "KEEP",
+    "reason": "Phonetic letter-spelling of FY; no ordinary English meaning."
+  },
+  {
+    "alias": "fiscal year",
+    "term": "FY",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "DROP",
+    "reason": "Common English phrase used in many natural sentences (e.g. 'start next fiscal year'); converting to FY would be disruptive."
+  },
+  {
+    "alias": "f y twenty five",
+    "term": "FY25",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "KEEP",
+    "reason": "Phonetic rendering of the abbreviation FY25; highly specific, no ordinary English meaning."
+  },
+  {
+    "alias": "fiscal year twenty five",
+    "term": "FY25",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "DROP",
+    "reason": "All ordinary English words; someone saying this naturally would have the full phrase converted to an abbreviation unexpectedly."
+  },
+  {
+    "alias": "f y twenty six",
+    "term": "FY26",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "KEEP",
+    "reason": "Phonetic rendering of FY26; no ordinary English meaning."
+  },
+  {
+    "alias": "fiscal year twenty six",
+    "term": "FY26",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "DROP",
+    "reason": "All ordinary English words; same issue as 'fiscal year twenty five'."
+  },
+  {
+    "alias": "y o y",
+    "term": "YoY",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "KEEP",
+    "reason": "Letter-by-letter spelling of Y-o-Y; no ordinary English meaning."
+  },
+  {
+    "alias": "why oh why",
+    "term": "YoY",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "DROP",
+    "reason": "'Why oh why' is an extremely common English exclamation of exasperation; fires constantly in ordinary speech."
+  },
+  {
+    "alias": "year over year",
+    "term": "YoY",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "DROP",
+    "reason": "Common English phrase; 'year over year, the garden grows' would be corrupted to 'YoY, the garden grows'."
+  },
+  {
+    "alias": "q o q",
+    "term": "QoQ",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "KEEP",
+    "reason": "Letter-by-letter spelling of Q-o-Q; no ordinary English meaning."
+  },
+  {
+    "alias": "queue oh queue",
+    "term": "QoQ",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "KEEP",
+    "reason": "Phonetic letter-spelling of QoQ (Q-o-Q); no ordinary English meaning for this combination."
+  },
+  {
+    "alias": "quarter over quarter",
+    "term": "QoQ",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "DROP",
+    "reason": "Ordinary English phrase; same structural problem as 'year over year' and 'month over month'."
+  },
+  {
+    "alias": "m o m",
+    "term": "MoM",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "KEEP",
+    "reason": "Letter-by-letter spelling of M-o-M; no ordinary English meaning as spaced letters."
+  },
+  {
+    "alias": "em oh em",
+    "term": "MoM",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "KEEP",
+    "reason": "Phonetic letter-spelling of MoM; no ordinary English meaning."
+  },
+  {
+    "alias": "month over month",
+    "term": "MoM",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "DROP",
+    "reason": "Common English phrase; 'month over month the improvements compound' would become 'MoM the improvements compound'."
+  },
+  {
+    "alias": "w o w",
+    "term": "WoW",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "KEEP",
+    "reason": "Letter-by-letter spelling of W-o-W; spaced form is distinct from the interjection 'wow'."
+  },
+  {
+    "alias": "double you oh double you",
+    "term": "WoW",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "KEEP",
+    "reason": "Phonetic letter-spelling of WoW; no ordinary English meaning for this combination."
+  },
+  {
+    "alias": "week over week",
+    "term": "WoW",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "DROP",
+    "reason": "Common English phrase; same structural problem as other 'X over X' phrases."
+  },
+  {
+    "alias": "d o d",
+    "term": "DoD",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "KEEP",
+    "reason": "Letter-by-letter spelling of D-o-D; no ordinary English meaning as spaced letters."
+  },
+  {
+    "alias": "dee oh dee",
+    "term": "DoD",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "KEEP",
+    "reason": "Phonetic letter-spelling of DoD; no ordinary English meaning."
+  },
+  {
+    "alias": "day over day",
+    "term": "DoD",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "DROP",
+    "reason": "Common English phrase; 'day over day it gets harder' would be corrupted to 'DoD it gets harder'."
+  },
+  {
+    "alias": "a r r",
+    "term": "ARR",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "KEEP",
+    "reason": "Letter-by-letter spelling of ARR; no ordinary English meaning as spaced letters."
+  },
+  {
+    "alias": "ay are are",
+    "term": "ARR",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "KEEP",
+    "reason": "Phonetic letter-spelling of ARR; no ordinary English meaning for this combination."
+  },
+  {
+    "alias": "annual recurring revenue",
+    "term": "ARR",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "KEEP",
+    "reason": "Exclusively a technical business term; never appears in ordinary non-business speech with a different meaning."
+  },
+  {
+    "alias": "m r r",
+    "term": "MRR",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "KEEP",
+    "reason": "Letter-by-letter spelling of MRR; no ordinary English meaning as spaced letters."
+  },
+  {
+    "alias": "em are are",
+    "term": "MRR",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "KEEP",
+    "reason": "Phonetic letter-spelling of MRR; no ordinary English meaning."
+  },
+  {
+    "alias": "monthly recurring revenue",
+    "term": "MRR",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "KEEP",
+    "reason": "Exclusively a technical business term; never appears in ordinary non-business speech."
+  },
+  {
+    "alias": "a c v",
+    "term": "ACV",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "KEEP",
+    "reason": "Letter-by-letter spelling of ACV; no ordinary English meaning as spaced letters."
+  },
+  {
+    "alias": "ay see vee",
+    "term": "ACV",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "KEEP",
+    "reason": "Phonetic letter-spelling of ACV; no ordinary English meaning."
+  },
+  {
+    "alias": "annual contract value",
+    "term": "ACV",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "KEEP",
+    "reason": "Exclusively a technical business term; never appears in ordinary non-business speech."
+  },
+  {
+    "alias": "t c v",
+    "term": "TCV",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "KEEP",
+    "reason": "Letter-by-letter spelling of TCV; no ordinary English meaning as spaced letters."
+  },
+  {
+    "alias": "tee see vee",
+    "term": "TCV",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "KEEP",
+    "reason": "Phonetic letter-spelling of TCV; no ordinary English meaning."
+  },
+  {
+    "alias": "total contract value",
+    "term": "TCV",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "KEEP",
+    "reason": "Exclusively a technical business term; never appears in ordinary non-business speech."
+  },
+  {
+    "alias": "l t v",
+    "term": "LTV",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "KEEP",
+    "reason": "Letter-by-letter spelling of LTV; no ordinary English meaning as spaced letters."
+  },
+  {
+    "alias": "el tee vee",
+    "term": "LTV",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "KEEP",
+    "reason": "Phonetic letter-spelling of LTV; no ordinary English meaning."
+  },
+  {
+    "alias": "lifetime value",
+    "term": "LTV",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "DROP",
+    "reason": "'Lifetime value' is ordinary English used in many contexts (e.g. 'the lifetime value of a friendship'); fires outside business contexts."
+  },
+  {
+    "alias": "c a c",
+    "term": "CAC",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "KEEP",
+    "reason": "Letter-by-letter spelling of CAC; no ordinary English meaning as spaced letters."
+  },
+  {
+    "alias": "see ay see",
+    "term": "CAC",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "KEEP",
+    "reason": "Phonetic letter-spelling of CAC; no ordinary English meaning."
+  },
+  {
+    "alias": "customer acquisition cost",
+    "term": "CAC",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "KEEP",
+    "reason": "Exclusively a technical business term; never appears in ordinary non-business speech."
+  },
+  {
+    "alias": "n r r",
+    "term": "NRR",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "KEEP",
+    "reason": "Letter-by-letter spelling of NRR; no ordinary English meaning as spaced letters."
+  },
+  {
+    "alias": "en are are",
+    "term": "NRR",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "KEEP",
+    "reason": "Phonetic letter-spelling of NRR; no ordinary English meaning."
+  },
+  {
+    "alias": "net revenue retention",
+    "term": "NRR",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "KEEP",
+    "reason": "Exclusively a technical business term; never appears in ordinary non-business speech."
+  },
+  {
+    "alias": "g r r",
+    "term": "GRR",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "KEEP",
+    "reason": "Letter-by-letter spelling of GRR; spaced form is distinct from the growl interjection."
+  },
+  {
+    "alias": "gee are are",
+    "term": "GRR",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "KEEP",
+    "reason": "Phonetic letter-spelling of GRR; no ordinary English meaning."
+  },
+  {
+    "alias": "gross revenue retention",
+    "term": "GRR",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "KEEP",
+    "reason": "Exclusively a technical business term; never appears in ordinary non-business speech."
+  },
+  {
+    "alias": "n p s",
+    "term": "NPS",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "KEEP",
+    "reason": "Letter-by-letter spelling of NPS; no ordinary English meaning as spaced letters."
+  },
+  {
+    "alias": "en pee ess",
+    "term": "NPS",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "KEEP",
+    "reason": "Phonetic letter-spelling of NPS; no ordinary English meaning."
+  },
+  {
+    "alias": "net promoter score",
+    "term": "NPS",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "KEEP",
+    "reason": "Exclusively a technical business/CX term; never appears in ordinary non-business speech."
+  },
+  {
+    "alias": "c sat",
+    "term": "CSAT",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "KEEP",
+    "reason": "Phonetic rendering of CSAT; 'c sat' has no ordinary English meaning."
+  },
+  {
+    "alias": "see sat",
+    "term": "CSAT",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "KEEP",
+    "reason": "Phonetic letter-rendering of CSAT; no ordinary English meaning for this combination."
+  },
+  {
+    "alias": "customer satisfaction",
+    "term": "CSAT",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "DROP",
+    "reason": "'Customer satisfaction' is ordinary English used naturally in non-abbreviation contexts (e.g. 'improve customer satisfaction by listening better')."
+  },
+  {
+    "alias": "c e s",
+    "term": "CES",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "KEEP",
+    "reason": "Letter-by-letter spelling of CES; no ordinary English meaning as spaced letters."
+  },
+  {
+    "alias": "see ee ess",
+    "term": "CES",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "KEEP",
+    "reason": "Phonetic letter-spelling of CES; no ordinary English meaning."
+  },
+  {
+    "alias": "customer effort score",
+    "term": "CES",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "KEEP",
+    "reason": "Exclusively a technical CX term; never appears in ordinary non-business speech."
+  },
+  {
+    "alias": "d a u",
+    "term": "DAU",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "KEEP",
+    "reason": "Letter-by-letter spelling of DAU; no ordinary English meaning as spaced letters."
+  },
+  {
+    "alias": "dee ay you",
+    "term": "DAU",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "KEEP",
+    "reason": "Phonetic letter-spelling of DAU; no ordinary English meaning."
+  },
+  {
+    "alias": "daily active users",
+    "term": "DAU",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "KEEP",
+    "reason": "Exclusively a technical product metrics term; never appears in ordinary non-business speech."
+  },
+  {
+    "alias": "m a u",
+    "term": "MAU",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "KEEP",
+    "reason": "Letter-by-letter spelling of MAU; no ordinary English meaning as spaced letters."
+  },
+  {
+    "alias": "em ay you",
+    "term": "MAU",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "KEEP",
+    "reason": "Phonetic letter-spelling of MAU; no ordinary English meaning."
+  },
+  {
+    "alias": "monthly active users",
+    "term": "MAU",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "KEEP",
+    "reason": "Exclusively a technical product metrics term; never appears in ordinary non-business speech."
+  },
+  {
+    "alias": "w a u",
+    "term": "WAU",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "KEEP",
+    "reason": "Letter-by-letter spelling of WAU; no ordinary English meaning as spaced letters."
+  },
+  {
+    "alias": "double you ay you",
+    "term": "WAU",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "KEEP",
+    "reason": "Phonetic letter-spelling of WAU; no ordinary English meaning."
+  },
+  {
+    "alias": "weekly active users",
+    "term": "WAU",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "KEEP",
+    "reason": "Exclusively a technical product metrics term; never appears in ordinary non-business speech."
+  },
+  {
+    "alias": "churn rate",
+    "term": "churn",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "DROP",
+    "reason": "'Churn rate' is ordinary English; conflict with the identity row means neither target is safe. Alias would fire in normal business writing where the user wants to keep the phrase as-is."
+  },
+  {
+    "alias": "churn rate",
+    "term": "churn rate",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "DROP",
+    "reason": "Identity rule: alias equals term."
+  },
+  {
+    "alias": "re tension",
+    "term": "retention",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "KEEP",
+    "reason": "Phonetic split rendering of 'retention'; 're tension' as two words has no plausible ordinary English meaning distinct from the target."
+  },
+  {
+    "alias": "re tension rate",
+    "term": "retention rate",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "KEEP",
+    "reason": "Phonetic split rendering of 'retention rate'; no ordinary English meaning for this two-word form."
+  },
+  {
+    "alias": "con version rate",
+    "term": "conversion rate",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "KEEP",
+    "reason": "Phonetic split rendering of 'conversion rate'; 'con version rate' has no ordinary English meaning."
+  },
+  {
+    "alias": "fun el",
+    "term": "funnel",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "KEEP",
+    "reason": "Phonetic split rendering of 'funnel'; 'fun el' has no ordinary English meaning."
+  },
+  {
+    "alias": "top of fun el",
+    "term": "top of funnel",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "KEEP",
+    "reason": "Phonetic split rendering of 'top of funnel'; the phrase with 'fun el' has no ordinary English meaning."
+  },
+  {
+    "alias": "bottom of fun el",
+    "term": "bottom of funnel",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "KEEP",
+    "reason": "Phonetic split rendering of 'bottom of funnel'; the phrase with 'fun el' has no ordinary English meaning."
+  },
+  {
+    "alias": "to fu",
+    "term": "TOFU",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "DROP",
+    "reason": "'To fu' is a phonetic rendering of 'tofu' the food; 'I had to fu for lunch' would be corrupted to 'I had TOFU for lunch' — the acronym, not the food correction."
+  },
+  {
+    "alias": "top of funnel",
+    "term": "TOFU",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "DROP",
+    "reason": "'Top of funnel' is ordinary English; converting it to the acronym TOFU is disruptive in any context where the full phrase is desired."
+  },
+  {
+    "alias": "mo fu",
+    "term": "MOFU",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "KEEP",
+    "reason": "'Mo fu' has no ordinary English meaning; safe phonetic rendering of MOFU."
+  },
+  {
+    "alias": "middle of funnel",
+    "term": "MOFU",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "DROP",
+    "reason": "'Middle of funnel' is ordinary English; converting to the acronym MOFU is disruptive when the full phrase is intended."
+  },
+  {
+    "alias": "bo fu",
+    "term": "BOFU",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "KEEP",
+    "reason": "'Bo fu' has no ordinary English meaning; safe phonetic rendering of BOFU."
+  },
+  {
+    "alias": "bottom of funnel",
+    "term": "BOFU",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "DROP",
+    "reason": "'Bottom of funnel' is ordinary English; converting to the acronym BOFU is disruptive when the full phrase is intended."
+  },
+  {
+    "alias": "act uh vation",
+    "term": "activation",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "KEEP",
+    "reason": "Phonetic split rendering of 'activation'; no ordinary English meaning for this form."
+  },
+  {
+    "alias": "on boarding",
+    "term": "onboarding",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "KEEP",
+    "reason": "Word-split rendering of 'onboarding'; replacement joins the split word correctly, no semantic change."
+  },
+  {
+    "alias": "time to value",
+    "term": "time to value",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "DROP",
+    "reason": "Identity rule: alias equals term."
+  },
+  {
+    "alias": "t t v",
+    "term": "TTV",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "KEEP",
+    "reason": "Letter-by-letter spelling of TTV; no ordinary English meaning as spaced letters."
+  },
+  {
+    "alias": "tee tee vee",
+    "term": "TTV",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "KEEP",
+    "reason": "Phonetic letter-spelling of TTV; no ordinary English meaning."
+  },
+  {
+    "alias": "time to value",
+    "term": "TTV",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "DROP",
+    "reason": "'Time to value' is ordinary English that appears in natural sentences; converting it to TTV would be unexpected in most contexts."
+  },
+  {
+    "alias": "feature a dop shun",
+    "term": "feature adoption",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "KEEP",
+    "reason": "Phonetic split rendering of 'feature adoption'; no ordinary English meaning for this form."
+  },
+  {
+    "alias": "en gage ment",
+    "term": "engagement",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "KEEP",
+    "reason": "Phonetic split rendering of 'engagement'; no ordinary English meaning for this split form."
+  },
+  {
+    "alias": "sticky ness",
+    "term": "stickiness",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "KEEP",
+    "reason": "Word-split rendering of 'stickiness'; replacement joins the split word, no semantic change."
+  },
+  {
+    "alias": "product market fit",
+    "term": "product-market fit",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "DEDUPE",
+    "new_alias": "product market fit",
+    "reason": "Conflict: same alias maps to both 'product-market fit' and 'PMF'. Winner is 'product-market fit' (more explicit, just adds standard hyphenation)."
+  },
+  {
+    "alias": "p m f",
+    "term": "PMF",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "KEEP",
+    "reason": "Letter-by-letter spelling of PMF; no ordinary English meaning as spaced letters."
+  },
+  {
+    "alias": "pee em ef",
+    "term": "PMF",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "KEEP",
+    "reason": "Phonetic letter-spelling of PMF; no ordinary English meaning."
+  },
+  {
+    "alias": "product market fit",
+    "term": "PMF",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "DEDUPE",
+    "new_alias": "product market fit",
+    "reason": "Conflict: same alias maps to both 'product-market fit' and 'PMF'. Winner is 'product-market fit'; this row is the loser."
+  },
+  {
+    "alias": "g t m",
+    "term": "GTM",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "KEEP",
+    "reason": "Letter-by-letter spelling of GTM; no ordinary English meaning as spaced letters."
+  },
+  {
+    "alias": "gee tee em",
+    "term": "GTM",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "KEEP",
+    "reason": "Phonetic letter-spelling of GTM; no ordinary English meaning."
+  },
+  {
+    "alias": "go to market",
+    "term": "GTM",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "DROP",
+    "reason": "'Go to market' is ordinary English meaning 'go to the marketplace'; fires in 'I'm going to go to market today'."
+  },
+  {
+    "alias": "go to market",
+    "term": "go-to-market",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "DROP",
+    "reason": "Ordinary English phrase with a literal meaning independent of the business term; same collision risk as the GTM row."
+  },
+  {
+    "alias": "t a m",
+    "term": "TAM",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "KEEP",
+    "reason": "Letter-by-letter spelling of TAM; no ordinary English meaning as spaced letters."
+  },
+  {
+    "alias": "tee ay em",
+    "term": "TAM",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "KEEP",
+    "reason": "Phonetic letter-spelling of TAM; no ordinary English meaning."
+  },
+  {
+    "alias": "total addressable market",
+    "term": "TAM",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "KEEP",
+    "reason": "Exclusively a technical business term; never appears in ordinary non-business speech."
+  },
+  {
+    "alias": "s a m",
+    "term": "SAM",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "KEEP",
+    "reason": "Letter-by-letter spelling of SAM; spaced form is distinct from the proper name 'Sam'."
+  },
+  {
+    "alias": "serviceable addressable market",
+    "term": "SAM",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "KEEP",
+    "reason": "Exclusively a technical business term; never appears in ordinary non-business speech."
+  },
+  {
+    "alias": "s o m",
+    "term": "SOM",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "KEEP",
+    "reason": "Letter-by-letter spelling of SOM; no ordinary English meaning as spaced letters."
+  },
+  {
+    "alias": "serviceable obtainable market",
+    "term": "SOM",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "KEEP",
+    "reason": "Exclusively a technical business term; never appears in ordinary non-business speech."
+  },
+  {
+    "alias": "i c p",
+    "term": "ICP",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "KEEP",
+    "reason": "Letter-by-letter spelling of ICP; no ordinary English meaning as spaced letters."
+  },
+  {
+    "alias": "eye see pee",
+    "term": "ICP",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "KEEP",
+    "reason": "Phonetic letter-spelling of ICP; no ordinary English meaning."
+  },
+  {
+    "alias": "ideal customer profile",
+    "term": "ICP",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "KEEP",
+    "reason": "Exclusively a technical business term; never appears in ordinary non-business speech."
+  },
+  {
+    "alias": "r o i",
+    "term": "ROI",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "KEEP",
+    "reason": "Letter-by-letter spelling of ROI; no ordinary English meaning as spaced letters."
+  },
+  {
+    "alias": "are oh eye",
+    "term": "ROI",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "KEEP",
+    "reason": "Phonetic letter-spelling of ROI; no ordinary English meaning."
+  },
+  {
+    "alias": "return on investment",
+    "term": "ROI",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "KEEP",
+    "reason": "Exclusively a technical business/finance term; does not appear in ordinary non-business speech with a different meaning."
+  },
+  {
+    "alias": "t c o",
+    "term": "TCO",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "KEEP",
+    "reason": "Letter-by-letter spelling of TCO; no ordinary English meaning as spaced letters."
+  },
+  {
+    "alias": "tee see oh",
+    "term": "TCO",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "KEEP",
+    "reason": "Phonetic letter-spelling of TCO; no ordinary English meaning."
+  },
+  {
+    "alias": "total cost of ownership",
+    "term": "TCO",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "KEEP",
+    "reason": "Exclusively a technical business/finance term; never appears in ordinary non-business speech."
+  },
+  {
+    "alias": "cap ex",
+    "term": "CAPEX",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "KEEP",
+    "reason": "Phonetic rendering of CAPEX; 'cap ex' has no ordinary English meaning."
+  },
+  {
+    "alias": "capital expenditure",
+    "term": "CAPEX",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "KEEP",
+    "reason": "Exclusively a technical finance term; never appears in ordinary non-business speech."
+  },
+  {
+    "alias": "op ex",
+    "term": "OPEX",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "KEEP",
+    "reason": "Phonetic rendering of OPEX; 'op ex' has no ordinary English meaning."
+  },
+  {
+    "alias": "operational expenditure",
+    "term": "OPEX",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "KEEP",
+    "reason": "Exclusively a technical finance term; never appears in ordinary non-business speech."
+  },
+  {
+    "alias": "cogs",
+    "term": "COGS",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "DROP",
+    "reason": "Identity rule: lowercase alias equals uppercase term. Also 'cogs' is an ordinary English word (gears)."
+  },
+  {
+    "alias": "cost of goods sold",
+    "term": "COGS",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "KEEP",
+    "reason": "Exclusively a technical accounting term; never appears in ordinary non-business speech with a different meaning."
+  },
+  {
+    "alias": "gross mar gin",
+    "term": "gross margin",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "KEEP",
+    "reason": "Phonetic split rendering of 'gross margin'; no ordinary English meaning for this split form."
+  },
+  {
+    "alias": "run way",
+    "term": "runway",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "KEEP",
+    "reason": "Word-split rendering of 'runway'; replacement joins the split word correctly with no semantic change."
+  },
+  {
+    "alias": "burn rate",
+    "term": "burn rate",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "DROP",
+    "reason": "Identity rule: alias equals term."
+  },
+  {
+    "alias": "head count",
+    "term": "headcount",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "KEEP",
+    "reason": "Word-split rendering of 'headcount'; replacement joins the split word correctly with no semantic change."
+  },
+  {
+    "alias": "h c",
+    "term": "HC",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "KEEP",
+    "reason": "Letter-by-letter spelling of HC; no ordinary English meaning as spaced letters."
+  },
+  {
+    "alias": "aitch see",
+    "term": "HC",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "KEEP",
+    "reason": "Phonetic letter-spelling of HC; no ordinary English meaning."
+  },
+  {
+    "alias": "headcount",
+    "term": "HC",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "DROP",
+    "reason": "'Headcount' is ordinary English; converting it silently to 'HC' is disruptive in natural sentences like 'we need to track headcount'."
+  },
+  {
+    "alias": "f t e",
+    "term": "FTE",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "KEEP",
+    "reason": "Letter-by-letter spelling of FTE; no ordinary English meaning as spaced letters."
+  },
+  {
+    "alias": "ef tee ee",
+    "term": "FTE",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "KEEP",
+    "reason": "Phonetic letter-spelling of FTE; no ordinary English meaning."
+  },
+  {
+    "alias": "full time equivalent",
+    "term": "FTE",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "KEEP",
+    "reason": "Exclusively a technical HR/business term; never appears in ordinary non-business speech with a different meaning."
+  },
+  {
+    "alias": "i c",
+    "term": "IC",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "KEEP",
+    "reason": "Letter-by-letter spelling of IC; no ordinary English meaning as spaced letters."
+  },
+  {
+    "alias": "eye see",
+    "term": "IC",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "DROP",
+    "reason": "'Eye see' is phonetically identical to 'I see', an extremely common English acknowledgment; 'I see what you mean' would become 'IC what you mean'."
+  },
+  {
+    "alias": "individual contributor",
+    "term": "IC",
+    "pack": "pack_08_okrs_product_mgmt",
+    "verdict": "KEEP",
+    "reason": "Exclusively a technical org/HR term; never appears in ordinary non-business speech with a different meaning."
+  }
+]

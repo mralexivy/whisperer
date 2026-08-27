@@ -1,0 +1,2587 @@
+[
+  {
+    "alias": "b e r t",
+    "term": "BERT",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "KEEP",
+    "reason": "Letter-by-letter spelling of the BERT acronym; no ordinary English meaning as a spelled-out string."
+  },
+  {
+    "alias": "row bert a",
+    "term": "RoBERTa",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "KEEP",
+    "reason": "Phonetic mis-transcription of RoBERTa; 'row bert a' is not a natural English phrase."
+  },
+  {
+    "alias": "roberta",
+    "term": "RoBERTa",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "DROP",
+    "reason": "Flagged identity and single_word_english. 'Roberta' is a common given name and would corrupt sentences like 'I spoke with Roberta'."
+  },
+  {
+    "alias": "t five",
+    "term": "T5",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "KEEP",
+    "reason": "Letter-plus-number pattern primarily used for the T5 language model; not a natural standalone English phrase."
+  },
+  {
+    "alias": "tee five",
+    "term": "T5",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "KEEP",
+    "reason": "Phonetic rendering of 'T5' letters; not a natural English compound with another meaning."
+  },
+  {
+    "alias": "res net",
+    "term": "ResNet",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "KEEP",
+    "reason": "Phonetic split of ResNet; 'res net' has no ordinary English meaning as a compound."
+  },
+  {
+    "alias": "rez net",
+    "term": "ResNet",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "KEEP",
+    "reason": "Phonetic variant of ResNet; 'rez net' has no ordinary English meaning."
+  },
+  {
+    "alias": "you only look once",
+    "term": "YOLO",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "KEEP",
+    "reason": "Exact canonical expansion of the YOLO object-detection algorithm; the phrase maps unambiguously to the tech term in context."
+  },
+  {
+    "alias": "open cv",
+    "term": "OpenCV",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "KEEP",
+    "reason": "Phonetic rendering of OpenCV; 'cv' as a standalone suffix has no natural English meaning here."
+  },
+  {
+    "alias": "open see vee",
+    "term": "OpenCV",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "KEEP",
+    "reason": "Phonetic spelling of the letters O-p-e-n-C-V; not a natural English phrase."
+  },
+  {
+    "alias": "tess er act",
+    "term": "Tesseract",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "KEEP",
+    "reason": "Phonetic split of Tesseract; 'tess er act' is not a natural English phrase."
+  },
+  {
+    "alias": "tessaract",
+    "term": "Tesseract",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "KEEP",
+    "reason": "Common misspelling of Tesseract; no other ordinary English meaning."
+  },
+  {
+    "alias": "o c r",
+    "term": "OCR",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "KEEP",
+    "reason": "Letter-by-letter spelling of OCR acronym."
+  },
+  {
+    "alias": "oh see are",
+    "term": "OCR",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "KEEP",
+    "reason": "Phonetic rendering of O-C-R letters; not a natural English phrase."
+  },
+  {
+    "alias": "optical character recognition",
+    "term": "OCR",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "KEEP",
+    "reason": "Exact canonical expansion of OCR; unambiguously technical."
+  },
+  {
+    "alias": "n l p",
+    "term": "NLP",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "KEEP",
+    "reason": "Letter-by-letter spelling of NLP acronym."
+  },
+  {
+    "alias": "en el pee",
+    "term": "NLP",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "KEEP",
+    "reason": "Phonetic rendering of N-L-P letters; not a natural English phrase."
+  },
+  {
+    "alias": "natural language processing",
+    "term": "NLP",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "KEEP",
+    "reason": "Exact canonical expansion of NLP; unambiguously technical."
+  },
+  {
+    "alias": "n l u",
+    "term": "NLU",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "KEEP",
+    "reason": "Letter-by-letter spelling of NLU acronym."
+  },
+  {
+    "alias": "en el you",
+    "term": "NLU",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "KEEP",
+    "reason": "Phonetic rendering of N-L-U letters; not a natural English phrase."
+  },
+  {
+    "alias": "a s r",
+    "term": "ASR",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "KEEP",
+    "reason": "Letter-by-letter spelling of ASR acronym."
+  },
+  {
+    "alias": "ay ess are",
+    "term": "ASR",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "KEEP",
+    "reason": "Phonetic rendering of A-S-R letters; not a natural English phrase."
+  },
+  {
+    "alias": "automatic speech recognition",
+    "term": "ASR",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "KEEP",
+    "reason": "Exact canonical expansion of ASR; unambiguously technical."
+  },
+  {
+    "alias": "t t s",
+    "term": "TTS",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "KEEP",
+    "reason": "Letter-by-letter spelling of TTS acronym."
+  },
+  {
+    "alias": "tee tee ess",
+    "term": "TTS",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "KEEP",
+    "reason": "Phonetic rendering of T-T-S letters; not a natural English phrase."
+  },
+  {
+    "alias": "text to speech",
+    "term": "TTS",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "KEEP",
+    "reason": "Exact canonical expansion of TTS; unambiguously technical."
+  },
+  {
+    "alias": "s t t",
+    "term": "STT",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "KEEP",
+    "reason": "Letter-by-letter spelling of STT acronym."
+  },
+  {
+    "alias": "ess tee tee",
+    "term": "STT",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "KEEP",
+    "reason": "Phonetic rendering of S-T-T letters; not a natural English phrase."
+  },
+  {
+    "alias": "speech to text",
+    "term": "STT",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "KEEP",
+    "reason": "Exact canonical expansion of STT; unambiguously technical."
+  },
+  {
+    "alias": "m c p",
+    "term": "MCP",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "KEEP",
+    "reason": "Letter-by-letter spelling of MCP acronym."
+  },
+  {
+    "alias": "em see pee",
+    "term": "MCP",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "KEEP",
+    "reason": "Phonetic rendering of M-C-P letters; not a natural English phrase."
+  },
+  {
+    "alias": "model context protocol",
+    "term": "MCP",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "KEEP",
+    "reason": "Exact canonical expansion of MCP; unambiguously technical."
+  },
+  {
+    "alias": "a two a",
+    "term": "A2A",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "KEEP",
+    "reason": "Phonetic rendering of the A2A abbreviation; not a natural English phrase."
+  },
+  {
+    "alias": "a 2 a",
+    "term": "A2A",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "KEEP",
+    "reason": "Alphanumeric rendering of the A2A abbreviation; clearly tech."
+  },
+  {
+    "alias": "agent to agent",
+    "term": "A2A",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "KEEP",
+    "reason": "Exact canonical expansion of the A2A protocol; unambiguously technical."
+  },
+  {
+    "alias": "open router",
+    "term": "OpenRouter",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "DROP",
+    "reason": "'Open router' is a common English phrase in networking contexts (open-source router, open the router) and would corrupt sentences like 'using an open router for our network'."
+  },
+  {
+    "alias": "together a i",
+    "term": "Together AI",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "KEEP",
+    "reason": "Phonetic split with letter-spelled 'a i'; the combination is specific to the Together AI platform."
+  },
+  {
+    "alias": "together ai",
+    "term": "Together AI",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "DROP",
+    "reason": "Flagged identity and substring_of_term; alias and term differ only in case, making this a no-op replacement."
+  },
+  {
+    "alias": "rep lick ate",
+    "term": "Replicate",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "KEEP",
+    "reason": "Phonetic split of 'Replicate'; 'rep lick ate' is not a natural English phrase and won't occur in ordinary speech."
+  },
+  {
+    "alias": "modal ai",
+    "term": "Modal",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "KEEP",
+    "reason": "The 'ai' disambiguator makes 'modal ai' specific to the Modal platform; unlikely to appear in non-tech sentences."
+  },
+  {
+    "alias": "banana ml",
+    "term": "Banana",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "KEEP",
+    "reason": "The 'ml' suffix unambiguously marks this as the Banana cloud ML service, not the fruit."
+  },
+  {
+    "alias": "run pod",
+    "term": "RunPod",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "KEEP",
+    "reason": "'Run pod' as a compound noun refers specifically to the RunPod GPU cloud; natural Kubernetes phrasing is 'run a pod' or 'run the pod', not this compound."
+  },
+  {
+    "alias": "lambda labs gpu",
+    "term": "Lambda Labs",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "KEEP",
+    "reason": "The 'gpu' qualifier disambiguates from Lambda (the Greek letter or AWS Lambda); unambiguously the GPU cloud provider."
+  },
+  {
+    "alias": "any scale",
+    "term": "Anyscale",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "DROP",
+    "reason": "'Any scale' is an extremely common English phrase ('this works at any scale', 'at any scale of deployment') and would corrupt ordinary sentences."
+  },
+  {
+    "alias": "ray framework",
+    "term": "Ray",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "KEEP",
+    "reason": "'Framework' disambiguates from the common word 'ray' (light ray, manta ray, name); the compound is tech-specific."
+  },
+  {
+    "alias": "dask python",
+    "term": "Dask",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "KEEP",
+    "reason": "'Dask' is not a common English word and 'python' confirms the tech context; unambiguously the Dask library."
+  },
+  {
+    "alias": "vex",
+    "term": "Vaex",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "DROP",
+    "reason": "Flagged single_word_english. 'Vex' is a common English verb ('that really vexed me') and would corrupt ordinary sentences."
+  },
+  {
+    "alias": "vay ex",
+    "term": "Vaex",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "KEEP",
+    "reason": "Phonetic mis-transcription of 'Vaex'; 'vay ex' is not a natural English phrase."
+  },
+  {
+    "alias": "try ton",
+    "term": "Triton",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "KEEP",
+    "reason": "Phonetic split of Triton; 'try ton' is not a natural English phrase."
+  },
+  {
+    "alias": "tri ton",
+    "term": "Triton",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "KEEP",
+    "reason": "Phonetic split of Triton; 'tri ton' is not a natural English phrase."
+  },
+  {
+    "alias": "deep speed",
+    "term": "DeepSpeed",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "KEEP",
+    "reason": "'Deep speed' as a compound is not a standard English phrase; unambiguously refers to the Microsoft DeepSpeed library."
+  },
+  {
+    "alias": "mega tron",
+    "term": "Megatron",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "KEEP",
+    "reason": "Phonetic split of Megatron; 'mega tron' is not a natural English compound phrase."
+  },
+  {
+    "alias": "f s d p",
+    "term": "FSDP",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "KEEP",
+    "reason": "Letter-by-letter spelling of FSDP acronym."
+  },
+  {
+    "alias": "ef ess dee pee",
+    "term": "FSDP",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "KEEP",
+    "reason": "Phonetic rendering of F-S-D-P letters; not a natural English phrase."
+  },
+  {
+    "alias": "quant ization",
+    "term": "quantization",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "KEEP",
+    "reason": "Phonetic split of 'quantization'; 'quant ization' is not a natural English phrase and maps unambiguously to the ML term."
+  },
+  {
+    "alias": "quantize ation",
+    "term": "quantization",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "KEEP",
+    "reason": "Phonetic split of 'quantization'; 'quantize ation' is not a natural English phrase."
+  },
+  {
+    "alias": "int eight",
+    "term": "INT8",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "KEEP",
+    "reason": "Tech abbreviation plus number; 'int eight' in context is the 8-bit integer data type, not a natural English phrase."
+  },
+  {
+    "alias": "int 8",
+    "term": "INT8",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "KEEP",
+    "reason": "Tech abbreviation plus digit; clearly the INT8 data type."
+  },
+  {
+    "alias": "f p sixteen",
+    "term": "FP16",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "KEEP",
+    "reason": "Letter-number pattern for the FP16 floating-point format; not a natural English phrase."
+  },
+  {
+    "alias": "f p 16",
+    "term": "FP16",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "KEEP",
+    "reason": "Letter-number pattern for FP16; clearly tech."
+  },
+  {
+    "alias": "b f sixteen",
+    "term": "BF16",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "KEEP",
+    "reason": "Letter-number pattern for BF16 (Brain Float 16); no ordinary English meaning."
+  },
+  {
+    "alias": "b f 16",
+    "term": "BF16",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "KEEP",
+    "reason": "Letter-number pattern for BF16; clearly tech."
+  },
+  {
+    "alias": "brain float 16",
+    "term": "BF16",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "KEEP",
+    "reason": "Exact canonical expansion of BF16; 'brain float' is not a natural English compound and the phrase is unambiguously technical."
+  },
+  {
+    "alias": "g g u f",
+    "term": "GGUF",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "KEEP",
+    "reason": "Letter-by-letter spelling of GGUF acronym."
+  },
+  {
+    "alias": "gee gee you ef",
+    "term": "GGUF",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "KEEP",
+    "reason": "Phonetic rendering of G-G-U-F letters; not a natural English phrase."
+  },
+  {
+    "alias": "g p t q",
+    "term": "GPTQ",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "KEEP",
+    "reason": "Letter-by-letter spelling of GPTQ acronym."
+  },
+  {
+    "alias": "gee pee tee queue",
+    "term": "GPTQ",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "KEEP",
+    "reason": "Phonetic rendering of G-P-T-Q letters; not a natural English phrase."
+  },
+  {
+    "alias": "a w q",
+    "term": "AWQ",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "KEEP",
+    "reason": "Letter-by-letter spelling of AWQ acronym."
+  },
+  {
+    "alias": "ay double you queue",
+    "term": "AWQ",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "KEEP",
+    "reason": "Phonetic rendering of A-W-Q letters; not a natural English phrase."
+  },
+  {
+    "alias": "postgress queue el",
+    "term": "PostgreSQL",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "KEEP",
+    "reason": "Phonetic multi-word mis-transcription of PostgreSQL; no ordinary English meaning."
+  },
+  {
+    "alias": "post gres q l",
+    "term": "PostgreSQL",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "KEEP",
+    "reason": "Letter-by-letter spelling combined with phonetic prefix; not ordinary English."
+  },
+  {
+    "alias": "post gress",
+    "term": "PostgreSQL",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "DEDUPE",
+    "new_alias": "post gress",
+    "reason": "Conflict with Postgres row for same alias; PostgreSQL is the more specific canonical term."
+  },
+  {
+    "alias": "postgres",
+    "term": "PostgreSQL",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "KEEP",
+    "reason": "Pure tech abbreviation/proper name with no ordinary English meaning."
+  },
+  {
+    "alias": "postgres sql",
+    "term": "PostgreSQL",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "KEEP",
+    "reason": "Tech compound with no ordinary English meaning."
+  },
+  {
+    "alias": "post grey sql",
+    "term": "PostgreSQL",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "KEEP",
+    "reason": "Phonetic mis-transcription of PostgreSQL; no ordinary English meaning."
+  },
+  {
+    "alias": "post gre sequel",
+    "term": "PostgreSQL",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "KEEP",
+    "reason": "Phonetic mis-transcription; the combination is not a natural English phrase."
+  },
+  {
+    "alias": "post gress",
+    "term": "Postgres",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "DEDUPE",
+    "new_alias": "post gress",
+    "reason": "Conflict with PostgreSQL row for same alias; PostgreSQL wins as the canonical full name."
+  },
+  {
+    "alias": "post grease",
+    "term": "Postgres",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "DROP",
+    "reason": "'post grease' is plausible ordinary English (e.g., 'after greasing the axle')."
+  },
+  {
+    "alias": "post grass",
+    "term": "Postgres",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "DROP",
+    "reason": "'post grass' reads as ordinary English (e.g., 'after the grass was laid')."
+  },
+  {
+    "alias": "my s q l",
+    "term": "MySQL",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "KEEP",
+    "reason": "Letter-by-letter spelling of SQL; matches KEEP rule for letter spellings."
+  },
+  {
+    "alias": "my sequel",
+    "term": "MySQL",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "DROP",
+    "reason": "'sequel' is a very common English word; 'my sequel' breaks naturally in film/book context."
+  },
+  {
+    "alias": "my sql",
+    "term": "MySQL",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "KEEP",
+    "reason": "Tech compound; 'my sql' has no ordinary English meaning."
+  },
+  {
+    "alias": "my ess queue el",
+    "term": "MySQL",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "KEEP",
+    "reason": "Letter-by-letter pronunciation of MySQL; no natural English reading."
+  },
+  {
+    "alias": "maria d b",
+    "term": "MariaDB",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "KEEP",
+    "reason": "Proper name plus letter-spelled 'DB'; not a natural English phrase."
+  },
+  {
+    "alias": "maria db",
+    "term": "MariaDB",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "KEEP",
+    "reason": "Tech compound; no ordinary English meaning."
+  },
+  {
+    "alias": "maria dee bee",
+    "term": "MariaDB",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "KEEP",
+    "reason": "Letter-by-letter pronunciation of the DB suffix; not a natural English phrase."
+  },
+  {
+    "alias": "sql lite",
+    "term": "SQLite",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "KEEP",
+    "reason": "Tech compound; 'sql lite' has no ordinary English meaning."
+  },
+  {
+    "alias": "sequel lite",
+    "term": "SQLite",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "DROP",
+    "reason": "'sequel' and 'lite' are both common English words; 'sequel lite' could describe a lighter follow-up film."
+  },
+  {
+    "alias": "s q lite",
+    "term": "SQLite",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "KEEP",
+    "reason": "Letter-spelling prefix 's q' plus 'lite'; qualifies as letter-spelled tech abbreviation."
+  },
+  {
+    "alias": "sq lite",
+    "term": "SQLite",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "KEEP",
+    "reason": "Tech compound with no natural English reading."
+  },
+  {
+    "alias": "mongo d b",
+    "term": "MongoDB",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "KEEP",
+    "reason": "Proper tech name plus letter-spelled DB; not ordinary English."
+  },
+  {
+    "alias": "mongo db",
+    "term": "MongoDB",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "KEEP",
+    "reason": "Tech compound; no ordinary English meaning."
+  },
+  {
+    "alias": "mongo dee bee",
+    "term": "MongoDB",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "KEEP",
+    "reason": "Letter-by-letter pronunciation of DB suffix; not a natural English phrase."
+  },
+  {
+    "alias": "couch d b",
+    "term": "CouchDB",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "KEEP",
+    "reason": "'couch d b' is not a natural English phrase; the letter suffix disambiguates it."
+  },
+  {
+    "alias": "couch db",
+    "term": "CouchDB",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "KEEP",
+    "reason": "Tech compound; no ordinary English meaning."
+  },
+  {
+    "alias": "ka sandra",
+    "term": "Cassandra",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "KEEP",
+    "reason": "Phonetic mis-transcription of Cassandra; 'ka sandra' is not a natural English phrase."
+  },
+  {
+    "alias": "cassandra db",
+    "term": "Cassandra",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "KEEP",
+    "reason": "Tech compound; no ordinary English meaning."
+  },
+  {
+    "alias": "scilla db",
+    "term": "ScyllaDB",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "KEEP",
+    "reason": "Phonetic mis-transcription; not ordinary English."
+  },
+  {
+    "alias": "sill a db",
+    "term": "ScyllaDB",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "KEEP",
+    "reason": "Phonetic mis-transcription; not ordinary English."
+  },
+  {
+    "alias": "scylla d b",
+    "term": "ScyllaDB",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "KEEP",
+    "reason": "Mythological name plus letter-spelled DB; not a natural English phrase."
+  },
+  {
+    "alias": "cockroach d b",
+    "term": "CockroachDB",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "KEEP",
+    "reason": "Compound tech name plus letter suffix; not a natural English phrase."
+  },
+  {
+    "alias": "cockroach db",
+    "term": "CockroachDB",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "KEEP",
+    "reason": "Tech compound; no ordinary English meaning."
+  },
+  {
+    "alias": "t i d b",
+    "term": "TiDB",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "KEEP",
+    "reason": "Letter-by-letter spelling; matches KEEP rule for letter spellings."
+  },
+  {
+    "alias": "tee eye dee bee",
+    "term": "TiDB",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "KEEP",
+    "reason": "Letter-by-letter pronunciation; not a natural English phrase."
+  },
+  {
+    "alias": "tie db",
+    "term": "TiDB",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "KEEP",
+    "reason": "Tech compound; 'tie db' has no ordinary English meaning."
+  },
+  {
+    "alias": "yuga byte db",
+    "term": "YugabyteDB",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "KEEP",
+    "reason": "Phonetic mis-transcription of brand name; not ordinary English."
+  },
+  {
+    "alias": "you ga bite db",
+    "term": "YugabyteDB",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "KEEP",
+    "reason": "Phonetic mis-transcription; not ordinary English."
+  },
+  {
+    "alias": "click house",
+    "term": "ClickHouse",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "DROP",
+    "reason": "'click' and 'house' are both common English words and 'click house' could appear naturally in speech."
+  },
+  {
+    "alias": "time scale db",
+    "term": "TimescaleDB",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "KEEP",
+    "reason": "Tech compound; 'time scale db' has no ordinary English meaning."
+  },
+  {
+    "alias": "timescale d b",
+    "term": "TimescaleDB",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "KEEP",
+    "reason": "Tech compound plus letter suffix; not ordinary English."
+  },
+  {
+    "alias": "influx d b",
+    "term": "InfluxDB",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "KEEP",
+    "reason": "'influx d b' is not a natural English phrase; the letter suffix disambiguates."
+  },
+  {
+    "alias": "influx db",
+    "term": "InfluxDB",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "KEEP",
+    "reason": "Tech compound; no ordinary English meaning."
+  },
+  {
+    "alias": "neo four j",
+    "term": "Neo4j",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "KEEP",
+    "reason": "Alphanumeric tech spelling; not ordinary English."
+  },
+  {
+    "alias": "neo for jay",
+    "term": "Neo4j",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "KEEP",
+    "reason": "Phonetic letter-number spelling of Neo4j; not a natural English phrase."
+  },
+  {
+    "alias": "nee oh 4 j",
+    "term": "Neo4j",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "KEEP",
+    "reason": "Letter-phonetic-number spelling; not ordinary English."
+  },
+  {
+    "alias": "a rango db",
+    "term": "ArangoDB",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "KEEP",
+    "reason": "Phonetic mis-transcription of brand name; not ordinary English."
+  },
+  {
+    "alias": "arango d b",
+    "term": "ArangoDB",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "KEEP",
+    "reason": "Brand name plus letter-spelled DB; not ordinary English."
+  },
+  {
+    "alias": "d graph",
+    "term": "DGraph",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "KEEP",
+    "reason": "Letter plus tech term; 'd graph' is not a natural English phrase."
+  },
+  {
+    "alias": "dee graph",
+    "term": "DGraph",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "KEEP",
+    "reason": "Letter pronunciation plus tech term; not ordinary English."
+  },
+  {
+    "alias": "fauna d b",
+    "term": "FaunaDB",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "KEEP",
+    "reason": "'fauna d b' is not a natural English phrase; letter suffix disambiguates."
+  },
+  {
+    "alias": "fauna db",
+    "term": "FaunaDB",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "KEEP",
+    "reason": "Tech compound; no ordinary English meaning."
+  },
+  {
+    "alias": "surreal d b",
+    "term": "SurrealDB",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "KEEP",
+    "reason": "Tech compound plus letter suffix; 'surreal d b' is not a natural English phrase."
+  },
+  {
+    "alias": "surreal db",
+    "term": "SurrealDB",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "KEEP",
+    "reason": "Tech compound; no ordinary English meaning."
+  },
+  {
+    "alias": "pine cone",
+    "term": "Pinecone",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "DROP",
+    "reason": "'pine cone' is a very common English compound noun (seed cone of a pine tree)."
+  },
+  {
+    "alias": "wee vee ate",
+    "term": "Weaviate",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "KEEP",
+    "reason": "Letter-phonetic mis-transcription; not a natural English phrase."
+  },
+  {
+    "alias": "weave ee ate",
+    "term": "Weaviate",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "KEEP",
+    "reason": "Phonetic mis-transcription of Weaviate; not ordinary English."
+  },
+  {
+    "alias": "weave iate",
+    "term": "Weaviate",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "KEEP",
+    "reason": "Phonetic mis-transcription; not ordinary English."
+  },
+  {
+    "alias": "cue drant",
+    "term": "Qdrant",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "KEEP",
+    "reason": "'cue drant' is not a natural English phrase."
+  },
+  {
+    "alias": "q drant",
+    "term": "Qdrant",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "KEEP",
+    "reason": "Letter plus partial word; not ordinary English."
+  },
+  {
+    "alias": "quadrant",
+    "term": "Qdrant",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "DROP",
+    "reason": "Single common English word (geometry, navigation); breaks naturally in any technical or general speech."
+  },
+  {
+    "alias": "mil vus",
+    "term": "Milvus",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "KEEP",
+    "reason": "Phonetic mis-transcription; not ordinary English."
+  },
+  {
+    "alias": "mill vus",
+    "term": "Milvus",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "KEEP",
+    "reason": "Phonetic mis-transcription; not ordinary English."
+  },
+  {
+    "alias": "chrome a",
+    "term": "Chroma",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "KEEP",
+    "reason": "Phonetic mis-transcription of 'Chroma'; 'chrome a' is not a natural English phrase."
+  },
+  {
+    "alias": "chroma db",
+    "term": "Chroma",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "KEEP",
+    "reason": "Tech compound; no ordinary English meaning."
+  },
+  {
+    "alias": "p g vector",
+    "term": "pgvector",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "KEEP",
+    "reason": "Letter-spelled abbreviation plus tech term; matches KEEP rule for letter spellings."
+  },
+  {
+    "alias": "pee gee vector",
+    "term": "pgvector",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "KEEP",
+    "reason": "Letter-by-letter pronunciation plus tech term; not ordinary English."
+  },
+  {
+    "alias": "face",
+    "term": "FAISS",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "DROP",
+    "reason": "Extremely common single English word; breaks constantly in natural speech."
+  },
+  {
+    "alias": "fays",
+    "term": "FAISS",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "KEEP",
+    "reason": "Phonetic mis-transcription of FAISS; 'fays' is archaic/rare with virtually no modern dictation use."
+  },
+  {
+    "alias": "f a i s s",
+    "term": "FAISS",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "KEEP",
+    "reason": "Letter-by-letter spelling; matches KEEP rule for letter spellings."
+  },
+  {
+    "alias": "s q l",
+    "term": "SQL",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "KEEP",
+    "reason": "Letter-by-letter spelling; matches KEEP rule for letter spellings."
+  },
+  {
+    "alias": "ess queue el",
+    "term": "SQL",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "KEEP",
+    "reason": "Letter-by-letter pronunciation of SQL; not ordinary English."
+  },
+  {
+    "alias": "sequel",
+    "term": "SQL",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "DROP",
+    "reason": "Very common single English word (follow-up film/book); breaks constantly in natural speech."
+  },
+  {
+    "alias": "no s q l",
+    "term": "NoSQL",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "KEEP",
+    "reason": "Letter-by-letter spelling with 'no' prefix; not ordinary English."
+  },
+  {
+    "alias": "no sequel",
+    "term": "NoSQL",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "DROP",
+    "reason": "'no sequel' is a common phrase in film/book contexts."
+  },
+  {
+    "alias": "no sql",
+    "term": "NoSQL",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "KEEP",
+    "reason": "Tech compound; no ordinary English meaning."
+  },
+  {
+    "alias": "crud",
+    "term": "CRUD",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "DROP",
+    "reason": "Identity rule: alias equals term (case-insensitive). Also a common English slang word."
+  },
+  {
+    "alias": "c r u d",
+    "term": "CRUD",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "KEEP",
+    "reason": "Letter-by-letter spelling; matches KEEP rule for letter spellings."
+  },
+  {
+    "alias": "o r m",
+    "term": "ORM",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "KEEP",
+    "reason": "Letter-by-letter spelling; matches KEEP rule for letter spellings."
+  },
+  {
+    "alias": "oh are em",
+    "term": "ORM",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "KEEP",
+    "reason": "Letter-by-letter pronunciation; not ordinary English."
+  },
+  {
+    "alias": "a c i d",
+    "term": "ACID",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "KEEP",
+    "reason": "Letter-by-letter spelling; matches KEEP rule for letter spellings."
+  },
+  {
+    "alias": "acid compliance",
+    "term": "ACID",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "DROP",
+    "reason": "'acid' is a common word and 'acid compliance' appears naturally in chemistry/regulatory contexts; also destroys 'compliance' from the output."
+  },
+  {
+    "alias": "cap theorem",
+    "term": "CAP theorem",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "DROP",
+    "reason": "Identity rule: alias is a substring of the term and effectively identical."
+  },
+  {
+    "alias": "c a p theorem",
+    "term": "CAP theorem",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "KEEP",
+    "reason": "Letter-by-letter spelling prefix; not ordinary English."
+  },
+  {
+    "alias": "sharting",
+    "term": "sharding",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "KEEP",
+    "reason": "Phonetic mis-transcription of 'sharding'; extremely unlikely to appear in professional dictation context."
+  },
+  {
+    "alias": "char ding",
+    "term": "sharding",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "KEEP",
+    "reason": "'char ding' is not a natural English phrase."
+  },
+  {
+    "alias": "dee normalization",
+    "term": "denormalization",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "KEEP",
+    "reason": "Phonetic mis-transcription with letter-spelled prefix; not ordinary English."
+  },
+  {
+    "alias": "open a i",
+    "term": "OpenAI",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "KEEP",
+    "reason": "Letter-by-letter spelling of AI suffix; not ordinary English."
+  },
+  {
+    "alias": "open ay eye",
+    "term": "OpenAI",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "KEEP",
+    "reason": "Letter-by-letter pronunciation of AI; not ordinary English."
+  },
+  {
+    "alias": "open ai",
+    "term": "OpenAI",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "KEEP",
+    "reason": "Tech compound; no ordinary English meaning."
+  },
+  {
+    "alias": "chat g p t",
+    "term": "ChatGPT",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "KEEP",
+    "reason": "Letter-by-letter spelling of GPT; not ordinary English."
+  },
+  {
+    "alias": "chat gee pee tee",
+    "term": "ChatGPT",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "KEEP",
+    "reason": "Letter-by-letter pronunciation; not ordinary English."
+  },
+  {
+    "alias": "chat gpt",
+    "term": "ChatGPT",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "KEEP",
+    "reason": "Tech compound; no ordinary English meaning."
+  },
+  {
+    "alias": "g p t four",
+    "term": "GPT-4",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "KEEP",
+    "reason": "Letter-by-letter spelling; matches KEEP rule for letter spellings."
+  },
+  {
+    "alias": "gee pee tee four",
+    "term": "GPT-4",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "KEEP",
+    "reason": "Letter-by-letter pronunciation; not ordinary English."
+  },
+  {
+    "alias": "gpt four",
+    "term": "GPT-4",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "KEEP",
+    "reason": "Tech compound; no ordinary English meaning."
+  },
+  {
+    "alias": "g p t four oh",
+    "term": "GPT-4o",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "KEEP",
+    "reason": "Letter-by-letter spelling; not ordinary English."
+  },
+  {
+    "alias": "gee pee tee four oh",
+    "term": "GPT-4o",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "KEEP",
+    "reason": "Letter-by-letter pronunciation; not ordinary English."
+  },
+  {
+    "alias": "g p t three",
+    "term": "GPT-3",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "KEEP",
+    "reason": "Letter-by-letter spelling; matches KEEP rule for letter spellings."
+  },
+  {
+    "alias": "gee pee tee three",
+    "term": "GPT-3",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "KEEP",
+    "reason": "Letter-by-letter pronunciation; not ordinary English."
+  },
+  {
+    "alias": "an throw pick",
+    "term": "Anthropic",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "KEEP",
+    "reason": "Phonetic mis-transcription of Anthropic; not a natural English phrase."
+  },
+  {
+    "alias": "an thropic",
+    "term": "Anthropic",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "KEEP",
+    "reason": "Phonetic mis-transcription; not ordinary English."
+  },
+  {
+    "alias": "anthro pick",
+    "term": "Anthropic",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "KEEP",
+    "reason": "Phonetic mis-transcription; not ordinary English."
+  },
+  {
+    "alias": "antro pic",
+    "term": "Anthropic",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "KEEP",
+    "reason": "Phonetic mis-transcription; not ordinary English."
+  },
+  {
+    "alias": "clod",
+    "term": "Claude",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "DROP",
+    "reason": "Common single English word (lump of earth; dull person); breaks naturally in ordinary speech."
+  },
+  {
+    "alias": "clawed",
+    "term": "Claude",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "DROP",
+    "reason": "Common past-tense English verb (past tense of 'claw'); breaks naturally in any description of animal behavior."
+  },
+  {
+    "alias": "claude sonnet",
+    "term": "Claude Sonnet",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "DROP",
+    "reason": "Identity rule: alias equals term."
+  },
+  {
+    "alias": "clod sonnet",
+    "term": "Claude Sonnet",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "DROP",
+    "reason": "'clod' and 'sonnet' are both common English words; in poetry/literature discussions 'clod sonnet' could appear naturally."
+  },
+  {
+    "alias": "claude opus",
+    "term": "Claude Opus",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "DROP",
+    "reason": "Identity rule: alias equals term."
+  },
+  {
+    "alias": "clod opus",
+    "term": "Claude Opus",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "DROP",
+    "reason": "'clod' and 'opus' are both common English words; the phrase could appear naturally in music/literary contexts."
+  },
+  {
+    "alias": "claude hi coo",
+    "term": "Claude Haiku",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "KEEP",
+    "reason": "Phonetic mis-transcription of 'Claude Haiku'; the specific three-word combination would not appear in ordinary speech."
+  },
+  {
+    "alias": "clod hi coo",
+    "term": "Claude Haiku",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "KEEP",
+    "reason": "Phonetic mis-transcription; 'clod hi coo' is not a natural English phrase."
+  },
+  {
+    "alias": "gem in eye",
+    "term": "Gemini",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "DROP",
+    "reason": "'gem in eye' can plausibly appear in ordinary English (e.g., describing an embedded gem sculpture detail)."
+  },
+  {
+    "alias": "gem in ee",
+    "term": "Gemini",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "KEEP",
+    "reason": "Phonetic mis-transcription; 'gem in ee' is not ordinary English."
+  },
+  {
+    "alias": "llama",
+    "term": "LLaMA",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "DROP",
+    "reason": "Identity rule and single common English word (the animal); breaks constantly in ordinary speech."
+  },
+  {
+    "alias": "lah ma",
+    "term": "LLaMA",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "KEEP",
+    "reason": "Phonetic mis-transcription; 'lah ma' is not ordinary English."
+  },
+  {
+    "alias": "llama three",
+    "term": "Llama 3",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "DROP",
+    "reason": "'llama three' can plausibly appear in ordinary English (e.g., 'the third llama in the herd')."
+  },
+  {
+    "alias": "lah ma three",
+    "term": "Llama 3",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "KEEP",
+    "reason": "Phonetic mis-transcription; not ordinary English."
+  },
+  {
+    "alias": "miss tral",
+    "term": "Mistral",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "KEEP",
+    "reason": "Phonetic mis-transcription of Mistral; not a natural English phrase."
+  },
+  {
+    "alias": "mist ral",
+    "term": "Mistral",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "KEEP",
+    "reason": "Phonetic mis-transcription; not ordinary English."
+  },
+  {
+    "alias": "mix tral",
+    "term": "Mixtral",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "KEEP",
+    "reason": "Phonetic mis-transcription; not ordinary English."
+  },
+  {
+    "alias": "mixed ral",
+    "term": "Mixtral",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "KEEP",
+    "reason": "Phonetic mis-transcription; not ordinary English."
+  },
+  {
+    "alias": "deep seek",
+    "term": "DeepSeek",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "DROP",
+    "reason": "'deep' and 'seek' are both common English words; 'deep seek' could appear naturally ('to deep seek the truth')."
+  },
+  {
+    "alias": "co here",
+    "term": "Cohere",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "KEEP",
+    "reason": "Phonetic mis-transcription of Cohere; 'co here' is not a standard English phrase."
+  },
+  {
+    "alias": "co hear",
+    "term": "Cohere",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "KEEP",
+    "reason": "Phonetic mis-transcription; 'co hear' is not a natural English phrase."
+  },
+  {
+    "alias": "grock",
+    "term": "Groq",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "KEEP",
+    "reason": "Phonetic mis-transcription; 'grock' is not a standard English word."
+  },
+  {
+    "alias": "g rock",
+    "term": "Groq",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "KEEP",
+    "reason": "Letter plus word; 'g rock' is not a common natural English phrase."
+  },
+  {
+    "alias": "per plexity",
+    "term": "Perplexity",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "KEEP",
+    "reason": "Phonetic mis-transcription of Perplexity; not ordinary English."
+  },
+  {
+    "alias": "per plex ity",
+    "term": "Perplexity",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "KEEP",
+    "reason": "Phonetic mis-transcription; not ordinary English."
+  },
+  {
+    "alias": "hugging face",
+    "term": "Hugging Face",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "DROP",
+    "reason": "Identity rule: alias equals term. Also both words are common English."
+  },
+  {
+    "alias": "hugging faze",
+    "term": "Hugging Face",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "KEEP",
+    "reason": "Phonetic mis-transcription of 'Hugging Face' (Whisper hears 'face' as 'faze'); 'hugging faze' is not a natural English phrase."
+  },
+  {
+    "alias": "tensor flow",
+    "term": "TensorFlow",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "KEEP",
+    "reason": "'tensor' is a specialized math/physics term; 'tensor flow' is not a common natural English phrase."
+  },
+  {
+    "alias": "tenser flow",
+    "term": "TensorFlow",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "KEEP",
+    "reason": "Phonetic mis-transcription; 'tenser flow' is not a common natural phrase."
+  },
+  {
+    "alias": "pie torch",
+    "term": "PyTorch",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "KEEP",
+    "reason": "Phonetic mis-transcription; 'pie torch' is not a common English phrase."
+  },
+  {
+    "alias": "pi torch",
+    "term": "PyTorch",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "KEEP",
+    "reason": "Phonetic mis-transcription; 'pi torch' is not ordinary English."
+  },
+  {
+    "alias": "py torch",
+    "term": "PyTorch",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "KEEP",
+    "reason": "Tech compound; no ordinary English meaning."
+  },
+  {
+    "alias": "jacks",
+    "term": "JAX",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "DROP",
+    "reason": "Very common English word (the game, plural of jack); breaks naturally in many ordinary contexts."
+  },
+  {
+    "alias": "care as",
+    "term": "Keras",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "DROP",
+    "reason": "'care as' can appear in ordinary English ('I care as much as you do')."
+  },
+  {
+    "alias": "care us",
+    "term": "Keras",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "KEEP",
+    "reason": "'care us' is not grammatically standard English; unlikely to appear in natural dictation."
+  },
+  {
+    "alias": "kerras",
+    "term": "Keras",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "KEEP",
+    "reason": "Phonetic mis-transcription; not ordinary English."
+  },
+  {
+    "alias": "psy kit learn",
+    "term": "scikit-learn",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "KEEP",
+    "reason": "Phonetic mis-transcription; not ordinary English."
+  },
+  {
+    "alias": "sigh kit learn",
+    "term": "scikit-learn",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "KEEP",
+    "reason": "Phonetic mis-transcription; 'sigh kit learn' is not a natural phrase."
+  },
+  {
+    "alias": "ski kit learn",
+    "term": "scikit-learn",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "KEEP",
+    "reason": "Phonetic mis-transcription; 'ski kit learn' is not a natural phrase."
+  },
+  {
+    "alias": "psychic learn",
+    "term": "scikit-learn",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "DROP",
+    "reason": "'psychic learn' can appear in ordinary English contexts (discussing psychic abilities or intuitive learning)."
+  },
+  {
+    "alias": "x g boost",
+    "term": "XGBoost",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "KEEP",
+    "reason": "Letter-spelled abbreviation plus tech term; not ordinary English."
+  },
+  {
+    "alias": "ex gee boost",
+    "term": "XGBoost",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "KEEP",
+    "reason": "Letter-by-letter pronunciation plus tech term; not ordinary English."
+  },
+  {
+    "alias": "light g b m",
+    "term": "LightGBM",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "KEEP",
+    "reason": "Letter-spelled abbreviation with descriptor; not ordinary English."
+  },
+  {
+    "alias": "light gee bee em",
+    "term": "LightGBM",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "KEEP",
+    "reason": "Letter-by-letter pronunciation; not ordinary English."
+  },
+  {
+    "alias": "cat boost",
+    "term": "CatBoost",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "KEEP",
+    "reason": "'cat boost' is not a standard English phrase; the combination is specific enough to avoid false positives."
+  },
+  {
+    "alias": "on x",
+    "term": "ONNX",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "DROP",
+    "reason": "'on x' is extremely common in ordinary English (e.g., 'on x-axis', 'on X platform', 'on x days')."
+  },
+  {
+    "alias": "on ex",
+    "term": "ONNX",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "DROP",
+    "reason": "Both 'on' and 'ex' are extremely common English words; 'on ex-[something]' would be misreplaced, e.g. 'working on ex-wife's car'."
+  },
+  {
+    "alias": "o n n x",
+    "term": "ONNX",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "KEEP",
+    "reason": "Letter-by-letter spelling of the abbreviation with no ordinary English meaning."
+  },
+  {
+    "alias": "tensor rt",
+    "term": "TensorRT",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "KEEP",
+    "reason": "'tensor' is a math/ML term and 'rt' is an abbreviation; the combination has no ordinary English meaning."
+  },
+  {
+    "alias": "tensor are tee",
+    "term": "TensorRT",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "KEEP",
+    "reason": "Phonetic rendering of 'TensorRT' ('RT' spoken as 'are tee'); not a natural English phrase."
+  },
+  {
+    "alias": "v l l m",
+    "term": "vLLM",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "KEEP",
+    "reason": "Letter-by-letter spelling of the abbreviation with no ordinary English meaning."
+  },
+  {
+    "alias": "vee el el em",
+    "term": "vLLM",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "KEEP",
+    "reason": "Phonetic letter-by-letter spelling of vLLM; not a natural English phrase."
+  },
+  {
+    "alias": "oh llama",
+    "term": "Ollama",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "KEEP",
+    "reason": "Phonetic rendering of 'Ollama'; 'oh llama' is not a common English exclamation or phrase."
+  },
+  {
+    "alias": "oh lah ma",
+    "term": "Ollama",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "KEEP",
+    "reason": "Phonetic rendering of 'Ollama' using non-standard spelling; no ordinary English meaning."
+  },
+  {
+    "alias": "l m studio",
+    "term": "LM Studio",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "KEEP",
+    "reason": "Letter abbreviation 'LM' plus 'studio'; the combination is tech-specific to LM Studio."
+  },
+  {
+    "alias": "el em studio",
+    "term": "LM Studio",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "KEEP",
+    "reason": "Phonetic letter spelling 'el em' plus 'studio'; unambiguously refers to LM Studio."
+  },
+  {
+    "alias": "lang chain",
+    "term": "LangChain",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "KEEP",
+    "reason": "'lang' is not a common English word; 'lang chain' has no ordinary English meaning and unambiguously maps to LangChain."
+  },
+  {
+    "alias": "language chain",
+    "term": "LangChain",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "DROP",
+    "reason": "Both words are common English; 'a language chain' could appear naturally in linguistics contexts."
+  },
+  {
+    "alias": "laying chain",
+    "term": "LangChain",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "DROP",
+    "reason": "'Laying chain' is plain English ('laying chain on the deck'); would break non-tech speech."
+  },
+  {
+    "alias": "lang graph",
+    "term": "LangGraph",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "KEEP",
+    "reason": "'lang' is not a common English word; 'lang graph' has no ordinary English meaning."
+  },
+  {
+    "alias": "language graph",
+    "term": "LangGraph",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "DROP",
+    "reason": "'language graph' is plain English and could appear in linguistics or network discussions."
+  },
+  {
+    "alias": "lang smith",
+    "term": "LangSmith",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "KEEP",
+    "reason": "'lang' is not a common English word; 'lang smith' has no ordinary English meaning."
+  },
+  {
+    "alias": "language smith",
+    "term": "LangSmith",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "DROP",
+    "reason": "'language smith' reads like a variant of 'wordsmith' and could appear naturally in English."
+  },
+  {
+    "alias": "llama index",
+    "term": "LlamaIndex",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "DROP",
+    "reason": "Both 'llama' and 'index' are common English words; 'the llama index' could appear in non-tech speech."
+  },
+  {
+    "alias": "lah ma index",
+    "term": "LlamaIndex",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "KEEP",
+    "reason": "Non-standard phonetic rendering of 'llama'; 'lah ma index' has no ordinary English meaning."
+  },
+  {
+    "alias": "crew ai",
+    "term": "CrewAI",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "KEEP",
+    "reason": "'ai' suffix makes this tech-specific; 'crew ai' is not a natural English phrase."
+  },
+  {
+    "alias": "crew a i",
+    "term": "CrewAI",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "KEEP",
+    "reason": "Letter spelling 'a i' combined with 'crew' is tech-specific and not a natural English phrase."
+  },
+  {
+    "alias": "auto gen",
+    "term": "AutoGen",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "DROP",
+    "reason": "'auto gen' is generic tech jargon meaning 'auto-generate'; would fire on phrases like 'I auto gen the code'."
+  },
+  {
+    "alias": "auto gen ai",
+    "term": "AutoGen",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "DROP",
+    "reason": "'auto gen ai' is still too generic; 'auto-generate AI' could be said about any AI auto-generation workflow."
+  },
+  {
+    "alias": "semantic kernel",
+    "term": "Semantic Kernel",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "DROP",
+    "reason": "Identity flag: alias equals the term (case-folded). No substitution occurs."
+  },
+  {
+    "alias": "hay stack",
+    "term": "Haystack",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "DROP",
+    "reason": "'haystack' is an extremely common English word ('needle in a haystack'); would break everyday speech."
+  },
+  {
+    "alias": "chroma d b",
+    "term": "ChromaDB",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "KEEP",
+    "reason": "'chroma' combined with letter-spelled 'db' is tech-specific; not a natural English phrase."
+  },
+  {
+    "alias": "chrome a db",
+    "term": "ChromaDB",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "KEEP",
+    "reason": "Phonetic rendering of ChromaDB; 'chrome a db' is not a natural English phrase."
+  },
+  {
+    "alias": "m l flow",
+    "term": "MLflow",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "KEEP",
+    "reason": "Letter abbreviation 'm l' plus 'flow' is tech-specific; not a natural English phrase."
+  },
+  {
+    "alias": "em el flow",
+    "term": "MLflow",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "KEEP",
+    "reason": "Phonetic letter spelling of 'ML' plus 'flow'; not a natural English phrase."
+  },
+  {
+    "alias": "weights and biases",
+    "term": "Weights & Biases",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "DROP",
+    "reason": "Very common English phrase in ML discussion ('model weights and biases'); would mis-replace generic neural network parameter descriptions."
+  },
+  {
+    "alias": "w and b",
+    "term": "W&B",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "DEDUPE",
+    "reason": "Conflict: alias mapped to both 'Weights & Biases' and 'W&B'; W&B is the canonical short form."
+  },
+  {
+    "alias": "w & b",
+    "term": "W&B",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "DEDUPE",
+    "reason": "Conflict: alias mapped to both 'Weights & Biases' and 'W&B'; W&B is the canonical short form."
+  },
+  {
+    "alias": "w and b",
+    "term": "W&B",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "DEDUPE",
+    "reason": "Conflict: alias mapped to both 'Weights & Biases' and 'W&B'; W&B is the canonical short form."
+  },
+  {
+    "alias": "w & b",
+    "term": "W&B",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "DEDUPE",
+    "reason": "Conflict: alias mapped to both 'Weights & Biases' and 'W&B'; W&B is the canonical short form."
+  },
+  {
+    "alias": "double you and bee",
+    "term": "W&B",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "KEEP",
+    "reason": "Phonetic letter-by-letter spelling of 'W&B'; not a natural English phrase."
+  },
+  {
+    "alias": "neptune ai",
+    "term": "Neptune.ai",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "KEEP",
+    "reason": "The 'ai' suffix makes this tech-specific; 'neptune ai' unambiguously refers to the ML tracking platform."
+  },
+  {
+    "alias": "neptune a i",
+    "term": "Neptune.ai",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "KEEP",
+    "reason": "Letter-spelled 'a i' plus 'neptune'; tech-specific and not a natural English phrase."
+  },
+  {
+    "alias": "d v c",
+    "term": "DVC",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "KEEP",
+    "reason": "Letter-by-letter spelling of the abbreviation with no ordinary English meaning."
+  },
+  {
+    "alias": "dee vee see",
+    "term": "DVC",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "KEEP",
+    "reason": "Phonetic letter spelling of DVC; not a natural English phrase."
+  },
+  {
+    "alias": "data version control",
+    "term": "DVC",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "KEEP",
+    "reason": "A precise technical phrase that specifically names the DVC tool; in context almost exclusively refers to the product."
+  },
+  {
+    "alias": "cube flow",
+    "term": "Kubeflow",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "KEEP",
+    "reason": "'cube flow' is not a natural English phrase; phonetically captures how 'Kubeflow' is sometimes mis-transcribed."
+  },
+  {
+    "alias": "kube flow",
+    "term": "Kubeflow",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "KEEP",
+    "reason": "'kube' is not a standard English word; 'kube flow' has no ordinary meaning and maps unambiguously to Kubeflow."
+  },
+  {
+    "alias": "sage maker",
+    "term": "SageMaker",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "DEDUPE",
+    "reason": "Conflict flag present; SageMaker is the correct canonical term."
+  },
+  {
+    "alias": "sage make her",
+    "term": "SageMaker",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "DEDUPE",
+    "reason": "Conflict flag present; SageMaker is the correct canonical term."
+  },
+  {
+    "alias": "vertex a i",
+    "term": "Vertex AI",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "KEEP",
+    "reason": "Letter-spelled 'a i' combined with 'vertex' is tech-specific; not a natural English phrase."
+  },
+  {
+    "alias": "vertex ai",
+    "term": "Vertex AI",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "DROP",
+    "reason": "Identity flag: alias equals the term (case-folded). No substitution occurs."
+  },
+  {
+    "alias": "azure m l",
+    "term": "Azure ML",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "KEEP",
+    "reason": "Letter abbreviation 'm l' combined with the brand name 'Azure'; unambiguously tech-specific."
+  },
+  {
+    "alias": "azure em el",
+    "term": "Azure ML",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "KEEP",
+    "reason": "Phonetic letter spelling of 'ML' with 'Azure'; not a natural English phrase."
+  },
+  {
+    "alias": "coo da",
+    "term": "CUDA",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "KEEP",
+    "reason": "Phonetic rendering of CUDA ('coo-da'); not a natural English word or phrase."
+  },
+  {
+    "alias": "cue da",
+    "term": "CUDA",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "KEEP",
+    "reason": "Phonetic rendering of CUDA; not a natural English word or phrase."
+  },
+  {
+    "alias": "c u d a",
+    "term": "CUDA",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "KEEP",
+    "reason": "Letter-by-letter spelling of the abbreviation with no ordinary English meaning."
+  },
+  {
+    "alias": "coo d n n",
+    "term": "cuDNN",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "KEEP",
+    "reason": "Phonetic + letter rendering of cuDNN; not a natural English phrase."
+  },
+  {
+    "alias": "cue dee en en",
+    "term": "cuDNN",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "KEEP",
+    "reason": "Phonetic letter-by-letter spelling of cuDNN; not a natural English phrase."
+  },
+  {
+    "alias": "in vidya",
+    "term": "NVIDIA",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "KEEP",
+    "reason": "Phonetic rendering of NVIDIA; 'in vidya' is not a natural English phrase."
+  },
+  {
+    "alias": "en video",
+    "term": "NVIDIA",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "KEEP",
+    "reason": "Phonetic rendering of NVIDIA; 'en video' is not a natural standalone English phrase."
+  },
+  {
+    "alias": "g p u",
+    "term": "GPU",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "KEEP",
+    "reason": "Letter-by-letter spelling of the abbreviation with no ordinary English meaning."
+  },
+  {
+    "alias": "gee pee you",
+    "term": "GPU",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "KEEP",
+    "reason": "Phonetic letter-by-letter spelling of GPU; not a natural English phrase."
+  },
+  {
+    "alias": "t p u",
+    "term": "TPU",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "KEEP",
+    "reason": "Letter-by-letter spelling of the abbreviation with no ordinary English meaning."
+  },
+  {
+    "alias": "tee pee you",
+    "term": "TPU",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "KEEP",
+    "reason": "Phonetic letter-by-letter spelling of TPU; not a natural English phrase."
+  },
+  {
+    "alias": "n p u",
+    "term": "NPU",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "KEEP",
+    "reason": "Letter-by-letter spelling of the abbreviation with no ordinary English meaning."
+  },
+  {
+    "alias": "en pee you",
+    "term": "NPU",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "KEEP",
+    "reason": "Phonetic letter-by-letter spelling of NPU; not a natural English phrase."
+  },
+  {
+    "alias": "flops",
+    "term": "FLOPS",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "DROP",
+    "reason": "Identity flag and common English word; 'flops' means failures in everyday English and would break many sentences."
+  },
+  {
+    "alias": "f l o p s",
+    "term": "FLOPS",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "KEEP",
+    "reason": "Letter-by-letter spelling of the abbreviation with no ordinary English meaning."
+  },
+  {
+    "alias": "tops",
+    "term": "TOPS",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "DROP",
+    "reason": "Identity flag and very common English word ('tops' as in shirts, first place, or limits); would break everyday speech."
+  },
+  {
+    "alias": "t o p s",
+    "term": "TOPS",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "KEEP",
+    "reason": "Letter-by-letter spelling of the abbreviation with no ordinary English meaning."
+  },
+  {
+    "alias": "rag",
+    "term": "RAG",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "DROP",
+    "reason": "Identity flag and very common English word (a piece of cloth); would break sentences like 'grab a rag'."
+  },
+  {
+    "alias": "r a g",
+    "term": "RAG",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "KEEP",
+    "reason": "Letter-by-letter spelling of the abbreviation with no ordinary English meaning."
+  },
+  {
+    "alias": "retrieval augmented generation",
+    "term": "Retrieval Augmented Generation",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "DROP",
+    "reason": "Identity flag: alias equals the term (case-folded). No substitution occurs."
+  },
+  {
+    "alias": "fine tuning",
+    "term": "fine-tuning",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "DROP",
+    "reason": "Very common English phrase ('fine tuning the engine', 'fine tuning an instrument'); would break many non-tech sentences."
+  },
+  {
+    "alias": "laura",
+    "term": "LoRA",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "DROP",
+    "reason": "Single-word English flag and extremely common proper name; would break any sentence mentioning someone named Laura."
+  },
+  {
+    "alias": "lor a",
+    "term": "LoRA",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "KEEP",
+    "reason": "Phonetic rendering of LoRA using non-standard spelling; 'lor a' is not a natural English word or phrase."
+  },
+  {
+    "alias": "low ra",
+    "term": "LoRA",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "KEEP",
+    "reason": "'low ra' is not a natural English phrase; phonetically captures a common mis-transcription of LoRA."
+  },
+  {
+    "alias": "q laura",
+    "term": "QLoRA",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "KEEP",
+    "reason": "Phonetic rendering of QLoRA; 'q laura' is not a natural English phrase."
+  },
+  {
+    "alias": "q lor a",
+    "term": "QLoRA",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "KEEP",
+    "reason": "Phonetic rendering of QLoRA; 'q lor a' has no ordinary English meaning."
+  },
+  {
+    "alias": "r l h f",
+    "term": "RLHF",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "KEEP",
+    "reason": "Letter-by-letter spelling of the abbreviation with no ordinary English meaning."
+  },
+  {
+    "alias": "are el aitch ef",
+    "term": "RLHF",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "KEEP",
+    "reason": "Phonetic letter-by-letter spelling of RLHF; not a natural English phrase."
+  },
+  {
+    "alias": "d p o",
+    "term": "DPO",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "KEEP",
+    "reason": "Letter-by-letter spelling of the abbreviation with no ordinary English meaning."
+  },
+  {
+    "alias": "dee pee oh",
+    "term": "DPO",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "KEEP",
+    "reason": "Phonetic letter-by-letter spelling of DPO; not a natural English phrase."
+  },
+  {
+    "alias": "p p o",
+    "term": "PPO",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "KEEP",
+    "reason": "Letter-by-letter spelling of the abbreviation with no ordinary English meaning."
+  },
+  {
+    "alias": "pee pee oh",
+    "term": "PPO",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "KEEP",
+    "reason": "Phonetic letter-by-letter spelling of PPO; not a natural English phrase."
+  },
+  {
+    "alias": "transformers",
+    "term": "transformer",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "DROP",
+    "reason": "'Transformers' is a very common English word (electrical devices, the movie/toy franchise); would break many non-tech sentences."
+  },
+  {
+    "alias": "attention mech anism",
+    "term": "attention mechanism",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "KEEP",
+    "reason": "Whisper split correction: 'mech anism' is a transcription artifact for 'mechanism'; corrects the split without altering meaning."
+  },
+  {
+    "alias": "em beddings",
+    "term": "embeddings",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "KEEP",
+    "reason": "Whisper split correction: 'em beddings' is a transcription artifact for 'embeddings'; corrects the split without risk."
+  },
+  {
+    "alias": "in beddings",
+    "term": "embeddings",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "KEEP",
+    "reason": "Whisper split correction for 'embeddings'; 'in beddings' is not a natural English phrase ('in the bedding' would be standard)."
+  },
+  {
+    "alias": "token izer",
+    "term": "tokenizer",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "KEEP",
+    "reason": "Whisper split correction for 'tokenizer'; 'token izer' has no ordinary English meaning."
+  },
+  {
+    "alias": "token eyezer",
+    "term": "tokenizer",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "KEEP",
+    "reason": "Phonetic rendering of 'tokenizer'; 'token eyezer' has no ordinary English meaning."
+  },
+  {
+    "alias": "b p e",
+    "term": "BPE",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "KEEP",
+    "reason": "Letter-by-letter spelling of the abbreviation with no ordinary English meaning."
+  },
+  {
+    "alias": "bee pee ee",
+    "term": "BPE",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "KEEP",
+    "reason": "Phonetic letter-by-letter spelling of BPE; not a natural English phrase."
+  },
+  {
+    "alias": "byte pair encoding",
+    "term": "BPE",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "KEEP",
+    "reason": "Specific technical phrase that specifically names the BPE algorithm; in context exclusively refers to the tech term."
+  },
+  {
+    "alias": "soft max",
+    "term": "softmax",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "KEEP",
+    "reason": "'soft max' is not a natural English phrase; almost exclusively used in ML contexts as a split-word rendering of softmax."
+  },
+  {
+    "alias": "back propagation",
+    "term": "backpropagation",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "KEEP",
+    "reason": "'back propagation' has no natural non-ML meaning; the two-word form is a standard variant of the ML term."
+  },
+  {
+    "alias": "back prop a gation",
+    "term": "backpropagation",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "KEEP",
+    "reason": "Phonetic split correction for 'backpropagation'; has no ordinary English meaning."
+  },
+  {
+    "alias": "batch normal ization",
+    "term": "batch normalization",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "KEEP",
+    "reason": "Whisper split correction for 'normalization'; corrects the split without altering meaning."
+  },
+  {
+    "alias": "batch norm",
+    "term": "batch normalization",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "KEEP",
+    "reason": "'batch norm' is ML-specific shorthand with no natural non-tech meaning."
+  },
+  {
+    "alias": "drop out",
+    "term": "dropout",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "DROP",
+    "reason": "'Drop out' is an extremely common English phrase ('she decided to drop out of school'); would break many non-ML sentences."
+  },
+  {
+    "alias": "e pock",
+    "term": "epoch",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "KEEP",
+    "reason": "'e pock' is not a natural English phrase; phonetically captures a common mis-transcription of 'epoch'."
+  },
+  {
+    "alias": "ee pok",
+    "term": "epoch",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "KEEP",
+    "reason": "Phonetic rendering of 'epoch'; 'ee pok' has no ordinary English meaning."
+  },
+  {
+    "alias": "hyper parameter",
+    "term": "hyperparameter",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "KEEP",
+    "reason": "'Hyper parameter' is a standard two-word rendering of the ML term with no natural non-tech meaning."
+  },
+  {
+    "alias": "hyper pare a meter",
+    "term": "hyperparameter",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "KEEP",
+    "reason": "Phonetic split rendering of 'hyperparameter'; has no ordinary English meaning."
+  },
+  {
+    "alias": "over fitting",
+    "term": "overfitting",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "DROP",
+    "reason": "'Over fitting' is natural English (a garment that fits too tightly, 'this jacket is over-fitting'); would break non-tech speech."
+  },
+  {
+    "alias": "under fitting",
+    "term": "underfitting",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "DROP",
+    "reason": "'Under fitting' is natural English (a garment that fits too loosely); would break non-tech speech."
+  },
+  {
+    "alias": "g a n",
+    "term": "GAN",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "KEEP",
+    "reason": "Letter-by-letter spelling of the abbreviation with no ordinary English meaning."
+  },
+  {
+    "alias": "gee ay en",
+    "term": "GAN",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "KEEP",
+    "reason": "Phonetic letter-by-letter spelling of GAN; not a natural English phrase."
+  },
+  {
+    "alias": "generative adversarial network",
+    "term": "GAN",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "KEEP",
+    "reason": "Specific technical phrase that exclusively names the ML architecture; in context refers unambiguously to the tech term."
+  },
+  {
+    "alias": "v a e",
+    "term": "VAE",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "KEEP",
+    "reason": "Letter-by-letter spelling of the abbreviation with no ordinary English meaning."
+  },
+  {
+    "alias": "vee ay ee",
+    "term": "VAE",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "KEEP",
+    "reason": "Phonetic letter-by-letter spelling of VAE; not a natural English phrase."
+  },
+  {
+    "alias": "variational auto encoder",
+    "term": "VAE",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "KEEP",
+    "reason": "Specific technical phrase that exclusively names the ML architecture; in context refers unambiguously to the tech term."
+  },
+  {
+    "alias": "diffusion model",
+    "term": "diffusion model",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "DROP",
+    "reason": "Identity flag: alias equals the term. No substitution occurs."
+  },
+  {
+    "alias": "stable diffusion",
+    "term": "Stable Diffusion",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "DROP",
+    "reason": "Identity flag: alias equals the term (case-folded). No substitution occurs."
+  },
+  {
+    "alias": "dolly",
+    "term": "DALL-E",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "DROP",
+    "reason": "Single-word English flag; 'dolly' is a very common English word (a cart, a toy, a name) and would break many non-tech sentences."
+  },
+  {
+    "alias": "doll ee",
+    "term": "DALL-E",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "KEEP",
+    "reason": "Phonetic rendering of DALL-E; 'doll ee' is not a natural English phrase."
+  },
+  {
+    "alias": "dall e",
+    "term": "DALL-E",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "KEEP",
+    "reason": "Phonetic rendering of DALL-E without the hyphen; not a natural English phrase."
+  },
+  {
+    "alias": "mid journey",
+    "term": "Midjourney",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "DROP",
+    "reason": "'Mid journey' (or 'mid-journey') is common English for 'in the middle of a trip'; would break non-tech speech."
+  },
+  {
+    "alias": "comfy ui",
+    "term": "ComfyUI",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "KEEP",
+    "reason": "The 'ui' suffix combined with 'comfy' is tech-specific; 'comfy ui' is not a natural standalone English phrase."
+  },
+  {
+    "alias": "comfy you eye",
+    "term": "ComfyUI",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "KEEP",
+    "reason": "Phonetic letter rendering of 'UI' ('you eye') combined with 'comfy'; not a natural English phrase."
+  },
+  {
+    "alias": "whisper ai",
+    "term": "Whisper",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "KEEP",
+    "reason": "The 'ai' suffix makes this tech-specific; 'whisper ai' unambiguously refers to the Whisper AI model."
+  },
+  {
+    "alias": "whisper model",
+    "term": "Whisper",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "DROP",
+    "reason": "'Whisper model' is a generic English phrase that could refer to any model involving whispering; breaks non-tech contexts."
+  },
+  {
+    "alias": "whisper cpp",
+    "term": "whisper.cpp",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "KEEP",
+    "reason": "'cpp' is a C++ file extension abbreviation; 'whisper cpp' unambiguously refers to the whisper.cpp library."
+  },
+  {
+    "alias": "whisper c plus plus",
+    "term": "whisper.cpp",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "KEEP",
+    "reason": "'C plus plus' is the spoken form of 'C++'; this phonetically renders 'whisper.cpp' unambiguously."
+  },
+  {
+    "alias": "whisper see plus plus",
+    "term": "whisper.cpp",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "KEEP",
+    "reason": "'see plus plus' is a phonetic rendering of 'C++'; 'whisper see plus plus' unambiguously refers to whisper.cpp."
+  },
+  {
+    "alias": "num pie",
+    "term": "NumPy",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "KEEP",
+    "reason": "Phonetic rendering of NumPy; 'num pie' is not a natural English phrase."
+  },
+  {
+    "alias": "numb pie",
+    "term": "NumPy",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "KEEP",
+    "reason": "Phonetic rendering of NumPy; 'numb pie' is not a real food item or natural English phrase."
+  },
+  {
+    "alias": "numpy",
+    "term": "NumPy",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "DROP",
+    "reason": "Identity flag: alias equals the term (case-folded). No substitution occurs."
+  },
+  {
+    "alias": "pandas py",
+    "term": "Pandas",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "KEEP",
+    "reason": "The 'py' suffix marks this as the Python library specifically; not a natural English phrase."
+  },
+  {
+    "alias": "mat plot lib",
+    "term": "Matplotlib",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "KEEP",
+    "reason": "Phonetic split of Matplotlib; 'mat plot lib' has no ordinary English meaning."
+  },
+  {
+    "alias": "mat plot library",
+    "term": "Matplotlib",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "KEEP",
+    "reason": "'mat plot' is not a natural English phrase; the combination specifically renders 'Matplotlib' and is not used in non-tech speech."
+  },
+  {
+    "alias": "sea born",
+    "term": "Seaborn",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "DROP",
+    "reason": "'Sea-born' is a real English adjective (born from the sea, as in a sea-born creature); would break poetic or literary speech."
+  },
+  {
+    "alias": "plot lee",
+    "term": "Plotly",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "KEEP",
+    "reason": "'plot lee' is not a natural English phrase; phonetically captures how 'Plotly' is often mis-transcribed."
+  },
+  {
+    "alias": "plot ly",
+    "term": "Plotly",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "KEEP",
+    "reason": "'plot ly' is not a natural English phrase; phonetically captures Plotly without ordinary English risk."
+  },
+  {
+    "alias": "pollers",
+    "term": "Polars",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "DROP",
+    "reason": "'Pollers' is a real English word (people who poll, or trees that have been pollarded); would break non-tech speech."
+  },
+  {
+    "alias": "pole ars",
+    "term": "Polars",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "KEEP",
+    "reason": "'pole ars' is not a natural English phrase; phonetically captures a common mis-transcription of Polars."
+  },
+  {
+    "alias": "arrow",
+    "term": "Apache Arrow",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "DROP",
+    "reason": "Single-word English flag; 'arrow' is an extremely common English word and would break countless non-tech sentences."
+  },
+  {
+    "alias": "a patchy arrow",
+    "term": "Apache Arrow",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "DROP",
+    "reason": "'A patchy arrow' is natural English ('an arrow with patches'); would break non-tech speech even though it phonetically renders 'Apache Arrow'."
+  },
+  {
+    "alias": "jew peter",
+    "term": "Jupyter",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "KEEP",
+    "reason": "Phonetic rendering of 'Jupyter' (pronounced like 'Jupiter'); 'jew peter' is not a natural English phrase."
+  },
+  {
+    "alias": "jupiter",
+    "term": "Jupyter",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "DROP",
+    "reason": "Single-word English flag; 'Jupiter' is the planet name and a common proper noun; would break any mention of the planet."
+  },
+  {
+    "alias": "jupyter lab",
+    "term": "JupyterLab",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "KEEP",
+    "reason": "'Jupyter' is a tech-specific term; 'jupyter lab' unambiguously refers to JupyterLab."
+  },
+  {
+    "alias": "jupiter lab",
+    "term": "JupyterLab",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "DROP",
+    "reason": "'Jupiter lab' is natural English ('a laboratory studying the planet Jupiter'); would break non-tech speech."
+  },
+  {
+    "alias": "co lab",
+    "term": "Colab",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "KEEP",
+    "reason": "'co lab' is not a natural standalone English phrase; in tech contexts unambiguously refers to Google Colab."
+  },
+  {
+    "alias": "google colab",
+    "term": "Colab",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "KEEP",
+    "reason": "The 'Google' brand qualifier makes this unambiguously tech-specific."
+  },
+  {
+    "alias": "stream lit",
+    "term": "Streamlit",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "DROP",
+    "reason": "'Stream lit' is natural English (a stream that is lit up, or a lit stream); would break non-tech speech."
+  },
+  {
+    "alias": "gray dee oh",
+    "term": "Gradio",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "KEEP",
+    "reason": "Phonetic rendering of Gradio; 'gray dee oh' has no ordinary English meaning."
+  },
+  {
+    "alias": "grad io",
+    "term": "Gradio",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "KEEP",
+    "reason": "'grad io' is not a natural English phrase; phonetically captures how Gradio is commonly mis-transcribed."
+  },
+  {
+    "alias": "gray dee o",
+    "term": "Gradio",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "KEEP",
+    "reason": "Phonetic rendering of Gradio; 'gray dee o' has no ordinary English meaning."
+  },
+  {
+    "alias": "n l t k",
+    "term": "NLTK",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "KEEP",
+    "reason": "Letter-by-letter spelling of the abbreviation with no ordinary English meaning."
+  },
+  {
+    "alias": "en el tee kay",
+    "term": "NLTK",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "KEEP",
+    "reason": "Phonetic letter-by-letter spelling of NLTK; not a natural English phrase."
+  },
+  {
+    "alias": "spacey",
+    "term": "spaCy",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "DROP",
+    "reason": "'Spacey' is common English slang meaning distracted or disoriented, and is also a well-known surname; would break non-tech speech."
+  },
+  {
+    "alias": "space ee",
+    "term": "spaCy",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "KEEP",
+    "reason": "'space ee' is not a natural English phrase; phonetically captures a common mis-transcription of spaCy."
+  },
+  {
+    "alias": "spy see",
+    "term": "spaCy",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "KEEP",
+    "reason": "'spy see' is not a natural English phrase; phonetically captures how spaCy is sometimes mis-transcribed."
+  },
+  {
+    "alias": "hugging face transformers",
+    "term": "Hugging Face Transformers",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "DROP",
+    "reason": "Identity flag: alias equals the term (case-folded). No substitution occurs."
+  },
+  {
+    "alias": "bert model",
+    "term": "BERT",
+    "pack": "pack_03_databases_ai_ml",
+    "verdict": "KEEP",
+    "reason": "'bert model' in a tech dictation context almost exclusively refers to the BERT ML model; the combination is specific enough to keep."
+  }
+]

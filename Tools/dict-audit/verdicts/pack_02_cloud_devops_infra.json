@@ -1,0 +1,2583 @@
+[
+  {
+    "alias": "tee see pee",
+    "term": "TCP",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "KEEP",
+    "reason": "Phonetic letter-by-letter spelling of TCP; no ordinary English meaning."
+  },
+  {
+    "alias": "u d p",
+    "term": "UDP",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "KEEP",
+    "reason": "Letter-by-letter spelling of UDP; no ordinary English meaning."
+  },
+  {
+    "alias": "you dee pee",
+    "term": "UDP",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "KEEP",
+    "reason": "Phonetic letter spelling of UDP; no ordinary English phrase meaning."
+  },
+  {
+    "alias": "h t t p",
+    "term": "HTTP",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "KEEP",
+    "reason": "Letter-by-letter spelling of HTTP; no ordinary English meaning."
+  },
+  {
+    "alias": "aitch tee tee pee",
+    "term": "HTTP",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "KEEP",
+    "reason": "Phonetic letter spelling of HTTP; no ordinary English phrase meaning."
+  },
+  {
+    "alias": "h t t p s",
+    "term": "HTTPS",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "KEEP",
+    "reason": "Letter-by-letter spelling of HTTPS; no ordinary English meaning."
+  },
+  {
+    "alias": "aitch tee tee pee ess",
+    "term": "HTTPS",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "KEEP",
+    "reason": "Phonetic letter spelling of HTTPS; no ordinary English phrase meaning."
+  },
+  {
+    "alias": "g r p c",
+    "term": "gRPC",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "KEEP",
+    "reason": "Letter-by-letter spelling of gRPC; no ordinary English meaning."
+  },
+  {
+    "alias": "gee are pee see",
+    "term": "gRPC",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "KEEP",
+    "reason": "Phonetic letter spelling of gRPC; no ordinary English phrase meaning."
+  },
+  {
+    "alias": "g rpc",
+    "term": "gRPC",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "KEEP",
+    "reason": "Partial letter-plus-abbreviation rendering of gRPC; no ordinary English meaning."
+  },
+  {
+    "alias": "rest api",
+    "term": "REST",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "KEEP",
+    "reason": "The phrase 'rest api' is exclusively technical; no plausible non-tech reading."
+  },
+  {
+    "alias": "representational state transfer",
+    "term": "REST",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "KEEP",
+    "reason": "Full technical expansion of REST; the phrase has no non-technical meaning."
+  },
+  {
+    "alias": "rest full",
+    "term": "RESTful",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "DROP",
+    "reason": "'Restful' is a common English adjective (a restful vacation). This would corrupt ordinary speech."
+  },
+  {
+    "alias": "rest ful",
+    "term": "RESTful",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "DROP",
+    "reason": "Same as 'rest full': 'restful' is ordinary English and this mis-transcription would fire on non-tech use."
+  },
+  {
+    "alias": "graph q l",
+    "term": "GraphQL",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "KEEP",
+    "reason": "Partial letter spelling of GraphQL; no ordinary English meaning."
+  },
+  {
+    "alias": "graph queue el",
+    "term": "GraphQL",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "KEEP",
+    "reason": "Phonetic letter-by-letter rendering of GraphQL suffix; no ordinary English phrase meaning."
+  },
+  {
+    "alias": "graphic ul",
+    "term": "GraphQL",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "KEEP",
+    "reason": "Phonetic mis-transcription of GraphQL; 'graphic ul' has no ordinary English meaning as a phrase."
+  },
+  {
+    "alias": "graph ql",
+    "term": "GraphQL",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "KEEP",
+    "reason": "Combined partial spelling of GraphQL; no ordinary English meaning."
+  },
+  {
+    "alias": "web socket",
+    "term": "WebSocket",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "KEEP",
+    "reason": "'Web socket' is an exclusively technical compound; no plausible non-tech meaning in context."
+  },
+  {
+    "alias": "web sock it",
+    "term": "WebSocket",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "KEEP",
+    "reason": "Phonetic mis-transcription of WebSocket; 'web sock it' has no ordinary English meaning."
+  },
+  {
+    "alias": "web r t c",
+    "term": "WebRTC",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "KEEP",
+    "reason": "Letter-by-letter spelling of WebRTC; no ordinary English meaning."
+  },
+  {
+    "alias": "web are tee see",
+    "term": "WebRTC",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "KEEP",
+    "reason": "Phonetic letter spelling of WebRTC; no ordinary English phrase meaning."
+  },
+  {
+    "alias": "m q t t",
+    "term": "MQTT",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "KEEP",
+    "reason": "Letter-by-letter spelling of MQTT; no ordinary English meaning."
+  },
+  {
+    "alias": "em queue tee tee",
+    "term": "MQTT",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "KEEP",
+    "reason": "Phonetic letter spelling of MQTT; no ordinary English phrase meaning."
+  },
+  {
+    "alias": "a m q p",
+    "term": "AMQP",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "KEEP",
+    "reason": "Letter-by-letter spelling of AMQP; no ordinary English meaning."
+  },
+  {
+    "alias": "ay em queue pee",
+    "term": "AMQP",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "KEEP",
+    "reason": "Phonetic letter spelling of AMQP; no ordinary English phrase meaning."
+  },
+  {
+    "alias": "proto buff",
+    "term": "Protobuf",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "KEEP",
+    "reason": "'Proto buff' has no natural English meaning as a two-word phrase; safe to keep."
+  },
+  {
+    "alias": "proto buf",
+    "term": "Protobuf",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "KEEP",
+    "reason": "'Proto buf' has no natural English meaning; safe phonetic alias."
+  },
+  {
+    "alias": "protocol buffer",
+    "term": "Protocol Buffers",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "KEEP",
+    "reason": "'Protocol buffer' is a purely technical term with no non-technical meaning."
+  },
+  {
+    "alias": "proto buffers",
+    "term": "Protocol Buffers",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "KEEP",
+    "reason": "'Proto buffers' has no ordinary English meaning; unambiguously technical."
+  },
+  {
+    "alias": "air flow",
+    "term": "Apache Airflow",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "DROP",
+    "reason": "'Airflow' (and 'air flow') is a common English noun used in HVAC, aerodynamics, and everyday speech. Would corrupt non-tech dictation."
+  },
+  {
+    "alias": "airflow",
+    "term": "Apache Airflow",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "DROP",
+    "reason": "'Airflow' is a common English word; single-word-english rule applies."
+  },
+  {
+    "alias": "dag ster",
+    "term": "Dagster",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "KEEP",
+    "reason": "'Dagster' has no ordinary English meaning; safe phonetic alias."
+  },
+  {
+    "alias": "pre fect",
+    "term": "Prefect",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "DROP",
+    "reason": "'Prefect' is a real English word (school administrator, Roman official). 'Pre fect' is its Whisper mis-transcription and would corrupt non-tech dictation."
+  },
+  {
+    "alias": "perfect",
+    "term": "Prefect",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "DROP",
+    "reason": "Flagged single_word_english. 'Perfect' is one of the most common English adjectives; would corrupt everyday dictation constantly."
+  },
+  {
+    "alias": "loo ee gee",
+    "term": "Luigi",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "KEEP",
+    "reason": "Phonetic syllable spelling of the name Luigi; not a natural English phrase."
+  },
+  {
+    "alias": "d b t",
+    "term": "dbt",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "KEEP",
+    "reason": "Letter-by-letter spelling of dbt; no ordinary English meaning."
+  },
+  {
+    "alias": "dee bee tee",
+    "term": "dbt",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "KEEP",
+    "reason": "Phonetic letter spelling of dbt; no ordinary English phrase meaning."
+  },
+  {
+    "alias": "data build tool",
+    "term": "dbt",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "KEEP",
+    "reason": "Full technical expansion of dbt; the phrase has no non-technical meaning."
+  },
+  {
+    "alias": "air byte",
+    "term": "Airbyte",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "KEEP",
+    "reason": "'Byte' is a computing term; 'air byte' has no ordinary English meaning as a phrase."
+  },
+  {
+    "alias": "air bite",
+    "term": "Airbyte",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "DROP",
+    "reason": "'Air bite' is a plausible ordinary English phrase (fishing, hunting). Would corrupt non-tech dictation."
+  },
+  {
+    "alias": "five tran",
+    "term": "Fivetran",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "KEEP",
+    "reason": "'Five tran' has no ordinary English meaning; safe phonetic alias."
+  },
+  {
+    "alias": "five tren",
+    "term": "Fivetran",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "KEEP",
+    "reason": "'Five tren' has no ordinary English meaning; safe phonetic alias."
+  },
+  {
+    "alias": "snow flake",
+    "term": "Snowflake",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "DROP",
+    "reason": "'Snowflake' (and 'snow flake') is a very common English word. Would corrupt weather, nature, and colloquial speech constantly."
+  },
+  {
+    "alias": "data bricks",
+    "term": "Databricks",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "KEEP",
+    "reason": "'Data bricks' has no ordinary English meaning as a compound phrase; safe alias."
+  },
+  {
+    "alias": "spark",
+    "term": "Apache Spark",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "DROP",
+    "reason": "Flagged single_word_english. 'Spark' is extremely common English (spark of fire, inspiration, etc.). Would corrupt everyday speech constantly."
+  },
+  {
+    "alias": "a patchy spark",
+    "term": "Apache Spark",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "DROP",
+    "reason": "'A patchy spark' is a plausible English phrase (describing an erratic spark). Applying 'when in doubt, DROP'."
+  },
+  {
+    "alias": "flink",
+    "term": "Apache Flink",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "KEEP",
+    "reason": "'Flink' is not a standard English dictionary word; safe to keep as a tech alias."
+  },
+  {
+    "alias": "beam",
+    "term": "Apache Beam",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "DROP",
+    "reason": "Flagged single_word_english. 'Beam' is a very common English word (light beam, structural beam, etc.). Would corrupt everyday speech."
+  },
+  {
+    "alias": "hive",
+    "term": "Apache Hive",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "DROP",
+    "reason": "Flagged single_word_english. 'Hive' is a very common English word (beehive, hive of activity). Would corrupt everyday speech."
+  },
+  {
+    "alias": "iceberg",
+    "term": "Apache Iceberg",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "DROP",
+    "reason": "Flagged single_word_english. 'Iceberg' is a very common English word. Would corrupt everyday speech."
+  },
+  {
+    "alias": "delta lake",
+    "term": "Delta Lake",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "DROP",
+    "reason": "Flagged identity (alias equals term modulo capitalization). Also, 'delta lake' is a real geographic/ecological concept and common English phrase."
+  },
+  {
+    "alias": "par kay",
+    "term": "Apache Parquet",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "DROP",
+    "reason": "'Parquet' is a real English word (parquet flooring) pronounced 'par-KAY'. This alias would corrupt dictation about floors and interior design."
+  },
+  {
+    "alias": "par quet",
+    "term": "Apache Parquet",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "DROP",
+    "reason": "'Parquet' is a real English word; 'par quet' is its Whisper mis-transcription and would corrupt non-tech dictation about flooring."
+  },
+  {
+    "alias": "parquet",
+    "term": "Apache Parquet",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "DROP",
+    "reason": "Flagged single_word_english. 'Parquet' is a standard English word (parquet flooring). Would corrupt interior design and architecture dictation."
+  },
+  {
+    "alias": "av row",
+    "term": "Apache Avro",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "KEEP",
+    "reason": "'Av row' has no ordinary English meaning as a two-word phrase; safe phonetic alias."
+  },
+  {
+    "alias": "avro",
+    "term": "Apache Avro",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "KEEP",
+    "reason": "'Avro' is not a standard English dictionary word; safe tech alias."
+  },
+  {
+    "alias": "trivvy",
+    "term": "Trivy",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "KEEP",
+    "reason": "Not a real English word; safe phonetic mis-transcription alias."
+  },
+  {
+    "alias": "try vee",
+    "term": "Trivy",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "KEEP",
+    "reason": "'Try vee' has no ordinary English meaning as a phrase; safe alias."
+  },
+  {
+    "alias": "tri vee",
+    "term": "Trivy",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "KEEP",
+    "reason": "'Tri vee' has no ordinary English meaning as a phrase; safe alias."
+  },
+  {
+    "alias": "fall co",
+    "term": "Falco",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "KEEP",
+    "reason": "'Fall co' has no ordinary English meaning as a two-word phrase; safe phonetic alias."
+  },
+  {
+    "alias": "snick",
+    "term": "Snyk",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "DROP",
+    "reason": "Flagged single_word_english. 'Snick' is a real English word (a small cut or notch). Would corrupt non-tech dictation."
+  },
+  {
+    "alias": "snik",
+    "term": "Snyk",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "KEEP",
+    "reason": "'Snik' is not a standard English word; safe phonetic alias for Snyk."
+  },
+  {
+    "alias": "sonar cube",
+    "term": "SonarQube",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "KEEP",
+    "reason": "'Sonar cube' is not a natural English phrase; unambiguously a mis-transcription of SonarQube."
+  },
+  {
+    "alias": "sonar queue be",
+    "term": "SonarQube",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "KEEP",
+    "reason": "'Sonar queue be' has no ordinary English meaning as a three-word phrase; safe alias."
+  },
+  {
+    "alias": "reno vate",
+    "term": "Renovate",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "DROP",
+    "reason": "'Renovate' is a common English verb; 'reno vate' is its Whisper mis-transcription and would corrupt dictation about home improvement."
+  },
+  {
+    "alias": "depend a bot",
+    "term": "Dependabot",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "KEEP",
+    "reason": "'Depend a bot' has no ordinary English meaning as a phrase; safe phonetic alias."
+  },
+  {
+    "alias": "depends bot",
+    "term": "Dependabot",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "KEEP",
+    "reason": "'Depends bot' has no ordinary English meaning as a phrase; safe alias."
+  },
+  {
+    "alias": "cooper netties",
+    "term": "Kubernetes",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "KEEP",
+    "reason": "Phonetic mis-transcription of Kubernetes with no ordinary English meaning."
+  },
+  {
+    "alias": "cooper net ease",
+    "term": "Kubernetes",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "KEEP",
+    "reason": "Phonetic mis-transcription of Kubernetes; the combined phrase has no ordinary English meaning."
+  },
+  {
+    "alias": "kuber net ease",
+    "term": "Kubernetes",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "KEEP",
+    "reason": "Phonetic mis-transcription; 'kuber' is not an English word."
+  },
+  {
+    "alias": "kuber nay tees",
+    "term": "Kubernetes",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "KEEP",
+    "reason": "Phonetic mis-transcription with no English phrase meaning."
+  },
+  {
+    "alias": "cube or netties",
+    "term": "Kubernetes",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "KEEP",
+    "reason": "Phonetic mis-transcription; 'cube or netties' has no ordinary English phrase meaning."
+  },
+  {
+    "alias": "cube or net ease",
+    "term": "Kubernetes",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "KEEP",
+    "reason": "Phonetic mis-transcription; the combined phrase is not idiomatic English."
+  },
+  {
+    "alias": "k8s",
+    "term": "Kubernetes",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "KEEP",
+    "reason": "Pure tech abbreviation with no dictionary meaning."
+  },
+  {
+    "alias": "k eights",
+    "term": "K8s",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "KEEP",
+    "reason": "Phonetic letter+number spelling of K8s with no ordinary English phrase meaning."
+  },
+  {
+    "alias": "k eight s",
+    "term": "K8s",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "KEEP",
+    "reason": "Letter-by-letter plus number spelling of K8s."
+  },
+  {
+    "alias": "kates",
+    "term": "K8s",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "DROP",
+    "reason": "Common English word/name (plural of Kate) with no reliable K8s-specific signal."
+  },
+  {
+    "alias": "docker container",
+    "term": "Docker",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "KEEP",
+    "reason": "'Docker container' is an unambiguous tech phrase; no ordinary non-tech meaning."
+  },
+  {
+    "alias": "dock er",
+    "term": "Docker",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "KEEP",
+    "reason": "Phonetic split of Docker; not a real English phrase."
+  },
+  {
+    "alias": "docker file",
+    "term": "Dockerfile",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "KEEP",
+    "reason": "'Docker file' unambiguously refers to a Dockerfile in tech context."
+  },
+  {
+    "alias": "dock er file",
+    "term": "Dockerfile",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "KEEP",
+    "reason": "Phonetic split of Dockerfile with no ordinary English meaning."
+  },
+  {
+    "alias": "pod man",
+    "term": "Podman",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "KEEP",
+    "reason": "'Pod man' is not an idiomatic English phrase; primarily a phonetic split of the Podman tool."
+  },
+  {
+    "alias": "pot man",
+    "term": "Podman",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "DROP",
+    "reason": "'Potman' is real archaic/British English for a pub assistant; too common a word to keep."
+  },
+  {
+    "alias": "container d",
+    "term": "Containerd",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "KEEP",
+    "reason": "'Container d' with a trailing letter is unambiguously a tech daemon name."
+  },
+  {
+    "alias": "container dee",
+    "term": "Containerd",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "KEEP",
+    "reason": "Phonetic split of 'containerd'; 'dee' suffix not idiomatic in this context."
+  },
+  {
+    "alias": "helm chart",
+    "term": "Helm",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "KEEP",
+    "reason": "'Helm chart' is unambiguously a Kubernetes Helm chart; no competing ordinary meaning."
+  },
+  {
+    "alias": "is tee oh",
+    "term": "Istio",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "KEEP",
+    "reason": "Phonetic spelling of Istio with no ordinary English phrase meaning."
+  },
+  {
+    "alias": "ist io",
+    "term": "Istio",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "KEEP",
+    "reason": "Phonetic split of Istio; not a real English phrase."
+  },
+  {
+    "alias": "east ee oh",
+    "term": "Istio",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "KEEP",
+    "reason": "Phonetic mis-transcription of Istio; 'east ee oh' has no ordinary English meaning."
+  },
+  {
+    "alias": "en voy",
+    "term": "Envoy",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "KEEP",
+    "reason": "Phonetic split specifically targeting how Whisper mis-transcribes 'Envoy' as two tokens; not a natural English phrase."
+  },
+  {
+    "alias": "envoy proxy",
+    "term": "Envoy",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "KEEP",
+    "reason": "'Envoy proxy' is an unambiguous tech phrase for the Envoy service mesh proxy."
+  },
+  {
+    "alias": "linker d",
+    "term": "Linkerd",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "KEEP",
+    "reason": "Phonetic split of Linkerd; 'linker d' with trailing letter is a tech daemon-style name."
+  },
+  {
+    "alias": "link erd",
+    "term": "Linkerd",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "KEEP",
+    "reason": "Phonetic split of Linkerd; 'erd' suffix is not an English word."
+  },
+  {
+    "alias": "linked",
+    "term": "Linkerd",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "DROP",
+    "reason": "Very common English word (past tense of 'link'); breaks normal speech constantly."
+  },
+  {
+    "alias": "argo cd",
+    "term": "ArgoCD",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "KEEP",
+    "reason": "'Argo cd' with CD abbreviation is unambiguously a CI/CD tech tool name."
+  },
+  {
+    "alias": "argo see dee",
+    "term": "ArgoCD",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "KEEP",
+    "reason": "Phonetic spelling of ArgoCD with no ordinary English meaning."
+  },
+  {
+    "alias": "are go cd",
+    "term": "ArgoCD",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "KEEP",
+    "reason": "'CD' suffix anchors this to tech; 'are go cd' is not a natural English phrase."
+  },
+  {
+    "alias": "flux cd",
+    "term": "Flux",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "KEEP",
+    "reason": "'Flux cd' with CD abbreviation is unambiguously tech."
+  },
+  {
+    "alias": "customize",
+    "term": "Kustomize",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "DROP",
+    "reason": "Extremely common English verb; would break countless ordinary utterances like 'you can customize it'."
+  },
+  {
+    "alias": "k customize",
+    "term": "Kustomize",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "KEEP",
+    "reason": "The 'k' prefix marking is specifically a Kubernetes ecosystem convention; not a natural English phrase."
+  },
+  {
+    "alias": "kustom eyes",
+    "term": "Kustomize",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "KEEP",
+    "reason": "Phonetic mis-transcription with non-standard 'kustom' spelling; no ordinary English meaning."
+  },
+  {
+    "alias": "a w s",
+    "term": "AWS",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "KEEP",
+    "reason": "Letter-by-letter spelling of the AWS abbreviation."
+  },
+  {
+    "alias": "ay double you ess",
+    "term": "AWS",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "KEEP",
+    "reason": "Phonetic letter-by-letter spelling of AWS."
+  },
+  {
+    "alias": "amazon web services",
+    "term": "AWS",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "KEEP",
+    "reason": "Specific tech brand name with no ordinary non-tech meaning."
+  },
+  {
+    "alias": "e c 2",
+    "term": "Amazon EC2",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "KEEP",
+    "reason": "Letter+number spelling of EC2; unambiguously tech."
+  },
+  {
+    "alias": "e c two",
+    "term": "Amazon EC2",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "KEEP",
+    "reason": "Phonetic letter+number spelling of EC2."
+  },
+  {
+    "alias": "ee see two",
+    "term": "Amazon EC2",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "KEEP",
+    "reason": "Phonetic spelling of EC2; not a natural English phrase."
+  },
+  {
+    "alias": "easy too",
+    "term": "Amazon EC2",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "DROP",
+    "reason": "Extremely common English phrase ('it's easy too'); would break normal speech constantly."
+  },
+  {
+    "alias": "s 3",
+    "term": "Amazon S3",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "KEEP",
+    "reason": "Letter+number abbreviation; unambiguously the AWS S3 service in tech context."
+  },
+  {
+    "alias": "s three",
+    "term": "Amazon S3",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "KEEP",
+    "reason": "Phonetic spelling of S3; not a natural English phrase in isolation."
+  },
+  {
+    "alias": "ess three",
+    "term": "Amazon S3",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "KEEP",
+    "reason": "Phonetic letter+number spelling of S3; no ordinary English meaning."
+  },
+  {
+    "alias": "e c s",
+    "term": "Amazon ECS",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "KEEP",
+    "reason": "Letter spelling of ECS abbreviation; conflict flag noted but no competing term visible in this chunk."
+  },
+  {
+    "alias": "ee see ess",
+    "term": "Amazon ECS",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "KEEP",
+    "reason": "Phonetic letter spelling of ECS; not a natural English phrase."
+  },
+  {
+    "alias": "e k s",
+    "term": "Amazon EKS",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "KEEP",
+    "reason": "Letter spelling of EKS abbreviation; conflict flag noted but no competing term visible in this chunk."
+  },
+  {
+    "alias": "ee kay ess",
+    "term": "Amazon EKS",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "KEEP",
+    "reason": "Phonetic letter spelling of EKS; not a natural English phrase."
+  },
+  {
+    "alias": "ex",
+    "term": "Amazon EKS",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "DROP",
+    "reason": "Extremely common English word with many meanings; single_word_english flag confirms this."
+  },
+  {
+    "alias": "r d s",
+    "term": "Amazon RDS",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "KEEP",
+    "reason": "Letter spelling of RDS abbreviation; unambiguously tech."
+  },
+  {
+    "alias": "are dee ess",
+    "term": "Amazon RDS",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "KEEP",
+    "reason": "Phonetic letter spelling of RDS; not a natural English phrase."
+  },
+  {
+    "alias": "s q s",
+    "term": "Amazon SQS",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "KEEP",
+    "reason": "Letter spelling of SQS abbreviation; unambiguously tech."
+  },
+  {
+    "alias": "ess queue ess",
+    "term": "Amazon SQS",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "KEEP",
+    "reason": "Phonetic letter spelling of SQS; not a natural English phrase."
+  },
+  {
+    "alias": "s n s",
+    "term": "Amazon SNS",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "KEEP",
+    "reason": "Letter spelling of SNS abbreviation; unambiguously tech."
+  },
+  {
+    "alias": "ess en ess",
+    "term": "Amazon SNS",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "KEEP",
+    "reason": "Phonetic letter spelling of SNS; not a natural English phrase."
+  },
+  {
+    "alias": "lambda",
+    "term": "Amazon Lambda",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "DROP",
+    "reason": "Common word with multiple non-AWS meanings: Greek letter, math/physics term, general programming lambda functions. Too broad."
+  },
+  {
+    "alias": "aws lambda",
+    "term": "Amazon Lambda",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "KEEP",
+    "reason": "'AWS Lambda' is an unambiguous tech phrase for the specific Amazon service."
+  },
+  {
+    "alias": "dynamo db",
+    "term": "Amazon DynamoDB",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "KEEP",
+    "reason": "'Dynamo db' with 'db' suffix is unambiguously a tech database name."
+  },
+  {
+    "alias": "dynamo d b",
+    "term": "Amazon DynamoDB",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "KEEP",
+    "reason": "Phonetic split of DynamoDB; the 'd b' letter suffix is unambiguously tech."
+  },
+  {
+    "alias": "dynamodb",
+    "term": "Amazon DynamoDB",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "KEEP",
+    "reason": "Tech compound term; no ordinary English meaning."
+  },
+  {
+    "alias": "cloud front",
+    "term": "Amazon CloudFront",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "KEEP",
+    "reason": "'Cloud front' in practice refers to Amazon CloudFront; meteorology uses 'cold front' not 'cloud front'."
+  },
+  {
+    "alias": "cloud watch",
+    "term": "Amazon CloudWatch",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "DROP",
+    "reason": "'Cloud watch' / cloud watching is a real hobby; breaks phrases like 'let's go cloud watch'."
+  },
+  {
+    "alias": "cog knee toe",
+    "term": "Amazon Cognito",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "KEEP",
+    "reason": "Phonetic mis-transcription of Cognito with no ordinary English phrase meaning."
+  },
+  {
+    "alias": "cognito",
+    "term": "Amazon Cognito",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "KEEP",
+    "reason": "'Cognito' is not a common English word (Latin root); primarily known as Amazon Cognito."
+  },
+  {
+    "alias": "sage maker",
+    "term": "Amazon SageMaker",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "DROP",
+    "reason": "Two common English words ('sage' herb/wise person + 'maker'); would break phrases like 'a sage maker of decisions'."
+  },
+  {
+    "alias": "sage make her",
+    "term": "Amazon SageMaker",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "KEEP",
+    "reason": "Phonetic split of SageMaker with unusual word boundaries; not a natural English phrase."
+  },
+  {
+    "alias": "bed rock",
+    "term": "Amazon Bedrock",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "DROP",
+    "reason": "'Bedrock' is a very common English word (foundation rock, basic principle); breaks ordinary speech constantly."
+  },
+  {
+    "alias": "a roar a",
+    "term": "Amazon Aurora",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "KEEP",
+    "reason": "Phonetic mis-transcription of Aurora with unusual spacing; not a natural English phrase."
+  },
+  {
+    "alias": "aurora db",
+    "term": "Amazon Aurora",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "KEEP",
+    "reason": "'Aurora db' with 'db' suffix is unambiguously a tech database name."
+  },
+  {
+    "alias": "red shift",
+    "term": "Amazon Redshift",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "DROP",
+    "reason": "'Redshift' is a well-known astronomy term; breaks phrases like 'the red shift of distant galaxies'."
+  },
+  {
+    "alias": "kin ee sis",
+    "term": "Amazon Kinesis",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "KEEP",
+    "reason": "Phonetic mis-transcription of Kinesis with no ordinary English phrase meaning."
+  },
+  {
+    "alias": "genesis",
+    "term": "Amazon Kinesis",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "DROP",
+    "reason": "Very common English word (origin/beginning) and biblical book; breaks ordinary speech constantly."
+  },
+  {
+    "alias": "elastic cache",
+    "term": "Amazon ElastiCache",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "KEEP",
+    "reason": "'Elastic cache' together is an unambiguous tech phrase; not a natural English compound."
+  },
+  {
+    "alias": "elastic ash",
+    "term": "Amazon ElastiCache",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "KEEP",
+    "reason": "Phonetic mis-transcription of ElastiCache; 'elastic ash' has no ordinary English meaning."
+  },
+  {
+    "alias": "route 53",
+    "term": "Amazon Route 53",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "DROP",
+    "reason": "Could easily refer to a highway route number; breaks phrases like 'take Route 53 north'."
+  },
+  {
+    "alias": "route fifty three",
+    "term": "Amazon Route 53",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "DROP",
+    "reason": "Refers to a highway route in ordinary English; breaks navigation/travel speech."
+  },
+  {
+    "alias": "v p c",
+    "term": "Amazon VPC",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "KEEP",
+    "reason": "Letter spelling of VPC abbreviation; unambiguously tech."
+  },
+  {
+    "alias": "vee pee see",
+    "term": "Amazon VPC",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "KEEP",
+    "reason": "Phonetic letter spelling of VPC; not a natural English phrase."
+  },
+  {
+    "alias": "i a m",
+    "term": "Amazon IAM",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "KEEP",
+    "reason": "Letter-by-letter spelling of IAM abbreviation; distinct from 'I am' as a spoken phrase."
+  },
+  {
+    "alias": "i am",
+    "term": "Amazon IAM",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "DROP",
+    "reason": "Extremely common English phrase; breaks nearly every sentence beginning with 'I am'."
+  },
+  {
+    "alias": "eye ay em",
+    "term": "Amazon IAM",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "KEEP",
+    "reason": "Phonetic letter-by-letter spelling of IAM; not a natural English phrase."
+  },
+  {
+    "alias": "cloud formation",
+    "term": "Amazon CloudFormation",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "DROP",
+    "reason": "Common English phrase referring to cloud shapes in the sky; breaks phrases like 'that cloud formation is beautiful'."
+  },
+  {
+    "alias": "event bridge",
+    "term": "Amazon EventBridge",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "KEEP",
+    "reason": "'Event bridge' is not a common English compound; primarily used as the AWS EventBridge service name."
+  },
+  {
+    "alias": "step functions",
+    "term": "Amazon Step Functions",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "DROP",
+    "reason": "'Step functions' is a legitimate mathematics term; breaks phrases like 'the step functions in calculus'."
+  },
+  {
+    "alias": "as your",
+    "term": "Azure",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "DROP",
+    "reason": "Extremely common English phrase; breaks sentences like 'as your friend would say'."
+  },
+  {
+    "alias": "ash your",
+    "term": "Azure",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "KEEP",
+    "reason": "Phonetic mis-transcription targeting how Whisper captures 'Azure'; 'ash your' is not a common English phrase."
+  },
+  {
+    "alias": "ay zure",
+    "term": "Azure",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "KEEP",
+    "reason": "Phonetic spelling of Azure; not a natural English phrase."
+  },
+  {
+    "alias": "azshur",
+    "term": "Azure",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "KEEP",
+    "reason": "Phonetic misspelling of Azure with no ordinary English meaning."
+  },
+  {
+    "alias": "azure dev ops",
+    "term": "Azure DevOps",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "KEEP",
+    "reason": "Specific tech product name with no ordinary non-tech meaning."
+  },
+  {
+    "alias": "azure function",
+    "term": "Azure Functions",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "KEEP",
+    "reason": "'Azure function' anchored by the brand name; unambiguously tech."
+  },
+  {
+    "alias": "cosmos db",
+    "term": "Azure Cosmos DB",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "KEEP",
+    "reason": "'Cosmos db' with 'db' suffix is unambiguously a tech database name."
+  },
+  {
+    "alias": "cosmos d b",
+    "term": "Azure Cosmos DB",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "KEEP",
+    "reason": "Phonetic split with letter 'db'; unambiguously tech."
+  },
+  {
+    "alias": "blob storage",
+    "term": "Azure Blob Storage",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "KEEP",
+    "reason": "'Blob storage' is an unambiguous tech phrase (Binary Large OBject); not a natural English compound."
+  },
+  {
+    "alias": "a k s",
+    "term": "Azure AKS",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "KEEP",
+    "reason": "Letter spelling of AKS abbreviation; unambiguously tech (conflict with other packs is external to this chunk)."
+  },
+  {
+    "alias": "ay kay ess",
+    "term": "Azure AKS",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "KEEP",
+    "reason": "Phonetic letter spelling of AKS; not a natural English phrase."
+  },
+  {
+    "alias": "azure a d",
+    "term": "Azure AD",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "KEEP",
+    "reason": "Brand-anchored tech phrase; unambiguously Azure Active Directory."
+  },
+  {
+    "alias": "azure active directory",
+    "term": "Azure AD",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "KEEP",
+    "reason": "Specific tech product name with no ordinary non-tech meaning."
+  },
+  {
+    "alias": "entra i d",
+    "term": "Entra ID",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "KEEP",
+    "reason": "Phonetic spelling of Entra ID with letter 'id'; unambiguously tech."
+  },
+  {
+    "alias": "entra eye dee",
+    "term": "Entra ID",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "KEEP",
+    "reason": "Phonetic spelling of Entra ID; not a natural English phrase."
+  },
+  {
+    "alias": "enter a id",
+    "term": "Entra ID",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "KEEP",
+    "reason": "Phonetic mis-transcription of Entra ID; grammatically awkward in English ('enter an ID' would be correct)."
+  },
+  {
+    "alias": "g c p",
+    "term": "GCP",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "KEEP",
+    "reason": "Letter spelling of GCP abbreviation; unambiguously tech."
+  },
+  {
+    "alias": "gee see pee",
+    "term": "GCP",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "KEEP",
+    "reason": "Phonetic letter spelling of GCP; not a natural English phrase."
+  },
+  {
+    "alias": "google cloud platform",
+    "term": "GCP",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "DEDUPE",
+    "new_alias": "google cloud platform",
+    "reason": "Same alias maps to both GCP and Google Cloud in this chunk. GCP wins as the exact expansion of 'Google Cloud Platform'."
+  },
+  {
+    "alias": "gee cloud",
+    "term": "Google Cloud",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "KEEP",
+    "reason": "Phonetic mis-transcription of Google Cloud; 'gee cloud' is not a natural English phrase."
+  },
+  {
+    "alias": "google cloud platform",
+    "term": "Google Cloud",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "DEDUPE",
+    "new_alias": "google cloud platform",
+    "reason": "Same alias maps to both GCP and Google Cloud. GCP wins as it is literally the acronym for 'Google Cloud Platform'."
+  },
+  {
+    "alias": "big query",
+    "term": "BigQuery",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "DROP",
+    "reason": "Ordinary English phrase ('that's a big query') that could appear in non-tech speech about large questions or database queries in general."
+  },
+  {
+    "alias": "big quarry",
+    "term": "BigQuery",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "DROP",
+    "reason": "A quarry is a real stone pit; 'big quarry' breaks phrases like 'the big quarry outside of town'."
+  },
+  {
+    "alias": "cloud run",
+    "term": "Cloud Run",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "DROP",
+    "reason": "Identity flag: alias equals the term. Mandatory DROP."
+  },
+  {
+    "alias": "cloud function",
+    "term": "Cloud Functions",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "KEEP",
+    "reason": "'Cloud function' is not a common English compound; primarily used in a Google Cloud / serverless tech context."
+  },
+  {
+    "alias": "fire store",
+    "term": "Firestore",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "KEEP",
+    "reason": "'Fire store' is not an idiomatic English compound; primarily used as the Firestore database name."
+  },
+  {
+    "alias": "fire stoor",
+    "term": "Firestore",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "KEEP",
+    "reason": "Phonetic mis-transcription of Firestore with non-standard spelling; no ordinary English meaning."
+  },
+  {
+    "alias": "fire base",
+    "term": "Firebase",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "DROP",
+    "reason": "'Firebase' / 'fire base' is a real military term (forward operating base); breaks related speech."
+  },
+  {
+    "alias": "fire bays",
+    "term": "Firebase",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "KEEP",
+    "reason": "Phonetic mis-transcription of Firebase; 'fire bays' is uncommon in ordinary English."
+  },
+  {
+    "alias": "pub sub",
+    "term": "Pub/Sub",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "DEDUPE",
+    "reason": "Duplicate entry: identical alias and term appear twice in the file. Retaining Pub/Sub as the canonical term."
+  },
+  {
+    "alias": "pub sub",
+    "term": "Pub/Sub",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "DEDUPE",
+    "reason": "Duplicate entry: identical alias and term appear twice in the file. Retaining Pub/Sub as the canonical term."
+  },
+  {
+    "alias": "ver sell",
+    "term": "Vercel",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "KEEP",
+    "reason": "Phonetic mis-transcription of Vercel; not a natural English phrase."
+  },
+  {
+    "alias": "verse el",
+    "term": "Vercel",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "KEEP",
+    "reason": "Phonetic split of Vercel; 'el' suffix is not idiomatic in this English context."
+  },
+  {
+    "alias": "ver sel",
+    "term": "Vercel",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "KEEP",
+    "reason": "Phonetic mis-transcription of Vercel with no ordinary English meaning."
+  },
+  {
+    "alias": "vercell",
+    "term": "Vercel",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "KEEP",
+    "reason": "Phonetic misspelling of Vercel; not an English word."
+  },
+  {
+    "alias": "net li fy",
+    "term": "Netlify",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "KEEP",
+    "reason": "Phonetic mis-transcription of Netlify; not a natural English phrase."
+  },
+  {
+    "alias": "net lify",
+    "term": "Netlify",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "KEEP",
+    "reason": "Phonetic mis-transcription of Netlify; 'lify' is not an English word."
+  },
+  {
+    "alias": "net lih fie",
+    "term": "Netlify",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "KEEP",
+    "reason": "Phonetic mis-transcription of Netlify with no ordinary English meaning."
+  },
+  {
+    "alias": "cloud flare",
+    "term": "Cloudflare",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "KEEP",
+    "reason": "'Cloud flare' as a combined phrase is not idiomatic English; primarily used as the Cloudflare brand name."
+  },
+  {
+    "alias": "cloud flair",
+    "term": "Cloudflare",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "KEEP",
+    "reason": "'Cloud flair' is not an idiomatic English phrase; no common non-tech usage."
+  },
+  {
+    "alias": "cloud flare workers",
+    "term": "Cloudflare Workers",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "KEEP",
+    "reason": "Specific tech product name; unambiguously Cloudflare Workers."
+  },
+  {
+    "alias": "cloud flare r two",
+    "term": "Cloudflare R2",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "KEEP",
+    "reason": "'Cloud flare r two' is a brand-anchored tech phrase; unambiguously the Cloudflare R2 service."
+  },
+  {
+    "alias": "r 2",
+    "term": "Cloudflare R2",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "DROP",
+    "reason": "Too generic; 'r 2' could refer to Star Wars R2-D2, vitamins, road designations, or any other 'R2' abbreviation."
+  },
+  {
+    "alias": "digital ocean",
+    "term": "DigitalOcean",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "KEEP",
+    "reason": "'Digital ocean' is primarily recognized as the cloud provider; not a common English phrase in other contexts."
+  },
+  {
+    "alias": "digital o shin",
+    "term": "DigitalOcean",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "KEEP",
+    "reason": "Phonetic mis-transcription of DigitalOcean; not a natural English phrase."
+  },
+  {
+    "alias": "lin ode",
+    "term": "Linode",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "KEEP",
+    "reason": "Phonetic mis-transcription of Linode; 'lin ode' has no ordinary English meaning."
+  },
+  {
+    "alias": "lie node",
+    "term": "Linode",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "KEEP",
+    "reason": "'Lie node' as a compound has no ordinary English phrase meaning; phonetic for Linode."
+  },
+  {
+    "alias": "vulture",
+    "term": "Vultr",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "DROP",
+    "reason": "Common English word (a scavenging bird); single_word_english flag confirms; breaks natural speech constantly."
+  },
+  {
+    "alias": "vul ter",
+    "term": "Vultr",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "KEEP",
+    "reason": "Phonetic mis-transcription of Vultr; 'vul ter' has no ordinary English meaning."
+  },
+  {
+    "alias": "hets ner",
+    "term": "Hetzner",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "KEEP",
+    "reason": "Phonetic mis-transcription of Hetzner; not an English word or phrase."
+  },
+  {
+    "alias": "hetzner cloud",
+    "term": "Hetzner",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "KEEP",
+    "reason": "Brand-anchored tech phrase; unambiguously the Hetzner cloud provider."
+  },
+  {
+    "alias": "fly io",
+    "term": "Fly.io",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "KEEP",
+    "reason": "'Fly io' with the 'io' domain suffix is unambiguously a tech platform name."
+  },
+  {
+    "alias": "fly i o",
+    "term": "Fly.io",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "KEEP",
+    "reason": "Phonetic letter spelling of Fly.io domain; not a natural English phrase."
+  },
+  {
+    "alias": "rail way",
+    "term": "Railway",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "DROP",
+    "reason": "'Railway' is a very common English word for a train system; breaks phrases like 'take the railway'."
+  },
+  {
+    "alias": "railway app",
+    "term": "Railway",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "KEEP",
+    "reason": "'Railway app' with the 'app' qualifier is unambiguously the Railway platform; not a common English phrase."
+  },
+  {
+    "alias": "render com",
+    "term": "Render",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "KEEP",
+    "reason": "'Render com' as a domain reference is unambiguously the Render cloud platform."
+  },
+  {
+    "alias": "super base",
+    "term": "Supabase",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "DROP",
+    "reason": "Two common English words ('super' + 'base'); breaks phrases like 'that's our super base of operations'."
+  },
+  {
+    "alias": "soup a base",
+    "term": "Supabase",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "KEEP",
+    "reason": "Phonetic mis-transcription of Supabase; 'soup a base' is not a natural English phrase."
+  },
+  {
+    "alias": "super bays",
+    "term": "Supabase",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "KEEP",
+    "reason": "Phonetic mis-transcription of Supabase; 'super bays' is not a common English phrase."
+  },
+  {
+    "alias": "planet scale",
+    "term": "PlanetScale",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "DROP",
+    "reason": "Ordinary English phrase; breaks sentences like 'problems at planet scale' or 'a planet-scale event'."
+  },
+  {
+    "alias": "planet scaled",
+    "term": "PlanetScale",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "DROP",
+    "reason": "Ordinary English adjective/verb form; breaks phrases like 'planet-scaled infrastructure'."
+  },
+  {
+    "alias": "neon db",
+    "term": "Neon",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "KEEP",
+    "reason": "'Neon db' with 'db' suffix is unambiguously a tech database name."
+  },
+  {
+    "alias": "neon database",
+    "term": "Neon",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "KEEP",
+    "reason": "'Neon database' is an unambiguous tech phrase for the Neon serverless Postgres platform."
+  },
+  {
+    "alias": "up stash",
+    "term": "Upstash",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "DROP",
+    "reason": "'Up stash' has ordinary English meaning ('increase the stash' or 'stash something upward'); too ambiguous."
+  },
+  {
+    "alias": "up stache",
+    "term": "Upstash",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "KEEP",
+    "reason": "Phonetic mis-transcription of Upstash; 'stache' is informal slang but 'up stache' is not an idiomatic English phrase."
+  },
+  {
+    "alias": "terra form",
+    "term": "Terraform",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "KEEP",
+    "reason": "Phonetic split of the IaC tool Terraform; while 'terraform' exists in sci-fi, 'terra form' as two words is a specific Whisper mis-transcription pattern."
+  },
+  {
+    "alias": "tear a form",
+    "term": "Terraform",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "DROP",
+    "reason": "Plain English phrase: 'tear a form' (to rip a form apart) is natural speech that would be wrongly replaced."
+  },
+  {
+    "alias": "terra formed",
+    "term": "Terraform",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "DROP",
+    "reason": "'Terraformed' is a real English past-tense verb used in sci-fi contexts ('the planet was terraformed'); breaks natural speech."
+  },
+  {
+    "alias": "open tofu",
+    "term": "OpenTofu",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "DROP",
+    "reason": "'Open tofu' is natural English ('open the tofu package'); both words are common with no tech-exclusive meaning together."
+  },
+  {
+    "alias": "open toe foo",
+    "term": "OpenTofu",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "KEEP",
+    "reason": "'Foo' has no common English meaning; the phonetic combination has no ordinary sentence usage."
+  },
+  {
+    "alias": "poo loo me",
+    "term": "Pulumi",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "KEEP",
+    "reason": "Phonetic rendering with no natural English meaning as a phrase."
+  },
+  {
+    "alias": "pull oo me",
+    "term": "Pulumi",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "KEEP",
+    "reason": "Phonetic rendering; 'oo me' has no English meaning as a unit."
+  },
+  {
+    "alias": "puh loo mee",
+    "term": "Pulumi",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "KEEP",
+    "reason": "Phonetic mis-transcription with no plausible ordinary English interpretation."
+  },
+  {
+    "alias": "ann sible",
+    "term": "Ansible",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "KEEP",
+    "reason": "'Ann sible' is not a real English phrase; phonetic rendering of Ansible."
+  },
+  {
+    "alias": "an suh bull",
+    "term": "Ansible",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "KEEP",
+    "reason": "Phonetic rendering; 'suh bull' has no English meaning as a unit."
+  },
+  {
+    "alias": "chef automation",
+    "term": "Chef",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "DROP",
+    "reason": "'Chef' is a very common English word (a cook); 'chef automation' plausibly means automating culinary work."
+  },
+  {
+    "alias": "puppet automation",
+    "term": "Puppet",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "DROP",
+    "reason": "'Puppet' is a common English word (marionette); 'puppet automation' plausibly refers to animatronic puppets."
+  },
+  {
+    "alias": "salt stack",
+    "term": "SaltStack",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "DROP",
+    "reason": "'Salt stack' is natural English (a stack of salt blocks); both words are common with clear non-tech meanings."
+  },
+  {
+    "alias": "vague rant",
+    "term": "Vagrant",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "DROP",
+    "reason": "'Vague rant' is very natural English ('that was a vague rant'); breaks ordinary speech about complaints."
+  },
+  {
+    "alias": "pack er",
+    "term": "Packer",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "DROP",
+    "reason": "'Packer' is a common English word (one who packs); spoken as 'pack er' it still maps to an ordinary noun."
+  },
+  {
+    "alias": "jenk ins",
+    "term": "Jenkins",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "KEEP",
+    "reason": "Phonetic mis-transcription of a proper noun; 'jenk' has no English meaning."
+  },
+  {
+    "alias": "jenkens",
+    "term": "Jenkins",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "KEEP",
+    "reason": "Misspelling of Jenkins with no English dictionary meaning."
+  },
+  {
+    "alias": "git lab ci",
+    "term": "GitLab CI",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "KEEP",
+    "reason": "The combination 'git lab ci' has no plausible ordinary English sentence meaning; 'ci' is not a common English word."
+  },
+  {
+    "alias": "git lab see eye",
+    "term": "GitLab CI",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "KEEP",
+    "reason": "Letter-spelling of CI appended to a tech proper noun; the full phrase has no natural English meaning."
+  },
+  {
+    "alias": "git hub actions",
+    "term": "GitHub Actions",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "KEEP",
+    "reason": "'GitHub' is a tech proper noun; the full phrase has no ordinary English meaning."
+  },
+  {
+    "alias": "github action",
+    "term": "GitHub Actions",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "KEEP",
+    "reason": "'GitHub' anchors this as exclusively technical; substring flag does not change that."
+  },
+  {
+    "alias": "circle ci",
+    "term": "CircleCI",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "KEEP",
+    "reason": "'CI' is not a common English word; 'circle ci' has no natural English meaning."
+  },
+  {
+    "alias": "circle see eye",
+    "term": "CircleCI",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "KEEP",
+    "reason": "Letter-spelling of CI; 'circle see eye' is not a natural English phrase."
+  },
+  {
+    "alias": "travis ci",
+    "term": "Travis CI",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "DROP",
+    "reason": "Identity flag: alias equals the term (case-insensitively); no-op rule."
+  },
+  {
+    "alias": "travis see eye",
+    "term": "Travis CI",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "KEEP",
+    "reason": "Letter-spelling of CI appended to a proper name; 'travis see eye' is not natural English."
+  },
+  {
+    "alias": "drone see eye",
+    "term": "Drone CI",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "KEEP",
+    "reason": "'See eye' is a letter-spelling of CI; 'drone see eye' is not a natural English phrase."
+  },
+  {
+    "alias": "team city",
+    "term": "TeamCity",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "DROP",
+    "reason": "'Team city' is common English ('Pittsburgh is a team city'); breaks ordinary speech."
+  },
+  {
+    "alias": "build kite",
+    "term": "Buildkite",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "DROP",
+    "reason": "'Build a kite' / 'build kite' is natural English; breaks common craft or hobbyist speech."
+  },
+  {
+    "alias": "c i c d",
+    "term": "CI/CD",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "KEEP",
+    "reason": "Letter-by-letter spelling of a pure tech abbreviation with no dictionary meaning."
+  },
+  {
+    "alias": "see eye see dee",
+    "term": "CI/CD",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "KEEP",
+    "reason": "Spoken letter-by-letter expansion of CI/CD; not a natural English phrase."
+  },
+  {
+    "alias": "ci cd",
+    "term": "CI/CD",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "KEEP",
+    "reason": "Pure tech abbreviation with no common English meaning."
+  },
+  {
+    "alias": "continuous integration continuous deployment",
+    "term": "CI/CD",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "KEEP",
+    "reason": "Used exclusively in tech contexts; no non-technical speaker would say this phrase."
+  },
+  {
+    "alias": "engine x",
+    "term": "Nginx",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "KEEP",
+    "reason": "Canonical pronunciation of Nginx ('engine-x'); the 'x' suffix makes ordinary English interpretation implausible."
+  },
+  {
+    "alias": "engine ex",
+    "term": "Nginx",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "KEEP",
+    "reason": "Phonetic variant of Nginx; 'engine ex' is not a natural English phrase."
+  },
+  {
+    "alias": "en gin x",
+    "term": "Nginx",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "KEEP",
+    "reason": "Phonetic rendering with no ordinary English meaning."
+  },
+  {
+    "alias": "en jin ex",
+    "term": "Nginx",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "KEEP",
+    "reason": "Phonetic rendering with no ordinary English meaning."
+  },
+  {
+    "alias": "a patchy",
+    "term": "Apache",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "DROP",
+    "reason": "'A patchy' is very common English ('a patchy lawn', 'a patchy signal'); breaks ordinary adjective use constantly."
+  },
+  {
+    "alias": "a patch ee",
+    "term": "Apache",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "KEEP",
+    "reason": "'Patch ee' is not standard English; the phonetic rendering is distinctive enough."
+  },
+  {
+    "alias": "caddy server",
+    "term": "Caddy",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "KEEP",
+    "reason": "'Caddy server' does not form a natural English phrase; the combination is not used in non-tech contexts."
+  },
+  {
+    "alias": "traffic",
+    "term": "Traefik",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "DROP",
+    "reason": "Single common English word with a very frequent non-tech meaning (road/network traffic); would corrupt most sentences."
+  },
+  {
+    "alias": "tray fick",
+    "term": "Traefik",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "KEEP",
+    "reason": "'Fick' is not an English word; phonetic rendering of Traefik with no natural English meaning."
+  },
+  {
+    "alias": "tray feek",
+    "term": "Traefik",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "KEEP",
+    "reason": "'Feek' is not an English word; phonetic rendering with no plausible ordinary interpretation."
+  },
+  {
+    "alias": "h a proxy",
+    "term": "HAProxy",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "KEEP",
+    "reason": "Letter-spelling 'H A' combined with proxy; not a natural English phrase."
+  },
+  {
+    "alias": "ha proxy",
+    "term": "HAProxy",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "KEEP",
+    "reason": "'Ha proxy' has no natural English meaning ('ha' as exclamation + 'proxy' makes no common phrase)."
+  },
+  {
+    "alias": "aitch ay proxy",
+    "term": "HAProxy",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "KEEP",
+    "reason": "Spoken letter-spelling of HA followed by proxy; not a natural English phrase."
+  },
+  {
+    "alias": "kong gateway",
+    "term": "Kong",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "KEEP",
+    "reason": "'Kong' is not a common English word; 'kong gateway' is not a natural English phrase."
+  },
+  {
+    "alias": "kong api",
+    "term": "Kong",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "KEEP",
+    "reason": "'API' is a tech abbreviation with no English meaning; the combination is exclusively tech."
+  },
+  {
+    "alias": "pro me thee us",
+    "term": "Prometheus",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "KEEP",
+    "reason": "Phonetic rendering of Prometheus; not a natural English phrase."
+  },
+  {
+    "alias": "prom ee thee us",
+    "term": "Prometheus",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "KEEP",
+    "reason": "Phonetic rendering with no plausible ordinary English meaning."
+  },
+  {
+    "alias": "graph ana",
+    "term": "Grafana",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "KEEP",
+    "reason": "'Ana' has no common English meaning as a standalone suffix unit; 'graph ana' is not a natural phrase."
+  },
+  {
+    "alias": "gra fauna",
+    "term": "Grafana",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "KEEP",
+    "reason": "'Gra' is not English; 'gra fauna' is not a natural English phrase."
+  },
+  {
+    "alias": "gra fah na",
+    "term": "Grafana",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "KEEP",
+    "reason": "Phonetic rendering; none of the syllables form a natural English phrase."
+  },
+  {
+    "alias": "data dog",
+    "term": "Datadog",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "KEEP",
+    "reason": "While both words are English, 'data dog' is not a common English compound; the combination is sufficiently distinctive."
+  },
+  {
+    "alias": "new relick",
+    "term": "New Relic",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "DROP",
+    "reason": "Sounds identical to 'new relic' (an old artifact newly found), which is natural English; breaks historical/archaeological speech."
+  },
+  {
+    "alias": "new rellick",
+    "term": "New Relic",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "DROP",
+    "reason": "Phonetically identical to 'new relic'; same natural English conflict as 'new relick'."
+  },
+  {
+    "alias": "splunked",
+    "term": "Splunk",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "KEEP",
+    "reason": "'Splunked' is not a real English word; no plausible non-tech interpretation."
+  },
+  {
+    "alias": "elk stack",
+    "term": "ELK Stack",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "DROP",
+    "reason": "Identity flag: alias matches the term; also 'elk stack' could describe a pile of elk antlers."
+  },
+  {
+    "alias": "e l k stack",
+    "term": "ELK Stack",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "KEEP",
+    "reason": "Letter-spelling of ELK disambiguates this as a tech acronym; not a natural English phrase."
+  },
+  {
+    "alias": "elastic search",
+    "term": "Elasticsearch",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "DROP",
+    "reason": "'Elastic search' is plausible English (a flexible or elastic search mechanism); breaks tech-adjacent non-product speech."
+  },
+  {
+    "alias": "elastic searched",
+    "term": "Elasticsearch",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "KEEP",
+    "reason": "'Elastic searched' is not a natural English phrase; the past-tense form is sufficiently distinctive."
+  },
+  {
+    "alias": "log stash",
+    "term": "Logstash",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "DROP",
+    "reason": "'Log stash' is natural English (a hidden supply of logs for firewood); breaks ordinary speech."
+  },
+  {
+    "alias": "log stache",
+    "term": "Logstash",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "KEEP",
+    "reason": "'Stache' (slang for mustache) combined with 'log' is not a natural English phrase."
+  },
+  {
+    "alias": "ki bah na",
+    "term": "Kibana",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "KEEP",
+    "reason": "Phonetic rendering; no natural English meaning."
+  },
+  {
+    "alias": "key bana",
+    "term": "Kibana",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "KEEP",
+    "reason": "'Bana' has no English meaning; 'key bana' is not a natural English phrase."
+  },
+  {
+    "alias": "kib ana",
+    "term": "Kibana",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "KEEP",
+    "reason": "'Kib' is not an English word; phonetic rendering with no plausible English meaning."
+  },
+  {
+    "alias": "open telemetry",
+    "term": "OpenTelemetry",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "KEEP",
+    "reason": "'Telemetry' is a specialized technical term; 'open telemetry' is not used in ordinary non-tech speech."
+  },
+  {
+    "alias": "open tell emetry",
+    "term": "OpenTelemetry",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "KEEP",
+    "reason": "Phonetic rendering; 'emetry' is not an English word."
+  },
+  {
+    "alias": "otel",
+    "term": "OpenTelemetry",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "KEEP",
+    "reason": "Pure tech abbreviation with no English dictionary meaning."
+  },
+  {
+    "alias": "oh tell",
+    "term": "OTel",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "DROP",
+    "reason": "'Oh, tell' is extremely natural English ('oh, tell me more'); would break conversational speech constantly."
+  },
+  {
+    "alias": "o tel",
+    "term": "OTel",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "KEEP",
+    "reason": "'Tel' is not a common English word; 'o tel' is not a natural English phrase."
+  },
+  {
+    "alias": "yay ger",
+    "term": "Jaeger",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "KEEP",
+    "reason": "'Ger' is not an English word; phonetic rendering of Jaeger with no natural English meaning."
+  },
+  {
+    "alias": "jay ger",
+    "term": "Jaeger",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "KEEP",
+    "reason": "'Ger' is not English; 'jay ger' is not a natural English phrase."
+  },
+  {
+    "alias": "jaegar",
+    "term": "Jaeger",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "KEEP",
+    "reason": "Misspelling of Jaeger; not an English word."
+  },
+  {
+    "alias": "zip kin",
+    "term": "Zipkin",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "KEEP",
+    "reason": "'Kin' is English but 'zip kin' as a phrase has no natural meaning; the combination is safe."
+  },
+  {
+    "alias": "pager duty",
+    "term": "PagerDuty",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "DEDUPE",
+    "new_alias": "pager duty",
+    "reason": "Conflict flag: alias maps to two terms. PagerDuty is the more specific term (full product name). Mark both rows DEDUPE; winner is PagerDuty."
+  },
+  {
+    "alias": "page or duty",
+    "term": "PagerDuty",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "KEEP",
+    "reason": "'Page or duty' is not a natural English compound phrase; the combination is sufficiently distinctive."
+  },
+  {
+    "alias": "ops genie",
+    "term": "OpsGenie",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "KEEP",
+    "reason": "'Ops genie' is not a common English phrase; the combination is distinctive enough."
+  },
+  {
+    "alias": "ops jeannie",
+    "term": "OpsGenie",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "KEEP",
+    "reason": "'Ops jeannie' is not a natural English phrase; phonetic rendering of OpsGenie."
+  },
+  {
+    "alias": "sentry io",
+    "term": "Sentry",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "KEEP",
+    "reason": "'io' is not a common English word; 'sentry io' is not a natural English phrase."
+  },
+  {
+    "alias": "honey comb",
+    "term": "Honeycomb",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "DROP",
+    "reason": "'Honeycomb' is a very common English word (beehive structure, food pattern); breaks ordinary speech about nature or food."
+  },
+  {
+    "alias": "low key",
+    "term": "Loki",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "DROP",
+    "reason": "'Low key' is extremely common English slang (understated, subtle); would break countless everyday sentences."
+  },
+  {
+    "alias": "loki grafana",
+    "term": "Loki",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "KEEP",
+    "reason": "'Grafana' is a tech proper noun that disambiguates the phrase; 'loki grafana' has no ordinary English meaning."
+  },
+  {
+    "alias": "hashicorp vault",
+    "term": "Vault",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "KEEP",
+    "reason": "'Hashicorp' is a company name that anchors this as tech; the phrase has no ordinary English meaning."
+  },
+  {
+    "alias": "vault secrets",
+    "term": "Vault",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "DROP",
+    "reason": "'Vault secrets' is natural English (secrets kept in a vault); breaks speech about security, history, or finance."
+  },
+  {
+    "alias": "hashi corp",
+    "term": "HashiCorp",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "KEEP",
+    "reason": "'Hashi' is not a common English word; 'hashi corp' has no ordinary English meaning."
+  },
+  {
+    "alias": "hashy corp",
+    "term": "HashiCorp",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "KEEP",
+    "reason": "'Hashy' is not a standard English word; the combination is not a natural phrase."
+  },
+  {
+    "alias": "hash ee corp",
+    "term": "HashiCorp",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "KEEP",
+    "reason": "Phonetic rendering with no natural English meaning."
+  },
+  {
+    "alias": "consul hashicorp",
+    "term": "Consul",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "KEEP",
+    "reason": "'Hashicorp' disambiguates this as a tech product; not a natural English phrase."
+  },
+  {
+    "alias": "nomad hashicorp",
+    "term": "Nomad",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "KEEP",
+    "reason": "'Hashicorp' disambiguates this as a tech product; not a natural English phrase."
+  },
+  {
+    "alias": "et cd",
+    "term": "etcd",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "KEEP",
+    "reason": "'Cd' is not a common English word in this context; 'et cd' is not a natural English phrase."
+  },
+  {
+    "alias": "e t c d",
+    "term": "etcd",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "KEEP",
+    "reason": "Letter-by-letter spelling of a pure tech abbreviation."
+  },
+  {
+    "alias": "et see dee",
+    "term": "etcd",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "KEEP",
+    "reason": "Spoken letter-spelling of etcd; not a natural English phrase."
+  },
+  {
+    "alias": "zoo keeper",
+    "term": "ZooKeeper",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "DROP",
+    "reason": "'Zookeeper' is a very common English word (person who cares for zoo animals); breaks speech about animals and zoos."
+  },
+  {
+    "alias": "zookeeper",
+    "term": "ZooKeeper",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "DROP",
+    "reason": "Identity flag: alias equals the term; also a very common English word that would break ordinary speech."
+  },
+  {
+    "alias": "rabbit m q",
+    "term": "RabbitMQ",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "KEEP",
+    "reason": "'M q' is not a common English unit; the combination 'rabbit m q' has no ordinary English meaning."
+  },
+  {
+    "alias": "rabbit mq",
+    "term": "RabbitMQ",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "KEEP",
+    "reason": "'MQ' is a tech abbreviation with no common English meaning; the phrase is distinctive."
+  },
+  {
+    "alias": "rabbit em queue",
+    "term": "RabbitMQ",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "KEEP",
+    "reason": "'Em queue' is a letter-spelling of MQ; 'rabbit em queue' is not a natural English phrase."
+  },
+  {
+    "alias": "kafka",
+    "term": "Apache Kafka",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "DROP",
+    "reason": "'Kafka' is primarily a famous author's surname (Franz Kafka); single proper noun with a well-known non-tech meaning."
+  },
+  {
+    "alias": "kaf ka",
+    "term": "Apache Kafka",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "DEDUPE",
+    "new_alias": "kaf ka",
+    "reason": "Conflict: same alias maps to both 'Apache Kafka' and 'Kafka'. Winner is 'Kafka' (the shorter, universally used tech shorthand)."
+  },
+  {
+    "alias": "kaf ka",
+    "term": "Kafka",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "DEDUPE",
+    "new_alias": "kaf ka",
+    "reason": "Conflict: same alias maps to both 'Apache Kafka' and 'Kafka'. Winner is 'Kafka'; this row is the surviving entry."
+  },
+  {
+    "alias": "cough ka",
+    "term": "Kafka",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "KEEP",
+    "reason": "'Cough ka' is not a natural English phrase; 'ka' has no common English meaning."
+  },
+  {
+    "alias": "nats messaging",
+    "term": "NATS",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "KEEP",
+    "reason": "'NATS messaging' is an exclusively tech phrase; the combination disambiguates from the insect plural."
+  },
+  {
+    "alias": "gnats",
+    "term": "NATS",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "DROP",
+    "reason": "'Gnats' is a very common English word (small flying insects); would break any speech about nature or insects."
+  },
+  {
+    "alias": "red is",
+    "term": "Redis",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "DROP",
+    "reason": "'Red is' is among the most frequent English two-word combinations ('red is my favorite color'); would break countless sentences."
+  },
+  {
+    "alias": "reddis",
+    "term": "Redis",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "KEEP",
+    "reason": "'Reddis' is not an English word; phonetic misspelling of Redis with no ordinary meaning."
+  },
+  {
+    "alias": "read iss",
+    "term": "Redis",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "KEEP",
+    "reason": "'Iss' is not an English word; 'read iss' is not a natural English phrase."
+  },
+  {
+    "alias": "mem cached",
+    "term": "Memcached",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "KEEP",
+    "reason": "'Mem cached' is not natural English; 'mem' as a standalone prefix has no common meaning."
+  },
+  {
+    "alias": "mem cash d",
+    "term": "Memcached",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "KEEP",
+    "reason": "Not a natural English phrase; phonetic rendering of Memcached."
+  },
+  {
+    "alias": "mem cashed",
+    "term": "Memcached",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "KEEP",
+    "reason": "'Mem cashed' is not a natural English phrase; 'mem' has no standalone English meaning."
+  },
+  {
+    "alias": "val key",
+    "term": "Valkey",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "KEEP",
+    "reason": "'Val key' is not a common English phrase; the combination does not have an established non-tech meaning."
+  },
+  {
+    "alias": "valley key",
+    "term": "Valkey",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "DROP",
+    "reason": "'Valley key' is natural English (a key associated with a valley, or a geographic place name); breaks ordinary geographic speech."
+  },
+  {
+    "alias": "min io",
+    "term": "MinIO",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "KEEP",
+    "reason": "'Io' is not a common English word; 'min io' is not a natural English phrase."
+  },
+  {
+    "alias": "mini oh",
+    "term": "MinIO",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "KEEP",
+    "reason": "'Mini oh' is not a natural English phrase; the combination is distinctive."
+  },
+  {
+    "alias": "min i o",
+    "term": "MinIO",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "KEEP",
+    "reason": "Letter-type spelling of MinIO; not a natural English phrase."
+  },
+  {
+    "alias": "sef",
+    "term": "Ceph",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "KEEP",
+    "reason": "'Sef' is not an English word; phonetic rendering of Ceph with no ordinary meaning."
+  },
+  {
+    "alias": "seff",
+    "term": "Ceph",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "KEEP",
+    "reason": "'Seff' is not an English word; phonetic misspelling of Ceph."
+  },
+  {
+    "alias": "gluster fs",
+    "term": "GlusterFS",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "KEEP",
+    "reason": "'Gluster' is not a common English word; 'gluster fs' has no ordinary English meaning."
+  },
+  {
+    "alias": "cluster fs",
+    "term": "GlusterFS",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "KEEP",
+    "reason": "'Fs' is not a common English word; 'cluster fs' has no natural English meaning."
+  },
+  {
+    "alias": "l dap",
+    "term": "LDAP",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "KEEP",
+    "reason": "'Dap' is not a common English word; 'l dap' is not a natural English phrase."
+  },
+  {
+    "alias": "el dap",
+    "term": "LDAP",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "KEEP",
+    "reason": "'Dap' is not a common English word; 'el dap' is not a natural English phrase."
+  },
+  {
+    "alias": "l d a p",
+    "term": "LDAP",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "KEEP",
+    "reason": "Letter-by-letter spelling of a pure tech abbreviation."
+  },
+  {
+    "alias": "oh auth",
+    "term": "OAuth",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "KEEP",
+    "reason": "'Auth' is not a common English word; 'oh auth' is not a natural English phrase."
+  },
+  {
+    "alias": "o auth",
+    "term": "OAuth",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "KEEP",
+    "reason": "'Auth' is not a common English word; 'o auth' is not a natural English phrase."
+  },
+  {
+    "alias": "o off",
+    "term": "OAuth",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "DROP",
+    "reason": "'O, off' is natural English ('o, off you go'); breaks ordinary speech with this very common two-word combination."
+  },
+  {
+    "alias": "oh auth two",
+    "term": "OAuth2",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "KEEP",
+    "reason": "'Auth' is not a common English word; 'oh auth two' is not a natural English phrase."
+  },
+  {
+    "alias": "o auth 2",
+    "term": "OAuth2",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "KEEP",
+    "reason": "'Auth' is not a common English word; the combination is not natural English."
+  },
+  {
+    "alias": "o i d c",
+    "term": "OIDC",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "KEEP",
+    "reason": "Letter-by-letter spelling of a pure tech abbreviation."
+  },
+  {
+    "alias": "oh eye dee see",
+    "term": "OIDC",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "KEEP",
+    "reason": "Spoken letter-by-letter spelling of OIDC; not a natural English phrase."
+  },
+  {
+    "alias": "oy dc",
+    "term": "OIDC",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "KEEP",
+    "reason": "'Dc' is not a standalone English word; 'oy dc' is not a natural English phrase."
+  },
+  {
+    "alias": "sam el",
+    "term": "SAML",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "KEEP",
+    "reason": "'Sam el' could be two names but is not a natural English phrase; the phonetic rendering is sufficiently distinctive."
+  },
+  {
+    "alias": "s a m l",
+    "term": "SAML",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "KEEP",
+    "reason": "Letter-by-letter spelling of a pure tech abbreviation."
+  },
+  {
+    "alias": "j w t",
+    "term": "JWT",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "KEEP",
+    "reason": "Letter-by-letter spelling of a pure tech abbreviation."
+  },
+  {
+    "alias": "jot",
+    "term": "JWT",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "DROP",
+    "reason": "'Jot' is a very common English word (to write a brief note); would break common speech ('let me jot that down')."
+  },
+  {
+    "alias": "jay double you tee",
+    "term": "JWT",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "KEEP",
+    "reason": "Spoken letter-by-letter spelling of JWT; not a natural English phrase."
+  },
+  {
+    "alias": "m t l s",
+    "term": "mTLS",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "KEEP",
+    "reason": "Letter-by-letter spelling of a pure tech abbreviation."
+  },
+  {
+    "alias": "em tee el ess",
+    "term": "mTLS",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "KEEP",
+    "reason": "Spoken letter-by-letter spelling of mTLS; not a natural English phrase."
+  },
+  {
+    "alias": "mutual tls",
+    "term": "mTLS",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "KEEP",
+    "reason": "'TLS' is a pure tech abbreviation; 'mutual TLS' is an exclusively tech phrase not used in ordinary speech."
+  },
+  {
+    "alias": "t l s",
+    "term": "TLS",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "KEEP",
+    "reason": "Letter-by-letter spelling of a pure tech abbreviation."
+  },
+  {
+    "alias": "tee el ess",
+    "term": "TLS",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "KEEP",
+    "reason": "Spoken letter-by-letter spelling of TLS; not a natural English phrase."
+  },
+  {
+    "alias": "s s l",
+    "term": "SSL",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "KEEP",
+    "reason": "Letter-by-letter spelling of a pure tech abbreviation."
+  },
+  {
+    "alias": "ess ess el",
+    "term": "SSL",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "KEEP",
+    "reason": "Spoken letter-by-letter spelling of SSL; not a natural English phrase."
+  },
+  {
+    "alias": "s s h",
+    "term": "SSH",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "KEEP",
+    "reason": "Letter-by-letter spelling of a pure tech abbreviation."
+  },
+  {
+    "alias": "ess ess aitch",
+    "term": "SSH",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "KEEP",
+    "reason": "Spoken letter-by-letter spelling of SSH; not a natural English phrase."
+  },
+  {
+    "alias": "v p n",
+    "term": "VPN",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "KEEP",
+    "reason": "Letter-by-letter spelling of a pure tech abbreviation."
+  },
+  {
+    "alias": "vee pee en",
+    "term": "VPN",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "KEEP",
+    "reason": "Spoken letter-by-letter spelling of VPN; not a natural English phrase."
+  },
+  {
+    "alias": "d n s",
+    "term": "DNS",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "KEEP",
+    "reason": "Letter-by-letter spelling of a pure tech abbreviation."
+  },
+  {
+    "alias": "dee en ess",
+    "term": "DNS",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "KEEP",
+    "reason": "Spoken letter-by-letter spelling of DNS; not a natural English phrase."
+  },
+  {
+    "alias": "c d n",
+    "term": "CDN",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "KEEP",
+    "reason": "Letter-by-letter spelling of a pure tech abbreviation."
+  },
+  {
+    "alias": "see dee en",
+    "term": "CDN",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "KEEP",
+    "reason": "Spoken letter-by-letter spelling of CDN; not a natural English phrase."
+  },
+  {
+    "alias": "content delivery network",
+    "term": "CDN",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "KEEP",
+    "reason": "Exclusively tech jargon; no non-technical speaker uses this phrase, so it will never appear in ordinary dictation."
+  },
+  {
+    "alias": "t c p",
+    "term": "TCP",
+    "pack": "pack_02_cloud_devops_infra",
+    "verdict": "KEEP",
+    "reason": "Letter-by-letter spelling of a pure tech abbreviation."
+  }
+]

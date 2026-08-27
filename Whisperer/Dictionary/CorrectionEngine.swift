@@ -45,6 +45,11 @@ class CorrectionEngine {
         for entry in entries where entry.isEnabled {
             let incorrect = entry.incorrectForm.lowercased()
 
+            // Drop identity rules at index time — they can never produce a non-equal substitution
+            // because the replacement is literally the same string. Note: incorrectForm is stored
+            // lowercased (see DictionaryEntry.init), so "a" → "A" is NOT identity ("a" != "A").
+            guard incorrect != entry.correctForm else { continue }
+
             // Check if it's a multi-word phrase
             if incorrect.contains(" ") {
                 phraseLookup[incorrect] = entry
@@ -69,49 +74,18 @@ class CorrectionEngine {
 
         // Tokenize the input text while preserving punctuation and spacing
         var result = text
-        var offset = 0
 
-        // First pass: multi-word phrases (longer matches first)
+        // First pass: multi-word phrases (longer matches first).
+        // Ambiguous all-English phrase aliases (e.g. "to do" → TODO, "not a bug" → NOTABUG) are
+        // removed by the LLM data audit rather than blocked here. A phrase-level engine guard was
+        // tried and produced false negatives: phonetic spellings like "java script" → JavaScript
+        // and "type script" → TypeScript use common English tokens and were incorrectly blocked.
         let inputTokens = Set(searchTokens(in: result.lowercased()))
         let candidatePhrases = Set(inputTokens.flatMap { phraseKeysByFirstToken[$0] ?? [] })
         let sortedPhrases = candidatePhrases.sorted { $0.count > $1.count }
         for phrase in sortedPhrases {
             guard let entry = phraseLookup[phrase] else { continue }
-            let replacement = entry.correctForm
-
-            // Case-insensitive search
-            let searchText = result.lowercased()
-            var searchRange = searchText.startIndex..<searchText.endIndex
-
-            while let range = searchText.range(of: phrase, options: .caseInsensitive, range: searchRange) {
-                // Check word boundaries
-                let isWordBoundary = isAtWordBoundary(in: searchText, range: range)
-                if isWordBoundary {
-                    // Get the actual range in the original string
-                    let originalText = String(result[range])
-                    result.replaceSubrange(range, with: replacement)
-
-                    // Only record correction if the text actually changed
-                    if originalText != replacement {
-                        corrections.append((range: range, original: originalText, replacement: replacement, category: entry.category, notes: entry.notes, entryId: entry.id))
-                    }
-
-                    // Adjust search range to continue after this replacement
-                    let newIndex = result.index(range.lowerBound, offsetBy: replacement.count)
-                    if newIndex < result.endIndex {
-                        searchRange = newIndex..<searchText.endIndex
-                    } else {
-                        break
-                    }
-                } else {
-                    // Move past this match
-                    if range.upperBound < searchText.endIndex {
-                        searchRange = range.upperBound..<searchText.endIndex
-                    } else {
-                        break
-                    }
-                }
-            }
+            result = replaceAllOccurrences(in: result, of: phrase, with: entry.correctForm, entry: entry, corrections: &corrections)
         }
 
         // Second pass: compound word segmentation errors (e.g., "post gres" -> "PostgreSQL")
@@ -123,13 +97,27 @@ class CorrectionEngine {
         let words = result.split(whereSeparator: { !$0.isLetter && !$0.isNumber })
         var processedText = result
 
+        // Each distinct word is handled once. `replaceWord` already rewrites *every* occurrence,
+        // so visiting a repeated word again re-scans text that has already been corrected. For an
+        // ordinary entry the repeat visits are harmless no-ops, but an entry whose replacement
+        // contains its own search term (`gpt → GPT model`) matches its own output: "gpt and gpt"
+        // became "GPT model model and GPT model model", one extra expansion per duplicate.
+        // Deduplicating case-insensitively matches `replaceWord`'s own case-insensitive search.
+        var handledWords = Set<String>()
+
         for word in words {
             let wordLower = word.lowercased()
+            guard handledWords.insert(wordLower).inserted else { continue }
             let wordLength = wordLower.count
 
-            // Try exact match first (works for any word length)
+            // Try exact match first (works for any word length).
+            // Safety gate for built-in entries: if the alias is a valid English word, skip.
+            // User-created entries (isBuiltIn == false) always fire — the user explicitly asked for it.
             if let entry = exactLookup[wordLower] {
-                processedText = replaceWord(processedText, word: String(word), entry: entry, corrections: &corrections)
+                let shouldApply = !entry.isBuiltIn || !isValidEnglishAlias(wordLower)
+                if shouldApply {
+                    processedText = replaceWord(processedText, word: String(word), entry: entry, corrections: &corrections)
+                }
                 continue
             }
 
@@ -172,6 +160,13 @@ class CorrectionEngine {
         }
 
         return CorrectionResult(text: processedText, corrections: corrections)
+    }
+
+    /// Returns true if the single-word alias is a valid English word.
+    /// Used to gate built-in exact-match corrections so ordinary words like "closure" or
+    /// "hassle" are never replaced by tech terms in normal dictation.
+    private func isValidEnglishAlias(_ word: String) -> Bool {
+        spellValidator.isLatinWord(word) && spellValidator.isValidEnglishWord(word)
     }
 
     private func searchTokens(in text: String) -> [String] {
@@ -265,37 +260,56 @@ class CorrectionEngine {
     }
 
     private func replaceWord(_ text: String, word: String, entry: DictionaryEntry, corrections: inout [(range: Range<String.Index>, original: String, replacement: String, category: String?, notes: String?, entryId: UUID)]) -> String {
+        replaceAllOccurrences(in: text, of: word, with: entry.correctForm, entry: entry, corrections: &corrections)
+    }
+
+    /// Replaces every word-boundary-respecting, case-insensitive occurrence of `needle`.
+    ///
+    /// Searches the live `result` rather than a `lowercased()` snapshot: a snapshot's
+    /// `String.Index` values are not valid in the original string (`lowercased()` can change the
+    /// character count), and they go stale the moment `replaceSubrange` resizes `result` — which
+    /// crashed with "String index range is out of bounds" on the second occurrence of a term whose
+    /// replacement had a different length. Positions are carried across mutations as integer
+    /// offsets, which stay meaningful after a resize.
+    private func replaceAllOccurrences(
+        in text: String,
+        of needle: String,
+        with replacement: String,
+        entry: DictionaryEntry,
+        corrections: inout [(range: Range<String.Index>, original: String, replacement: String, category: String?, notes: String?, entryId: UUID)]
+    ) -> String {
+        guard !needle.isEmpty else { return text }
+
         var result = text
-        let searchText = result.lowercased()
-        let searchWord = word.lowercased()
-        let replacement = entry.correctForm
-        var searchRange = searchText.startIndex..<searchText.endIndex
+        var searchOffset = 0
 
-        while let range = searchText.range(of: searchWord, options: .literal, range: searchRange) {
-            // Check word boundaries
-            if isAtWordBoundary(in: searchText, range: range) {
-                let originalText = String(result[range])
-                result.replaceSubrange(range, with: replacement)
-
-                if originalText != replacement {
-                    corrections.append((range: range, original: originalText, replacement: replacement, category: entry.category, notes: entry.notes, entryId: entry.id))
-                }
-
-                // Adjust search range
-                let newIndex = result.index(range.lowerBound, offsetBy: replacement.count)
-                if newIndex < result.endIndex {
-                    searchRange = newIndex..<result.endIndex
-                } else {
-                    break
-                }
-            } else {
-                // Move past this match
-                if range.upperBound < searchText.endIndex {
-                    searchRange = range.upperBound..<searchText.endIndex
-                } else {
-                    break
-                }
+        while searchOffset < result.count {
+            let searchStart = result.index(result.startIndex, offsetBy: searchOffset)
+            guard let range = result.range(of: needle, options: .caseInsensitive, range: searchStart..<result.endIndex) else {
+                break
             }
+
+            guard isAtWordBoundary(in: result, range: range) else {
+                let upperOffset = result.distance(from: result.startIndex, to: range.upperBound)
+                // A zero-width or non-advancing match would spin forever.
+                guard upperOffset > searchOffset else { break }
+                searchOffset = upperOffset
+                continue
+            }
+
+            let originalText = String(result[range])
+            let lowerOffset = result.distance(from: result.startIndex, to: range.lowerBound)
+            result.replaceSubrange(range, with: replacement)
+
+            if originalText != replacement {
+                let newLower = result.index(result.startIndex, offsetBy: lowerOffset)
+                let newUpper = result.index(newLower, offsetBy: replacement.count)
+                corrections.append((range: newLower..<newUpper, original: originalText, replacement: replacement, category: entry.category, notes: entry.notes, entryId: entry.id))
+            }
+
+            // An empty replacement leaves the cursor put, but `result` shrank by a non-empty
+            // `needle`, so the loop still terminates against `result.count`.
+            searchOffset = lowerOffset + replacement.count
         }
 
         return result

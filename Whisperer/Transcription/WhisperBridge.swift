@@ -294,6 +294,26 @@ struct WhisperStreamWord: Sendable {
     let probability: Float
 }
 
+/// Why a decode did not run at all — as distinct from a decode that ran and heard nothing.
+///
+/// Exists so callers that persist a decode's output can refuse to treat "the bridge was busy or
+/// gone" as "the audio was silent". See `WhisperBridge.transcribeTimestampedChecked`.
+enum WhisperDecodeUnavailable: Error, LocalizedError {
+    case shuttingDown
+    case notInitialized
+    case lockTimeout
+    case lockFailure(String)
+
+    var errorDescription: String? {
+        switch self {
+        case .shuttingDown:            return "the transcription backend is shutting down"
+        case .notInitialized:          return "the transcription backend is not initialized"
+        case .lockTimeout:             return "the transcription context was busy"
+        case .lockFailure(let detail): return "the transcription context could not be locked: \(detail)"
+        }
+    }
+}
+
 /// Result of one eager streaming decode pass over `WhisperBridge`.
 struct WhisperStreamResult: Sendable {
     let words: [WhisperStreamWord]
@@ -387,6 +407,57 @@ class WhisperBridge: TranscriptionBackend {
 
     private let opState = OSAllocatedUnfairLock(initialState: OpState())
 
+    /// Number of `whisper_full` calls executing anywhere in the process, across all bridges.
+    ///
+    /// Exists for `StuckStateDumper`, which must not run `/usr/bin/sample` while whisper.cpp is
+    /// decoding — `sample` repeatedly suspends every thread in the target, so it turns a decode
+    /// that was merely slow into one that is genuinely frozen for the duration of the dump.
+    /// `AppState.state` is not a sufficient proxy: meeting transcript refine and file
+    /// transcription both decode while the app sits at `.idle`.
+    private static let decodesInFlight = OSAllocatedUnfairLock(initialState: 0)
+
+    /// True while any bridge is inside `whisper_full`.
+    static var isDecoding: Bool { decodesInFlight.withLock { $0 > 0 } }
+
+    /// Observed real-time factor (decode seconds per audio second) for THIS bridge's model.
+    ///
+    /// The health deadline used to be `duration * 0.15` for every bridge on Apple Silicon. That is
+    /// a tiny/dictation-model figure; the meeting refine baseline (large-v3-turbo-q5, 547 MB) runs
+    /// several times slower, so every refine window blew its deadline on arrival and reported
+    /// `deadline=+4.1s` against an 8-10s decode. Seed from model size, then converge on what the
+    /// model actually does on this machine — a fixed table would go stale on new hardware.
+    private let rtfEstimate: OSAllocatedUnfairLock<Double>
+
+    /// Seed RTF from the model file's size. Rough by design; the EMA corrects it within a decode
+    /// or two. Figures are Apple Silicon Metal; Intel CPU decode is ~3x slower across the board.
+    private static func seedRTF(forModelAt path: URL) -> Double {
+        let bytes = (try? FileManager.default.attributesOfItem(atPath: path.path)[.size] as? Int64) ?? nil
+        let mb = Double(bytes ?? 0) / (1024 * 1024)
+        let base: Double
+        switch mb {
+        case ..<120:   base = 0.05   // tiny
+        case ..<300:   base = 0.12   // base / small
+        case ..<700:   base = 0.35   // medium, large-turbo quantized
+        default:       base = 0.60   // large
+        }
+        return WhisperBridge.isAppleSilicon ? base : base * 3.0
+    }
+
+    /// Deadline input for `beginOperation`, in milliseconds.
+    private func estimatedDecodeMs(forAudioSeconds duration: Double) -> Double {
+        // Floor keeps very short clips from getting a deadline so tight that normal model
+        // warm-up reads as a stall.
+        max(750.0, duration * 1000.0 * rtfEstimate.withLock { $0 })
+    }
+
+    /// Fold a completed decode into the RTF estimate. Heavily damped: one pathological window
+    /// (a repetition spiral, a machine under thermal pressure) must not move the deadline much.
+    private func recordObservedRTF(audioSeconds: Double, decodeSeconds: Double) {
+        guard audioSeconds > 0.5, decodeSeconds > 0 else { return }
+        let observed = decodeSeconds / audioSeconds
+        rtfEstimate.withLock { $0 = $0 * 0.8 + observed * 0.2 }
+    }
+
     /// Open a new operation. Returns the freshly assigned id so the caller can log it.
     private func beginOperation(named name: String, estimatedMs: Double, expectedSegments: Int) -> UInt64 {
         opState.withLock {
@@ -447,6 +518,7 @@ class WhisperBridge: TranscriptionBackend {
     init(modelPath: URL, useGPU: Bool = true) throws {
         self.modelPath = modelPath
         self.useGPU = useGPU
+        self.rtfEstimate = OSAllocatedUnfairLock(initialState: WhisperBridge.seedRTF(forModelAt: modelPath))
 
         // Use longer timeouts on Intel Macs
         if WhisperBridge.isAppleSilicon {
@@ -680,7 +752,7 @@ class WhisperBridge: TranscriptionBackend {
 
         // Track operation for HealthManager
         let duration = Double(samples.count) / 16000.0
-        let estimatedMs = duration * 1000.0 * (WhisperBridge.isAppleSilicon ? 0.15 : 0.5)
+        let estimatedMs = estimatedDecodeMs(forAudioSeconds: duration)
         let opID = beginOperation(named: "transcribing", estimatedMs: estimatedMs,
                                   expectedSegments: max(1, Int(duration / 2.0)))
         EventRingBuffer.shared.record(
@@ -808,34 +880,42 @@ class WhisperBridge: TranscriptionBackend {
         // Set up callbacks for chunked pipeline
         let userData = Unmanaged.passUnretained(self).toOpaque()
 
-        if onNewSegment != nil {
-            wparams.new_segment_callback = { ctx, state, nNew, userData in
-                guard let userData = userData, let ctx = ctx else { return }
-                let bridge = Unmanaged<WhisperBridge>.fromOpaque(userData).takeUnretainedValue()
-                // One acquisition for all three: the counter, the segment tally and the deadline
-                // extension are read together by `healthState`, so publishing them separately
-                // lets HealthManager see a bumped counter with a stale deadline.
-                bridge.opState.withLock {
-                    $0.progressCounter &+= 1
-                    $0.segmentCount += 1
-                    $0.deadline = .now + .seconds(4)   // progress arrived — push the deadline out
-                }
+        // Installed UNCONDITIONALLY. This used to be gated on `onNewSegment != nil`, which meant
+        // the health counters only advanced for live dictation — `onNewSegment` is set solely by
+        // `StreamingTranscriber`. Every other consumer (meeting transcript refine, file
+        // transcription) therefore reported zero progress for the whole decode, so `healthState`
+        // took the `elapsed > 8s && segmentCount == 0` branch and declared a perfectly healthy
+        // window `.stalled`. At 10s `HealthManager` dumps, and `StuckStateDumper` runs
+        // `/usr/bin/sample`, which suspends every thread in the process — including this decode.
+        // The watchdog was manufacturing the stall it was reporting. Progress tracking is cheap
+        // and belongs to the operation, not to whether anyone wants the text.
+        wparams.new_segment_callback = { ctx, state, nNew, userData in
+            guard let userData = userData, let ctx = ctx else { return }
+            let bridge = Unmanaged<WhisperBridge>.fromOpaque(userData).takeUnretainedValue()
+            // One acquisition for all three: the counter, the segment tally and the deadline
+            // extension are read together by `healthState`, so publishing them separately
+            // lets HealthManager see a bumped counter with a stale deadline.
+            bridge.opState.withLock {
+                $0.progressCounter &+= 1
+                $0.segmentCount += 1
+                $0.deadline = .now + .seconds(4)   // progress arrived — push the deadline out
+            }
 
-                // Read the latest segments
-                let totalSegments = whisper_full_n_segments(ctx)
-                var newText = ""
-                for i in max(0, totalSegments - nNew)..<totalSegments {
-                    if let segText = whisper_full_get_segment_text(ctx, i) {
-                        newText += String(cString: segText)
-                    }
-                }
-                let trimmed = newText.trimmingCharacters(in: .whitespacesAndNewlines)
-                if !trimmed.isEmpty {
-                    bridge.onNewSegment?(trimmed)
+            // Text extraction is the only part that is actually optional.
+            guard let onNewSegment = bridge.onNewSegment else { return }
+            let totalSegments = whisper_full_n_segments(ctx)
+            var newText = ""
+            for i in max(0, totalSegments - nNew)..<totalSegments {
+                if let segText = whisper_full_get_segment_text(ctx, i) {
+                    newText += String(cString: segText)
                 }
             }
-            wparams.new_segment_callback_user_data = userData
+            let trimmed = newText.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !trimmed.isEmpty {
+                onNewSegment(trimmed)
+            }
         }
+        wparams.new_segment_callback_user_data = userData
 
         // Installed unconditionally. This used to be gated on `shouldAbort == false`, described
         // as "only set abort callback if we might want to abort" — which has the logic exactly
@@ -889,6 +969,24 @@ class WhisperBridge: TranscriptionBackend {
     private func runWhisperFull(ctx: OpaquePointer, samples: [Float], params: whisper_full_params,
                                 initialPrompt: String?, language: TranscriptionLanguage) -> Int32 {
         var wparams = params
+
+        // Every decode in the process funnels through here, so this is the one place that can
+        // answer "is whisper.cpp running right now?" for `StuckStateDumper`. It must not key off
+        // `opState.currentOp`, which is deliberately left stale on the failure path (see below).
+        WhisperBridge.decodesInFlight.withLock { $0 += 1 }
+        let decodeStart = ContinuousClock.now
+        let audioSeconds = Double(samples.count) / 16000.0
+        defer {
+            WhisperBridge.decodesInFlight.withLock { $0 -= 1 }
+            // Feed the health deadline's RTF estimate from what this model actually costs here.
+            // Skipped for aborted decodes: they return early, so their elapsed time describes the
+            // abort latency rather than the model, and folding it in would shrink the deadline.
+            if !abortRequestedDuringCurrentOp {
+                let elapsed = Double((ContinuousClock.now - decodeStart).components.seconds)
+                    + Double((ContinuousClock.now - decodeStart).components.attoseconds) / 1e18
+                recordObservedRTF(audioSeconds: audioSeconds, decodeSeconds: elapsed)
+            }
+        }
 
         // Open the abort epoch as late as possible — immediately before the call whose return
         // code it will be used to interpret — so a code left over from the previous operation
@@ -1016,13 +1114,26 @@ class WhisperBridge: TranscriptionBackend {
     ///            Empty on failure — callers keep their existing text.
     func transcribeTimestamped(samples: [Float], initialPrompt: String? = nil,
                                language: TranscriptionLanguage = .auto) -> [WhisperTimedSegment] {
+        (try? transcribeTimestampedChecked(samples: samples, initialPrompt: initialPrompt, language: language)) ?? []
+    }
+
+    /// Same decode, but a failure to *run* is an error instead of an empty array.
+    ///
+    /// `transcribeTimestamped` collapses four outcomes into `[]`: the bridge is shutting down, it
+    /// was never initialized, the context lock timed out, and the audio genuinely contained no
+    /// speech. Callers that persist the result cannot tell them apart — the meeting refiner
+    /// logged "window decoded to silence" and marked the window handled when in fact no decode
+    /// had happened, so a lock timeout quietly blanked a card. Only the last case returns an
+    /// empty array here; the rest throw.
+    func transcribeTimestampedChecked(samples: [Float], initialPrompt: String? = nil,
+                                      language: TranscriptionLanguage = .auto) throws -> [WhisperTimedSegment] {
         guard !isShuttingDown else {
             Logger.warning("Timestamped transcription skipped - WhisperBridge is shutting down", subsystem: .transcription)
-            return []
+            throw WhisperDecodeUnavailable.shuttingDown
         }
         guard isInitialized else {
             Logger.warning("Timestamped transcription skipped - WhisperBridge not initialized", subsystem: .transcription)
-            return []
+            throw WhisperDecodeUnavailable.notInitialized
         }
 
         do {
@@ -1032,10 +1143,10 @@ class WhisperBridge: TranscriptionBackend {
             }
         } catch SafeLockError.timeout {
             Logger.error("Failed to acquire context lock within \(lockTimeout) seconds - possible deadlock", subsystem: .transcription)
-            return []
+            throw WhisperDecodeUnavailable.lockTimeout
         } catch {
             Logger.error("Lock acquisition error: \(error.localizedDescription)", subsystem: .transcription)
-            return []
+            throw WhisperDecodeUnavailable.lockFailure(error.localizedDescription)
         }
     }
 
@@ -1050,7 +1161,7 @@ class WhisperBridge: TranscriptionBackend {
 
         // Track operation for HealthManager
         let duration = Double(samples.count) / 16000.0
-        let estimatedMs = duration * 1000.0 * (WhisperBridge.isAppleSilicon ? 0.15 : 0.5)
+        let estimatedMs = estimatedDecodeMs(forAudioSeconds: duration)
         _ = beginOperation(named: "transcribing", estimatedMs: estimatedMs,
                            expectedSegments: max(1, Int(duration / 2.0)))
 

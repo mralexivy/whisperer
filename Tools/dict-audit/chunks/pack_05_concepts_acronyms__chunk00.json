@@ -1,0 +1,1153 @@
+[
+  {
+    "alias": "a p i",
+    "term": "API",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "ay pee eye",
+    "term": "API",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "a. p. i.",
+    "term": "API",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "s d k",
+    "term": "SDK",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "ess dee kay",
+    "term": "SDK",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "c l i",
+    "term": "CLI",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "see el eye",
+    "term": "CLI",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "command line interface",
+    "term": "CLI",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "g u i",
+    "term": "GUI",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "gee you eye",
+    "term": "GUI",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "gooey",
+    "term": "GUI",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": []
+  },
+  {
+    "alias": "i d e",
+    "term": "IDE",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "eye dee ee",
+    "term": "IDE",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": []
+  },
+  {
+    "alias": "integrated development environment",
+    "term": "IDE",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": []
+  },
+  {
+    "alias": "sass",
+    "term": "SaaS",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": [
+      "all_english",
+      "single_word_english"
+    ]
+  },
+  {
+    "alias": "s a a s",
+    "term": "SaaS",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "software as a service",
+    "term": "SaaS",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "pass",
+    "term": "PaaS",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": [
+      "all_english",
+      "single_word_english"
+    ]
+  },
+  {
+    "alias": "p a a s",
+    "term": "PaaS",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "platform as a service",
+    "term": "PaaS",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "eye as",
+    "term": "IaaS",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "i a a s",
+    "term": "IaaS",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "infrastructure as a service",
+    "term": "IaaS",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "dev ops",
+    "term": "DevOps",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": []
+  },
+  {
+    "alias": "dev op s",
+    "term": "DevOps",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": []
+  },
+  {
+    "alias": "dev sec ops",
+    "term": "DevSecOps",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": []
+  },
+  {
+    "alias": "dev seck ops",
+    "term": "DevSecOps",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": []
+  },
+  {
+    "alias": "m l ops",
+    "term": "MLOps",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": []
+  },
+  {
+    "alias": "em el ops",
+    "term": "MLOps",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": []
+  },
+  {
+    "alias": "a i ops",
+    "term": "AIOps",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": []
+  },
+  {
+    "alias": "ay eye ops",
+    "term": "AIOps",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": []
+  },
+  {
+    "alias": "git ops",
+    "term": "GitOps",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": []
+  },
+  {
+    "alias": "data ops",
+    "term": "DataOps",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": []
+  },
+  {
+    "alias": "fin ops",
+    "term": "FinOps",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": []
+  },
+  {
+    "alias": "s r e",
+    "term": "SRE",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "ess are ee",
+    "term": "SRE",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": []
+  },
+  {
+    "alias": "site reliability engineering",
+    "term": "SRE",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "s l a",
+    "term": "SLA",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "ess el ay",
+    "term": "SLA",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "service level agreement",
+    "term": "SLA",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "s l o",
+    "term": "SLO",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "ess el oh",
+    "term": "SLO",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "service level objective",
+    "term": "SLO",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "s l i",
+    "term": "SLI",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "ess el eye",
+    "term": "SLI",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "service level indicator",
+    "term": "SLI",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "m t t r",
+    "term": "MTTR",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "mean time to recovery",
+    "term": "MTTR",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "m t t f",
+    "term": "MTTF",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "mean time to failure",
+    "term": "MTTF",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "r p o",
+    "term": "RPO",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "are pee oh",
+    "term": "RPO",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "recovery point objective",
+    "term": "RPO",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "r t o",
+    "term": "RTO",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "are tee oh",
+    "term": "RTO",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "recovery time objective",
+    "term": "RTO",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "r back",
+    "term": "RBAC",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "are back",
+    "term": "RBAC",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "role based access control",
+    "term": "RBAC",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "a back",
+    "term": "ABAC",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "attribute based access control",
+    "term": "ABAC",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "a c l",
+    "term": "ACL",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "ay see el",
+    "term": "ACL",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "access control list",
+    "term": "ACL",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "cores",
+    "term": "CORS",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": []
+  },
+  {
+    "alias": "c o r s",
+    "term": "CORS",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "cross origin resource sharing",
+    "term": "CORS",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": []
+  },
+  {
+    "alias": "c s r f",
+    "term": "CSRF",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "sea surf",
+    "term": "CSRF",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "cross site request forgery",
+    "term": "CSRF",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "x s s",
+    "term": "XSS",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "cross site scripting",
+    "term": "XSS",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": []
+  },
+  {
+    "alias": "sequel injection",
+    "term": "SQL injection",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "s q l injection",
+    "term": "SQL injection",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "d dos",
+    "term": "DDoS",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "dee dos",
+    "term": "DDoS",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "distributed denial of service",
+    "term": "DDoS",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "w a f",
+    "term": "WAF",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "waf",
+    "term": "WAF",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": [
+      "all_english",
+      "single_word_english",
+      "identity",
+      "substring_of_term"
+    ]
+  },
+  {
+    "alias": "web application firewall",
+    "term": "WAF",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "seem",
+    "term": "SIEM",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": [
+      "all_english",
+      "single_word_english"
+    ]
+  },
+  {
+    "alias": "s i e m",
+    "term": "SIEM",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "soar",
+    "term": "SOAR",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": [
+      "all_english",
+      "single_word_english",
+      "identity",
+      "substring_of_term"
+    ]
+  },
+  {
+    "alias": "s o a r",
+    "term": "SOAR",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "sock",
+    "term": "SOC",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": [
+      "all_english",
+      "single_word_english"
+    ]
+  },
+  {
+    "alias": "s o c",
+    "term": "SOC",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": [
+      "all_english",
+      "conflict"
+    ]
+  },
+  {
+    "alias": "security operations center",
+    "term": "SOC",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": []
+  },
+  {
+    "alias": "pen test",
+    "term": "pentest",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "penetration test",
+    "term": "pentest",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "c v e",
+    "term": "CVE",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "see vee ee",
+    "term": "CVE",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": []
+  },
+  {
+    "alias": "oh wasp",
+    "term": "OWASP",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "o w a s p",
+    "term": "OWASP",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "oh auth",
+    "term": "OAuth",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": []
+  },
+  {
+    "alias": "o auth",
+    "term": "OAuth",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": []
+  },
+  {
+    "alias": "s s o",
+    "term": "SSO",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "ess ess oh",
+    "term": "SSO",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "single sign on",
+    "term": "SSO",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "m f a",
+    "term": "MFA",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "em ef ay",
+    "term": "MFA",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": []
+  },
+  {
+    "alias": "multi factor authentication",
+    "term": "MFA",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": []
+  },
+  {
+    "alias": "two f a",
+    "term": "2FA",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "two factor authentication",
+    "term": "2FA",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "t o t p",
+    "term": "TOTP",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "time based one time password",
+    "term": "TOTP",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "p k i",
+    "term": "PKI",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "pee kay eye",
+    "term": "PKI",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "public key infrastructure",
+    "term": "PKI",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "r s a",
+    "term": "RSA",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "are ess ay",
+    "term": "RSA",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "a e s",
+    "term": "AES",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "ay ee ess",
+    "term": "AES",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": []
+  },
+  {
+    "alias": "s h a",
+    "term": "SHA",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "shaw",
+    "term": "SHA",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": [
+      "all_english",
+      "single_word_english"
+    ]
+  },
+  {
+    "alias": "shaw 256",
+    "term": "SHA-256",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": [
+      "all_english",
+      "single_word_english"
+    ]
+  },
+  {
+    "alias": "sha 256",
+    "term": "SHA-256",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": [
+      "all_english",
+      "single_word_english"
+    ]
+  },
+  {
+    "alias": "m d 5",
+    "term": "MD5",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "em dee five",
+    "term": "MD5",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "u u i d",
+    "term": "UUID",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "you you eye dee",
+    "term": "UUID",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "g u i d",
+    "term": "GUID",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "goo id",
+    "term": "GUID",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "gwid",
+    "term": "GUID",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": []
+  },
+  {
+    "alias": "reg ex",
+    "term": "regex",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "regular expression",
+    "term": "regex",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": [
+      "all_english",
+      "conflict"
+    ]
+  },
+  {
+    "alias": "reg exp",
+    "term": "RegExp",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": []
+  },
+  {
+    "alias": "regular expression",
+    "term": "RegExp",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": [
+      "all_english",
+      "conflict"
+    ]
+  },
+  {
+    "alias": "chrome",
+    "term": "cron",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": [
+      "all_english",
+      "single_word_english"
+    ]
+  },
+  {
+    "alias": "cron job",
+    "term": "cron",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": [
+      "conflict"
+    ]
+  },
+  {
+    "alias": "cron tab",
+    "term": "crontab",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": []
+  },
+  {
+    "alias": "chrome tab",
+    "term": "crontab",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "dee mon",
+    "term": "daemon",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "day mon",
+    "term": "daemon",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "mew tex",
+    "term": "mutex",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": []
+  },
+  {
+    "alias": "mutual exclusion",
+    "term": "mutex",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "sem a four",
+    "term": "semaphore",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": []
+  },
+  {
+    "alias": "semma for",
+    "term": "semaphore",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": []
+  },
+  {
+    "alias": "dead lock",
+    "term": "deadlock",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "race condition",
+    "term": "race condition",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": [
+      "all_english",
+      "identity",
+      "substring_of_term"
+    ]
+  },
+  {
+    "alias": "thread pool",
+    "term": "thread pool",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": [
+      "all_english",
+      "identity",
+      "substring_of_term"
+    ]
+  },
+  {
+    "alias": "a sync",
+    "term": "async",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "ay sink",
+    "term": "async",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "a wait",
+    "term": "await",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "ah weight",
+    "term": "await",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "call back",
+    "term": "callback",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "promise js",
+    "term": "promise",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": []
+  },
+  {
+    "alias": "co routine",
+    "term": "coroutine",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": []
+  },
+  {
+    "alias": "core oo teen",
+    "term": "coroutine",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": []
+  },
+  {
+    "alias": "go routine",
+    "term": "goroutine",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "gore oo teen",
+    "term": "goroutine",
+    "pack": "pack_05_concepts_acronyms",
+    "flags": []
+  }
+]

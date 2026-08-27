@@ -1,0 +1,170 @@
+[
+  {
+    "alias": "high through put",
+    "term": "high throughput",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "q p s",
+    "term": "QPS",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "queue pee ess",
+    "term": "QPS",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "queries per second",
+    "term": "QPS",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "flags": []
+  },
+  {
+    "alias": "r p s",
+    "term": "RPS",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "are pee ess",
+    "term": "RPS",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "requests per second",
+    "term": "RPS",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "flags": []
+  },
+  {
+    "alias": "t p s",
+    "term": "TPS",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "tee pee ess",
+    "term": "TPS",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "transactions per second",
+    "term": "TPS",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "flags": []
+  },
+  {
+    "alias": "p fifty",
+    "term": "P50",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "pee fifty",
+    "term": "P50",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "50th percentile",
+    "term": "P50",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "p ninety",
+    "term": "P90",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "pee ninety",
+    "term": "P90",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "90th percentile",
+    "term": "P90",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "p ninety five",
+    "term": "P95",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "pee ninety five",
+    "term": "P95",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "p ninety nine",
+    "term": "P99",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "pee ninety nine",
+    "term": "P99",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "per cent ile",
+    "term": "percentile",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "flags": []
+  },
+  {
+    "alias": "tail lay ten see",
+    "term": "tail latency",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "flags": [
+      "all_english"
+    ]
+  }
+]

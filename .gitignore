@@ -72,3 +72,6 @@ __pycache__/
 
 # Pre-gold mmBERT data snapshot — local backup, not history
 Tools/mmbert/data.backup-pre-gold/
+
+# graphify knowledge-graph artifacts — generated, rebuild with /graphify
+graphify-out/

@@ -1,0 +1,2749 @@
+[
+  {
+    "alias": "cooper netties",
+    "term": "Kubernetes",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": []
+  },
+  {
+    "alias": "cooper net ease",
+    "term": "Kubernetes",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "kuber net ease",
+    "term": "Kubernetes",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": []
+  },
+  {
+    "alias": "kuber nay tees",
+    "term": "Kubernetes",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": []
+  },
+  {
+    "alias": "cube or netties",
+    "term": "Kubernetes",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": []
+  },
+  {
+    "alias": "cube or net ease",
+    "term": "Kubernetes",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "k8s",
+    "term": "Kubernetes",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "k eights",
+    "term": "K8s",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": []
+  },
+  {
+    "alias": "k eight s",
+    "term": "K8s",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "kates",
+    "term": "K8s",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": []
+  },
+  {
+    "alias": "docker container",
+    "term": "Docker",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "dock er",
+    "term": "Docker",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "docker file",
+    "term": "Dockerfile",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "dock er file",
+    "term": "Dockerfile",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "pod man",
+    "term": "Podman",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "pot man",
+    "term": "Podman",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "container d",
+    "term": "Containerd",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "container dee",
+    "term": "Containerd",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "helm chart",
+    "term": "Helm",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "is tee oh",
+    "term": "Istio",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "ist io",
+    "term": "Istio",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "east ee oh",
+    "term": "Istio",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": []
+  },
+  {
+    "alias": "en voy",
+    "term": "Envoy",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": []
+  },
+  {
+    "alias": "envoy proxy",
+    "term": "Envoy",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "linker d",
+    "term": "Linkerd",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "link erd",
+    "term": "Linkerd",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "linked",
+    "term": "Linkerd",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": [
+      "all_english",
+      "single_word_english"
+    ]
+  },
+  {
+    "alias": "argo cd",
+    "term": "ArgoCD",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": []
+  },
+  {
+    "alias": "argo see dee",
+    "term": "ArgoCD",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "are go cd",
+    "term": "ArgoCD",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": []
+  },
+  {
+    "alias": "flux cd",
+    "term": "Flux",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": []
+  },
+  {
+    "alias": "customize",
+    "term": "Kustomize",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": []
+  },
+  {
+    "alias": "k customize",
+    "term": "Kustomize",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": []
+  },
+  {
+    "alias": "kustom eyes",
+    "term": "Kustomize",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": []
+  },
+  {
+    "alias": "a w s",
+    "term": "AWS",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "ay double you ess",
+    "term": "AWS",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "amazon web services",
+    "term": "AWS",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": []
+  },
+  {
+    "alias": "e c 2",
+    "term": "Amazon EC2",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "e c two",
+    "term": "Amazon EC2",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "ee see two",
+    "term": "Amazon EC2",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": []
+  },
+  {
+    "alias": "easy too",
+    "term": "Amazon EC2",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "s 3",
+    "term": "Amazon S3",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": [
+      "all_english",
+      "single_word_english"
+    ]
+  },
+  {
+    "alias": "s three",
+    "term": "Amazon S3",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "ess three",
+    "term": "Amazon S3",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "e c s",
+    "term": "Amazon ECS",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": [
+      "all_english",
+      "conflict"
+    ]
+  },
+  {
+    "alias": "ee see ess",
+    "term": "Amazon ECS",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": [
+      "conflict"
+    ]
+  },
+  {
+    "alias": "e k s",
+    "term": "Amazon EKS",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": [
+      "all_english",
+      "conflict"
+    ]
+  },
+  {
+    "alias": "ee kay ess",
+    "term": "Amazon EKS",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": [
+      "conflict"
+    ]
+  },
+  {
+    "alias": "ex",
+    "term": "Amazon EKS",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": [
+      "all_english",
+      "single_word_english"
+    ]
+  },
+  {
+    "alias": "r d s",
+    "term": "Amazon RDS",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "are dee ess",
+    "term": "Amazon RDS",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "s q s",
+    "term": "Amazon SQS",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "ess queue ess",
+    "term": "Amazon SQS",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "s n s",
+    "term": "Amazon SNS",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "ess en ess",
+    "term": "Amazon SNS",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "lambda",
+    "term": "Amazon Lambda",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": [
+      "all_english",
+      "single_word_english",
+      "substring_of_term"
+    ]
+  },
+  {
+    "alias": "aws lambda",
+    "term": "Amazon Lambda",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": []
+  },
+  {
+    "alias": "dynamo db",
+    "term": "Amazon DynamoDB",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": []
+  },
+  {
+    "alias": "dynamo d b",
+    "term": "Amazon DynamoDB",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "dynamodb",
+    "term": "Amazon DynamoDB",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": [
+      "substring_of_term"
+    ]
+  },
+  {
+    "alias": "cloud front",
+    "term": "Amazon CloudFront",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "cloud watch",
+    "term": "Amazon CloudWatch",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "cog knee toe",
+    "term": "Amazon Cognito",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "cognito",
+    "term": "Amazon Cognito",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": [
+      "substring_of_term"
+    ]
+  },
+  {
+    "alias": "sage maker",
+    "term": "Amazon SageMaker",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": [
+      "all_english",
+      "conflict"
+    ]
+  },
+  {
+    "alias": "sage make her",
+    "term": "Amazon SageMaker",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": [
+      "all_english",
+      "conflict"
+    ]
+  },
+  {
+    "alias": "bed rock",
+    "term": "Amazon Bedrock",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "a roar a",
+    "term": "Amazon Aurora",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "aurora db",
+    "term": "Amazon Aurora",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": []
+  },
+  {
+    "alias": "red shift",
+    "term": "Amazon Redshift",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "kin ee sis",
+    "term": "Amazon Kinesis",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": []
+  },
+  {
+    "alias": "genesis",
+    "term": "Amazon Kinesis",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": [
+      "all_english",
+      "single_word_english"
+    ]
+  },
+  {
+    "alias": "elastic cache",
+    "term": "Amazon ElastiCache",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "elastic ash",
+    "term": "Amazon ElastiCache",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "route 53",
+    "term": "Amazon Route 53",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": [
+      "all_english",
+      "single_word_english",
+      "substring_of_term"
+    ]
+  },
+  {
+    "alias": "route fifty three",
+    "term": "Amazon Route 53",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "v p c",
+    "term": "Amazon VPC",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": [
+      "all_english",
+      "conflict"
+    ]
+  },
+  {
+    "alias": "vee pee see",
+    "term": "Amazon VPC",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": [
+      "all_english",
+      "conflict"
+    ]
+  },
+  {
+    "alias": "i a m",
+    "term": "Amazon IAM",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "i am",
+    "term": "Amazon IAM",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "eye ay em",
+    "term": "Amazon IAM",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "cloud formation",
+    "term": "Amazon CloudFormation",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "event bridge",
+    "term": "Amazon EventBridge",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "step functions",
+    "term": "Amazon Step Functions",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": [
+      "substring_of_term"
+    ]
+  },
+  {
+    "alias": "as your",
+    "term": "Azure",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "ash your",
+    "term": "Azure",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "ay zure",
+    "term": "Azure",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": []
+  },
+  {
+    "alias": "azshur",
+    "term": "Azure",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": []
+  },
+  {
+    "alias": "azure dev ops",
+    "term": "Azure DevOps",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": []
+  },
+  {
+    "alias": "azure function",
+    "term": "Azure Functions",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": [
+      "all_english",
+      "substring_of_term"
+    ]
+  },
+  {
+    "alias": "cosmos db",
+    "term": "Azure Cosmos DB",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": [
+      "substring_of_term"
+    ]
+  },
+  {
+    "alias": "cosmos d b",
+    "term": "Azure Cosmos DB",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "blob storage",
+    "term": "Azure Blob Storage",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": [
+      "all_english",
+      "substring_of_term"
+    ]
+  },
+  {
+    "alias": "a k s",
+    "term": "Azure AKS",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": [
+      "all_english",
+      "conflict"
+    ]
+  },
+  {
+    "alias": "ay kay ess",
+    "term": "Azure AKS",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": [
+      "all_english",
+      "conflict"
+    ]
+  },
+  {
+    "alias": "azure a d",
+    "term": "Azure AD",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "azure active directory",
+    "term": "Azure AD",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "entra i d",
+    "term": "Entra ID",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": []
+  },
+  {
+    "alias": "entra eye dee",
+    "term": "Entra ID",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": []
+  },
+  {
+    "alias": "enter a id",
+    "term": "Entra ID",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "g c p",
+    "term": "GCP",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "gee see pee",
+    "term": "GCP",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "google cloud platform",
+    "term": "GCP",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": [
+      "conflict"
+    ]
+  },
+  {
+    "alias": "gee cloud",
+    "term": "Google Cloud",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "google cloud platform",
+    "term": "Google Cloud",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": [
+      "conflict"
+    ]
+  },
+  {
+    "alias": "big query",
+    "term": "BigQuery",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "big quarry",
+    "term": "BigQuery",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "cloud run",
+    "term": "Cloud Run",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": [
+      "all_english",
+      "identity",
+      "substring_of_term"
+    ]
+  },
+  {
+    "alias": "cloud function",
+    "term": "Cloud Functions",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": [
+      "all_english",
+      "substring_of_term"
+    ]
+  },
+  {
+    "alias": "fire store",
+    "term": "Firestore",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "fire stoor",
+    "term": "Firestore",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": []
+  },
+  {
+    "alias": "fire base",
+    "term": "Firebase",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "fire bays",
+    "term": "Firebase",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": []
+  },
+  {
+    "alias": "pub sub",
+    "term": "Pub/Sub",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": [
+      "all_english",
+      "conflict"
+    ]
+  },
+  {
+    "alias": "pub sub",
+    "term": "Pub/Sub",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": [
+      "all_english",
+      "conflict"
+    ]
+  },
+  {
+    "alias": "ver sell",
+    "term": "Vercel",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": []
+  },
+  {
+    "alias": "verse el",
+    "term": "Vercel",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "ver sel",
+    "term": "Vercel",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": []
+  },
+  {
+    "alias": "vercell",
+    "term": "Vercel",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": []
+  },
+  {
+    "alias": "net li fy",
+    "term": "Netlify",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": []
+  },
+  {
+    "alias": "net lify",
+    "term": "Netlify",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": []
+  },
+  {
+    "alias": "net lih fie",
+    "term": "Netlify",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": []
+  },
+  {
+    "alias": "cloud flare",
+    "term": "Cloudflare",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "cloud flair",
+    "term": "Cloudflare",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "cloud flare workers",
+    "term": "Cloudflare Workers",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": []
+  },
+  {
+    "alias": "cloud flare r two",
+    "term": "Cloudflare R2",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "r 2",
+    "term": "Cloudflare R2",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": [
+      "all_english",
+      "single_word_english"
+    ]
+  },
+  {
+    "alias": "digital ocean",
+    "term": "DigitalOcean",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "digital o shin",
+    "term": "DigitalOcean",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "lin ode",
+    "term": "Linode",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "lie node",
+    "term": "Linode",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "vulture",
+    "term": "Vultr",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": [
+      "all_english",
+      "single_word_english"
+    ]
+  },
+  {
+    "alias": "vul ter",
+    "term": "Vultr",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": []
+  },
+  {
+    "alias": "hets ner",
+    "term": "Hetzner",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": []
+  },
+  {
+    "alias": "hetzner cloud",
+    "term": "Hetzner",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": []
+  },
+  {
+    "alias": "fly io",
+    "term": "Fly.io",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "fly i o",
+    "term": "Fly.io",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "rail way",
+    "term": "Railway",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "railway app",
+    "term": "Railway",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": []
+  },
+  {
+    "alias": "render com",
+    "term": "Render",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": []
+  },
+  {
+    "alias": "super base",
+    "term": "Supabase",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "soup a base",
+    "term": "Supabase",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "super bays",
+    "term": "Supabase",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": []
+  },
+  {
+    "alias": "planet scale",
+    "term": "PlanetScale",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "planet scaled",
+    "term": "PlanetScale",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "neon db",
+    "term": "Neon",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": []
+  },
+  {
+    "alias": "neon database",
+    "term": "Neon",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": []
+  },
+  {
+    "alias": "up stash",
+    "term": "Upstash",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "up stache",
+    "term": "Upstash",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": []
+  },
+  {
+    "alias": "terra form",
+    "term": "Terraform",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": []
+  },
+  {
+    "alias": "tear a form",
+    "term": "Terraform",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "terra formed",
+    "term": "Terraform",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": []
+  },
+  {
+    "alias": "open tofu",
+    "term": "OpenTofu",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "open toe foo",
+    "term": "OpenTofu",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "poo loo me",
+    "term": "Pulumi",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": []
+  },
+  {
+    "alias": "pull oo me",
+    "term": "Pulumi",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": []
+  },
+  {
+    "alias": "puh loo mee",
+    "term": "Pulumi",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": []
+  },
+  {
+    "alias": "ann sible",
+    "term": "Ansible",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": []
+  },
+  {
+    "alias": "an suh bull",
+    "term": "Ansible",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": []
+  },
+  {
+    "alias": "chef automation",
+    "term": "Chef",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": []
+  },
+  {
+    "alias": "puppet automation",
+    "term": "Puppet",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": []
+  },
+  {
+    "alias": "salt stack",
+    "term": "SaltStack",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "vague rant",
+    "term": "Vagrant",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "pack er",
+    "term": "Packer",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "jenk ins",
+    "term": "Jenkins",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": []
+  },
+  {
+    "alias": "jenkens",
+    "term": "Jenkins",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": []
+  },
+  {
+    "alias": "git lab ci",
+    "term": "GitLab CI",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": []
+  },
+  {
+    "alias": "git lab see eye",
+    "term": "GitLab CI",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "git hub actions",
+    "term": "GitHub Actions",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": []
+  },
+  {
+    "alias": "github action",
+    "term": "GitHub Actions",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": [
+      "substring_of_term"
+    ]
+  },
+  {
+    "alias": "circle ci",
+    "term": "CircleCI",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": []
+  },
+  {
+    "alias": "circle see eye",
+    "term": "CircleCI",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "travis ci",
+    "term": "Travis CI",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": [
+      "identity",
+      "substring_of_term"
+    ]
+  },
+  {
+    "alias": "travis see eye",
+    "term": "Travis CI",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "drone see eye",
+    "term": "Drone CI",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "team city",
+    "term": "TeamCity",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "build kite",
+    "term": "Buildkite",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "c i c d",
+    "term": "CI/CD",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "see eye see dee",
+    "term": "CI/CD",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "ci cd",
+    "term": "CI/CD",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": []
+  },
+  {
+    "alias": "continuous integration continuous deployment",
+    "term": "CI/CD",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "engine x",
+    "term": "Nginx",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "engine ex",
+    "term": "Nginx",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "en gin x",
+    "term": "Nginx",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "en jin ex",
+    "term": "Nginx",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "a patchy",
+    "term": "Apache",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "a patch ee",
+    "term": "Apache",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": []
+  },
+  {
+    "alias": "caddy server",
+    "term": "Caddy",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "traffic",
+    "term": "Traefik",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": [
+      "all_english",
+      "single_word_english"
+    ]
+  },
+  {
+    "alias": "tray fick",
+    "term": "Traefik",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": []
+  },
+  {
+    "alias": "tray feek",
+    "term": "Traefik",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": []
+  },
+  {
+    "alias": "h a proxy",
+    "term": "HAProxy",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "ha proxy",
+    "term": "HAProxy",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "aitch ay proxy",
+    "term": "HAProxy",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "kong gateway",
+    "term": "Kong",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": []
+  },
+  {
+    "alias": "kong api",
+    "term": "Kong",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": []
+  },
+  {
+    "alias": "pro me thee us",
+    "term": "Prometheus",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "prom ee thee us",
+    "term": "Prometheus",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": []
+  },
+  {
+    "alias": "graph ana",
+    "term": "Grafana",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "gra fauna",
+    "term": "Grafana",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "gra fah na",
+    "term": "Grafana",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": []
+  },
+  {
+    "alias": "data dog",
+    "term": "Datadog",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "new relick",
+    "term": "New Relic",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "new rellick",
+    "term": "New Relic",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": []
+  },
+  {
+    "alias": "splunked",
+    "term": "Splunk",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": []
+  },
+  {
+    "alias": "elk stack",
+    "term": "ELK Stack",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": [
+      "all_english",
+      "identity",
+      "substring_of_term"
+    ]
+  },
+  {
+    "alias": "e l k stack",
+    "term": "ELK Stack",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "elastic search",
+    "term": "Elasticsearch",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "elastic searched",
+    "term": "Elasticsearch",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": []
+  },
+  {
+    "alias": "log stash",
+    "term": "Logstash",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "log stache",
+    "term": "Logstash",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": []
+  },
+  {
+    "alias": "ki bah na",
+    "term": "Kibana",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": []
+  },
+  {
+    "alias": "key bana",
+    "term": "Kibana",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "kib ana",
+    "term": "Kibana",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": []
+  },
+  {
+    "alias": "open telemetry",
+    "term": "OpenTelemetry",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "open tell emetry",
+    "term": "OpenTelemetry",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": []
+  },
+  {
+    "alias": "otel",
+    "term": "OpenTelemetry",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": []
+  },
+  {
+    "alias": "oh tell",
+    "term": "OTel",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "o tel",
+    "term": "OTel",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": []
+  },
+  {
+    "alias": "yay ger",
+    "term": "Jaeger",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": []
+  },
+  {
+    "alias": "jay ger",
+    "term": "Jaeger",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "jaegar",
+    "term": "Jaeger",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": []
+  },
+  {
+    "alias": "zip kin",
+    "term": "Zipkin",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "pager duty",
+    "term": "PagerDuty",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": [
+      "all_english",
+      "conflict"
+    ]
+  },
+  {
+    "alias": "page or duty",
+    "term": "PagerDuty",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "ops genie",
+    "term": "OpsGenie",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": []
+  },
+  {
+    "alias": "ops jeannie",
+    "term": "OpsGenie",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": []
+  },
+  {
+    "alias": "sentry io",
+    "term": "Sentry",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "honey comb",
+    "term": "Honeycomb",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "low key",
+    "term": "Loki",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "loki grafana",
+    "term": "Loki",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": []
+  },
+  {
+    "alias": "hashicorp vault",
+    "term": "Vault",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": []
+  },
+  {
+    "alias": "vault secrets",
+    "term": "Vault",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": []
+  },
+  {
+    "alias": "hashi corp",
+    "term": "HashiCorp",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": []
+  },
+  {
+    "alias": "hashy corp",
+    "term": "HashiCorp",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "hash ee corp",
+    "term": "HashiCorp",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": []
+  },
+  {
+    "alias": "consul hashicorp",
+    "term": "Consul",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": []
+  },
+  {
+    "alias": "nomad hashicorp",
+    "term": "Nomad",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": []
+  },
+  {
+    "alias": "et cd",
+    "term": "etcd",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": []
+  },
+  {
+    "alias": "e t c d",
+    "term": "etcd",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "et see dee",
+    "term": "etcd",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": []
+  },
+  {
+    "alias": "zoo keeper",
+    "term": "ZooKeeper",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "zookeeper",
+    "term": "ZooKeeper",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": [
+      "identity",
+      "substring_of_term"
+    ]
+  },
+  {
+    "alias": "rabbit m q",
+    "term": "RabbitMQ",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "rabbit mq",
+    "term": "RabbitMQ",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": []
+  },
+  {
+    "alias": "rabbit em queue",
+    "term": "RabbitMQ",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "kafka",
+    "term": "Apache Kafka",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": [
+      "all_english",
+      "single_word_english",
+      "substring_of_term"
+    ]
+  },
+  {
+    "alias": "kaf ka",
+    "term": "Apache Kafka",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": [
+      "all_english",
+      "conflict"
+    ]
+  },
+  {
+    "alias": "kaf ka",
+    "term": "Kafka",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": [
+      "all_english",
+      "conflict"
+    ]
+  },
+  {
+    "alias": "cough ka",
+    "term": "Kafka",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "nats messaging",
+    "term": "NATS",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": []
+  },
+  {
+    "alias": "gnats",
+    "term": "NATS",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": []
+  },
+  {
+    "alias": "red is",
+    "term": "Redis",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "reddis",
+    "term": "Redis",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": []
+  },
+  {
+    "alias": "read iss",
+    "term": "Redis",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": []
+  },
+  {
+    "alias": "mem cached",
+    "term": "Memcached",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": []
+  },
+  {
+    "alias": "mem cash d",
+    "term": "Memcached",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "mem cashed",
+    "term": "Memcached",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": []
+  },
+  {
+    "alias": "val key",
+    "term": "Valkey",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "valley key",
+    "term": "Valkey",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "min io",
+    "term": "MinIO",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "mini oh",
+    "term": "MinIO",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": []
+  },
+  {
+    "alias": "min i o",
+    "term": "MinIO",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "sef",
+    "term": "Ceph",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": []
+  },
+  {
+    "alias": "seff",
+    "term": "Ceph",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": []
+  },
+  {
+    "alias": "gluster fs",
+    "term": "GlusterFS",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": []
+  },
+  {
+    "alias": "cluster fs",
+    "term": "GlusterFS",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": []
+  },
+  {
+    "alias": "l dap",
+    "term": "LDAP",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "el dap",
+    "term": "LDAP",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "l d a p",
+    "term": "LDAP",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "oh auth",
+    "term": "OAuth",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": []
+  },
+  {
+    "alias": "o auth",
+    "term": "OAuth",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": []
+  },
+  {
+    "alias": "o off",
+    "term": "OAuth",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "oh auth two",
+    "term": "OAuth2",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": []
+  },
+  {
+    "alias": "o auth 2",
+    "term": "OAuth2",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": []
+  },
+  {
+    "alias": "o i d c",
+    "term": "OIDC",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "oh eye dee see",
+    "term": "OIDC",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "oy dc",
+    "term": "OIDC",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": []
+  },
+  {
+    "alias": "sam el",
+    "term": "SAML",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "s a m l",
+    "term": "SAML",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "j w t",
+    "term": "JWT",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "jot",
+    "term": "JWT",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": [
+      "all_english",
+      "single_word_english"
+    ]
+  },
+  {
+    "alias": "jay double you tee",
+    "term": "JWT",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "m t l s",
+    "term": "mTLS",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "em tee el ess",
+    "term": "mTLS",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "mutual tls",
+    "term": "mTLS",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": []
+  },
+  {
+    "alias": "t l s",
+    "term": "TLS",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "tee el ess",
+    "term": "TLS",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "s s l",
+    "term": "SSL",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "ess ess el",
+    "term": "SSL",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "s s h",
+    "term": "SSH",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "ess ess aitch",
+    "term": "SSH",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "v p n",
+    "term": "VPN",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "vee pee en",
+    "term": "VPN",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "d n s",
+    "term": "DNS",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "dee en ess",
+    "term": "DNS",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "c d n",
+    "term": "CDN",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "see dee en",
+    "term": "CDN",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "content delivery network",
+    "term": "CDN",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "t c p",
+    "term": "TCP",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "tee see pee",
+    "term": "TCP",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "u d p",
+    "term": "UDP",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "you dee pee",
+    "term": "UDP",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "h t t p",
+    "term": "HTTP",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "aitch tee tee pee",
+    "term": "HTTP",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "h t t p s",
+    "term": "HTTPS",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "aitch tee tee pee ess",
+    "term": "HTTPS",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "g r p c",
+    "term": "gRPC",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "gee are pee see",
+    "term": "gRPC",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "g rpc",
+    "term": "gRPC",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": []
+  },
+  {
+    "alias": "rest api",
+    "term": "REST",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": []
+  },
+  {
+    "alias": "representational state transfer",
+    "term": "REST",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "rest full",
+    "term": "RESTful",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "rest ful",
+    "term": "RESTful",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": []
+  },
+  {
+    "alias": "graph q l",
+    "term": "GraphQL",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "graph queue el",
+    "term": "GraphQL",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "graphic ul",
+    "term": "GraphQL",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": []
+  },
+  {
+    "alias": "graph ql",
+    "term": "GraphQL",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": []
+  },
+  {
+    "alias": "web socket",
+    "term": "WebSocket",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "web sock it",
+    "term": "WebSocket",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "web r t c",
+    "term": "WebRTC",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "web are tee see",
+    "term": "WebRTC",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "m q t t",
+    "term": "MQTT",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "em queue tee tee",
+    "term": "MQTT",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "a m q p",
+    "term": "AMQP",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "ay em queue pee",
+    "term": "AMQP",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "proto buff",
+    "term": "Protobuf",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "proto buf",
+    "term": "Protobuf",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": []
+  },
+  {
+    "alias": "protocol buffer",
+    "term": "Protocol Buffers",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": [
+      "all_english",
+      "substring_of_term"
+    ]
+  },
+  {
+    "alias": "proto buffers",
+    "term": "Protocol Buffers",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": []
+  },
+  {
+    "alias": "air flow",
+    "term": "Apache Airflow",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "airflow",
+    "term": "Apache Airflow",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": [
+      "substring_of_term"
+    ]
+  },
+  {
+    "alias": "dag ster",
+    "term": "Dagster",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": []
+  },
+  {
+    "alias": "pre fect",
+    "term": "Prefect",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": []
+  },
+  {
+    "alias": "perfect",
+    "term": "Prefect",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": [
+      "all_english",
+      "single_word_english"
+    ]
+  },
+  {
+    "alias": "loo ee gee",
+    "term": "Luigi",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": []
+  },
+  {
+    "alias": "d b t",
+    "term": "dbt",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "dee bee tee",
+    "term": "dbt",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "data build tool",
+    "term": "dbt",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "air byte",
+    "term": "Airbyte",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": []
+  },
+  {
+    "alias": "air bite",
+    "term": "Airbyte",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "five tran",
+    "term": "Fivetran",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "five tren",
+    "term": "Fivetran",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": []
+  },
+  {
+    "alias": "snow flake",
+    "term": "Snowflake",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "data bricks",
+    "term": "Databricks",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": []
+  },
+  {
+    "alias": "spark",
+    "term": "Apache Spark",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": [
+      "all_english",
+      "single_word_english",
+      "substring_of_term"
+    ]
+  },
+  {
+    "alias": "a patchy spark",
+    "term": "Apache Spark",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "flink",
+    "term": "Apache Flink",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": [
+      "substring_of_term"
+    ]
+  },
+  {
+    "alias": "beam",
+    "term": "Apache Beam",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": [
+      "all_english",
+      "single_word_english",
+      "substring_of_term"
+    ]
+  },
+  {
+    "alias": "hive",
+    "term": "Apache Hive",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": [
+      "all_english",
+      "single_word_english",
+      "substring_of_term"
+    ]
+  },
+  {
+    "alias": "iceberg",
+    "term": "Apache Iceberg",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": [
+      "all_english",
+      "single_word_english",
+      "substring_of_term"
+    ]
+  },
+  {
+    "alias": "delta lake",
+    "term": "Delta Lake",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": [
+      "all_english",
+      "identity",
+      "substring_of_term"
+    ]
+  },
+  {
+    "alias": "par kay",
+    "term": "Apache Parquet",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "par quet",
+    "term": "Apache Parquet",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "parquet",
+    "term": "Apache Parquet",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": [
+      "all_english",
+      "single_word_english",
+      "substring_of_term"
+    ]
+  },
+  {
+    "alias": "av row",
+    "term": "Apache Avro",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": []
+  },
+  {
+    "alias": "avro",
+    "term": "Apache Avro",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": [
+      "substring_of_term"
+    ]
+  },
+  {
+    "alias": "trivvy",
+    "term": "Trivy",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": []
+  },
+  {
+    "alias": "try vee",
+    "term": "Trivy",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "tri vee",
+    "term": "Trivy",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "fall co",
+    "term": "Falco",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": []
+  },
+  {
+    "alias": "snick",
+    "term": "Snyk",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": [
+      "all_english",
+      "single_word_english"
+    ]
+  },
+  {
+    "alias": "snik",
+    "term": "Snyk",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": []
+  },
+  {
+    "alias": "sonar cube",
+    "term": "SonarQube",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "sonar queue be",
+    "term": "SonarQube",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "reno vate",
+    "term": "Renovate",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": []
+  },
+  {
+    "alias": "depend a bot",
+    "term": "Dependabot",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "depends bot",
+    "term": "Dependabot",
+    "pack": "pack_02_cloud_devops_infra",
+    "flags": []
+  }
+]

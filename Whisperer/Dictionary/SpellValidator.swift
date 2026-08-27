@@ -64,6 +64,36 @@ final class SpellValidator: @unchecked Sendable {
         return isValid
     }
 
+    /// Check if a word is valid English with no minimum-length restriction.
+    ///
+    /// Used for the phrase-pass guard, where short common English words like "to", "do", "my",
+    /// "in", "of" must also be recognised. `isValidEnglishWord` skips words shorter than 4 chars
+    /// to avoid false-positives in the fuzzy-match path; this method has no such gate.
+    func isEnglishToken(_ word: String) -> Bool {
+        let w = word.lowercased()
+        guard !w.isEmpty,
+              w.unicodeScalars.allSatisfy({ CharacterSet.letters.contains($0) && $0.isASCII }) else {
+            return false
+        }
+
+        // Length >= 4 is already handled by isValidEnglishWord (with caching).
+        if w.count >= 4 { return isValidEnglishWord(w) }
+
+        // Short words — check cache, then spell checker directly.
+        lock.lock()
+        if let cached = cache[w] { lock.unlock(); return cached }
+        lock.unlock()
+
+        var wordCount: Int = 0
+        let misspelledRange = NSSpellChecker.shared.checkSpelling(
+            of: w, startingAt: 0, language: "en", wrap: false,
+            inSpellDocumentWithTag: tag, wordCount: &wordCount
+        )
+        let isValid = (misspelledRange.location == NSNotFound)
+        remember(w, isValid)
+        return isValid
+    }
+
     /// Check if word contains only Latin ASCII letters
     func isLatinWord(_ word: String) -> Bool {
         word.unicodeScalars.allSatisfy { $0.isASCII && CharacterSet.letters.contains($0) }

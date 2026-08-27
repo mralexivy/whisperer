@@ -15,7 +15,27 @@ xcodebuild build -project Whisperer.xcodeproj -scheme whisperer -configuration R
 xcodebuild clean build -project Whisperer.xcodeproj -scheme whisperer -configuration Debug -destination "platform=macOS"
 ```
 
-No unit tests. No linter.
+No linter.
+
+## Tests
+
+XCTest suite in `WhispererTests/` (76 files). The target uses a synchronized file group, so a new
+`.swift` file there is picked up with no `pbxproj` edit.
+
+**Never run the whole suite** — some suites load real models and take 18+ minutes. Always scope it:
+
+```bash
+xcodebuild test -project Whisperer.xcodeproj -scheme whisperer -configuration Debug \
+  -destination "platform=macOS" -only-testing:WhispererTests/<SuiteName>
+```
+
+Known slow suites (opt in deliberately): `PolishBenchmarkTests`, `PolishCorpusDumpTests`,
+`PolishChunkCorpusDumpTests`, `MeetingPolishTests`.
+
+Deallocating a `@MainActor` pure-Swift class inside a synchronous test method aborts the test host
+(`pointer being freed was not allocated` in `swift_task_deinitOnExecutorImpl`). The project sets
+`SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor`, which synthesizes an isolated `deinit`. Keep such
+test-built objects alive for the process, or make the class `nonisolated`.
 
 ## Key Paths
 

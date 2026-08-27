@@ -1,0 +1,2168 @@
+[
+  {
+    "alias": "to do",
+    "term": "TODO",
+    "pack": "pack_11_spoken_phrases",
+    "flags": [
+      "all_english",
+      "conflict"
+    ]
+  },
+  {
+    "alias": "to dew",
+    "term": "TODO",
+    "pack": "pack_11_spoken_phrases",
+    "flags": [
+      "all_english",
+      "conflict"
+    ]
+  },
+  {
+    "alias": "two dew",
+    "term": "TODO",
+    "pack": "pack_11_spoken_phrases",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "fix me",
+    "term": "FIXME",
+    "pack": "pack_11_spoken_phrases",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "hack comment",
+    "term": "HACK",
+    "pack": "pack_11_spoken_phrases",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "won't fix",
+    "term": "WONTFIX",
+    "pack": "pack_11_spoken_phrases",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "wont fix",
+    "term": "WONTFIX",
+    "pack": "pack_11_spoken_phrases",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "not a bug",
+    "term": "NOTABUG",
+    "pack": "pack_11_spoken_phrases",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "y m m v",
+    "term": "YMMV",
+    "pack": "pack_11_spoken_phrases",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "your mileage may vary",
+    "term": "YMMV",
+    "pack": "pack_11_spoken_phrases",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "i m h o",
+    "term": "IMHO",
+    "pack": "pack_11_spoken_phrases",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "in my humble opinion",
+    "term": "IMHO",
+    "pack": "pack_11_spoken_phrases",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "a f a i k",
+    "term": "AFAIK",
+    "pack": "pack_11_spoken_phrases",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "as far as i know",
+    "term": "AFAIK",
+    "pack": "pack_11_spoken_phrases",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "a f a i c t",
+    "term": "AFAICT",
+    "pack": "pack_11_spoken_phrases",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "as far as i can tell",
+    "term": "AFAICT",
+    "pack": "pack_11_spoken_phrases",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "f w i w",
+    "term": "FWIW",
+    "pack": "pack_11_spoken_phrases",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "for what its worth",
+    "term": "FWIW",
+    "pack": "pack_11_spoken_phrases",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "t i l",
+    "term": "TIL",
+    "pack": "pack_11_spoken_phrases",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "today i learned",
+    "term": "TIL",
+    "pack": "pack_11_spoken_phrases",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "i m o",
+    "term": "IMO",
+    "pack": "pack_11_spoken_phrases",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "in my opinion",
+    "term": "IMO",
+    "pack": "pack_11_spoken_phrases",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "i i r c",
+    "term": "IIRC",
+    "pack": "pack_11_spoken_phrases",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "if i remember correctly",
+    "term": "IIRC",
+    "pack": "pack_11_spoken_phrases",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "t b d",
+    "term": "TBD",
+    "pack": "pack_11_spoken_phrases",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "tee bee dee",
+    "term": "TBD",
+    "pack": "pack_11_spoken_phrases",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "to be determined",
+    "term": "TBD",
+    "pack": "pack_11_spoken_phrases",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "t b h",
+    "term": "TBH",
+    "pack": "pack_11_spoken_phrases",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "to be honest",
+    "term": "TBH",
+    "pack": "pack_11_spoken_phrases",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "n a",
+    "term": "N/A",
+    "pack": "pack_11_spoken_phrases",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "not applicable",
+    "term": "N/A",
+    "pack": "pack_11_spoken_phrases",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "w r t",
+    "term": "WRT",
+    "pack": "pack_11_spoken_phrases",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "with respect to",
+    "term": "WRT",
+    "pack": "pack_11_spoken_phrases",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "w d y t",
+    "term": "WDYT",
+    "pack": "pack_11_spoken_phrases",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "what do you think",
+    "term": "WDYT",
+    "pack": "pack_11_spoken_phrases",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "i c y m i",
+    "term": "ICYMI",
+    "pack": "pack_11_spoken_phrases",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "in case you missed it",
+    "term": "ICYMI",
+    "pack": "pack_11_spoken_phrases",
+    "flags": []
+  },
+  {
+    "alias": "o o o",
+    "term": "OOO",
+    "pack": "pack_11_spoken_phrases",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "oh oh oh",
+    "term": "OOO",
+    "pack": "pack_11_spoken_phrases",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "out of office",
+    "term": "OOO",
+    "pack": "pack_11_spoken_phrases",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "p t o",
+    "term": "PTO",
+    "pack": "pack_11_spoken_phrases",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "pee tee oh",
+    "term": "PTO",
+    "pack": "pack_11_spoken_phrases",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "paid time off",
+    "term": "PTO",
+    "pack": "pack_11_spoken_phrases",
+    "flags": []
+  },
+  {
+    "alias": "a f k",
+    "term": "AFK",
+    "pack": "pack_11_spoken_phrases",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "away from keyboard",
+    "term": "AFK",
+    "pack": "pack_11_spoken_phrases",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "b r b",
+    "term": "BRB",
+    "pack": "pack_11_spoken_phrases",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "be right back",
+    "term": "BRB",
+    "pack": "pack_11_spoken_phrases",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "d m",
+    "term": "DM",
+    "pack": "pack_11_spoken_phrases",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "dee em",
+    "term": "DM",
+    "pack": "pack_11_spoken_phrases",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "direct message",
+    "term": "DM",
+    "pack": "pack_11_spoken_phrases",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "ping me",
+    "term": "ping me",
+    "pack": "pack_11_spoken_phrases",
+    "flags": [
+      "all_english",
+      "identity",
+      "substring_of_term"
+    ]
+  },
+  {
+    "alias": "ping",
+    "term": "ping",
+    "pack": "pack_11_spoken_phrases",
+    "flags": [
+      "all_english",
+      "single_word_english",
+      "identity",
+      "substring_of_term"
+    ]
+  },
+  {
+    "alias": "slack me",
+    "term": "slack me",
+    "pack": "pack_11_spoken_phrases",
+    "flags": [
+      "all_english",
+      "identity",
+      "substring_of_term"
+    ]
+  },
+  {
+    "alias": "slack",
+    "term": "Slack",
+    "pack": "pack_11_spoken_phrases",
+    "flags": [
+      "all_english",
+      "single_word_english",
+      "identity",
+      "substring_of_term"
+    ]
+  },
+  {
+    "alias": "slack thread",
+    "term": "Slack thread",
+    "pack": "pack_11_spoken_phrases",
+    "flags": [
+      "all_english",
+      "identity",
+      "substring_of_term"
+    ]
+  },
+  {
+    "alias": "thread",
+    "term": "thread",
+    "pack": "pack_11_spoken_phrases",
+    "flags": [
+      "all_english",
+      "single_word_english",
+      "identity",
+      "substring_of_term"
+    ]
+  },
+  {
+    "alias": "at mention",
+    "term": "at-mention",
+    "pack": "pack_11_spoken_phrases",
+    "flags": [
+      "all_english",
+      "conflict"
+    ]
+  },
+  {
+    "alias": "at mention",
+    "term": "@mention",
+    "pack": "pack_11_spoken_phrases",
+    "flags": [
+      "all_english",
+      "conflict"
+    ]
+  },
+  {
+    "alias": "emoji re act",
+    "term": "emoji react",
+    "pack": "pack_11_spoken_phrases",
+    "flags": []
+  },
+  {
+    "alias": "thumbs up",
+    "term": "thumbs up",
+    "pack": "pack_11_spoken_phrases",
+    "flags": [
+      "identity",
+      "substring_of_term"
+    ]
+  },
+  {
+    "alias": "ship it",
+    "term": "ship it",
+    "pack": "pack_11_spoken_phrases",
+    "flags": [
+      "all_english",
+      "identity",
+      "substring_of_term"
+    ]
+  },
+  {
+    "alias": "l g t m",
+    "term": "LGTM",
+    "pack": "pack_11_spoken_phrases",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "looks good to me",
+    "term": "LGTM",
+    "pack": "pack_11_spoken_phrases",
+    "flags": []
+  },
+  {
+    "alias": "s g t m",
+    "term": "SGTM",
+    "pack": "pack_11_spoken_phrases",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "sounds good to me",
+    "term": "SGTM",
+    "pack": "pack_11_spoken_phrases",
+    "flags": []
+  },
+  {
+    "alias": "ack",
+    "term": "ACK",
+    "pack": "pack_11_spoken_phrases",
+    "flags": [
+      "identity",
+      "substring_of_term"
+    ]
+  },
+  {
+    "alias": "acknowledged",
+    "term": "ACK",
+    "pack": "pack_11_spoken_phrases",
+    "flags": [
+      "all_english",
+      "single_word_english"
+    ]
+  },
+  {
+    "alias": "nack",
+    "term": "NACK",
+    "pack": "pack_11_spoken_phrases",
+    "flags": [
+      "identity",
+      "substring_of_term"
+    ]
+  },
+  {
+    "alias": "not acknowledged",
+    "term": "NACK",
+    "pack": "pack_11_spoken_phrases",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "e o d",
+    "term": "EOD",
+    "pack": "pack_11_spoken_phrases",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "end of day",
+    "term": "EOD",
+    "pack": "pack_11_spoken_phrases",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "e t a",
+    "term": "ETA",
+    "pack": "pack_11_spoken_phrases",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "estimated time",
+    "term": "ETA",
+    "pack": "pack_11_spoken_phrases",
+    "flags": []
+  },
+  {
+    "alias": "un block",
+    "term": "unblock",
+    "pack": "pack_11_spoken_phrases",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "un blocked",
+    "term": "unblocked",
+    "pack": "pack_11_spoken_phrases",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "block er",
+    "term": "blocker",
+    "pack": "pack_11_spoken_phrases",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "hard block er",
+    "term": "hard blocker",
+    "pack": "pack_11_spoken_phrases",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "soft block er",
+    "term": "soft blocker",
+    "pack": "pack_11_spoken_phrases",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "up stream dependency",
+    "term": "upstream dependency",
+    "pack": "pack_11_spoken_phrases",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "down stream",
+    "term": "downstream",
+    "pack": "pack_11_spoken_phrases",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "context switch",
+    "term": "context switch",
+    "pack": "pack_11_spoken_phrases",
+    "flags": [
+      "all_english",
+      "identity",
+      "substring_of_term"
+    ]
+  },
+  {
+    "alias": "context switching",
+    "term": "context switching",
+    "pack": "pack_11_spoken_phrases",
+    "flags": [
+      "all_english",
+      "identity",
+      "substring_of_term"
+    ]
+  },
+  {
+    "alias": "deep work",
+    "term": "deep work",
+    "pack": "pack_11_spoken_phrases",
+    "flags": [
+      "all_english",
+      "identity",
+      "substring_of_term"
+    ]
+  },
+  {
+    "alias": "flow state",
+    "term": "flow state",
+    "pack": "pack_11_spoken_phrases",
+    "flags": [
+      "all_english",
+      "identity",
+      "substring_of_term"
+    ]
+  },
+  {
+    "alias": "heads down",
+    "term": "heads down",
+    "pack": "pack_11_spoken_phrases",
+    "flags": [
+      "identity",
+      "substring_of_term"
+    ]
+  },
+  {
+    "alias": "green field",
+    "term": "greenfield",
+    "pack": "pack_11_spoken_phrases",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "brown field",
+    "term": "brownfield",
+    "pack": "pack_11_spoken_phrases",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "net new",
+    "term": "net new",
+    "pack": "pack_11_spoken_phrases",
+    "flags": [
+      "all_english",
+      "identity",
+      "substring_of_term"
+    ]
+  },
+  {
+    "alias": "from scratch",
+    "term": "from scratch",
+    "pack": "pack_11_spoken_phrases",
+    "flags": [
+      "all_english",
+      "identity",
+      "substring_of_term"
+    ]
+  },
+  {
+    "alias": "rip and replace",
+    "term": "rip and replace",
+    "pack": "pack_11_spoken_phrases",
+    "flags": [
+      "all_english",
+      "identity",
+      "substring_of_term"
+    ]
+  },
+  {
+    "alias": "lift and shift",
+    "term": "lift and shift",
+    "pack": "pack_11_spoken_phrases",
+    "flags": [
+      "all_english",
+      "identity",
+      "substring_of_term"
+    ]
+  },
+  {
+    "alias": "strangler fig",
+    "term": "strangler fig",
+    "pack": "pack_11_spoken_phrases",
+    "flags": [
+      "all_english",
+      "identity",
+      "substring_of_term"
+    ]
+  },
+  {
+    "alias": "strangler pattern",
+    "term": "strangler pattern",
+    "pack": "pack_11_spoken_phrases",
+    "flags": [
+      "all_english",
+      "identity",
+      "substring_of_term"
+    ]
+  },
+  {
+    "alias": "big bang my gration",
+    "term": "big bang migration",
+    "pack": "pack_11_spoken_phrases",
+    "flags": []
+  },
+  {
+    "alias": "ink re mental",
+    "term": "incremental",
+    "pack": "pack_11_spoken_phrases",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "it er a tiv",
+    "term": "iterative",
+    "pack": "pack_11_spoken_phrases",
+    "flags": []
+  },
+  {
+    "alias": "bite sized",
+    "term": "bite-sized",
+    "pack": "pack_11_spoken_phrases",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "low hanging fruit",
+    "term": "low-hanging fruit",
+    "pack": "pack_11_spoken_phrases",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "quick win",
+    "term": "quick win",
+    "pack": "pack_11_spoken_phrases",
+    "flags": [
+      "all_english",
+      "identity",
+      "substring_of_term"
+    ]
+  },
+  {
+    "alias": "table stakes",
+    "term": "table stakes",
+    "pack": "pack_11_spoken_phrases",
+    "flags": [
+      "identity",
+      "substring_of_term"
+    ]
+  },
+  {
+    "alias": "north star",
+    "term": "north star",
+    "pack": "pack_11_spoken_phrases",
+    "flags": [
+      "all_english",
+      "identity",
+      "substring_of_term"
+    ]
+  },
+  {
+    "alias": "ten x",
+    "term": "10x",
+    "pack": "pack_11_spoken_phrases",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "ten ex",
+    "term": "10x",
+    "pack": "pack_11_spoken_phrases",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "ten x engineer",
+    "term": "10x engineer",
+    "pack": "pack_11_spoken_phrases",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "full stack",
+    "term": "full-stack",
+    "pack": "pack_11_spoken_phrases",
+    "flags": [
+      "all_english",
+      "conflict"
+    ]
+  },
+  {
+    "alias": "front end",
+    "term": "frontend",
+    "pack": "pack_11_spoken_phrases",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "back end",
+    "term": "backend",
+    "pack": "pack_11_spoken_phrases",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "full stack",
+    "term": "fullstack",
+    "pack": "pack_11_spoken_phrases",
+    "flags": [
+      "all_english",
+      "conflict"
+    ]
+  },
+  {
+    "alias": "dev",
+    "term": "dev",
+    "pack": "pack_11_spoken_phrases",
+    "flags": [
+      "all_english",
+      "single_word_english",
+      "identity",
+      "substring_of_term"
+    ]
+  },
+  {
+    "alias": "devs",
+    "term": "devs",
+    "pack": "pack_11_spoken_phrases",
+    "flags": [
+      "identity",
+      "substring_of_term"
+    ]
+  },
+  {
+    "alias": "eng",
+    "term": "eng",
+    "pack": "pack_11_spoken_phrases",
+    "flags": [
+      "identity",
+      "substring_of_term"
+    ]
+  },
+  {
+    "alias": "infra",
+    "term": "infra",
+    "pack": "pack_11_spoken_phrases",
+    "flags": [
+      "all_english",
+      "single_word_english",
+      "identity",
+      "substring_of_term"
+    ]
+  },
+  {
+    "alias": "ops",
+    "term": "ops",
+    "pack": "pack_11_spoken_phrases",
+    "flags": [
+      "identity",
+      "substring_of_term"
+    ]
+  },
+  {
+    "alias": "plat form",
+    "term": "platform",
+    "pack": "pack_11_spoken_phrases",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "plat form team",
+    "term": "platform team",
+    "pack": "pack_11_spoken_phrases",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "s r e",
+    "term": "SRE",
+    "pack": "pack_11_spoken_phrases",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "site reliability",
+    "term": "SRE",
+    "pack": "pack_11_spoken_phrases",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "on call rotation",
+    "term": "on-call rotation",
+    "pack": "pack_11_spoken_phrases",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "pager duty",
+    "term": "pager duty",
+    "pack": "pack_11_spoken_phrases",
+    "flags": [
+      "all_english",
+      "conflict",
+      "identity",
+      "substring_of_term"
+    ]
+  },
+  {
+    "alias": "fire fighting",
+    "term": "firefighting",
+    "pack": "pack_11_spoken_phrases",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "yak shaving",
+    "term": "yak shaving",
+    "pack": "pack_11_spoken_phrases",
+    "flags": [
+      "all_english",
+      "identity",
+      "substring_of_term"
+    ]
+  },
+  {
+    "alias": "bike shedding",
+    "term": "bike shedding",
+    "pack": "pack_11_spoken_phrases",
+    "flags": [
+      "all_english",
+      "conflict",
+      "identity",
+      "substring_of_term"
+    ]
+  },
+  {
+    "alias": "bike shedding",
+    "term": "bikeshedding",
+    "pack": "pack_11_spoken_phrases",
+    "flags": [
+      "all_english",
+      "conflict"
+    ]
+  },
+  {
+    "alias": "pre mature optimization",
+    "term": "premature optimization",
+    "pack": "pack_11_spoken_phrases",
+    "flags": []
+  },
+  {
+    "alias": "over engineering",
+    "term": "over-engineering",
+    "pack": "pack_11_spoken_phrases",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "under engineering",
+    "term": "under-engineering",
+    "pack": "pack_11_spoken_phrases",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "gold plating",
+    "term": "gold plating",
+    "pack": "pack_11_spoken_phrases",
+    "flags": [
+      "all_english",
+      "identity",
+      "substring_of_term"
+    ]
+  },
+  {
+    "alias": "yag knee",
+    "term": "YAGNI",
+    "pack": "pack_11_spoken_phrases",
+    "flags": []
+  },
+  {
+    "alias": "you aren't gonna need it",
+    "term": "YAGNI",
+    "pack": "pack_11_spoken_phrases",
+    "flags": []
+  },
+  {
+    "alias": "k i s s",
+    "term": "KISS",
+    "pack": "pack_11_spoken_phrases",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "keep it simple",
+    "term": "KISS",
+    "pack": "pack_11_spoken_phrases",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "d r y",
+    "term": "DRY",
+    "pack": "pack_11_spoken_phrases",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "don't repeat yourself",
+    "term": "DRY",
+    "pack": "pack_11_spoken_phrases",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "w e t",
+    "term": "WET",
+    "pack": "pack_11_spoken_phrases",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "write everything twice",
+    "term": "WET",
+    "pack": "pack_11_spoken_phrases",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "solid principles",
+    "term": "SOLID",
+    "pack": "pack_11_spoken_phrases",
+    "flags": []
+  },
+  {
+    "alias": "dog fooding",
+    "term": "dogfooding",
+    "pack": "pack_11_spoken_phrases",
+    "flags": []
+  },
+  {
+    "alias": "dog food",
+    "term": "dogfood",
+    "pack": "pack_11_spoken_phrases",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "eat our own dog food",
+    "term": "eat our own dog food",
+    "pack": "pack_11_spoken_phrases",
+    "flags": [
+      "all_english",
+      "identity",
+      "substring_of_term"
+    ]
+  },
+  {
+    "alias": "rubber stamp",
+    "term": "rubber stamp",
+    "pack": "pack_11_spoken_phrases",
+    "flags": [
+      "all_english",
+      "identity",
+      "substring_of_term"
+    ]
+  },
+  {
+    "alias": "sanity check",
+    "term": "sanity check",
+    "pack": "pack_11_spoken_phrases",
+    "flags": [
+      "all_english",
+      "identity",
+      "substring_of_term"
+    ]
+  },
+  {
+    "alias": "gut check",
+    "term": "gut check",
+    "pack": "pack_11_spoken_phrases",
+    "flags": [
+      "all_english",
+      "identity",
+      "substring_of_term"
+    ]
+  },
+  {
+    "alias": "smell test",
+    "term": "smell test",
+    "pack": "pack_11_spoken_phrases",
+    "flags": [
+      "all_english",
+      "identity",
+      "substring_of_term"
+    ]
+  },
+  {
+    "alias": "sniff test",
+    "term": "sniff test",
+    "pack": "pack_11_spoken_phrases",
+    "flags": [
+      "all_english",
+      "identity",
+      "substring_of_term"
+    ]
+  },
+  {
+    "alias": "back of the envelope",
+    "term": "back of the envelope",
+    "pack": "pack_11_spoken_phrases",
+    "flags": [
+      "all_english",
+      "identity",
+      "substring_of_term"
+    ]
+  },
+  {
+    "alias": "ball park",
+    "term": "ballpark",
+    "pack": "pack_11_spoken_phrases",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "rough estimate",
+    "term": "rough estimate",
+    "pack": "pack_11_spoken_phrases",
+    "flags": [
+      "all_english",
+      "identity",
+      "substring_of_term"
+    ]
+  },
+  {
+    "alias": "t shirt size",
+    "term": "T-shirt size",
+    "pack": "pack_11_spoken_phrases",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "sizing",
+    "term": "sizing",
+    "pack": "pack_11_spoken_phrases",
+    "flags": [
+      "all_english",
+      "single_word_english",
+      "identity",
+      "substring_of_term"
+    ]
+  },
+  {
+    "alias": "l o e",
+    "term": "LOE",
+    "pack": "pack_11_spoken_phrases",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "el oh ee",
+    "term": "LOE",
+    "pack": "pack_11_spoken_phrases",
+    "flags": []
+  },
+  {
+    "alias": "level of effort",
+    "term": "LOE",
+    "pack": "pack_11_spoken_phrases",
+    "flags": [
+      "all_english",
+      "conflict"
+    ]
+  },
+  {
+    "alias": "level of effort",
+    "term": "level of effort",
+    "pack": "pack_11_spoken_phrases",
+    "flags": [
+      "all_english",
+      "conflict",
+      "identity",
+      "substring_of_term"
+    ]
+  },
+  {
+    "alias": "spike it",
+    "term": "spike it",
+    "pack": "pack_11_spoken_phrases",
+    "flags": [
+      "all_english",
+      "identity",
+      "substring_of_term"
+    ]
+  },
+  {
+    "alias": "spiking",
+    "term": "spiking",
+    "pack": "pack_11_spoken_phrases",
+    "flags": [
+      "all_english",
+      "single_word_english",
+      "identity",
+      "substring_of_term"
+    ]
+  },
+  {
+    "alias": "p o c",
+    "term": "POC",
+    "pack": "pack_11_spoken_phrases",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "proof of concept",
+    "term": "POC",
+    "pack": "pack_11_spoken_phrases",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "proto type",
+    "term": "prototype",
+    "pack": "pack_11_spoken_phrases",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "throw away code",
+    "term": "throw away code",
+    "pack": "pack_11_spoken_phrases",
+    "flags": [
+      "all_english",
+      "identity",
+      "substring_of_term"
+    ]
+  },
+  {
+    "alias": "production ready",
+    "term": "production ready",
+    "pack": "pack_11_spoken_phrases",
+    "flags": [
+      "all_english",
+      "identity",
+      "substring_of_term"
+    ]
+  },
+  {
+    "alias": "prod ready",
+    "term": "prod ready",
+    "pack": "pack_11_spoken_phrases",
+    "flags": [
+      "all_english",
+      "identity",
+      "substring_of_term"
+    ]
+  },
+  {
+    "alias": "battle tested",
+    "term": "battle tested",
+    "pack": "pack_11_spoken_phrases",
+    "flags": [
+      "all_english",
+      "identity",
+      "substring_of_term"
+    ]
+  },
+  {
+    "alias": "hardened",
+    "term": "hardened",
+    "pack": "pack_11_spoken_phrases",
+    "flags": [
+      "identity",
+      "substring_of_term"
+    ]
+  },
+  {
+    "alias": "enterprise grade",
+    "term": "enterprise grade",
+    "pack": "pack_11_spoken_phrases",
+    "flags": [
+      "all_english",
+      "identity",
+      "substring_of_term"
+    ]
+  },
+  {
+    "alias": "scale able",
+    "term": "scalable",
+    "pack": "pack_11_spoken_phrases",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "per form ant",
+    "term": "performant",
+    "pack": "pack_11_spoken_phrases",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "re silient",
+    "term": "resilient",
+    "pack": "pack_11_spoken_phrases",
+    "flags": []
+  },
+  {
+    "alias": "fault tolerant",
+    "term": "fault tolerant",
+    "pack": "pack_11_spoken_phrases",
+    "flags": [
+      "all_english",
+      "identity",
+      "substring_of_term"
+    ]
+  },
+  {
+    "alias": "eye dem potent",
+    "term": "idempotent",
+    "pack": "pack_11_spoken_phrases",
+    "flags": []
+  },
+  {
+    "alias": "deter min istic",
+    "term": "deterministic",
+    "pack": "pack_11_spoken_phrases",
+    "flags": []
+  },
+  {
+    "alias": "non deter min istic",
+    "term": "non-deterministic",
+    "pack": "pack_11_spoken_phrases",
+    "flags": []
+  },
+  {
+    "alias": "state less",
+    "term": "stateless",
+    "pack": "pack_11_spoken_phrases",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "state full",
+    "term": "stateful",
+    "pack": "pack_11_spoken_phrases",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "im mutable",
+    "term": "immutable",
+    "pack": "pack_11_spoken_phrases",
+    "flags": []
+  },
+  {
+    "alias": "mew table",
+    "term": "mutable",
+    "pack": "pack_11_spoken_phrases",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "deck lair a tiv",
+    "term": "declarative",
+    "pack": "pack_11_spoken_phrases",
+    "flags": []
+  },
+  {
+    "alias": "im pear a tiv",
+    "term": "imperative",
+    "pack": "pack_11_spoken_phrases",
+    "flags": []
+  },
+  {
+    "alias": "opinion ated",
+    "term": "opinionated",
+    "pack": "pack_11_spoken_phrases",
+    "flags": []
+  },
+  {
+    "alias": "un opinion ated",
+    "term": "unopinionated",
+    "pack": "pack_11_spoken_phrases",
+    "flags": []
+  },
+  {
+    "alias": "convention over configuration",
+    "term": "convention over configuration",
+    "pack": "pack_11_spoken_phrases",
+    "flags": [
+      "all_english",
+      "identity",
+      "substring_of_term"
+    ]
+  },
+  {
+    "alias": "con fig",
+    "term": "config",
+    "pack": "pack_11_spoken_phrases",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "en var",
+    "term": "env var",
+    "pack": "pack_11_spoken_phrases",
+    "flags": []
+  },
+  {
+    "alias": "environment variable",
+    "term": "env var",
+    "pack": "pack_11_spoken_phrases",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "en vars",
+    "term": "env vars",
+    "pack": "pack_11_spoken_phrases",
+    "flags": []
+  },
+  {
+    "alias": "environment variables",
+    "term": "env vars",
+    "pack": "pack_11_spoken_phrases",
+    "flags": []
+  },
+  {
+    "alias": "dot env",
+    "term": "dotenv",
+    "pack": "pack_11_spoken_phrases",
+    "flags": [
+      "conflict"
+    ]
+  },
+  {
+    "alias": "dot e n v",
+    "term": "dotenv",
+    "pack": "pack_11_spoken_phrases",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "dot env",
+    "term": ".env",
+    "pack": "pack_11_spoken_phrases",
+    "flags": [
+      "conflict"
+    ]
+  },
+  {
+    "alias": "dot env file",
+    "term": ".env file",
+    "pack": "pack_11_spoken_phrases",
+    "flags": []
+  },
+  {
+    "alias": "git ignore",
+    "term": "gitignore",
+    "pack": "pack_11_spoken_phrases",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "dot git ignore",
+    "term": "gitignore",
+    "pack": "pack_11_spoken_phrases",
+    "flags": [
+      "all_english",
+      "conflict"
+    ]
+  },
+  {
+    "alias": "dot git ignore",
+    "term": ".gitignore",
+    "pack": "pack_11_spoken_phrases",
+    "flags": [
+      "all_english",
+      "conflict"
+    ]
+  },
+  {
+    "alias": "docker file",
+    "term": "Dockerfile",
+    "pack": "pack_11_spoken_phrases",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "docker compose yaml",
+    "term": "docker-compose.yml",
+    "pack": "pack_11_spoken_phrases",
+    "flags": []
+  },
+  {
+    "alias": "yaml file",
+    "term": "YAML file",
+    "pack": "pack_11_spoken_phrases",
+    "flags": [
+      "identity",
+      "substring_of_term"
+    ]
+  },
+  {
+    "alias": "yam el file",
+    "term": "YAML file",
+    "pack": "pack_11_spoken_phrases",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "jason file",
+    "term": "JSON file",
+    "pack": "pack_11_spoken_phrases",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "jay son file",
+    "term": "JSON file",
+    "pack": "pack_11_spoken_phrases",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "con fig file",
+    "term": "config file",
+    "pack": "pack_11_spoken_phrases",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "t s config",
+    "term": "tsconfig",
+    "pack": "pack_11_spoken_phrases",
+    "flags": []
+  },
+  {
+    "alias": "tee ess config",
+    "term": "tsconfig",
+    "pack": "pack_11_spoken_phrases",
+    "flags": []
+  },
+  {
+    "alias": "package jason",
+    "term": "package.json",
+    "pack": "pack_11_spoken_phrases",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "package jay son",
+    "term": "package.json",
+    "pack": "pack_11_spoken_phrases",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "node modules",
+    "term": "node_modules",
+    "pack": "pack_11_spoken_phrases",
+    "flags": []
+  },
+  {
+    "alias": "vendor folder",
+    "term": "vendor",
+    "pack": "pack_11_spoken_phrases",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "dist folder",
+    "term": "dist",
+    "pack": "pack_11_spoken_phrases",
+    "flags": []
+  },
+  {
+    "alias": "build folder",
+    "term": "build",
+    "pack": "pack_11_spoken_phrases",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "source",
+    "term": "src",
+    "pack": "pack_11_spoken_phrases",
+    "flags": [
+      "all_english",
+      "single_word_english"
+    ]
+  },
+  {
+    "alias": "s r c",
+    "term": "src",
+    "pack": "pack_11_spoken_phrases",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "lib folder",
+    "term": "lib",
+    "pack": "pack_11_spoken_phrases",
+    "flags": []
+  },
+  {
+    "alias": "you tills",
+    "term": "utils",
+    "pack": "pack_11_spoken_phrases",
+    "flags": []
+  },
+  {
+    "alias": "utilities",
+    "term": "utils",
+    "pack": "pack_11_spoken_phrases",
+    "flags": []
+  },
+  {
+    "alias": "help ers",
+    "term": "helpers",
+    "pack": "pack_11_spoken_phrases",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "middle ware",
+    "term": "middleware",
+    "pack": "pack_11_spoken_phrases",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "hand ler",
+    "term": "handler",
+    "pack": "pack_11_spoken_phrases",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "control er",
+    "term": "controller",
+    "pack": "pack_11_spoken_phrases",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "service layer",
+    "term": "service layer",
+    "pack": "pack_11_spoken_phrases",
+    "flags": [
+      "all_english",
+      "identity",
+      "substring_of_term"
+    ]
+  },
+  {
+    "alias": "data layer",
+    "term": "data layer",
+    "pack": "pack_11_spoken_phrases",
+    "flags": [
+      "all_english",
+      "identity",
+      "substring_of_term"
+    ]
+  },
+  {
+    "alias": "presentation layer",
+    "term": "presentation layer",
+    "pack": "pack_11_spoken_phrases",
+    "flags": [
+      "all_english",
+      "identity",
+      "substring_of_term"
+    ]
+  },
+  {
+    "alias": "business logic",
+    "term": "business logic",
+    "pack": "pack_11_spoken_phrases",
+    "flags": [
+      "all_english",
+      "identity",
+      "substring_of_term"
+    ]
+  },
+  {
+    "alias": "domain logic",
+    "term": "domain logic",
+    "pack": "pack_11_spoken_phrases",
+    "flags": [
+      "all_english",
+      "identity",
+      "substring_of_term"
+    ]
+  },
+  {
+    "alias": "edge case",
+    "term": "edge case",
+    "pack": "pack_11_spoken_phrases",
+    "flags": [
+      "all_english",
+      "identity",
+      "substring_of_term"
+    ]
+  },
+  {
+    "alias": "corner case",
+    "term": "corner case",
+    "pack": "pack_11_spoken_phrases",
+    "flags": [
+      "all_english",
+      "identity",
+      "substring_of_term"
+    ]
+  },
+  {
+    "alias": "off by one",
+    "term": "off-by-one",
+    "pack": "pack_11_spoken_phrases",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "off by one error",
+    "term": "off-by-one error",
+    "pack": "pack_11_spoken_phrases",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "null check",
+    "term": "null check",
+    "pack": "pack_11_spoken_phrases",
+    "flags": [
+      "all_english",
+      "identity",
+      "substring_of_term"
+    ]
+  },
+  {
+    "alias": "nil check",
+    "term": "nil check",
+    "pack": "pack_11_spoken_phrases",
+    "flags": [
+      "all_english",
+      "identity",
+      "substring_of_term"
+    ]
+  },
+  {
+    "alias": "guard clause",
+    "term": "guard clause",
+    "pack": "pack_11_spoken_phrases",
+    "flags": [
+      "all_english",
+      "identity",
+      "substring_of_term"
+    ]
+  },
+  {
+    "alias": "early return",
+    "term": "early return",
+    "pack": "pack_11_spoken_phrases",
+    "flags": [
+      "all_english",
+      "identity",
+      "substring_of_term"
+    ]
+  },
+  {
+    "alias": "happy path",
+    "term": "happy path",
+    "pack": "pack_11_spoken_phrases",
+    "flags": [
+      "all_english",
+      "identity",
+      "substring_of_term"
+    ]
+  },
+  {
+    "alias": "sad path",
+    "term": "sad path",
+    "pack": "pack_11_spoken_phrases",
+    "flags": [
+      "all_english",
+      "identity",
+      "substring_of_term"
+    ]
+  },
+  {
+    "alias": "error handling",
+    "term": "error handling",
+    "pack": "pack_11_spoken_phrases",
+    "flags": [
+      "all_english",
+      "identity",
+      "substring_of_term"
+    ]
+  },
+  {
+    "alias": "try catch",
+    "term": "try-catch",
+    "pack": "pack_11_spoken_phrases",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "exception handling",
+    "term": "exception handling",
+    "pack": "pack_11_spoken_phrases",
+    "flags": [
+      "all_english",
+      "identity",
+      "substring_of_term"
+    ]
+  },
+  {
+    "alias": "error boundary",
+    "term": "error boundary",
+    "pack": "pack_11_spoken_phrases",
+    "flags": [
+      "all_english",
+      "identity",
+      "substring_of_term"
+    ]
+  },
+  {
+    "alias": "fall back",
+    "term": "fallback",
+    "pack": "pack_11_spoken_phrases",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "graceful degradation",
+    "term": "graceful degradation",
+    "pack": "pack_11_spoken_phrases",
+    "flags": [
+      "all_english",
+      "identity",
+      "substring_of_term"
+    ]
+  },
+  {
+    "alias": "progressive enhancement",
+    "term": "progressive enhancement",
+    "pack": "pack_11_spoken_phrases",
+    "flags": [
+      "all_english",
+      "identity",
+      "substring_of_term"
+    ]
+  },
+  {
+    "alias": "backwards compatible",
+    "term": "backwards compatible",
+    "pack": "pack_11_spoken_phrases",
+    "flags": [
+      "all_english",
+      "identity",
+      "substring_of_term"
+    ]
+  },
+  {
+    "alias": "backwards compat ibility",
+    "term": "backwards compatibility",
+    "pack": "pack_11_spoken_phrases",
+    "flags": []
+  },
+  {
+    "alias": "forward compatible",
+    "term": "forward compatible",
+    "pack": "pack_11_spoken_phrases",
+    "flags": [
+      "all_english",
+      "identity",
+      "substring_of_term"
+    ]
+  },
+  {
+    "alias": "ver shun ing",
+    "term": "versioning",
+    "pack": "pack_11_spoken_phrases",
+    "flags": []
+  },
+  {
+    "alias": "a p i ver shun ing",
+    "term": "API versioning",
+    "pack": "pack_11_spoken_phrases",
+    "flags": []
+  },
+  {
+    "alias": "breaking change",
+    "term": "breaking change",
+    "pack": "pack_11_spoken_phrases",
+    "flags": [
+      "all_english",
+      "identity",
+      "substring_of_term"
+    ]
+  },
+  {
+    "alias": "non breaking change",
+    "term": "non-breaking change",
+    "pack": "pack_11_spoken_phrases",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "additive change",
+    "term": "additive change",
+    "pack": "pack_11_spoken_phrases",
+    "flags": [
+      "all_english",
+      "identity",
+      "substring_of_term"
+    ]
+  },
+  {
+    "alias": "hot fix",
+    "term": "hotfix",
+    "pack": "pack_11_spoken_phrases",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "patch fix",
+    "term": "patch",
+    "pack": "pack_11_spoken_phrases",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "work around",
+    "term": "workaround",
+    "pack": "pack_11_spoken_phrases",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "hack fix",
+    "term": "hack",
+    "pack": "pack_11_spoken_phrases",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "band aid fix",
+    "term": "band-aid fix",
+    "pack": "pack_11_spoken_phrases",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "duct tape fix",
+    "term": "duct tape fix",
+    "pack": "pack_11_spoken_phrases",
+    "flags": [
+      "all_english",
+      "identity",
+      "substring_of_term"
+    ]
+  },
+  {
+    "alias": "proper fix",
+    "term": "proper fix",
+    "pack": "pack_11_spoken_phrases",
+    "flags": [
+      "all_english",
+      "identity",
+      "substring_of_term"
+    ]
+  },
+  {
+    "alias": "root cause fix",
+    "term": "root cause fix",
+    "pack": "pack_11_spoken_phrases",
+    "flags": [
+      "all_english",
+      "identity",
+      "substring_of_term"
+    ]
+  },
+  {
+    "alias": "follow up",
+    "term": "followup",
+    "pack": "pack_11_spoken_phrases",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "follow up ticket",
+    "term": "follow-up ticket",
+    "pack": "pack_11_spoken_phrases",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "teck debt ticket",
+    "term": "tech debt ticket",
+    "pack": "pack_11_spoken_phrases",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "clean up ticket",
+    "term": "cleanup ticket",
+    "pack": "pack_11_spoken_phrases",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "chore ticket",
+    "term": "chore",
+    "pack": "pack_11_spoken_phrases",
+    "flags": [
+      "all_english"
+    ]
+  }
+]

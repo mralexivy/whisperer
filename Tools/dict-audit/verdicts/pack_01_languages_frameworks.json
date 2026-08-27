@@ -1,0 +1,2790 @@
+[
+  {
+    "alias": "play wright",
+    "term": "Playwright",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "DROP",
+    "reason": "\"playwright\" is a common English word (a person who writes plays). The split form would incorrectly replace natural dictation like \"she is a playwright\" or \"the play wright\"."
+  },
+  {
+    "alias": "puppet ear",
+    "term": "Puppeteer",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "KEEP",
+    "reason": "\"puppet ear\" is not a natural English phrase — it is a phonetic split of \"Puppeteer\" that would only appear when the user intends the tech tool."
+  },
+  {
+    "alias": "puppet eer",
+    "term": "Puppeteer",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "KEEP",
+    "reason": "\"puppet eer\" is not a natural English phrase — it is a phonetic split of \"Puppeteer\" that Whisper produces when the user says the library name."
+  },
+  {
+    "alias": "sell enium",
+    "term": "Selenium",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "KEEP",
+    "reason": "\"sell enium\" has no natural English meaning — it is a clear phonetic mis-transcription of \"Selenium\"."
+  },
+  {
+    "alias": "selenium",
+    "term": "Selenium",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "DROP",
+    "reason": "Identity flag — alias equals the term (case-insensitive). Always drop."
+  },
+  {
+    "alias": "story book",
+    "term": "Storybook",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "DROP",
+    "reason": "\"story book\" is common English (a book of stories). Would break natural phrases like \"read me a story book\"."
+  },
+  {
+    "alias": "crow matic",
+    "term": "Chromatic",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "KEEP",
+    "reason": "\"crow matic\" has no natural English meaning — it is a phonetic mis-transcription of \"Chromatic\"."
+  },
+  {
+    "alias": "chrome atic",
+    "term": "Chromatic",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "KEEP",
+    "reason": "\"chrome atic\" is a phonetic split that would not appear in natural English dictation; no ordinary phrase uses this form."
+  },
+  {
+    "alias": "re dux",
+    "term": "Redux",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "DROP",
+    "reason": "\"redux\" is a real English/Latin word meaning \"brought back\" (e.g., \"Apocalypse Now Redux\"). The split form would incorrectly replace ordinary usage."
+  },
+  {
+    "alias": "ree ducks",
+    "term": "Redux",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "KEEP",
+    "reason": "\"ree ducks\" has no natural English meaning — it is a phonetic mis-transcription of \"Redux\"."
+  },
+  {
+    "alias": "mob x",
+    "term": "MobX",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "KEEP",
+    "reason": "\"mob x\" does not form a natural English phrase; the combination unambiguously signals the tech library."
+  },
+  {
+    "alias": "mob ex",
+    "term": "MobX",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "KEEP",
+    "reason": "\"mob ex\" has no natural English meaning — a clear phonetic variant of \"MobX\"."
+  },
+  {
+    "alias": "zoo stand",
+    "term": "Zustand",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "DROP",
+    "reason": "\"zoo stand\" is plausible ordinary English (a stand at a zoo). Would break natural dictation."
+  },
+  {
+    "alias": "zuh stand",
+    "term": "Zustand",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "KEEP",
+    "reason": "\"zuh stand\" has no natural English meaning — it is a phonetic mis-transcription of the German-origin library name \"Zustand\"."
+  },
+  {
+    "alias": "zu stond",
+    "term": "Zustand",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "KEEP",
+    "reason": "\"zu stond\" has no natural English meaning — a phonetic mis-transcription of \"Zustand\"."
+  },
+  {
+    "alias": "joe tie",
+    "term": "Jotai",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "DROP",
+    "reason": "\"joe tie\" is ordinary English — could appear in natural dictation such as \"Joe, tie your shoes\" or references to a person named Joe."
+  },
+  {
+    "alias": "joh tie",
+    "term": "Jotai",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "KEEP",
+    "reason": "\"joh\" is not an English word; \"joh tie\" has no natural English meaning and is a phonetic mis-transcription of \"Jotai\"."
+  },
+  {
+    "alias": "joe thai",
+    "term": "Jotai",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "DROP",
+    "reason": "\"Thai\" is a real adjective in common use (Thai food, Thai culture). \"joe thai\" could naturally appear when dictating about Thai restaurants or a person named Joe."
+  },
+  {
+    "alias": "re coil",
+    "term": "Recoil",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "DROP",
+    "reason": "\"recoil\" is common English (gun recoil, to recoil in horror). The split form would incorrectly replace natural phrases like \"the gun had significant re coil\"."
+  },
+  {
+    "alias": "x state",
+    "term": "XState",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "DROP",
+    "reason": "\"x state\" is ordinary English; could appear in phrases like \"x state of the art\" or in political/geographic contexts."
+  },
+  {
+    "alias": "ex state",
+    "term": "XState",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "DROP",
+    "reason": "\"ex state\" is natural English meaning \"former state\" (e.g., \"ex-state department\"). Very likely to appear in ordinary dictation."
+  },
+  {
+    "alias": "tan stack",
+    "term": "TanStack",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "DROP",
+    "reason": "\"tan stack\" is ordinary English — could appear in phrases like \"a tan stack of folders\" or similar descriptions."
+  },
+  {
+    "alias": "tan stacked",
+    "term": "TanStack",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "DROP",
+    "reason": "\"tan stacked\" uses two ordinary English words in a plausible combination (describing color and arrangement). Risk of collision in natural speech."
+  },
+  {
+    "alias": "react query",
+    "term": "React Query",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "DROP",
+    "reason": "Identity flag — alias is a case-insensitive match of the term. Always drop."
+  },
+  {
+    "alias": "react quarry",
+    "term": "React Query",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "DROP",
+    "reason": "Both \"react\" and \"quarry\" are common English words; \"react quarry\" could appear in natural dictation about animal behavior or mining contexts."
+  },
+  {
+    "alias": "s w r",
+    "term": "SWR",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "KEEP",
+    "reason": "Letter-by-letter spelling of the abbreviation SWR — no ordinary English meaning."
+  },
+  {
+    "alias": "ess double you are",
+    "term": "SWR",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "KEEP",
+    "reason": "Spoken-out letter spelling of \"SWR\" — not a natural English phrase."
+  },
+  {
+    "alias": "apollo graphql",
+    "term": "Apollo",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "KEEP",
+    "reason": "\"graphql\" is a tech term; the combined phrase unambiguously refers to the Apollo GraphQL library."
+  },
+  {
+    "alias": "a pollo",
+    "term": "Apollo",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "KEEP",
+    "reason": "\"a pollo\" is not natural English — a phonetic mis-transcription of \"Apollo\"."
+  },
+  {
+    "alias": "t r p c",
+    "term": "tRPC",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "KEEP",
+    "reason": "Letter-by-letter spelling of the abbreviation tRPC — no ordinary English meaning."
+  },
+  {
+    "alias": "tee are pee see",
+    "term": "tRPC",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "KEEP",
+    "reason": "Spoken-out letter spelling of \"tRPC\" — not a natural English phrase."
+  },
+  {
+    "alias": "t rpc",
+    "term": "tRPC",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "KEEP",
+    "reason": "\"t rpc\" has no natural English meaning — a partial abbreviation variant of \"tRPC\"."
+  },
+  {
+    "alias": "trpc",
+    "term": "tRPC",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "DROP",
+    "reason": "Identity flag — \"trpc\" is a case-insensitive match of the term. Always drop."
+  },
+  {
+    "alias": "prism a",
+    "term": "Prisma",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "KEEP",
+    "reason": "\"prism a\" is not a natural English phrase — a phonetic split of \"Prisma\"."
+  },
+  {
+    "alias": "prison a",
+    "term": "Prisma",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "DROP",
+    "reason": "\"prison\" is a very common English word; \"prison a\" could naturally appear in dictation such as \"Prison A had maximum security\" or \"I visited prison, a difficult experience\"."
+  },
+  {
+    "alias": "pris ma",
+    "term": "Prisma",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "KEEP",
+    "reason": "\"pris ma\" has no natural English meaning — a phonetic mis-transcription of \"Prisma\"."
+  },
+  {
+    "alias": "drizzle orm",
+    "term": "Drizzle",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "KEEP",
+    "reason": "\"orm\" is a tech abbreviation with no ordinary English meaning; the phrase unambiguously refers to the Drizzle ORM library."
+  },
+  {
+    "alias": "drizzell",
+    "term": "Drizzle",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "KEEP",
+    "reason": "\"drizzell\" is not a real English word — a phonetic mis-transcription of \"Drizzle\"."
+  },
+  {
+    "alias": "sequel eyes",
+    "term": "Sequelize",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "DROP",
+    "reason": "\"sequel\" and \"eyes\" are both very common English words; \"sequel eyes\" could naturally appear in sentences about movie sequels or descriptions."
+  },
+  {
+    "alias": "sequel ize",
+    "term": "Sequelize",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "KEEP",
+    "reason": "\"sequel ize\" is not a natural English phrase — a phonetic split of \"Sequelize\" with no plausible ordinary use."
+  },
+  {
+    "alias": "see qua lize",
+    "term": "Sequelize",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "KEEP",
+    "reason": "\"see qua lize\" has no natural English meaning — a phonetic mis-transcription of \"Sequelize\"."
+  },
+  {
+    "alias": "type orm",
+    "term": "TypeORM",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "KEEP",
+    "reason": "\"orm\" is a tech abbreviation with no ordinary English meaning; the phrase unambiguously refers to the TypeORM library."
+  },
+  {
+    "alias": "type o r m",
+    "term": "TypeORM",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "KEEP",
+    "reason": "\"o r m\" is a letter-spelled abbreviation with no ordinary English meaning; unambiguously tech context."
+  },
+  {
+    "alias": "k nex",
+    "term": "Knex",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "KEEP",
+    "reason": "\"k nex\" is not a natural English phrase — a phonetic split of \"Knex\"."
+  },
+  {
+    "alias": "nex",
+    "term": "Knex",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "KEEP",
+    "reason": "\"nex\" is not a real English word — a phonetic fragment mis-transcription of \"Knex\"."
+  },
+  {
+    "alias": "connects",
+    "term": "Knex",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "DROP",
+    "reason": "\"connects\" is an extremely common English verb. Would break countless natural sentences like \"she connects with her team\" or \"it connects to the server\"."
+  },
+  {
+    "alias": "mongo ose",
+    "term": "Mongoose",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "KEEP",
+    "reason": "\"mongo ose\" is not a natural English phrase — a phonetic split of \"Mongoose\"."
+  },
+  {
+    "alias": "mon goose",
+    "term": "Mongoose",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "KEEP",
+    "reason": "\"mon goose\" is not a natural English phrase (\"mon\" is not standard English). A phonetic split of \"Mongoose\"."
+  },
+  {
+    "alias": "zawed",
+    "term": "Zod",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "KEEP",
+    "reason": "\"zawed\" is not a real English word — a phonetic mis-transcription of \"Zod\"."
+  },
+  {
+    "alias": "zawd",
+    "term": "Zod",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "KEEP",
+    "reason": "\"zawd\" is not a real English word — a phonetic mis-transcription of \"Zod\"."
+  },
+  {
+    "alias": "yup validator",
+    "term": "Yup",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "KEEP",
+    "reason": "\"yup validator\" has no natural English meaning as a phrase — unambiguously refers to the Yup validation library."
+  },
+  {
+    "alias": "form ik",
+    "term": "Formik",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "KEEP",
+    "reason": "\"form ik\" is not a natural English phrase — a phonetic split of \"Formik\"."
+  },
+  {
+    "alias": "for mick",
+    "term": "Formik",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "DROP",
+    "reason": "\"for Mick\" is natural English (a personal name in a prepositional phrase). Would break dictation like \"I did this for Mick\" or \"a gift for Mick\"."
+  },
+  {
+    "alias": "react hook form",
+    "term": "React Hook Form",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "DROP",
+    "reason": "Identity flag — alias is a case-insensitive match of the term. Always drop."
+  },
+  {
+    "alias": "three js",
+    "term": "Three.js",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "KEEP",
+    "reason": "\"three js\" is not a natural English phrase — \"js\" has no ordinary English meaning and the combination unambiguously refers to the library."
+  },
+  {
+    "alias": "three jay es",
+    "term": "Three.js",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "KEEP",
+    "reason": "\"three jay es\" is a spoken-out rendering of \"Three.js\" (three + J + S) — not a natural English phrase."
+  },
+  {
+    "alias": "3 js",
+    "term": "Three.js",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "KEEP",
+    "reason": "\"3 js\" is not a natural English phrase — unambiguously a tech library reference."
+  },
+  {
+    "alias": "d3 js",
+    "term": "D3.js",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "KEEP",
+    "reason": "\"d3 js\" is not a natural English phrase — unambiguously refers to the D3.js library."
+  },
+  {
+    "alias": "d three js",
+    "term": "D3.js",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "KEEP",
+    "reason": "\"d three js\" is not a natural English phrase — a phonetic rendering of \"D3.js\"."
+  },
+  {
+    "alias": "dee three",
+    "term": "D3.js",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "DROP",
+    "reason": "\"dee three\" naturally appears in common dictation about vitamin D3, D3 formats, or other non-tech D3 references. Too broad."
+  },
+  {
+    "alias": "chart js",
+    "term": "Chart.js",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "KEEP",
+    "reason": "\"chart js\" is not a natural English phrase — unambiguously refers to the Chart.js library."
+  },
+  {
+    "alias": "charts js",
+    "term": "Chart.js",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "KEEP",
+    "reason": "\"charts js\" is not a natural English phrase — unambiguously refers to Chart.js."
+  },
+  {
+    "alias": "re charts",
+    "term": "Recharts",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "DROP",
+    "reason": "\"re charts\" functions as natural English meaning \"to chart again\" — could appear in phrases like \"she re charts the course\"."
+  },
+  {
+    "alias": "ree charts",
+    "term": "Recharts",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "KEEP",
+    "reason": "\"ree charts\" is not a natural English phrase — \"ree\" is not a standard English word, making this a clear phonetic mis-transcription."
+  },
+  {
+    "alias": "frame er motion",
+    "term": "Framer Motion",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "KEEP",
+    "reason": "\"frame er motion\" is not a natural English phrase — the unusual split \"frame er\" signals a phonetic mis-transcription of \"Framer Motion\"."
+  },
+  {
+    "alias": "framer mo tion",
+    "term": "Framer Motion",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "KEEP",
+    "reason": "\"framer mo tion\" is not a natural English phrase — the split \"mo tion\" is unnatural in ordinary dictation."
+  },
+  {
+    "alias": "g sap",
+    "term": "GSAP",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "KEEP",
+    "reason": "\"g sap\" is not a natural English phrase — a phonetic variant of the GSAP acronym."
+  },
+  {
+    "alias": "gee sap",
+    "term": "GSAP",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "KEEP",
+    "reason": "\"gee sap\" is not a natural English phrase — a phonetic rendering of \"GSAP\" (G + SAP)."
+  },
+  {
+    "alias": "g s a p",
+    "term": "GSAP",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "KEEP",
+    "reason": "Letter-by-letter spelling of the abbreviation GSAP — no ordinary English meaning."
+  },
+  {
+    "alias": "lot ee",
+    "term": "Lottie",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "KEEP",
+    "reason": "\"lot ee\" is not a natural English phrase — a phonetic mis-transcription of \"Lottie\"."
+  },
+  {
+    "alias": "lotty",
+    "term": "Lottie",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "KEEP",
+    "reason": "\"lotty\" is not a standard English word — a phonetic mis-transcription of \"Lottie\"."
+  },
+  {
+    "alias": "socket io",
+    "term": "Socket.IO",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "KEEP",
+    "reason": "\"io\" has no ordinary English meaning; the combination \"socket io\" unambiguously refers to the Socket.IO library."
+  },
+  {
+    "alias": "socket i o",
+    "term": "Socket.IO",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "KEEP",
+    "reason": "\"socket i o\" is a letter-spelled rendering of \"Socket.IO\" — not a natural English phrase."
+  },
+  {
+    "alias": "sock it i o",
+    "term": "Socket.IO",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "KEEP",
+    "reason": "\"sock it i o\" is not a natural English phrase as a whole — a phonetic rendering of \"Socket.IO\"."
+  },
+  {
+    "alias": "rx js",
+    "term": "RxJS",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "KEEP",
+    "reason": "\"rx js\" is not a natural English phrase — unambiguously a tech library reference."
+  },
+  {
+    "alias": "are ex js",
+    "term": "RxJS",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "KEEP",
+    "reason": "\"are ex js\" is not a natural English phrase — a phonetic rendering of \"RxJS\"."
+  },
+  {
+    "alias": "r x j s",
+    "term": "RxJS",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "KEEP",
+    "reason": "Letter-by-letter spelling of the abbreviation RxJS — no ordinary English meaning."
+  },
+  {
+    "alias": "low dash",
+    "term": "Lodash",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "DROP",
+    "reason": "\"low dash\" is ordinary English — both words are common and the phrase could appear in natural dictation about movement, punctuation, or typography."
+  },
+  {
+    "alias": "lo dash",
+    "term": "Lodash",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "KEEP",
+    "reason": "\"lo dash\" is not a natural modern English phrase — \"lo\" is archaic and the combination is not in common use."
+  },
+  {
+    "alias": "ram da",
+    "term": "Ramda",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "KEEP",
+    "reason": "\"ram da\" is not a natural English phrase — a phonetic split of \"Ramda\"."
+  },
+  {
+    "alias": "ram duh",
+    "term": "Ramda",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "KEEP",
+    "reason": "\"ram duh\" is not a natural English phrase — a phonetic mis-transcription of \"Ramda\"."
+  },
+  {
+    "alias": "im er",
+    "term": "Immer",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "KEEP",
+    "reason": "\"im er\" is not a natural English phrase — a phonetic split of \"Immer\"."
+  },
+  {
+    "alias": "ih mer",
+    "term": "Immer",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "KEEP",
+    "reason": "\"ih mer\" is not a natural English phrase — a phonetic mis-transcription of \"Immer\"."
+  },
+  {
+    "alias": "date fns",
+    "term": "date-fns",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "KEEP",
+    "reason": "\"fns\" is not an English word; the phrase unambiguously refers to the date-fns library."
+  },
+  {
+    "alias": "date functions",
+    "term": "date-fns",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "DROP",
+    "reason": "\"date functions\" is natural English in any software or spreadsheet context. Would break common phrases like \"date functions in Excel\" or \"built-in date functions\"."
+  },
+  {
+    "alias": "moment js",
+    "term": "Moment.js",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "KEEP",
+    "reason": "\"moment js\" is not a natural English phrase — unambiguously refers to the Moment.js library."
+  },
+  {
+    "alias": "day js",
+    "term": "Day.js",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "KEEP",
+    "reason": "\"day js\" is not a natural English phrase — unambiguously refers to the Day.js library."
+  },
+  {
+    "alias": "ax ee os",
+    "term": "Axios",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "KEEP",
+    "reason": "\"ax ee os\" has no natural English meaning — a phonetic mis-transcription of \"Axios\"."
+  },
+  {
+    "alias": "axe ee os",
+    "term": "Axios",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "KEEP",
+    "reason": "\"axe ee os\" has no natural English meaning — a phonetic mis-transcription of \"Axios\"."
+  },
+  {
+    "alias": "ax ios",
+    "term": "Axios",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "KEEP",
+    "reason": "\"ax ios\" has no natural English meaning — a phonetic split of \"Axios\"."
+  },
+  {
+    "alias": "tur so",
+    "term": "Turso",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "KEEP",
+    "reason": "\"tur so\" has no natural English meaning — a phonetic split of \"Turso\"."
+  },
+  {
+    "alias": "tor so",
+    "term": "Turso",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "DROP",
+    "reason": "\"torso\" is a very common English word (the trunk of the body). The split \"tor so\" would incorrectly replace natural dictation like \"the sculpture's torso\" or \"a human torso\"."
+  },
+  {
+    "alias": "drizzle o r m",
+    "term": "Drizzle ORM",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "KEEP",
+    "reason": "\"o r m\" is a letter-spelled tech abbreviation with no ordinary English meaning; the combination is unambiguously a tech library reference."
+  },
+  {
+    "alias": "drizzell orm",
+    "term": "Drizzle ORM",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "KEEP",
+    "reason": "\"drizzell\" is not a real English word; the combination is a phonetic mis-transcription of \"Drizzle ORM\"."
+  },
+  {
+    "alias": "payload see em es",
+    "term": "Payload CMS",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "KEEP",
+    "reason": "\"see em es\" is a spoken-out letter rendering of \"CMS\" with no ordinary English meaning; the phrase unambiguously refers to Payload CMS."
+  },
+  {
+    "alias": "strap ee",
+    "term": "Strapi",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "KEEP",
+    "reason": "\"strap ee\" is not a natural English phrase — a phonetic mis-transcription of \"Strapi\"."
+  },
+  {
+    "alias": "stra pee",
+    "term": "Strapi",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "KEEP",
+    "reason": "\"stra pee\" is not a natural English phrase — a phonetic split of \"Strapi\"."
+  },
+  {
+    "alias": "strappy",
+    "term": "Strapi",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "DROP",
+    "reason": "\"strappy\" is a real English adjective (having straps, e.g., \"strappy sandals\"). Would break natural dictation about footwear or accessories."
+  },
+  {
+    "alias": "java script",
+    "term": "JavaScript",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "KEEP",
+    "reason": "Phonetic pronunciation of JavaScript; 'java script' as a phrase has no ordinary English meaning."
+  },
+  {
+    "alias": "job a script",
+    "term": "JavaScript",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "KEEP",
+    "reason": "Phonetic mis-transcription with no ordinary English meaning."
+  },
+  {
+    "alias": "java skipped",
+    "term": "JavaScript",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "KEEP",
+    "reason": "Phonetic mis-transcription with no ordinary English meaning."
+  },
+  {
+    "alias": "javascript",
+    "term": "JavaScript",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "DROP",
+    "reason": "Identity flag — alias equals term."
+  },
+  {
+    "alias": "javas crypt",
+    "term": "JavaScript",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "KEEP",
+    "reason": "Phonetic mis-transcription with no ordinary English meaning."
+  },
+  {
+    "alias": "type script",
+    "term": "TypeScript",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "KEEP",
+    "reason": "'Type script' as two words is extremely uncommon in ordinary English; the phrase unambiguously signals TypeScript in dictation."
+  },
+  {
+    "alias": "type skipped",
+    "term": "TypeScript",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "KEEP",
+    "reason": "Phonetic mis-transcription with no ordinary English meaning."
+  },
+  {
+    "alias": "types crypt",
+    "term": "TypeScript",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "KEEP",
+    "reason": "Phonetic mis-transcription with no ordinary English meaning."
+  },
+  {
+    "alias": "typescript",
+    "term": "TypeScript",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "DROP",
+    "reason": "Identity flag — alias equals term."
+  },
+  {
+    "alias": "tight script",
+    "term": "TypeScript",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "DROP",
+    "reason": "Ordinary English phrase — 'a tight script' is common usage (e.g., a well-written screenplay)."
+  },
+  {
+    "alias": "pie thon",
+    "term": "Python",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "KEEP",
+    "reason": "Phonetic mis-transcription with no ordinary English meaning."
+  },
+  {
+    "alias": "pie then",
+    "term": "Python",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "DROP",
+    "reason": "Ordinary English — 'pie then cake' or similar constructions are common in speech."
+  },
+  {
+    "alias": "python",
+    "term": "Python",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "DROP",
+    "reason": "Identity flag — alias equals term."
+  },
+  {
+    "alias": "py thon",
+    "term": "Python",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "KEEP",
+    "reason": "Phonetic mis-transcription with no ordinary English meaning."
+  },
+  {
+    "alias": "rusted",
+    "term": "Rust",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "DROP",
+    "reason": "Ordinary English — past tense of 'rust' (e.g., 'the gate rusted shut')."
+  },
+  {
+    "alias": "rusk",
+    "term": "Rust",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "DROP",
+    "reason": "Common English word — a type of hard, dry bread/biscuit."
+  },
+  {
+    "alias": "golang",
+    "term": "Go",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "KEEP",
+    "reason": "Pure tech term; 'golang' has no ordinary English meaning."
+  },
+  {
+    "alias": "go lang",
+    "term": "Go",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "DEDUPE",
+    "reason": "Conflict: maps to both Go and Golang. 'Golang' is the more specific colloquial name for the language and what 'go lang' spells out phonetically."
+  },
+  {
+    "alias": "go laying",
+    "term": "Go",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "DEDUPE",
+    "reason": "Conflict: maps to both Go and Golang. Winner is Golang (more specific). Note: ordinary English risk, but conflict rule takes precedence."
+  },
+  {
+    "alias": "go lang",
+    "term": "Golang",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "DEDUPE",
+    "reason": "Conflict: maps to both Go and Golang. Golang is the winner — 'go lang' phonetically spells out 'Golang'."
+  },
+  {
+    "alias": "go laying",
+    "term": "Golang",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "DEDUPE",
+    "reason": "Conflict: maps to both Go and Golang. Golang is the winner."
+  },
+  {
+    "alias": "go long",
+    "term": "Golang",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "DROP",
+    "reason": "Ordinary English — 'go long' is a very common sports phrase (e.g., football: 'go long!')."
+  },
+  {
+    "alias": "caught lin",
+    "term": "Kotlin",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "KEEP",
+    "reason": "Phonetic mis-transcription with no ordinary English meaning."
+  },
+  {
+    "alias": "cotton",
+    "term": "Kotlin",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "DROP",
+    "reason": "Very common English word — the fabric."
+  },
+  {
+    "alias": "kot lin",
+    "term": "Kotlin",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "KEEP",
+    "reason": "Phonetic mis-transcription with no ordinary English meaning."
+  },
+  {
+    "alias": "cotland",
+    "term": "Kotlin",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "KEEP",
+    "reason": "'Cotland' is not a standard English word and has no common non-tech meaning."
+  },
+  {
+    "alias": "swifted",
+    "term": "Swift",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "KEEP",
+    "reason": "'Swift' is not a standard verb in English, so 'swifted' has no ordinary English meaning."
+  },
+  {
+    "alias": "scholar",
+    "term": "Scala",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "DROP",
+    "reason": "Very common English word — an academic or learned person."
+  },
+  {
+    "alias": "scale a",
+    "term": "Scala",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "DROP",
+    "reason": "Ordinary English — 'scale a wall' or 'on a scale a to b' are common constructions."
+  },
+  {
+    "alias": "scaler",
+    "term": "Scala",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "DROP",
+    "reason": "Common English word — a tool or device used for scaling."
+  },
+  {
+    "alias": "has kell",
+    "term": "Haskell",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "KEEP",
+    "reason": "Phonetic mis-transcription with no ordinary English meaning."
+  },
+  {
+    "alias": "hassle",
+    "term": "Haskell",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "DROP",
+    "reason": "Very common English word — a troublesome situation or inconvenience."
+  },
+  {
+    "alias": "has kel",
+    "term": "Haskell",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "KEEP",
+    "reason": "Phonetic mis-transcription with no ordinary English meaning."
+  },
+  {
+    "alias": "er lang",
+    "term": "Erlang",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "KEEP",
+    "reason": "Phonetic mis-transcription with no ordinary English meaning."
+  },
+  {
+    "alias": "air lang",
+    "term": "Erlang",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "KEEP",
+    "reason": "Phonetic mis-transcription with no ordinary English meaning."
+  },
+  {
+    "alias": "ur lang",
+    "term": "Erlang",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "KEEP",
+    "reason": "Phonetic mis-transcription with no ordinary English meaning."
+  },
+  {
+    "alias": "a licks er",
+    "term": "Elixir",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "KEEP",
+    "reason": "Phonetic mis-transcription with no ordinary English meaning."
+  },
+  {
+    "alias": "elixir",
+    "term": "Elixir",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "DROP",
+    "reason": "Identity flag — alias equals term."
+  },
+  {
+    "alias": "e licks ir",
+    "term": "Elixir",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "KEEP",
+    "reason": "Phonetic mis-transcription with no ordinary English meaning."
+  },
+  {
+    "alias": "closure",
+    "term": "Clojure",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "DROP",
+    "reason": "Very common English word — the act of closing or resolving; also a standard programming concept independent of Clojure."
+  },
+  {
+    "alias": "clo sure",
+    "term": "Clojure",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "KEEP",
+    "reason": "Phonetic mis-transcription with no ordinary English meaning as a two-token phrase."
+  },
+  {
+    "alias": "close your",
+    "term": "Clojure",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "DROP",
+    "reason": "Ordinary English — 'close your eyes' and similar constructions are extremely common."
+  },
+  {
+    "alias": "closure script",
+    "term": "ClojureScript",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "DROP",
+    "reason": "Ordinary English — a programmer could naturally say 'closure script' to mean a script that uses closures."
+  },
+  {
+    "alias": "close your script",
+    "term": "ClojureScript",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "DROP",
+    "reason": "Ordinary English — 'close your script and listen' is a perfectly natural sentence."
+  },
+  {
+    "alias": "c plus plus",
+    "term": "C++",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "KEEP",
+    "reason": "Letter-spelling of C++; phrase has no ordinary English meaning outside the language name."
+  },
+  {
+    "alias": "see plus plus",
+    "term": "C++",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "KEEP",
+    "reason": "Phonetic letter-spelling of C++ with no ordinary English meaning."
+  },
+  {
+    "alias": "sea plus plus",
+    "term": "C++",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "KEEP",
+    "reason": "Phonetic letter-spelling of C++ with no ordinary English meaning."
+  },
+  {
+    "alias": "c++",
+    "term": "C++",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "DROP",
+    "reason": "Identity flag — alias equals term."
+  },
+  {
+    "alias": "c sharp",
+    "term": "C#",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "KEEP",
+    "reason": "C# and C-sharp (the musical note) share the same symbol; replacing 'c sharp' with 'C#' is correct in both the programming and music contexts."
+  },
+  {
+    "alias": "see sharp",
+    "term": "C#",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "KEEP",
+    "reason": "Phonetic spelling of C#; the replacement 'C#' is appropriate in both tech and music contexts."
+  },
+  {
+    "alias": "sea sharp",
+    "term": "C#",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "KEEP",
+    "reason": "Phonetic spelling of C#; replacement is appropriate in both contexts."
+  },
+  {
+    "alias": "c hashtag",
+    "term": "C#",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "KEEP",
+    "reason": "Phonetic mis-transcription of C# with no ordinary English meaning."
+  },
+  {
+    "alias": "f sharp",
+    "term": "F#",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "KEEP",
+    "reason": "F# and F-sharp (the musical note) share the same symbol; the replacement is correct in both contexts."
+  },
+  {
+    "alias": "ef sharp",
+    "term": "F#",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "KEEP",
+    "reason": "Phonetic spelling of F# with no ordinary English meaning."
+  },
+  {
+    "alias": "objective see",
+    "term": "Objective-C",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "KEEP",
+    "reason": "Phonetic mis-transcription of 'Objective-C' with no ordinary English meaning."
+  },
+  {
+    "alias": "objective c",
+    "term": "Objective-C",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "KEEP",
+    "reason": "Clear tech phrase; cannot plausibly appear in ordinary English without meaning the language."
+  },
+  {
+    "alias": "cobalt",
+    "term": "COBOL",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "DROP",
+    "reason": "Very common English word — a metallic element and a shade of blue."
+  },
+  {
+    "alias": "co ball",
+    "term": "COBOL",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "KEEP",
+    "reason": "Phonetic mis-transcription with no ordinary English meaning."
+  },
+  {
+    "alias": "co bol",
+    "term": "COBOL",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "KEEP",
+    "reason": "Phonetic mis-transcription with no ordinary English meaning."
+  },
+  {
+    "alias": "four tran",
+    "term": "Fortran",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "KEEP",
+    "reason": "Phonetic mis-transcription with no ordinary English meaning."
+  },
+  {
+    "alias": "fort ran",
+    "term": "Fortran",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "DROP",
+    "reason": "Ordinary English — 'the fort ran out of supplies' is a natural sentence."
+  },
+  {
+    "alias": "lou a",
+    "term": "Lua",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "KEEP",
+    "reason": "Phonetic mis-transcription with no ordinary English meaning."
+  },
+  {
+    "alias": "loo a",
+    "term": "Lua",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "KEEP",
+    "reason": "Phonetic mis-transcription with no ordinary English meaning."
+  },
+  {
+    "alias": "lew a",
+    "term": "Lua",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "KEEP",
+    "reason": "Phonetic mis-transcription with no ordinary English meaning."
+  },
+  {
+    "alias": "pearl",
+    "term": "Perl",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "DROP",
+    "reason": "Very common English word — a gem; explicit homophone-of-real-word case per the rules."
+  },
+  {
+    "alias": "purl",
+    "term": "Perl",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "DROP",
+    "reason": "Common English word — a knitting stitch."
+  },
+  {
+    "alias": "p h p",
+    "term": "PHP",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "KEEP",
+    "reason": "Letter-by-letter spelling of PHP with no ordinary English meaning."
+  },
+  {
+    "alias": "pee h p",
+    "term": "PHP",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "KEEP",
+    "reason": "Phonetic letter spelling of PHP with no ordinary English meaning."
+  },
+  {
+    "alias": "pee aitch pee",
+    "term": "PHP",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "KEEP",
+    "reason": "Phonetic letter spelling of PHP with no ordinary English meaning."
+  },
+  {
+    "alias": "rooby",
+    "term": "Ruby",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "KEEP",
+    "reason": "Phonetic mis-transcription; not a standard English word."
+  },
+  {
+    "alias": "darts",
+    "term": "Dart",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "DROP",
+    "reason": "Common English word — the throwing game and the projectiles."
+  },
+  {
+    "alias": "zig lang",
+    "term": "Zig",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "KEEP",
+    "reason": "Phonetic tech phrase with no ordinary English meaning."
+  },
+  {
+    "alias": "nimm",
+    "term": "Nim",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "KEEP",
+    "reason": "Phonetic mis-transcription; not a standard English word."
+  },
+  {
+    "alias": "nim lang",
+    "term": "Nim",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "KEEP",
+    "reason": "Phonetic tech phrase with no ordinary English meaning."
+  },
+  {
+    "alias": "jewlia",
+    "term": "Julia",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "KEEP",
+    "reason": "Phonetic mis-transcription; not a standard English word."
+  },
+  {
+    "alias": "jewel ya",
+    "term": "Julia",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "KEEP",
+    "reason": "Phonetic mis-transcription; 'jewel ya' is not a common English phrase."
+  },
+  {
+    "alias": "are lang",
+    "term": "R",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "KEEP",
+    "reason": "Phonetic mis-transcription with no ordinary English meaning."
+  },
+  {
+    "alias": "our lang",
+    "term": "R",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "KEEP",
+    "reason": "Phonetic mis-transcription with no ordinary English meaning."
+  },
+  {
+    "alias": "mat lab",
+    "term": "MATLAB",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "KEEP",
+    "reason": "Phonetic mis-transcription of MATLAB; 'mat lab' is not a common English phrase."
+  },
+  {
+    "alias": "mat lob",
+    "term": "MATLAB",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "KEEP",
+    "reason": "Phonetic mis-transcription with no ordinary English meaning."
+  },
+  {
+    "alias": "groovey",
+    "term": "Groovy",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "KEEP",
+    "reason": "Non-standard misspelling that serves as a clear mis-transcription marker; Whisper is unlikely to output the standard 'groovy' spelling as 'groovey'."
+  },
+  {
+    "alias": "o camel",
+    "term": "OCaml",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "KEEP",
+    "reason": "Phonetic mis-transcription; 'o camel' has no common English meaning as a phrase."
+  },
+  {
+    "alias": "oh camel",
+    "term": "OCaml",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "KEEP",
+    "reason": "'Oh camel' is not a common English phrase; it reads as a phonetic rendering of OCaml."
+  },
+  {
+    "alias": "o cam el",
+    "term": "OCaml",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "KEEP",
+    "reason": "Phonetic mis-transcription with no ordinary English meaning."
+  },
+  {
+    "alias": "lisp lang",
+    "term": "Lisp",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "KEEP",
+    "reason": "Phonetic tech phrase with no ordinary English meaning."
+  },
+  {
+    "alias": "scheme lang",
+    "term": "Scheme",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "KEEP",
+    "reason": "Disambiguated tech phrase; 'scheme lang' has no ordinary English meaning."
+  },
+  {
+    "alias": "racket lang",
+    "term": "Racket",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "KEEP",
+    "reason": "Disambiguated tech phrase; 'racket lang' has no ordinary English meaning."
+  },
+  {
+    "alias": "racquets",
+    "term": "Racket",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "DROP",
+    "reason": "Common English word — plural of racquet, the sports equipment."
+  },
+  {
+    "alias": "pro log",
+    "term": "Prolog",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "KEEP",
+    "reason": "'Pro log' as a two-word phrase is not a common English expression; it unambiguously reads as a phonetic split of Prolog."
+  },
+  {
+    "alias": "prologue",
+    "term": "Prolog",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "DROP",
+    "reason": "Very common English word — the introductory section of a play or book."
+  },
+  {
+    "alias": "solid ity",
+    "term": "Solidity",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "KEEP",
+    "reason": "Phonetic mis-transcription with no ordinary English meaning."
+  },
+  {
+    "alias": "soliditee",
+    "term": "Solidity",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "KEEP",
+    "reason": "Phonetic mis-transcription; not a standard English word."
+  },
+  {
+    "alias": "viper",
+    "term": "Vyper",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "DROP",
+    "reason": "Common English word — a venomous snake; also a well-known car model."
+  },
+  {
+    "alias": "vie per",
+    "term": "Vyper",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "KEEP",
+    "reason": "Phonetic mis-transcription with no ordinary English meaning."
+  },
+  {
+    "alias": "web assembly",
+    "term": "WebAssembly",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "KEEP",
+    "reason": "'Web assembly' as a phrase has no ordinary non-tech meaning; it exclusively refers to the technology in modern usage."
+  },
+  {
+    "alias": "wasm",
+    "term": "WebAssembly",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "DEDUPE",
+    "reason": "Conflict: maps to both WebAssembly and WASM. WASM is the more specific abbreviation and is the correct canonical form for this alias."
+  },
+  {
+    "alias": "web a sembly",
+    "term": "WebAssembly",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "KEEP",
+    "reason": "Phonetic mis-transcription with no ordinary English meaning."
+  },
+  {
+    "alias": "waz em",
+    "term": "WASM",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "KEEP",
+    "reason": "Phonetic mis-transcription with no ordinary English meaning."
+  },
+  {
+    "alias": "was um",
+    "term": "WASM",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "DROP",
+    "reason": "Ordinary English — 'was um' is a natural filler pattern in speech (e.g., 'it was um, like that')."
+  },
+  {
+    "alias": "wasm",
+    "term": "WASM",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "DEDUPE",
+    "reason": "Conflict + identity: maps to both WASM and WebAssembly. WASM is the winner as the more specific abbreviation."
+  },
+  {
+    "alias": "react js",
+    "term": "React",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "KEEP",
+    "reason": "Clear tech phrase with no ordinary English meaning."
+  },
+  {
+    "alias": "react.js",
+    "term": "React",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "KEEP",
+    "reason": "Clear tech term with no ordinary English meaning."
+  },
+  {
+    "alias": "react nay tiv",
+    "term": "React Native",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "KEEP",
+    "reason": "Phonetic mis-transcription with no ordinary English meaning."
+  },
+  {
+    "alias": "react nay tive",
+    "term": "React Native",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "KEEP",
+    "reason": "Phonetic mis-transcription with no ordinary English meaning."
+  },
+  {
+    "alias": "next js",
+    "term": "Next.js",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "DEDUPE",
+    "reason": "Conflict: maps to both Next.js and Nuxt.js. Next.js is the winner — 'next js' is the natural phonetic rendering of Next.js, and Next.js is more commonly referenced by this alias."
+  },
+  {
+    "alias": "next jay es",
+    "term": "Next.js",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "KEEP",
+    "reason": "Phonetic tech phrase with no ordinary English meaning."
+  },
+  {
+    "alias": "nexjs",
+    "term": "Next.js",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "KEEP",
+    "reason": "Tech mis-transcription with no ordinary English meaning."
+  },
+  {
+    "alias": "next j s",
+    "term": "Next.js",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "KEEP",
+    "reason": "Letter-spelling of Next.js with no ordinary English meaning."
+  },
+  {
+    "alias": "next js",
+    "term": "Nuxt.js",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "DEDUPE",
+    "reason": "Conflict: maps to both Next.js and Nuxt.js. Next.js is the winner."
+  },
+  {
+    "alias": "nux js",
+    "term": "Nuxt.js",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "KEEP",
+    "reason": "Phonetic tech phrase with no ordinary English meaning."
+  },
+  {
+    "alias": "nukes js",
+    "term": "Nuxt.js",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "KEEP",
+    "reason": "Phonetic mis-transcription with no ordinary English meaning."
+  },
+  {
+    "alias": "nux jay es",
+    "term": "Nuxt.js",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "KEEP",
+    "reason": "Phonetic tech phrase with no ordinary English meaning."
+  },
+  {
+    "alias": "view js",
+    "term": "Vue.js",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "KEEP",
+    "reason": "Clear tech phrase; 'view js' has no ordinary English meaning."
+  },
+  {
+    "alias": "view jay es",
+    "term": "Vue.js",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "KEEP",
+    "reason": "Phonetic tech phrase with no ordinary English meaning."
+  },
+  {
+    "alias": "vue js",
+    "term": "Vue.js",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "KEEP",
+    "reason": "Clear tech phrase with no ordinary English meaning."
+  },
+  {
+    "alias": "voo js",
+    "term": "Vue.js",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "KEEP",
+    "reason": "Phonetic mis-transcription with no ordinary English meaning."
+  },
+  {
+    "alias": "ang you ler",
+    "term": "Angular",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "KEEP",
+    "reason": "Phonetic mis-transcription with no ordinary English meaning."
+  },
+  {
+    "alias": "angular js",
+    "term": "Angular",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "DEDUPE",
+    "reason": "Conflict: maps to both Angular and AngularJS. AngularJS is the more specific winner — 'angular js' names the older JS-era framework specifically."
+  },
+  {
+    "alias": "angular jay es",
+    "term": "AngularJS",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "KEEP",
+    "reason": "Phonetic tech phrase with no ordinary English meaning."
+  },
+  {
+    "alias": "angular js",
+    "term": "AngularJS",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "DEDUPE",
+    "reason": "Conflict: maps to both Angular and AngularJS. AngularJS is the winner."
+  },
+  {
+    "alias": "svelt",
+    "term": "Svelte",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "KEEP",
+    "reason": "Not a standard English word; clear mis-transcription of Svelte."
+  },
+  {
+    "alias": "s felt",
+    "term": "Svelte",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "KEEP",
+    "reason": "Phonetic mis-transcription with no ordinary English meaning."
+  },
+  {
+    "alias": "sfelt",
+    "term": "Svelte",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "KEEP",
+    "reason": "Phonetic mis-transcription with no ordinary English meaning."
+  },
+  {
+    "alias": "svelled",
+    "term": "Svelte",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "KEEP",
+    "reason": "Not a standard English word; clear mis-transcription of Svelte."
+  },
+  {
+    "alias": "svelt kit",
+    "term": "SvelteKit",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "KEEP",
+    "reason": "Phonetic tech phrase with no ordinary English meaning."
+  },
+  {
+    "alias": "sfelt kit",
+    "term": "SvelteKit",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "KEEP",
+    "reason": "Phonetic tech phrase with no ordinary English meaning."
+  },
+  {
+    "alias": "svelte kit",
+    "term": "SvelteKit",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "KEEP",
+    "reason": "'Svelte kit' has no common non-technical meaning as a phrase; the two-word combination does not appear in ordinary English."
+  },
+  {
+    "alias": "re mix",
+    "term": "Remix",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "DROP",
+    "reason": "Ordinary English — 'remix' (to mix again) is a very common word in music and everyday speech."
+  },
+  {
+    "alias": "astro js",
+    "term": "Astro",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "KEEP",
+    "reason": "Clear tech phrase with no ordinary English meaning."
+  },
+  {
+    "alias": "ass trow",
+    "term": "Astro",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "KEEP",
+    "reason": "Phonetic mis-transcription with no ordinary English meaning."
+  },
+  {
+    "alias": "solid js",
+    "term": "Solid.js",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "DEDUPE",
+    "reason": "Conflict: maps to both Solid.js and SolidJS. Solid.js is the winner as the canonical dotted-name form."
+  },
+  {
+    "alias": "solid jay es",
+    "term": "Solid.js",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "DEDUPE",
+    "reason": "Conflict: maps to both Solid.js and SolidJS. Solid.js is the winner."
+  },
+  {
+    "alias": "solid jay es",
+    "term": "SolidJS",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "DEDUPE",
+    "reason": "Conflict: maps to both Solid.js and SolidJS. Solid.js is the winner."
+  },
+  {
+    "alias": "solid js",
+    "term": "SolidJS",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "DEDUPE",
+    "reason": "Conflict: maps to both Solid.js and SolidJS. Solid.js is the winner."
+  },
+  {
+    "alias": "quick",
+    "term": "Qwik",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "DROP",
+    "reason": "Very common English word — 'that was quick', 'quick question', etc."
+  },
+  {
+    "alias": "quik",
+    "term": "Qwik",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "KEEP",
+    "reason": "Non-standard spelling that is not a dictionary word; serves as a clear phonetic marker for Qwik."
+  },
+  {
+    "alias": "pre act",
+    "term": "Preact",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "KEEP",
+    "reason": "'Pre act' is not a common English phrase; it reads as a phonetic split of Preact."
+  },
+  {
+    "alias": "pree act",
+    "term": "Preact",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "KEEP",
+    "reason": "Phonetic mis-transcription with no ordinary English meaning."
+  },
+  {
+    "alias": "ember js",
+    "term": "Ember.js",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "KEEP",
+    "reason": "Clear tech phrase with no ordinary English meaning."
+  },
+  {
+    "alias": "ember jay es",
+    "term": "Ember.js",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "KEEP",
+    "reason": "Phonetic tech phrase with no ordinary English meaning."
+  },
+  {
+    "alias": "backbone js",
+    "term": "Backbone.js",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "KEEP",
+    "reason": "Clear tech phrase with no ordinary English meaning."
+  },
+  {
+    "alias": "backbone jay es",
+    "term": "Backbone.js",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "KEEP",
+    "reason": "Phonetic tech phrase with no ordinary English meaning."
+  },
+  {
+    "alias": "j query",
+    "term": "jQuery",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "KEEP",
+    "reason": "Clear tech phrase; 'j query' has no ordinary English meaning."
+  },
+  {
+    "alias": "jay query",
+    "term": "jQuery",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "KEEP",
+    "reason": "Phonetic tech phrase with no ordinary English meaning."
+  },
+  {
+    "alias": "j quarry",
+    "term": "jQuery",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "KEEP",
+    "reason": "Phonetic mis-transcription with no ordinary English meaning."
+  },
+  {
+    "alias": "jake weary",
+    "term": "jQuery",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "KEEP",
+    "reason": "Phonetic mis-transcription with no ordinary English meaning."
+  },
+  {
+    "alias": "alpine js",
+    "term": "Alpine.js",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "KEEP",
+    "reason": "Clear tech phrase with no ordinary English meaning."
+  },
+  {
+    "alias": "alpine jay es",
+    "term": "Alpine.js",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "KEEP",
+    "reason": "Phonetic tech phrase with no ordinary English meaning."
+  },
+  {
+    "alias": "lit html",
+    "term": "Lit",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "KEEP",
+    "reason": "Clear tech phrase with no ordinary English meaning."
+  },
+  {
+    "alias": "lit element",
+    "term": "Lit",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "KEEP",
+    "reason": "'Lit element' is not a common English phrase; it unambiguously refers to the Lit web-component library."
+  },
+  {
+    "alias": "stencil js",
+    "term": "Stencil",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "KEEP",
+    "reason": "Has 'js' suffix making it tech-specific; not plausible as ordinary English."
+  },
+  {
+    "alias": "express js",
+    "term": "Express.js",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "DEDUPE",
+    "new_alias": "express js",
+    "reason": "Conflict: same alias maps to both Express.js and Express. Express.js is more specific; keep this term."
+  },
+  {
+    "alias": "express jay es",
+    "term": "Express.js",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "KEEP",
+    "reason": "Phonetic letter-spelling of 'Express JS'; not a natural English phrase."
+  },
+  {
+    "alias": "express js",
+    "term": "Express",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "DEDUPE",
+    "new_alias": "express js",
+    "reason": "Conflict: same alias maps to both Express.js and Express. Express.js is the more specific winner."
+  },
+  {
+    "alias": "fast if eye",
+    "term": "Fastify",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "KEEP",
+    "reason": "Phonetic breakdown of 'Fastify'; the three-word phrase has no plausible ordinary English meaning."
+  },
+  {
+    "alias": "fast i fy",
+    "term": "Fastify",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "KEEP",
+    "reason": "Letter-spaced phonetic of 'Fastify'; no ordinary English meaning."
+  },
+  {
+    "alias": "fast a fy",
+    "term": "Fastify",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "KEEP",
+    "reason": "Phonetic mis-transcription of 'Fastify'; no ordinary English meaning."
+  },
+  {
+    "alias": "nest js",
+    "term": "NestJS",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "KEEP",
+    "reason": "'js' suffix makes it tech-specific; not ordinary English."
+  },
+  {
+    "alias": "nest jay es",
+    "term": "NestJS",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "KEEP",
+    "reason": "Phonetic spelling of 'Nest JS'; not a natural English phrase."
+  },
+  {
+    "alias": "nests js",
+    "term": "NestJS",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "KEEP",
+    "reason": "Tech compound with 'js' suffix; not ordinary English."
+  },
+  {
+    "alias": "ko a",
+    "term": "Koa",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "KEEP",
+    "reason": "'ko' is not a standard English word; phonetic spelling of Koa with no ordinary English meaning."
+  },
+  {
+    "alias": "co ah",
+    "term": "Koa",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "KEEP",
+    "reason": "'co ah' has no natural English meaning; phonetic rendering of 'Koa'."
+  },
+  {
+    "alias": "ho no",
+    "term": "Hono",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "KEEP",
+    "reason": "'ho no' is not a natural English two-word phrase; phonetic rendering of 'Hono'."
+  },
+  {
+    "alias": "hoe no",
+    "term": "Hono",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "KEEP",
+    "reason": "'hoe no' has no natural English phrase meaning; phonetic rendering of 'Hono'."
+  },
+  {
+    "alias": "dee no",
+    "term": "Deno",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "KEEP",
+    "reason": "'dee' is not standard English; phonetic spelling of 'Deno', not ordinary speech."
+  },
+  {
+    "alias": "den oh",
+    "term": "Deno",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "KEEP",
+    "reason": "'den oh' is not a natural English phrase; phonetic rendering of 'Deno'."
+  },
+  {
+    "alias": "deno js",
+    "term": "Deno",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "KEEP",
+    "reason": "Tech compound with 'js' suffix; not ordinary English."
+  },
+  {
+    "alias": "bun js",
+    "term": "Bun",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "KEEP",
+    "reason": "'bun js' is tech-specific; 'js' suffix disambiguates from the English word 'bun'."
+  },
+  {
+    "alias": "bun runtime",
+    "term": "Bun",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "KEEP",
+    "reason": "'bun runtime' is a tech compound; 'runtime' disambiguates this as tech-specific."
+  },
+  {
+    "alias": "node js",
+    "term": "Node.js",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "KEEP",
+    "reason": "Well-established tech compound; 'node js' cannot plausibly appear as ordinary English."
+  },
+  {
+    "alias": "node jay es",
+    "term": "Node.js",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "KEEP",
+    "reason": "Phonetic letter-spelling of 'Node.js'; not a natural English phrase."
+  },
+  {
+    "alias": "no js",
+    "term": "Node.js",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "KEEP",
+    "reason": "'no js' is a known tech abbreviation; the 'js' component disambiguates it from ordinary 'no'."
+  },
+  {
+    "alias": "nodejs",
+    "term": "Node.js",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "KEEP",
+    "reason": "Single compound token with no ordinary English meaning."
+  },
+  {
+    "alias": "jango",
+    "term": "Django",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "KEEP",
+    "reason": "'jango' is not a common English word; it's a name fragment with no ordinary dictionary meaning."
+  },
+  {
+    "alias": "d jango",
+    "term": "Django",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "KEEP",
+    "reason": "Phonetic spelling of Django (silent D); not a natural English phrase."
+  },
+  {
+    "alias": "dee jango",
+    "term": "Django",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "KEEP",
+    "reason": "Phonetic spelling of 'Django'; not a natural English phrase."
+  },
+  {
+    "alias": "jan go",
+    "term": "Django",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "DROP",
+    "reason": "'Jan go' is plausible ordinary English (a name 'Jan' followed by 'go'), creating false-positive risk."
+  },
+  {
+    "alias": "flask py",
+    "term": "Flask",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "KEEP",
+    "reason": "'py' suffix makes it tech-specific (Python marker); not ordinary English."
+  },
+  {
+    "alias": "fast api",
+    "term": "FastAPI",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "KEEP",
+    "reason": "'api' is a tech-only abbreviation; 'fast api' is an unambiguous tech compound."
+  },
+  {
+    "alias": "fast a p i",
+    "term": "FastAPI",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "KEEP",
+    "reason": "Letter-spaced 'API' is a tech-only construct; not ordinary English."
+  },
+  {
+    "alias": "fast ay pee eye",
+    "term": "FastAPI",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "KEEP",
+    "reason": "Phonetic letter-spelling of 'FastAPI'; not a natural English phrase."
+  },
+  {
+    "alias": "star let",
+    "term": "Starlette",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "DROP",
+    "reason": "'starlet' is a very common English word meaning a young actress; high false-positive risk."
+  },
+  {
+    "alias": "star light",
+    "term": "Starlette",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "DROP",
+    "reason": "'starlight' is ordinary English (light from stars); would corrupt normal speech."
+  },
+  {
+    "alias": "pie dantic",
+    "term": "Pydantic",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "KEEP",
+    "reason": "'dantic' is not an English word; phonetic rendering of 'Pydantic', not ordinary speech."
+  },
+  {
+    "alias": "pie dan tick",
+    "term": "Pydantic",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "KEEP",
+    "reason": "'pie dan tick' has no natural English phrase meaning; phonetic of 'Pydantic'."
+  },
+  {
+    "alias": "pi dantic",
+    "term": "Pydantic",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "KEEP",
+    "reason": "'dantic' is not English; phonetic of 'Pydantic', not ordinary speech."
+  },
+  {
+    "alias": "sql alchemy",
+    "term": "SQLAlchemy",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "KEEP",
+    "reason": "'sql' is a tech-only abbreviation; 'sql alchemy' unambiguously refers to the framework."
+  },
+  {
+    "alias": "sequel alchemy",
+    "term": "SQLAlchemy",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "KEEP",
+    "reason": "'sequel alchemy' is an unusual compound not found in ordinary speech; safely tech-specific."
+  },
+  {
+    "alias": "s q l alchemy",
+    "term": "SQLAlchemy",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "KEEP",
+    "reason": "Letter-spaced 'SQL' is a tech-only construct; not ordinary English."
+  },
+  {
+    "alias": "celery py",
+    "term": "Celery",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "KEEP",
+    "reason": "'py' suffix makes it tech-specific (Python marker); disambiguates from the vegetable."
+  },
+  {
+    "alias": "salary",
+    "term": "Celery",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "DROP",
+    "reason": "Single common English word meaning wages; high false-positive risk in any dictation."
+  },
+  {
+    "alias": "tornado py",
+    "term": "Tornado",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "KEEP",
+    "reason": "'py' suffix makes it tech-specific; disambiguates from the English word 'tornado'."
+  },
+  {
+    "alias": "ruby on rails",
+    "term": "Rails",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "KEEP",
+    "reason": "'ruby on rails' always refers to the framework in practice; not natural ordinary English."
+  },
+  {
+    "alias": "rail",
+    "term": "Rails",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "DROP",
+    "reason": "Single very common English word (a bar, to rail against); extremely high false-positive risk."
+  },
+  {
+    "alias": "ruby on rail",
+    "term": "Ruby on Rails",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "KEEP",
+    "reason": "'ruby on rail' is a singular mis-transcription of 'Ruby on Rails'; not natural ordinary English."
+  },
+  {
+    "alias": "ruby on rales",
+    "term": "Ruby on Rails",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "KEEP",
+    "reason": "'rales' is a medical term; 'ruby on rales' has no plausible ordinary English meaning."
+  },
+  {
+    "alias": "sin ah tra",
+    "term": "Sinatra",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "KEEP",
+    "reason": "'sin ah tra' has no natural English phrase meaning; phonetic spelling of 'Sinatra'."
+  },
+  {
+    "alias": "sinatra rb",
+    "term": "Sinatra",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "KEEP",
+    "reason": "'rb' is a Ruby file-extension marker; makes it unambiguously tech-specific."
+  },
+  {
+    "alias": "spring boot java",
+    "term": "Spring Boot",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "KEEP",
+    "reason": "Three-word tech compound; 'java' at the end makes it unambiguously a tech reference."
+  },
+  {
+    "alias": "spring booted",
+    "term": "Spring Boot",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "DROP",
+    "reason": "'spring booted' is ordinary English past tense (e.g., 'she spring booted the car'); high false-positive risk."
+  },
+  {
+    "alias": "spring framework",
+    "term": "Spring",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "KEEP",
+    "reason": "'spring framework' is unambiguously tech-specific; 'framework' disambiguates from the season."
+  },
+  {
+    "alias": "quark us",
+    "term": "Quarkus",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "KEEP",
+    "reason": "'quark us' is not a natural English phrase; phonetic rendering of 'Quarkus'."
+  },
+  {
+    "alias": "cork us",
+    "term": "Quarkus",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "DROP",
+    "reason": "'cork us' is plausible ordinary English (e.g., 'don't cork us up'); too much false-positive risk."
+  },
+  {
+    "alias": "micro not",
+    "term": "Micronaut",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "DROP",
+    "reason": "'micro not' is ordinary English (e.g., 'micro, not macro'); would corrupt normal dictation."
+  },
+  {
+    "alias": "micro nought",
+    "term": "Micronaut",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "KEEP",
+    "reason": "'micro nought' is not a natural English phrase; phonetic rendering of 'Micronaut'."
+  },
+  {
+    "alias": "lar a vel",
+    "term": "Laravel",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "KEEP",
+    "reason": "Phonetic breakdown of 'Laravel'; no natural English meaning."
+  },
+  {
+    "alias": "laraville",
+    "term": "Laravel",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "KEEP",
+    "reason": "Not an English word; phonetic mis-transcription of 'Laravel'."
+  },
+  {
+    "alias": "la ravel",
+    "term": "Laravel",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "KEEP",
+    "reason": "'la ravel' is not a natural English phrase; phonetic rendering of 'Laravel'."
+  },
+  {
+    "alias": "sim phony",
+    "term": "Symfony",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "KEEP",
+    "reason": "'sim phony' is not a natural two-word English phrase; phonetic rendering of 'Symfony'."
+  },
+  {
+    "alias": "symphony",
+    "term": "Symfony",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "DROP",
+    "reason": "'symphony' is a very common English word (orchestral music); would corrupt normal speech."
+  },
+  {
+    "alias": "sim fony",
+    "term": "Symfony",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "KEEP",
+    "reason": "'fony' is not an English word; phonetic rendering of 'Symfony', not ordinary speech."
+  },
+  {
+    "alias": "code igniter",
+    "term": "CodeIgniter",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "KEEP",
+    "reason": "'code igniter' as a compound is primarily tech-specific; low real-world false-positive risk."
+  },
+  {
+    "alias": "code ig nighter",
+    "term": "CodeIgniter",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "KEEP",
+    "reason": "'ig nighter' is not an English word; phonetic rendering of 'CodeIgniter'."
+  },
+  {
+    "alias": "asp dot net",
+    "term": "ASP.NET",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "KEEP",
+    "reason": "Tech compound; 'dot net' combined with 'asp' is unambiguously a tech reference."
+  },
+  {
+    "alias": "a s p net",
+    "term": "ASP.NET",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "KEEP",
+    "reason": "Letter-spaced 'ASP' is a tech-only construct; not ordinary English."
+  },
+  {
+    "alias": "asp net",
+    "term": "ASP.NET",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "KEEP",
+    "reason": "'asp net' is not a natural English phrase; unambiguously a tech reference."
+  },
+  {
+    "alias": "dot net",
+    "term": ".NET",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "KEEP",
+    "reason": "'dot net' is universally understood as the .NET framework; effectively a tech-only phrase."
+  },
+  {
+    "alias": "dot nett",
+    "term": ".NET",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "KEEP",
+    "reason": "'dot nett' is not ordinary English; phonetic mis-transcription of '.NET'."
+  },
+  {
+    "alias": "blaze or",
+    "term": "Blazor",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "DROP",
+    "reason": "'blaze or' is ordinary English (e.g., 'does it blaze or not'); high false-positive risk in dictation."
+  },
+  {
+    "alias": "blazer",
+    "term": "Blazor",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "DROP",
+    "reason": "Very common English word (a jacket); would corrupt normal speech."
+  },
+  {
+    "alias": "dot net maui",
+    "term": "MAUI",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "KEEP",
+    "reason": "Tech compound with 'dot net'; unambiguously a tech reference."
+  },
+  {
+    "alias": "mouie",
+    "term": "MAUI",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "KEEP",
+    "reason": "'mouie' is not an English word; phonetic mis-transcription of 'MAUI'."
+  },
+  {
+    "alias": "flutters",
+    "term": "Flutter",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "DROP",
+    "reason": "Common English word (third-person singular of 'to flutter'); would corrupt normal speech."
+  },
+  {
+    "alias": "swift ui",
+    "term": "SwiftUI",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "KEEP",
+    "reason": "'ui' is a tech-only abbreviation; 'swift ui' is unambiguously a tech reference."
+  },
+  {
+    "alias": "swift you eye",
+    "term": "SwiftUI",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "KEEP",
+    "reason": "Phonetic letter-spelling of 'SwiftUI'; not a natural English phrase."
+  },
+  {
+    "alias": "swift u i",
+    "term": "SwiftUI",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "KEEP",
+    "reason": "Letter-spaced 'UI' is a tech construct; not ordinary English."
+  },
+  {
+    "alias": "jet pack compose",
+    "term": "Jetpack Compose",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "KEEP",
+    "reason": "'jet pack compose' as a three-word combination is not natural English; unambiguously tech."
+  },
+  {
+    "alias": "jetpack compost",
+    "term": "Jetpack Compose",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "KEEP",
+    "reason": "'jetpack compost' is not ordinary English; phonetic mis-transcription of 'Jetpack Compose'."
+  },
+  {
+    "alias": "expo react",
+    "term": "Expo",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "KEEP",
+    "reason": "'expo react' combined is tech-specific; 'react' disambiguates as a framework reference."
+  },
+  {
+    "alias": "tory",
+    "term": "Tauri",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "DROP",
+    "reason": "Common English word/proper noun (Conservative Party member); high false-positive risk."
+  },
+  {
+    "alias": "tao ree",
+    "term": "Tauri",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "KEEP",
+    "reason": "'ree' is not a standard English word; phonetic rendering of 'Tauri', not ordinary speech."
+  },
+  {
+    "alias": "tower ee",
+    "term": "Tauri",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "KEEP",
+    "reason": "'ee' is not standard English; phonetic rendering of 'Tauri', not ordinary speech."
+  },
+  {
+    "alias": "electron js",
+    "term": "Electron",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "KEEP",
+    "reason": "'js' suffix makes it tech-specific; disambiguates from the physics term 'electron'."
+  },
+  {
+    "alias": "capacity or",
+    "term": "Capacitor",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "DROP",
+    "reason": "'capacity or' is ordinary English (e.g., 'capacity or capability'); high false-positive risk."
+  },
+  {
+    "alias": "cap a citor",
+    "term": "Capacitor",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "KEEP",
+    "reason": "'citor' is not an English word; phonetic breakdown of 'capacitor', not ordinary speech."
+  },
+  {
+    "alias": "eye on ick",
+    "term": "Ionic",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "KEEP",
+    "reason": "'eye on ick' has no natural English meaning as a phrase; phonetic of 'Ionic'."
+  },
+  {
+    "alias": "i on ic",
+    "term": "Ionic",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "KEEP",
+    "reason": "Letter-spaced phonetic of 'Ionic'; not ordinary English."
+  },
+  {
+    "alias": "tailwind css",
+    "term": "TailwindCSS",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "KEEP",
+    "reason": "'css' suffix is tech-only; makes the compound unambiguously a tech reference."
+  },
+  {
+    "alias": "tail wind css",
+    "term": "TailwindCSS",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "KEEP",
+    "reason": "'css' suffix is tech-only; disambiguates from the aeronautical term 'tailwind'."
+  },
+  {
+    "alias": "tailwind see ss ss",
+    "term": "TailwindCSS",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "KEEP",
+    "reason": "Phonetic letter-spelling of 'TailwindCSS'; not a natural English phrase."
+  },
+  {
+    "alias": "tail wind",
+    "term": "Tailwind",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "DROP",
+    "reason": "'tailwind' is a real English word (wind from behind an aircraft); would corrupt normal dictation."
+  },
+  {
+    "alias": "tale wind",
+    "term": "Tailwind",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "KEEP",
+    "reason": "'tale wind' is not a natural English phrase; phonetic mis-transcription of 'tailwind'."
+  },
+  {
+    "alias": "boot strap",
+    "term": "Bootstrap",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "KEEP",
+    "reason": "'boot strap' is a space-split of 'bootstrap'; correction to 'Bootstrap' is acceptable even for the English sense."
+  },
+  {
+    "alias": "bootstrap css",
+    "term": "Bootstrap",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "KEEP",
+    "reason": "'css' suffix makes it unambiguously a tech reference."
+  },
+  {
+    "alias": "chakra you eye",
+    "term": "Chakra UI",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "KEEP",
+    "reason": "Phonetic letter-spelling of 'Chakra UI'; not a natural English phrase."
+  },
+  {
+    "alias": "shock ra ui",
+    "term": "Chakra UI",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "KEEP",
+    "reason": "'shock ra ui' has no natural English meaning; phonetic mis-transcription of 'Chakra UI'."
+  },
+  {
+    "alias": "shad cn ui",
+    "term": "shadcn/ui",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "KEEP",
+    "reason": "'cn ui' is not ordinary English; unambiguously a tech reference."
+  },
+  {
+    "alias": "shad see en ui",
+    "term": "shadcn/ui",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "KEEP",
+    "reason": "Phonetic letter-spelling of 'shadcn/ui'; not a natural English phrase."
+  },
+  {
+    "alias": "shadow cn",
+    "term": "shadcn/ui",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "KEEP",
+    "reason": "'cn' is not an English word; 'shadow cn' is not ordinary English."
+  },
+  {
+    "alias": "raid ix",
+    "term": "Radix",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "KEEP",
+    "reason": "'ix' is not standard English; phonetic rendering of 'Radix', not ordinary speech."
+  },
+  {
+    "alias": "ray dix",
+    "term": "Radix",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "KEEP",
+    "reason": "'dix' is not an English word; phonetic rendering of 'Radix', not ordinary speech."
+  },
+  {
+    "alias": "radix ui",
+    "term": "Radix",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "KEEP",
+    "reason": "'ui' suffix makes it tech-specific; 'radix' (mathematical term) + 'ui' is unambiguously tech."
+  },
+  {
+    "alias": "material you eye",
+    "term": "Material UI",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "KEEP",
+    "reason": "Phonetic letter-spelling of 'Material UI'; not a natural English phrase."
+  },
+  {
+    "alias": "mui",
+    "term": "Material UI",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "KEEP",
+    "reason": "Pure tech abbreviation with no English dictionary meaning."
+  },
+  {
+    "alias": "em you eye",
+    "term": "MUI",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "KEEP",
+    "reason": "Phonetic letter-spelling of 'MUI'; not a natural English phrase."
+  },
+  {
+    "alias": "m u i",
+    "term": "MUI",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "KEEP",
+    "reason": "Letter-by-letter spelling of 'MUI'; a tech-only construct."
+  },
+  {
+    "alias": "ant design",
+    "term": "Ant Design",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "DROP",
+    "reason": "Identity rule: alias equals the term (case-insensitive). Mandatory DROP."
+  },
+  {
+    "alias": "ant dee sign",
+    "term": "Ant Design",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "KEEP",
+    "reason": "Phonetic of 'Ant Design' with letter-spelled 'D'; not a natural English phrase."
+  },
+  {
+    "alias": "styled components",
+    "term": "Styled Components",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "DROP",
+    "reason": "Identity rule: alias equals the term (case-insensitive). Mandatory DROP."
+  },
+  {
+    "alias": "emotion css",
+    "term": "Emotion",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "KEEP",
+    "reason": "'css' suffix is tech-only; disambiguates 'emotion' from the ordinary English word."
+  },
+  {
+    "alias": "post css",
+    "term": "PostCSS",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "KEEP",
+    "reason": "'css' suffix is tech-only; makes the compound unambiguously a tech reference."
+  },
+  {
+    "alias": "post see ss ss",
+    "term": "PostCSS",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "KEEP",
+    "reason": "Phonetic letter-spelling of 'PostCSS'; not a natural English phrase."
+  },
+  {
+    "alias": "sass css",
+    "term": "Sass",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "KEEP",
+    "reason": "'css' suffix is tech-only; disambiguates 'sass' from the ordinary English word."
+  },
+  {
+    "alias": "s c s s",
+    "term": "SCSS",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "KEEP",
+    "reason": "Letter-by-letter spelling of 'SCSS'; a tech-only construct."
+  },
+  {
+    "alias": "ess see ess ess",
+    "term": "SCSS",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "KEEP",
+    "reason": "Phonetic letter-spelling of 'SCSS'; not a natural English phrase."
+  },
+  {
+    "alias": "less css",
+    "term": "Less",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "KEEP",
+    "reason": "'css' suffix is tech-only; disambiguates 'less' from the common English comparative adjective."
+  },
+  {
+    "alias": "veet",
+    "term": "Vite",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "KEEP",
+    "reason": "'veet' is not a standard English word; phonetic mis-transcription of 'Vite'."
+  },
+  {
+    "alias": "vight",
+    "term": "Vite",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "KEEP",
+    "reason": "'vight' is not an English word; phonetic mis-transcription of 'Vite'."
+  },
+  {
+    "alias": "vit",
+    "term": "Vite",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "KEEP",
+    "reason": "'vit' is not a standard standalone English word; phonetic mis-transcription of 'Vite'."
+  },
+  {
+    "alias": "veet js",
+    "term": "Vite",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "KEEP",
+    "reason": "Tech compound with 'js' suffix; not ordinary English."
+  },
+  {
+    "alias": "web pack",
+    "term": "Webpack",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "KEEP",
+    "reason": "'web pack' as a two-word phrase is not natural ordinary English; low false-positive risk."
+  },
+  {
+    "alias": "web packed",
+    "term": "Webpack",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "KEEP",
+    "reason": "'web packed' is not a natural English phrase; phonetic mis-transcription of 'Webpack'."
+  },
+  {
+    "alias": "roll up",
+    "term": "Rollup",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "DROP",
+    "reason": "Very common English phrasal verb (e.g., 'roll up your sleeves'); high false-positive risk."
+  },
+  {
+    "alias": "roll up js",
+    "term": "Rollup",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "KEEP",
+    "reason": "'js' suffix makes it tech-specific; disambiguates from the ordinary phrasal verb."
+  },
+  {
+    "alias": "es build",
+    "term": "esbuild",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "KEEP",
+    "reason": "'es' is not a common English word; 'es build' is not ordinary English."
+  },
+  {
+    "alias": "e s build",
+    "term": "esbuild",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "KEEP",
+    "reason": "Letter-spaced prefix + 'build' is a tech construct; not ordinary English."
+  },
+  {
+    "alias": "turbo pack",
+    "term": "Turbopack",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "KEEP",
+    "reason": "'turbo pack' is not a natural English compound; low false-positive risk."
+  },
+  {
+    "alias": "turbopacked",
+    "term": "Turbopack",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "KEEP",
+    "reason": "'turbopacked' is not an English word; phonetic mis-transcription of 'Turbopack'."
+  },
+  {
+    "alias": "s w c",
+    "term": "SWC",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "KEEP",
+    "reason": "Letter-by-letter spelling of 'SWC'; a tech-only construct."
+  },
+  {
+    "alias": "ess double you see",
+    "term": "SWC",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "KEEP",
+    "reason": "Phonetic letter-spelling of 'SWC'; not a natural English phrase."
+  },
+  {
+    "alias": "babble",
+    "term": "Babel",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "DROP",
+    "reason": "Very common English word meaning to talk incoherently; would corrupt normal speech."
+  },
+  {
+    "alias": "bay bell",
+    "term": "Babel",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "KEEP",
+    "reason": "'bay bell' is not a natural English phrase; phonetic rendering of 'Babel'."
+  },
+  {
+    "alias": "babble js",
+    "term": "Babel",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "KEEP",
+    "reason": "'js' suffix makes it tech-specific; disambiguates from the ordinary English word 'babble'."
+  },
+  {
+    "alias": "parcel js",
+    "term": "Parcel",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "KEEP",
+    "reason": "'js' suffix makes it tech-specific; disambiguates from the ordinary English word 'parcel'."
+  },
+  {
+    "alias": "par sell",
+    "term": "Parcel",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "KEEP",
+    "reason": "'par sell' is not a natural English phrase; phonetic rendering of 'Parcel'."
+  },
+  {
+    "alias": "by ohm",
+    "term": "Biome",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "KEEP",
+    "reason": "'by ohm' (physics unit) is not a natural English phrase; phonetic rendering of 'Biome'."
+  },
+  {
+    "alias": "bio me",
+    "term": "Biome",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "KEEP",
+    "reason": "'bio me' is not a natural English phrase; phonetic rendering of 'Biome'."
+  },
+  {
+    "alias": "es lint",
+    "term": "ESLint",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "KEEP",
+    "reason": "'es' is not a standard English word; 'es lint' is not ordinary English."
+  },
+  {
+    "alias": "e s lint",
+    "term": "ESLint",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "KEEP",
+    "reason": "Letter-spaced prefix + 'lint' is a tech construct; not ordinary English."
+  },
+  {
+    "alias": "pretty er",
+    "term": "Prettier",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "DROP",
+    "reason": "'pretty er' is ordinary English (e.g., a hesitation 'pretty, er, good'); also flagged conflict but the alias itself is too risky."
+  },
+  {
+    "alias": "jest js",
+    "term": "Jest",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "KEEP",
+    "reason": "'js' suffix makes it tech-specific; disambiguates from the English word 'jest'."
+  },
+  {
+    "alias": "vee test",
+    "term": "Vitest",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "KEEP",
+    "reason": "'vee test' is not a natural English phrase; phonetic rendering of 'Vitest'."
+  },
+  {
+    "alias": "vi test",
+    "term": "Vitest",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "KEEP",
+    "reason": "'vi test' as a compound is not ordinary English; phonetic rendering of 'Vitest'."
+  },
+  {
+    "alias": "moka",
+    "term": "Mocha",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "KEEP",
+    "reason": "'moka' is not a standard English word; phonetic mis-transcription of 'Mocha'."
+  },
+  {
+    "alias": "mock a",
+    "term": "Mocha",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "DROP",
+    "reason": "'mock a' is ordinary English (e.g., 'mock a person'); would corrupt normal dictation."
+  },
+  {
+    "alias": "chai js",
+    "term": "Chai",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "KEEP",
+    "reason": "'js' suffix makes it tech-specific; disambiguates from the English/Hindi word 'chai'."
+  },
+  {
+    "alias": "chy",
+    "term": "Chai",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "KEEP",
+    "reason": "'chy' is not a standard English word; phonetic mis-transcription of 'Chai'."
+  },
+  {
+    "alias": "sigh press",
+    "term": "Cypress",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "KEEP",
+    "reason": "'sigh press' is not a natural English phrase; phonetic rendering of 'Cypress'."
+  },
+  {
+    "alias": "play right",
+    "term": "Playwright",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "DROP",
+    "reason": "'play right' is ordinary English (e.g., 'play right field', 'you should play right'); high false-positive risk."
+  },
+  {
+    "alias": "play write",
+    "term": "Playwright",
+    "pack": "pack_01_languages_frameworks",
+    "verdict": "DROP",
+    "reason": "'play write' is ordinary English (someone who writes plays, or 'play, write it down'); would corrupt normal speech."
+  }
+]

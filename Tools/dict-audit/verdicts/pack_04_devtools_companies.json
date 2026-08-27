@@ -1,0 +1,1873 @@
+[
+  {
+    "alias": "git vcs",
+    "term": "Git",
+    "pack": "pack_04_devtools_companies",
+    "verdict": "KEEP",
+    "reason": "Tech-specific two-word phrase; 'git vcs' does not appear in ordinary English without referring to the Git version control system."
+  },
+  {
+    "alias": "git hub",
+    "term": "GitHub",
+    "pack": "pack_04_devtools_companies",
+    "verdict": "KEEP",
+    "reason": "The compound 'git hub' is exclusively used to refer to GitHub in tech contexts; no plausible ordinary English meaning as a two-word phrase."
+  },
+  {
+    "alias": "git hubb",
+    "term": "GitHub",
+    "pack": "pack_04_devtools_companies",
+    "verdict": "KEEP",
+    "reason": "Phonetic misspelling with doubled B; no ordinary English meaning."
+  },
+  {
+    "alias": "git lab",
+    "term": "GitLab",
+    "pack": "pack_04_devtools_companies",
+    "verdict": "KEEP",
+    "reason": "The combination 'git lab' (as two words) is specific to GitLab in developer discourse; contrived as ordinary English."
+  },
+  {
+    "alias": "bit bucket",
+    "term": "Bitbucket",
+    "pack": "pack_04_devtools_companies",
+    "verdict": "KEEP",
+    "reason": "'Bit bucket' is already tech jargon (old synonym for /dev/null) and does not carry a plain non-technical meaning in ordinary English prose."
+  },
+  {
+    "alias": "git tea",
+    "term": "Gitea",
+    "pack": "pack_04_devtools_companies",
+    "verdict": "KEEP",
+    "reason": "'Git tea' as a two-word phrase carries no natural English meaning; only plausibly the Gitea platform."
+  },
+  {
+    "alias": "gih tee a",
+    "term": "Gitea",
+    "pack": "pack_04_devtools_companies",
+    "verdict": "KEEP",
+    "reason": "Phonetic three-syllable rendering with no dictionary meaning."
+  },
+  {
+    "alias": "source tree",
+    "term": "Sourcetree",
+    "pack": "pack_04_devtools_companies",
+    "verdict": "DROP",
+    "reason": "'Source tree' is a common developer phrase meaning the directory tree of source files ('navigate the source tree'); would corrupt legitimate technical speech."
+  },
+  {
+    "alias": "git kraken",
+    "term": "GitKraken",
+    "pack": "pack_04_devtools_companies",
+    "verdict": "KEEP",
+    "reason": "'Git kraken' as a compound has no ordinary English meaning; the mythical creature 'kraken' is not combined with 'git' outside the tool name."
+  },
+  {
+    "alias": "git crack in",
+    "term": "GitKraken",
+    "pack": "pack_04_devtools_companies",
+    "verdict": "KEEP",
+    "reason": "Phonetic split of GitKraken; 'git crack in' has no natural English meaning as a phrase."
+  },
+  {
+    "alias": "v s code",
+    "term": "VS Code",
+    "pack": "pack_04_devtools_companies",
+    "verdict": "DEDUPE",
+    "new_alias": "v s code",
+    "reason": "Conflict between 'VS Code' and 'VSCode' entries for same alias. 'VS Code' is Microsoft's official branding (space-separated); choosing it as winner."
+  },
+  {
+    "alias": "vee ess code",
+    "term": "VS Code",
+    "pack": "pack_04_devtools_companies",
+    "verdict": "DEDUPE",
+    "new_alias": "vee ess code",
+    "reason": "Conflict between 'VS Code' and 'VSCode' entries for same alias. 'VS Code' is the official canonical form; choosing it as winner."
+  },
+  {
+    "alias": "visual studio code",
+    "term": "VS Code",
+    "pack": "pack_04_devtools_companies",
+    "verdict": "KEEP",
+    "reason": "The full product name unambiguously refers to VS Code; mapping to the abbreviated form is correct and safe."
+  },
+  {
+    "alias": "v s code",
+    "term": "VSCode",
+    "pack": "pack_04_devtools_companies",
+    "verdict": "DEDUPE",
+    "new_alias": "v s code",
+    "reason": "Conflict with 'VS Code' entry. Losing side: 'VSCode'. Winner is 'VS Code' (official Microsoft branding with space)."
+  },
+  {
+    "alias": "vee ess code",
+    "term": "VSCode",
+    "pack": "pack_04_devtools_companies",
+    "verdict": "DEDUPE",
+    "new_alias": "vee ess code",
+    "reason": "Conflict with 'VS Code' entry. Losing side: 'VSCode'. Winner is 'VS Code'."
+  },
+  {
+    "alias": "visual studio",
+    "term": "Visual Studio",
+    "pack": "pack_04_devtools_companies",
+    "verdict": "DROP",
+    "reason": "Identity flag: alias is the same as the term (case-insensitive). No correction needed."
+  },
+  {
+    "alias": "intelli j",
+    "term": "IntelliJ",
+    "pack": "pack_04_devtools_companies",
+    "verdict": "KEEP",
+    "reason": "Phonetic split with letter 'j'; no ordinary English meaning."
+  },
+  {
+    "alias": "intelly jay",
+    "term": "IntelliJ",
+    "pack": "pack_04_devtools_companies",
+    "verdict": "KEEP",
+    "reason": "Phonetic rendering of IntelliJ with no plain English meaning."
+  },
+  {
+    "alias": "intel a jay",
+    "term": "IntelliJ",
+    "pack": "pack_04_devtools_companies",
+    "verdict": "KEEP",
+    "reason": "Phonetic split; 'intel a jay' is not a phrase in ordinary English."
+  },
+  {
+    "alias": "intelli j idea",
+    "term": "IntelliJ IDEA",
+    "pack": "pack_04_devtools_companies",
+    "verdict": "KEEP",
+    "reason": "Phonetic split of IntelliJ paired with 'idea' which is the product name suffix; collectively unambiguous."
+  },
+  {
+    "alias": "intel a jay idea",
+    "term": "IntelliJ IDEA",
+    "pack": "pack_04_devtools_companies",
+    "verdict": "KEEP",
+    "reason": "Phonetic rendering; 'intel a jay idea' has no ordinary English meaning as a phrase."
+  },
+  {
+    "alias": "web storm",
+    "term": "WebStorm",
+    "pack": "pack_04_devtools_companies",
+    "verdict": "DROP",
+    "reason": "'Web storm' can appear in ordinary English as a metaphor for a storm of internet activity or controversy; too risky."
+  },
+  {
+    "alias": "pie charm",
+    "term": "PyCharm",
+    "pack": "pack_04_devtools_companies",
+    "verdict": "KEEP",
+    "reason": "'Pie charm' is not a standard English idiom or phrase; the combination is distinctive enough to be safe."
+  },
+  {
+    "alias": "py charm",
+    "term": "PyCharm",
+    "pack": "pack_04_devtools_companies",
+    "verdict": "KEEP",
+    "reason": "'Py' is not an English word; this phonetic split has no plain English meaning."
+  },
+  {
+    "alias": "neo vim",
+    "term": "Neovim",
+    "pack": "pack_04_devtools_companies",
+    "verdict": "KEEP",
+    "reason": "'Neo vim' as a compound is specifically the Neovim editor; 'vim' meaning vitality would not be preceded by 'neo' in ordinary speech."
+  },
+  {
+    "alias": "nee oh vim",
+    "term": "Neovim",
+    "pack": "pack_04_devtools_companies",
+    "verdict": "KEEP",
+    "reason": "Phonetic three-word rendering; no ordinary English meaning."
+  },
+  {
+    "alias": "vim editor",
+    "term": "Vim",
+    "pack": "pack_04_devtools_companies",
+    "verdict": "KEEP",
+    "reason": "'Vim editor' is disambiguated by the 'editor' suffix; would only appear in tech dictation referring to the Vim text editor."
+  },
+  {
+    "alias": "e max",
+    "term": "Emacs",
+    "pack": "pack_04_devtools_companies",
+    "verdict": "DROP",
+    "reason": "'E-max' is a real brand name (dental crowns) and 'e max' (abbreviation for electronic maximum) could appear in engineering or business contexts."
+  },
+  {
+    "alias": "ee max",
+    "term": "Emacs",
+    "pack": "pack_04_devtools_companies",
+    "verdict": "KEEP",
+    "reason": "Phonetic letter + word rendering; 'ee max' has no ordinary English meaning and distinctively captures Emacs mis-transcription."
+  },
+  {
+    "alias": "zed editor",
+    "term": "Zed",
+    "pack": "pack_04_devtools_companies",
+    "verdict": "KEEP",
+    "reason": "'Zed editor' is disambiguated by the 'editor' suffix; it would not appear in ordinary English without referring to the Zed code editor."
+  },
+  {
+    "alias": "cursor ai",
+    "term": "Cursor",
+    "pack": "pack_04_devtools_companies",
+    "verdict": "KEEP",
+    "reason": "'AI' suffix disambiguates from the ordinary English 'cursor' (mouse pointer); the compound refers specifically to the Cursor AI tool."
+  },
+  {
+    "alias": "cursor editor",
+    "term": "Cursor",
+    "pack": "pack_04_devtools_companies",
+    "verdict": "KEEP",
+    "reason": "'Editor' suffix disambiguates; 'cursor editor' would only appear when speaking about the Cursor coding tool."
+  },
+  {
+    "alias": "wind surf",
+    "term": "Windsurf",
+    "pack": "pack_04_devtools_companies",
+    "verdict": "DROP",
+    "reason": "'Wind surf' / 'windsurf' is a real English word for the water sport; would corrupt legitimate speech about windsurfing."
+  },
+  {
+    "alias": "windsurfer",
+    "term": "Windsurf",
+    "pack": "pack_04_devtools_companies",
+    "verdict": "DROP",
+    "reason": "'Windsurfer' is a standard English word for a person who windsurfs; common in ordinary speech."
+  },
+  {
+    "alias": "co pilot",
+    "term": "Copilot",
+    "pack": "pack_04_devtools_companies",
+    "verdict": "DROP",
+    "reason": "'Co-pilot' / 'copilot' is standard English for a secondary pilot; would corrupt aviation and general speech."
+  },
+  {
+    "alias": "co-pilot",
+    "term": "Copilot",
+    "pack": "pack_04_devtools_companies",
+    "verdict": "DROP",
+    "reason": "Same as 'co pilot'; 'co-pilot' is the standard hyphenated form for an aircraft co-pilot."
+  },
+  {
+    "alias": "github copilot",
+    "term": "Copilot",
+    "pack": "pack_04_devtools_companies",
+    "verdict": "KEEP",
+    "reason": "The full product name 'GitHub Copilot' is unambiguous; safe to map to 'Copilot'."
+  },
+  {
+    "alias": "code ee um",
+    "term": "Codeium",
+    "pack": "pack_04_devtools_companies",
+    "verdict": "KEEP",
+    "reason": "Phonetic rendering of Codeium; 'code ee um' has no ordinary English meaning as a phrase."
+  },
+  {
+    "alias": "codium",
+    "term": "Codeium",
+    "pack": "pack_04_devtools_companies",
+    "verdict": "DROP",
+    "reason": "'Codium' is a real genus of green algae used in biology and scientific contexts; single-word English with non-tech meaning."
+  },
+  {
+    "alias": "tab nine",
+    "term": "Tabnine",
+    "pack": "pack_04_devtools_companies",
+    "verdict": "DROP",
+    "reason": "'Tab nine' is ordinary English (pressing the tab key nine times, or tab number nine in a UI); would corrupt natural speech."
+  },
+  {
+    "alias": "tab 9",
+    "term": "Tabnine",
+    "pack": "pack_04_devtools_companies",
+    "verdict": "DROP",
+    "reason": "'Tab 9' refers naturally to a browser or UI tab numbered 9; common in ordinary English."
+  },
+  {
+    "alias": "claude code",
+    "term": "Claude Code",
+    "pack": "pack_04_devtools_companies",
+    "verdict": "DROP",
+    "reason": "Identity flag: 'claude code' maps to 'Claude Code' — same text, only casing differs. Drop per mandatory identity rule."
+  },
+  {
+    "alias": "clod code",
+    "term": "Claude Code",
+    "pack": "pack_04_devtools_companies",
+    "verdict": "KEEP",
+    "reason": "'Clod code' is not a standard English phrase; it specifically captures Whisper mis-transcribing 'Claude Code' and is safe to correct."
+  },
+  {
+    "alias": "aid er",
+    "term": "Aider",
+    "pack": "pack_04_devtools_companies",
+    "verdict": "DROP",
+    "reason": "'Aider' is a real English word meaning one who aids; 'aid er' as a two-word split would corrupt legitimate speech about helping someone."
+  },
+  {
+    "alias": "aider ai",
+    "term": "Aider",
+    "pack": "pack_04_devtools_companies",
+    "verdict": "KEEP",
+    "reason": "'AI' suffix disambiguates; 'aider ai' specifically refers to the Aider coding agent."
+  },
+  {
+    "alias": "devin ai",
+    "term": "Devin",
+    "pack": "pack_04_devtools_companies",
+    "verdict": "KEEP",
+    "reason": "'AI' suffix makes it unambiguous; 'Devin' alone is a name but 'devin ai' specifically is the Devin AI agent."
+  },
+  {
+    "alias": "n p m",
+    "term": "npm",
+    "pack": "pack_04_devtools_companies",
+    "verdict": "KEEP",
+    "reason": "Letter-by-letter spelling of the npm acronym; safe per mandatory KEEP rule for letter spellings."
+  },
+  {
+    "alias": "en pee em",
+    "term": "npm",
+    "pack": "pack_04_devtools_companies",
+    "verdict": "KEEP",
+    "reason": "Phonetic letter-by-letter spelling of npm; no ordinary English meaning."
+  },
+  {
+    "alias": "yarn package",
+    "term": "yarn",
+    "pack": "pack_04_devtools_companies",
+    "verdict": "KEEP",
+    "reason": "'Package' suffix disambiguates the tech tool from the ordinary English 'yarn' (fiber/story); safe to keep."
+  },
+  {
+    "alias": "p n p m",
+    "term": "pnpm",
+    "pack": "pack_04_devtools_companies",
+    "verdict": "KEEP",
+    "reason": "Letter-by-letter spelling of the pnpm acronym; safe per mandatory KEEP rule."
+  },
+  {
+    "alias": "pee en pee em",
+    "term": "pnpm",
+    "pack": "pack_04_devtools_companies",
+    "verdict": "KEEP",
+    "reason": "Phonetic letter-by-letter spelling of pnpm; no ordinary English meaning."
+  },
+  {
+    "alias": "pip install",
+    "term": "pip",
+    "pack": "pack_04_devtools_companies",
+    "verdict": "KEEP",
+    "reason": "'Pip install' is a specific command-line invocation; 'pip install' would not appear in ordinary non-technical speech."
+  },
+  {
+    "alias": "pip python",
+    "term": "pip",
+    "pack": "pack_04_devtools_companies",
+    "verdict": "KEEP",
+    "reason": "'Pip python' explicitly places pip in a Python context; unambiguous."
+  },
+  {
+    "alias": "poetry python",
+    "term": "Poetry",
+    "pack": "pack_04_devtools_companies",
+    "verdict": "KEEP",
+    "reason": "'Poetry' is an English word but 'poetry python' as a compound specifically refers to the Poetry package manager; the 'python' suffix disambiguates safely."
+  },
+  {
+    "alias": "u v",
+    "term": "uv",
+    "pack": "pack_04_devtools_companies",
+    "verdict": "DROP",
+    "reason": "'UV' / 'u v' is extremely common English for ultraviolet radiation ('UV rays', 'UV index'); would corrupt everyday speech."
+  },
+  {
+    "alias": "you vee",
+    "term": "uv",
+    "pack": "pack_04_devtools_companies",
+    "verdict": "DROP",
+    "reason": "'You vee' is the phonetic spelling of 'UV' (ultraviolet) which appears constantly in everyday conversation about sunscreen, light, etc."
+  },
+  {
+    "alias": "con da",
+    "term": "Conda",
+    "pack": "pack_04_devtools_companies",
+    "verdict": "KEEP",
+    "reason": "'Con da' has no natural English meaning as a two-word phrase; phonetically captures Conda mis-transcription."
+  },
+  {
+    "alias": "con dah",
+    "term": "Conda",
+    "pack": "pack_04_devtools_companies",
+    "verdict": "KEEP",
+    "reason": "'Con dah' is not ordinary English; phonetic variant of 'con da' for Conda."
+  },
+  {
+    "alias": "home brew",
+    "term": "Homebrew",
+    "pack": "pack_04_devtools_companies",
+    "verdict": "DROP",
+    "reason": "'Home brew' / 'homebrew' is very common English for beer brewed at home; would corrupt speech about brewing."
+  },
+  {
+    "alias": "cargo rust",
+    "term": "Cargo",
+    "pack": "pack_04_devtools_companies",
+    "verdict": "DROP",
+    "reason": "'Cargo rust' can naturally appear in maritime or logistics contexts ('the cargo rust damage was severe'); both words are common English with clear non-tech meanings."
+  },
+  {
+    "alias": "new get",
+    "term": "NuGet",
+    "pack": "pack_04_devtools_companies",
+    "verdict": "KEEP",
+    "reason": "'New get' is not a natural English phrase; the combination phonetically captures NuGet and would not appear in ordinary dictation with another meaning."
+  },
+  {
+    "alias": "noo get",
+    "term": "NuGet",
+    "pack": "pack_04_devtools_companies",
+    "verdict": "KEEP",
+    "reason": "Phonetic rendering; 'noo' is not standard English, so 'noo get' has no ordinary meaning."
+  },
+  {
+    "alias": "nu get",
+    "term": "NuGet",
+    "pack": "pack_04_devtools_companies",
+    "verdict": "KEEP",
+    "reason": "'Nu' is not a standard English word in this context; 'nu get' is a non-English phonetic split."
+  },
+  {
+    "alias": "may ven",
+    "term": "Maven",
+    "pack": "pack_04_devtools_companies",
+    "verdict": "KEEP",
+    "reason": "Phonetic two-word split of 'Maven'; a speaker saying 'maven' (expert) would produce the one-word form, not 'may ven'."
+  },
+  {
+    "alias": "gray del",
+    "term": "Gradle",
+    "pack": "pack_04_devtools_companies",
+    "verdict": "KEEP",
+    "reason": "'Gray del' is not a natural English phrase; phonetic split of Gradle with no ordinary meaning."
+  },
+  {
+    "alias": "grad el",
+    "term": "Gradle",
+    "pack": "pack_04_devtools_companies",
+    "verdict": "KEEP",
+    "reason": "'Grad el' has no ordinary English meaning as a phrase; safely captures Gradle mis-transcription."
+  },
+  {
+    "alias": "cocoa pods",
+    "term": "CocoaPods",
+    "pack": "pack_04_devtools_companies",
+    "verdict": "DROP",
+    "reason": "'Cocoa pods' are the actual pods that grow on the cocoa tree; extremely common in food/agriculture contexts. Would corrupt speech about chocolate production."
+  },
+  {
+    "alias": "coco a pods",
+    "term": "CocoaPods",
+    "pack": "pack_04_devtools_companies",
+    "verdict": "KEEP",
+    "reason": "The unusual three-word split 'coco a pods' is a Whisper artifact specific to CocoaPods; this form would not appear in ordinary English speech."
+  },
+  {
+    "alias": "car thage",
+    "term": "Carthage",
+    "pack": "pack_04_devtools_companies",
+    "verdict": "KEEP",
+    "reason": "The two-word split 'car thage' is a Whisper artifact; a speaker saying 'Carthage' (the ancient city) would produce the single word, not 'car thage'."
+  },
+  {
+    "alias": "s p m",
+    "term": "SPM",
+    "pack": "pack_04_devtools_companies",
+    "verdict": "KEEP",
+    "reason": "Letter-by-letter acronym spelling; safe per mandatory KEEP rule for letter spellings."
+  },
+  {
+    "alias": "swift package manager",
+    "term": "SPM",
+    "pack": "pack_04_devtools_companies",
+    "verdict": "KEEP",
+    "reason": "The full product name 'Swift Package Manager' unambiguously refers to SPM; safe to map."
+  },
+  {
+    "alias": "x code",
+    "term": "Xcode",
+    "pack": "pack_04_devtools_companies",
+    "verdict": "DROP",
+    "reason": "'X code' can naturally appear in ordinary English to mean a code starting with X, a secret code, or an error code prefix ('the x code was listed in the manual')."
+  },
+  {
+    "alias": "ex code",
+    "term": "Xcode",
+    "pack": "pack_04_devtools_companies",
+    "verdict": "DROP",
+    "reason": "'Ex code' can naturally appear as 'former code' or a code prefixed with 'ex'; would corrupt ordinary speech."
+  },
+  {
+    "alias": "android studio",
+    "term": "Android Studio",
+    "pack": "pack_04_devtools_companies",
+    "verdict": "DROP",
+    "reason": "Identity flag: 'android studio' maps to 'Android Studio' — same text, only casing differs. Drop per mandatory identity rule."
+  },
+  {
+    "alias": "post man",
+    "term": "Postman",
+    "pack": "pack_04_devtools_companies",
+    "verdict": "DROP",
+    "reason": "'Postman' / 'post man' is standard English for a mail carrier; extremely common in everyday speech."
+  },
+  {
+    "alias": "in som nia",
+    "term": "Insomnia",
+    "pack": "pack_04_devtools_companies",
+    "verdict": "KEEP",
+    "reason": "The three-word split 'in som nia' is a Whisper artifact; a speaker saying 'insomnia' (sleep disorder) would produce the single word, not three separate words."
+  },
+  {
+    "alias": "http ee",
+    "term": "HTTPie",
+    "pack": "pack_04_devtools_companies",
+    "verdict": "KEEP",
+    "reason": "Phonetic rendering of HTTPie; no ordinary English meaning."
+  },
+  {
+    "alias": "h t t p ie",
+    "term": "HTTPie",
+    "pack": "pack_04_devtools_companies",
+    "verdict": "KEEP",
+    "reason": "Letter-by-letter spelling of HTTP + 'ie'; safe per letter-spelling KEEP rule."
+  },
+  {
+    "alias": "curl",
+    "term": "cURL",
+    "pack": "pack_04_devtools_companies",
+    "verdict": "DROP",
+    "reason": "Identity flag plus extremely common English word ('curl your hair', 'do a curl'); would corrupt everyday speech constantly."
+  },
+  {
+    "alias": "see url",
+    "term": "cURL",
+    "pack": "pack_04_devtools_companies",
+    "verdict": "DROP",
+    "reason": "'See URL' is a very natural English phrase ('see URL in the browser'); would corrupt instructions to look at a URL."
+  },
+  {
+    "alias": "c url",
+    "term": "cURL",
+    "pack": "pack_04_devtools_companies",
+    "verdict": "KEEP",
+    "reason": "'C url' (letter C + url) is not a natural English phrase; specifically captures cURL mis-transcription."
+  },
+  {
+    "alias": "w get",
+    "term": "wget",
+    "pack": "pack_04_devtools_companies",
+    "verdict": "KEEP",
+    "reason": "'W get' (letter W + get) is not a natural English phrase; safely captures wget mis-transcription."
+  },
+  {
+    "alias": "double you get",
+    "term": "wget",
+    "pack": "pack_04_devtools_companies",
+    "verdict": "KEEP",
+    "reason": "'Double you get' is the phonetic spelling of 'W get' (wget); unlikely to appear in ordinary English with another meaning."
+  },
+  {
+    "alias": "swag er",
+    "term": "Swagger",
+    "pack": "pack_04_devtools_companies",
+    "verdict": "KEEP",
+    "reason": "Two-word split 'swag er' is a Whisper artifact; a speaker using 'swagger' (walk confidently) would produce the one-word form, not 'swag er'."
+  },
+  {
+    "alias": "open api",
+    "term": "OpenAPI",
+    "pack": "pack_04_devtools_companies",
+    "verdict": "KEEP",
+    "reason": "'Open API' is a technical compound; while 'API' is tech jargon, 'open API' specifically refers to the OpenAPI specification and is safe in developer contexts."
+  },
+  {
+    "alias": "open a p i",
+    "term": "OpenAPI",
+    "pack": "pack_04_devtools_companies",
+    "verdict": "KEEP",
+    "reason": "Letter-by-letter spelling of 'API' with 'open' prefix; safe per letter-spelling KEEP rule."
+  },
+  {
+    "alias": "open ay pee eye",
+    "term": "OpenAPI",
+    "pack": "pack_04_devtools_companies",
+    "verdict": "KEEP",
+    "reason": "Phonetic letter-by-letter spelling of 'OpenAPI'; no ordinary English meaning."
+  },
+  {
+    "alias": "fig ma",
+    "term": "Figma",
+    "pack": "pack_04_devtools_companies",
+    "verdict": "KEEP",
+    "reason": "'Fig ma' is not a natural English phrase; phonetically captures Figma mis-transcription safely."
+  },
+  {
+    "alias": "fig mah",
+    "term": "Figma",
+    "pack": "pack_04_devtools_companies",
+    "verdict": "KEEP",
+    "reason": "'Fig mah' is not standard English; phonetic variant that safely captures Figma."
+  },
+  {
+    "alias": "sketch app",
+    "term": "Sketch",
+    "pack": "pack_04_devtools_companies",
+    "verdict": "KEEP",
+    "reason": "'App' suffix disambiguates from the English word 'sketch'; 'sketch app' specifically refers to the Sketch design tool."
+  },
+  {
+    "alias": "frame er",
+    "term": "Framer",
+    "pack": "pack_04_devtools_companies",
+    "verdict": "KEEP",
+    "reason": "Two-word split 'frame er' is a Whisper artifact; a speaker saying 'framer' (one who frames) would produce the single word, not 'frame er'."
+  },
+  {
+    "alias": "ex cali draw",
+    "term": "Excalidraw",
+    "pack": "pack_04_devtools_companies",
+    "verdict": "KEEP",
+    "reason": "Phonetic split of Excalidraw; 'ex cali draw' has no ordinary English meaning."
+  },
+  {
+    "alias": "excali draw",
+    "term": "Excalidraw",
+    "pack": "pack_04_devtools_companies",
+    "verdict": "KEEP",
+    "reason": "Phonetic split of Excalidraw; 'excali draw' is not a natural English phrase."
+  },
+  {
+    "alias": "mirror",
+    "term": "Miro",
+    "pack": "pack_04_devtools_companies",
+    "verdict": "DROP",
+    "reason": "'Mirror' is an extremely common English word (looking glass, to reflect); would corrupt everyday speech constantly. Single-word English flagged."
+  },
+  {
+    "alias": "mee ro",
+    "term": "Miro",
+    "pack": "pack_04_devtools_companies",
+    "verdict": "KEEP",
+    "reason": "Phonetic rendering 'mee ro' has no ordinary English meaning; safely captures Miro mis-transcription."
+  },
+  {
+    "alias": "no shun",
+    "term": "Notion",
+    "pack": "pack_04_devtools_companies",
+    "verdict": "KEEP",
+    "reason": "Two-word split 'no shun' is a Whisper artifact; a speaker saying 'notion' (idea) would produce the single word, not 'no shun'."
+  },
+  {
+    "alias": "ob sid ian",
+    "term": "Obsidian",
+    "pack": "pack_04_devtools_companies",
+    "verdict": "KEEP",
+    "reason": "Three-word split is a Whisper artifact; 'obsidian' (volcanic glass) spoken normally would be transcribed as one word, not 'ob sid ian'."
+  },
+  {
+    "alias": "con flew ence",
+    "term": "Confluence",
+    "pack": "pack_04_devtools_companies",
+    "verdict": "KEEP",
+    "reason": "Three-word split is a Whisper artifact; 'confluence' spoken normally would be transcribed as one word, not 'con flew ence'."
+  },
+  {
+    "alias": "con flu ence",
+    "term": "Confluence",
+    "pack": "pack_04_devtools_companies",
+    "verdict": "KEEP",
+    "reason": "Three-word split is a Whisper artifact; 'confluence' spoken normally produces the single word, not 'con flu ence'."
+  },
+  {
+    "alias": "jeer a",
+    "term": "Jira",
+    "pack": "pack_04_devtools_companies",
+    "verdict": "DROP",
+    "reason": "'Jeer a' can appear naturally in ordinary English ('they jeer a lot', 'don't jeer a person'); would corrupt legitimate speech."
+  },
+  {
+    "alias": "jeera",
+    "term": "Jira",
+    "pack": "pack_04_devtools_companies",
+    "verdict": "DROP",
+    "reason": "'Jeera' is the common Hindi/Urdu word for cumin, widely used in English-language cooking contexts ('add jeera to the curry')."
+  },
+  {
+    "alias": "gear a",
+    "term": "Jira",
+    "pack": "pack_04_devtools_companies",
+    "verdict": "KEEP",
+    "reason": "'Gear a' is not a standard English phrase; phonetic rendering that safely captures Jira mis-transcription."
+  },
+  {
+    "alias": "linear app",
+    "term": "Linear",
+    "pack": "pack_04_devtools_companies",
+    "verdict": "KEEP",
+    "reason": "'App' suffix disambiguates from the adjective 'linear'; 'linear app' specifically refers to the Linear project management tool."
+  },
+  {
+    "alias": "a sana",
+    "term": "Asana",
+    "pack": "pack_04_devtools_companies",
+    "verdict": "KEEP",
+    "reason": "Two-word split 'a sana' is a Whisper artifact; a speaker saying 'asana' (yoga pose) would produce the single word, not 'a sana'."
+  },
+  {
+    "alias": "ah sana",
+    "term": "Asana",
+    "pack": "pack_04_devtools_companies",
+    "verdict": "KEEP",
+    "reason": "'Ah sana' has no ordinary English meaning as a phrase; phonetic variant safely captures Asana."
+  },
+  {
+    "alias": "trel oh",
+    "term": "Trello",
+    "pack": "pack_04_devtools_companies",
+    "verdict": "KEEP",
+    "reason": "Phonetic split 'trel oh' has no ordinary English meaning; safely captures Trello mis-transcription."
+  },
+  {
+    "alias": "slack app",
+    "term": "Slack",
+    "pack": "pack_04_devtools_companies",
+    "verdict": "KEEP",
+    "reason": "'App' suffix disambiguates from the English adjective/noun 'slack' (loose, idle); 'slack app' specifically refers to the messaging tool."
+  },
+  {
+    "alias": "dis cord",
+    "term": "Discord",
+    "pack": "pack_04_devtools_companies",
+    "verdict": "KEEP",
+    "reason": "Two-word split 'dis cord' is a Whisper artifact; a speaker meaning the concept 'discord' (conflict) would produce the single word, not 'dis cord'."
+  },
+  {
+    "alias": "zoom app",
+    "term": "Zoom",
+    "pack": "pack_04_devtools_companies",
+    "verdict": "KEEP",
+    "reason": "'App' suffix disambiguates from the English verb/noun 'zoom'; 'zoom app' specifically refers to the video conferencing tool."
+  },
+  {
+    "alias": "loom video",
+    "term": "Loom",
+    "pack": "pack_04_devtools_companies",
+    "verdict": "KEEP",
+    "reason": "'Video' suffix disambiguates from the English 'loom' (weaving machine or to appear threateningly); 'loom video' specifically refers to the screen recording tool."
+  },
+  {
+    "alias": "ver sell",
+    "term": "Vercel",
+    "pack": "pack_04_devtools_companies",
+    "verdict": "KEEP",
+    "reason": "'Ver sell' has no ordinary English meaning as a phrase; phonetically captures Vercel mis-transcription."
+  },
+  {
+    "alias": "verse el",
+    "term": "Vercel",
+    "pack": "pack_04_devtools_companies",
+    "verdict": "KEEP",
+    "reason": "'Verse el' is not a natural English phrase; phonetic variant safely captures Vercel."
+  },
+  {
+    "alias": "vercell",
+    "term": "Vercel",
+    "pack": "pack_04_devtools_companies",
+    "verdict": "KEEP",
+    "reason": "'Vercell' is not an English word; specifically captures Vercel mis-transcription."
+  },
+  {
+    "alias": "stripe api",
+    "term": "Stripe",
+    "pack": "pack_04_devtools_companies",
+    "verdict": "KEEP",
+    "reason": "'API' suffix disambiguates from the English 'stripe' (a band of color); 'stripe api' specifically refers to the Stripe payments API."
+  },
+  {
+    "alias": "twill ee oh",
+    "term": "Twilio",
+    "pack": "pack_04_devtools_companies",
+    "verdict": "KEEP",
+    "reason": "Phonetic rendering 'twill ee oh' has no ordinary English meaning as a phrase."
+  },
+  {
+    "alias": "twil io",
+    "term": "Twilio",
+    "pack": "pack_04_devtools_companies",
+    "verdict": "KEEP",
+    "reason": "Phonetic split; 'twil io' has no ordinary English meaning."
+  },
+  {
+    "alias": "trill io",
+    "term": "Twilio",
+    "pack": "pack_04_devtools_companies",
+    "verdict": "KEEP",
+    "reason": "'Trill io' is not a standard English phrase; safely captures Twilio mis-transcription."
+  },
+  {
+    "alias": "send grid",
+    "term": "SendGrid",
+    "pack": "pack_04_devtools_companies",
+    "verdict": "DROP",
+    "reason": "'Send grid' can appear naturally in technical or logistics speech ('send grid coordinates', 'send grid data to the server'); both words are common English."
+  },
+  {
+    "alias": "mail gun",
+    "term": "Mailgun",
+    "pack": "pack_04_devtools_companies",
+    "verdict": "KEEP",
+    "reason": "'Mail gun' as a compound phrase is not common in ordinary English; it specifically captures the Mailgun email service in developer contexts."
+  },
+  {
+    "alias": "re send",
+    "term": "Resend",
+    "pack": "pack_04_devtools_companies",
+    "verdict": "DROP",
+    "reason": "'Resend' / 're-send' is a very common English action word ('I need to re send that email'); would corrupt ordinary speech about email."
+  },
+  {
+    "alias": "auth zero",
+    "term": "Auth0",
+    "pack": "pack_04_devtools_companies",
+    "verdict": "KEEP",
+    "reason": "'Auth' is a tech abbreviation; 'auth zero' as a compound is specifically the Auth0 service and would not appear in ordinary non-technical speech."
+  },
+  {
+    "alias": "off zero",
+    "term": "Auth0",
+    "pack": "pack_04_devtools_companies",
+    "verdict": "DROP",
+    "reason": "'Off zero' can appear naturally in ordinary English ('we're off zero now', 'starting off zero'); would corrupt legitimate speech."
+  },
+  {
+    "alias": "oth zero",
+    "term": "Auth0",
+    "pack": "pack_04_devtools_companies",
+    "verdict": "KEEP",
+    "reason": "'Oth zero' is not a natural English phrase; phonetic variant safely captures Auth0."
+  },
+  {
+    "alias": "clerk auth",
+    "term": "Clerk",
+    "pack": "pack_04_devtools_companies",
+    "verdict": "KEEP",
+    "reason": "'Auth' suffix places this clearly in a technical authentication context; 'clerk auth' specifically refers to the Clerk auth service."
+  },
+  {
+    "alias": "oct a",
+    "term": "Okta",
+    "pack": "pack_04_devtools_companies",
+    "verdict": "KEEP",
+    "reason": "'Oct a' (two words) is not a standard English phrase; safely captures Okta mis-transcription."
+  },
+  {
+    "alias": "ok ta",
+    "term": "Okta",
+    "pack": "pack_04_devtools_companies",
+    "verdict": "DROP",
+    "reason": "'OK ta' is used in British English slang as an affirmative ('ok ta' meaning 'okay, thanks'); could appear in ordinary speech."
+  },
+  {
+    "alias": "one login",
+    "term": "OneLogin",
+    "pack": "pack_04_devtools_companies",
+    "verdict": "DROP",
+    "reason": "'One login' is an extremely common English phrase in everyday tech usage ('use one login for everything'); would corrupt ordinary speech."
+  },
+  {
+    "alias": "al go lia",
+    "term": "Algolia",
+    "pack": "pack_04_devtools_companies",
+    "verdict": "KEEP",
+    "reason": "Phonetic three-word split 'al go lia' has no ordinary English meaning; safely captures Algolia mis-transcription."
+  },
+  {
+    "alias": "alg oh lia",
+    "term": "Algolia",
+    "pack": "pack_04_devtools_companies",
+    "verdict": "KEEP",
+    "reason": "Phonetic split; 'alg oh lia' has no ordinary English meaning."
+  },
+  {
+    "alias": "may lee search",
+    "term": "Meilisearch",
+    "pack": "pack_04_devtools_companies",
+    "verdict": "KEEP",
+    "reason": "'May lee search' is not a natural English phrase; phonetically captures Meilisearch mis-transcription safely."
+  },
+  {
+    "alias": "melee search",
+    "term": "Meilisearch",
+    "pack": "pack_04_devtools_companies",
+    "verdict": "DROP",
+    "reason": "'Melee' is a real English word for a confused fight or brawl; 'melee search' could naturally appear ('a melee search for survivors') and would corrupt legitimate speech."
+  },
+  {
+    "alias": "type sense",
+    "term": "Typesense",
+    "pack": "pack_04_devtools_companies",
+    "verdict": "KEEP",
+    "reason": "'Type sense' is not a common English idiom or established phrase; the compound is distinctive enough to be safe."
+  },
+  {
+    "alias": "launch darkly",
+    "term": "LaunchDarkly",
+    "pack": "pack_04_devtools_companies",
+    "verdict": "KEEP",
+    "reason": "'Launch darkly' is not a natural English phrase; the combination specifically captures the LaunchDarkly feature-flag service."
+  },
+  {
+    "alias": "unleash feature",
+    "term": "Unleash",
+    "pack": "pack_04_devtools_companies",
+    "verdict": "KEEP",
+    "reason": "'Feature' suffix places this clearly in a feature-flagging context; 'unleash feature' specifically refers to the Unleash platform."
+  },
+  {
+    "alias": "century",
+    "term": "Sentry",
+    "pack": "pack_04_devtools_companies",
+    "verdict": "DROP",
+    "reason": "'Century' is an extremely common English word (100 years, a military unit); would corrupt everyday speech constantly. Single-word English flagged."
+  },
+  {
+    "alias": "sentry io",
+    "term": "Sentry",
+    "pack": "pack_04_devtools_companies",
+    "verdict": "KEEP",
+    "reason": "'.io' suffix places this unambiguously in a tech-service context; 'sentry io' specifically refers to sentry.io."
+  },
+  {
+    "alias": "log rocket",
+    "term": "LogRocket",
+    "pack": "pack_04_devtools_companies",
+    "verdict": "KEEP",
+    "reason": "'Log rocket' is not a common English phrase; the combination is distinctive enough to refer specifically to LogRocket."
+  },
+  {
+    "alias": "full story",
+    "term": "FullStory",
+    "pack": "pack_04_devtools_companies",
+    "verdict": "DROP",
+    "reason": "'The full story' is an extremely common English phrase ('tell me the full story'); would corrupt everyday speech constantly."
+  },
+  {
+    "alias": "amp lih tude",
+    "term": "Amplitude",
+    "pack": "pack_04_devtools_companies",
+    "verdict": "KEEP",
+    "reason": "Phonetic three-word split 'amp lih tude' is a Whisper artifact; a speaker saying 'amplitude' would produce the single word, not this split."
+  },
+  {
+    "alias": "mix panel",
+    "term": "Mixpanel",
+    "pack": "pack_04_devtools_companies",
+    "verdict": "KEEP",
+    "reason": "'Mix panel' is not a standard English idiom; the compound is distinctive enough to refer specifically to Mixpanel."
+  },
+  {
+    "alias": "segment io",
+    "term": "Segment",
+    "pack": "pack_04_devtools_companies",
+    "verdict": "KEEP",
+    "reason": "'.io' suffix places this unambiguously in a tech-service context; 'segment io' specifically refers to Segment."
+  },
+  {
+    "alias": "post hog",
+    "term": "PostHog",
+    "pack": "pack_04_devtools_companies",
+    "verdict": "KEEP",
+    "reason": "'Post hog' is not a natural English phrase; the combination is distinctive enough to refer specifically to PostHog."
+  },
+  {
+    "alias": "plausible analytics",
+    "term": "Plausible",
+    "pack": "pack_04_devtools_companies",
+    "verdict": "KEEP",
+    "reason": "'Analytics' suffix disambiguates from the adjective 'plausible'; 'plausible analytics' specifically refers to the Plausible Analytics tool."
+  },
+  {
+    "alias": "an throw pick",
+    "term": "Anthropic",
+    "pack": "pack_04_devtools_companies",
+    "verdict": "KEEP",
+    "reason": "Phonetic three-word split 'an throw pick' has no ordinary English meaning as a phrase; safely captures Anthropic mis-transcription."
+  },
+  {
+    "alias": "anthro pick",
+    "term": "Anthropic",
+    "pack": "pack_04_devtools_companies",
+    "verdict": "KEEP",
+    "reason": "'Anthro pick' is not a natural English phrase; phonetic split safely captures Anthropic."
+  },
+  {
+    "alias": "antro pic",
+    "term": "Anthropic",
+    "pack": "pack_04_devtools_companies",
+    "verdict": "KEEP",
+    "reason": "'Antro pic' has no ordinary English meaning; phonetic variant safely captures Anthropic."
+  },
+  {
+    "alias": "open a i",
+    "term": "OpenAI",
+    "pack": "pack_04_devtools_companies",
+    "verdict": "KEEP",
+    "reason": "Letter-by-letter spelling of 'AI' with 'open' prefix; safe per letter-spelling KEEP rule."
+  },
+  {
+    "alias": "open ay eye",
+    "term": "OpenAI",
+    "pack": "pack_04_devtools_companies",
+    "verdict": "KEEP",
+    "reason": "Phonetic letter-by-letter spelling of 'OpenAI'; no ordinary English meaning."
+  },
+  {
+    "alias": "google",
+    "term": "Google",
+    "pack": "pack_04_devtools_companies",
+    "verdict": "DROP",
+    "reason": "Identity flag: 'google' maps to 'Google' — same text, only casing differs. Drop per mandatory identity rule."
+  },
+  {
+    "alias": "micro soft",
+    "term": "Microsoft",
+    "pack": "pack_04_devtools_companies",
+    "verdict": "KEEP",
+    "reason": "'Micro soft' as two words is a Whisper artifact; the combination does not carry a natural English meaning and specifically captures Microsoft mis-transcription."
+  },
+  {
+    "alias": "meta platforms",
+    "term": "Meta",
+    "pack": "pack_04_devtools_companies",
+    "verdict": "KEEP",
+    "reason": "The compound 'meta platforms' is the company's legal name and does not form a natural, common English phrase."
+  },
+  {
+    "alias": "apple inc",
+    "term": "Apple",
+    "pack": "pack_04_devtools_companies",
+    "verdict": "KEEP",
+    "reason": "'Apple Inc' is the legal corporate name; nobody says 'apple inc' in ordinary English without referring to the company."
+  },
+  {
+    "alias": "en vidya",
+    "term": "NVIDIA",
+    "pack": "pack_04_devtools_companies",
+    "verdict": "KEEP",
+    "reason": "Phonetic mis-transcription of NVIDIA; 'en vidya' is not a natural English phrase."
+  },
+  {
+    "alias": "in videa",
+    "term": "NVIDIA",
+    "pack": "pack_04_devtools_companies",
+    "verdict": "KEEP",
+    "reason": "Phonetic mis-transcription of NVIDIA; 'in videa' has no ordinary English meaning."
+  },
+  {
+    "alias": "a m d",
+    "term": "AMD",
+    "pack": "pack_04_devtools_companies",
+    "verdict": "KEEP",
+    "reason": "Letter-by-letter spelling of the abbreviation AMD."
+  },
+  {
+    "alias": "ay em dee",
+    "term": "AMD",
+    "pack": "pack_04_devtools_companies",
+    "verdict": "KEEP",
+    "reason": "Phonetic letter spelling of AMD; unambiguously the abbreviation."
+  },
+  {
+    "alias": "intel",
+    "term": "Intel",
+    "pack": "pack_04_devtools_companies",
+    "verdict": "DROP",
+    "reason": "Flagged identity; alias equals term. Also, 'intel' is a common English word for intelligence/information."
+  },
+  {
+    "alias": "qual com",
+    "term": "Qualcomm",
+    "pack": "pack_04_devtools_companies",
+    "verdict": "KEEP",
+    "reason": "Phonetic split of Qualcomm; 'qual com' has no ordinary English meaning."
+  },
+  {
+    "alias": "quall com",
+    "term": "Qualcomm",
+    "pack": "pack_04_devtools_companies",
+    "verdict": "KEEP",
+    "reason": "Phonetic mis-transcription of Qualcomm; not a natural English phrase."
+  },
+  {
+    "alias": "broad com",
+    "term": "Broadcom",
+    "pack": "pack_04_devtools_companies",
+    "verdict": "KEEP",
+    "reason": "Phonetic split of Broadcom; 'broad com' as a two-word phrase does not occur naturally in English."
+  },
+  {
+    "alias": "pal an tier",
+    "term": "Palantir",
+    "pack": "pack_04_devtools_companies",
+    "verdict": "KEEP",
+    "reason": "Phonetic mis-transcription of Palantir; the three-word combination 'pal an tier' does not form any natural English phrase."
+  },
+  {
+    "alias": "pah lan tear",
+    "term": "Palantir",
+    "pack": "pack_04_devtools_companies",
+    "verdict": "KEEP",
+    "reason": "Phonetic mis-transcription of Palantir; 'pah lan tear' has no natural English meaning."
+  },
+  {
+    "alias": "data bricks",
+    "term": "Databricks",
+    "pack": "pack_04_devtools_companies",
+    "verdict": "KEEP",
+    "reason": "In tech dictation, 'data bricks' unambiguously refers to Databricks; 'bricks of data' is not a common ordinary-language phrase."
+  },
+  {
+    "alias": "snow flake",
+    "term": "Snowflake",
+    "pack": "pack_04_devtools_companies",
+    "verdict": "DROP",
+    "reason": "'Snowflake' is an extremely common English word (frozen precipitation, the insult); 'snow flake' would fire constantly in ordinary speech."
+  },
+  {
+    "alias": "hashi corp",
+    "term": "HashiCorp",
+    "pack": "pack_04_devtools_companies",
+    "verdict": "KEEP",
+    "reason": "'Hashi' is not a standard English word; the combination 'hashi corp' cannot occur in natural English speech."
+  },
+  {
+    "alias": "hashy corp",
+    "term": "HashiCorp",
+    "pack": "pack_04_devtools_companies",
+    "verdict": "KEEP",
+    "reason": "'Hashy corp' is not a natural English phrase; clearly a phonetic render of HashiCorp."
+  },
+  {
+    "alias": "elastic co",
+    "term": "Elastic",
+    "pack": "pack_04_devtools_companies",
+    "verdict": "KEEP",
+    "reason": "'Elastic co' as a two-word phrase strongly points to the company and does not form common ordinary-language usage."
+  },
+  {
+    "alias": "con flew ent",
+    "term": "Confluent",
+    "pack": "pack_04_devtools_companies",
+    "verdict": "KEEP",
+    "reason": "Phonetic mis-transcription of Confluent; 'con flew ent' has no natural English meaning as three words."
+  },
+  {
+    "alias": "con flu ent",
+    "term": "Confluent",
+    "pack": "pack_04_devtools_companies",
+    "verdict": "KEEP",
+    "reason": "Phonetic split rendering of Confluent; the three-word form does not appear in ordinary speech."
+  },
+  {
+    "alias": "mongo d b inc",
+    "term": "MongoDB Inc",
+    "pack": "pack_04_devtools_companies",
+    "verdict": "KEEP",
+    "reason": "Phonetic rendering with letter-spelled abbreviation; unambiguously the company name."
+  },
+  {
+    "alias": "data dog",
+    "term": "Datadog",
+    "pack": "pack_04_devtools_companies",
+    "verdict": "KEEP",
+    "reason": "'Data dog' is not a common English compound phrase; in tech dictation it unambiguously refers to Datadog."
+  },
+  {
+    "alias": "crowd strike",
+    "term": "CrowdStrike",
+    "pack": "pack_04_devtools_companies",
+    "verdict": "KEEP",
+    "reason": "'Crowd strike' is not a set English phrase; the compound is not commonly used outside the company name."
+  },
+  {
+    "alias": "palo alto networks",
+    "term": "Palo Alto Networks",
+    "pack": "pack_04_devtools_companies",
+    "verdict": "DROP",
+    "reason": "Flagged identity; alias is identical to term."
+  },
+  {
+    "alias": "forty net",
+    "term": "Fortinet",
+    "pack": "pack_04_devtools_companies",
+    "verdict": "DROP",
+    "reason": "'Forty net' is ordinary English (e.g., 'forty net units', 'forty net profit'); would fire on non-tech speech."
+  },
+  {
+    "alias": "fort in et",
+    "term": "Fortinet",
+    "pack": "pack_04_devtools_companies",
+    "verdict": "KEEP",
+    "reason": "Phonetic three-word split of Fortinet; 'fort in et' does not form any natural English phrase."
+  },
+  {
+    "alias": "z scaler",
+    "term": "Zscaler",
+    "pack": "pack_04_devtools_companies",
+    "verdict": "KEEP",
+    "reason": "Phonetic split of Zscaler; 'z scaler' as a two-word phrase is not a natural English expression."
+  },
+  {
+    "alias": "zee scaler",
+    "term": "Zscaler",
+    "pack": "pack_04_devtools_companies",
+    "verdict": "KEEP",
+    "reason": "Phonetic letter-name rendering of Zscaler; 'zee scaler' has no natural English meaning."
+  },
+  {
+    "alias": "cloud flare",
+    "term": "Cloudflare",
+    "pack": "pack_04_devtools_companies",
+    "verdict": "DROP",
+    "reason": "'Cloud flare' is natural English (atmospheric/solar flare near clouds, lens flare from clouds); breaks ordinary speech."
+  },
+  {
+    "alias": "cloud flair",
+    "term": "Cloudflare",
+    "pack": "pack_04_devtools_companies",
+    "verdict": "DROP",
+    "reason": "'Cloud flair' (style/flair related to cloud) is ordinary English and would cause false positives."
+  },
+  {
+    "alias": "ack a my",
+    "term": "Akamai",
+    "pack": "pack_04_devtools_companies",
+    "verdict": "KEEP",
+    "reason": "Phonetic mis-transcription of Akamai; 'ack a my' has no natural English meaning as three words."
+  },
+  {
+    "alias": "aka my",
+    "term": "Akamai",
+    "pack": "pack_04_devtools_companies",
+    "verdict": "DROP",
+    "reason": "'Aka my' reads as 'also known as my' and would fire frequently in ordinary speech (e.g., 'aka my other project')."
+  },
+  {
+    "alias": "fast lee",
+    "term": "Fastly",
+    "pack": "pack_04_devtools_companies",
+    "verdict": "KEEP",
+    "reason": "'Fast lee' (where Lee is a name or nautical term) is not a common English phrase; the combination is unusual outside the product name."
+  },
+  {
+    "alias": "twitch dev",
+    "term": "Twitch",
+    "pack": "pack_04_devtools_companies",
+    "verdict": "KEEP",
+    "reason": "'Twitch dev' specifically denotes a Twitch developer context; the compound is tech-specific enough to be unambiguous."
+  },
+  {
+    "alias": "shop if eye",
+    "term": "Shopify",
+    "pack": "pack_04_devtools_companies",
+    "verdict": "DROP",
+    "reason": "'Shop if eye' is a phonetic rendering of 'shop if I' (as in 'shop if I go downtown'), a very common English construction; would cause false positives."
+  },
+  {
+    "alias": "shop ify",
+    "term": "Shopify",
+    "pack": "pack_04_devtools_companies",
+    "verdict": "KEEP",
+    "reason": "'Shop ify' is not a natural English phrase; the '-ify' suffix split clearly points to the product name."
+  },
+  {
+    "alias": "content full",
+    "term": "Contentful",
+    "pack": "pack_04_devtools_companies",
+    "verdict": "DROP",
+    "reason": "'Content full' is ordinary English meaning filled with content (e.g., 'the presentation was content full'); would break natural speech."
+  },
+  {
+    "alias": "sanity io",
+    "term": "Sanity",
+    "pack": "pack_04_devtools_companies",
+    "verdict": "KEEP",
+    "reason": "The 'io' suffix makes this a product-specific reference; nobody says 'sanity io' in ordinary non-tech speech."
+  },
+  {
+    "alias": "sanity cms",
+    "term": "Sanity",
+    "pack": "pack_04_devtools_companies",
+    "verdict": "KEEP",
+    "reason": "'Sanity cms' is a tech-specific compound; the CMS qualifier disambiguates from the English word 'sanity'."
+  },
+  {
+    "alias": "story block",
+    "term": "Storyblok",
+    "pack": "pack_04_devtools_companies",
+    "verdict": "DROP",
+    "reason": "'Story block' is natural English (a block in a story, a story segment, a writer's block variant); would fire on non-tech speech."
+  },
+  {
+    "alias": "story blok",
+    "term": "Storyblok",
+    "pack": "pack_04_devtools_companies",
+    "verdict": "KEEP",
+    "reason": "'Blok' is not standard English spelling; this phonetic rendering is unambiguously the product name."
+  },
+  {
+    "alias": "hi graph",
+    "term": "Hygraph",
+    "pack": "pack_04_devtools_companies",
+    "verdict": "KEEP",
+    "reason": "'Hi graph' is not a natural English phrase; the combination does not appear in ordinary speech."
+  },
+  {
+    "alias": "high graph",
+    "term": "Hygraph",
+    "pack": "pack_04_devtools_companies",
+    "verdict": "DROP",
+    "reason": "'High graph' is natural English (a graph with high values, a high-resolution graph); would fire on non-tech speech."
+  },
+  {
+    "alias": "word press",
+    "term": "WordPress",
+    "pack": "pack_04_devtools_companies",
+    "verdict": "DROP",
+    "reason": "'Word press' is natural English (a printing press, 'press of words'); extremely common and would break ordinary speech."
+  },
+  {
+    "alias": "woo commerce",
+    "term": "WooCommerce",
+    "pack": "pack_04_devtools_companies",
+    "verdict": "KEEP",
+    "reason": "'Woo commerce' is not a standard English phrase; the combination is unusual outside the product name."
+  },
+  {
+    "alias": "web flow",
+    "term": "Webflow",
+    "pack": "pack_04_devtools_companies",
+    "verdict": "DROP",
+    "reason": "'Web flow' is natural English meaning the flow of web traffic or how a webpage flows; common in tech and non-tech speech."
+  },
+  {
+    "alias": "square space",
+    "term": "Squarespace",
+    "pack": "pack_04_devtools_companies",
+    "verdict": "DROP",
+    "reason": "'Square space' is natural English (a space that is square-shaped); would fire on ordinary speech."
+  },
+  {
+    "alias": "wicks",
+    "term": "Wix",
+    "pack": "pack_04_devtools_companies",
+    "verdict": "DROP",
+    "reason": "'Wicks' is a common English word (candle wicks); single common word with a clear non-tech meaning."
+  },
+  {
+    "alias": "t mux",
+    "term": "tmux",
+    "pack": "pack_04_devtools_companies",
+    "verdict": "KEEP",
+    "reason": "Letter + tech abbreviation (mux = multiplexer); 't mux' is not a natural English phrase."
+  },
+  {
+    "alias": "tee mux",
+    "term": "tmux",
+    "pack": "pack_04_devtools_companies",
+    "verdict": "KEEP",
+    "reason": "Phonetic letter name + mux; 'tee mux' has no natural English meaning."
+  },
+  {
+    "alias": "t-mux",
+    "term": "tmux",
+    "pack": "pack_04_devtools_companies",
+    "verdict": "KEEP",
+    "reason": "Hyphenated phonetic spelling of tmux; unambiguous tech reference."
+  },
+  {
+    "alias": "z shell",
+    "term": "zsh",
+    "pack": "pack_04_devtools_companies",
+    "verdict": "KEEP",
+    "reason": "'Z shell' specifically refers to the Unix shell; not a natural English phrase in non-tech contexts."
+  },
+  {
+    "alias": "zee shell",
+    "term": "zsh",
+    "pack": "pack_04_devtools_companies",
+    "verdict": "KEEP",
+    "reason": "Phonetic letter-name spelling of zsh; 'zee shell' has no natural English meaning."
+  },
+  {
+    "alias": "zed shell",
+    "term": "zsh",
+    "pack": "pack_04_devtools_companies",
+    "verdict": "KEEP",
+    "reason": "British/Canadian letter-name spelling of zsh; 'zed shell' has no natural English meaning."
+  },
+  {
+    "alias": "bash shell",
+    "term": "Bash",
+    "pack": "pack_04_devtools_companies",
+    "verdict": "KEEP",
+    "reason": "The disambiguating compound 'bash shell' specifically denotes the Unix shell; 'bash' alone would be risky but the compound is adequately specific."
+  },
+  {
+    "alias": "power shell",
+    "term": "PowerShell",
+    "pack": "pack_04_devtools_companies",
+    "verdict": "KEEP",
+    "reason": "'Power shell' as a two-word phrase is not a common English compound; it does not appear naturally in ordinary speech."
+  },
+  {
+    "alias": "i term 2",
+    "term": "iTerm2",
+    "pack": "pack_04_devtools_companies",
+    "verdict": "KEEP",
+    "reason": "Phonetic rendering with number suffix; 'i term 2' has no natural English meaning."
+  },
+  {
+    "alias": "eye term two",
+    "term": "iTerm2",
+    "pack": "pack_04_devtools_companies",
+    "verdict": "KEEP",
+    "reason": "Fully spelled-out phonetic rendering of iTerm2; 'eye term two' is not a natural English phrase."
+  },
+  {
+    "alias": "warp terminal",
+    "term": "Warp",
+    "pack": "pack_04_devtools_companies",
+    "verdict": "KEEP",
+    "reason": "'Warp terminal' specifically denotes the Warp terminal app; the compound is adequately specific in tech dictation context."
+  },
+  {
+    "alias": "ah la critty",
+    "term": "Alacritty",
+    "pack": "pack_04_devtools_companies",
+    "verdict": "KEEP",
+    "reason": "Phonetic mis-transcription of Alacritty; 'critty' is not an English word, so the phrase cannot occur naturally."
+  },
+  {
+    "alias": "ala critty",
+    "term": "Alacritty",
+    "pack": "pack_04_devtools_companies",
+    "verdict": "KEEP",
+    "reason": "Phonetic mis-transcription of Alacritty; 'critty' is not English, making the phrase unambiguous."
+  },
+  {
+    "alias": "kitty terminal",
+    "term": "Kitty",
+    "pack": "pack_04_devtools_companies",
+    "verdict": "KEEP",
+    "reason": "'Kitty terminal' specifically refers to the Kitty terminal emulator; unlikely to appear in non-tech speech as a set phrase."
+  },
+  {
+    "alias": "starship prompt",
+    "term": "Starship",
+    "pack": "pack_04_devtools_companies",
+    "verdict": "KEEP",
+    "reason": "'Starship prompt' specifically denotes the Starship shell prompt tool; the compound is tech-specific and unlikely in ordinary speech."
+  },
+  {
+    "alias": "oh my z shell",
+    "term": "Oh My Zsh",
+    "pack": "pack_04_devtools_companies",
+    "verdict": "KEEP",
+    "reason": "The phrase 'oh my z shell' is an unambiguous reference to the Oh My Zsh framework; not a natural English expression."
+  },
+  {
+    "alias": "oh my zed shell",
+    "term": "Oh My Zsh",
+    "pack": "pack_04_devtools_companies",
+    "verdict": "KEEP",
+    "reason": "'Oh my zed shell' is an unambiguous phonetic rendering of Oh My Zsh; not a natural English expression."
+  },
+  {
+    "alias": "f z f",
+    "term": "fzf",
+    "pack": "pack_04_devtools_companies",
+    "verdict": "KEEP",
+    "reason": "Letter-by-letter spelling of fzf; unambiguously the tool abbreviation."
+  },
+  {
+    "alias": "ef zee ef",
+    "term": "fzf",
+    "pack": "pack_04_devtools_companies",
+    "verdict": "KEEP",
+    "reason": "Phonetic letter-name spelling of fzf; unambiguously the tool abbreviation."
+  },
+  {
+    "alias": "fuzzy finder",
+    "term": "fzf",
+    "pack": "pack_04_devtools_companies",
+    "verdict": "KEEP",
+    "reason": "In tech dictation, 'fuzzy finder' is a well-established descriptor that primarily evokes fzf; the term is semi-technical and unlikely to cause confusion in developer speech."
+  },
+  {
+    "alias": "rip grep",
+    "term": "ripgrep",
+    "pack": "pack_04_devtools_companies",
+    "verdict": "KEEP",
+    "reason": "'Rip grep' combines a common word with a Unix tool name; the compound is tech-specific and does not form a natural English phrase."
+  },
+  {
+    "alias": "lazy git",
+    "term": "lazygit",
+    "pack": "pack_04_devtools_companies",
+    "verdict": "DROP",
+    "reason": "'Lazy git' is a common British English insult meaning a lazy person ('git' = British slang); would fire on non-tech speech."
+  },
+  {
+    "alias": "lazy docker",
+    "term": "lazydocker",
+    "pack": "pack_04_devtools_companies",
+    "verdict": "DROP",
+    "reason": "'Lazy docker' is natural English (a lazy dock worker, or lazy Docker user); has a clear non-technical meaning."
+  },
+  {
+    "alias": "h top",
+    "term": "htop",
+    "pack": "pack_04_devtools_companies",
+    "verdict": "KEEP",
+    "reason": "Letter + tech word; 'h top' is not a natural English phrase."
+  },
+  {
+    "alias": "aitch top",
+    "term": "htop",
+    "pack": "pack_04_devtools_companies",
+    "verdict": "KEEP",
+    "reason": "Phonetic letter-name rendering of htop; 'aitch top' has no natural English meaning."
+  },
+  {
+    "alias": "b top",
+    "term": "btop",
+    "pack": "pack_04_devtools_companies",
+    "verdict": "KEEP",
+    "reason": "Letter + tech word; 'b top' is not a natural English phrase."
+  },
+  {
+    "alias": "bee top",
+    "term": "btop",
+    "pack": "pack_04_devtools_companies",
+    "verdict": "KEEP",
+    "reason": "Phonetic letter-name rendering of btop; 'bee top' is not a natural English phrase."
+  },
+  {
+    "alias": "n map",
+    "term": "nmap",
+    "pack": "pack_04_devtools_companies",
+    "verdict": "DEDUPE",
+    "new_alias": "n map",
+    "reason": "Conflict flag present; two aliases ('n map' and 'en map') both target nmap. Keeping nmap as the winner since both rows already agree on nmap."
+  },
+  {
+    "alias": "en map",
+    "term": "nmap",
+    "pack": "pack_04_devtools_companies",
+    "verdict": "DEDUPE",
+    "new_alias": "en map",
+    "reason": "Conflict flag present; paired with 'n map' → nmap. Keeping nmap as the winner for both rows."
+  },
+  {
+    "alias": "wire shark",
+    "term": "Wireshark",
+    "pack": "pack_04_devtools_companies",
+    "verdict": "KEEP",
+    "reason": "'Wire shark' is not a natural English phrase; the combination does not appear in ordinary speech."
+  },
+  {
+    "alias": "tcp dump",
+    "term": "tcpdump",
+    "pack": "pack_04_devtools_companies",
+    "verdict": "KEEP",
+    "reason": "'Tcp dump' combines a tech acronym with a word; the compound is tech-specific and unambiguous."
+  },
+  {
+    "alias": "t c p dump",
+    "term": "tcpdump",
+    "pack": "pack_04_devtools_companies",
+    "verdict": "KEEP",
+    "reason": "Letter-spelled abbreviation plus 'dump'; clearly a tech reference with no natural English meaning."
+  },
+  {
+    "alias": "s trace",
+    "term": "strace",
+    "pack": "pack_04_devtools_companies",
+    "verdict": "KEEP",
+    "reason": "Letter + tech word; 's trace' is not a natural English phrase."
+  },
+  {
+    "alias": "ess trace",
+    "term": "strace",
+    "pack": "pack_04_devtools_companies",
+    "verdict": "KEEP",
+    "reason": "Phonetic letter-name rendering of strace; 'ess trace' has no natural English meaning."
+  },
+  {
+    "alias": "docker compose",
+    "term": "Docker Compose",
+    "pack": "pack_04_devtools_companies",
+    "verdict": "DROP",
+    "reason": "Flagged identity; alias is identical to term (case-insensitive)."
+  },
+  {
+    "alias": "dock er compose",
+    "term": "Docker Compose",
+    "pack": "pack_04_devtools_companies",
+    "verdict": "KEEP",
+    "reason": "Phonetic split of 'Docker Compose'; 'dock er compose' has no natural English meaning."
+  },
+  {
+    "alias": "make file",
+    "term": "Makefile",
+    "pack": "pack_04_devtools_companies",
+    "verdict": "DROP",
+    "reason": "'Make file' is extremely natural English (to create a file, to make a file transfer); would fire constantly in ordinary tech and non-tech speech."
+  },
+  {
+    "alias": "c make",
+    "term": "CMake",
+    "pack": "pack_04_devtools_companies",
+    "verdict": "KEEP",
+    "reason": "Letter + tech verb compound; 'c make' is not a natural English phrase and unambiguously refers to the build tool."
+  },
+  {
+    "alias": "see make",
+    "term": "CMake",
+    "pack": "pack_04_devtools_companies",
+    "verdict": "KEEP",
+    "reason": "'See make' as a two-word phrase is not a natural English construction; it does not occur as a set expression in ordinary speech."
+  },
+  {
+    "alias": "bay zel",
+    "term": "Bazel",
+    "pack": "pack_04_devtools_companies",
+    "verdict": "KEEP",
+    "reason": "Phonetic mis-transcription of Bazel; 'zel' is not English, so the phrase cannot occur naturally."
+  },
+  {
+    "alias": "bazelle",
+    "term": "Bazel",
+    "pack": "pack_04_devtools_companies",
+    "verdict": "KEEP",
+    "reason": "'Bazelle' is not an English word; unambiguously a phonetic rendering of Bazel."
+  },
+  {
+    "alias": "n x",
+    "term": "Nx",
+    "pack": "pack_04_devtools_companies",
+    "verdict": "KEEP",
+    "reason": "Letter-by-letter spelling of the abbreviation Nx; not a natural English phrase."
+  },
+  {
+    "alias": "en ex",
+    "term": "Nx",
+    "pack": "pack_04_devtools_companies",
+    "verdict": "KEEP",
+    "reason": "Phonetic letter-name spelling of N-X; clearly different from 'an ex' (former partner) which Whisper would transcribe differently."
+  },
+  {
+    "alias": "turbo repo",
+    "term": "Turborepo",
+    "pack": "pack_04_devtools_companies",
+    "verdict": "KEEP",
+    "reason": "'Turbo repo' combines two tech terms; the compound specifically denotes the Turborepo monorepo tool and does not appear in ordinary English."
+  },
+  {
+    "alias": "ler na",
+    "term": "Lerna",
+    "pack": "pack_04_devtools_companies",
+    "verdict": "KEEP",
+    "reason": "'Ler' is not a standard English word; 'ler na' cannot occur in natural English speech."
+  },
+  {
+    "alias": "learn a",
+    "term": "Lerna",
+    "pack": "pack_04_devtools_companies",
+    "verdict": "DROP",
+    "reason": "'Learn a' is extremely common English ('learn a new skill', 'learn a language'); would fire constantly on ordinary speech."
+  },
+  {
+    "alias": "mono repo",
+    "term": "monorepo",
+    "pack": "pack_04_devtools_companies",
+    "verdict": "KEEP",
+    "reason": "'Mono repo' is a tech-specific compound; does not appear in ordinary non-tech speech."
+  },
+  {
+    "alias": "mono repository",
+    "term": "monorepo",
+    "pack": "pack_04_devtools_companies",
+    "verdict": "KEEP",
+    "reason": "'Mono repository' is a technical descriptor that specifically means monorepo; unlikely to appear outside tech contexts."
+  },
+  {
+    "alias": "micro services",
+    "term": "microservices",
+    "pack": "pack_04_devtools_companies",
+    "verdict": "KEEP",
+    "reason": "'Micro services' is a tech-specific compound; the term does not appear in ordinary non-tech speech."
+  },
+  {
+    "alias": "server less",
+    "term": "serverless",
+    "pack": "pack_04_devtools_companies",
+    "verdict": "DROP",
+    "reason": "'Server less' is natural English meaning 'without a server' or 'the server, less than...'; would fire on ordinary tech speech outside the computing paradigm name."
+  },
+  {
+    "alias": "edge computing",
+    "term": "edge computing",
+    "pack": "pack_04_devtools_companies",
+    "verdict": "DROP",
+    "reason": "Flagged identity; alias is identical to term."
+  },
+  {
+    "alias": "web assembly",
+    "term": "WebAssembly",
+    "pack": "pack_04_devtools_companies",
+    "verdict": "DROP",
+    "reason": "'Web assembly' can read as ordinary English ('the assembly of a web', 'web page assembly process'); would cause false positives."
+  },
+  {
+    "alias": "wasm",
+    "term": "WebAssembly",
+    "pack": "pack_04_devtools_companies",
+    "verdict": "DEDUPE",
+    "new_alias": "wasm",
+    "reason": "Flagged conflict; 'wasm' maps to WebAssembly here. WebAssembly is the full canonical name and the more specific term; retaining it as the winner."
+  },
+  {
+    "alias": "h t m x",
+    "term": "HTMX",
+    "pack": "pack_04_devtools_companies",
+    "verdict": "KEEP",
+    "reason": "Letter-by-letter spelling of HTMX; unambiguously the abbreviation."
+  },
+  {
+    "alias": "aitch tee em ex",
+    "term": "HTMX",
+    "pack": "pack_04_devtools_companies",
+    "verdict": "KEEP",
+    "reason": "Phonetic letter-name spelling of HTMX; unambiguously the abbreviation."
+  },
+  {
+    "alias": "html x",
+    "term": "HTMX",
+    "pack": "pack_04_devtools_companies",
+    "verdict": "KEEP",
+    "reason": "Tech abbreviation split; 'html x' is a clear phonetic approximation of HTMX with no ordinary English meaning."
+  },
+  {
+    "alias": "live view",
+    "term": "LiveView",
+    "pack": "pack_04_devtools_companies",
+    "verdict": "DROP",
+    "reason": "'Live view' is extremely common English (camera live view, live feed); would fire constantly on ordinary speech."
+  },
+  {
+    "alias": "phoenix live view",
+    "term": "LiveView",
+    "pack": "pack_04_devtools_companies",
+    "verdict": "KEEP",
+    "reason": "'Phoenix live view' specifically refers to the Phoenix/Elixir LiveView framework; the 'phoenix' qualifier makes this unambiguous."
+  },
+  {
+    "alias": "hot wire",
+    "term": "Hotwire",
+    "pack": "pack_04_devtools_companies",
+    "verdict": "DROP",
+    "reason": "'Hotwire' (to start a vehicle without a key) is a very common English word; would cause frequent false positives."
+  },
+  {
+    "alias": "stim u lus",
+    "term": "Stimulus",
+    "pack": "pack_04_devtools_companies",
+    "verdict": "KEEP",
+    "reason": "Three-word phonetic mis-transcription of the Stimulus framework; Whisper would not normally produce 'stim u lus' from the English word 'stimulus' (which it renders as one word)."
+  },
+  {
+    "alias": "turbo rails",
+    "term": "Turbo",
+    "pack": "pack_04_devtools_companies",
+    "verdict": "KEEP",
+    "reason": "'Turbo rails' specifically refers to the Turbo (Hotwire) framework in a Rails context; unlikely to appear as a natural English phrase."
+  },
+  {
+    "alias": "hotwire turbo",
+    "term": "Turbo",
+    "pack": "pack_04_devtools_companies",
+    "verdict": "KEEP",
+    "reason": "'Hotwire turbo' as a compound refers to the Hotwire/Turbo web framework; not a natural English phrase."
+  },
+  {
+    "alias": "alpine js",
+    "term": "Alpine.js",
+    "pack": "pack_04_devtools_companies",
+    "verdict": "KEEP",
+    "reason": "'Alpine js' (alpine + JS abbreviation) is tech-specific; 'alpine' alone is common English but the JS suffix disambiguates."
+  },
+  {
+    "alias": "un poly",
+    "term": "Unpoly",
+    "pack": "pack_04_devtools_companies",
+    "verdict": "KEEP",
+    "reason": "'Un poly' is not a natural English phrase; the combination does not occur in ordinary speech."
+  },
+  {
+    "alias": "double verify",
+    "term": "DoubleVerify",
+    "pack": "pack_04_devtools_companies",
+    "verdict": "DROP",
+    "reason": "'Double verify' is natural English meaning to verify twice (e.g., 'let me double verify that'); would fire on ordinary speech."
+  },
+  {
+    "alias": "dv",
+    "term": "DoubleVerify",
+    "pack": "pack_04_devtools_companies",
+    "verdict": "KEEP",
+    "reason": "Pure abbreviation; in the DoubleVerify employee context of this pack, 'dv' → DoubleVerify is intentional and appropriate."
+  },
+  {
+    "alias": "d v",
+    "term": "DoubleVerify",
+    "pack": "pack_04_devtools_companies",
+    "verdict": "DEDUPE",
+    "new_alias": "d v",
+    "reason": "Conflict flag: same alias 'd v' maps to both DoubleVerify and DV. DV is the standard abbreviation that the letters spell out; it is the more specific/natural expansion for letter-by-letter dictation."
+  },
+  {
+    "alias": "d v",
+    "term": "DV",
+    "pack": "pack_04_devtools_companies",
+    "verdict": "DEDUPE",
+    "new_alias": "d v",
+    "reason": "Conflict flag: same alias 'd v' maps to both DoubleVerify and DV. Retaining DV as the winner since letter-spelling 'd v' most naturally expands to the abbreviation DV."
+  },
+  {
+    "alias": "dee vee",
+    "term": "DV",
+    "pack": "pack_04_devtools_companies",
+    "verdict": "KEEP",
+    "reason": "Phonetic letter-name spelling of DV; unambiguously the abbreviation."
+  }
+]

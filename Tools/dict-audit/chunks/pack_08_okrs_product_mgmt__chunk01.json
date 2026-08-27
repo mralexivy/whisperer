@@ -1,0 +1,1191 @@
+[
+  {
+    "alias": "ee oh why",
+    "term": "EOY",
+    "pack": "pack_08_okrs_product_mgmt",
+    "flags": []
+  },
+  {
+    "alias": "end of year",
+    "term": "EOY",
+    "pack": "pack_08_okrs_product_mgmt",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "q one",
+    "term": "Q1",
+    "pack": "pack_08_okrs_product_mgmt",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "queue one",
+    "term": "Q1",
+    "pack": "pack_08_okrs_product_mgmt",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "quarter one",
+    "term": "Q1",
+    "pack": "pack_08_okrs_product_mgmt",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "q two",
+    "term": "Q2",
+    "pack": "pack_08_okrs_product_mgmt",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "queue two",
+    "term": "Q2",
+    "pack": "pack_08_okrs_product_mgmt",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "quarter two",
+    "term": "Q2",
+    "pack": "pack_08_okrs_product_mgmt",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "q three",
+    "term": "Q3",
+    "pack": "pack_08_okrs_product_mgmt",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "queue three",
+    "term": "Q3",
+    "pack": "pack_08_okrs_product_mgmt",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "quarter three",
+    "term": "Q3",
+    "pack": "pack_08_okrs_product_mgmt",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "q four",
+    "term": "Q4",
+    "pack": "pack_08_okrs_product_mgmt",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "queue four",
+    "term": "Q4",
+    "pack": "pack_08_okrs_product_mgmt",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "quarter four",
+    "term": "Q4",
+    "pack": "pack_08_okrs_product_mgmt",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "h one",
+    "term": "H1",
+    "pack": "pack_08_okrs_product_mgmt",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "aitch one",
+    "term": "H1",
+    "pack": "pack_08_okrs_product_mgmt",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "half one",
+    "term": "H1",
+    "pack": "pack_08_okrs_product_mgmt",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "h two",
+    "term": "H2",
+    "pack": "pack_08_okrs_product_mgmt",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "aitch two",
+    "term": "H2",
+    "pack": "pack_08_okrs_product_mgmt",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "half two",
+    "term": "H2",
+    "pack": "pack_08_okrs_product_mgmt",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "f y",
+    "term": "FY",
+    "pack": "pack_08_okrs_product_mgmt",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "ef why",
+    "term": "FY",
+    "pack": "pack_08_okrs_product_mgmt",
+    "flags": []
+  },
+  {
+    "alias": "fiscal year",
+    "term": "FY",
+    "pack": "pack_08_okrs_product_mgmt",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "f y twenty five",
+    "term": "FY25",
+    "pack": "pack_08_okrs_product_mgmt",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "fiscal year twenty five",
+    "term": "FY25",
+    "pack": "pack_08_okrs_product_mgmt",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "f y twenty six",
+    "term": "FY26",
+    "pack": "pack_08_okrs_product_mgmt",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "fiscal year twenty six",
+    "term": "FY26",
+    "pack": "pack_08_okrs_product_mgmt",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "y o y",
+    "term": "YoY",
+    "pack": "pack_08_okrs_product_mgmt",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "why oh why",
+    "term": "YoY",
+    "pack": "pack_08_okrs_product_mgmt",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "year over year",
+    "term": "YoY",
+    "pack": "pack_08_okrs_product_mgmt",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "q o q",
+    "term": "QoQ",
+    "pack": "pack_08_okrs_product_mgmt",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "queue oh queue",
+    "term": "QoQ",
+    "pack": "pack_08_okrs_product_mgmt",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "quarter over quarter",
+    "term": "QoQ",
+    "pack": "pack_08_okrs_product_mgmt",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "m o m",
+    "term": "MoM",
+    "pack": "pack_08_okrs_product_mgmt",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "em oh em",
+    "term": "MoM",
+    "pack": "pack_08_okrs_product_mgmt",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "month over month",
+    "term": "MoM",
+    "pack": "pack_08_okrs_product_mgmt",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "w o w",
+    "term": "WoW",
+    "pack": "pack_08_okrs_product_mgmt",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "double you oh double you",
+    "term": "WoW",
+    "pack": "pack_08_okrs_product_mgmt",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "week over week",
+    "term": "WoW",
+    "pack": "pack_08_okrs_product_mgmt",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "d o d",
+    "term": "DoD",
+    "pack": "pack_08_okrs_product_mgmt",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "dee oh dee",
+    "term": "DoD",
+    "pack": "pack_08_okrs_product_mgmt",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "day over day",
+    "term": "DoD",
+    "pack": "pack_08_okrs_product_mgmt",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "a r r",
+    "term": "ARR",
+    "pack": "pack_08_okrs_product_mgmt",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "ay are are",
+    "term": "ARR",
+    "pack": "pack_08_okrs_product_mgmt",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "annual recurring revenue",
+    "term": "ARR",
+    "pack": "pack_08_okrs_product_mgmt",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "m r r",
+    "term": "MRR",
+    "pack": "pack_08_okrs_product_mgmt",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "em are are",
+    "term": "MRR",
+    "pack": "pack_08_okrs_product_mgmt",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "monthly recurring revenue",
+    "term": "MRR",
+    "pack": "pack_08_okrs_product_mgmt",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "a c v",
+    "term": "ACV",
+    "pack": "pack_08_okrs_product_mgmt",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "ay see vee",
+    "term": "ACV",
+    "pack": "pack_08_okrs_product_mgmt",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "annual contract value",
+    "term": "ACV",
+    "pack": "pack_08_okrs_product_mgmt",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "t c v",
+    "term": "TCV",
+    "pack": "pack_08_okrs_product_mgmt",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "tee see vee",
+    "term": "TCV",
+    "pack": "pack_08_okrs_product_mgmt",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "total contract value",
+    "term": "TCV",
+    "pack": "pack_08_okrs_product_mgmt",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "l t v",
+    "term": "LTV",
+    "pack": "pack_08_okrs_product_mgmt",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "el tee vee",
+    "term": "LTV",
+    "pack": "pack_08_okrs_product_mgmt",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "lifetime value",
+    "term": "LTV",
+    "pack": "pack_08_okrs_product_mgmt",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "c a c",
+    "term": "CAC",
+    "pack": "pack_08_okrs_product_mgmt",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "see ay see",
+    "term": "CAC",
+    "pack": "pack_08_okrs_product_mgmt",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "customer acquisition cost",
+    "term": "CAC",
+    "pack": "pack_08_okrs_product_mgmt",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "n r r",
+    "term": "NRR",
+    "pack": "pack_08_okrs_product_mgmt",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "en are are",
+    "term": "NRR",
+    "pack": "pack_08_okrs_product_mgmt",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "net revenue retention",
+    "term": "NRR",
+    "pack": "pack_08_okrs_product_mgmt",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "g r r",
+    "term": "GRR",
+    "pack": "pack_08_okrs_product_mgmt",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "gee are are",
+    "term": "GRR",
+    "pack": "pack_08_okrs_product_mgmt",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "gross revenue retention",
+    "term": "GRR",
+    "pack": "pack_08_okrs_product_mgmt",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "n p s",
+    "term": "NPS",
+    "pack": "pack_08_okrs_product_mgmt",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "en pee ess",
+    "term": "NPS",
+    "pack": "pack_08_okrs_product_mgmt",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "net promoter score",
+    "term": "NPS",
+    "pack": "pack_08_okrs_product_mgmt",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "c sat",
+    "term": "CSAT",
+    "pack": "pack_08_okrs_product_mgmt",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "see sat",
+    "term": "CSAT",
+    "pack": "pack_08_okrs_product_mgmt",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "customer satisfaction",
+    "term": "CSAT",
+    "pack": "pack_08_okrs_product_mgmt",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "c e s",
+    "term": "CES",
+    "pack": "pack_08_okrs_product_mgmt",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "see ee ess",
+    "term": "CES",
+    "pack": "pack_08_okrs_product_mgmt",
+    "flags": []
+  },
+  {
+    "alias": "customer effort score",
+    "term": "CES",
+    "pack": "pack_08_okrs_product_mgmt",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "d a u",
+    "term": "DAU",
+    "pack": "pack_08_okrs_product_mgmt",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "dee ay you",
+    "term": "DAU",
+    "pack": "pack_08_okrs_product_mgmt",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "daily active users",
+    "term": "DAU",
+    "pack": "pack_08_okrs_product_mgmt",
+    "flags": []
+  },
+  {
+    "alias": "m a u",
+    "term": "MAU",
+    "pack": "pack_08_okrs_product_mgmt",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "em ay you",
+    "term": "MAU",
+    "pack": "pack_08_okrs_product_mgmt",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "monthly active users",
+    "term": "MAU",
+    "pack": "pack_08_okrs_product_mgmt",
+    "flags": []
+  },
+  {
+    "alias": "w a u",
+    "term": "WAU",
+    "pack": "pack_08_okrs_product_mgmt",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "double you ay you",
+    "term": "WAU",
+    "pack": "pack_08_okrs_product_mgmt",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "weekly active users",
+    "term": "WAU",
+    "pack": "pack_08_okrs_product_mgmt",
+    "flags": []
+  },
+  {
+    "alias": "churn rate",
+    "term": "churn",
+    "pack": "pack_08_okrs_product_mgmt",
+    "flags": [
+      "all_english",
+      "conflict"
+    ]
+  },
+  {
+    "alias": "churn rate",
+    "term": "churn rate",
+    "pack": "pack_08_okrs_product_mgmt",
+    "flags": [
+      "all_english",
+      "conflict",
+      "identity",
+      "substring_of_term"
+    ]
+  },
+  {
+    "alias": "re tension",
+    "term": "retention",
+    "pack": "pack_08_okrs_product_mgmt",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "re tension rate",
+    "term": "retention rate",
+    "pack": "pack_08_okrs_product_mgmt",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "con version rate",
+    "term": "conversion rate",
+    "pack": "pack_08_okrs_product_mgmt",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "fun el",
+    "term": "funnel",
+    "pack": "pack_08_okrs_product_mgmt",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "top of fun el",
+    "term": "top of funnel",
+    "pack": "pack_08_okrs_product_mgmt",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "bottom of fun el",
+    "term": "bottom of funnel",
+    "pack": "pack_08_okrs_product_mgmt",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "to fu",
+    "term": "TOFU",
+    "pack": "pack_08_okrs_product_mgmt",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "top of funnel",
+    "term": "TOFU",
+    "pack": "pack_08_okrs_product_mgmt",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "mo fu",
+    "term": "MOFU",
+    "pack": "pack_08_okrs_product_mgmt",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "middle of funnel",
+    "term": "MOFU",
+    "pack": "pack_08_okrs_product_mgmt",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "bo fu",
+    "term": "BOFU",
+    "pack": "pack_08_okrs_product_mgmt",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "bottom of funnel",
+    "term": "BOFU",
+    "pack": "pack_08_okrs_product_mgmt",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "act uh vation",
+    "term": "activation",
+    "pack": "pack_08_okrs_product_mgmt",
+    "flags": []
+  },
+  {
+    "alias": "on boarding",
+    "term": "onboarding",
+    "pack": "pack_08_okrs_product_mgmt",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "time to value",
+    "term": "time to value",
+    "pack": "pack_08_okrs_product_mgmt",
+    "flags": [
+      "all_english",
+      "conflict",
+      "identity",
+      "substring_of_term"
+    ]
+  },
+  {
+    "alias": "t t v",
+    "term": "TTV",
+    "pack": "pack_08_okrs_product_mgmt",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "tee tee vee",
+    "term": "TTV",
+    "pack": "pack_08_okrs_product_mgmt",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "time to value",
+    "term": "TTV",
+    "pack": "pack_08_okrs_product_mgmt",
+    "flags": [
+      "all_english",
+      "conflict"
+    ]
+  },
+  {
+    "alias": "feature a dop shun",
+    "term": "feature adoption",
+    "pack": "pack_08_okrs_product_mgmt",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "en gage ment",
+    "term": "engagement",
+    "pack": "pack_08_okrs_product_mgmt",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "sticky ness",
+    "term": "stickiness",
+    "pack": "pack_08_okrs_product_mgmt",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "product market fit",
+    "term": "product-market fit",
+    "pack": "pack_08_okrs_product_mgmt",
+    "flags": [
+      "all_english",
+      "conflict"
+    ]
+  },
+  {
+    "alias": "p m f",
+    "term": "PMF",
+    "pack": "pack_08_okrs_product_mgmt",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "pee em ef",
+    "term": "PMF",
+    "pack": "pack_08_okrs_product_mgmt",
+    "flags": []
+  },
+  {
+    "alias": "product market fit",
+    "term": "PMF",
+    "pack": "pack_08_okrs_product_mgmt",
+    "flags": [
+      "all_english",
+      "conflict"
+    ]
+  },
+  {
+    "alias": "g t m",
+    "term": "GTM",
+    "pack": "pack_08_okrs_product_mgmt",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "gee tee em",
+    "term": "GTM",
+    "pack": "pack_08_okrs_product_mgmt",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "go to market",
+    "term": "GTM",
+    "pack": "pack_08_okrs_product_mgmt",
+    "flags": [
+      "all_english",
+      "conflict"
+    ]
+  },
+  {
+    "alias": "go to market",
+    "term": "go-to-market",
+    "pack": "pack_08_okrs_product_mgmt",
+    "flags": [
+      "all_english",
+      "conflict"
+    ]
+  },
+  {
+    "alias": "t a m",
+    "term": "TAM",
+    "pack": "pack_08_okrs_product_mgmt",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "tee ay em",
+    "term": "TAM",
+    "pack": "pack_08_okrs_product_mgmt",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "total addressable market",
+    "term": "TAM",
+    "pack": "pack_08_okrs_product_mgmt",
+    "flags": []
+  },
+  {
+    "alias": "s a m",
+    "term": "SAM",
+    "pack": "pack_08_okrs_product_mgmt",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "serviceable addressable market",
+    "term": "SAM",
+    "pack": "pack_08_okrs_product_mgmt",
+    "flags": []
+  },
+  {
+    "alias": "s o m",
+    "term": "SOM",
+    "pack": "pack_08_okrs_product_mgmt",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "serviceable obtainable market",
+    "term": "SOM",
+    "pack": "pack_08_okrs_product_mgmt",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "i c p",
+    "term": "ICP",
+    "pack": "pack_08_okrs_product_mgmt",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "eye see pee",
+    "term": "ICP",
+    "pack": "pack_08_okrs_product_mgmt",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "ideal customer profile",
+    "term": "ICP",
+    "pack": "pack_08_okrs_product_mgmt",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "r o i",
+    "term": "ROI",
+    "pack": "pack_08_okrs_product_mgmt",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "are oh eye",
+    "term": "ROI",
+    "pack": "pack_08_okrs_product_mgmt",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "return on investment",
+    "term": "ROI",
+    "pack": "pack_08_okrs_product_mgmt",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "t c o",
+    "term": "TCO",
+    "pack": "pack_08_okrs_product_mgmt",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "tee see oh",
+    "term": "TCO",
+    "pack": "pack_08_okrs_product_mgmt",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "total cost of ownership",
+    "term": "TCO",
+    "pack": "pack_08_okrs_product_mgmt",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "cap ex",
+    "term": "CAPEX",
+    "pack": "pack_08_okrs_product_mgmt",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "capital expenditure",
+    "term": "CAPEX",
+    "pack": "pack_08_okrs_product_mgmt",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "op ex",
+    "term": "OPEX",
+    "pack": "pack_08_okrs_product_mgmt",
+    "flags": []
+  },
+  {
+    "alias": "operational expenditure",
+    "term": "OPEX",
+    "pack": "pack_08_okrs_product_mgmt",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "cogs",
+    "term": "COGS",
+    "pack": "pack_08_okrs_product_mgmt",
+    "flags": [
+      "identity",
+      "substring_of_term"
+    ]
+  },
+  {
+    "alias": "cost of goods sold",
+    "term": "COGS",
+    "pack": "pack_08_okrs_product_mgmt",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "gross mar gin",
+    "term": "gross margin",
+    "pack": "pack_08_okrs_product_mgmt",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "run way",
+    "term": "runway",
+    "pack": "pack_08_okrs_product_mgmt",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "burn rate",
+    "term": "burn rate",
+    "pack": "pack_08_okrs_product_mgmt",
+    "flags": [
+      "all_english",
+      "identity",
+      "substring_of_term"
+    ]
+  },
+  {
+    "alias": "head count",
+    "term": "headcount",
+    "pack": "pack_08_okrs_product_mgmt",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "h c",
+    "term": "HC",
+    "pack": "pack_08_okrs_product_mgmt",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "aitch see",
+    "term": "HC",
+    "pack": "pack_08_okrs_product_mgmt",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "headcount",
+    "term": "HC",
+    "pack": "pack_08_okrs_product_mgmt",
+    "flags": []
+  },
+  {
+    "alias": "f t e",
+    "term": "FTE",
+    "pack": "pack_08_okrs_product_mgmt",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "ef tee ee",
+    "term": "FTE",
+    "pack": "pack_08_okrs_product_mgmt",
+    "flags": []
+  },
+  {
+    "alias": "full time equivalent",
+    "term": "FTE",
+    "pack": "pack_08_okrs_product_mgmt",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "i c",
+    "term": "IC",
+    "pack": "pack_08_okrs_product_mgmt",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "eye see",
+    "term": "IC",
+    "pack": "pack_08_okrs_product_mgmt",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "individual contributor",
+    "term": "IC",
+    "pack": "pack_08_okrs_product_mgmt",
+    "flags": [
+      "all_english"
+    ]
+  }
+]

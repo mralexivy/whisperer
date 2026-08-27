@@ -1,0 +1,2873 @@
+[
+  {
+    "alias": "java script",
+    "term": "JavaScript",
+    "pack": "pack_01_languages_frameworks",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "job a script",
+    "term": "JavaScript",
+    "pack": "pack_01_languages_frameworks",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "java skipped",
+    "term": "JavaScript",
+    "pack": "pack_01_languages_frameworks",
+    "flags": []
+  },
+  {
+    "alias": "javascript",
+    "term": "JavaScript",
+    "pack": "pack_01_languages_frameworks",
+    "flags": [
+      "identity",
+      "substring_of_term"
+    ]
+  },
+  {
+    "alias": "javas crypt",
+    "term": "JavaScript",
+    "pack": "pack_01_languages_frameworks",
+    "flags": []
+  },
+  {
+    "alias": "type script",
+    "term": "TypeScript",
+    "pack": "pack_01_languages_frameworks",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "type skipped",
+    "term": "TypeScript",
+    "pack": "pack_01_languages_frameworks",
+    "flags": []
+  },
+  {
+    "alias": "types crypt",
+    "term": "TypeScript",
+    "pack": "pack_01_languages_frameworks",
+    "flags": []
+  },
+  {
+    "alias": "typescript",
+    "term": "TypeScript",
+    "pack": "pack_01_languages_frameworks",
+    "flags": [
+      "all_english",
+      "single_word_english",
+      "identity",
+      "substring_of_term"
+    ]
+  },
+  {
+    "alias": "tight script",
+    "term": "TypeScript",
+    "pack": "pack_01_languages_frameworks",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "pie thon",
+    "term": "Python",
+    "pack": "pack_01_languages_frameworks",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "pie then",
+    "term": "Python",
+    "pack": "pack_01_languages_frameworks",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "python",
+    "term": "Python",
+    "pack": "pack_01_languages_frameworks",
+    "flags": [
+      "all_english",
+      "single_word_english",
+      "identity",
+      "substring_of_term"
+    ]
+  },
+  {
+    "alias": "py thon",
+    "term": "Python",
+    "pack": "pack_01_languages_frameworks",
+    "flags": []
+  },
+  {
+    "alias": "rusted",
+    "term": "Rust",
+    "pack": "pack_01_languages_frameworks",
+    "flags": []
+  },
+  {
+    "alias": "rusk",
+    "term": "Rust",
+    "pack": "pack_01_languages_frameworks",
+    "flags": [
+      "all_english",
+      "single_word_english"
+    ]
+  },
+  {
+    "alias": "golang",
+    "term": "Go",
+    "pack": "pack_01_languages_frameworks",
+    "flags": []
+  },
+  {
+    "alias": "go lang",
+    "term": "Go",
+    "pack": "pack_01_languages_frameworks",
+    "flags": [
+      "conflict"
+    ]
+  },
+  {
+    "alias": "go laying",
+    "term": "Go",
+    "pack": "pack_01_languages_frameworks",
+    "flags": [
+      "all_english",
+      "conflict"
+    ]
+  },
+  {
+    "alias": "go lang",
+    "term": "Golang",
+    "pack": "pack_01_languages_frameworks",
+    "flags": [
+      "conflict"
+    ]
+  },
+  {
+    "alias": "go laying",
+    "term": "Golang",
+    "pack": "pack_01_languages_frameworks",
+    "flags": [
+      "all_english",
+      "conflict"
+    ]
+  },
+  {
+    "alias": "go long",
+    "term": "Golang",
+    "pack": "pack_01_languages_frameworks",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "caught lin",
+    "term": "Kotlin",
+    "pack": "pack_01_languages_frameworks",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "cotton",
+    "term": "Kotlin",
+    "pack": "pack_01_languages_frameworks",
+    "flags": [
+      "all_english",
+      "single_word_english"
+    ]
+  },
+  {
+    "alias": "kot lin",
+    "term": "Kotlin",
+    "pack": "pack_01_languages_frameworks",
+    "flags": []
+  },
+  {
+    "alias": "cotland",
+    "term": "Kotlin",
+    "pack": "pack_01_languages_frameworks",
+    "flags": [
+      "all_english",
+      "single_word_english"
+    ]
+  },
+  {
+    "alias": "swifted",
+    "term": "Swift",
+    "pack": "pack_01_languages_frameworks",
+    "flags": []
+  },
+  {
+    "alias": "scholar",
+    "term": "Scala",
+    "pack": "pack_01_languages_frameworks",
+    "flags": [
+      "all_english",
+      "single_word_english"
+    ]
+  },
+  {
+    "alias": "scale a",
+    "term": "Scala",
+    "pack": "pack_01_languages_frameworks",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "scaler",
+    "term": "Scala",
+    "pack": "pack_01_languages_frameworks",
+    "flags": [
+      "all_english",
+      "single_word_english"
+    ]
+  },
+  {
+    "alias": "has kell",
+    "term": "Haskell",
+    "pack": "pack_01_languages_frameworks",
+    "flags": []
+  },
+  {
+    "alias": "hassle",
+    "term": "Haskell",
+    "pack": "pack_01_languages_frameworks",
+    "flags": [
+      "all_english",
+      "single_word_english"
+    ]
+  },
+  {
+    "alias": "has kel",
+    "term": "Haskell",
+    "pack": "pack_01_languages_frameworks",
+    "flags": []
+  },
+  {
+    "alias": "er lang",
+    "term": "Erlang",
+    "pack": "pack_01_languages_frameworks",
+    "flags": []
+  },
+  {
+    "alias": "air lang",
+    "term": "Erlang",
+    "pack": "pack_01_languages_frameworks",
+    "flags": []
+  },
+  {
+    "alias": "ur lang",
+    "term": "Erlang",
+    "pack": "pack_01_languages_frameworks",
+    "flags": []
+  },
+  {
+    "alias": "a licks er",
+    "term": "Elixir",
+    "pack": "pack_01_languages_frameworks",
+    "flags": []
+  },
+  {
+    "alias": "elixir",
+    "term": "Elixir",
+    "pack": "pack_01_languages_frameworks",
+    "flags": [
+      "all_english",
+      "single_word_english",
+      "identity",
+      "substring_of_term"
+    ]
+  },
+  {
+    "alias": "e licks ir",
+    "term": "Elixir",
+    "pack": "pack_01_languages_frameworks",
+    "flags": []
+  },
+  {
+    "alias": "closure",
+    "term": "Clojure",
+    "pack": "pack_01_languages_frameworks",
+    "flags": [
+      "all_english",
+      "single_word_english"
+    ]
+  },
+  {
+    "alias": "clo sure",
+    "term": "Clojure",
+    "pack": "pack_01_languages_frameworks",
+    "flags": []
+  },
+  {
+    "alias": "close your",
+    "term": "Clojure",
+    "pack": "pack_01_languages_frameworks",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "closure script",
+    "term": "ClojureScript",
+    "pack": "pack_01_languages_frameworks",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "close your script",
+    "term": "ClojureScript",
+    "pack": "pack_01_languages_frameworks",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "c plus plus",
+    "term": "C++",
+    "pack": "pack_01_languages_frameworks",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "see plus plus",
+    "term": "C++",
+    "pack": "pack_01_languages_frameworks",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "sea plus plus",
+    "term": "C++",
+    "pack": "pack_01_languages_frameworks",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "c++",
+    "term": "C++",
+    "pack": "pack_01_languages_frameworks",
+    "flags": [
+      "all_english",
+      "single_word_english",
+      "identity",
+      "substring_of_term"
+    ]
+  },
+  {
+    "alias": "c sharp",
+    "term": "C#",
+    "pack": "pack_01_languages_frameworks",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "see sharp",
+    "term": "C#",
+    "pack": "pack_01_languages_frameworks",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "sea sharp",
+    "term": "C#",
+    "pack": "pack_01_languages_frameworks",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "c hashtag",
+    "term": "C#",
+    "pack": "pack_01_languages_frameworks",
+    "flags": []
+  },
+  {
+    "alias": "f sharp",
+    "term": "F#",
+    "pack": "pack_01_languages_frameworks",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "ef sharp",
+    "term": "F#",
+    "pack": "pack_01_languages_frameworks",
+    "flags": []
+  },
+  {
+    "alias": "objective see",
+    "term": "Objective-C",
+    "pack": "pack_01_languages_frameworks",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "objective c",
+    "term": "Objective-C",
+    "pack": "pack_01_languages_frameworks",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "cobalt",
+    "term": "COBOL",
+    "pack": "pack_01_languages_frameworks",
+    "flags": [
+      "all_english",
+      "single_word_english"
+    ]
+  },
+  {
+    "alias": "co ball",
+    "term": "COBOL",
+    "pack": "pack_01_languages_frameworks",
+    "flags": []
+  },
+  {
+    "alias": "co bol",
+    "term": "COBOL",
+    "pack": "pack_01_languages_frameworks",
+    "flags": []
+  },
+  {
+    "alias": "four tran",
+    "term": "Fortran",
+    "pack": "pack_01_languages_frameworks",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "fort ran",
+    "term": "Fortran",
+    "pack": "pack_01_languages_frameworks",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "lou a",
+    "term": "Lua",
+    "pack": "pack_01_languages_frameworks",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "loo a",
+    "term": "Lua",
+    "pack": "pack_01_languages_frameworks",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "lew a",
+    "term": "Lua",
+    "pack": "pack_01_languages_frameworks",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "pearl",
+    "term": "Perl",
+    "pack": "pack_01_languages_frameworks",
+    "flags": [
+      "all_english",
+      "single_word_english"
+    ]
+  },
+  {
+    "alias": "purl",
+    "term": "Perl",
+    "pack": "pack_01_languages_frameworks",
+    "flags": [
+      "all_english",
+      "single_word_english"
+    ]
+  },
+  {
+    "alias": "p h p",
+    "term": "PHP",
+    "pack": "pack_01_languages_frameworks",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "pee h p",
+    "term": "PHP",
+    "pack": "pack_01_languages_frameworks",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "pee aitch pee",
+    "term": "PHP",
+    "pack": "pack_01_languages_frameworks",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "rooby",
+    "term": "Ruby",
+    "pack": "pack_01_languages_frameworks",
+    "flags": []
+  },
+  {
+    "alias": "darts",
+    "term": "Dart",
+    "pack": "pack_01_languages_frameworks",
+    "flags": [
+      "all_english",
+      "single_word_english"
+    ]
+  },
+  {
+    "alias": "zig lang",
+    "term": "Zig",
+    "pack": "pack_01_languages_frameworks",
+    "flags": []
+  },
+  {
+    "alias": "nimm",
+    "term": "Nim",
+    "pack": "pack_01_languages_frameworks",
+    "flags": []
+  },
+  {
+    "alias": "nim lang",
+    "term": "Nim",
+    "pack": "pack_01_languages_frameworks",
+    "flags": []
+  },
+  {
+    "alias": "jewlia",
+    "term": "Julia",
+    "pack": "pack_01_languages_frameworks",
+    "flags": []
+  },
+  {
+    "alias": "jewel ya",
+    "term": "Julia",
+    "pack": "pack_01_languages_frameworks",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "are lang",
+    "term": "R",
+    "pack": "pack_01_languages_frameworks",
+    "flags": []
+  },
+  {
+    "alias": "our lang",
+    "term": "R",
+    "pack": "pack_01_languages_frameworks",
+    "flags": []
+  },
+  {
+    "alias": "mat lab",
+    "term": "MATLAB",
+    "pack": "pack_01_languages_frameworks",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "mat lob",
+    "term": "MATLAB",
+    "pack": "pack_01_languages_frameworks",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "groovey",
+    "term": "Groovy",
+    "pack": "pack_01_languages_frameworks",
+    "flags": []
+  },
+  {
+    "alias": "o camel",
+    "term": "OCaml",
+    "pack": "pack_01_languages_frameworks",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "oh camel",
+    "term": "OCaml",
+    "pack": "pack_01_languages_frameworks",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "o cam el",
+    "term": "OCaml",
+    "pack": "pack_01_languages_frameworks",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "lisp lang",
+    "term": "Lisp",
+    "pack": "pack_01_languages_frameworks",
+    "flags": []
+  },
+  {
+    "alias": "scheme lang",
+    "term": "Scheme",
+    "pack": "pack_01_languages_frameworks",
+    "flags": []
+  },
+  {
+    "alias": "racket lang",
+    "term": "Racket",
+    "pack": "pack_01_languages_frameworks",
+    "flags": []
+  },
+  {
+    "alias": "racquets",
+    "term": "Racket",
+    "pack": "pack_01_languages_frameworks",
+    "flags": []
+  },
+  {
+    "alias": "pro log",
+    "term": "Prolog",
+    "pack": "pack_01_languages_frameworks",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "prologue",
+    "term": "Prolog",
+    "pack": "pack_01_languages_frameworks",
+    "flags": [
+      "all_english",
+      "single_word_english"
+    ]
+  },
+  {
+    "alias": "solid ity",
+    "term": "Solidity",
+    "pack": "pack_01_languages_frameworks",
+    "flags": []
+  },
+  {
+    "alias": "soliditee",
+    "term": "Solidity",
+    "pack": "pack_01_languages_frameworks",
+    "flags": []
+  },
+  {
+    "alias": "viper",
+    "term": "Vyper",
+    "pack": "pack_01_languages_frameworks",
+    "flags": [
+      "all_english",
+      "single_word_english"
+    ]
+  },
+  {
+    "alias": "vie per",
+    "term": "Vyper",
+    "pack": "pack_01_languages_frameworks",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "web assembly",
+    "term": "WebAssembly",
+    "pack": "pack_01_languages_frameworks",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "wasm",
+    "term": "WebAssembly",
+    "pack": "pack_01_languages_frameworks",
+    "flags": [
+      "conflict"
+    ]
+  },
+  {
+    "alias": "web a sembly",
+    "term": "WebAssembly",
+    "pack": "pack_01_languages_frameworks",
+    "flags": []
+  },
+  {
+    "alias": "waz em",
+    "term": "WASM",
+    "pack": "pack_01_languages_frameworks",
+    "flags": []
+  },
+  {
+    "alias": "was um",
+    "term": "WASM",
+    "pack": "pack_01_languages_frameworks",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "wasm",
+    "term": "WASM",
+    "pack": "pack_01_languages_frameworks",
+    "flags": [
+      "conflict",
+      "identity",
+      "substring_of_term"
+    ]
+  },
+  {
+    "alias": "react js",
+    "term": "React",
+    "pack": "pack_01_languages_frameworks",
+    "flags": []
+  },
+  {
+    "alias": "react.js",
+    "term": "React",
+    "pack": "pack_01_languages_frameworks",
+    "flags": []
+  },
+  {
+    "alias": "react nay tiv",
+    "term": "React Native",
+    "pack": "pack_01_languages_frameworks",
+    "flags": []
+  },
+  {
+    "alias": "react nay tive",
+    "term": "React Native",
+    "pack": "pack_01_languages_frameworks",
+    "flags": []
+  },
+  {
+    "alias": "next js",
+    "term": "Next.js",
+    "pack": "pack_01_languages_frameworks",
+    "flags": [
+      "conflict"
+    ]
+  },
+  {
+    "alias": "next jay es",
+    "term": "Next.js",
+    "pack": "pack_01_languages_frameworks",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "nexjs",
+    "term": "Next.js",
+    "pack": "pack_01_languages_frameworks",
+    "flags": []
+  },
+  {
+    "alias": "next j s",
+    "term": "Next.js",
+    "pack": "pack_01_languages_frameworks",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "next js",
+    "term": "Nuxt.js",
+    "pack": "pack_01_languages_frameworks",
+    "flags": [
+      "conflict"
+    ]
+  },
+  {
+    "alias": "nux js",
+    "term": "Nuxt.js",
+    "pack": "pack_01_languages_frameworks",
+    "flags": []
+  },
+  {
+    "alias": "nukes js",
+    "term": "Nuxt.js",
+    "pack": "pack_01_languages_frameworks",
+    "flags": []
+  },
+  {
+    "alias": "nux jay es",
+    "term": "Nuxt.js",
+    "pack": "pack_01_languages_frameworks",
+    "flags": []
+  },
+  {
+    "alias": "view js",
+    "term": "Vue.js",
+    "pack": "pack_01_languages_frameworks",
+    "flags": []
+  },
+  {
+    "alias": "view jay es",
+    "term": "Vue.js",
+    "pack": "pack_01_languages_frameworks",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "vue js",
+    "term": "Vue.js",
+    "pack": "pack_01_languages_frameworks",
+    "flags": []
+  },
+  {
+    "alias": "voo js",
+    "term": "Vue.js",
+    "pack": "pack_01_languages_frameworks",
+    "flags": []
+  },
+  {
+    "alias": "ang you ler",
+    "term": "Angular",
+    "pack": "pack_01_languages_frameworks",
+    "flags": []
+  },
+  {
+    "alias": "angular js",
+    "term": "Angular",
+    "pack": "pack_01_languages_frameworks",
+    "flags": [
+      "conflict"
+    ]
+  },
+  {
+    "alias": "angular jay es",
+    "term": "AngularJS",
+    "pack": "pack_01_languages_frameworks",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "angular js",
+    "term": "AngularJS",
+    "pack": "pack_01_languages_frameworks",
+    "flags": [
+      "conflict"
+    ]
+  },
+  {
+    "alias": "svelt",
+    "term": "Svelte",
+    "pack": "pack_01_languages_frameworks",
+    "flags": [
+      "substring_of_term"
+    ]
+  },
+  {
+    "alias": "s felt",
+    "term": "Svelte",
+    "pack": "pack_01_languages_frameworks",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "sfelt",
+    "term": "Svelte",
+    "pack": "pack_01_languages_frameworks",
+    "flags": []
+  },
+  {
+    "alias": "svelled",
+    "term": "Svelte",
+    "pack": "pack_01_languages_frameworks",
+    "flags": []
+  },
+  {
+    "alias": "svelt kit",
+    "term": "SvelteKit",
+    "pack": "pack_01_languages_frameworks",
+    "flags": []
+  },
+  {
+    "alias": "sfelt kit",
+    "term": "SvelteKit",
+    "pack": "pack_01_languages_frameworks",
+    "flags": []
+  },
+  {
+    "alias": "svelte kit",
+    "term": "SvelteKit",
+    "pack": "pack_01_languages_frameworks",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "re mix",
+    "term": "Remix",
+    "pack": "pack_01_languages_frameworks",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "astro js",
+    "term": "Astro",
+    "pack": "pack_01_languages_frameworks",
+    "flags": []
+  },
+  {
+    "alias": "ass trow",
+    "term": "Astro",
+    "pack": "pack_01_languages_frameworks",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "solid js",
+    "term": "Solid.js",
+    "pack": "pack_01_languages_frameworks",
+    "flags": [
+      "conflict"
+    ]
+  },
+  {
+    "alias": "solid jay es",
+    "term": "Solid.js",
+    "pack": "pack_01_languages_frameworks",
+    "flags": [
+      "all_english",
+      "conflict"
+    ]
+  },
+  {
+    "alias": "solid jay es",
+    "term": "SolidJS",
+    "pack": "pack_01_languages_frameworks",
+    "flags": [
+      "all_english",
+      "conflict"
+    ]
+  },
+  {
+    "alias": "solid js",
+    "term": "SolidJS",
+    "pack": "pack_01_languages_frameworks",
+    "flags": [
+      "conflict"
+    ]
+  },
+  {
+    "alias": "quick",
+    "term": "Qwik",
+    "pack": "pack_01_languages_frameworks",
+    "flags": [
+      "all_english",
+      "single_word_english"
+    ]
+  },
+  {
+    "alias": "quik",
+    "term": "Qwik",
+    "pack": "pack_01_languages_frameworks",
+    "flags": []
+  },
+  {
+    "alias": "pre act",
+    "term": "Preact",
+    "pack": "pack_01_languages_frameworks",
+    "flags": []
+  },
+  {
+    "alias": "pree act",
+    "term": "Preact",
+    "pack": "pack_01_languages_frameworks",
+    "flags": []
+  },
+  {
+    "alias": "ember js",
+    "term": "Ember.js",
+    "pack": "pack_01_languages_frameworks",
+    "flags": []
+  },
+  {
+    "alias": "ember jay es",
+    "term": "Ember.js",
+    "pack": "pack_01_languages_frameworks",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "backbone js",
+    "term": "Backbone.js",
+    "pack": "pack_01_languages_frameworks",
+    "flags": []
+  },
+  {
+    "alias": "backbone jay es",
+    "term": "Backbone.js",
+    "pack": "pack_01_languages_frameworks",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "j query",
+    "term": "jQuery",
+    "pack": "pack_01_languages_frameworks",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "jay query",
+    "term": "jQuery",
+    "pack": "pack_01_languages_frameworks",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "j quarry",
+    "term": "jQuery",
+    "pack": "pack_01_languages_frameworks",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "jake weary",
+    "term": "jQuery",
+    "pack": "pack_01_languages_frameworks",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "alpine js",
+    "term": "Alpine.js",
+    "pack": "pack_01_languages_frameworks",
+    "flags": []
+  },
+  {
+    "alias": "alpine jay es",
+    "term": "Alpine.js",
+    "pack": "pack_01_languages_frameworks",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "lit html",
+    "term": "Lit",
+    "pack": "pack_01_languages_frameworks",
+    "flags": []
+  },
+  {
+    "alias": "lit element",
+    "term": "Lit",
+    "pack": "pack_01_languages_frameworks",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "stencil js",
+    "term": "Stencil",
+    "pack": "pack_01_languages_frameworks",
+    "flags": []
+  },
+  {
+    "alias": "express js",
+    "term": "Express.js",
+    "pack": "pack_01_languages_frameworks",
+    "flags": [
+      "conflict"
+    ]
+  },
+  {
+    "alias": "express jay es",
+    "term": "Express.js",
+    "pack": "pack_01_languages_frameworks",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "express js",
+    "term": "Express",
+    "pack": "pack_01_languages_frameworks",
+    "flags": [
+      "conflict"
+    ]
+  },
+  {
+    "alias": "fast if eye",
+    "term": "Fastify",
+    "pack": "pack_01_languages_frameworks",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "fast i fy",
+    "term": "Fastify",
+    "pack": "pack_01_languages_frameworks",
+    "flags": []
+  },
+  {
+    "alias": "fast a fy",
+    "term": "Fastify",
+    "pack": "pack_01_languages_frameworks",
+    "flags": []
+  },
+  {
+    "alias": "nest js",
+    "term": "NestJS",
+    "pack": "pack_01_languages_frameworks",
+    "flags": []
+  },
+  {
+    "alias": "nest jay es",
+    "term": "NestJS",
+    "pack": "pack_01_languages_frameworks",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "nests js",
+    "term": "NestJS",
+    "pack": "pack_01_languages_frameworks",
+    "flags": []
+  },
+  {
+    "alias": "ko a",
+    "term": "Koa",
+    "pack": "pack_01_languages_frameworks",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "co ah",
+    "term": "Koa",
+    "pack": "pack_01_languages_frameworks",
+    "flags": []
+  },
+  {
+    "alias": "ho no",
+    "term": "Hono",
+    "pack": "pack_01_languages_frameworks",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "hoe no",
+    "term": "Hono",
+    "pack": "pack_01_languages_frameworks",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "dee no",
+    "term": "Deno",
+    "pack": "pack_01_languages_frameworks",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "den oh",
+    "term": "Deno",
+    "pack": "pack_01_languages_frameworks",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "deno js",
+    "term": "Deno",
+    "pack": "pack_01_languages_frameworks",
+    "flags": []
+  },
+  {
+    "alias": "bun js",
+    "term": "Bun",
+    "pack": "pack_01_languages_frameworks",
+    "flags": []
+  },
+  {
+    "alias": "bun runtime",
+    "term": "Bun",
+    "pack": "pack_01_languages_frameworks",
+    "flags": []
+  },
+  {
+    "alias": "node js",
+    "term": "Node.js",
+    "pack": "pack_01_languages_frameworks",
+    "flags": []
+  },
+  {
+    "alias": "node jay es",
+    "term": "Node.js",
+    "pack": "pack_01_languages_frameworks",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "no js",
+    "term": "Node.js",
+    "pack": "pack_01_languages_frameworks",
+    "flags": []
+  },
+  {
+    "alias": "nodejs",
+    "term": "Node.js",
+    "pack": "pack_01_languages_frameworks",
+    "flags": []
+  },
+  {
+    "alias": "jango",
+    "term": "Django",
+    "pack": "pack_01_languages_frameworks",
+    "flags": [
+      "substring_of_term"
+    ]
+  },
+  {
+    "alias": "d jango",
+    "term": "Django",
+    "pack": "pack_01_languages_frameworks",
+    "flags": []
+  },
+  {
+    "alias": "dee jango",
+    "term": "Django",
+    "pack": "pack_01_languages_frameworks",
+    "flags": []
+  },
+  {
+    "alias": "jan go",
+    "term": "Django",
+    "pack": "pack_01_languages_frameworks",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "flask py",
+    "term": "Flask",
+    "pack": "pack_01_languages_frameworks",
+    "flags": []
+  },
+  {
+    "alias": "fast api",
+    "term": "FastAPI",
+    "pack": "pack_01_languages_frameworks",
+    "flags": []
+  },
+  {
+    "alias": "fast a p i",
+    "term": "FastAPI",
+    "pack": "pack_01_languages_frameworks",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "fast ay pee eye",
+    "term": "FastAPI",
+    "pack": "pack_01_languages_frameworks",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "star let",
+    "term": "Starlette",
+    "pack": "pack_01_languages_frameworks",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "star light",
+    "term": "Starlette",
+    "pack": "pack_01_languages_frameworks",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "pie dantic",
+    "term": "Pydantic",
+    "pack": "pack_01_languages_frameworks",
+    "flags": []
+  },
+  {
+    "alias": "pie dan tick",
+    "term": "Pydantic",
+    "pack": "pack_01_languages_frameworks",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "pi dantic",
+    "term": "Pydantic",
+    "pack": "pack_01_languages_frameworks",
+    "flags": []
+  },
+  {
+    "alias": "sql alchemy",
+    "term": "SQLAlchemy",
+    "pack": "pack_01_languages_frameworks",
+    "flags": []
+  },
+  {
+    "alias": "sequel alchemy",
+    "term": "SQLAlchemy",
+    "pack": "pack_01_languages_frameworks",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "s q l alchemy",
+    "term": "SQLAlchemy",
+    "pack": "pack_01_languages_frameworks",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "celery py",
+    "term": "Celery",
+    "pack": "pack_01_languages_frameworks",
+    "flags": []
+  },
+  {
+    "alias": "salary",
+    "term": "Celery",
+    "pack": "pack_01_languages_frameworks",
+    "flags": [
+      "all_english",
+      "single_word_english"
+    ]
+  },
+  {
+    "alias": "tornado py",
+    "term": "Tornado",
+    "pack": "pack_01_languages_frameworks",
+    "flags": []
+  },
+  {
+    "alias": "ruby on rails",
+    "term": "Rails",
+    "pack": "pack_01_languages_frameworks",
+    "flags": []
+  },
+  {
+    "alias": "rail",
+    "term": "Rails",
+    "pack": "pack_01_languages_frameworks",
+    "flags": [
+      "all_english",
+      "single_word_english",
+      "substring_of_term"
+    ]
+  },
+  {
+    "alias": "ruby on rail",
+    "term": "Ruby on Rails",
+    "pack": "pack_01_languages_frameworks",
+    "flags": [
+      "all_english",
+      "substring_of_term"
+    ]
+  },
+  {
+    "alias": "ruby on rales",
+    "term": "Ruby on Rails",
+    "pack": "pack_01_languages_frameworks",
+    "flags": []
+  },
+  {
+    "alias": "sin ah tra",
+    "term": "Sinatra",
+    "pack": "pack_01_languages_frameworks",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "sinatra rb",
+    "term": "Sinatra",
+    "pack": "pack_01_languages_frameworks",
+    "flags": []
+  },
+  {
+    "alias": "spring boot java",
+    "term": "Spring Boot",
+    "pack": "pack_01_languages_frameworks",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "spring booted",
+    "term": "Spring Boot",
+    "pack": "pack_01_languages_frameworks",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "spring framework",
+    "term": "Spring",
+    "pack": "pack_01_languages_frameworks",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "quark us",
+    "term": "Quarkus",
+    "pack": "pack_01_languages_frameworks",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "cork us",
+    "term": "Quarkus",
+    "pack": "pack_01_languages_frameworks",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "micro not",
+    "term": "Micronaut",
+    "pack": "pack_01_languages_frameworks",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "micro nought",
+    "term": "Micronaut",
+    "pack": "pack_01_languages_frameworks",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "lar a vel",
+    "term": "Laravel",
+    "pack": "pack_01_languages_frameworks",
+    "flags": []
+  },
+  {
+    "alias": "laraville",
+    "term": "Laravel",
+    "pack": "pack_01_languages_frameworks",
+    "flags": []
+  },
+  {
+    "alias": "la ravel",
+    "term": "Laravel",
+    "pack": "pack_01_languages_frameworks",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "sim phony",
+    "term": "Symfony",
+    "pack": "pack_01_languages_frameworks",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "symphony",
+    "term": "Symfony",
+    "pack": "pack_01_languages_frameworks",
+    "flags": [
+      "all_english",
+      "single_word_english"
+    ]
+  },
+  {
+    "alias": "sim fony",
+    "term": "Symfony",
+    "pack": "pack_01_languages_frameworks",
+    "flags": []
+  },
+  {
+    "alias": "code igniter",
+    "term": "CodeIgniter",
+    "pack": "pack_01_languages_frameworks",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "code ig nighter",
+    "term": "CodeIgniter",
+    "pack": "pack_01_languages_frameworks",
+    "flags": []
+  },
+  {
+    "alias": "asp dot net",
+    "term": "ASP.NET",
+    "pack": "pack_01_languages_frameworks",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "a s p net",
+    "term": "ASP.NET",
+    "pack": "pack_01_languages_frameworks",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "asp net",
+    "term": "ASP.NET",
+    "pack": "pack_01_languages_frameworks",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "dot net",
+    "term": ".NET",
+    "pack": "pack_01_languages_frameworks",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "dot nett",
+    "term": ".NET",
+    "pack": "pack_01_languages_frameworks",
+    "flags": []
+  },
+  {
+    "alias": "blaze or",
+    "term": "Blazor",
+    "pack": "pack_01_languages_frameworks",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "blazer",
+    "term": "Blazor",
+    "pack": "pack_01_languages_frameworks",
+    "flags": [
+      "all_english",
+      "single_word_english"
+    ]
+  },
+  {
+    "alias": "dot net maui",
+    "term": "MAUI",
+    "pack": "pack_01_languages_frameworks",
+    "flags": []
+  },
+  {
+    "alias": "mouie",
+    "term": "MAUI",
+    "pack": "pack_01_languages_frameworks",
+    "flags": []
+  },
+  {
+    "alias": "flutters",
+    "term": "Flutter",
+    "pack": "pack_01_languages_frameworks",
+    "flags": []
+  },
+  {
+    "alias": "swift ui",
+    "term": "SwiftUI",
+    "pack": "pack_01_languages_frameworks",
+    "flags": []
+  },
+  {
+    "alias": "swift you eye",
+    "term": "SwiftUI",
+    "pack": "pack_01_languages_frameworks",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "swift u i",
+    "term": "SwiftUI",
+    "pack": "pack_01_languages_frameworks",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "jet pack compose",
+    "term": "Jetpack Compose",
+    "pack": "pack_01_languages_frameworks",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "jetpack compost",
+    "term": "Jetpack Compose",
+    "pack": "pack_01_languages_frameworks",
+    "flags": []
+  },
+  {
+    "alias": "expo react",
+    "term": "Expo",
+    "pack": "pack_01_languages_frameworks",
+    "flags": []
+  },
+  {
+    "alias": "tory",
+    "term": "Tauri",
+    "pack": "pack_01_languages_frameworks",
+    "flags": [
+      "all_english",
+      "single_word_english"
+    ]
+  },
+  {
+    "alias": "tao ree",
+    "term": "Tauri",
+    "pack": "pack_01_languages_frameworks",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "tower ee",
+    "term": "Tauri",
+    "pack": "pack_01_languages_frameworks",
+    "flags": []
+  },
+  {
+    "alias": "electron js",
+    "term": "Electron",
+    "pack": "pack_01_languages_frameworks",
+    "flags": []
+  },
+  {
+    "alias": "capacity or",
+    "term": "Capacitor",
+    "pack": "pack_01_languages_frameworks",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "cap a citor",
+    "term": "Capacitor",
+    "pack": "pack_01_languages_frameworks",
+    "flags": []
+  },
+  {
+    "alias": "eye on ick",
+    "term": "Ionic",
+    "pack": "pack_01_languages_frameworks",
+    "flags": []
+  },
+  {
+    "alias": "i on ic",
+    "term": "Ionic",
+    "pack": "pack_01_languages_frameworks",
+    "flags": []
+  },
+  {
+    "alias": "tailwind css",
+    "term": "TailwindCSS",
+    "pack": "pack_01_languages_frameworks",
+    "flags": []
+  },
+  {
+    "alias": "tail wind css",
+    "term": "TailwindCSS",
+    "pack": "pack_01_languages_frameworks",
+    "flags": []
+  },
+  {
+    "alias": "tailwind see ss ss",
+    "term": "TailwindCSS",
+    "pack": "pack_01_languages_frameworks",
+    "flags": []
+  },
+  {
+    "alias": "tail wind",
+    "term": "Tailwind",
+    "pack": "pack_01_languages_frameworks",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "tale wind",
+    "term": "Tailwind",
+    "pack": "pack_01_languages_frameworks",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "boot strap",
+    "term": "Bootstrap",
+    "pack": "pack_01_languages_frameworks",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "bootstrap css",
+    "term": "Bootstrap",
+    "pack": "pack_01_languages_frameworks",
+    "flags": []
+  },
+  {
+    "alias": "chakra you eye",
+    "term": "Chakra UI",
+    "pack": "pack_01_languages_frameworks",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "shock ra ui",
+    "term": "Chakra UI",
+    "pack": "pack_01_languages_frameworks",
+    "flags": []
+  },
+  {
+    "alias": "shad cn ui",
+    "term": "shadcn/ui",
+    "pack": "pack_01_languages_frameworks",
+    "flags": []
+  },
+  {
+    "alias": "shad see en ui",
+    "term": "shadcn/ui",
+    "pack": "pack_01_languages_frameworks",
+    "flags": []
+  },
+  {
+    "alias": "shadow cn",
+    "term": "shadcn/ui",
+    "pack": "pack_01_languages_frameworks",
+    "flags": []
+  },
+  {
+    "alias": "raid ix",
+    "term": "Radix",
+    "pack": "pack_01_languages_frameworks",
+    "flags": []
+  },
+  {
+    "alias": "ray dix",
+    "term": "Radix",
+    "pack": "pack_01_languages_frameworks",
+    "flags": []
+  },
+  {
+    "alias": "radix ui",
+    "term": "Radix",
+    "pack": "pack_01_languages_frameworks",
+    "flags": []
+  },
+  {
+    "alias": "material you eye",
+    "term": "Material UI",
+    "pack": "pack_01_languages_frameworks",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "mui",
+    "term": "Material UI",
+    "pack": "pack_01_languages_frameworks",
+    "flags": []
+  },
+  {
+    "alias": "em you eye",
+    "term": "MUI",
+    "pack": "pack_01_languages_frameworks",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "m u i",
+    "term": "MUI",
+    "pack": "pack_01_languages_frameworks",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "ant design",
+    "term": "Ant Design",
+    "pack": "pack_01_languages_frameworks",
+    "flags": [
+      "all_english",
+      "identity",
+      "substring_of_term"
+    ]
+  },
+  {
+    "alias": "ant dee sign",
+    "term": "Ant Design",
+    "pack": "pack_01_languages_frameworks",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "styled components",
+    "term": "Styled Components",
+    "pack": "pack_01_languages_frameworks",
+    "flags": [
+      "identity",
+      "substring_of_term"
+    ]
+  },
+  {
+    "alias": "emotion css",
+    "term": "Emotion",
+    "pack": "pack_01_languages_frameworks",
+    "flags": []
+  },
+  {
+    "alias": "post css",
+    "term": "PostCSS",
+    "pack": "pack_01_languages_frameworks",
+    "flags": []
+  },
+  {
+    "alias": "post see ss ss",
+    "term": "PostCSS",
+    "pack": "pack_01_languages_frameworks",
+    "flags": []
+  },
+  {
+    "alias": "sass css",
+    "term": "Sass",
+    "pack": "pack_01_languages_frameworks",
+    "flags": []
+  },
+  {
+    "alias": "s c s s",
+    "term": "SCSS",
+    "pack": "pack_01_languages_frameworks",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "ess see ess ess",
+    "term": "SCSS",
+    "pack": "pack_01_languages_frameworks",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "less css",
+    "term": "Less",
+    "pack": "pack_01_languages_frameworks",
+    "flags": []
+  },
+  {
+    "alias": "veet",
+    "term": "Vite",
+    "pack": "pack_01_languages_frameworks",
+    "flags": []
+  },
+  {
+    "alias": "vight",
+    "term": "Vite",
+    "pack": "pack_01_languages_frameworks",
+    "flags": []
+  },
+  {
+    "alias": "vit",
+    "term": "Vite",
+    "pack": "pack_01_languages_frameworks",
+    "flags": [
+      "substring_of_term"
+    ]
+  },
+  {
+    "alias": "veet js",
+    "term": "Vite",
+    "pack": "pack_01_languages_frameworks",
+    "flags": []
+  },
+  {
+    "alias": "web pack",
+    "term": "Webpack",
+    "pack": "pack_01_languages_frameworks",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "web packed",
+    "term": "Webpack",
+    "pack": "pack_01_languages_frameworks",
+    "flags": []
+  },
+  {
+    "alias": "roll up",
+    "term": "Rollup",
+    "pack": "pack_01_languages_frameworks",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "roll up js",
+    "term": "Rollup",
+    "pack": "pack_01_languages_frameworks",
+    "flags": []
+  },
+  {
+    "alias": "es build",
+    "term": "esbuild",
+    "pack": "pack_01_languages_frameworks",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "e s build",
+    "term": "esbuild",
+    "pack": "pack_01_languages_frameworks",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "turbo pack",
+    "term": "Turbopack",
+    "pack": "pack_01_languages_frameworks",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "turbopacked",
+    "term": "Turbopack",
+    "pack": "pack_01_languages_frameworks",
+    "flags": []
+  },
+  {
+    "alias": "s w c",
+    "term": "SWC",
+    "pack": "pack_01_languages_frameworks",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "ess double you see",
+    "term": "SWC",
+    "pack": "pack_01_languages_frameworks",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "babble",
+    "term": "Babel",
+    "pack": "pack_01_languages_frameworks",
+    "flags": [
+      "all_english",
+      "single_word_english"
+    ]
+  },
+  {
+    "alias": "bay bell",
+    "term": "Babel",
+    "pack": "pack_01_languages_frameworks",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "babble js",
+    "term": "Babel",
+    "pack": "pack_01_languages_frameworks",
+    "flags": []
+  },
+  {
+    "alias": "parcel js",
+    "term": "Parcel",
+    "pack": "pack_01_languages_frameworks",
+    "flags": []
+  },
+  {
+    "alias": "par sell",
+    "term": "Parcel",
+    "pack": "pack_01_languages_frameworks",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "by ohm",
+    "term": "Biome",
+    "pack": "pack_01_languages_frameworks",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "bio me",
+    "term": "Biome",
+    "pack": "pack_01_languages_frameworks",
+    "flags": []
+  },
+  {
+    "alias": "es lint",
+    "term": "ESLint",
+    "pack": "pack_01_languages_frameworks",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "e s lint",
+    "term": "ESLint",
+    "pack": "pack_01_languages_frameworks",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "pretty er",
+    "term": "Prettier",
+    "pack": "pack_01_languages_frameworks",
+    "flags": [
+      "all_english",
+      "conflict"
+    ]
+  },
+  {
+    "alias": "jest js",
+    "term": "Jest",
+    "pack": "pack_01_languages_frameworks",
+    "flags": []
+  },
+  {
+    "alias": "vee test",
+    "term": "Vitest",
+    "pack": "pack_01_languages_frameworks",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "vi test",
+    "term": "Vitest",
+    "pack": "pack_01_languages_frameworks",
+    "flags": []
+  },
+  {
+    "alias": "moka",
+    "term": "Mocha",
+    "pack": "pack_01_languages_frameworks",
+    "flags": []
+  },
+  {
+    "alias": "mock a",
+    "term": "Mocha",
+    "pack": "pack_01_languages_frameworks",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "chai js",
+    "term": "Chai",
+    "pack": "pack_01_languages_frameworks",
+    "flags": []
+  },
+  {
+    "alias": "chy",
+    "term": "Chai",
+    "pack": "pack_01_languages_frameworks",
+    "flags": []
+  },
+  {
+    "alias": "sigh press",
+    "term": "Cypress",
+    "pack": "pack_01_languages_frameworks",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "play right",
+    "term": "Playwright",
+    "pack": "pack_01_languages_frameworks",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "play write",
+    "term": "Playwright",
+    "pack": "pack_01_languages_frameworks",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "play wright",
+    "term": "Playwright",
+    "pack": "pack_01_languages_frameworks",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "puppet ear",
+    "term": "Puppeteer",
+    "pack": "pack_01_languages_frameworks",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "puppet eer",
+    "term": "Puppeteer",
+    "pack": "pack_01_languages_frameworks",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "sell enium",
+    "term": "Selenium",
+    "pack": "pack_01_languages_frameworks",
+    "flags": []
+  },
+  {
+    "alias": "selenium",
+    "term": "Selenium",
+    "pack": "pack_01_languages_frameworks",
+    "flags": [
+      "all_english",
+      "single_word_english",
+      "identity",
+      "substring_of_term"
+    ]
+  },
+  {
+    "alias": "story book",
+    "term": "Storybook",
+    "pack": "pack_01_languages_frameworks",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "crow matic",
+    "term": "Chromatic",
+    "pack": "pack_01_languages_frameworks",
+    "flags": []
+  },
+  {
+    "alias": "chrome atic",
+    "term": "Chromatic",
+    "pack": "pack_01_languages_frameworks",
+    "flags": []
+  },
+  {
+    "alias": "re dux",
+    "term": "Redux",
+    "pack": "pack_01_languages_frameworks",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "ree ducks",
+    "term": "Redux",
+    "pack": "pack_01_languages_frameworks",
+    "flags": []
+  },
+  {
+    "alias": "mob x",
+    "term": "MobX",
+    "pack": "pack_01_languages_frameworks",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "mob ex",
+    "term": "MobX",
+    "pack": "pack_01_languages_frameworks",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "zoo stand",
+    "term": "Zustand",
+    "pack": "pack_01_languages_frameworks",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "zuh stand",
+    "term": "Zustand",
+    "pack": "pack_01_languages_frameworks",
+    "flags": []
+  },
+  {
+    "alias": "zu stond",
+    "term": "Zustand",
+    "pack": "pack_01_languages_frameworks",
+    "flags": []
+  },
+  {
+    "alias": "joe tie",
+    "term": "Jotai",
+    "pack": "pack_01_languages_frameworks",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "joh tie",
+    "term": "Jotai",
+    "pack": "pack_01_languages_frameworks",
+    "flags": []
+  },
+  {
+    "alias": "joe thai",
+    "term": "Jotai",
+    "pack": "pack_01_languages_frameworks",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "re coil",
+    "term": "Recoil",
+    "pack": "pack_01_languages_frameworks",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "x state",
+    "term": "XState",
+    "pack": "pack_01_languages_frameworks",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "ex state",
+    "term": "XState",
+    "pack": "pack_01_languages_frameworks",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "tan stack",
+    "term": "TanStack",
+    "pack": "pack_01_languages_frameworks",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "tan stacked",
+    "term": "TanStack",
+    "pack": "pack_01_languages_frameworks",
+    "flags": []
+  },
+  {
+    "alias": "react query",
+    "term": "React Query",
+    "pack": "pack_01_languages_frameworks",
+    "flags": [
+      "all_english",
+      "identity",
+      "substring_of_term"
+    ]
+  },
+  {
+    "alias": "react quarry",
+    "term": "React Query",
+    "pack": "pack_01_languages_frameworks",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "s w r",
+    "term": "SWR",
+    "pack": "pack_01_languages_frameworks",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "ess double you are",
+    "term": "SWR",
+    "pack": "pack_01_languages_frameworks",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "apollo graphql",
+    "term": "Apollo",
+    "pack": "pack_01_languages_frameworks",
+    "flags": []
+  },
+  {
+    "alias": "a pollo",
+    "term": "Apollo",
+    "pack": "pack_01_languages_frameworks",
+    "flags": []
+  },
+  {
+    "alias": "t r p c",
+    "term": "tRPC",
+    "pack": "pack_01_languages_frameworks",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "tee are pee see",
+    "term": "tRPC",
+    "pack": "pack_01_languages_frameworks",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "t rpc",
+    "term": "tRPC",
+    "pack": "pack_01_languages_frameworks",
+    "flags": []
+  },
+  {
+    "alias": "trpc",
+    "term": "tRPC",
+    "pack": "pack_01_languages_frameworks",
+    "flags": [
+      "identity",
+      "substring_of_term"
+    ]
+  },
+  {
+    "alias": "prism a",
+    "term": "Prisma",
+    "pack": "pack_01_languages_frameworks",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "prison a",
+    "term": "Prisma",
+    "pack": "pack_01_languages_frameworks",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "pris ma",
+    "term": "Prisma",
+    "pack": "pack_01_languages_frameworks",
+    "flags": []
+  },
+  {
+    "alias": "drizzle orm",
+    "term": "Drizzle",
+    "pack": "pack_01_languages_frameworks",
+    "flags": []
+  },
+  {
+    "alias": "drizzell",
+    "term": "Drizzle",
+    "pack": "pack_01_languages_frameworks",
+    "flags": []
+  },
+  {
+    "alias": "sequel eyes",
+    "term": "Sequelize",
+    "pack": "pack_01_languages_frameworks",
+    "flags": []
+  },
+  {
+    "alias": "sequel ize",
+    "term": "Sequelize",
+    "pack": "pack_01_languages_frameworks",
+    "flags": []
+  },
+  {
+    "alias": "see qua lize",
+    "term": "Sequelize",
+    "pack": "pack_01_languages_frameworks",
+    "flags": []
+  },
+  {
+    "alias": "type orm",
+    "term": "TypeORM",
+    "pack": "pack_01_languages_frameworks",
+    "flags": []
+  },
+  {
+    "alias": "type o r m",
+    "term": "TypeORM",
+    "pack": "pack_01_languages_frameworks",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "k nex",
+    "term": "Knex",
+    "pack": "pack_01_languages_frameworks",
+    "flags": []
+  },
+  {
+    "alias": "nex",
+    "term": "Knex",
+    "pack": "pack_01_languages_frameworks",
+    "flags": [
+      "substring_of_term"
+    ]
+  },
+  {
+    "alias": "connects",
+    "term": "Knex",
+    "pack": "pack_01_languages_frameworks",
+    "flags": []
+  },
+  {
+    "alias": "mongo ose",
+    "term": "Mongoose",
+    "pack": "pack_01_languages_frameworks",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "mon goose",
+    "term": "Mongoose",
+    "pack": "pack_01_languages_frameworks",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "zawed",
+    "term": "Zod",
+    "pack": "pack_01_languages_frameworks",
+    "flags": []
+  },
+  {
+    "alias": "zawd",
+    "term": "Zod",
+    "pack": "pack_01_languages_frameworks",
+    "flags": []
+  },
+  {
+    "alias": "yup validator",
+    "term": "Yup",
+    "pack": "pack_01_languages_frameworks",
+    "flags": []
+  },
+  {
+    "alias": "form ik",
+    "term": "Formik",
+    "pack": "pack_01_languages_frameworks",
+    "flags": []
+  },
+  {
+    "alias": "for mick",
+    "term": "Formik",
+    "pack": "pack_01_languages_frameworks",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "react hook form",
+    "term": "React Hook Form",
+    "pack": "pack_01_languages_frameworks",
+    "flags": [
+      "all_english",
+      "identity",
+      "substring_of_term"
+    ]
+  },
+  {
+    "alias": "three js",
+    "term": "Three.js",
+    "pack": "pack_01_languages_frameworks",
+    "flags": []
+  },
+  {
+    "alias": "three jay es",
+    "term": "Three.js",
+    "pack": "pack_01_languages_frameworks",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "3 js",
+    "term": "Three.js",
+    "pack": "pack_01_languages_frameworks",
+    "flags": []
+  },
+  {
+    "alias": "d3 js",
+    "term": "D3.js",
+    "pack": "pack_01_languages_frameworks",
+    "flags": []
+  },
+  {
+    "alias": "d three js",
+    "term": "D3.js",
+    "pack": "pack_01_languages_frameworks",
+    "flags": []
+  },
+  {
+    "alias": "dee three",
+    "term": "D3.js",
+    "pack": "pack_01_languages_frameworks",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "chart js",
+    "term": "Chart.js",
+    "pack": "pack_01_languages_frameworks",
+    "flags": []
+  },
+  {
+    "alias": "charts js",
+    "term": "Chart.js",
+    "pack": "pack_01_languages_frameworks",
+    "flags": []
+  },
+  {
+    "alias": "re charts",
+    "term": "Recharts",
+    "pack": "pack_01_languages_frameworks",
+    "flags": []
+  },
+  {
+    "alias": "ree charts",
+    "term": "Recharts",
+    "pack": "pack_01_languages_frameworks",
+    "flags": []
+  },
+  {
+    "alias": "frame er motion",
+    "term": "Framer Motion",
+    "pack": "pack_01_languages_frameworks",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "framer mo tion",
+    "term": "Framer Motion",
+    "pack": "pack_01_languages_frameworks",
+    "flags": []
+  },
+  {
+    "alias": "g sap",
+    "term": "GSAP",
+    "pack": "pack_01_languages_frameworks",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "gee sap",
+    "term": "GSAP",
+    "pack": "pack_01_languages_frameworks",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "g s a p",
+    "term": "GSAP",
+    "pack": "pack_01_languages_frameworks",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "lot ee",
+    "term": "Lottie",
+    "pack": "pack_01_languages_frameworks",
+    "flags": []
+  },
+  {
+    "alias": "lotty",
+    "term": "Lottie",
+    "pack": "pack_01_languages_frameworks",
+    "flags": []
+  },
+  {
+    "alias": "socket io",
+    "term": "Socket.IO",
+    "pack": "pack_01_languages_frameworks",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "socket i o",
+    "term": "Socket.IO",
+    "pack": "pack_01_languages_frameworks",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "sock it i o",
+    "term": "Socket.IO",
+    "pack": "pack_01_languages_frameworks",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "rx js",
+    "term": "RxJS",
+    "pack": "pack_01_languages_frameworks",
+    "flags": []
+  },
+  {
+    "alias": "are ex js",
+    "term": "RxJS",
+    "pack": "pack_01_languages_frameworks",
+    "flags": []
+  },
+  {
+    "alias": "r x j s",
+    "term": "RxJS",
+    "pack": "pack_01_languages_frameworks",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "low dash",
+    "term": "Lodash",
+    "pack": "pack_01_languages_frameworks",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "lo dash",
+    "term": "Lodash",
+    "pack": "pack_01_languages_frameworks",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "ram da",
+    "term": "Ramda",
+    "pack": "pack_01_languages_frameworks",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "ram duh",
+    "term": "Ramda",
+    "pack": "pack_01_languages_frameworks",
+    "flags": []
+  },
+  {
+    "alias": "im er",
+    "term": "Immer",
+    "pack": "pack_01_languages_frameworks",
+    "flags": []
+  },
+  {
+    "alias": "ih mer",
+    "term": "Immer",
+    "pack": "pack_01_languages_frameworks",
+    "flags": []
+  },
+  {
+    "alias": "date fns",
+    "term": "date-fns",
+    "pack": "pack_01_languages_frameworks",
+    "flags": []
+  },
+  {
+    "alias": "date functions",
+    "term": "date-fns",
+    "pack": "pack_01_languages_frameworks",
+    "flags": []
+  },
+  {
+    "alias": "moment js",
+    "term": "Moment.js",
+    "pack": "pack_01_languages_frameworks",
+    "flags": []
+  },
+  {
+    "alias": "day js",
+    "term": "Day.js",
+    "pack": "pack_01_languages_frameworks",
+    "flags": []
+  },
+  {
+    "alias": "ax ee os",
+    "term": "Axios",
+    "pack": "pack_01_languages_frameworks",
+    "flags": []
+  },
+  {
+    "alias": "axe ee os",
+    "term": "Axios",
+    "pack": "pack_01_languages_frameworks",
+    "flags": []
+  },
+  {
+    "alias": "ax ios",
+    "term": "Axios",
+    "pack": "pack_01_languages_frameworks",
+    "flags": []
+  },
+  {
+    "alias": "tur so",
+    "term": "Turso",
+    "pack": "pack_01_languages_frameworks",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "tor so",
+    "term": "Turso",
+    "pack": "pack_01_languages_frameworks",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "drizzle o r m",
+    "term": "Drizzle ORM",
+    "pack": "pack_01_languages_frameworks",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "drizzell orm",
+    "term": "Drizzle ORM",
+    "pack": "pack_01_languages_frameworks",
+    "flags": []
+  },
+  {
+    "alias": "payload see em es",
+    "term": "Payload CMS",
+    "pack": "pack_01_languages_frameworks",
+    "flags": []
+  },
+  {
+    "alias": "strap ee",
+    "term": "Strapi",
+    "pack": "pack_01_languages_frameworks",
+    "flags": []
+  },
+  {
+    "alias": "stra pee",
+    "term": "Strapi",
+    "pack": "pack_01_languages_frameworks",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "strappy",
+    "term": "Strapi",
+    "pack": "pack_01_languages_frameworks",
+    "flags": []
+  }
+]

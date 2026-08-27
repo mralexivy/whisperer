@@ -39,7 +39,6 @@ class DictionaryManager: ObservableObject {
             UserDefaults.standard.set(usePhoneticMatching, forKey: "usePhoneticMatching")
         }
     }
-    @Published var lastCorrections: [AppliedCorrection] = []
     @Published var selectedEntryId: UUID? = nil  // For navigation from correction popover
 
     private let database = HistoryDatabase.shared
@@ -185,6 +184,20 @@ class DictionaryManager: ObservableObject {
             }
         }
 
+        // Prune built-in rows that no longer exist in any enabled pack.
+        // This ensures that removing or rewriting a rule in a pack JSON actually takes effect on
+        // existing installs. User-created entries (isBuiltIn == false) are never touched.
+        // Guarded by a version stamp so the scan only runs once per pack-schema bump.
+        let pruneVersionKey = "dictionaryPruneVersion"
+        let currentPruneVersion = "2.0.0"  // bump this whenever pack schemas are cleaned
+        let storedPruneVersion = UserDefaults.standard.string(forKey: pruneVersionKey)
+        if storedPruneVersion != currentPruneVersion {
+            await pruneRemovedBuiltInEntries(packs: packs, context: context)
+            await MainActor.run {
+                UserDefaults.standard.set(currentPruneVersion, forKey: pruneVersionKey)
+            }
+        }
+
         // Legacy dictionary.json support
         let hasLoadedKey = "hasLoadedBundledDictionary"
         if !UserDefaults.standard.bool(forKey: hasLoadedKey) {
@@ -243,12 +256,19 @@ class DictionaryManager: ObservableObject {
                     let correctForm = correction.term
 
                     for alias in correction.aliases {
-                        // Check if exists
+                        let aliasLower = alias.lowercased()
                         let fetchRequest: NSFetchRequest<DictionaryEntryEntity> = DictionaryEntryEntity.fetchRequest()
-                        fetchRequest.predicate = NSPredicate(format: "incorrectForm == %@", alias.lowercased())
+                        fetchRequest.predicate = NSPredicate(format: "incorrectForm == %@", aliasLower)
                         fetchRequest.fetchLimit = 1
 
-                        if (try? context.fetch(fetchRequest).first) == nil {
+                        if let existing = try? context.fetch(fetchRequest).first {
+                            // Conflict-update: if a previous pack loaded this alias with a different
+                            // correctForm, update it so the cleaned pack's version wins.
+                            if existing.isBuiltIn && existing.correctForm != correctForm {
+                                existing.correctForm = correctForm
+                                existing.lastModifiedAt = Date()
+                            }
+                        } else {
                             _ = DictionaryEntryEntity.create(
                                 in: context,
                                 incorrectForm: alias,
@@ -273,6 +293,65 @@ class DictionaryManager: ObservableObject {
             }
         } catch {
             Logger.error("Failed to load entries from pack \(pack.name): \(error)", subsystem: .app)
+        }
+    }
+
+    // MARK: - Prune
+
+    /// Delete built-in CoreData rows whose alias is no longer present in any enabled pack.
+    ///
+    /// Called once per pack-schema version bump (guarded by `dictionaryPruneVersion` in
+    /// UserDefaults). Never touches user-created entries (`isBuiltIn == false`).
+    private static func pruneRemovedBuiltInEntries(packs: [DictionaryPack], context: NSManagedObjectContext) async {
+        guard let resourcePath = Bundle.main.resourcePath else { return }
+
+        let fileManager = FileManager.default
+        let dictionariesPath = (resourcePath as NSString).appendingPathComponent("dictionaries")
+        let searchPath = fileManager.fileExists(atPath: dictionariesPath) ? dictionariesPath : resourcePath
+
+        // Build the complete set of valid aliases from all enabled packs + legacy dictionary.json
+        var validAliases = Set<String>()
+
+        for pack in packs where pack.isEnabled {
+            let filePath = (searchPath as NSString).appendingPathComponent(pack.filename)
+            let url = URL(fileURLWithPath: filePath)
+            if let data = try? Data(contentsOf: url),
+               let packFile = try? JSONDecoder().decode(DictionaryPackFile.self, from: data) {
+                for correction in packFile.corrections {
+                    for alias in correction.aliases {
+                        validAliases.insert(alias.lowercased())
+                    }
+                }
+            }
+        }
+
+        // Also include legacy dictionary.json aliases so we don't prune them
+        if let url = Bundle.main.url(forResource: "dictionary", withExtension: "json"),
+           let data = try? Data(contentsOf: url),
+           let bundledDict = try? JSONDecoder().decode(BundledDictionary.self, from: data) {
+            for entry in bundledDict.entries {
+                validAliases.insert(entry.incorrectForm.lowercased())
+            }
+        }
+
+        await context.perform {
+            let fetchRequest: NSFetchRequest<DictionaryEntryEntity> = DictionaryEntryEntity.fetchRequest()
+            fetchRequest.predicate = NSPredicate(format: "isBuiltIn == YES")
+
+            guard let builtIns = try? context.fetch(fetchRequest) else { return }
+
+            var pruned = 0
+            for entity in builtIns {
+                if !validAliases.contains(entity.incorrectForm) {
+                    context.delete(entity)
+                    pruned += 1
+                }
+            }
+
+            if pruned > 0 {
+                try? context.save()
+                Logger.info("Pruned \(pruned) stale built-in dictionary entries", subsystem: .app)
+            }
         }
     }
 
@@ -710,17 +789,24 @@ class DictionaryManager: ObservableObject {
 
     // MARK: - Correction Engine
 
-    func correctText(_ text: String) -> String {
+    /// Applies the dictionary and hands the applied corrections back to the caller.
+    ///
+    /// This replaced a `correctText` that left its result in a process-wide `lastCorrections`
+    /// slot. The slot cross-attributed: a meeting refine correcting its 88th window overwrote
+    /// what a finishing dictation's history save was about to read, so a record was stamped with
+    /// another job's terms. Callers now own the list, which makes that impossible by construction.
+    func correctTextCapturing(_ text: String) -> (text: String, corrections: [AppliedCorrection]) {
         guard isEnabled, let engine = correctionEngine else {
-            return text
+            return (text, [])
         }
 
         // Use the new sensitivity settings (0 = exact match only, 1-3 = edit distance)
         let maxEditDistance = fuzzyMatchingSensitivity
         let result = engine.applyCorrections(text, maxEditDistance: maxEditDistance, usePhonetic: usePhoneticMatching)
 
-        // Store corrections for UI display
-        lastCorrections = result.corrections.map { AppliedCorrection(original: $0.original, replacement: $0.replacement, category: $0.category, notes: $0.notes, entryId: $0.entryId) }
+        let applied = result.corrections.map {
+            AppliedCorrection(original: $0.original, replacement: $0.replacement, category: $0.category, notes: $0.notes, entryId: $0.entryId)
+        }
 
         // Log corrections for debugging
         if !result.corrections.isEmpty {
@@ -737,7 +823,7 @@ class DictionaryManager: ObservableObject {
             }
         }
 
-        return result.text
+        return (result.text, applied)
     }
 
     // MARK: - Navigation

@@ -152,12 +152,28 @@ enum SpokenNumberConverter {
             guard follows(numeral, previous) else { break }
 
             switch numeral {
+            // Every arithmetic step reports overflow instead of trapping. Dictation can produce
+            // an arbitrarily long chain of scale words — "one hundred hundred hundred …" is
+            // grammatical to `follows` — and ten of them overflow Int64. On overflow the run
+            // simply ends before the offending word, so the words parsed so far still convert
+            // and the rest is left as text. Nothing is mutated before the check, so the value
+            // stays consistent with the span.
             case .unit(let value), .teen(let value), .tens(let value):
-                current += value
+                let (sum, overflowed) = current.addingReportingOverflow(value)
+                if overflowed { break loop }
+                current = sum
                 numeralWords += 1
             case .numericScale(let value):
-                current = max(current, 1) * value
-                if value >= 1000 { total += current; current = 0 }
+                let (product, productOverflowed) = max(current, 1).multipliedReportingOverflow(by: value)
+                if productOverflowed { break loop }
+                if value >= 1000 {
+                    let (sum, sumOverflowed) = total.addingReportingOverflow(product)
+                    if sumOverflowed { break loop }
+                    total = sum
+                    current = 0
+                } else {
+                    current = product
+                }
                 numeralWords += 1
             case .wordScale(let name):
                 // The scale word stays; the run ends with it.
@@ -184,8 +200,8 @@ enum SpokenNumberConverter {
               onlyWhitespaceBetween(span, in: graph),
               editable(span, in: graph) else { return nil }
 
-        let value = total + current
-        guard value > 0 else { return nil }
+        let (value, valueOverflowed) = total.addingReportingOverflow(current)
+        guard !valueOverflowed, value > 0 else { return nil }
 
         let digits = retainedScale.map { "\(value) \($0)" } ?? "\(value)"
         let spoken = span.map { fold(graph.tokens[$0].effectiveText) }.joined(separator: " ")

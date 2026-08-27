@@ -10,6 +10,7 @@
 import Foundation
 import AVFoundation
 import Accelerate
+import os
 
 // MARK: - NemotronPartialCounter
 
@@ -667,6 +668,25 @@ class StreamingTranscriber {
     /// Effective language for transcription — driven by router or fallback to configured language
     var effectiveLanguage: TranscriptionLanguage {
         routeDecision?.lang ?? language
+    }
+
+    /// Dictionary corrections applied to *this* session's final text, for the history record.
+    ///
+    /// Deliberately not `DictionaryManager.lastCorrections`: that is one process-wide slot, and a
+    /// meeting refine correcting its next window between the final pass and `AppState`'s history
+    /// save would hand this dictation someone else's terms. Lock-backed because the final pass
+    /// runs on `stopAsync`'s detached task while the reader is on the main actor.
+    private let appliedCorrections = OSAllocatedUnfairLock<[AppliedCorrection]>(initialState: [])
+    var lastAppliedCorrections: [AppliedCorrection] { appliedCorrections.withLock { $0 } }
+
+    /// Applies the dictionary and records what it changed on this instance. Every final-text
+    /// path goes through here so the attribution above is structural rather than a convention.
+    /// Not private: `AppState`'s timeout fallback corrects `currentTranscription` itself, and that
+    /// text becomes the same history record, so it has to record its corrections here too.
+    func applyDictionary(_ text: String) -> String {
+        let result = DictionaryManager.shared.correctTextCapturing(text)
+        appliedCorrections.withLock { $0 = result.corrections }
+        return result.text
     }
 
     /// Whether this session drives the eager-agreement engine instead of VAD chunking plus a
@@ -2527,7 +2547,7 @@ class StreamingTranscriber {
         // Skip dictionary correction when LLM post-processing is active — LLM handles
         // corrections, and CorrectionEngine can make wrong substitutions (e.g. "and it" → "audit")
         // that corrupt the text before the LLM sees it.
-        var finalResult = skipCorrections ? rawText : DictionaryManager.shared.correctText(rawText)
+        var finalResult = skipCorrections ? rawText : applyDictionary(rawText)
         if fillerWordRemovalEnabled {
             finalResult = FillerWordFilter.removeFillers(from: finalResult)
         }
@@ -2912,7 +2932,7 @@ class StreamingTranscriber {
                 } else {
                     previewAccumulatedText = ""
                     if !skipCorrections {
-                        text = DictionaryManager.shared.correctText(text)
+                        text = applyDictionary(text)
                         if fillerWordRemovalEnabled { text = FillerWordFilter.removeFillers(from: text) }
                     }
                     completedChunkTexts = [text]
@@ -3504,7 +3524,7 @@ class StreamingTranscriber {
         }
         guard !rawText.isEmpty else { return clearAndReturn("") }
 
-        var result = skipCorrections ? rawText : DictionaryManager.shared.correctText(rawText)
+        var result = skipCorrections ? rawText : applyDictionary(rawText)
         if fillerWordRemovalEnabled {
             result = FillerWordFilter.removeFillers(from: result)
         }
@@ -3535,7 +3555,7 @@ class StreamingTranscriber {
             transcribeTail()
             let rawText = fullTranscription
             guard !rawText.isEmpty else { return clearAndReturn("") }
-            var result = skipCorrections ? rawText : DictionaryManager.shared.correctText(rawText)
+            var result = skipCorrections ? rawText : applyDictionary(rawText)
             if fillerWordRemovalEnabled {
                 result = FillerWordFilter.removeFillers(from: result)
             }
@@ -3568,7 +3588,7 @@ class StreamingTranscriber {
 
         var finalResult: String
         if !rawText.isEmpty {
-            finalResult = skipCorrections ? rawText : DictionaryManager.shared.correctText(rawText)
+            finalResult = skipCorrections ? rawText : applyDictionary(rawText)
             if fillerWordRemovalEnabled {
                 finalResult = FillerWordFilter.removeFillers(from: finalResult)
             }

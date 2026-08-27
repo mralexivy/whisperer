@@ -1,0 +1,2260 @@
+[
+  {
+    "alias": "high through put",
+    "term": "high throughput",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "verdict": "KEEP",
+    "reason": "Splitting 'throughput' into 'through put' is a phonetic misspelling with no plausible ordinary-English meaning. No natural sentence uses 'through put' as two separate words in this way."
+  },
+  {
+    "alias": "q p s",
+    "term": "QPS",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "verdict": "KEEP",
+    "reason": "Letter-by-letter spelling of the abbreviation QPS. No ordinary English meaning."
+  },
+  {
+    "alias": "queue pee ess",
+    "term": "QPS",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "verdict": "KEEP",
+    "reason": "Phonetic rendition of the letters Q-P-S. 'Queue pee ess' is not a natural English phrase."
+  },
+  {
+    "alias": "queries per second",
+    "term": "QPS",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "verdict": "KEEP",
+    "reason": "In practice, 'queries per second' as a phrase is almost exclusively technical. The target user base (developers) saying this almost always means the metric QPS."
+  },
+  {
+    "alias": "r p s",
+    "term": "RPS",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "verdict": "KEEP",
+    "reason": "Letter-by-letter spelling of the abbreviation RPS. No ordinary English meaning."
+  },
+  {
+    "alias": "are pee ess",
+    "term": "RPS",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "verdict": "KEEP",
+    "reason": "Phonetic rendition of the letters R-P-S. 'Are pee ess' is not a natural English phrase."
+  },
+  {
+    "alias": "requests per second",
+    "term": "RPS",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "verdict": "KEEP",
+    "reason": "'Requests per second' is an exclusively technical phrase in practice. A developer dictating it almost always intends the RPS metric abbreviation."
+  },
+  {
+    "alias": "t p s",
+    "term": "TPS",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "verdict": "KEEP",
+    "reason": "Letter-by-letter spelling of the abbreviation TPS. No ordinary English meaning."
+  },
+  {
+    "alias": "tee pee ess",
+    "term": "TPS",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "verdict": "KEEP",
+    "reason": "Phonetic rendition of the letters T-P-S. 'Tee pee ess' is not a natural English phrase."
+  },
+  {
+    "alias": "transactions per second",
+    "term": "TPS",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "verdict": "KEEP",
+    "reason": "'Transactions per second' is a purely technical performance metric phrase. It does not appear in ordinary non-tech speech."
+  },
+  {
+    "alias": "p fifty",
+    "term": "P50",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "verdict": "KEEP",
+    "reason": "'P fifty' is a spoken form of the statistical/technical notation P50 (50th percentile). It would not arise in normal English outside a performance/stats conversation."
+  },
+  {
+    "alias": "pee fifty",
+    "term": "P50",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "verdict": "KEEP",
+    "reason": "Phonetic spelling of 'P fifty'. 'Pee fifty' is not a natural English phrase outside of saying the letter P followed by the number fifty."
+  },
+  {
+    "alias": "50th percentile",
+    "term": "P50",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "verdict": "DROP",
+    "reason": "'50th percentile' is common, natural English used in education, medicine, and general statistics contexts (e.g. 'she scored in the 50th percentile'). Silently replacing it with 'P50' would break non-tech dictation."
+  },
+  {
+    "alias": "p ninety",
+    "term": "P90",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "verdict": "KEEP",
+    "reason": "'P ninety' as a spoken phrase is specific to the statistical/technical notation P90. It does not appear as a natural English expression outside performance discussions."
+  },
+  {
+    "alias": "pee ninety",
+    "term": "P90",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "verdict": "KEEP",
+    "reason": "Phonetic spelling of 'P ninety'. 'Pee ninety' is not a natural English phrase."
+  },
+  {
+    "alias": "90th percentile",
+    "term": "P90",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "verdict": "DROP",
+    "reason": "'90th percentile' is natural English used freely in education, health, and general statistics (e.g. 'scored in the 90th percentile on the test'). Replacing it silently with 'P90' would break non-tech dictation."
+  },
+  {
+    "alias": "p ninety five",
+    "term": "P95",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "verdict": "KEEP",
+    "reason": "'P ninety five' spoken is specific to the technical notation P95 for the 95th-percentile latency metric. Not a natural English phrase otherwise."
+  },
+  {
+    "alias": "pee ninety five",
+    "term": "P95",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "verdict": "KEEP",
+    "reason": "Phonetic spelling of 'P ninety five'. Not a natural English phrase."
+  },
+  {
+    "alias": "p ninety nine",
+    "term": "P99",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "verdict": "KEEP",
+    "reason": "'P ninety nine' spoken is specific to the technical notation P99 for the 99th-percentile latency metric. Not a natural English phrase otherwise."
+  },
+  {
+    "alias": "pee ninety nine",
+    "term": "P99",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "verdict": "KEEP",
+    "reason": "Phonetic spelling of 'P ninety nine'. Not a natural English phrase."
+  },
+  {
+    "alias": "per cent ile",
+    "term": "percentile",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "verdict": "KEEP",
+    "reason": "'Per cent ile' is a phonetic misspelling of 'percentile' split across words. It has no ordinary English meaning as written and is clearly a transcription artifact."
+  },
+  {
+    "alias": "tail lay ten see",
+    "term": "tail latency",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "verdict": "KEEP",
+    "reason": "'Tail lay ten see' is a phonetic misspelling of 'tail latency' split into syllables. It has no ordinary English meaning and is a clear transcription artifact."
+  },
+  {
+    "alias": "ad tech",
+    "term": "AdTech",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "verdict": "KEEP",
+    "reason": "Ad tech is the industry shorthand for advertising technology; no ordinary non-tech meaning as a compound."
+  },
+  {
+    "alias": "add tech",
+    "term": "AdTech",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "verdict": "KEEP",
+    "reason": "Phonetic mis-transcription of 'ad tech'; 'add tech' has no ordinary English meaning."
+  },
+  {
+    "alias": "pro gram atic",
+    "term": "programmatic",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "verdict": "KEEP",
+    "reason": "Phonetic split of 'programmatic'; the split form has no ordinary English meaning."
+  },
+  {
+    "alias": "pro gram atic advertising",
+    "term": "programmatic advertising",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "verdict": "KEEP",
+    "reason": "Phonetic split of 'programmatic advertising'; split form has no ordinary English meaning."
+  },
+  {
+    "alias": "d s p",
+    "term": "DSP",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "verdict": "KEEP",
+    "reason": "Letter-by-letter spelling of DSP."
+  },
+  {
+    "alias": "dee ess pee",
+    "term": "DSP",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "verdict": "KEEP",
+    "reason": "Phonetic letter spelling of DSP."
+  },
+  {
+    "alias": "demand side platform",
+    "term": "DSP",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "verdict": "KEEP",
+    "reason": "Unambiguous adtech industry phrase; does not appear in ordinary English with a different meaning."
+  },
+  {
+    "alias": "s s p",
+    "term": "SSP",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "verdict": "KEEP",
+    "reason": "Letter-by-letter spelling of SSP."
+  },
+  {
+    "alias": "ess ess pee",
+    "term": "SSP",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "verdict": "KEEP",
+    "reason": "Phonetic letter spelling of SSP."
+  },
+  {
+    "alias": "supply side platform",
+    "term": "SSP",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "verdict": "KEEP",
+    "reason": "Unambiguous adtech industry phrase; does not appear in ordinary English with a different meaning."
+  },
+  {
+    "alias": "d m p",
+    "term": "DMP",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "verdict": "KEEP",
+    "reason": "Letter-by-letter spelling of DMP."
+  },
+  {
+    "alias": "dee em pee",
+    "term": "DMP",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "verdict": "KEEP",
+    "reason": "Phonetic letter spelling of DMP."
+  },
+  {
+    "alias": "data management platform",
+    "term": "DMP",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "verdict": "KEEP",
+    "reason": "Unambiguous adtech industry phrase; does not appear in ordinary English with a different meaning."
+  },
+  {
+    "alias": "c d p",
+    "term": "CDP",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "verdict": "KEEP",
+    "reason": "Letter-by-letter spelling of CDP."
+  },
+  {
+    "alias": "see dee pee",
+    "term": "CDP",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "verdict": "KEEP",
+    "reason": "Phonetic letter spelling of CDP."
+  },
+  {
+    "alias": "customer data platform",
+    "term": "CDP",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "verdict": "KEEP",
+    "reason": "Unambiguous adtech industry phrase; does not appear in ordinary English with a different meaning."
+  },
+  {
+    "alias": "r t b",
+    "term": "RTB",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "verdict": "KEEP",
+    "reason": "Letter-by-letter spelling of RTB."
+  },
+  {
+    "alias": "are tee bee",
+    "term": "RTB",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "verdict": "KEEP",
+    "reason": "Phonetic letter spelling of RTB."
+  },
+  {
+    "alias": "real time bidding",
+    "term": "real-time bidding",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "verdict": "DEDUPE",
+    "reason": "Conflict: same alias maps to both RTB and real-time bidding. Winner is real-time bidding — it preserves user intent (they said the phrase, not the abbreviation) and is just a hyphenation fix."
+  },
+  {
+    "alias": "real time bidding",
+    "term": "real-time bidding",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "verdict": "DEDUPE",
+    "reason": "Conflict: same alias maps to both RTB and real-time bidding. Winner is real-time bidding — it preserves user intent and is just a hyphenation fix."
+  },
+  {
+    "alias": "c p m",
+    "term": "CPM",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "verdict": "KEEP",
+    "reason": "Letter-by-letter spelling of CPM."
+  },
+  {
+    "alias": "see pee em",
+    "term": "CPM",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "verdict": "KEEP",
+    "reason": "Phonetic letter spelling of CPM."
+  },
+  {
+    "alias": "cost per mille",
+    "term": "CPM",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "verdict": "KEEP",
+    "reason": "'mille' is used exclusively in adtech contexts; the phrase is an unambiguous industry term."
+  },
+  {
+    "alias": "c p c",
+    "term": "CPC",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "verdict": "KEEP",
+    "reason": "Letter-by-letter spelling of CPC."
+  },
+  {
+    "alias": "see pee see",
+    "term": "CPC",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "verdict": "KEEP",
+    "reason": "Phonetic letter spelling of CPC."
+  },
+  {
+    "alias": "cost per click",
+    "term": "CPC",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "verdict": "KEEP",
+    "reason": "Unambiguous adtech industry phrase."
+  },
+  {
+    "alias": "c p a",
+    "term": "CPA",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "verdict": "KEEP",
+    "reason": "Letter-by-letter spelling of CPA."
+  },
+  {
+    "alias": "see pee ay",
+    "term": "CPA",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "verdict": "KEEP",
+    "reason": "Phonetic letter spelling of CPA."
+  },
+  {
+    "alias": "cost per acquisition",
+    "term": "CPA",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "verdict": "KEEP",
+    "reason": "Unambiguous adtech industry phrase."
+  },
+  {
+    "alias": "c p v",
+    "term": "CPV",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "verdict": "KEEP",
+    "reason": "Letter-by-letter spelling of CPV."
+  },
+  {
+    "alias": "see pee vee",
+    "term": "CPV",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "verdict": "KEEP",
+    "reason": "Phonetic letter spelling of CPV."
+  },
+  {
+    "alias": "cost per view",
+    "term": "CPV",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "verdict": "KEEP",
+    "reason": "Unambiguous adtech industry phrase."
+  },
+  {
+    "alias": "row as",
+    "term": "ROAS",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "verdict": "DROP",
+    "reason": "'row as' is ordinary English — 'row as fast as you can', 'row as a team' — and would corrupt normal sentences."
+  },
+  {
+    "alias": "r o a s",
+    "term": "ROAS",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "verdict": "KEEP",
+    "reason": "Letter-by-letter spelling of ROAS."
+  },
+  {
+    "alias": "return on ad spend",
+    "term": "ROAS",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "verdict": "KEEP",
+    "reason": "Unambiguous adtech industry phrase; 'ad spend' is jargon that anchors this to the tech domain."
+  },
+  {
+    "alias": "c t r",
+    "term": "CTR",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "verdict": "KEEP",
+    "reason": "Letter-by-letter spelling of CTR."
+  },
+  {
+    "alias": "see tee are",
+    "term": "CTR",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "verdict": "KEEP",
+    "reason": "Phonetic letter spelling of CTR."
+  },
+  {
+    "alias": "click through rate",
+    "term": "CTR",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "verdict": "KEEP",
+    "reason": "Unambiguous adtech industry phrase."
+  },
+  {
+    "alias": "view ability",
+    "term": "viewability",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "verdict": "KEEP",
+    "reason": "Phonetic split of 'viewability'; the split form has no ordinary English meaning."
+  },
+  {
+    "alias": "brand safety",
+    "term": "brand safety",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "verdict": "DROP",
+    "reason": "Identity rule: alias equals term."
+  },
+  {
+    "alias": "brand suit ability",
+    "term": "brand suitability",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "verdict": "KEEP",
+    "reason": "Phonetic split of 'suitability'; 'brand suit ability' has no ordinary English meaning as three words."
+  },
+  {
+    "alias": "brand lift",
+    "term": "brand lift",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "verdict": "DROP",
+    "reason": "Identity rule: alias equals term."
+  },
+  {
+    "alias": "add fraud",
+    "term": "ad fraud",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "verdict": "KEEP",
+    "reason": "Phonetic mis-transcription of 'ad fraud'; 'add fraud' has no ordinary English meaning."
+  },
+  {
+    "alias": "invalid traffic",
+    "term": "IVT",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "verdict": "DEDUPE",
+    "reason": "Conflict with identity entry. Both conflict rows get DEDUPE; winner is IVT as the more specific tech abbreviation."
+  },
+  {
+    "alias": "i v t",
+    "term": "IVT",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "verdict": "KEEP",
+    "reason": "Letter-by-letter spelling of IVT."
+  },
+  {
+    "alias": "eye vee tee",
+    "term": "IVT",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "verdict": "KEEP",
+    "reason": "Phonetic letter spelling of IVT."
+  },
+  {
+    "alias": "invalid traffic",
+    "term": "IVT",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "verdict": "DEDUPE",
+    "reason": "Conflict: same alias maps to both 'invalid traffic' (identity) and IVT. Winner is IVT as more specific term; both rows deduplicated."
+  },
+  {
+    "alias": "g i v t",
+    "term": "GIVT",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "verdict": "KEEP",
+    "reason": "Letter-by-letter spelling of GIVT."
+  },
+  {
+    "alias": "general invalid traffic",
+    "term": "GIVT",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "verdict": "KEEP",
+    "reason": "Unambiguous adtech industry phrase."
+  },
+  {
+    "alias": "s i v t",
+    "term": "SIVT",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "verdict": "KEEP",
+    "reason": "Letter-by-letter spelling of SIVT."
+  },
+  {
+    "alias": "sophisticated invalid traffic",
+    "term": "SIVT",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "verdict": "KEEP",
+    "reason": "Unambiguous adtech industry phrase."
+  },
+  {
+    "alias": "bot traffic",
+    "term": "bot traffic",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "verdict": "DROP",
+    "reason": "Identity rule: alias equals term."
+  },
+  {
+    "alias": "click fraud",
+    "term": "click fraud",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "verdict": "DROP",
+    "reason": "Identity rule: alias equals term."
+  },
+  {
+    "alias": "impression fraud",
+    "term": "impression fraud",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "verdict": "DROP",
+    "reason": "Identity rule: alias equals term."
+  },
+  {
+    "alias": "domain spoofing",
+    "term": "domain spoofing",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "verdict": "DROP",
+    "reason": "Identity rule: alias equals term."
+  },
+  {
+    "alias": "add stacking",
+    "term": "ad stacking",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "verdict": "KEEP",
+    "reason": "Phonetic mis-transcription of 'ad stacking'; 'add stacking' has no ordinary English meaning."
+  },
+  {
+    "alias": "pixel stuffing",
+    "term": "pixel stuffing",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "verdict": "DROP",
+    "reason": "Identity rule: alias equals term."
+  },
+  {
+    "alias": "content class if ication",
+    "term": "content classification",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "verdict": "KEEP",
+    "reason": "Phonetic split of 'classification'; the split form has no ordinary English meaning."
+  },
+  {
+    "alias": "contextual targeting",
+    "term": "contextual targeting",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "verdict": "DROP",
+    "reason": "Identity rule: alias equals term."
+  },
+  {
+    "alias": "contextual analysis",
+    "term": "contextual analysis",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "verdict": "DROP",
+    "reason": "Identity rule: alias equals term."
+  },
+  {
+    "alias": "tax on o me",
+    "term": "taxonomy",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "verdict": "KEEP",
+    "reason": "Phonetic split of 'taxonomy'; the split form has no ordinary English meaning."
+  },
+  {
+    "alias": "i a b",
+    "term": "IAB",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "verdict": "KEEP",
+    "reason": "Letter-by-letter spelling of IAB."
+  },
+  {
+    "alias": "eye ay bee",
+    "term": "IAB",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "verdict": "KEEP",
+    "reason": "Phonetic letter spelling of IAB."
+  },
+  {
+    "alias": "i a b tax on o me",
+    "term": "IAB taxonomy",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "verdict": "KEEP",
+    "reason": "Letter spelling of IAB plus phonetic split of 'taxonomy'; no ordinary English meaning."
+  },
+  {
+    "alias": "g a r m",
+    "term": "GARM",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "verdict": "KEEP",
+    "reason": "Letter-by-letter spelling of GARM."
+  },
+  {
+    "alias": "garm",
+    "term": "GARM",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "verdict": "DROP",
+    "reason": "Identity rule: alias is just a lowercase rendering of the term with no meaningful correction; flagged identity."
+  },
+  {
+    "alias": "m r c",
+    "term": "MRC",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "verdict": "KEEP",
+    "reason": "Letter-by-letter spelling of MRC."
+  },
+  {
+    "alias": "em are see",
+    "term": "MRC",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "verdict": "KEEP",
+    "reason": "Phonetic letter spelling of MRC."
+  },
+  {
+    "alias": "media rating council",
+    "term": "MRC",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "verdict": "KEEP",
+    "reason": "Proper noun for the organization; unambiguous in this context."
+  },
+  {
+    "alias": "m r c accredited",
+    "term": "MRC accredited",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "verdict": "KEEP",
+    "reason": "Letter spelling of MRC plus ordinary word; the combination is an adtech-specific phrase."
+  },
+  {
+    "alias": "t a g",
+    "term": "TAG",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "verdict": "KEEP",
+    "reason": "Letter-by-letter spelling of TAG (Trustworthy Accountability Group); spaced letters distinguish from the common word 'tag'."
+  },
+  {
+    "alias": "trustworthy accountability group",
+    "term": "TAG",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "verdict": "KEEP",
+    "reason": "Proper noun phrase for the organization; unambiguous."
+  },
+  {
+    "alias": "ads dot text",
+    "term": "ads.txt",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "verdict": "KEEP",
+    "reason": "Phonetic rendering of the filename 'ads.txt'; 'ads dot text' has no ordinary English meaning."
+  },
+  {
+    "alias": "ads txt",
+    "term": "ads.txt",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "verdict": "KEEP",
+    "reason": "Phonetic rendering of 'ads.txt'; no ordinary English meaning."
+  },
+  {
+    "alias": "app ads dot text",
+    "term": "app-ads.txt",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "verdict": "KEEP",
+    "reason": "Phonetic rendering of the filename 'app-ads.txt'; no ordinary English meaning."
+  },
+  {
+    "alias": "sellers jason",
+    "term": "sellers.json",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "verdict": "KEEP",
+    "reason": "Phonetic rendering of 'sellers.json' (JSON pronounced as 'jason'); no ordinary English meaning."
+  },
+  {
+    "alias": "sellers jay son",
+    "term": "sellers.json",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "verdict": "KEEP",
+    "reason": "Phonetic rendering of 'sellers.json'; no ordinary English meaning."
+  },
+  {
+    "alias": "supply chain",
+    "term": "supply chain",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "verdict": "DROP",
+    "reason": "Identity rule: alias equals term."
+  },
+  {
+    "alias": "supply path optimization",
+    "term": "supply path optimization",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "verdict": "DROP",
+    "reason": "Identity rule: alias equals term."
+  },
+  {
+    "alias": "s p o",
+    "term": "SPO",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "verdict": "KEEP",
+    "reason": "Letter-by-letter spelling of SPO."
+  },
+  {
+    "alias": "ess pee oh",
+    "term": "SPO",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "verdict": "KEEP",
+    "reason": "Phonetic letter spelling of SPO."
+  },
+  {
+    "alias": "header bidding",
+    "term": "header bidding",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "verdict": "DROP",
+    "reason": "Identity rule: alias equals term."
+  },
+  {
+    "alias": "pre bid",
+    "term": "prebid",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "verdict": "DROP",
+    "reason": "'pre bid' is ordinary English meaning 'before the bid' (e.g., pre-bid conference, pre-bid meeting) and would corrupt those sentences."
+  },
+  {
+    "alias": "pre bid js",
+    "term": "Prebid.js",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "verdict": "KEEP",
+    "reason": "The 'js' suffix makes this unambiguously a JavaScript library reference; no ordinary English meaning."
+  },
+  {
+    "alias": "open r t b",
+    "term": "OpenRTB",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "verdict": "KEEP",
+    "reason": "Tech brand name plus letter spelling; no ordinary English meaning."
+  },
+  {
+    "alias": "open real time bidding",
+    "term": "OpenRTB",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "verdict": "KEEP",
+    "reason": "Unambiguous name for the OpenRTB protocol; no ordinary English meaning as a phrase."
+  },
+  {
+    "alias": "v a s t",
+    "term": "VAST",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "verdict": "KEEP",
+    "reason": "Letter-by-letter spelling (with spaces) of the VAST acronym; distinct from the common adjective 'vast'."
+  },
+  {
+    "alias": "vast tag",
+    "term": "VAST",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "verdict": "KEEP",
+    "reason": "In adtech 'VAST tag' specifically refers to the ad markup format; 'vast tag' together is not used in ordinary English."
+  },
+  {
+    "alias": "v paid",
+    "term": "VPAID",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "verdict": "KEEP",
+    "reason": "Phonetic split of VPAID; 'v paid' has no ordinary English meaning."
+  },
+  {
+    "alias": "vee paid",
+    "term": "VPAID",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "verdict": "KEEP",
+    "reason": "Phonetic letter+word rendering of VPAID; 'vee paid' has no ordinary English meaning."
+  },
+  {
+    "alias": "m raid",
+    "term": "MRAID",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "verdict": "KEEP",
+    "reason": "Phonetic rendering of MRAID; 'm raid' has no ordinary English meaning."
+  },
+  {
+    "alias": "em raid",
+    "term": "MRAID",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "verdict": "KEEP",
+    "reason": "Phonetic letter rendering of MRAID; 'em raid' has no ordinary English meaning."
+  },
+  {
+    "alias": "c t v",
+    "term": "CTV",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "verdict": "KEEP",
+    "reason": "Letter-by-letter spelling of CTV."
+  },
+  {
+    "alias": "see tee vee",
+    "term": "CTV",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "verdict": "KEEP",
+    "reason": "Phonetic letter spelling of CTV."
+  },
+  {
+    "alias": "connected tv",
+    "term": "CTV",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "verdict": "KEEP",
+    "reason": "Unambiguous adtech industry phrase."
+  },
+  {
+    "alias": "o t t",
+    "term": "OTT",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "verdict": "KEEP",
+    "reason": "Letter-by-letter spelling of OTT."
+  },
+  {
+    "alias": "oh tee tee",
+    "term": "OTT",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "verdict": "KEEP",
+    "reason": "Phonetic letter spelling of OTT."
+  },
+  {
+    "alias": "over the top",
+    "term": "OTT",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "verdict": "DROP",
+    "reason": "'Over the top' is extremely common English meaning excessive or exaggerated; would corrupt many ordinary sentences."
+  },
+  {
+    "alias": "d o o h",
+    "term": "DOOH",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "verdict": "KEEP",
+    "reason": "Letter-by-letter spelling of DOOH."
+  },
+  {
+    "alias": "digital out of home",
+    "term": "DOOH",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "verdict": "KEEP",
+    "reason": "Unambiguous adtech industry phrase; 'digital' anchors it to the tech domain."
+  },
+  {
+    "alias": "o o h",
+    "term": "OOH",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "verdict": "KEEP",
+    "reason": "Letter-by-letter spelling of OOH (with spaces); distinct from the exclamation 'ooh'."
+  },
+  {
+    "alias": "out of home",
+    "term": "OOH",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "verdict": "DROP",
+    "reason": "'Out of home' is common ordinary English — 'I was out of home all day', 'out of home care' — and would corrupt many sentences."
+  },
+  {
+    "alias": "im pression",
+    "term": "impression",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "verdict": "KEEP",
+    "reason": "Phonetic split of 'impression'; the split form has no ordinary English meaning."
+  },
+  {
+    "alias": "reach metric",
+    "term": "reach",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "verdict": "DROP",
+    "reason": "'Reach metric' is ordinary English, and the replacement drops the word 'metric', losing information and potentially corrupting natural sentences."
+  },
+  {
+    "alias": "free quency",
+    "term": "frequency",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "verdict": "KEEP",
+    "reason": "Phonetic split of 'frequency'; the split form has no ordinary English meaning."
+  },
+  {
+    "alias": "free quency capping",
+    "term": "frequency capping",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "verdict": "KEEP",
+    "reason": "Phonetic split of 'frequency' plus 'capping'; the split form has no ordinary English meaning."
+  },
+  {
+    "alias": "at tribution",
+    "term": "attribution",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "verdict": "KEEP",
+    "reason": "Phonetic split of 'attribution'; the split form has no ordinary English meaning."
+  },
+  {
+    "alias": "multi touch at tribution",
+    "term": "multi-touch attribution",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "verdict": "KEEP",
+    "reason": "Phonetic split of 'attribution' in an adtech compound phrase; no ordinary English meaning."
+  },
+  {
+    "alias": "m t a",
+    "term": "MTA",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "verdict": "KEEP",
+    "reason": "Letter-by-letter spelling of MTA."
+  },
+  {
+    "alias": "em tee ay",
+    "term": "MTA",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "verdict": "KEEP",
+    "reason": "Phonetic letter spelling of MTA."
+  },
+  {
+    "alias": "multi touch attribution",
+    "term": "MTA",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "verdict": "KEEP",
+    "reason": "Unambiguous adtech industry phrase."
+  },
+  {
+    "alias": "last click at tribution",
+    "term": "last-click attribution",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "verdict": "KEEP",
+    "reason": "Phonetic split of 'attribution' in an adtech phrase; no ordinary English meaning as rendered."
+  },
+  {
+    "alias": "first click at tribution",
+    "term": "first-click attribution",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "verdict": "KEEP",
+    "reason": "Phonetic split of 'attribution' in an adtech phrase; no ordinary English meaning as rendered."
+  },
+  {
+    "alias": "con version",
+    "term": "conversion",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "verdict": "KEEP",
+    "reason": "Phonetic split of 'conversion'; the split form has no ordinary English meaning."
+  },
+  {
+    "alias": "pixel tracking",
+    "term": "pixel",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "verdict": "DROP",
+    "reason": "'Pixel tracking' is ordinary English and the replacement drops the word 'tracking', losing information and corrupting natural sentences like 'pixel tracking on images'."
+  },
+  {
+    "alias": "tracking pixel",
+    "term": "tracking pixel",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "verdict": "DROP",
+    "reason": "Identity rule: alias equals term."
+  },
+  {
+    "alias": "s d k integration",
+    "term": "SDK integration",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "verdict": "KEEP",
+    "reason": "Letter spelling of SDK plus ordinary word; the combination is unambiguously a tech phrase."
+  },
+  {
+    "alias": "tag manager",
+    "term": "tag manager",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "verdict": "DROP",
+    "reason": "Identity rule: alias equals term."
+  },
+  {
+    "alias": "g t m",
+    "term": "GTM",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "verdict": "KEEP",
+    "reason": "Letter-by-letter spelling of GTM."
+  },
+  {
+    "alias": "google tag manager",
+    "term": "GTM",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "verdict": "KEEP",
+    "reason": "Proper noun for the product; unambiguous."
+  },
+  {
+    "alias": "double verify",
+    "term": "DoubleVerify",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "verdict": "DROP",
+    "reason": "'Double verify' is ordinary English meaning to verify twice — 'let me double verify that' — and would corrupt natural sentences."
+  },
+  {
+    "alias": "dv",
+    "term": "DoubleVerify",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "verdict": "KEEP",
+    "reason": "'dv' (no spaces) has no ordinary dictionary meaning; safe as a tech abbreviation correction."
+  },
+  {
+    "alias": "d v",
+    "term": "DoubleVerify",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "verdict": "DEDUPE",
+    "reason": "Conflict: 'd v' maps to both DoubleVerify and DV. Winner is DoubleVerify (more specific proper noun in this adtech domain pack)."
+  },
+  {
+    "alias": "double very fly",
+    "term": "DoubleVerify",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "verdict": "KEEP",
+    "reason": "Garbled mis-transcription of 'DoubleVerify'; 'double very fly' has no ordinary English meaning."
+  },
+  {
+    "alias": "d v",
+    "term": "DV",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "verdict": "DEDUPE",
+    "reason": "Conflict: 'd v' maps to both DoubleVerify and DV. Winner is DoubleVerify (more specific proper noun in this adtech domain pack)."
+  },
+  {
+    "alias": "dee vee",
+    "term": "DV",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "verdict": "KEEP",
+    "reason": "Phonetic letter spelling of DV; 'dee vee' has no ordinary English meaning."
+  },
+  {
+    "alias": "moat",
+    "term": "MOAT",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "verdict": "DROP",
+    "reason": "Single common English word with a well-known non-tech meaning (the water-filled ditch around a castle). Flagged single_word_english and identity."
+  },
+  {
+    "alias": "m o a t",
+    "term": "MOAT",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "verdict": "KEEP",
+    "reason": "Letter-by-letter spelling of MOAT; spaced letters distinguish from the common word."
+  },
+  {
+    "alias": "i a s",
+    "term": "IAS",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "verdict": "KEEP",
+    "reason": "Letter-by-letter spelling of IAS."
+  },
+  {
+    "alias": "eye ay ess",
+    "term": "IAS",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "verdict": "KEEP",
+    "reason": "Phonetic letter spelling of IAS."
+  },
+  {
+    "alias": "integral ad science",
+    "term": "IAS",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "verdict": "KEEP",
+    "reason": "Proper noun for the company; unambiguous."
+  },
+  {
+    "alias": "integral add science",
+    "term": "Integral Ad Science",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "verdict": "KEEP",
+    "reason": "Phonetic mis-transcription of 'Integral Ad Science' (Whisper hears 'add' for 'Ad'); no ordinary English meaning."
+  },
+  {
+    "alias": "oracle advertising",
+    "term": "Oracle Advertising",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "verdict": "DROP",
+    "reason": "Identity rule: alias is just a lowercase rendering of the proper noun term with no meaningful correction."
+  },
+  {
+    "alias": "grape shot",
+    "term": "Grapeshot",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "verdict": "KEEP",
+    "reason": "Phonetic split of the company name Grapeshot; 'grapeshot' as historical ammunition is obscure enough that this is safe."
+  },
+  {
+    "alias": "sass",
+    "term": "SaaS",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "verdict": "DROP",
+    "reason": "'Sass' is a very common English word meaning impudence ('don't give me sass'); also the name of a CSS preprocessor. Flagged single_word_english."
+  },
+  {
+    "alias": "s a a s",
+    "term": "SaaS",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "verdict": "KEEP",
+    "reason": "Letter-by-letter spelling of SaaS."
+  },
+  {
+    "alias": "b to b",
+    "term": "B2B",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "verdict": "KEEP",
+    "reason": "Letter-number rendering of B2B; 'b to b' has no ordinary English meaning."
+  },
+  {
+    "alias": "b 2 b",
+    "term": "B2B",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "verdict": "KEEP",
+    "reason": "Alphanumeric rendering of B2B."
+  },
+  {
+    "alias": "business to business",
+    "term": "B2B",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "verdict": "KEEP",
+    "reason": "Unambiguous industry phrase that exclusively means B2B."
+  },
+  {
+    "alias": "b to c",
+    "term": "B2C",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "verdict": "KEEP",
+    "reason": "Letter-number rendering of B2C; 'b to c' has no ordinary English meaning."
+  },
+  {
+    "alias": "b 2 c",
+    "term": "B2C",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "verdict": "KEEP",
+    "reason": "Alphanumeric rendering of B2C."
+  },
+  {
+    "alias": "business to consumer",
+    "term": "B2C",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "verdict": "KEEP",
+    "reason": "Unambiguous industry phrase that exclusively means B2C."
+  },
+  {
+    "alias": "b to b to c",
+    "term": "B2B2C",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "verdict": "KEEP",
+    "reason": "Letter-number rendering of B2B2C; no ordinary English meaning."
+  },
+  {
+    "alias": "b 2 b 2 c",
+    "term": "B2B2C",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "verdict": "KEEP",
+    "reason": "Alphanumeric rendering of B2B2C."
+  },
+  {
+    "alias": "enter prize",
+    "term": "enterprise",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "verdict": "KEEP",
+    "reason": "Phonetic split of 'enterprise'; 'enter prize' has no ordinary English meaning as two words."
+  },
+  {
+    "alias": "mid market",
+    "term": "mid-market",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "verdict": "KEEP",
+    "reason": "Low-risk hyphenation correction; alias and term are the same concept and the rule only adds a hyphen."
+  },
+  {
+    "alias": "s m b",
+    "term": "SMB",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "verdict": "KEEP",
+    "reason": "Letter-by-letter spelling of SMB."
+  },
+  {
+    "alias": "ess em bee",
+    "term": "SMB",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "verdict": "KEEP",
+    "reason": "Phonetic letter spelling of SMB."
+  },
+  {
+    "alias": "small medium business",
+    "term": "SMB",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "verdict": "KEEP",
+    "reason": "Unambiguous industry phrase for SMB segment."
+  },
+  {
+    "alias": "p l g",
+    "term": "PLG",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "verdict": "KEEP",
+    "reason": "Letter-by-letter spelling of PLG (product-led growth)."
+  },
+  {
+    "alias": "pee el gee",
+    "term": "PLG",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "verdict": "KEEP",
+    "reason": "Letter-by-letter phonetic spelling of the acronym PLG; no plausible ordinary English meaning."
+  },
+  {
+    "alias": "product led growth",
+    "term": "PLG",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "verdict": "DEDUPE",
+    "new_alias": "product led growth",
+    "reason": "Conflict: same alias maps to PLG and product-led growth. Winner is product-led growth (full descriptive term, correct hyphenation). Both conflict rows get DEDUPE."
+  },
+  {
+    "alias": "product led growth",
+    "term": "product-led growth",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "verdict": "DEDUPE",
+    "new_alias": "product led growth",
+    "reason": "Conflict: same alias maps to PLG and product-led growth. Winner is product-led growth. Both conflict rows get DEDUPE."
+  },
+  {
+    "alias": "s l g",
+    "term": "SLG",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "verdict": "KEEP",
+    "reason": "Letter-by-letter spelling of the acronym SLG; no plausible ordinary English meaning."
+  },
+  {
+    "alias": "sales led growth",
+    "term": "SLG",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "verdict": "DEDUPE",
+    "new_alias": "sales led growth",
+    "reason": "Conflict: same alias maps to SLG and sales-led growth. Winner is sales-led growth (full descriptive term with correct hyphenation). Both conflict rows get DEDUPE."
+  },
+  {
+    "alias": "sales led growth",
+    "term": "sales-led growth",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "verdict": "DEDUPE",
+    "new_alias": "sales led growth",
+    "reason": "Conflict: same alias maps to SLG and sales-led growth. Winner is sales-led growth. Both conflict rows get DEDUPE."
+  },
+  {
+    "alias": "c l g",
+    "term": "CLG",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "verdict": "KEEP",
+    "reason": "Letter-by-letter spelling of the acronym CLG; no plausible ordinary English meaning."
+  },
+  {
+    "alias": "community led growth",
+    "term": "CLG",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "verdict": "DROP",
+    "reason": "All ordinary English words; 'our community led growth this quarter' is valid natural speech that would be incorrectly replaced."
+  },
+  {
+    "alias": "free me um",
+    "term": "freemium",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "verdict": "KEEP",
+    "reason": "Phonetic split of 'freemium'; 'free me um' is not natural English."
+  },
+  {
+    "alias": "free trial",
+    "term": "free trial",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "verdict": "DROP",
+    "reason": "Identity rule: alias equals term exactly."
+  },
+  {
+    "alias": "self serve",
+    "term": "self-serve",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "verdict": "DROP",
+    "reason": "Ordinary English phrase used in everyday contexts (restaurants, buffets); would break natural speech."
+  },
+  {
+    "alias": "enter prize sales",
+    "term": "enterprise sales",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "verdict": "KEEP",
+    "reason": "Phonetic mis-transcription of 'enterprise' as 'enter prize'; 'enter prize sales' is not natural English."
+  },
+  {
+    "alias": "p o c",
+    "term": "POC",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "verdict": "KEEP",
+    "reason": "Letter-by-letter spelling of the acronym POC; no plausible ordinary English meaning."
+  },
+  {
+    "alias": "proof of concept",
+    "term": "POC",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "verdict": "DROP",
+    "reason": "All ordinary English words; speaker saying 'proof of concept' wants those words written out, not silently collapsed to an acronym."
+  },
+  {
+    "alias": "pilot program",
+    "term": "pilot",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "verdict": "DROP",
+    "reason": "Ordinary English phrase; correction drops a word and changes meaning, breaking 'our pilot program starts Monday'."
+  },
+  {
+    "alias": "land and expand",
+    "term": "land and expand",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "verdict": "DROP",
+    "reason": "Identity rule: alias equals term exactly."
+  },
+  {
+    "alias": "up sell",
+    "term": "upsell",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "verdict": "DROP",
+    "reason": "'up' and 'sell' are common English words; 'we need to up sell count' could be broken."
+  },
+  {
+    "alias": "cross sell",
+    "term": "cross-sell",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "verdict": "DROP",
+    "reason": "Ordinary English words; 'cross' and 'sell' appear independently in normal speech, making this too broad."
+  },
+  {
+    "alias": "expansion revenue",
+    "term": "expansion revenue",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "verdict": "DROP",
+    "reason": "Identity rule: alias equals term exactly."
+  },
+  {
+    "alias": "pipe line",
+    "term": "pipeline",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "verdict": "KEEP",
+    "reason": "Phonetic split of 'pipeline'; 'pipe line' as two words is Whisper's mis-transcription of the compound."
+  },
+  {
+    "alias": "deal pipe line",
+    "term": "deal pipeline",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "verdict": "KEEP",
+    "reason": "Phonetic split of 'pipeline' within a tech phrase; 'deal pipe line' is not natural English."
+  },
+  {
+    "alias": "qualified lead",
+    "term": "qualified lead",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "verdict": "DROP",
+    "reason": "Identity rule: alias equals term exactly."
+  },
+  {
+    "alias": "m q l",
+    "term": "MQL",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "verdict": "KEEP",
+    "reason": "Letter-by-letter spelling of the acronym MQL; no plausible ordinary English meaning."
+  },
+  {
+    "alias": "em queue el",
+    "term": "MQL",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "verdict": "KEEP",
+    "reason": "Phonetic letter-by-letter rendering of MQL; not natural English."
+  },
+  {
+    "alias": "marketing qualified lead",
+    "term": "MQL",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "verdict": "DROP",
+    "reason": "All ordinary English words; speaker saying the full phrase wants it written out, not collapsed to an acronym."
+  },
+  {
+    "alias": "s q l",
+    "term": "SQL",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "verdict": "KEEP",
+    "reason": "Letter-by-letter spelling of the acronym SQL; no plausible ordinary English meaning."
+  },
+  {
+    "alias": "sales qualified lead",
+    "term": "SQL",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "verdict": "DROP",
+    "reason": "Expanding 'sales qualified lead' to SQL is dangerous — SQL primarily means Structured Query Language; any tech speaker would be confused by the substitution."
+  },
+  {
+    "alias": "p q l",
+    "term": "PQL",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "verdict": "KEEP",
+    "reason": "Letter-by-letter spelling of the acronym PQL; no plausible ordinary English meaning."
+  },
+  {
+    "alias": "product qualified lead",
+    "term": "PQL",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "verdict": "DROP",
+    "reason": "All ordinary English words; speaker saying the full phrase wants it written out, not collapsed to an acronym."
+  },
+  {
+    "alias": "closed won",
+    "term": "closed-won",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "verdict": "KEEP",
+    "reason": "CRM stage name; adding hyphen is a pure formatting fix. 'Closed won' as a two-word phrase has no common non-CRM meaning."
+  },
+  {
+    "alias": "closed lost",
+    "term": "closed-lost",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "verdict": "KEEP",
+    "reason": "CRM stage name; adding hyphen is a pure formatting fix. 'Closed lost' as a two-word phrase has no common non-CRM meaning."
+  },
+  {
+    "alias": "win rate",
+    "term": "win rate",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "verdict": "DROP",
+    "reason": "Identity rule: alias equals term exactly."
+  },
+  {
+    "alias": "deal size",
+    "term": "deal size",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "verdict": "DROP",
+    "reason": "Identity rule: alias equals term exactly."
+  },
+  {
+    "alias": "sales cycle",
+    "term": "sales cycle",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "verdict": "DROP",
+    "reason": "Identity rule: alias equals term exactly."
+  },
+  {
+    "alias": "p o c to close",
+    "term": "POC to close",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "verdict": "KEEP",
+    "reason": "Letter-by-letter rendering of POC followed by 'to close'; the whole phrase is SaaS sales jargon not found in ordinary English."
+  },
+  {
+    "alias": "pro cure ment",
+    "term": "procurement",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "verdict": "KEEP",
+    "reason": "Phonetic split of 'procurement'; 'pro cure ment' is not natural English."
+  },
+  {
+    "alias": "m s a",
+    "term": "MSA",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "verdict": "KEEP",
+    "reason": "Letter-by-letter spelling of the acronym MSA; no plausible ordinary English meaning."
+  },
+  {
+    "alias": "em ess ay",
+    "term": "MSA",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "verdict": "KEEP",
+    "reason": "Phonetic letter-by-letter rendering of MSA; not natural English."
+  },
+  {
+    "alias": "master service agreement",
+    "term": "MSA",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "verdict": "DROP",
+    "reason": "All ordinary English words; speaker saying the full phrase wants it written out, not collapsed to an acronym."
+  },
+  {
+    "alias": "s o w",
+    "term": "SOW",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "verdict": "KEEP",
+    "reason": "Letter-by-letter spelling of the acronym SOW; no plausible ordinary English meaning in this form."
+  },
+  {
+    "alias": "ess oh double you",
+    "term": "SOW",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "verdict": "KEEP",
+    "reason": "Phonetic letter-by-letter rendering of SOW; not natural English."
+  },
+  {
+    "alias": "statement of work",
+    "term": "SOW",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "verdict": "DROP",
+    "reason": "All ordinary English words; speaker saying the full phrase wants it written out, not collapsed to an acronym."
+  },
+  {
+    "alias": "n d a",
+    "term": "NDA",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "verdict": "KEEP",
+    "reason": "Letter-by-letter spelling of the acronym NDA; no plausible ordinary English meaning."
+  },
+  {
+    "alias": "en dee ay",
+    "term": "NDA",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "verdict": "KEEP",
+    "reason": "Phonetic letter-by-letter rendering of NDA; not natural English."
+  },
+  {
+    "alias": "non disclosure agreement",
+    "term": "NDA",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "verdict": "DROP",
+    "reason": "All ordinary English words; speaker saying the full phrase wants it written out, not collapsed to an acronym."
+  },
+  {
+    "alias": "s l a",
+    "term": "SLA",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "verdict": "KEEP",
+    "reason": "Letter-by-letter spelling of the acronym SLA; no plausible ordinary English meaning."
+  },
+  {
+    "alias": "ess el ay",
+    "term": "SLA",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "verdict": "KEEP",
+    "reason": "Phonetic letter-by-letter rendering of SLA; not natural English."
+  },
+  {
+    "alias": "up time s l a",
+    "term": "uptime SLA",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "verdict": "KEEP",
+    "reason": "Phonetic split of 'uptime' plus letter-by-letter SLA; 'up time s l a' is not natural English."
+  },
+  {
+    "alias": "g d p r",
+    "term": "GDPR",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "verdict": "KEEP",
+    "reason": "Letter-by-letter spelling of the acronym GDPR; no plausible ordinary English meaning."
+  },
+  {
+    "alias": "gee dee pee are",
+    "term": "GDPR",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "verdict": "KEEP",
+    "reason": "Phonetic letter-by-letter rendering of GDPR; not natural English."
+  },
+  {
+    "alias": "c c p a",
+    "term": "CCPA",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "verdict": "KEEP",
+    "reason": "Letter-by-letter spelling of the acronym CCPA; no plausible ordinary English meaning."
+  },
+  {
+    "alias": "see see pee ay",
+    "term": "CCPA",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "verdict": "KEEP",
+    "reason": "Phonetic letter-by-letter rendering of CCPA; not natural English."
+  },
+  {
+    "alias": "sock two",
+    "term": "SOC 2",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "verdict": "KEEP",
+    "reason": "Phonetic rendering of SOC 2 (sock = SOC, two = 2); 'sock two' is not a natural English phrase."
+  },
+  {
+    "alias": "s o c two",
+    "term": "SOC 2",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "verdict": "KEEP",
+    "reason": "Letter-by-letter SOC plus 'two' for '2'; not natural English."
+  },
+  {
+    "alias": "sock 2",
+    "term": "SOC 2",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "verdict": "KEEP",
+    "reason": "Phonetic rendering of SOC 2; 'sock 2' as a phrase has no ordinary English meaning."
+  },
+  {
+    "alias": "sock two type two",
+    "term": "SOC 2 Type II",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "verdict": "KEEP",
+    "reason": "Full phonetic rendering of 'SOC 2 Type II'; not natural English."
+  },
+  {
+    "alias": "iso twenty seven thousand one",
+    "term": "ISO 27001",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "verdict": "KEEP",
+    "reason": "Phonetic rendering of the standard designation ISO 27001; unique enough to not break ordinary speech."
+  },
+  {
+    "alias": "hip a",
+    "term": "HIPAA",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "verdict": "KEEP",
+    "reason": "Phonetic rendering of HIPAA; 'hip a' is not natural English."
+  },
+  {
+    "alias": "hip ah",
+    "term": "HIPAA",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "verdict": "KEEP",
+    "reason": "Phonetic rendering of HIPAA; 'hip ah' is not natural English."
+  },
+  {
+    "alias": "h i p a a",
+    "term": "HIPAA",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "verdict": "KEEP",
+    "reason": "Letter-by-letter spelling of HIPAA; no plausible ordinary English meaning."
+  },
+  {
+    "alias": "p c i d s s",
+    "term": "PCI DSS",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "verdict": "KEEP",
+    "reason": "Letter-by-letter spelling of PCI DSS; no plausible ordinary English meaning."
+  },
+  {
+    "alias": "pci",
+    "term": "PCI DSS",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "verdict": "DROP",
+    "reason": "PCI alone is ambiguous (Peripheral Component Interconnect is another common meaning); expanding a three-letter acronym to the full 'PCI DSS' is overreach and would corrupt legitimate uses of 'PCI' in other senses."
+  },
+  {
+    "alias": "fed ramp",
+    "term": "FedRAMP",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "verdict": "KEEP",
+    "reason": "Phonetic split of FedRAMP; 'fed ramp' is not natural English."
+  },
+  {
+    "alias": "f e d ramp",
+    "term": "FedRAMP",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "verdict": "KEEP",
+    "reason": "Letter-by-letter FED plus 'ramp'; not natural English."
+  },
+  {
+    "alias": "door a",
+    "term": "DORA",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "verdict": "KEEP",
+    "reason": "Phonetic rendering of DORA; 'door a' is not natural English."
+  },
+  {
+    "alias": "d o r a",
+    "term": "DORA",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "verdict": "KEEP",
+    "reason": "Letter-by-letter spelling of DORA; no plausible ordinary English meaning."
+  },
+  {
+    "alias": "com ply ance",
+    "term": "compliance",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "verdict": "KEEP",
+    "reason": "Phonetic split of 'compliance'; 'com ply ance' is not natural English."
+  },
+  {
+    "alias": "audit",
+    "term": "audit",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "verdict": "DROP",
+    "reason": "Identity rule: alias equals term exactly; also a common single English word."
+  },
+  {
+    "alias": "audit trail",
+    "term": "audit trail",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "verdict": "DROP",
+    "reason": "Identity rule: alias equals term exactly."
+  },
+  {
+    "alias": "audit log",
+    "term": "audit log",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "verdict": "DROP",
+    "reason": "Identity rule: alias equals term exactly."
+  },
+  {
+    "alias": "data residency",
+    "term": "data residency",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "verdict": "DROP",
+    "reason": "Identity rule: alias equals term exactly."
+  },
+  {
+    "alias": "data sovereignty",
+    "term": "data sovereignty",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "verdict": "DROP",
+    "reason": "Identity rule: alias equals term exactly."
+  },
+  {
+    "alias": "p i i",
+    "term": "PII",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "verdict": "KEEP",
+    "reason": "Letter-by-letter spelling of the acronym PII; no plausible ordinary English meaning."
+  },
+  {
+    "alias": "pee eye eye",
+    "term": "PII",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "verdict": "KEEP",
+    "reason": "Phonetic letter-by-letter rendering of PII; not natural English."
+  },
+  {
+    "alias": "personally identifiable information",
+    "term": "PII",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "verdict": "DROP",
+    "reason": "All ordinary English words; speaker saying the full phrase wants it written out, not collapsed to an acronym."
+  },
+  {
+    "alias": "p h i",
+    "term": "PHI",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "verdict": "KEEP",
+    "reason": "Letter-by-letter spelling of the acronym PHI; no plausible ordinary English meaning."
+  },
+  {
+    "alias": "pee aitch eye",
+    "term": "PHI",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "verdict": "KEEP",
+    "reason": "Phonetic letter-by-letter rendering of PHI; not natural English."
+  },
+  {
+    "alias": "protected health information",
+    "term": "PHI",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "verdict": "DROP",
+    "reason": "All ordinary English words; speaker saying the full phrase wants it written out, not collapsed to an acronym."
+  },
+  {
+    "alias": "data class if ication",
+    "term": "data classification",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "verdict": "KEEP",
+    "reason": "Phonetic split of 'classification'; 'class if ication' is not natural English."
+  },
+  {
+    "alias": "encryption at rest",
+    "term": "encryption at rest",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "verdict": "DROP",
+    "reason": "Identity rule: alias equals term exactly."
+  },
+  {
+    "alias": "encryption in transit",
+    "term": "encryption in transit",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "verdict": "DROP",
+    "reason": "Identity rule: alias equals term exactly."
+  },
+  {
+    "alias": "customer success",
+    "term": "customer success",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "verdict": "DROP",
+    "reason": "Identity rule: alias equals term exactly; identity takes priority over conflict flag."
+  },
+  {
+    "alias": "c s",
+    "term": "CS",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "verdict": "KEEP",
+    "reason": "Letter-by-letter spelling of the acronym CS; no plausible ordinary English meaning."
+  },
+  {
+    "alias": "see ess",
+    "term": "CS",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "verdict": "KEEP",
+    "reason": "Phonetic letter-by-letter rendering of CS; not natural English."
+  },
+  {
+    "alias": "customer success",
+    "term": "CS",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "verdict": "DROP",
+    "reason": "Ordinary English phrase; silently collapsing 'customer success' to 'CS' would surprise the speaker and conflicts with the identity entry above."
+  },
+  {
+    "alias": "c s m",
+    "term": "CSM",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "verdict": "KEEP",
+    "reason": "Letter-by-letter spelling of the acronym CSM; no plausible ordinary English meaning."
+  },
+  {
+    "alias": "see ess em",
+    "term": "CSM",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "verdict": "KEEP",
+    "reason": "Phonetic letter-by-letter rendering of CSM; not natural English."
+  },
+  {
+    "alias": "customer success manager",
+    "term": "CSM",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "verdict": "DROP",
+    "reason": "All ordinary English words; speaker saying the full phrase wants it written out, not collapsed to an acronym."
+  },
+  {
+    "alias": "t a m",
+    "term": "TAM",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "verdict": "KEEP",
+    "reason": "Letter-by-letter spelling of the acronym TAM; no plausible ordinary English meaning."
+  },
+  {
+    "alias": "technical account manager",
+    "term": "TAM",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "verdict": "DROP",
+    "reason": "All ordinary English words; speaker saying the full phrase wants it written out, not collapsed to an acronym."
+  },
+  {
+    "alias": "solution engineer",
+    "term": "solution engineer",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "verdict": "DROP",
+    "reason": "Identity rule: alias equals term exactly; identity takes priority over conflict flag."
+  },
+  {
+    "alias": "s e",
+    "term": "SE",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "verdict": "KEEP",
+    "reason": "Letter-by-letter spelling of the acronym SE; no plausible ordinary English meaning."
+  },
+  {
+    "alias": "ess ee",
+    "term": "SE",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "verdict": "KEEP",
+    "reason": "Phonetic letter-by-letter rendering of SE; not natural English."
+  },
+  {
+    "alias": "solution engineer",
+    "term": "SE",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "verdict": "DROP",
+    "reason": "Ordinary English phrase; silently collapsing 'solution engineer' to 'SE' would surprise the speaker. Also conflicts with the identity entry."
+  },
+  {
+    "alias": "a e",
+    "term": "AE",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "verdict": "KEEP",
+    "reason": "Letter-by-letter spelling of the acronym AE; no plausible ordinary English meaning."
+  },
+  {
+    "alias": "ay ee",
+    "term": "AE",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "verdict": "KEEP",
+    "reason": "Phonetic letter-by-letter rendering of AE; not natural English."
+  },
+  {
+    "alias": "account executive",
+    "term": "AE",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "verdict": "DROP",
+    "reason": "All ordinary English words; speaker saying the full phrase wants it written out, not collapsed to an acronym."
+  },
+  {
+    "alias": "s d r",
+    "term": "SDR",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "verdict": "KEEP",
+    "reason": "Letter-by-letter spelling of the acronym SDR; no plausible ordinary English meaning."
+  },
+  {
+    "alias": "ess dee are",
+    "term": "SDR",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "verdict": "KEEP",
+    "reason": "Phonetic letter-by-letter rendering of SDR; not natural English."
+  },
+  {
+    "alias": "sales development rep",
+    "term": "SDR",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "verdict": "DROP",
+    "reason": "All ordinary English words; speaker saying the full phrase wants it written out, not collapsed to an acronym."
+  },
+  {
+    "alias": "b d r",
+    "term": "BDR",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "verdict": "KEEP",
+    "reason": "Letter-by-letter spelling of the acronym BDR; no plausible ordinary English meaning."
+  },
+  {
+    "alias": "bee dee are",
+    "term": "BDR",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "verdict": "KEEP",
+    "reason": "Phonetic letter-by-letter rendering of BDR; not natural English."
+  },
+  {
+    "alias": "business development rep",
+    "term": "BDR",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "verdict": "DROP",
+    "reason": "All ordinary English words; speaker saying the full phrase wants it written out, not collapsed to an acronym."
+  },
+  {
+    "alias": "a r r",
+    "term": "ARR",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "verdict": "KEEP",
+    "reason": "Letter-by-letter spelling of the acronym ARR; no plausible ordinary English meaning."
+  },
+  {
+    "alias": "annual recurring revenue",
+    "term": "ARR",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "verdict": "DROP",
+    "reason": "All ordinary English words; speaker saying the full phrase wants it written out, not collapsed to an acronym."
+  },
+  {
+    "alias": "m r r",
+    "term": "MRR",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "verdict": "KEEP",
+    "reason": "Letter-by-letter spelling of the acronym MRR; no plausible ordinary English meaning."
+  },
+  {
+    "alias": "monthly recurring revenue",
+    "term": "MRR",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "verdict": "DROP",
+    "reason": "All ordinary English words; speaker saying the full phrase wants it written out, not collapsed to an acronym."
+  },
+  {
+    "alias": "g r r",
+    "term": "GRR",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "verdict": "KEEP",
+    "reason": "Letter-by-letter spelling of the acronym GRR; no plausible ordinary English meaning."
+  },
+  {
+    "alias": "gross revenue retention",
+    "term": "GRR",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "verdict": "DROP",
+    "reason": "All ordinary English words; speaker saying the full phrase wants it written out, not collapsed to an acronym."
+  },
+  {
+    "alias": "n r r",
+    "term": "NRR",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "verdict": "KEEP",
+    "reason": "Letter-by-letter spelling of the acronym NRR; no plausible ordinary English meaning."
+  },
+  {
+    "alias": "net revenue retention",
+    "term": "NRR",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "verdict": "DROP",
+    "reason": "All ordinary English words; speaker saying the full phrase wants it written out, not collapsed to an acronym."
+  },
+  {
+    "alias": "n d r",
+    "term": "NDR",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "verdict": "KEEP",
+    "reason": "Letter-by-letter spelling of the acronym NDR; no plausible ordinary English meaning."
+  },
+  {
+    "alias": "net dollar retention",
+    "term": "NDR",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "verdict": "DROP",
+    "reason": "All ordinary English words; speaker saying the full phrase wants it written out, not collapsed to an acronym."
+  },
+  {
+    "alias": "logo retention",
+    "term": "logo retention",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "verdict": "DROP",
+    "reason": "Identity rule: alias equals term exactly."
+  },
+  {
+    "alias": "churn",
+    "term": "churn",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "verdict": "DROP",
+    "reason": "Identity rule: alias equals term exactly; also a common single English word."
+  },
+  {
+    "alias": "con traction",
+    "term": "contraction",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "verdict": "KEEP",
+    "reason": "Phonetic split of 'contraction'; 'con traction' is not natural English."
+  },
+  {
+    "alias": "ex pan shun",
+    "term": "expansion",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "verdict": "KEEP",
+    "reason": "Phonetic split of 'expansion'; 'ex pan shun' is not natural English."
+  },
+  {
+    "alias": "re new al",
+    "term": "renewal",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "verdict": "KEEP",
+    "reason": "Phonetic split of 'renewal'; 're new al' is not natural English."
+  },
+  {
+    "alias": "re new al rate",
+    "term": "renewal rate",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "verdict": "KEEP",
+    "reason": "Phonetic split of 'renewal' in a business phrase; not natural English."
+  },
+  {
+    "alias": "multi tenant",
+    "term": "multi-tenant",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "verdict": "KEEP",
+    "reason": "Tech jargon with no common non-technical meaning; hyphen correction is safe."
+  },
+  {
+    "alias": "single tenant",
+    "term": "single-tenant",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "verdict": "DROP",
+    "reason": "'Single tenant' is ordinary English in real-estate and property contexts ('a single tenant in the building'); would break normal speech."
+  },
+  {
+    "alias": "ten ant",
+    "term": "tenant",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "verdict": "KEEP",
+    "reason": "Phonetic split of 'tenant'; 'ten ant' is not natural English."
+  },
+  {
+    "alias": "ten an see",
+    "term": "tenancy",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "verdict": "KEEP",
+    "reason": "Phonetic split of 'tenancy'; 'ten an see' is not natural English."
+  },
+  {
+    "alias": "on prem",
+    "term": "on-prem",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "verdict": "KEEP",
+    "reason": "'On prem' is tech-only jargon with no non-tech meaning; hyphen correction is safe."
+  },
+  {
+    "alias": "on premise",
+    "term": "on-prem",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "verdict": "DROP",
+    "reason": "'On premise' is ordinary English (logical premise, a building premise); 'the argument is built on premise' would be incorrectly replaced."
+  },
+  {
+    "alias": "on premises",
+    "term": "on-premises",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "verdict": "KEEP",
+    "reason": "Hyphen-correction only; the tech meaning ('on-premises software') and non-tech meaning ('on the premises') are identical, so the change is harmless."
+  },
+  {
+    "alias": "hybrid cloud",
+    "term": "hybrid cloud",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "verdict": "DROP",
+    "reason": "Identity rule: alias equals term exactly."
+  },
+  {
+    "alias": "multi cloud",
+    "term": "multi-cloud",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "verdict": "KEEP",
+    "reason": "Tech jargon with no common non-technical meaning; hyphen correction is safe."
+  },
+  {
+    "alias": "cloud native",
+    "term": "cloud-native",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "verdict": "KEEP",
+    "reason": "Tech jargon with no common non-technical meaning; hyphen correction is safe."
+  },
+  {
+    "alias": "cloud agnostic",
+    "term": "cloud agnostic",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "verdict": "DROP",
+    "reason": "Identity rule: alias equals term exactly."
+  },
+  {
+    "alias": "vendor lock in",
+    "term": "vendor lock-in",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "verdict": "KEEP",
+    "reason": "Tech/business jargon; 'vendor lock in' has no natural non-tech reading, and the correction only adds a hyphen."
+  },
+  {
+    "alias": "data lake",
+    "term": "data lake",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "verdict": "DROP",
+    "reason": "Identity rule: alias equals term exactly."
+  },
+  {
+    "alias": "data lake house",
+    "term": "data lakehouse",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "verdict": "KEEP",
+    "reason": "Phonetic split of 'lakehouse'; 'data lake house' as three words is Whisper's mis-transcription of the compound term."
+  },
+  {
+    "alias": "data ware house",
+    "term": "data warehouse",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "verdict": "KEEP",
+    "reason": "Phonetic split of 'warehouse'; 'data ware house' as three words is Whisper's mis-transcription of the compound term."
+  },
+  {
+    "alias": "data mesh",
+    "term": "data mesh",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "verdict": "DROP",
+    "reason": "Identity rule: alias equals term exactly."
+  },
+  {
+    "alias": "data fabric",
+    "term": "data fabric",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "verdict": "DROP",
+    "reason": "Identity rule: alias equals term exactly."
+  },
+  {
+    "alias": "data catalog",
+    "term": "data catalog",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "verdict": "DROP",
+    "reason": "Identity rule: alias equals term exactly."
+  },
+  {
+    "alias": "data lineage",
+    "term": "data lineage",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "verdict": "DROP",
+    "reason": "Identity rule: alias equals term exactly."
+  },
+  {
+    "alias": "data quality",
+    "term": "data quality",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "verdict": "DROP",
+    "reason": "Identity rule: alias equals term exactly."
+  },
+  {
+    "alias": "data governance",
+    "term": "data governance",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "verdict": "DROP",
+    "reason": "Identity rule: alias equals term exactly."
+  },
+  {
+    "alias": "data pipe line",
+    "term": "data pipeline",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "verdict": "KEEP",
+    "reason": "Phonetic split of 'pipeline'; 'data pipe line' as three words is Whisper's mis-transcription."
+  },
+  {
+    "alias": "e t l pipe line",
+    "term": "ETL pipeline",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "verdict": "KEEP",
+    "reason": "Letter-by-letter ETL plus phonetic split of 'pipeline'; not natural English."
+  },
+  {
+    "alias": "e l t pipe line",
+    "term": "ELT pipeline",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "verdict": "KEEP",
+    "reason": "Letter-by-letter ELT plus phonetic split of 'pipeline'; not natural English."
+  },
+  {
+    "alias": "real time pipe line",
+    "term": "real-time pipeline",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "verdict": "KEEP",
+    "reason": "Hyphen correction for 'real-time' plus phonetic split of 'pipeline'; the combined phrase is specific enough to be safe."
+  },
+  {
+    "alias": "batch processing",
+    "term": "batch processing",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "verdict": "DROP",
+    "reason": "Identity rule: alias equals term exactly."
+  },
+  {
+    "alias": "stream processing",
+    "term": "stream processing",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "verdict": "DROP",
+    "reason": "Identity rule: alias equals term exactly."
+  },
+  {
+    "alias": "micro batch",
+    "term": "micro-batch",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "verdict": "KEEP",
+    "reason": "Tech jargon; 'micro batch' has no non-technical meaning, and the correction only adds a hyphen."
+  },
+  {
+    "alias": "near real time",
+    "term": "near real-time",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "verdict": "KEEP",
+    "reason": "Tech-specific phrase; 'near real time' is rarely used outside technical contexts, and the hyphen correction is safe."
+  },
+  {
+    "alias": "real time",
+    "term": "real-time",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "verdict": "DROP",
+    "reason": "'Real time' is very common ordinary English ('in real time', 'we watched in real time'); forcing a hyphen breaks natural adverbial uses."
+  },
+  {
+    "alias": "low lay ten see",
+    "term": "low latency",
+    "pack": "pack_12_adtech_saas_enterprise",
+    "verdict": "KEEP",
+    "reason": "Phonetic split of 'latency'; 'low lay ten see' is not natural English."
+  }
+]

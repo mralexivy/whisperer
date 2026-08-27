@@ -1,0 +1,873 @@
+[
+  {
+    "alias": "meta platforms",
+    "term": "Meta",
+    "pack": "pack_04_devtools_companies",
+    "flags": []
+  },
+  {
+    "alias": "apple inc",
+    "term": "Apple",
+    "pack": "pack_04_devtools_companies",
+    "flags": []
+  },
+  {
+    "alias": "en vidya",
+    "term": "NVIDIA",
+    "pack": "pack_04_devtools_companies",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "in videa",
+    "term": "NVIDIA",
+    "pack": "pack_04_devtools_companies",
+    "flags": []
+  },
+  {
+    "alias": "a m d",
+    "term": "AMD",
+    "pack": "pack_04_devtools_companies",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "ay em dee",
+    "term": "AMD",
+    "pack": "pack_04_devtools_companies",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "intel",
+    "term": "Intel",
+    "pack": "pack_04_devtools_companies",
+    "flags": [
+      "identity",
+      "substring_of_term"
+    ]
+  },
+  {
+    "alias": "qual com",
+    "term": "Qualcomm",
+    "pack": "pack_04_devtools_companies",
+    "flags": []
+  },
+  {
+    "alias": "quall com",
+    "term": "Qualcomm",
+    "pack": "pack_04_devtools_companies",
+    "flags": []
+  },
+  {
+    "alias": "broad com",
+    "term": "Broadcom",
+    "pack": "pack_04_devtools_companies",
+    "flags": []
+  },
+  {
+    "alias": "pal an tier",
+    "term": "Palantir",
+    "pack": "pack_04_devtools_companies",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "pah lan tear",
+    "term": "Palantir",
+    "pack": "pack_04_devtools_companies",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "data bricks",
+    "term": "Databricks",
+    "pack": "pack_04_devtools_companies",
+    "flags": []
+  },
+  {
+    "alias": "snow flake",
+    "term": "Snowflake",
+    "pack": "pack_04_devtools_companies",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "hashi corp",
+    "term": "HashiCorp",
+    "pack": "pack_04_devtools_companies",
+    "flags": []
+  },
+  {
+    "alias": "hashy corp",
+    "term": "HashiCorp",
+    "pack": "pack_04_devtools_companies",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "elastic co",
+    "term": "Elastic",
+    "pack": "pack_04_devtools_companies",
+    "flags": []
+  },
+  {
+    "alias": "con flew ent",
+    "term": "Confluent",
+    "pack": "pack_04_devtools_companies",
+    "flags": []
+  },
+  {
+    "alias": "con flu ent",
+    "term": "Confluent",
+    "pack": "pack_04_devtools_companies",
+    "flags": []
+  },
+  {
+    "alias": "mongo d b inc",
+    "term": "MongoDB Inc",
+    "pack": "pack_04_devtools_companies",
+    "flags": []
+  },
+  {
+    "alias": "data dog",
+    "term": "Datadog",
+    "pack": "pack_04_devtools_companies",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "crowd strike",
+    "term": "CrowdStrike",
+    "pack": "pack_04_devtools_companies",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "palo alto networks",
+    "term": "Palo Alto Networks",
+    "pack": "pack_04_devtools_companies",
+    "flags": [
+      "identity",
+      "substring_of_term"
+    ]
+  },
+  {
+    "alias": "forty net",
+    "term": "Fortinet",
+    "pack": "pack_04_devtools_companies",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "fort in et",
+    "term": "Fortinet",
+    "pack": "pack_04_devtools_companies",
+    "flags": []
+  },
+  {
+    "alias": "z scaler",
+    "term": "Zscaler",
+    "pack": "pack_04_devtools_companies",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "zee scaler",
+    "term": "Zscaler",
+    "pack": "pack_04_devtools_companies",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "cloud flare",
+    "term": "Cloudflare",
+    "pack": "pack_04_devtools_companies",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "cloud flair",
+    "term": "Cloudflare",
+    "pack": "pack_04_devtools_companies",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "ack a my",
+    "term": "Akamai",
+    "pack": "pack_04_devtools_companies",
+    "flags": []
+  },
+  {
+    "alias": "aka my",
+    "term": "Akamai",
+    "pack": "pack_04_devtools_companies",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "fast lee",
+    "term": "Fastly",
+    "pack": "pack_04_devtools_companies",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "twitch dev",
+    "term": "Twitch",
+    "pack": "pack_04_devtools_companies",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "shop if eye",
+    "term": "Shopify",
+    "pack": "pack_04_devtools_companies",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "shop ify",
+    "term": "Shopify",
+    "pack": "pack_04_devtools_companies",
+    "flags": []
+  },
+  {
+    "alias": "content full",
+    "term": "Contentful",
+    "pack": "pack_04_devtools_companies",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "sanity io",
+    "term": "Sanity",
+    "pack": "pack_04_devtools_companies",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "sanity cms",
+    "term": "Sanity",
+    "pack": "pack_04_devtools_companies",
+    "flags": []
+  },
+  {
+    "alias": "story block",
+    "term": "Storyblok",
+    "pack": "pack_04_devtools_companies",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "story blok",
+    "term": "Storyblok",
+    "pack": "pack_04_devtools_companies",
+    "flags": []
+  },
+  {
+    "alias": "hi graph",
+    "term": "Hygraph",
+    "pack": "pack_04_devtools_companies",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "high graph",
+    "term": "Hygraph",
+    "pack": "pack_04_devtools_companies",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "word press",
+    "term": "WordPress",
+    "pack": "pack_04_devtools_companies",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "woo commerce",
+    "term": "WooCommerce",
+    "pack": "pack_04_devtools_companies",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "web flow",
+    "term": "Webflow",
+    "pack": "pack_04_devtools_companies",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "square space",
+    "term": "Squarespace",
+    "pack": "pack_04_devtools_companies",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "wicks",
+    "term": "Wix",
+    "pack": "pack_04_devtools_companies",
+    "flags": []
+  },
+  {
+    "alias": "t mux",
+    "term": "tmux",
+    "pack": "pack_04_devtools_companies",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "tee mux",
+    "term": "tmux",
+    "pack": "pack_04_devtools_companies",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "t-mux",
+    "term": "tmux",
+    "pack": "pack_04_devtools_companies",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "z shell",
+    "term": "zsh",
+    "pack": "pack_04_devtools_companies",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "zee shell",
+    "term": "zsh",
+    "pack": "pack_04_devtools_companies",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "zed shell",
+    "term": "zsh",
+    "pack": "pack_04_devtools_companies",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "bash shell",
+    "term": "Bash",
+    "pack": "pack_04_devtools_companies",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "power shell",
+    "term": "PowerShell",
+    "pack": "pack_04_devtools_companies",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "i term 2",
+    "term": "iTerm2",
+    "pack": "pack_04_devtools_companies",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "eye term two",
+    "term": "iTerm2",
+    "pack": "pack_04_devtools_companies",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "warp terminal",
+    "term": "Warp",
+    "pack": "pack_04_devtools_companies",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "ah la critty",
+    "term": "Alacritty",
+    "pack": "pack_04_devtools_companies",
+    "flags": []
+  },
+  {
+    "alias": "ala critty",
+    "term": "Alacritty",
+    "pack": "pack_04_devtools_companies",
+    "flags": []
+  },
+  {
+    "alias": "kitty terminal",
+    "term": "Kitty",
+    "pack": "pack_04_devtools_companies",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "starship prompt",
+    "term": "Starship",
+    "pack": "pack_04_devtools_companies",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "oh my z shell",
+    "term": "Oh My Zsh",
+    "pack": "pack_04_devtools_companies",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "oh my zed shell",
+    "term": "Oh My Zsh",
+    "pack": "pack_04_devtools_companies",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "f z f",
+    "term": "fzf",
+    "pack": "pack_04_devtools_companies",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "ef zee ef",
+    "term": "fzf",
+    "pack": "pack_04_devtools_companies",
+    "flags": []
+  },
+  {
+    "alias": "fuzzy finder",
+    "term": "fzf",
+    "pack": "pack_04_devtools_companies",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "rip grep",
+    "term": "ripgrep",
+    "pack": "pack_04_devtools_companies",
+    "flags": []
+  },
+  {
+    "alias": "lazy git",
+    "term": "lazygit",
+    "pack": "pack_04_devtools_companies",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "lazy docker",
+    "term": "lazydocker",
+    "pack": "pack_04_devtools_companies",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "h top",
+    "term": "htop",
+    "pack": "pack_04_devtools_companies",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "aitch top",
+    "term": "htop",
+    "pack": "pack_04_devtools_companies",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "b top",
+    "term": "btop",
+    "pack": "pack_04_devtools_companies",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "bee top",
+    "term": "btop",
+    "pack": "pack_04_devtools_companies",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "n map",
+    "term": "nmap",
+    "pack": "pack_04_devtools_companies",
+    "flags": [
+      "all_english",
+      "conflict"
+    ]
+  },
+  {
+    "alias": "en map",
+    "term": "nmap",
+    "pack": "pack_04_devtools_companies",
+    "flags": [
+      "all_english",
+      "conflict"
+    ]
+  },
+  {
+    "alias": "wire shark",
+    "term": "Wireshark",
+    "pack": "pack_04_devtools_companies",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "tcp dump",
+    "term": "tcpdump",
+    "pack": "pack_04_devtools_companies",
+    "flags": []
+  },
+  {
+    "alias": "t c p dump",
+    "term": "tcpdump",
+    "pack": "pack_04_devtools_companies",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "s trace",
+    "term": "strace",
+    "pack": "pack_04_devtools_companies",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "ess trace",
+    "term": "strace",
+    "pack": "pack_04_devtools_companies",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "docker compose",
+    "term": "Docker Compose",
+    "pack": "pack_04_devtools_companies",
+    "flags": [
+      "all_english",
+      "identity",
+      "substring_of_term"
+    ]
+  },
+  {
+    "alias": "dock er compose",
+    "term": "Docker Compose",
+    "pack": "pack_04_devtools_companies",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "make file",
+    "term": "Makefile",
+    "pack": "pack_04_devtools_companies",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "c make",
+    "term": "CMake",
+    "pack": "pack_04_devtools_companies",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "see make",
+    "term": "CMake",
+    "pack": "pack_04_devtools_companies",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "bay zel",
+    "term": "Bazel",
+    "pack": "pack_04_devtools_companies",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "bazelle",
+    "term": "Bazel",
+    "pack": "pack_04_devtools_companies",
+    "flags": []
+  },
+  {
+    "alias": "n x",
+    "term": "Nx",
+    "pack": "pack_04_devtools_companies",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "en ex",
+    "term": "Nx",
+    "pack": "pack_04_devtools_companies",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "turbo repo",
+    "term": "Turborepo",
+    "pack": "pack_04_devtools_companies",
+    "flags": []
+  },
+  {
+    "alias": "ler na",
+    "term": "Lerna",
+    "pack": "pack_04_devtools_companies",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "learn a",
+    "term": "Lerna",
+    "pack": "pack_04_devtools_companies",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "mono repo",
+    "term": "monorepo",
+    "pack": "pack_04_devtools_companies",
+    "flags": []
+  },
+  {
+    "alias": "mono repository",
+    "term": "monorepo",
+    "pack": "pack_04_devtools_companies",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "micro services",
+    "term": "microservices",
+    "pack": "pack_04_devtools_companies",
+    "flags": []
+  },
+  {
+    "alias": "server less",
+    "term": "serverless",
+    "pack": "pack_04_devtools_companies",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "edge computing",
+    "term": "edge computing",
+    "pack": "pack_04_devtools_companies",
+    "flags": [
+      "identity",
+      "substring_of_term"
+    ]
+  },
+  {
+    "alias": "web assembly",
+    "term": "WebAssembly",
+    "pack": "pack_04_devtools_companies",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "wasm",
+    "term": "WebAssembly",
+    "pack": "pack_04_devtools_companies",
+    "flags": [
+      "conflict"
+    ]
+  },
+  {
+    "alias": "h t m x",
+    "term": "HTMX",
+    "pack": "pack_04_devtools_companies",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "aitch tee em ex",
+    "term": "HTMX",
+    "pack": "pack_04_devtools_companies",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "html x",
+    "term": "HTMX",
+    "pack": "pack_04_devtools_companies",
+    "flags": []
+  },
+  {
+    "alias": "live view",
+    "term": "LiveView",
+    "pack": "pack_04_devtools_companies",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "phoenix live view",
+    "term": "LiveView",
+    "pack": "pack_04_devtools_companies",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "hot wire",
+    "term": "Hotwire",
+    "pack": "pack_04_devtools_companies",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "stim u lus",
+    "term": "Stimulus",
+    "pack": "pack_04_devtools_companies",
+    "flags": []
+  },
+  {
+    "alias": "turbo rails",
+    "term": "Turbo",
+    "pack": "pack_04_devtools_companies",
+    "flags": []
+  },
+  {
+    "alias": "hotwire turbo",
+    "term": "Turbo",
+    "pack": "pack_04_devtools_companies",
+    "flags": []
+  },
+  {
+    "alias": "alpine js",
+    "term": "Alpine.js",
+    "pack": "pack_04_devtools_companies",
+    "flags": []
+  },
+  {
+    "alias": "un poly",
+    "term": "Unpoly",
+    "pack": "pack_04_devtools_companies",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "double verify",
+    "term": "DoubleVerify",
+    "pack": "pack_04_devtools_companies",
+    "flags": [
+      "all_english"
+    ]
+  },
+  {
+    "alias": "dv",
+    "term": "DoubleVerify",
+    "pack": "pack_04_devtools_companies",
+    "flags": []
+  },
+  {
+    "alias": "d v",
+    "term": "DoubleVerify",
+    "pack": "pack_04_devtools_companies",
+    "flags": [
+      "all_english",
+      "conflict"
+    ]
+  },
+  {
+    "alias": "d v",
+    "term": "DV",
+    "pack": "pack_04_devtools_companies",
+    "flags": [
+      "all_english",
+      "conflict"
+    ]
+  },
+  {
+    "alias": "dee vee",
+    "term": "DV",
+    "pack": "pack_04_devtools_companies",
+    "flags": [
+      "all_english"
+    ]
+  }
+]
