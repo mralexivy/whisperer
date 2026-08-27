@@ -94,6 +94,10 @@ class AppState: ObservableObject {
     @Published var liveTranscription: String = ""  // Live transcription during recording
     @Published var recordingSessionID: UUID = UUID()  // Forces SwiftUI state reset between recordings
 
+    /// Built on the first preview callback of a recording. Dictionary compilation has the same
+    /// per-recording staleness contract as the meeting editor and must not repeat at 2–3 Hz.
+    private var livePreviewProtectedCasingWords: Set<String>?
+
     /// The committed VAD chunks of the recording in progress, kept so the polisher can read the
     /// silence between them.
     ///
@@ -2129,6 +2133,19 @@ class AppState: ObservableObject {
         text.split(whereSeparator: \.isWhitespace).joined(separator: " ")
     }
 
+    /// The short-dictation HUD gets raw growing hypotheses, not the endpoint editor output.
+    /// Apply only the shared casing repair here: running filler deletion or punctuation repair on
+    /// an unstable hypothesis would fight `SmoothTextUpdater`'s append-only projection.
+    private func normalizeLivePreviewCase(_ text: String) -> String {
+        if livePreviewProtectedCasingWords == nil {
+            let terms = Set(DictionaryManager.shared.entries.map(\.correctForm))
+            livePreviewProtectedCasingWords = MidSentenceCaseNormalizer.protectedWords(in: terms)
+        }
+        return MidSentenceCaseNormalizer.normalize(
+            text: text,
+            protectedWords: livePreviewProtectedCasingWords ?? [])
+    }
+
     /// Apply LLM post-processing to transcribed text if enabled.
     /// `fragment`: true for a mid-stream chunk. It adds a fragment-mode instruction to the system
     /// prompt telling the model to preserve boundary capitalization and not to add terminal
@@ -2796,6 +2813,7 @@ class AppState: ObservableObject {
         // Set state immediately so UI updates
         state = .recording(startTime: Date())
         liveTranscription = ""
+        livePreviewProtectedCasingWords = nil
         recordingSessionID = UUID()  // Force SwiftUI state reset
         committedChunks = []
         isLiveTranscriptionRTL = selectedLanguage.isRTL
@@ -2955,7 +2973,7 @@ class AppState: ObservableObject {
                 streamingTranscriber?.start { [weak self] text in
                     Task { @MainActor in
                         if self?.liveTranscriptionEnabled == true {
-                            self?.liveTranscription = text
+                            self?.liveTranscription = self?.normalizeLivePreviewCase(text) ?? text
                         }
                     }
                 }
@@ -3294,6 +3312,7 @@ class AppState: ObservableObject {
         state = .recording(startTime: recordingStart)
         PermissionManager.shared.pausePolling()  // Permissions don't change mid-recording
         liveTranscription = ""
+        livePreviewProtectedCasingWords = nil
         chunkLLMCoordinator.reset()  // Clear any leftover state from previous recording
         recordingSessionID = UUID()
         committedChunks = []
@@ -3375,7 +3394,7 @@ class AppState: ObservableObject {
                 streamingTranscriber?.start { [weak self] text in
                     Task { @MainActor in
                         if self?.liveTranscriptionEnabled == true {
-                            self?.liveTranscription = text
+                            self?.liveTranscription = self?.normalizeLivePreviewCase(text) ?? text
                         }
                     }
                 }

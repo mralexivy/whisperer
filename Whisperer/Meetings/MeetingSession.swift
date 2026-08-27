@@ -162,13 +162,20 @@ class MeetingSession: ObservableObject {
 
     /// Mid-stream pass: every utterance as it arrives, and the live tail.
     ///
-    /// Behind `PolishFeatureFlags` while it is experimental. Meetings shipped with no polishing at
-    /// all, so "off" here means returning the argument untouched — not a reduced pass.
+    /// The broader editor remains behind `PolishFeatureFlags` while it is experimental. The live
+    /// casing repair is always on: it fixes a decoder display artifact and changes no wording.
     private func polishUtterance(_ text: String) -> String {
-        guard PolishFeatureFlags.isFastPolishEnabled else { return text }
         if utteranceEditor == nil { makeEditors() }
-        guard let editor = utteranceEditor else { return text }
-        let polished = editor.polish(text: text).text
+        let polished: String
+        if PolishFeatureFlags.isFastPolishEnabled, let editor = utteranceEditor {
+            polished = editor.polish(text: text).text
+        } else {
+            // Preview casing is a display repair, not the optional full polish feature. Meetings
+            // with Fast Polish disabled must not keep the decoder's random interior capitals.
+            polished = MidSentenceCaseNormalizer.normalize(
+                text: text,
+                protectedWords: utteranceEditor?.casingProtectedWords ?? [])
+        }
         // An empty render would mean the editor deleted an entire utterance — it has no rule that
         // can, but dropping speech is the one failure worth a guard rather than a test.
         return polished.isEmpty ? text : polished
@@ -1102,4 +1109,3 @@ class MeetingSession: ObservableObject {
         return String(format: "%d:%02d", m, s)
     }
 }
-

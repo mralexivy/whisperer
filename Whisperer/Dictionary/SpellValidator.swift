@@ -13,13 +13,17 @@ final class SpellValidator: @unchecked Sendable {
     static let shared = SpellValidator()
 
     private let tag: Int
+    private let availableLanguages: [String]
     private var cache: [String: Bool] = [:]
     private var order: [String] = []
+    private var multilingualCache: [String: Bool] = [:]
+    private var multilingualOrder: [String] = []
     private let maxCache = 10_000
     private let lock = NSLock()
 
     private init() {
         self.tag = NSSpellChecker.uniqueSpellDocumentTag()
+        self.availableLanguages = NSSpellChecker.shared.availableLanguages
     }
 
     // Note: No deinit needed - this is a singleton that lives for the app's lifetime.
@@ -94,6 +98,55 @@ final class SpellValidator: @unchecked Sendable {
         return isValid
     }
 
+    /// Whether the lowercase spelling is an ordinary word in any detected transcript language.
+    ///
+    /// This is separate from the English correction cache above: the same letters can be valid in
+    /// one language and invalid in another, so a word-only cache would leak an English decision
+    /// into a Spanish or German preview. Callers pass only languages inferred for this transcript;
+    /// checking every installed dictionary would turn coincidental cross-language matches into
+    /// false evidence.
+    func isKnownWord(_ word: String, languages: [String]) -> Bool {
+        let lowered = word.lowercased()
+        guard lowered.count > 1, lowered.allSatisfy(\.isLetter) else { return false }
+
+        for language in languages {
+            let key = language + "\u{0}" + lowered
+            lock.lock()
+            let cached = multilingualCache[key]
+            lock.unlock()
+            if let cached {
+                if cached { return true }
+                continue
+            }
+
+            var wordCount = 0
+            let misspelled = NSSpellChecker.shared.checkSpelling(
+                of: lowered,
+                startingAt: 0,
+                language: language,
+                wrap: false,
+                inSpellDocumentWithTag: tag,
+                wordCount: &wordCount)
+            let isKnown = misspelled.location == NSNotFound
+            rememberMultilingual(key, isKnown)
+            if isKnown { return true }
+        }
+        return false
+    }
+
+    /// Resolve NaturalLanguage's base codes (`pt`, `en`) to installed spell dictionaries
+    /// (`pt_PT`/`pt_BR`, `en`). Exact matches win; regional variants are all retained because a
+    /// transcript does not expose the speaker's region reliably.
+    func supportedLanguages(for languageCodes: [String]) -> [String] {
+        var resolved: [String] = []
+        for code in languageCodes {
+            if availableLanguages.contains(code) { resolved.append(code) }
+            resolved += availableLanguages.filter { $0.hasPrefix(code + "_") }
+        }
+        var seen: Set<String> = []
+        return resolved.filter { seen.insert($0).inserted }
+    }
+
     /// Check if word contains only Latin ASCII letters
     func isLatinWord(_ word: String) -> Bool {
         word.unicodeScalars.allSatisfy { $0.isASCII && CharacterSet.letters.contains($0) }
@@ -113,11 +166,23 @@ final class SpellValidator: @unchecked Sendable {
         }
     }
 
+    private func rememberMultilingual(_ key: String, _ value: Bool) {
+        lock.lock()
+        defer { lock.unlock() }
+        multilingualCache[key] = value
+        multilingualOrder.append(key)
+        if multilingualOrder.count > maxCache {
+            multilingualCache.removeValue(forKey: multilingualOrder.removeFirst())
+        }
+    }
+
     /// Clear the cache (useful for testing)
     func clearCache() {
         lock.lock()
         defer { lock.unlock() }
         cache.removeAll()
         order.removeAll()
+        multilingualCache.removeAll()
+        multilingualOrder.removeAll()
     }
 }

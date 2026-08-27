@@ -40,6 +40,8 @@ struct DeterministicPolisher: Sendable {
     let gate: ConfidenceGate
     /// User dictionary terms, hard-protected so no later pass can undo a correction the user made.
     let dictionaryTerms: Set<String>
+    /// Cased components of those terms, compiled once rather than split on every live hypothesis.
+    let casingProtectedWords: Set<String>
     /// Whether to run `ListFormatter` on the rendered text. Off for mid-stream chunks, where an
     /// enumeration may straddle the cut.
     let formatsLists: Bool
@@ -76,6 +78,7 @@ struct DeterministicPolisher: Sendable {
         self.aliases = aliases
         self.gate = gate
         self.dictionaryTerms = dictionaryTerms
+        self.casingProtectedWords = MidSentenceCaseNormalizer.protectedWords(in: dictionaryTerms)
         self.formatsLists = formatsLists
         self.isFragment = isFragment
         self.terminatesUtteranceEnd = terminatesUtteranceEnd
@@ -116,7 +119,15 @@ struct DeterministicPolisher: Sendable {
                                          terminatesEnd: !isFragment && terminatesUtteranceEnd),
             to: &working)
 
-        // 6. Sentence structure, after the text has settled: casing reads the sentence openings
+        // 6. Remove decoder-added title case before adding the capitals sentence structure does
+        //    require. Running in this order means a genuine opening can never be lowered, while
+        //    the next pass can still repair an ASR-lowercased opening.
+        applied += gate.apply(
+            MidSentenceCaseNormalizer.proposals(for: working,
+                                                protectedWords: casingProtectedWords),
+            to: &working)
+
+        // 7. Sentence structure, after the text has settled: casing reads the sentence openings
         //    and paragraph breaks read the gaps between them, and both would be computed against
         //    the wrong tokens if a filler deletion were still pending.
         applied += gate.apply(
@@ -127,7 +138,7 @@ struct DeterministicPolisher: Sendable {
                                   to: &working)
         }
 
-        // 7. Structure last, on text. `ListFormatter` rewrites line by line and reorders nothing,
+        // 8. Structure last, on text. `ListFormatter` rewrites line by line and reorders nothing,
         //    so it has no token-level representation to preserve.
         let rendered = working.render()
         let text = formatsLists ? ListFormatter.format(rendered) : rendered
