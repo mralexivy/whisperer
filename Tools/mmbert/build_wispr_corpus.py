@@ -436,7 +436,7 @@ def wispr_align_pair(
         tgt_repl=tgt_repl,
         tgt_merge=tgt_merge,
         tgt_para=tgt_para,
-        tgt_dest=dest,
+        dest=dest,
     )
     return ex, mask_counts, expressible, total_ops_count
 

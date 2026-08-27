@@ -554,8 +554,8 @@ class Corruptor:
 
             sent_start = mark in (".", "?", "!", "…")
 
-        return build_example(in_words, tp, tc, td, ta, tr, tm, tpa,
-                             self.script, source)
+        return build_example(in_words, tp, tc, td, self.script, source,
+                             tgt_append=ta, tgt_repl=tr, tgt_merge=tm, tgt_para=tpa)
 
 
 # =========================================================================
