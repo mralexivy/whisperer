@@ -133,14 +133,19 @@ final class MMBERTCoreMLRuntime: TextEditingModelRuntime, @unchecked Sendable {
         if let bundled = Bundle.main.url(forResource: "MMBERTEditing_32", withExtension: "mlmodelc") {
             return bundled.deletingLastPathComponent()
         }
-        let development = URL(fileURLWithPath: #filePath)
+        let artifacts = URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent()      // Editing
             .deletingLastPathComponent()      // Transcription
             .deletingLastPathComponent()      // Whisperer
             .deletingLastPathComponent()      // repository root
             .appendingPathComponent("Tools/mmbert/artifacts")
-        let probe = development.appendingPathComponent("MMBERTEditing_32.mlpackage")
-        return FileManager.default.fileExists(atPath: probe.path) ? development : nil
+        // Prefer the latest versioned model package.
+        let wispr = artifacts.appendingPathComponent("mmbert-wispr.mlpackage")
+        if FileManager.default.fileExists(atPath: wispr.appendingPathComponent("MMBERTEditing_32.mlpackage").path) {
+            return wispr
+        }
+        let probe = artifacts.appendingPathComponent("MMBERTEditing_32.mlpackage")
+        return FileManager.default.fileExists(atPath: probe.path) ? artifacts : nil
     }
 
     /// `nil` when no weights are on disk. Callers keep `StubEditingRuntime` in that case rather

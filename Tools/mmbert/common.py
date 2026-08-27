@@ -58,6 +58,7 @@ APPEND_VOCAB = ["NONE","the","a","is","are","an","to","in","of","that","it",
   "back","people","well","know","want"]
 N_APPEND = len(APPEND_VOCAB)  # 101
 APPEND2ID = {w: i for i, w in enumerate(APPEND_VOCAB)}
+APPEND_LABELS = APPEND_VOCAB  # alias used by calibrate.py
 
 # --- G-transform vocab ---
 GTRANSFORMS = ["NONE","PLURAL","SINGULAR","VERB_3SG","VERB_PAST","VERB_ING","CONTRACT","EXPAND"]
@@ -75,6 +76,7 @@ N_REPL_LITERALS = len(REPL_LITERALS)
 REPL_VOCAB: List[str] = GTRANSFORMS + REPL_LITERALS
 N_REPL = len(REPL_VOCAB)  # 8 + up to 150 = up to 158
 REPL2ID = {w: i for i, w in enumerate(REPL_VOCAB)}
+REPL_LABELS = REPL_VOCAB  # alias used by calibrate.py
 
 # --- Merge vocab ---
 MERGE_LABELS = ["NONE","MERGE_SPACE","MERGE_HYPHEN","SPLIT"]
