@@ -117,19 +117,25 @@ def main() -> None:
         print(f"\n===== shape {L} =====", flush=True)
         ids = torch.randint(5, 200000, (1, L), dtype=torch.int32)
         mask = torch.ones(1, L, dtype=torch.int32)
+        dest_id = torch.zeros(1, dtype=torch.int32)
 
         with torch.no_grad():
-            ref = wrapper(ids, mask)
-        traced = torch.jit.trace(wrapper, (ids, mask), strict=False)
+            ref = wrapper(ids, mask, dest_id)
+        traced = torch.jit.trace(wrapper, (ids, mask, dest_id), strict=False)
 
         mlmodel = ct.convert(
             traced,
             inputs=[ct.TensorType(name="input_ids", shape=(1, L), dtype=np.int32),
-                    ct.TensorType(name="attention_mask", shape=(1, L), dtype=np.int32)],
+                    ct.TensorType(name="attention_mask", shape=(1, L), dtype=np.int32),
+                    ct.TensorType(name="destination_id", shape=(1,), dtype=np.int32)],
             outputs=[ct.TensorType(name="error_logits"),
                      ct.TensorType(name="punct_logits"),
                      ct.TensorType(name="case_logits"),
-                     ct.TensorType(name="disf_logits")],
+                     ct.TensorType(name="disf_logits"),
+                     ct.TensorType(name="append_logits"),
+                     ct.TensorType(name="repl_logits"),
+                     ct.TensorType(name="merge_logits"),
+                     ct.TensorType(name="para_logits")],
             convert_to="mlprogram",
             compute_precision=ct.precision.FLOAT16,
             minimum_deployment_target=ct.target.macOS14,
@@ -150,14 +156,16 @@ def main() -> None:
 
         # ---- numerical check against PyTorch ----
         feed = {"input_ids": ids.numpy().astype(np.int32),
-                "attention_mask": mask.numpy().astype(np.int32)}
+                "attention_mask": mask.numpy().astype(np.int32),
+                "destination_id": np.zeros(1, dtype=np.int32)}
         try:
             loaded = ct.models.MLModel(str(path),
                                        compute_units=ct.ComputeUnit.ALL)
             pred = loaded.predict(feed)
             errs = {}
             for name, t in zip(["error_logits", "punct_logits", "case_logits",
-                                "disf_logits"], ref):
+                                 "disf_logits", "append_logits", "repl_logits",
+                                 "merge_logits", "para_logits"], ref):
                 a = np.asarray(pred[name]).reshape(t.shape)
                 errs[name] = float(np.abs(a - t.numpy()).max())
             print("[check] max abs logit delta vs PyTorch:", errs, flush=True)

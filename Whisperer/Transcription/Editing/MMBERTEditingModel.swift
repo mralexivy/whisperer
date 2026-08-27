@@ -106,43 +106,70 @@ struct MMBERTEditingModel: EditingModel {
         let candidates = tokens.filter { $0.kind != .whitespace }
         guard !candidates.isEmpty else { return [] }
 
+        var allEdits: [TranscriptEdit] = []
+        var editedTexts: [TokenID: String] = [:]  // tracks tokens modified in pass 1
+
+        for pass in 0..<2 {
+            let passEdits = try? await singlePass(candidates, editedTexts: editedTexts, context: context)
+            guard let passEdits, !passEdits.isEmpty else { break }
+            // On pass 2, skip tokens already edited (append/repl only fire once per token).
+            let newEdits = pass == 0 ? passEdits : passEdits.filter { !editedTexts.keys.contains($0.target) }
+            guard !newEdits.isEmpty else { break }
+            allEdits.append(contentsOf: newEdits)
+            // Track what was edited for next pass.
+            for edit in newEdits {
+                if case .replace(let text) = edit.operation { editedTexts[edit.target] = text }
+                if case .insertAfter(_) = edit.operation { editedTexts[edit.target] = "" }
+            }
+            // Para/structural edits don't need a second pass.
+            if pass == 0 && newEdits.allSatisfy({ isPunct($0) || isPara($0) }) { break }
+        }
+
+        if !allEdits.isEmpty {
+            Logger.debug("Editor model: \(allEdits.count) edits over \(candidates.count) tokens",
+                         subsystem: .transcription)
+        }
+        return allEdits
+    }
+
+    private func singlePass(_ candidates: [TranscriptToken],
+                             editedTexts: [TokenID: String],
+                             context: EditContext) async throws -> [TranscriptEdit] {
         var edits: [TranscriptEdit] = []
         let window = EditingSequenceShape.long.rawValue
         var start = 0
 
         while start < candidates.count {
             let slice = Array(candidates[start..<min(start + window, candidates.count)])
-            do {
-                let output = try await runtime.encode(slice.map(\.effectiveText))
-                guard output.tokens.count == slice.count else {
-                    // A runtime that returns a different number of positions than it was given
-                    // has lost the alignment, and an edit applied to the wrong token is worse
-                    // than no edit. Abandon the whole pass rather than the current window.
-                    Logger.error("Editing runtime returned \(output.tokens.count) positions for "
-                                 + "\(slice.count) tokens", subsystem: .transcription)
-                    return []
+            let output = try await runtime.encode(slice.map(\.effectiveText))
+            guard output.tokens.count == slice.count else {
+                // A runtime that returns a different number of positions than it was given
+                // has lost the alignment, and an edit applied to the wrong token is worse
+                // than no edit. Abandon the whole pass rather than the current window.
+                Logger.error("Editing runtime returned \(output.tokens.count) positions for "
+                             + "\(slice.count) tokens", subsystem: .transcription)
+                return []
+            }
+            for (token, logits) in zip(slice, output.tokens) {
+                if let edit = proposal(for: token,
+                                       logits: logits,
+                                       language: context.language?.rawValue) {
+                    edits.append(edit)
                 }
-                for (token, logits) in zip(slice, output.tokens) {
-                    if let edit = proposal(for: token,
-                                           logits: logits,
-                                           language: context.language?.rawValue) {
-                        edits.append(edit)
-                    }
-                }
-            } catch {
-                Logger.warning("Editing runtime failed: \(error.localizedDescription)",
-                               subsystem: .transcription)
-                return edits
             }
             start += window
         }
-
-        if !edits.isEmpty {
-            Logger.debug("Editor model: \(edits.count) candidate edits over "
-                         + "\(candidates.count) tokens (\(context.capabilities.tierLabel) tier)",
-                         subsystem: .transcription)
-        }
         return edits
+    }
+
+    private func isPunct(_ edit: TranscriptEdit) -> Bool {
+        if case .insertAfter(let s) = edit.operation { return ".,?!;:".contains(s) }
+        return false
+    }
+
+    private func isPara(_ edit: TranscriptEdit) -> Bool {
+        if case .insertAfter(let s) = edit.operation { return s.hasPrefix("\n") }
+        return false
     }
 
     // MARK: - Tagging policy
@@ -245,16 +272,34 @@ struct MMBERTEditingModel: EditingModel {
                           certified: rule.certified)
 
         case .insertAfter:
-            guard let head = logits.values(for: .punctuation) else { return nil }
-            let probabilities = Self.softmax(head)
-            guard let index = Self.argmax(probabilities),
-                  let mark = EditingPunctuationLabel(rawValue: index)?.mark,
-                  let rule = requirement(.punct, mark, language),
-                  probabilities[index] >= rule.floor else { return nil }
-            return Action(operation: .insertAfter(mark),
-                          probability: probabilities[index],
-                          description: "insert '\(mark)' after '\(token.effectiveText)'",
-                          certified: rule.certified)
+            // First try the punctuation head.
+            if let head = logits.values(for: .punctuation) {
+                let probabilities = Self.softmax(head)
+                if let index = Self.argmax(probabilities),
+                   let mark = EditingPunctuationLabel(rawValue: index)?.mark,
+                   let rule = requirement(.punct, mark, language),
+                   probabilities[index] >= rule.floor {
+                    return Action(operation: .insertAfter(mark),
+                                  probability: probabilities[index],
+                                  description: "insert '\(mark)' after '\(token.effectiveText)'",
+                                  certified: rule.certified)
+                }
+            }
+            // Try the para head (surfaced via the .structure slot) for paragraph breaks.
+            if let structureVals = logits.values(for: .structure) {
+                let structureProbs = Self.softmax(structureVals)
+                let breakProb = structureProbs.count > 1 ? structureProbs[1] : 0
+                if let rule = requirement(.para, "PARA_BREAK", language), breakProb >= rule.floor {
+                    return Action(operation: .insertAfter("\n\n"),
+                                  probability: breakProb,
+                                  description: "paragraph break after '\(token.effectiveText)'",
+                                  certified: rule.certified)
+                }
+            }
+            // TODO: word-level append (selecting WHICH word to insert) requires the raw
+            // append logits to be carried through synthesis. For v1, when the punctuation
+            // head says NONE and there is no para break, punt.
+            return nil
 
         case .replace:
             // The only replacement a tagger without an output vocabulary can make is a case
@@ -366,12 +411,19 @@ private extension EditingCasingLabel {
 /// fails if the literal is ever more permissive than the file it claims to mirror.
 struct MMBERTCalibrationTable: Sendable {
 
-    /// The four heads `calibrate.py` reports. Spelled as the JSON spells them.
+    /// The heads `calibrate.py` reports. Spelled as the JSON spells them.
+    /// The first four (error, punct, casing, disf) are measured; the remaining four
+    /// (append, repl, merge, para) are new and unmeasured — absent from the table,
+    /// so proposals from them are capped below every gate floor.
     enum Head: String, Sendable, CaseIterable {
         case error
         case punct
         case casing = "case"
         case disf
+        case append      // word insertion from APPEND_VOCAB
+        case repl        // word replacement (g-transform or literal)
+        case merge       // compound merge or split
+        case para        // paragraph break / list item
     }
 
     struct Cell: Sendable, Equatable {

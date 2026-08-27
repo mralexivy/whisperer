@@ -428,6 +428,10 @@ final class MMBERTCoreMLRuntime: TextEditingModelRuntime, @unchecked Sendable {
         let punctuation: [Float]
         let casing: [Float]
         let disfluency: [Float]
+        let append: [Float]      // APPEND_VOCAB logits (101); empty on old 4-head models
+        let repl: [Float]        // g-transform + literal repl logits (158); empty on old 4-head models
+        let merge: [Float]       // NONE/MERGE_SPACE/MERGE_HYPHEN/SPLIT (4); empty on old 4-head models
+        let para: [Float]        // NONE/PARA_BREAK/LIST_ITEM (3); empty on old 4-head models
     }
 
     /// Raw four-head logits per word, keyed to the words `group(_:)` derives from `pieces`.
@@ -456,6 +460,7 @@ final class MMBERTCoreMLRuntime: TextEditingModelRuntime, @unchecked Sendable {
                 let to = offset + 1 < batch.count ? batch.firstSubword[offset + 1] - 1 : batch.ids.count
                 result.append((groups[start + offset].raw, Array(batch.ids[from..<to]), heads))
             }
+
             start += batch.count
         }
         return result
@@ -474,9 +479,14 @@ final class MMBERTCoreMLRuntime: TextEditingModelRuntime, @unchecked Sendable {
             mask[position] = NSNumber(value: Int32(inside ? 1 : 0))
         }
 
+        // TODO: pass the real destination through encode() once the caller knows it; for now
+        // hardcode 0 (unknown destination) so the model graph accepts the input shape.
+        let destArray = try MLMultiArray(shape: [1], dataType: .int32)
+        destArray[0] = 0
         let input = try MLDictionaryFeatureProvider(dictionary: [
             "input_ids": MLFeatureValue(multiArray: ids),
             "attention_mask": MLFeatureValue(multiArray: mask),
+            "destination_id": MLFeatureValue(multiArray: destArray),
         ])
         let prediction = try model.prediction(from: input)
 
@@ -487,13 +497,26 @@ final class MMBERTCoreMLRuntime: TextEditingModelRuntime, @unchecked Sendable {
             throw EditingRuntimeError.notLoaded
         }
 
+        // New heads — absent in the current 4-head model. Use empty arrays as the sentinel so
+        // `synthesize` can distinguish "no data" from "model said zero" and contribute nothing
+        // to the operation synthesis rather than inflating it with uniform-softmax noise.
+        let appendArray = prediction.featureValue(for: "append_logits")?.multiArrayValue
+        let replArray = prediction.featureValue(for: "repl_logits")?.multiArrayValue
+        let mergeArray = prediction.featureValue(for: "merge_logits")?.multiArrayValue
+        let paraArray = prediction.featureValue(for: "para_logits")?.multiArrayValue
+        let hasNewHeads = appendArray != nil && replArray != nil && mergeArray != nil && paraArray != nil
+
         return (0..<batch.count).map { word in
             let position = batch.firstSubword[word]
             return RawWordHeads(
                 error: row(error, at: position, width: 2),
                 punctuation: row(punct, at: position, width: trainedPunctuation.count),
                 casing: row(casing, at: position, width: TrainedCase.allCases.count),
-                disfluency: row(disfluency, at: position, width: 2))
+                disfluency: row(disfluency, at: position, width: 2),
+                append: hasNewHeads ? row(appendArray!, at: position, width: 101) : [],
+                repl: hasNewHeads ? row(replArray!, at: position, width: 158) : [],
+                merge: hasNewHeads ? row(mergeArray!, at: position, width: 4) : [],
+                para: hasNewHeads ? row(paraArray!, at: position, width: 3) : [])
         }
     }
 
@@ -555,28 +578,55 @@ final class MMBERTCoreMLRuntime: TextEditingModelRuntime, @unchecked Sendable {
             casingProbabilities[EditingCasingLabel.keep.rawValue] = 1
         }
 
-        // --- operation: the three action heads treated as independent ---
+        // --- append (word insertion): P(insert any word) = 1 - P(NONE). Empty = no signal. ---
+        let wordInsertProb: Float = raw.append.isEmpty ? 0
+            : 1.0 - MMBERTEditingModel.softmax(raw.append)[0]
+
+        // --- repl (word replacement): P(replace with anything) = 1 - P(NONE). Empty = no signal. ---
+        let wordReplProb: Float = raw.repl.isEmpty ? 0
+            : 1.0 - MMBERTEditingModel.softmax(raw.repl)[0]
+
+        // --- para (structure signal): NONE=0, PARA_BREAK=1, LIST_ITEM=2 → .structure slot ---
+        // Empty raw.para means old 4-head model — omit the structure head entirely so an absent
+        // model opinion cannot veto (the design intent from the header).
+        var structureLogits: [Float]? = nil
+        if !raw.para.isEmpty {
+            let paraProbs = MMBERTEditingModel.softmax(raw.para)
+            var sl = [Float](repeating: logf(1e-9), count: 2)  // [noBreak, break]
+            sl[0] = logf(max(paraProbs[0], 1e-9))
+            let breakMass = paraProbs.count > 2 ? paraProbs[1] + paraProbs[2]
+                          : paraProbs.count > 1 ? paraProbs[1] : 0
+            sl[1] = logf(max(breakMass, 1e-9))
+            structureLogits = sl
+        }
+
+        // --- operation: the four action heads treated as independent ---
         //
         // Independence is an assumption and it is the conservative one here: it makes P(keep) the
-        // product of three no-change probabilities, so any one head being unsure pulls the whole
+        // product of four no-change probabilities, so any one head being unsure pulls the whole
         // token toward KEEP. A joint operation head would need joint supervision, which this
         // corpus does not carry.
         let deletion = disfluencyProbabilities[EditingDisfluencyLabel.drop.rawValue]
         let insertion = 1 - punctuationProbabilities[EditingPunctuationLabel.none.rawValue]
         let replacement = 1 - casingProbabilities[EditingCasingLabel.keep.rawValue]
-        let keep = punctuationProbabilities[EditingPunctuationLabel.none.rawValue]
-            * casingProbabilities[EditingCasingLabel.keep.rawValue]
-            * (1 - deletion)
-        let operation = normalized([keep, replacement, deletion, insertion])
+        // New heads raise the ceiling; take the max so old models are unaffected.
+        let totalInsertion = max(insertion, wordInsertProb)
+        let totalReplacement = max(replacement, wordReplProb)
+        let keep = (1.0 - totalInsertion) * (1.0 - totalReplacement) * (1.0 - deletion)
+        let operation = normalized([keep, totalReplacement, deletion, totalInsertion])
 
-        return EditingTokenLogits(logits: [
+        var logitsDict: [EditingHead: [Float]] = [
             .error: logs(errorProbabilities),
             .operation: logs(operation),
             .punctuation: logs(punctuationProbabilities),
             .casing: logs(casingProbabilities),
             .disfluency: logs(disfluencyProbabilities),
-            // structure / language / semanticRisk: not trained, therefore not emitted. See header.
-        ])
+            // language / semanticRisk: not trained, therefore not emitted. See header.
+        ]
+        if let sl = structureLogits {
+            logitsDict[.structure] = sl
+        }
+        return EditingTokenLogits(logits: logitsDict)
     }
 
     private static func normalized(_ values: [Float]) -> [Float] {

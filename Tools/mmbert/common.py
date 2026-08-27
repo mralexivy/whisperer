@@ -4,10 +4,14 @@ Shared primitives for the mmBERT transcript-polishing edit tagger.
 Label scheme (GECToR-style, one label set per head, emitted on the FIRST subword
 of each whitespace word; all other subwords are masked with -100):
 
-  error : binary  {0 = no change needed, 1 = this word needs some edit}
-  punct : 9-way   absolute TARGET trailing punctuation for this word
-  case  : 4-way   absolute TARGET casing for this word's alphabetic core
-  disf  : binary  {0 = keep the word, 1 = delete it (filler / repetition)}
+  error  : binary  {0 = no change needed, 1 = this word needs some edit}
+  punct  : 9-way   absolute TARGET trailing punctuation for this word
+  case   : 3-way   absolute TARGET casing for this word's alphabetic core
+  disf   : binary  {0 = keep the word, 1 = delete it (filler / repetition)}
+  append : 101-way absolute TARGET word to append after this word (0 = NONE)
+  repl   : N_REPL-way replacement transform or literal (0 = NONE)
+  merge  : 4-way   merge/split operation between this word and the next
+  para   : 3-way   paragraph / list-item break after this word
 
 `punct` and `case` are ABSOLUTE targets, not deltas. The edit that actually gets
 applied at inference is `predicted_state != current_state_of_the_input_word`, so
@@ -18,9 +22,11 @@ that equals the input's current state (see train.py / MMBERTEditingModel).
 
 from __future__ import annotations
 
+import json
 import re
 import unicodedata
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import List, Optional, Sequence, Tuple
 
 # --------------------------------------------------------------------------
@@ -40,9 +46,78 @@ N_DISF = 2
 
 IGNORE = -100
 
+# --- Append vocab ---
+APPEND_VOCAB = ["NONE","the","a","is","are","an","to","in","of","that","it",
+  "not","for","on","you","was","with","at","this","have","we","they","or","be",
+  "as","but","by","can","had","his","from","she","what","their","do","which",
+  "one","would","all","there","some","been","also","its","so","my","when","more",
+  "up","no","if","out","about","who","get","your","said","could","them","into",
+  "just","then","our","will","has","like","than","other","how","may","two",
+  "these","should","her","him","any","were","now","here","over","time","first",
+  "very","need","make","see","way","use","does","only","new","because","going",
+  "back","people","well","know","want"]
+N_APPEND = len(APPEND_VOCAB)  # 101
+APPEND2ID = {w: i for i, w in enumerate(APPEND_VOCAB)}
+
+# --- G-transform vocab ---
+GTRANSFORMS = ["NONE","PLURAL","SINGULAR","VERB_3SG","VERB_PAST","VERB_ING","CONTRACT","EXPAND"]
+N_GTRANSFORM = len(GTRANSFORMS)  # 8
+
+# --- Replacement vocab: g-transforms + literal replacements from data/repl_vocab.json ---
+_REPL_VOCAB_PATH = Path(__file__).parent / "data" / "repl_vocab.json"
+try:
+    with _REPL_VOCAB_PATH.open() as _f:
+        REPL_LITERALS: List[str] = json.load(_f)[:150]
+except FileNotFoundError:
+    REPL_LITERALS = []
+
+N_REPL_LITERALS = len(REPL_LITERALS)
+REPL_VOCAB: List[str] = GTRANSFORMS + REPL_LITERALS
+N_REPL = len(REPL_VOCAB)  # 8 + up to 150 = up to 158
+
+# --- Merge vocab ---
+MERGE_LABELS = ["NONE","MERGE_SPACE","MERGE_HYPHEN","SPLIT"]
+N_MERGE = len(MERGE_LABELS)  # 4
+MERGE2ID = {m: i for i, m in enumerate(MERGE_LABELS)}
+
+# --- Paragraph vocab ---
+PARA_LABELS = ["NONE","PARA_BREAK","LIST_ITEM"]
+N_PARA = len(PARA_LABELS)  # 3
+PARA2ID = {p: i for i, p in enumerate(PARA_LABELS)}
+
+# --- Destination conditioning ---
+DEST_CLASSES = ["unknown","editor","chat","browser","messaging"]
+N_DEST = len(DEST_CLASSES)  # 5
+DEST2ID = {d: i for i, d in enumerate(DEST_CLASSES)}
+BUNDLE_TO_DEST = {
+    "com.microsoft.VSCode": "editor",
+    "com.todesktop.230313mzl4w4u92": "editor",
+    "com.sublimetext.4": "editor",
+    "com.google.Chrome": "browser",
+    "org.mozilla.firefox": "browser",
+    "com.apple.Safari": "browser",
+    "com.tinyspeck.slackmacgap": "messaging",
+    "ru.keepcoder.Telegram": "messaging",
+    "com.anthropic.claudefordesktop": "chat",
+    "com.openai.chat": "chat",
+}
+
+# --- Head registry ---
+HEADS = ["error","punct","case","disf","append","repl","merge","para"]
+HEAD_SIZES = {
+    "error": N_ERROR,
+    "punct": N_PUNCT,
+    "case": N_CASE,
+    "disf": N_DISF,
+    "append": N_APPEND,
+    "repl": N_REPL,
+    "merge": N_MERGE,
+    "para": N_PARA,
+}
+
 # Trailing characters we treat as "punctuation attached to the previous word".
 _TRAIL = ".,?!;:…—-–"
-_QUOTES = "\"'“”’»«)]}"
+_QUOTES = "\"'""'»«)]}"
 
 
 # --------------------------------------------------------------------------
@@ -187,28 +262,66 @@ class Example:
     error: List[int]                    # 1 = any edit needed, or IGNORE
     script: str
     source: str                         # 'wiki' | 'golden' | 'teacher' | 'db'
+    append: List[int] = field(default_factory=list)   # target append id per word, or IGNORE
+    repl: List[int] = field(default_factory=list)     # target repl id per word, or IGNORE
+    merge: List[int] = field(default_factory=list)    # target merge id per word, or IGNORE
+    para: List[int] = field(default_factory=list)     # target para id per word, or IGNORE
+    dest: int = 0                                     # destination class id
+
+    def __post_init__(self):
+        n = len(self.words)
+        if not self.append:
+            self.append = [IGNORE] * n
+        if not self.repl:
+            self.repl = [IGNORE] * n
+        if not self.merge:
+            self.merge = [IGNORE] * n
+        if not self.para:
+            self.para = [IGNORE] * n
 
     def to_json(self) -> dict:
         return {
             "words": self.words, "punct": self.punct, "case": self.case,
             "disf": self.disf, "error": self.error,
             "script": self.script, "source": self.source,
+            "append": self.append, "repl": self.repl,
+            "merge": self.merge, "para": self.para,
+            "dest": self.dest,
         }
 
     @staticmethod
     def from_json(d: dict) -> "Example":
-        return Example(d["words"], d["punct"], d["case"], d["disf"],
-                       d["error"], d["script"], d["source"])
+        n = len(d["words"])
+        return Example(
+            words=d["words"],
+            punct=d["punct"],
+            case=d["case"],
+            disf=d["disf"],
+            error=d["error"],
+            script=d["script"],
+            source=d["source"],
+            append=d.get("append", [IGNORE] * n),
+            repl=d.get("repl", [IGNORE] * n),
+            merge=d.get("merge", [IGNORE] * n),
+            para=d.get("para", [IGNORE] * n),
+            dest=d.get("dest", 0),
+        )
 
 
 def build_example(input_words: Sequence[Word],
                   tgt_punct: Sequence[int],
                   tgt_case: Sequence[Optional[int]],
                   tgt_delete: Sequence[Optional[bool]],
-                  script: str, source: str) -> Example:
+                  script: str, source: str,
+                  tgt_append: Optional[Sequence[Optional[int]]] = None,
+                  tgt_repl: Optional[Sequence[Optional[int]]] = None,
+                  tgt_merge: Optional[Sequence[Optional[int]]] = None,
+                  tgt_para: Optional[Sequence[Optional[int]]] = None,
+                  dest: int = 0) -> Example:
     """Assemble an Example, masking case labels for uncased scripts."""
     words, punct, case, disf, error = [], [], [], [], []
-    for w, p, c, d in zip(input_words, tgt_punct, tgt_case, tgt_delete):
+    append_labels, repl_labels, merge_labels, para_labels = [], [], [], []
+    for i, (w, p, c, d) in enumerate(zip(input_words, tgt_punct, tgt_case, tgt_delete)):
         words.append(w.raw)
         pl = IGNORE if p is None else p
         # Casing head is a hard no-op for words with no cased characters
@@ -233,16 +346,24 @@ def build_example(input_words: Sequence[Word],
             error.append(IGNORE)
         else:
             error.append(changed)
-    return Example(words, punct, case, disf, error, script, source)
+
+        # New heads — NONE class (0) is the default/no-op.
+        al = IGNORE if (tgt_append is None or tgt_append[i] is None) else tgt_append[i]
+        rl = IGNORE if (tgt_repl is None or tgt_repl[i] is None) else tgt_repl[i]
+        ml = IGNORE if (tgt_merge is None or tgt_merge[i] is None) else tgt_merge[i]
+        pal = IGNORE if (tgt_para is None or tgt_para[i] is None) else tgt_para[i]
+        append_labels.append(al)
+        repl_labels.append(rl)
+        merge_labels.append(ml)
+        para_labels.append(pal)
+
+    return Example(words, punct, case, disf, error, script, source,
+                   append_labels, repl_labels, merge_labels, para_labels, dest)
 
 
 # --------------------------------------------------------------------------
 # Subword encoding
 # --------------------------------------------------------------------------
-
-HEADS = ["error", "punct", "case", "disf"]
-HEAD_SIZES = {"error": N_ERROR, "punct": N_PUNCT, "case": N_CASE, "disf": N_DISF}
-
 
 def encode(example: Example, tokenizer, max_len: int) -> Optional[dict]:
     """Tokenise word-by-word, putting labels on the first subword of each word.
@@ -297,8 +418,107 @@ def encode(example: Example, tokenizer, max_len: int) -> Optional[dict]:
         "word_index": word_index,
         "script": example.script,
         "source": example.source,
+        "dest_id": example.dest,
     }
 
 
 SCRIPTS = ["en", "he", "ru"]
 SCRIPT2ID = {s: i for i, s in enumerate(SCRIPTS)}
+
+
+# --------------------------------------------------------------------------
+# Destination helper
+# --------------------------------------------------------------------------
+
+def bundle_id_to_dest(bundle_id: str) -> int:
+    """Map a macOS bundle ID to a DEST2ID value.
+
+    Checks BUNDLE_TO_DEST for an exact match first, then a prefix match for
+    com.jetbrains (which covers all JetBrains IDEs). Returns DEST2ID['unknown']
+    if nothing matches.
+    """
+    if bundle_id in BUNDLE_TO_DEST:
+        return DEST2ID[BUNDLE_TO_DEST[bundle_id]]
+    if bundle_id.startswith("com.jetbrains"):
+        return DEST2ID["editor"]
+    return DEST2ID["unknown"]
+
+
+# --------------------------------------------------------------------------
+# G-transform helpers
+# --------------------------------------------------------------------------
+
+try:
+    import inflect as _inflect_mod
+    _inflect = _inflect_mod.engine()
+    _INFLECT_AVAILABLE = True
+except ImportError:
+    _inflect = None
+    _INFLECT_AVAILABLE = False
+
+_CONTRACTIONS = {
+    "do not": "don't", "does not": "doesn't", "did not": "didn't",
+    "is not": "isn't", "are not": "aren't", "was not": "wasn't",
+    "were not": "weren't", "have not": "haven't", "has not": "hasn't",
+    "had not": "hadn't", "will not": "won't", "would not": "wouldn't",
+    "can not": "can't", "cannot": "can't", "could not": "couldn't",
+    "should not": "shouldn't", "I am": "I'm", "you are": "you're",
+    "he is": "he's", "she is": "she's", "it is": "it's",
+    "we are": "we're", "they are": "they're", "I will": "I'll",
+    "I have": "I've", "I would": "I'd", "I had": "I'd",
+}
+_EXPANSIONS = {
+    "don't": "do not", "doesn't": "does not", "didn't": "did not",
+    "isn't": "is not", "aren't": "are not", "wasn't": "was not",
+    "weren't": "were not", "haven't": "have not", "hasn't": "has not",
+    "hadn't": "had not", "won't": "will not", "wouldn't": "would not",
+    "can't": "cannot", "couldn't": "could not", "shouldn't": "should not",
+    "I'm": "I am", "you're": "you are", "he's": "he is", "she's": "she is",
+    "it's": "it is", "we're": "we are", "they're": "they are",
+    "I'll": "I will", "I've": "I have", "I'd": "I would",
+    "'ve": "have", "'re": "are", "'ll": "will", "'m": "am",
+}
+
+
+def apply_gtransform(word: str, transform: str) -> Optional[str]:
+    """Apply a g-transform to a word. Returns None if not applicable."""
+    w = word.strip(".,!?;:\"'")
+    if transform == "PLURAL":
+        if not _INFLECT_AVAILABLE:
+            return None
+        r = _inflect.plural(w)
+        return r if r and r != w else None
+    if transform == "SINGULAR":
+        if not _INFLECT_AVAILABLE:
+            return None
+        r = _inflect.singular_noun(w)
+        return r if r and r != w else None
+    if transform == "VERB_3SG":
+        if w.endswith(('s', 'x', 'z', 'ch', 'sh')):
+            r = w + "es"
+        elif w.endswith('y') and len(w) > 1 and w[-2] not in 'aeiou':
+            r = w[:-1] + "ies"
+        else:
+            r = w + "s"
+        return r if r != w else None
+    if transform == "VERB_PAST":
+        if w.endswith('e'):
+            r = w + "d"
+        elif w.endswith('y') and len(w) > 1 and w[-2] not in 'aeiou':
+            r = w[:-1] + "ied"
+        else:
+            r = w + "ed"
+        return r if r != w else None
+    if transform == "VERB_ING":
+        if w.endswith('ie'):
+            r = w[:-2] + "ying"
+        elif w.endswith('e') and len(w) > 1:
+            r = w[:-1] + "ing"
+        else:
+            r = w + "ing"
+        return r if r != w else None
+    if transform == "CONTRACT":
+        return _CONTRACTIONS.get(word)
+    if transform == "EXPAND":
+        return _EXPANSIONS.get(word)
+    return None

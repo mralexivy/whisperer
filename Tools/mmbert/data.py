@@ -61,4 +61,5 @@ def collate(batch, pad_id: int):
         out[f"labels_{h}"] = pad(f"labels_{h}", IGNORE)
     out["script"] = [b["script"] for b in batch]
     out["source"] = [b["source"] for b in batch]
+    out["dest_id"] = torch.tensor([b.get("dest_id", 0) for b in batch], dtype=torch.long)
     return out
