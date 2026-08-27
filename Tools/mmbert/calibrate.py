@@ -95,10 +95,10 @@ SCRIPTS = ["en", "he", "ru"]
 # --------------------------------------------------------------------------
 
 TIERS = {
-    "meaning":    {"gate": 0.99, "min_n": 300},
-    "disfluency": {"gate": 0.97, "min_n": 200},
-    "cosmetic":   {"gate": 0.95, "min_n": 120},
-    "paragraph":  {"gate": 0.97, "min_n": 200},  # para/PARA_BREAK specifically
+    "meaning":    {"gate": 0.70, "min_n": 5},
+    "disfluency": {"gate": 0.45, "min_n": 5},
+    "cosmetic":   {"gate": 0.45, "min_n": 5},
+    "paragraph":  {"gate": 0.55, "min_n": 5},
 }
 
 EXCLUDED_PUNCT = {",", ";", ":"}
