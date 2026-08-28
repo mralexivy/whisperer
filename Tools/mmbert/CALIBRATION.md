@@ -497,3 +497,135 @@ is a re-run rather than a rebuild.
 ### Core ML export
 
 All 3 shapes (32/64/128) exported to `artifacts/mmbert-wispr.mlpackage`. Latency on CPU+NE: p50=2.5ms, p95=3.4ms — well within the 100ms budget. All `MMBERTRuntimeTests` pass against the regenerated Python reference.
+
+---
+
+## 2d. Wispr retrain, second pass — 2026-08-28
+
+**Model: `mmbert-wispr` (8-head, dest-conditioned). Training: 3 epochs, 2500 steps, 17.4 min MPS,
+0 OOM skips. Data: 20,012 train / 179 val. Calibration: `thresholds-calibrated-wispr.json`,
+`--primary pooled_all`.**
+
+Section 2c ended with "para makes zero proposals — the para head is too conservative" and four
+suggested next steps. Two of those turned out to be treating a symptom. This section records
+what the zero actually was, because the same shape of mistake is easy to repeat.
+
+### There were two separate zeros, and only the first one was the model
+
+**Zero #1 — real collapse, in the model.** The `para` head genuinely predicted NONE everywhere.
+Three causes, all fixed:
+
+- `build_meeting_corpus.py` stripped HTML *before* alignment and emitted one example per
+  segment, so a paragraph break — which by definition lives *between* segments — could not
+  exist inside any training example. It passed `para_marks={}` literally. It now keeps the
+  markup, groups consecutive accepted segments into 60–120 word documents, and marks the first
+  word of every non-first segment `PARA_BREAK`. Meeting rows went from 0 to 650 para positives
+  (en 151 / he 350 / ru 149) — the first paragraph supervision Hebrew and Russian have ever had.
+  Corpus-wide the para positive rate went 0.083% → 0.810%.
+- `keep_bias` (the additive prior favouring no-change) applied uniformly to all eight heads. It
+  is now per-head overridable (`keep_bias_by_head`, `--para-keep-bias`), and para trains at 0.0.
+  Old checkpoints load with `{}` and behave exactly as before.
+- The para class weights were capped alongside append/repl/merge. Para is now excluded from that
+  cap and takes `--para-weight 8.0`; the resulting weights are `[0.007, 0.715, 2.277]`.
+
+Post-fix val recall, per head, non-NONE: error 0.644, punct 0.816, case 0.918, disf 0.430,
+append 0.417, repl 0.700, merge 1.000, **para 0.381 (69 proposals against 84 gold edits)**.
+Every head proposes something.
+
+**Zero #2 — not the model at all, the measuring instrument.** Calibration *still* reported all
+24 para cells as `support=0 ... "no proposals at any threshold"`, identically to 2c, on a model
+that demonstrably proposes para.
+
+`--primary` defaulted to `eval_real_large.jsonl`. That split was built before the
+append/repl/merge/para heads existed and carries only `error`/`punct`/`case`/`disf` keys.
+`Example.from_json` fills missing heads with `IGNORE`, and `cell_events` only visits positions
+where the label is not `IGNORE` — so **not one position in the primary split was ever eligible
+for a para, append, repl or merge cell.** Zero was the only number it could print, for any
+model, forever. The 2c row "para | PARA_BREAK | 0 | no proposals" was not a finding.
+
+The fix is `meeting_val.jsonl` as a first-class split (192 held-out grouped documents, 166 para
+positives, en/he/ru) pooled with the other three as `pooled_all`, which is now what
+`run_wispr_retrain.sh` calibrates against. Paragraph breaks only exist inside multi-segment
+documents, and `build_meeting_corpus.py` is the only builder that produces those, so this is the
+only split that can measure the head.
+
+**Lesson, stated plainly:** a cell reading `support=0` means "this split could not answer",
+which is not the same as "the model does nothing". `run_wispr_retrain.sh` step 5b now hard-fails
+the build on any head whose summed `max_support_any_threshold` is zero, and `train.py` prints
+per-head non-NONE gold/pred/recall every epoch with an explicit `<-- COLLAPSED (zero proposals)`
+marker, so both zeros are visible at the moment they happen rather than three runs later.
+
+### Two gating bugs the new data exposed
+
+Both are the same shape: a cell getting a *laxer* gate than the risk of what it does.
+
+- `tier_for()` matched the whole action label, but per-destination cells are named
+  `PARA_BREAK/unknown`. They missed the `PARA_BREAK` arm and fell through to the permissive
+  default, so `he/para/PARA_BREAK/unknown` was **enabled** at the cosmetic 0.45 on LCB95 0.4529
+  while `he/para/PARA_BREAK` — the identical evidence under the correct paragraph tier of 0.55 —
+  was rejected at 0.5438. Slicing a cell more finely must not buy it a weaker gate. The
+  destination suffix is now stripped before tiering.
+- The aggregate (`ALL`) exclusion was written inside the `punct` and `case` arms only, so
+  `para/ALL` reached a real tier and `he/para/ALL` + `ru/para/ALL` came out enabled — a cell that
+  mixes PARA_BREAK with LIST_ITEM, i.e. the paragraph tier averaged with the meaning tier. The
+  exclusion is now global to `tier_for`.
+
+### Result: 8 enabled cells → 15
+
+| cell | tier | thr | P | LCB95 | n | recall |
+|---|---|---|---|---|---|---|
+| en/case/CAP | cosmetic | 0.51 | 0.638 | 0.609 | 779 | 0.640 |
+| en/case/LOWER | cosmetic | 0.30 | 0.824 | 0.761 | 131 | 0.446 |
+| en/disf/DISF | disfluency | 0.52 | 0.499 | 0.454 | 359 | 0.472 |
+| en/error/ERROR | meaning | 0.48 | 0.715 | 0.702 | 3409 | 0.670 |
+| en/punct/. | cosmetic | 0.30 | 0.761 | 0.741 | 1318 | 0.836 |
+| en/punct/? | cosmetic | 0.30 | 0.762 | 0.630 | 42 | 0.653 |
+| en/repl/CONTRACT | cosmetic | 0.78 | 0.875 | 0.529 | 8 | 0.467 |
+| en/repl/VERB_3SG | meaning | 0.964 | 1.000 | 0.762 | 11 | 0.550 |
+| he/disf/DISF | disfluency | 0.65 | 0.645 | 0.482 | 31 | 0.303 |
+| ru/case/CAP | cosmetic | 0.982 | 0.570 | 0.471 | 79 | 0.413 |
+| ru/case/LOWER | cosmetic | 0.30 | 0.900 | 0.606 | 10 | 0.300 |
+| ru/error/ERROR | meaning | 0.94 | 0.754 | 0.705 | 248 | 0.348 |
+| **ru/para/PARA_BREAK** | **paragraph** | **0.9915** | **0.824** | **0.604** | **17** | **0.389** |
+| **ru/para/PARA_BREAK/unknown** | paragraph | 0.9915 | 0.824 | 0.604 | 17 | 0.389 |
+| ru/punct/. | cosmetic | 0.48 | 0.646 | 0.570 | 127 | 0.667 |
+
+Paragraph breaking is certified in Russian and nowhere else. The two cells that did not make it
+are measured and short, not silent:
+
+- `en/para/PARA_BREAK`: best LCB95 0.3203 (P=0.4828, n=29) against the paragraph tier's 0.55.
+- `he/para/PARA_BREAK`: best LCB95 0.5438 (P=0.6829, n=41) — misses 0.55 by 0.006.
+
+`he` is the one to revisit first: it has the most gold (93 edits) and is closest to the gate.
+
+`append` (294 cells, 282 proposals) and `merge` (12 cells, 8 proposals) are measured across the
+board and certify nowhere. That is a real result now rather than an artefact — the head proposes,
+the precision is not there. `append`'s failure mode is unchanged from 2c and diagnostic: it picks
+the insertion *position* far better than the insertion *word*.
+
+### Shipping
+
+`emit_swift_table.py` is new and is now the only supported way to update the baked
+`MMBERTCalibrationTable.measured` literal, which until now was maintained by hand — the exact
+condition its guard test (`EditingModelTests.testBakedTableIsNoLooserThanTheCalibrationFile`)
+exists to catch. `--check` fails on drift.
+
+Core ML re-exported to all three shapes; p95 4.06/12.49/22.57 ms for 128/64/32 against the 100 ms
+budget. `build_swift_reference.py` gained `--mlpackage` and the parity fixture was regenerated
+from the package the app actually bundles — regenerating it from a different export is how 835
+identical assertion failures show up looking like a Swift bug.
+
+Green: `MMBERTRuntimeTests` 5/5, `EditingModelTests` 28/28, and the inert-with-flags-off set
+(`DeterministicPolisherTests`, `PolishInteriorBoundaryTests`, `PolishAuthoredGoldBoundaryTests`,
+`PolishPeriodPrecisionDiagnosticTests`, `ListFormatterMultilingualTests`) 37/37.
+
+### What would move the needle next
+
+1. **Hebrew paragraph breaks** — 0.006 of LCB95 away. More meeting documents, or the same
+   documents grouped at a finer word target, should carry it over.
+2. **English paragraph breaks** — the weak one, at n=29. English para gold lives in the Wispr
+   dictation pairs (19 positives in `wispr_val`), not the meetings; Phase 7's daily export is
+   the supply.
+3. **Mine `repl_vocab.json`** — top-150 literal replacements. Still `N_REPL=8`, g-transforms only.
+   Unchanged from 2c and still the largest untouched lever.
+4. **`append` precision, not `append` volume** — more rows will not fix picking the wrong word.

@@ -136,3 +136,33 @@
     contains its own search term (`gpt → GPT model`) matches its own output, so N occurrences
     produced an N-fold expansion. Deduplicate the word list case-insensitively, matching the
     helper's own case-insensitive search.
+
+22. **`support=0` in a calibration cell means "this split could not answer", not "the model does
+    nothing".** `eval_real_large.jsonl` predates the append/repl/merge/para heads and has no keys
+    for them; `Example.from_json` fills missing heads with `IGNORE` and `cell_events` only visits
+    non-`IGNORE` positions, so with that file as `--primary` every cell of those four heads read
+    `support=0 ... "no proposals at any threshold"` for *any* model, forever. Two retrains were
+    diagnosed off that number. Before believing a head is collapsed, check that the primary split
+    actually carries gold for it — and fail the build when it does not, rather than publishing the
+    zero (`run_wispr_retrain.sh` step 5b).
+
+23. **A cell sliced more finely must not get a laxer gate.** `tier_for()` matched the full action
+    label, so per-destination cells named `PARA_BREAK/unknown` missed the `PARA_BREAK` arm and fell
+    through to the permissive default: `he/para/PARA_BREAK/unknown` was enabled at the cosmetic 0.45
+    on LCB95 0.4529 while the identical evidence under the correct paragraph tier of 0.55 was
+    rejected at 0.5438. Strip slice suffixes before tiering, and make the aggregate-cell exclusion
+    global to the tiering function rather than restating it per head — `para/ALL`, which mixes the
+    paragraph and meaning tiers, was enabled for exactly that reason.
+
+24. **Supervision for a structural label cannot exist inside an example smaller than the
+    structure.** The `para` head saw zero paragraph breaks because the meeting builder emitted one
+    example per segment, and a paragraph break lives *between* segments by definition. Grouping
+    consecutive segments into 60–120 word documents produced 650 positives from the same source
+    data. Before tuning loss weights for a silent head, check that its positive class is
+    representable in the example shape at all.
+
+25. **The Python↔Swift parity fixture is a contract with a specific checkpoint.** Regenerate
+    `mmbert-runtime-reference.json` from the `.mlpackage` `project.pbxproj` actually bundles, in
+    the same change that swaps the model. Regenerating from a different export produces hundreds
+    of numeric assertion failures that all read like a tokenisation or alignment bug in the Swift
+    runtime.
