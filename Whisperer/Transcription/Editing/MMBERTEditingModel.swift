@@ -544,7 +544,7 @@ struct MMBERTCalibrationTable: Sendable {
     /// which mixes synthetically-corrupted text into the denominator and reads ~10 points high on
     /// every cell; `Tools/mmbert/CALIBRATION.md` §2a explains why only the real split may enable.
     ///
-    /// 8 cells enabled as of 2026-08-28 (retrain on Wispr dictation + meeting corpus, en/he/ru).
+    /// 8 cells enabled as of 2026-08-28 (retrain on real dictation + meeting corpus, en/he/ru).
     /// en: error, punct/. punct/? case/LOWER case/CAP. ru: error, punct/. case/CAP.
     /// Flip a cell's `enabled` to `true` here and that class becomes reachable in that language.
     static let measured = MMBERTCalibrationTable(cells: [

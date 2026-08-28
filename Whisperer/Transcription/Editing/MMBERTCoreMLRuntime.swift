@@ -139,10 +139,10 @@ final class MMBERTCoreMLRuntime: TextEditingModelRuntime, @unchecked Sendable {
             .deletingLastPathComponent()      // Whisperer
             .deletingLastPathComponent()      // repository root
             .appendingPathComponent("Tools/mmbert/artifacts")
-        // Prefer the latest versioned model package.
-        let wispr = artifacts.appendingPathComponent("mmbert-wispr.mlpackage")
-        if FileManager.default.fileExists(atPath: wispr.appendingPathComponent("MMBERTEditing_32.mlpackage").path) {
-            return wispr
+        // Prefer the versioned model package over the flat layout.
+        let versioned = artifacts.appendingPathComponent("mmbert-v3.mlpackage")
+        if FileManager.default.fileExists(atPath: versioned.appendingPathComponent("MMBERTEditing_32.mlpackage").path) {
+            return versioned
         }
         let probe = artifacts.appendingPathComponent("MMBERTEditing_32.mlpackage")
         return FileManager.default.fileExists(atPath: probe.path) ? artifacts : nil
