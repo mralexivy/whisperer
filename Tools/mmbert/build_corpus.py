@@ -45,6 +45,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from common import (  # noqa: E402
     CASE2ID, IGNORE, PUNCT2ID, PUNCT_LABELS, Example, Word, build_example,
     detect_script, has_case, normalise_punct, split_word, tokenize_words,
+    APPEND2ID, REPL2ID, MERGE2ID, PARA2ID,  # new for 8-head model
 )
 
 HERE = Path(__file__).resolve().parent
@@ -57,12 +58,6 @@ NONSANDBOX_DB = Path(os.path.expanduser(
     "~/Library/Application Support/Whisperer/history.sqlite"))
 GOLDEN = REPO / "WhispererTests" / "TestData" / "golden-set.json"
 
-WIKI_SHARDS = {
-    "he": "20231101.he/train-00000-of-00004.parquet",
-    "ru": "20231101.ru/train-00000-of-00021.parquet",
-    "en": "20231101.en/train-00000-of-00041.parquet",
-}
-WIKI_REPO = "wikimedia/wikipedia"
 SCRIPT_SALT = {"en": 11, "he": 23, "ru": 37}
 
 # Fillers observed in the app's own raw transcripts, plus the standard set.
@@ -362,6 +357,36 @@ class Corruptor:
     FILLER_SOFT = 0.010       # "like", "so" -- label MASKED (genuinely ambiguous)
     REPEAT = 0.004            # immediate repetition -- labelled DELETE
 
+    # Contraction → expansion map (inverts repl/CONTRACT). Keys are lowercase.
+    _CONTRACTION_MAP: dict = {
+        "don't": "do not", "doesn't": "does not", "didn't": "did not",
+        "won't": "will not", "wouldn't": "would not", "shouldn't": "should not",
+        "couldn't": "could not", "wasn't": "was not", "weren't": "were not",
+        "haven't": "have not", "hasn't": "has not", "hadn't": "had not",
+        "i'm": "i am", "i've": "i have", "i'll": "i will", "i'd": "i would",
+        "you're": "you are", "you've": "you have", "you'll": "you will",
+        "he's": "he is", "she's": "she is", "it's": "it is",
+        "we're": "we are", "we've": "we have", "we'll": "we will",
+        "they're": "they are", "they've": "they have", "they'll": "they will",
+        "that's": "that is", "there's": "there is", "here's": "here is",
+        "let's": "let us", "isn't": "is not", "aren't": "are not",
+    }
+
+    # Compound → split map (inverts merge/MERGE_SPACE).
+    _COMPOUND_MAP: dict = {
+        "dropdown": "drop down", "startup": "start up", "login": "log in",
+        "logout": "log out", "setup": "set up", "checkup": "check up",
+        "backup": "back up", "followup": "follow up", "callback": "call back",
+        "pushback": "push back", "feedback": "feed back", "layout": "lay out",
+        "output": "out put", "input": "in put", "rollout": "roll out",
+        "rollback": "roll back", "handoff": "hand off", "handover": "hand over",
+        "takeaway": "take away", "breakdown": "break down",
+        "workaround": "work around", "workflow": "work flow",
+        "touchpoint": "touch point", "hotspot": "hot spot",
+        "chatbot": "chat bot", "dataset": "data set", "database": "data base",
+        "timeline": "time line", "frontend": "front end", "backend": "back end",
+    }
+
     def __init__(self, rng: random.Random, script: str):
         self.rng = rng
         self.script = script
@@ -371,17 +396,56 @@ class Corruptor:
 
     def __call__(self, clean: str, source: str) -> Optional[Example]:
         rng = self.rng
-        cws = tokenize_words(clean)
+
+        # --- paragraph collapse pre-pass (inverts para/PARA_BREAK) ---
+        # When loading text with newlines, occasionally strip paragraph breaks so
+        # the model must predict PARA_BREAK at those positions. Rate: 0.15/break.
+        para_break_after: set = set()  # word indices where a break was collapsed
+        if "\n" in clean:
+            paras = [p.strip() for p in clean.split("\n") if p.strip()]
+            all_words: List[Word] = []
+            for pi, para in enumerate(paras):
+                pw = tokenize_words(para)
+                if pi > 0 and all_words and rng.random() < 0.15:
+                    # collapsed break: last word of prev para gets PARA_BREAK label
+                    para_break_after.add(len(all_words) - 1)
+                all_words.extend(pw)
+            cws = all_words if all_words else tokenize_words(clean)
+        else:
+            cws = tokenize_words(clean)
+
         if len(cws) < 4:
             return None
+
+        # --- article deletion pre-pass (inverts append) ---
+        # Delete "the"/"a"/"an" from the corrupted input at rate 0.08/eligible
+        # position; the following word gets the corresponding append label.
+        skip_word: List[bool] = [False] * len(cws)
+        article_label: List[int] = [0] * len(cws)
+        pending_art: Optional[str] = None
+        for i, w in enumerate(cws):
+            if pending_art is not None:
+                article_label[i] = APPEND2ID.get(pending_art, 0)
+                pending_art = None
+            if w.key in ("the", "a", "an") and self.script == "en":
+                if rng.random() < 0.08:
+                    skip_word[i] = True
+                    pending_art = w.key
 
         in_words: List[Word] = []
         tp: List[Optional[int]] = []
         tc: List[Optional[int]] = []
         td: List[Optional[bool]] = []
+        ta: List[Optional[int]] = []   # append head labels
+        tr: List[Optional[int]] = []   # repl head labels
+        tm: List[Optional[int]] = []   # merge head labels
+        tpa: List[Optional[int]] = []  # para head labels
 
         sent_start = True
         for i, w in enumerate(cws):
+            if skip_word[i]:
+                continue
+
             gold_p = w.punct_state
             gold_c = w.case_state
             mark = PUNCT_LABELS[gold_p]
@@ -405,40 +469,93 @@ class Corruptor:
             elif gold_c == CASE2ID["LOWER"] and rng.random() < self.MID_CAP:
                 core = core[:1].upper() + core[1:]
 
-            # --- filler insertion ---
+            lw = w.key
+
+            # --- compound splitting (inverts merge/MERGE_SPACE) ---
+            split_parts = None
+            if lw in self._COMPOUND_MAP and rng.random() < 0.30:
+                split_parts = self._COMPOUND_MAP[lw].split()
+
+            # --- contraction expansion (inverts repl/CONTRACT) ---
+            expanded = None
+            if (self.script == "en" and split_parts is None
+                    and lw in self._CONTRACTION_MAP and rng.random() < 0.03):
+                expanded = self._CONTRACTION_MAP[lw].split()
+
+            # --- inflection simplification (inverts repl/VERB_3SG, VERB_PAST) ---
+            inflect_label = 0
+            if (self.script == "en" and split_parts is None
+                    and expanded is None and rng.random() < 0.02):
+                cl = core.lower()
+                if cl.endswith("ed") and len(cl) > 4:
+                    core = core[:-2]
+                    inflect_label = REPL2ID.get("VERB_PAST", 0)
+                elif cl.endswith("es") and len(cl) > 4 and not cl.endswith("ses"):
+                    core = core[:-2]
+                    inflect_label = REPL2ID.get("VERB_3SG", 0)
+                elif cl.endswith("s") and not cl.endswith("ss") and len(cl) > 3:
+                    core = core[:-1]
+                    inflect_label = REPL2ID.get("VERB_3SG", 0)
+
+            art_lb = article_label[i]
+            para_lb = PARA2ID.get("PARA_BREAK", 1) if i in para_break_after else 0
+
+            # --- filler insertion (before current word) ---
             # STRONG fillers ("um", "uh") are labelled DELETE. SOFT fillers
             # ("like", "so") are inserted but MASKED: the teacher deletes them
             # only sometimes, so a hard label either way would be noise.
             if self.strong and rng.random() < self.FILLER_STRONG:
                 in_words.append(split_word(rng.choice(self.strong)))
-                tp.append(None)
-                tc.append(None)
-                td.append(True)
+                tp.append(None); tc.append(None); td.append(True)
+                ta.append(0); tr.append(0); tm.append(0); tpa.append(0)
             elif self.soft and rng.random() < self.FILLER_SOFT:
                 in_words.append(split_word(rng.choice(self.soft)))
-                tp.append(None)
-                tc.append(None)
-                td.append(None)   # masked -- genuinely ambiguous
+                tp.append(None); tc.append(None); td.append(None)
+                ta.append(0); tr.append(0); tm.append(0); tpa.append(0)
 
-            in_words.append(split_word(core + new_mark))
-            tp.append(gold_p)
-            tc.append(gold_c)
-            td.append(False)
+            # --- emit word(s) ---
+            if split_parts is not None and len(split_parts) == 2:
+                # Compound split: two words; merge label on the first
+                w1_str, w2_str = split_parts
+                in_words.append(split_word(w1_str))
+                tp.append(None); tc.append(gold_c); td.append(False)
+                ta.append(art_lb); tr.append(0)
+                tm.append(MERGE2ID.get("MERGE_SPACE", 1)); tpa.append(para_lb)
+                in_words.append(split_word(w2_str + new_mark))
+                tp.append(gold_p); tc.append(CASE2ID["LOWER"]); td.append(False)
+                ta.append(0); tr.append(0); tm.append(0); tpa.append(0)
+            elif expanded is not None:
+                # Contraction expansion: emit all parts; CONTRACT label on first
+                for ei, part in enumerate(expanded):
+                    is_last = (ei == len(expanded) - 1)
+                    in_words.append(split_word(part + (new_mark if is_last else "")))
+                    if ei == 0:
+                        tp.append(None); tc.append(gold_c); td.append(False)
+                        ta.append(art_lb)
+                        tr.append(REPL2ID.get("CONTRACT", 0))
+                        tm.append(0); tpa.append(para_lb)
+                    else:
+                        tp.append(gold_p if is_last else None)
+                        tc.append(CASE2ID["LOWER"]); td.append(None)
+                        ta.append(0); tr.append(0); tm.append(0); tpa.append(0)
+            else:
+                # Normal word
+                in_words.append(split_word(core + new_mark))
+                tp.append(gold_p); tc.append(gold_c); td.append(False)
+                ta.append(art_lb); tr.append(inflect_label)
+                tm.append(0); tpa.append(para_lb)
 
             # --- immediate repetition (the model must DELETE the copy) ---
             if rng.random() < self.REPEAT:
                 rep = split_word(core.lower())
                 in_words.append(rep)
-                tp.append(None)
-                tc.append(None)
-                td.append(True)
-                # the repeated pair: delete the FIRST occurrence's mark carrier
-                # is ambiguous, so we delete the trailing copy -- matches how
-                # whisper duplicates words.
+                tp.append(None); tc.append(None); td.append(True)
+                ta.append(0); tr.append(0); tm.append(0); tpa.append(0)
 
             sent_start = mark in (".", "?", "!", "…")
 
-        return build_example(in_words, tp, tc, td, self.script, source)
+        return build_example(in_words, tp, tc, td, self.script, source,
+                             tgt_append=ta, tgt_repl=tr, tgt_merge=tm, tgt_para=tpa)
 
 
 # =========================================================================
@@ -448,42 +565,6 @@ class Corruptor:
 SENT_SPLIT = re.compile(r"(?<=[.!?…])\s+")
 BAD_LINE = re.compile(r"^\s*[=*#|]|\{\{|\}\}|\[\[|\]\]|\bhttps?://")
 
-
-def wiki_sentences(script: str, target: int, rng: random.Random,
-                   min_words: int = 6, max_words: int = 45) -> List[str]:
-    """Pull `target` utterances (1-3 consecutive sentences) from one shard."""
-    import pyarrow.parquet as pq
-    from huggingface_hub import hf_hub_download
-
-    path = hf_hub_download(WIKI_REPO, WIKI_SHARDS[script], repo_type="dataset")
-    pf = pq.ParquetFile(path)
-    out: List[str] = []
-    for batch in pf.iter_batches(batch_size=512, columns=["text"]):
-        for txt in batch.column("text").to_pylist():
-            # Skip the lead-section-only heuristic; take body paragraphs.
-            for para in txt.split("\n"):
-                para = para.strip()
-                if len(para) < 60 or BAD_LINE.search(para):
-                    continue
-                sents = [s.strip() for s in SENT_SPLIT.split(para) if s.strip()]
-                sents = [s for s in sents
-                         if min_words <= len(s.split()) <= max_words
-                         and detect_script(s) == script
-                         and s[0].isalpha()]
-                i = 0
-                while i < len(sents):
-                    k = rng.choice([1, 1, 2, 2, 3])
-                    chunk = sents[i:i + k]
-                    i += k
-                    if not chunk:
-                        break
-                    u = " ".join(chunk)
-                    wc = len(u.split())
-                    if min_words <= wc <= 110 and detect_script(u) == script:
-                        out.append(u)
-                        if len(out) >= target:
-                            return out
-    return out
 
 
 def golden_texts(path: Path = None) -> List[Tuple[str, str, str]]:
@@ -506,17 +587,19 @@ def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--out", default=str(HERE / "artifacts" / "data"))
     ap.add_argument("--seed", type=int, default=1234)
-    # Wikipedia is OFF by default, and that is a correction, not a preference.
-    # The first corpus was 163,337 wiki rows against 7,059 rows of the user's own
-    # recordings -- 95.9% encyclopedia -- and was then evaluated 100% on real ASR.
-    # The calibration gradient it produced (wiki 0.993 -> synthetic 0.963 -> real
-    # 0.800) is that mismatch measured, not a statement about mmBERT. Clean
-    # in-domain text now comes from --golden, which is a whole-file decode of the
-    # user's own audio. Pass a non-zero --wiki-* only to reproduce that old run.
-    ap.add_argument("--wiki-en", type=int, default=0)
-    ap.add_argument("--wiki-he", type=int, default=0)
-    ap.add_argument("--wiki-ru", type=int, default=0)
-    ap.add_argument("--wiki-eval", type=int, default=1500)
+    # --wiki-* args are IGNORED and kept only for backward compatibility with
+    # run_history_retrain.sh. The Wikipedia path has been removed permanently.
+    # Wikipedia was 95.9% of the first corpus (163,337/170,396 rows) evaluated
+    # 100% on real ASR; the domain gap produced the mismatch gradient that drove
+    # the decision to remove it. Do not re-enable without a new argument.
+    ap.add_argument("--wiki-en", type=int, default=0)  # ignored; backward compat
+    ap.add_argument("--wiki-he", type=int, default=0)  # ignored; backward compat
+    ap.add_argument("--wiki-ru", type=int, default=0)  # ignored; backward compat
+    ap.add_argument("--wiki-eval", type=int, default=1500)  # ignored; backward compat
+    ap.add_argument("--wispr-corpus", default=None,
+                    help="path to artifacts/data/wispr_train.jsonl -- if provided, "
+                         "merged into train at --indomain-repeats weight. "
+                         "Primary source of labeled data for append/repl/merge/para heads.")
     ap.add_argument("--golden", default=str(GOLDEN),
                     help="golden-set JSON supplying in-domain clean text. Point at "
                          "artifacts/raw/history-golden.json for the whole recordings "
@@ -672,18 +755,6 @@ def main() -> None:
     print("[clean] in-domain utterances:", n_indomain,
           dict(Counter(s for _, s, _ in clean)))
 
-    # 3c. Wikipedia, script-balanced and weighted TOWARDS he/ru. The last
-    #     `wiki_eval` utterances of each language are held out -- this is the
-    #     only he/ru eval set with enough volume to bound a 99% precision gate.
-    for sc, n in (("he", args.wiki_he), ("ru", args.wiki_ru), ("en", args.wiki_en)):
-        if n <= 0:
-            continue
-        got = wiki_sentences(sc, n + args.wiki_eval,
-                             random.Random(args.seed + SCRIPT_SALT[sc]))
-        print(f"[clean] wiki {sc}: {len(got)}")
-        clean += [(t, sc, "wiki") for t in got[: -args.wiki_eval or None]]
-        clean += [(t, sc, "wiki_eval") for t in got[-args.wiki_eval:]]
-
     # ---------- 4. corrupt ----------
     corr = {sc: Corruptor(random.Random(args.seed + 7 * i), sc)
             for i, sc in enumerate(("en", "he", "ru"))}
@@ -740,6 +811,34 @@ def main() -> None:
         print(f"[extra] {p.name}: +{len(got)} pairs x{repeat} "
               f"({skipped} withheld) scripts={dict(Counter(e.script for e in got))}")
 
+    # ---------- 5b. Wispr corpus ----------
+    # In-domain labeled pairs for the new heads (append/repl/merge/para).
+    # Weighted at the same rate as golden in-domain text (--indomain-repeats).
+    if args.wispr_corpus:
+        p = Path(args.wispr_corpus)
+        if not p.exists():
+            print(f"[wispr] missing, skipped: {p}")
+        else:
+            got, skipped = [], 0
+            with p.open() as f:
+                for line in f:
+                    d = json.loads(line)
+                    if norm_key(" ".join(d["words"])) in holdout_keys:
+                        skipped += 1
+                        continue
+                    e = Example.from_json(d)
+                    e = e._replace(source="wispr") if hasattr(e, "_replace") else e
+                    got.append(e)
+            repeat = args.indomain_repeats
+            train += got * repeat
+            print(f"[wispr] {p.name}: +{len(got)} pairs x{repeat} "
+                  f"({skipped} withheld) "
+                  f"scripts={dict(Counter(e.script for e in got))}")
+
+    # Zero-Wikipedia assertion: the wiki path was permanently removed.
+    wiki_rows = sum(1 for r in train if r.source == "wiki")
+    assert wiki_rows == 0, f"BUG: {wiki_rows} Wikipedia rows crept in"
+
     rng.shuffle(train)
 
     def dump(name: str, xs: Sequence[Example]) -> None:
@@ -768,7 +867,6 @@ def main() -> None:
         "eval_synth": len(syn_eval), "eval_wiki": len(wiki_eval),
         "eval_real": len(teacher_eval),
         "train_by_script": dict(Counter(e.script for e in train)),
-        "wiki_shards": WIKI_SHARDS,
         "corruption": {k: v for k, v in vars(Corruptor).items()
                        if k.isupper()},
     }

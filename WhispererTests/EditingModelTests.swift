@@ -463,9 +463,9 @@ final class EditingModelTests: XCTestCase {
         let url = URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent()
             .deletingLastPathComponent()
-            .appendingPathComponent("Tools/mmbert/thresholds-calibrated-history.json")
+            .appendingPathComponent("Tools/mmbert/thresholds-calibrated-wispr.json")
         guard FileManager.default.fileExists(atPath: url.path) else {
-            throw XCTSkip("thresholds-calibrated-history.json absent")
+            throw XCTSkip("thresholds-calibrated-wispr.json absent")
         }
         let measured = try MMBERTCalibrationTable.decode(from: Data(contentsOf: url))
         XCTAssertFalse(measured.cells.isEmpty, "the file decoded to nothing")

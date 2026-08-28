@@ -36,7 +36,7 @@ from torch.utils.data import DataLoader, WeightedRandomSampler
 from transformers import AutoTokenizer, get_cosine_schedule_with_warmup
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from common import HEADS, HEAD_SIZES, IGNORE, PUNCT2ID  # noqa: E402
+from common import HEADS, HEAD_SIZES, IGNORE, PUNCT2ID, N_DEST  # noqa: E402
 from data import EditDataset, collate  # noqa: E402
 from model import MMBERTEditingModel  # noqa: E402
 
@@ -82,6 +82,11 @@ def class_weights(ds, head: str, keep_weight: float, device) -> torch.Tensor:
     # `error` and `disf` are binary with class 0 == "leave it alone".
     if head in ("error", "disf"):
         w[0] *= keep_weight
+    # append/repl/merge/para have NONE at index 0 and are extremely sparse —
+    # without capping, NONE's sqrt-inverse weight dominates the mean and
+    # effectively drives all non-NONE classes toward extreme over-weighting.
+    if head in ("append", "repl", "merge", "para"):
+        w[0] = min(float(w[0]), float(w[1:].mean()) if n > 1 else 1.0)
     w = w / w.mean()
     return w.to(device)
 
@@ -104,7 +109,8 @@ def main() -> None:
     ap.add_argument("--script-balance", default="en=1.0,he=2.0,ru=2.0",
                     help="sampling weight per SCRIPT -- he/ru are weighted up "
                          "because the release gate is per language")
-    ap.add_argument("--head-weights", default="error=0.5,punct=1.0,case=1.0,disf=1.0")
+    ap.add_argument("--head-weights",
+                    default="error=0.5,punct=1.0,case=1.0,disf=1.0,append=1.5,repl=1.5,merge=0.8,para=1.0")
     # Memory and restartability. A first run died at step 250 of 7098 on
     # "MPS backend out of memory (other allocations: 33.01 GiB)" — the other
     # allocations were an xcodebuild running beside it. On a shared machine an
@@ -244,7 +250,8 @@ def main() -> None:
                 b = {k: (v.to(device) if torch.is_tensor(v) else v)
                      for k, v in batch.items()}
                 logits = model(b["input_ids"], b["attention_mask"],
-                               b["punct_state"], b["case_state"])
+                               b["punct_state"], b["case_state"],
+                               dest_id=b.get("dest_id"))
                 loss, parts = loss_fn(logits, b)
                 (loss / args.accum).backward()
 
@@ -310,7 +317,8 @@ def main() -> None:
                 b = {k: (v.to(device) if torch.is_tensor(v) else v)
                      for k, v in batch.items()}
                 lg = model(b["input_ids"], b["attention_mask"],
-                           b["punct_state"], b["case_state"])
+                           b["punct_state"], b["case_state"],
+                           dest_id=b.get("dest_id"))
                 l, _ = loss_fn(lg, b)
                 vl += float(l)
                 vn += 1

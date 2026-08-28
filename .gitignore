@@ -70,8 +70,10 @@ whisper.cpp/build-static
 __pycache__/
 *.pyc
 
-# Pre-gold mmBERT data snapshot — local backup, not history
-Tools/mmbert/data.backup-pre-gold/
+# mmBERT training data — all data dirs contain personal dictation, keep out of VCS
+Tools/mmbert/data/
+Tools/mmbert/data.backup-*/
+Tools/mmbert/artifacts/
 
 # graphify knowledge-graph artifacts — generated, rebuild with /graphify
 graphify-out/

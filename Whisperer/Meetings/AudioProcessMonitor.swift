@@ -27,7 +27,7 @@ final class AudioProcessMonitor {
     static let ignoredBundleIDs: Set<String> = [
         "com.ivy.whisperer",
         "com.cisco.Proximity",       // Webex room pairing — opens the mic on a timer, all day
-        "com.electron.wispr-flow",
+        "com.electron.dictation-app",
         "com.apple.controlcenter",
         "com.apple.Siri",
         "com.apple.assistantd",

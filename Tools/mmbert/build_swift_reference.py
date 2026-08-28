@@ -26,9 +26,10 @@ from transformers import AutoTokenizer
 
 HERE = Path(__file__).resolve().parent
 ARTIFACTS = HERE / "artifacts"
+MLPACKAGE = ARTIFACTS / "mmbert-wispr.mlpackage"
 OUT = HERE.parent.parent / "WhispererTests" / "TestData" / "mmbert-runtime-reference.json"
 
-HEADS = ["error", "punct", "case", "disf"]
+HEADS = ["error", "punct", "case", "disf", "append", "repl", "merge", "para"]
 
 CASES = [
     ["hello", "world"],
@@ -54,12 +55,12 @@ def shape_for(n: int) -> int:
 
 
 def main() -> None:
-    tok = AutoTokenizer.from_pretrained(ARTIFACTS / "model")
+    tok = AutoTokenizer.from_pretrained(MLPACKAGE / "model")
     bos = tok.cls_token_id if tok.cls_token_id is not None else tok.bos_token_id
     eos = tok.sep_token_id if tok.sep_token_id is not None else tok.eos_token_id
     pad = tok.pad_token_id or 0
 
-    models = {s: ct.models.MLModel(str(ARTIFACTS / f"MMBERTEditing_{s}.mlpackage"))
+    models = {s: ct.models.MLModel(str(MLPACKAGE / f"MMBERTEditing_{s}.mlpackage"))
               for s in (32, 64, 128)}
 
     out = {"bos": int(bos), "eos": int(eos), "pad": int(pad), "cases": []}
@@ -76,10 +77,15 @@ def main() -> None:
         seq = [bos] + ids + [eos]
         input_ids = np.zeros((1, length), dtype=np.int32)
         mask = np.zeros((1, length), dtype=np.int32)
+        dest_id = np.zeros((1,), dtype=np.int32)
         input_ids[0, :len(seq)] = seq
         mask[0, :len(seq)] = 1
 
-        pred = models[length].predict({"input_ids": input_ids, "attention_mask": mask})
+        pred = models[length].predict({
+            "input_ids": input_ids,
+            "attention_mask": mask,
+            "destination_id": dest_id,
+        })
         rows = []
         for wi, pos in enumerate(first):
             rows.append({

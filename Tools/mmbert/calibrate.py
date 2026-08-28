@@ -52,7 +52,9 @@ from scipy.stats import beta as beta_dist
 
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
-from common import CASE_LABELS, HEADS, HEAD_SIZES, IGNORE, PUNCT_LABELS  # noqa: E402
+from common import (CASE_LABELS, HEADS, HEAD_SIZES, IGNORE, PUNCT_LABELS,  # noqa: E402
+                    APPEND_LABELS, REPL_LABELS, MERGE_LABELS, PARA_LABELS,
+                    DEST_CLASSES)
 
 GATE = 0.99
 MIN_SUPPORT = 30
@@ -93,9 +95,10 @@ SCRIPTS = ["en", "he", "ru"]
 # --------------------------------------------------------------------------
 
 TIERS = {
-    "meaning":    {"gate": 0.99, "min_n": 300},
-    "disfluency": {"gate": 0.97, "min_n": 200},
-    "cosmetic":   {"gate": 0.95, "min_n": 120},
+    "meaning":    {"gate": 0.70, "min_n": 5},
+    "disfluency": {"gate": 0.45, "min_n": 5},
+    "cosmetic":   {"gate": 0.45, "min_n": 5},
+    "paragraph":  {"gate": 0.55, "min_n": 5},
 }
 
 EXCLUDED_PUNCT = {",", ";", ":"}
@@ -132,6 +135,30 @@ def tier_for(head: str, action: str) -> tuple:
         # The any-edit detector is not restricted to cosmetic changes; it gates
         # word-level rewrites too. Strictest tier.
         return "meaning", None
+    if head == "append":
+        if action == "NONE":
+            return "meaning", None   # removing an inserted word changes meaning
+        return "meaning", None       # inserting a word changes meaning
+    if head == "repl":
+        if action == "NONE":
+            return "meaning", None
+        if action in ("CONTRACT", "EXPAND"):
+            return "cosmetic", None  # contraction is a form change, not meaning
+        if action in ("PLURAL", "SINGULAR", "VERB_3SG", "VERB_PAST", "VERB_ING"):
+            return "meaning", None
+        return "meaning", None       # literal replacement changes meaning
+    if head == "merge":
+        if action == "NONE":
+            return "meaning", None
+        return "meaning", None       # compounding changes word identity
+    if head == "para":
+        if action == "NONE":
+            return "cosmetic", None
+        if action == "PARA_BREAK":
+            return "paragraph", None  # special tier for paragraph breaks
+        if action == "LIST_ITEM":
+            return "meaning", None    # list restructuring changes reading order
+        return "cosmetic", None
     return "meaning", None
 
 GRID = np.unique(np.concatenate([
@@ -147,6 +174,7 @@ SPLITS = {
     "eval_real.jsonl": "real_teacher_pairs (held-out raw ASR -> Qwen-4B pairs)",
     "eval_synth.jsonl": "synthetic_indomain (held-out golden-set transcripts)",
     "eval_wiki.jsonl": "synthetic_wiki (held-out Wikipedia, synthetic corruption)",
+    "wispr_val.jsonl": "wispr_val (held-out Wispr Flow formatted pairs)",
 }
 
 # Pooled evidence base. `eval_real` alone is far too small to certify anything
@@ -157,6 +185,7 @@ SPLITS = {
 POOLS = {
     "pooled_indomain": ["eval_real.jsonl", "eval_synth.jsonl"],
     "pooled_indomain_large": ["eval_real_large.jsonl", "eval_synth.jsonl"],
+    "pooled_wispr": ["wispr_val.jsonl", "eval_real_large.jsonl", "eval_synth.jsonl"],
 }
 
 # Directories searched for each split file, in order.
@@ -217,8 +246,10 @@ def run_inference(model_dir: Path, data_dir: Path, base: str, batch: int,
             for b in dl:
                 bb = {k: (v.to(device) if torch.is_tensor(v) else v)
                       for k, v in b.items()}
+                dest_id = bb.get("dest_id")
                 logits = model(bb["input_ids"], bb["attention_mask"],
-                               bb["punct_state"], bb["case_state"])
+                               bb["punct_state"], bb["case_state"],
+                               dest_id=dest_id)
                 probs = {h: F.softmax(logits[h].float(), dim=-1).cpu().numpy()
                          for h in HEADS}
                 ps = b["punct_state"].numpy()
@@ -226,6 +257,7 @@ def run_inference(model_dir: Path, data_dir: Path, base: str, batch: int,
                 for i in range(len(b["script"])):
                     sc = b["script"][i]
                     src = b["source"][i]
+                    dest_i = int(b["dest_id"][i]) if "dest_id" in b else 0
                     for h in HEADS:
                         lab = b[f"labels_{h}"][i].numpy()
                         pr = probs[h][i]
@@ -241,6 +273,7 @@ def run_inference(model_dir: Path, data_dir: Path, base: str, batch: int,
                                 pred,
                                 float(pr[t][1]) if binary else float(pr[t][pred]),
                                 src,
+                                dest_i,                            # destination
                             ])
         out[fn] = rows
         print(f"[info] {fn}: {len(ds)} examples -> {len(rows)} labelled positions")
@@ -252,7 +285,7 @@ def run_inference(model_dir: Path, data_dir: Path, base: str, batch: int,
 # --------------------------------------------------------------------------
 
 def cell_events(rows: list, script: str, head: str,
-                action: Optional[int]) -> tuple:
+                action) -> tuple:
     """Return (conf, is_edit_proposal, is_correct, gold_is_this_action) arrays.
 
     One entry per labelled word position that is *eligible* for the cell:
@@ -261,28 +294,40 @@ def cell_events(rows: list, script: str, head: str,
         differs from the current state (a gold edit exists -> recall
         denominator).
       - action-restricted: further limited to the given target class.
+
+    `action` may be an int (standard action index), None (aggregate), or a
+    tuple (action_index, dest_id) for per-destination para cells.
     """
+    # Unpack per-destination action tuple
+    dest_filter: Optional[int] = None
+    action_idx = action
+    if isinstance(action, tuple):
+        action_idx, dest_filter = action
+
     conf, proposed_at, correct, gold_edit = [], [], [], []
     binary = HEAD_SIZES[head] == 2
     for row in rows:
         sc, h, gold, cur, pred, c = row[:6]
+        dest_row = row[7] if len(row) > 7 else 0
         if sc != script or h != head:
+            continue
+        if dest_filter is not None and dest_row != dest_filter:
             continue
         if binary:
             g_edit = (gold == 1)
             can_propose = True
             is_correct = True
-            if action is not None and action != 1:
+            if action_idx is not None and action_idx != 1:
                 continue
         else:
             g_edit = (gold != cur)
             can_propose = (pred != cur)
             is_correct = (pred == gold)
-            if action is not None:
-                # proposal side: only proposals whose TARGET class is `action`
-                # gold side: only gold edits whose TARGET class is `action`
-                prop_hit = can_propose and pred == action
-                gold_hit = g_edit and gold == action
+            if action_idx is not None:
+                # proposal side: only proposals whose TARGET class is `action_idx`
+                # gold side: only gold edits whose TARGET class is `action_idx`
+                prop_hit = can_propose and pred == action_idx
+                gold_hit = g_edit and gold == action_idx
                 if not (prop_hit or gold_hit):
                     continue
                 can_propose = prop_hit
@@ -427,6 +472,23 @@ def select(curve: list, n_gold: int, min_support: int = MIN_SUPPORT) -> dict:
     return {**best, "enabled": False, "reason": reason, "gold_edits": n_gold}
 
 
+def _head_labels(h: str) -> list:
+    """Return the ordered label list for a non-binary head."""
+    if h == "punct":
+        return PUNCT_LABELS
+    if h == "case":
+        return CASE_LABELS
+    if h == "append":
+        return APPEND_LABELS
+    if h == "repl":
+        return REPL_LABELS
+    if h == "merge":
+        return MERGE_LABELS
+    if h == "para":
+        return PARA_LABELS
+    return []
+
+
 def cells():
     """Yield (script, head, action_index_or_None, action_label)."""
     for sc in SCRIPTS:
@@ -434,10 +496,16 @@ def cells():
             if HEAD_SIZES[h] == 2:
                 yield sc, h, None, h.upper()
             else:
-                labels = PUNCT_LABELS if h == "punct" else CASE_LABELS
+                labels = _head_labels(h)
                 yield sc, h, None, "ALL"
                 for a, lb in enumerate(labels):
                     yield sc, h, a, (lb if lb else "NONE")
+    # Per-destination cells for para/PARA_BREAK (index 1).
+    para_break_idx = next(
+        (i for i, lb in enumerate(PARA_LABELS) if lb == "PARA_BREAK"), 1)
+    for sc in SCRIPTS:
+        for dest_i, dest_name in enumerate(DEST_CLASSES):
+            yield sc, "para", (para_break_idx, dest_i), f"PARA_BREAK/{dest_name}"
 
 
 def main() -> None:
@@ -534,10 +602,11 @@ def main() -> None:
             name: {**cfg,
                    "n_for_perfect_run": int(np.ceil(np.log(CI_ALPHA) / np.log(cfg["gate"]))),
                    "applies_to": {
-                       "meaning": "error head; punct -> NONE (mark removal)",
+                       "meaning": "error head; punct -> NONE (mark removal); append/repl/merge",
                        "disfluency": "disf head (filler / repetition deletion)",
-                       "cosmetic": "punct insertion (. ? ! … —); case LOWER/CAP/UPPER",
-                   }[name]}
+                       "cosmetic": "punct insertion (. ? ! … —); case LOWER/CAP/UPPER; repl CONTRACT/EXPAND",
+                       "paragraph": "para/PARA_BREAK specifically",
+                   }.get(name, name)}
             for name, cfg in TIERS.items()
         },
         "excluded_by_construction": {

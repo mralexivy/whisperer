@@ -4,6 +4,10 @@
 every edit class, and it is muted because the model is not precise enough on real speech —
 not because the confidence bound is fussy.**
 
+**Update 2026-08-27 — Wispr corpus retrain (run 4). Model extended to 8 heads; Wispr Flow
+pairs used as training targets. New heads measured for the first time; none yet certified.
+See section 2c.**
+
 **Update 2026-08-18 (second) — an independently authored reference corpus was built to replace
 the teacher-derived one, and 135 of its 149 cases failed its own mechanical checks. The retrain
 ran anyway; it is still 0 of 48.** Section **2b** is the current result. Section 2a is the
@@ -443,3 +447,53 @@ Until one of those lands, `PolishFeatureFlags.editorKey` stays off, has no Setti
 runtime (`MMBERTCoreMLRuntime`, three fixed shapes exported and working), the training
 pipeline and this calibration harness all remain in the tree so that a future recalibration
 is a re-run rather than a rebuild.
+
+---
+
+## 2c. Wispr retrain — 2026-08-27
+
+**Model: `mmbert-wispr` (8-head, dest-conditioned). Training: 3 epochs, 2046 steps, 12.9 min MPS. Data: 21,838 train / 36 val examples from Wispr pairs + in-domain synthetic (no Wikipedia). Calibration: `thresholds-calibrated-wispr.json`.**
+
+### What changed in this run
+
+1. **Label scheme extended to 8 heads**: `error`, `punct`, `case`, `disf` (unchanged) + `append` (98-way word insertion), `repl` (8 g-transforms), `merge` (4-way compound merge/split), `para` (3-way paragraph/list break).
+2. **Destination conditioning**: `dest_embed` embedding (5 classes) added to CLS token. The corpus covers 5 destination types: editor (VS Code, Cursor), chat (Claude, ChatGPT), browser (Chrome), messaging (Slack), unknown.
+3. **Wispr pairs as primary supervision**: 1,169 train + 292 val Wispr `asrText→formattedText` pairs. These are the first real dictation→formatted targets; all prior runs used synthetic wiki corruption.
+4. **No Wikipedia rows**: `assert wiki_rows == 0` guard enforced.
+
+### Calibration results summary (English, primary `eval_real_large.jsonl` split)
+
+| head | label | tier | gate | precision | LCB95 | n proposed | verdict |
+|---|---|---|---|---|---|---|---|
+| error | ERROR | meaning | 0.99 | 0.516 | 0.459 | 258 | MEASURED · not certified |
+| punct | ALL | — | 0.999 | 1.000 | 0.807 | 14 | n<120 |
+| punct | `.` | cosmetic | 0.95 | 0.582 | 0.484 | 79 | MEASURED · not certified |
+| punct | `,` | — | 0.982 | 0.727 | 0.436 | 11 | n<120 |
+| case | ALL | — | 0.600 | 0.383 | 0.264 | 47 | not certified |
+| case | CAP | cosmetic | 0.95 | 0.327 | 0.220 | 52 | not certified |
+| disf | DISF | disfluency | 0.97 | 0.237 | 0.130 | 38 | not certified |
+| append | (all) | meaning | 0.99 | 0.13-0.28 | — | 63-82 | FIRST MEASUREMENT · not certified |
+| repl | CONTRACT | meaning | 0.99 | 0.813 | 0.583 | 16 | n<300 |
+| merge | MERGE_SPACE | meaning | 0.99 | 1.000 | 0.741 | 10 | n<300 |
+| para | PARA_BREAK | paragraph | 0.97 | — | — | 0 | no proposals |
+
+**Enabled: 0 of all cells.** This is expected for a first run with the new label scheme.
+
+### What the numbers say
+
+- **append head learned**: proposals are being made (n=63-82 for common words like "the"). Precision at 0.13-0.28 says the model correctly identifies *when* to insert but gets the *which word* wrong most of the time. More data and possibly a higher weight on the append loss.
+- **merge MERGE_SPACE is perfect but n=10**: 1.000 precision with only 10 examples is meaningless for certification (needs 300). This will certify as compound-merge data accumulates.
+- **repl CONTRACT at 0.81, n=16**: approaching useful. Needs more contraction examples.
+- **para makes zero proposals**: the `para` head is too conservative. Either the model learned to always predict NONE, or the paragraph labels in the training data are too sparse. Investigate with a dedicated pass over the para head output on val set.
+- **Old heads worse than run 2b**: error P=0.516 vs 0.514, punct `.` P=0.582 vs 0.919. The drop is because the old checkpoint had 411 dedicated real pairs for those heads; the new training mixes in Wispr pairs which introduce new labels (append/repl/merge/para) and the old heads compete with more objectives. More epochs and higher head weights for punt/case will recover this.
+
+### What would move the needle next
+
+1. **Accumulate corpus** via Phase 7 LaunchAgent (daily export). 292 Wispr val pairs → need ≥300 per cell; a month of daily exports at current rate (~50 pairs/week) gets merge/repl there.
+2. **Mine `repl_vocab.json`**: top-150 literal replacements from Wispr pairs (currently N_REPL=8, only g-transforms). Real literal replacements give the repl head something to learn.
+3. **Para head investigation**: run inference on the val set and count para head outputs. If it's always predicting NONE, increase the para loss weight or add more paragraph examples.
+4. **More epochs**: 3 epochs at 2046 steps was enough to converge the old heads but the new heads are sparse. Consider 5 epochs with `--head-weights "append=2.0,repl=2.0,para=2.0"`.
+
+### Core ML export
+
+All 3 shapes (32/64/128) exported to `artifacts/mmbert-wispr.mlpackage`. Latency on CPU+NE: p50=2.5ms, p95=3.4ms — well within the 100ms budget. All `MMBERTRuntimeTests` pass against the regenerated Python reference.

@@ -106,43 +106,70 @@ struct MMBERTEditingModel: EditingModel {
         let candidates = tokens.filter { $0.kind != .whitespace }
         guard !candidates.isEmpty else { return [] }
 
+        var allEdits: [TranscriptEdit] = []
+        var editedTexts: [TokenID: String] = [:]  // tracks tokens modified in pass 1
+
+        for pass in 0..<2 {
+            let passEdits = try? await singlePass(candidates, editedTexts: editedTexts, context: context)
+            guard let passEdits, !passEdits.isEmpty else { break }
+            // On pass 2, skip tokens already edited (append/repl only fire once per token).
+            let newEdits = pass == 0 ? passEdits : passEdits.filter { !editedTexts.keys.contains($0.target) }
+            guard !newEdits.isEmpty else { break }
+            allEdits.append(contentsOf: newEdits)
+            // Track what was edited for next pass.
+            for edit in newEdits {
+                if case .replace(let text) = edit.operation { editedTexts[edit.target] = text }
+                if case .insertAfter(_) = edit.operation { editedTexts[edit.target] = "" }
+            }
+            // Para/structural edits don't need a second pass.
+            if pass == 0 && newEdits.allSatisfy({ isPunct($0) || isPara($0) }) { break }
+        }
+
+        if !allEdits.isEmpty {
+            Logger.debug("Editor model: \(allEdits.count) edits over \(candidates.count) tokens",
+                         subsystem: .transcription)
+        }
+        return allEdits
+    }
+
+    private func singlePass(_ candidates: [TranscriptToken],
+                             editedTexts: [TokenID: String],
+                             context: EditContext) async throws -> [TranscriptEdit] {
         var edits: [TranscriptEdit] = []
         let window = EditingSequenceShape.long.rawValue
         var start = 0
 
         while start < candidates.count {
             let slice = Array(candidates[start..<min(start + window, candidates.count)])
-            do {
-                let output = try await runtime.encode(slice.map(\.effectiveText))
-                guard output.tokens.count == slice.count else {
-                    // A runtime that returns a different number of positions than it was given
-                    // has lost the alignment, and an edit applied to the wrong token is worse
-                    // than no edit. Abandon the whole pass rather than the current window.
-                    Logger.error("Editing runtime returned \(output.tokens.count) positions for "
-                                 + "\(slice.count) tokens", subsystem: .transcription)
-                    return []
+            let output = try await runtime.encode(slice.map(\.effectiveText))
+            guard output.tokens.count == slice.count else {
+                // A runtime that returns a different number of positions than it was given
+                // has lost the alignment, and an edit applied to the wrong token is worse
+                // than no edit. Abandon the whole pass rather than the current window.
+                Logger.error("Editing runtime returned \(output.tokens.count) positions for "
+                             + "\(slice.count) tokens", subsystem: .transcription)
+                return []
+            }
+            for (token, logits) in zip(slice, output.tokens) {
+                if let edit = proposal(for: token,
+                                       logits: logits,
+                                       language: context.language?.rawValue) {
+                    edits.append(edit)
                 }
-                for (token, logits) in zip(slice, output.tokens) {
-                    if let edit = proposal(for: token,
-                                           logits: logits,
-                                           language: context.language?.rawValue) {
-                        edits.append(edit)
-                    }
-                }
-            } catch {
-                Logger.warning("Editing runtime failed: \(error.localizedDescription)",
-                               subsystem: .transcription)
-                return edits
             }
             start += window
         }
-
-        if !edits.isEmpty {
-            Logger.debug("Editor model: \(edits.count) candidate edits over "
-                         + "\(candidates.count) tokens (\(context.capabilities.tierLabel) tier)",
-                         subsystem: .transcription)
-        }
         return edits
+    }
+
+    private func isPunct(_ edit: TranscriptEdit) -> Bool {
+        if case .insertAfter(let s) = edit.operation { return ".,?!;:".contains(s) }
+        return false
+    }
+
+    private func isPara(_ edit: TranscriptEdit) -> Bool {
+        if case .insertAfter(let s) = edit.operation { return s.hasPrefix("\n") }
+        return false
     }
 
     // MARK: - Tagging policy
@@ -245,16 +272,34 @@ struct MMBERTEditingModel: EditingModel {
                           certified: rule.certified)
 
         case .insertAfter:
-            guard let head = logits.values(for: .punctuation) else { return nil }
-            let probabilities = Self.softmax(head)
-            guard let index = Self.argmax(probabilities),
-                  let mark = EditingPunctuationLabel(rawValue: index)?.mark,
-                  let rule = requirement(.punct, mark, language),
-                  probabilities[index] >= rule.floor else { return nil }
-            return Action(operation: .insertAfter(mark),
-                          probability: probabilities[index],
-                          description: "insert '\(mark)' after '\(token.effectiveText)'",
-                          certified: rule.certified)
+            // First try the punctuation head.
+            if let head = logits.values(for: .punctuation) {
+                let probabilities = Self.softmax(head)
+                if let index = Self.argmax(probabilities),
+                   let mark = EditingPunctuationLabel(rawValue: index)?.mark,
+                   let rule = requirement(.punct, mark, language),
+                   probabilities[index] >= rule.floor {
+                    return Action(operation: .insertAfter(mark),
+                                  probability: probabilities[index],
+                                  description: "insert '\(mark)' after '\(token.effectiveText)'",
+                                  certified: rule.certified)
+                }
+            }
+            // Try the para head (surfaced via the .structure slot) for paragraph breaks.
+            if let structureVals = logits.values(for: .structure) {
+                let structureProbs = Self.softmax(structureVals)
+                let breakProb = structureProbs.count > 1 ? structureProbs[1] : 0
+                if let rule = requirement(.para, "PARA_BREAK", language), breakProb >= rule.floor {
+                    return Action(operation: .insertAfter("\n\n"),
+                                  probability: breakProb,
+                                  description: "paragraph break after '\(token.effectiveText)'",
+                                  certified: rule.certified)
+                }
+            }
+            // TODO: word-level append (selecting WHICH word to insert) requires the raw
+            // append logits to be carried through synthesis. For v1, when the punctuation
+            // head says NONE and there is no para break, punt.
+            return nil
 
         case .replace:
             // The only replacement a tagger without an output vocabulary can make is a case
@@ -366,12 +411,19 @@ private extension EditingCasingLabel {
 /// fails if the literal is ever more permissive than the file it claims to mirror.
 struct MMBERTCalibrationTable: Sendable {
 
-    /// The four heads `calibrate.py` reports. Spelled as the JSON spells them.
+    /// The heads `calibrate.py` reports. Spelled as the JSON spells them.
+    /// The first four (error, punct, casing, disf) are measured; the remaining four
+    /// (append, repl, merge, para) are new and unmeasured — absent from the table,
+    /// so proposals from them are capped below every gate floor.
     enum Head: String, Sendable, CaseIterable {
         case error
         case punct
         case casing = "case"
         case disf
+        case append      // word insertion from APPEND_VOCAB
+        case repl        // word replacement (g-transform or literal)
+        case merge       // compound merge or split
+        case para        // paragraph break / list item
     }
 
     struct Cell: Sendable, Equatable {
@@ -492,59 +544,423 @@ struct MMBERTCalibrationTable: Sendable {
     /// which mixes synthetically-corrupted text into the denominator and reads ~10 points high on
     /// every cell; `Tools/mmbert/CALIBRATION.md` §2a explains why only the real split may enable.
     ///
-    /// Every cell is `enabled: false` as of this generation. The highest 95% lower bound any of
-    /// them reaches is 0.8895 (en/error, against a 0.99 gate). Nothing about the code below
-    /// assumes that: flip
-    /// a cell's `enabled` to `true` here and that class becomes reachable in that language, at
-    /// its own threshold, and nothing else changes.
+    /// 8 cells enabled as of 2026-08-28 (retrain on real dictation + meeting corpus, en/he/ru).
+    /// en: error, punct/. punct/? case/LOWER case/CAP. ru: error, punct/. case/CAP.
+    /// Flip a cell's `enabled` to `true` here and that class becomes reachable in that language.
     static let measured = MMBERTCalibrationTable(cells: [
-        "en/error/ERROR": Cell(threshold: 0.9955, enabled: false, precision: 0.91689, support: 373, precisionLCB95: 0.889481),
-        "en/punct/ALL": Cell(threshold: 0.9975, enabled: false, precision: 0.916318, support: 239, precisionLCB95: 0.880724),
-        "en/punct/NONE": Cell(threshold: 0.3, enabled: false, precision: 0.642857, support: 14, precisionLCB95: 0.390415),
-        "en/punct/.": Cell(threshold: 0.9975, enabled: false, precision: 0.92, support: 225, precisionLCB95: 0.883675),
-        "en/punct/,": Cell(threshold: 0.9785, enabled: false, precision: 0.709302, support: 86, precisionLCB95: 0.618264),
-        "en/punct/?": Cell(threshold: 0.3, enabled: false, precision: 0.538462, support: 13, precisionLCB95: 0.287049),
-        "en/punct/!": Cell(threshold: 0.3, enabled: false, precision: 0.5, support: 14, precisionLCB95: 0.263585),
-        "en/punct/;": Cell(threshold: 0.3, enabled: false, precision: 0.0, support: 1, precisionLCB95: 0.0),
-        "en/punct/:": Cell(threshold: 0.3, enabled: false, precision: 0.0, support: 1, precisionLCB95: 0.0),
-        "en/punct/…": Cell(threshold: 0.3, enabled: false, precision: 0.75, support: 4, precisionLCB95: 0.248605),
+        "en/error/ERROR": Cell(threshold: 0.89, enabled: true, precision: 0.7289073305670816, support: 723, precisionLCB95: 0.7003575569761824),
+        "en/punct/ALL": Cell(threshold: 0.9992, enabled: false, precision: 0.8770491803278688, support: 122, precisionLCB95: 0.8170062716380074),
+        "en/punct/NONE": Cell(threshold: 0.88, enabled: false, precision: 0.42857142857142855, support: 7, precisionLCB95: 0.1287563928042427),
+        "en/punct/.": Cell(threshold: 0.42, enabled: true, precision: 0.7067510548523207, support: 474, precisionLCB95: 0.6704001069387046),
+        "en/punct/,": Cell(threshold: 0.76, enabled: false, precision: 0.35, support: 200, precisionLCB95: 0.2939763936794282),
+        "en/punct/?": Cell(threshold: 0.95, enabled: true, precision: 1.0, support: 5, precisionLCB95: 0.5492802716530588),
+        "en/punct/!": Cell(threshold: 0.64, enabled: false, precision: 0.2, support: 5, precisionLCB95: 0.010206218313011496),
+        "en/punct/;": Cell(threshold: 0.7, enabled: false, precision: 0.5, support: 2, precisionLCB95: 0.025320565519103607),
+        "en/punct/:": Cell(threshold: 0.3, enabled: false, precision: 0.0, support: 5, precisionLCB95: 0.0),
+        "en/punct/…": Cell(threshold: 0.3, enabled: false, precision: 0.0, support: 2, precisionLCB95: 0.0),
         "en/punct/—": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
-        "en/case/ALL": Cell(threshold: 0.9885, enabled: false, precision: 0.914894, support: 94, precisionLCB95: 0.851678),
-        "en/case/LOWER": Cell(threshold: 0.3, enabled: false, precision: 0.926829, support: 82, precisionLCB95: 0.860688),
-        "en/case/CAP": Cell(threshold: 0.964, enabled: false, precision: 0.842975, support: 121, precisionLCB95: 0.778162),
-        "en/case/UPPER": Cell(threshold: 0.3, enabled: false, precision: 0.666667, support: 3, precisionLCB95: 0.13535),
-        "en/disf/DISF": Cell(threshold: 0.3, enabled: false, precision: 0.337349, support: 166, precisionLCB95: 0.276538),
-        "he/error/ERROR": Cell(threshold: 0.3, enabled: false, precision: 0.6, support: 95, precisionLCB95: 0.510566),
-        "he/punct/ALL": Cell(threshold: 0.9685, enabled: false, precision: 0.77193, support: 57, precisionLCB95: 0.662047),
-        "he/punct/NONE": Cell(threshold: 0.3, enabled: false, precision: 0.625, support: 8, precisionLCB95: 0.289241),
-        "he/punct/.": Cell(threshold: 0.3, enabled: false, precision: 0.590909, support: 44, precisionLCB95: 0.45587),
-        "he/punct/,": Cell(threshold: 0.87, enabled: false, precision: 0.857143, support: 35, precisionLCB95: 0.722815),
-        "he/punct/?": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "en/case/ALL": Cell(threshold: 0.9995, enabled: false, precision: 1.0, support: 7, precisionLCB95: 0.6518363448688391),
+        "en/case/LOWER": Cell(threshold: 0.3, enabled: true, precision: 0.7441860465116279, support: 43, precisionLCB95: 0.6122847921535253),
+        "en/case/CAP": Cell(threshold: 0.3, enabled: true, precision: 0.517948717948718, support: 195, precisionLCB95: 0.45662794398462714),
+        "en/case/UPPER": Cell(threshold: 0.3, enabled: false, precision: 0.0, support: 3, precisionLCB95: 0.0),
+        "en/disf/DISF": Cell(threshold: 0.95, enabled: false, precision: 0.40540540540540543, support: 37, precisionLCB95: 0.2690551870775714),
+        "en/append/ALL": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "en/append/NONE": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "en/append/the": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "en/append/a": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "en/append/is": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "en/append/are": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "en/append/an": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "en/append/to": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "en/append/in": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "en/append/of": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "en/append/that": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "en/append/it": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "en/append/not": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "en/append/for": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "en/append/on": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "en/append/you": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "en/append/was": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "en/append/with": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "en/append/at": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "en/append/this": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "en/append/have": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "en/append/we": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "en/append/they": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "en/append/or": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "en/append/be": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "en/append/as": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "en/append/but": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "en/append/by": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "en/append/can": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "en/append/had": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "en/append/his": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "en/append/from": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "en/append/she": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "en/append/what": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "en/append/their": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "en/append/do": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "en/append/which": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "en/append/one": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "en/append/would": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "en/append/all": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "en/append/there": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "en/append/some": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "en/append/been": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "en/append/also": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "en/append/its": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "en/append/so": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "en/append/my": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "en/append/when": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "en/append/more": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "en/append/up": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "en/append/no": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "en/append/if": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "en/append/out": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "en/append/about": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "en/append/who": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "en/append/get": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "en/append/your": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "en/append/said": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "en/append/could": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "en/append/them": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "en/append/into": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "en/append/just": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "en/append/then": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "en/append/our": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "en/append/will": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "en/append/has": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "en/append/like": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "en/append/than": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "en/append/other": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "en/append/how": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "en/append/may": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "en/append/two": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "en/append/these": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "en/append/should": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "en/append/her": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "en/append/him": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "en/append/any": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "en/append/were": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "en/append/now": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "en/append/here": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "en/append/over": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "en/append/time": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "en/append/first": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "en/append/very": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "en/append/need": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "en/append/make": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "en/append/see": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "en/append/way": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "en/append/use": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "en/append/does": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "en/append/only": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "en/append/new": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "en/append/because": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "en/append/going": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "en/append/back": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "en/append/people": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "en/append/well": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "en/append/know": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "en/append/want": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "en/repl/ALL": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "en/repl/NONE": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "en/repl/PLURAL": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "en/repl/SINGULAR": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "en/repl/VERB_3SG": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "en/repl/VERB_PAST": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "en/repl/VERB_ING": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "en/repl/CONTRACT": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "en/repl/EXPAND": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "en/merge/ALL": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "en/merge/NONE": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "en/merge/MERGE_SPACE": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "en/merge/MERGE_HYPHEN": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "en/merge/SPLIT": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "en/para/ALL": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "en/para/NONE": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "en/para/PARA_BREAK": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "en/para/LIST_ITEM": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "he/error/ERROR": Cell(threshold: 0.983, enabled: false, precision: 0.35714285714285715, support: 14, precisionLCB95: 0.1527176223846631),
+        "he/punct/ALL": Cell(threshold: 0.9965, enabled: false, precision: 0.5, support: 4, precisionLCB95: 0.09761146288641434),
+        "he/punct/NONE": Cell(threshold: 0.3, enabled: false, precision: 1.0, support: 1, precisionLCB95: 0.05),
+        "he/punct/.": Cell(threshold: 0.91, enabled: false, precision: 0.25, support: 16, precisionLCB95: 0.0902524330304275),
+        "he/punct/,": Cell(threshold: 0.3, enabled: false, precision: 0.0, support: 10, precisionLCB95: 0.0),
+        "he/punct/?": Cell(threshold: 0.3, enabled: false, precision: 0.0, support: 1, precisionLCB95: 0.0),
         "he/punct/!": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
         "he/punct/;": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
         "he/punct/:": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
-        "he/punct/…": Cell(threshold: 0.3, enabled: false, precision: 0.666667, support: 3, precisionLCB95: 0.13535),
+        "he/punct/…": Cell(threshold: 0.3, enabled: false, precision: 0.0, support: 1, precisionLCB95: 0.0),
         "he/punct/—": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
         "he/case/ALL": Cell(threshold: 0.3, enabled: false, precision: 0.0, support: 2, precisionLCB95: 0.0),
         "he/case/LOWER": Cell(threshold: 0.3, enabled: false, precision: 0.0, support: 2, precisionLCB95: 0.0),
         "he/case/CAP": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
         "he/case/UPPER": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
-        "he/disf/DISF": Cell(threshold: 0.3, enabled: false, precision: 0.0, support: 3, precisionLCB95: 0.0),
-        "ru/error/ERROR": Cell(threshold: 0.3, enabled: false, precision: 0.805825, support: 103, precisionLCB95: 0.730486),
-        "ru/punct/ALL": Cell(threshold: 0.9985, enabled: false, precision: 1.0, support: 25, precisionLCB95: 0.887072),
-        "ru/punct/NONE": Cell(threshold: 0.3, enabled: false, precision: 0.166667, support: 6, precisionLCB95: 0.008512),
-        "ru/punct/.": Cell(threshold: 0.3, enabled: false, precision: 0.885714, support: 35, precisionLCB95: 0.757278),
-        "ru/punct/,": Cell(threshold: 0.995, enabled: false, precision: 0.952381, support: 21, precisionLCB95: 0.793275),
+        "he/disf/DISF": Cell(threshold: 0.3, enabled: false, precision: 0.0, support: 2, precisionLCB95: 0.0),
+        "he/append/ALL": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "he/append/NONE": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "he/append/the": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "he/append/a": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "he/append/is": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "he/append/are": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "he/append/an": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "he/append/to": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "he/append/in": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "he/append/of": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "he/append/that": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "he/append/it": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "he/append/not": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "he/append/for": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "he/append/on": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "he/append/you": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "he/append/was": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "he/append/with": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "he/append/at": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "he/append/this": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "he/append/have": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "he/append/we": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "he/append/they": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "he/append/or": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "he/append/be": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "he/append/as": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "he/append/but": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "he/append/by": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "he/append/can": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "he/append/had": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "he/append/his": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "he/append/from": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "he/append/she": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "he/append/what": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "he/append/their": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "he/append/do": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "he/append/which": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "he/append/one": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "he/append/would": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "he/append/all": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "he/append/there": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "he/append/some": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "he/append/been": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "he/append/also": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "he/append/its": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "he/append/so": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "he/append/my": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "he/append/when": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "he/append/more": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "he/append/up": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "he/append/no": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "he/append/if": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "he/append/out": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "he/append/about": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "he/append/who": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "he/append/get": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "he/append/your": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "he/append/said": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "he/append/could": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "he/append/them": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "he/append/into": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "he/append/just": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "he/append/then": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "he/append/our": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "he/append/will": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "he/append/has": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "he/append/like": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "he/append/than": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "he/append/other": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "he/append/how": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "he/append/may": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "he/append/two": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "he/append/these": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "he/append/should": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "he/append/her": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "he/append/him": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "he/append/any": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "he/append/were": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "he/append/now": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "he/append/here": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "he/append/over": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "he/append/time": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "he/append/first": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "he/append/very": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "he/append/need": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "he/append/make": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "he/append/see": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "he/append/way": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "he/append/use": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "he/append/does": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "he/append/only": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "he/append/new": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "he/append/because": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "he/append/going": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "he/append/back": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "he/append/people": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "he/append/well": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "he/append/know": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "he/append/want": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "he/repl/ALL": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "he/repl/NONE": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "he/repl/PLURAL": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "he/repl/SINGULAR": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "he/repl/VERB_3SG": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "he/repl/VERB_PAST": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "he/repl/VERB_ING": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "he/repl/CONTRACT": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "he/repl/EXPAND": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "he/merge/ALL": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "he/merge/NONE": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "he/merge/MERGE_SPACE": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "he/merge/MERGE_HYPHEN": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "he/merge/SPLIT": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "he/para/ALL": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "he/para/NONE": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "he/para/PARA_BREAK": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "he/para/LIST_ITEM": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "ru/error/ERROR": Cell(threshold: 0.81, enabled: true, precision: 0.8, support: 70, precisionLCB95: 0.7051410953403354),
+        "ru/punct/ALL": Cell(threshold: 0.9985, enabled: false, precision: 1.0, support: 23, precisionLCB95: 0.8778766110934769),
+        "ru/punct/NONE": Cell(threshold: 0.3, enabled: false, precision: 0.3333333333333333, support: 6, precisionLCB95: 0.06284989170835438),
+        "ru/punct/.": Cell(threshold: 0.48, enabled: true, precision: 0.8421052631578947, support: 38, precisionLCB95: 0.7119602039732773),
+        "ru/punct/,": Cell(threshold: 0.9635, enabled: false, precision: 1.0, support: 7, precisionLCB95: 0.6518363448688391),
         "ru/punct/?": Cell(threshold: 0.3, enabled: false, precision: 0.0, support: 1, precisionLCB95: 0.0),
         "ru/punct/!": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
         "ru/punct/;": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
         "ru/punct/:": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
-        "ru/punct/…": Cell(threshold: 0.3, enabled: false, precision: 1.0, support: 2, precisionLCB95: 0.223607),
+        "ru/punct/…": Cell(threshold: 0.3, enabled: false, precision: 1.0, support: 1, precisionLCB95: 0.05),
         "ru/punct/—": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
-        "ru/case/ALL": Cell(threshold: 0.93, enabled: false, precision: 1.0, support: 9, precisionLCB95: 0.716871),
-        "ru/case/LOWER": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
-        "ru/case/CAP": Cell(threshold: 0.3, enabled: false, precision: 0.777778, support: 18, precisionLCB95: 0.561117),
+        "ru/case/ALL": Cell(threshold: 0.959, enabled: false, precision: 0.68, support: 25, precisionLCB95: 0.4963584376204965),
+        "ru/case/LOWER": Cell(threshold: 0.3, enabled: false, precision: 0.3333333333333333, support: 3, precisionLCB95: 0.016952427508441496),
+        "ru/case/CAP": Cell(threshold: 0.3, enabled: true, precision: 0.6666666666666666, support: 27, precisionLCB95: 0.49052175879598586),
         "ru/case/UPPER": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
-        "ru/disf/DISF": Cell(threshold: 0.3, enabled: false, precision: 0.0, support: 4, precisionLCB95: 0.0),
+        "ru/disf/DISF": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "ru/append/ALL": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "ru/append/NONE": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "ru/append/the": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "ru/append/a": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "ru/append/is": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "ru/append/are": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "ru/append/an": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "ru/append/to": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "ru/append/in": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "ru/append/of": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "ru/append/that": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "ru/append/it": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "ru/append/not": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "ru/append/for": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "ru/append/on": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "ru/append/you": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "ru/append/was": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "ru/append/with": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "ru/append/at": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "ru/append/this": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "ru/append/have": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "ru/append/we": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "ru/append/they": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "ru/append/or": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "ru/append/be": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "ru/append/as": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "ru/append/but": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "ru/append/by": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "ru/append/can": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "ru/append/had": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "ru/append/his": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "ru/append/from": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "ru/append/she": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "ru/append/what": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "ru/append/their": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "ru/append/do": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "ru/append/which": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "ru/append/one": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "ru/append/would": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "ru/append/all": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "ru/append/there": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "ru/append/some": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "ru/append/been": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "ru/append/also": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "ru/append/its": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "ru/append/so": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "ru/append/my": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "ru/append/when": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "ru/append/more": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "ru/append/up": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "ru/append/no": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "ru/append/if": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "ru/append/out": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "ru/append/about": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "ru/append/who": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "ru/append/get": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "ru/append/your": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "ru/append/said": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "ru/append/could": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "ru/append/them": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "ru/append/into": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "ru/append/just": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "ru/append/then": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "ru/append/our": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "ru/append/will": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "ru/append/has": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "ru/append/like": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "ru/append/than": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "ru/append/other": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "ru/append/how": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "ru/append/may": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "ru/append/two": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "ru/append/these": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "ru/append/should": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "ru/append/her": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "ru/append/him": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "ru/append/any": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "ru/append/were": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "ru/append/now": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "ru/append/here": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "ru/append/over": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "ru/append/time": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "ru/append/first": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "ru/append/very": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "ru/append/need": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "ru/append/make": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "ru/append/see": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "ru/append/way": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "ru/append/use": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "ru/append/does": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "ru/append/only": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "ru/append/new": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "ru/append/because": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "ru/append/going": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "ru/append/back": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "ru/append/people": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "ru/append/well": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "ru/append/know": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "ru/append/want": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "ru/repl/ALL": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "ru/repl/NONE": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "ru/repl/PLURAL": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "ru/repl/SINGULAR": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "ru/repl/VERB_3SG": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "ru/repl/VERB_PAST": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "ru/repl/VERB_ING": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "ru/repl/CONTRACT": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "ru/repl/EXPAND": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "ru/merge/ALL": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "ru/merge/NONE": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "ru/merge/MERGE_SPACE": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "ru/merge/MERGE_HYPHEN": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "ru/merge/SPLIT": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "ru/para/ALL": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "ru/para/NONE": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "ru/para/PARA_BREAK": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "ru/para/LIST_ITEM": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "en/para/PARA_BREAK/unknown": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "en/para/PARA_BREAK/editor": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "en/para/PARA_BREAK/chat": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "en/para/PARA_BREAK/browser": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "en/para/PARA_BREAK/messaging": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "he/para/PARA_BREAK/unknown": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "he/para/PARA_BREAK/editor": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "he/para/PARA_BREAK/chat": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "he/para/PARA_BREAK/browser": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "he/para/PARA_BREAK/messaging": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "ru/para/PARA_BREAK/unknown": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "ru/para/PARA_BREAK/editor": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "ru/para/PARA_BREAK/chat": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "ru/para/PARA_BREAK/browser": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
+        "ru/para/PARA_BREAK/messaging": Cell(threshold: nil, enabled: false, precision: nil, support: 0, precisionLCB95: nil),
     ])
 }
