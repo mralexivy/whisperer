@@ -2,24 +2,24 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <!--
-  LaunchAgent: daily Wispr corpus export
-  Phase 7 — keeps ~/wispr_corpus/ growing as Wispr purges audio blobs after ~2 weeks.
+  LaunchAgent: daily training corpus export
+  Keeps ~/corpus/ growing before the app purges audio blobs (~2 weeks).
 
   Install:
-    cp com.ivy.whisperer.wispr-corpus-export.plist ~/Library/LaunchAgents/
-    launchctl load ~/Library/LaunchAgents/com.ivy.whisperer.wispr-corpus-export.plist
+    cp com.ivy.whisperer.corpus-export.plist ~/Library/LaunchAgents/
+    launchctl load ~/Library/LaunchAgents/com.ivy.whisperer.corpus-export.plist
 
   Uninstall:
-    launchctl unload ~/Library/LaunchAgents/com.ivy.whisperer.wispr-corpus-export.plist
-    rm ~/Library/LaunchAgents/com.ivy.whisperer.wispr-corpus-export.plist
+    launchctl unload ~/Library/LaunchAgents/com.ivy.whisperer.corpus-export.plist
+    rm ~/Library/LaunchAgents/com.ivy.whisperer.corpus-export.plist
 
-  The export script (~wispr_corpus/export_wispr_corpus.py) is idempotent —
+  The export script (~/corpus/export_corpus.py) is idempotent —
   running it again just skips already-exported rows and audio files.
-  Log tail: tail -f ~/wispr_corpus/export.log
+  Log tail: tail -f ~/corpus/export.log
 -->
 <dict>
     <key>Label</key>
-    <string>com.ivy.whisperer.wispr-corpus-export</string>
+    <string>com.ivy.whisperer.corpus-export</string>
 
     <key>ProgramArguments</key>
     <array>
