@@ -145,12 +145,12 @@ enum PolishFeatureFlags {
     /// class has not been measured at its tier's precision bound, so switching this on cannot
     /// enable an uncertified class — it can only stop suppressing the certified ones.
     static var isEditorEnabled: Bool {
-        isFastPolishEnabled && UserDefaults.standard.bool(forKey: editorKey)
+        isFastPolishEnabled && (UserDefaults.standard.object(forKey: editorKey) as? Bool ?? true)
     }
 
     /// Whether the paragraph pass may insert breaks.
     static var areParagraphsEnabled: Bool {
-        isFastPolishEnabled && UserDefaults.standard.bool(forKey: paragraphsKey)
+        isFastPolishEnabled && (UserDefaults.standard.object(forKey: paragraphsKey) as? Bool ?? true)
     }
 
     // MARK: - Diagnostics

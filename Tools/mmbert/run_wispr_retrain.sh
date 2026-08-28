@@ -1,27 +1,25 @@
 #!/bin/bash
-# One command for the Wispr-corpus retrain.
+# Wispr-corpus retrain — all 3 languages (en / he / ru).
 #
-# Order:
-#   1. build_wispr_corpus    -- mine Wispr pairs into wispr_train.jsonl / wispr_val.jsonl
-#   2. build_eval_large      -- pin holdout (if not already done)
-#   3. build_corpus          -- merge all sources (no Wikipedia) into artifacts/data/
-#   4. train                 -- 3 epochs (more data = more epochs than history retrain)
-#   5. calibrate             -- fresh cache against pinned holdout
-#   6. export_coreml         -- if training succeeded
+# Steps:
+#   1. build_wispr_corpus    -- dictation pairs (mostly en)
+#   2. build_eval_large      -- pin holdout from history recordings
+#   2b. build_meeting_corpus -- meeting pairs (he + ru heavy)
+#   3. build_corpus          -- merge all, no Wikipedia
+#   4. train                 -- 4 epochs, script-balanced for he/ru
+#   5. calibrate             -- fresh cache
+#   6. export_coreml         -- fixed-shape mlpackage
 #
 # Usage:
 #   ./run_wispr_retrain.sh [--skip-corpus] [--skip-train] [--dry-run]
-#
-# Flags:
-#   --skip-corpus   skip steps 1-3 (use existing artifacts/data/)
-#   --skip-train    skip step 4 (calibrate existing artifacts/model-wispr/)
-#   --dry-run       print commands only
 set -euo pipefail
 cd "$(dirname "$0")"
 
 PY=./.venv/bin/python
 GOLDEN=artifacts/raw/history-golden.json
 A=artifacts
+D=data                    # pre-existing history data dir
+AD=$A/data                # generated corpus output dir
 
 SKIP_CORPUS=0
 SKIP_TRAIN=0
@@ -43,59 +41,75 @@ run() {
     fi
 }
 
+mkdir -p "$AD"
+
 if [ "$SKIP_CORPUS" -eq 0 ]; then
-    # ── Step 1: build Wispr corpus ──────────────────────────────────────────
+    # ── Step 1: Wispr dictation corpus (en-dominant) ─────────────────────────
     echo "=== 1/6 build_wispr_corpus  $(date +%T)"
     run $PY build_wispr_corpus.py \
         --corpus ~/wispr_corpus/corpus.jsonl \
-        --audio-dir ~/wispr_corpus/audio/ \
-        --our-asr "$A/our_asr_pairs.jsonl" \
-        --out-train data/wispr_train.jsonl \
-        --out-val   data/wispr_val.jsonl \
-        --report    "$A/wispr_corpus_report.json" \
+        --out "$AD" \
         > "$A/build_wispr_corpus.log" 2>&1
-    grep -E "^\[" "$A/build_wispr_corpus.log" || true
+    grep -E "train|val|Accepted|script" "$A/build_wispr_corpus.log" | tail -10 || true
 
-    # ── Step 2: pin the history holdout ─────────────────────────────────────
+    # ── Step 2: pin history holdout ──────────────────────────────────────────
     echo "=== 2/6 build_eval_large  $(date +%T)"
     run $PY build_eval_large.py \
         --golden "$GOLDEN" \
-        --train-frac 0.55 --min-eval 300 \
-        --report "$A/eval_real_large_report_wispr.json" \
+        --train-frac 0.55 \
+        --min-eval 300 \
         > "$A/build_eval_large_wispr.log" 2>&1
-    grep -E "^\[" "$A/build_eval_large_wispr.log" || true
+    tail -5 "$A/build_eval_large_wispr.log" || true
 
-    # ── Step 3: merge all sources (no Wikipedia) ─────────────────────────────
+    # ── Step 2b: meeting corpus (he=820, ru=390, en=323) ────────────────────
+    echo "=== 2b/6 build_meeting_corpus  $(date +%T)"
+    run $PY build_meeting_corpus.py \
+        --out "$AD" \
+        > "$A/build_meeting_corpus.log" 2>&1
+    grep -E "Accepted|en:|he:|ru:|Wrote" "$A/build_meeting_corpus.log" || true
+
+    # ── Step 3: merge — no Wikipedia, all 3 languages ────────────────────────
+    # Weighting rationale (before script-balance in trainer):
+    #   wispr dictation: high quality en, 6x
+    #   meeting:         real he/ru, 5x (heavy)
+    #   train_real_large: in-domain en, 5x
+    #   gold_train:      authored, 8x
     echo "=== 3/6 build_corpus  $(date +%T)"
     run $PY build_corpus.py \
         --golden "$GOLDEN" \
         --wiki-en 0 --wiki-he 0 --wiki-ru 0 \
-        --indomain-repeats 8 --teacher-repeat 6 \
-        --extra-train data/train_real_large.jsonl --extra-train-repeat 6 \
-        --extra-train "data/wispr_train.jsonl" --extra-train-repeat 4 \
-        --holdout data/eval_real_large.jsonl \
-        --holdout data/wispr_val.jsonl \
+        --indomain-repeats 5 \
+        --extra-train-weighted "$AD/wispr_train.jsonl:6" \
+        --extra-train-weighted "$AD/meeting_train.jsonl:5" \
+        --extra-train-weighted "$D/train_real_large.jsonl:5" \
+        --extra-train-weighted "$D/gold_train.jsonl:8" \
+        --holdout "$D/eval_real_large.jsonl" \
+        --holdout "$AD/wispr_val.jsonl" \
+        --holdout "$AD/meeting_val.jsonl" \
         > "$A/build_corpus_wispr.log" 2>&1
-    grep -E "^\[" "$A/build_corpus_wispr.log" || true
+    tail -10 "$A/build_corpus_wispr.log" || true
 fi
 
 if [ "$SKIP_TRAIN" -eq 0 ]; then
-    # ── Step 4: train (3 epochs — more data warrants one extra pass) ─────────
+    # ── Step 4: train — 4 epochs, aggressively balance he/ru ─────────────────
+    # script-balance: ru=4.0 (least data), he=2.5 (1025 pairs but still under en),
+    #                 en=1.0 (dominant by raw count, needs no boost)
+    # head-weights: append/repl 1.5x (new heads, need more gradient)
+    #               para 1.5x (currently makes zero proposals)
+    #               error 0.5x (simpler task, reduce domination)
     echo "=== 4/6 train  $(date +%T)"
     run $PY train.py \
-        --epochs 3 \
+        --epochs 4 \
         --out "$A/model-wispr" \
-        --head-weights "error=0.5,punct=1.0,case=1.0,disf=1.0,append=1.5,repl=1.5,merge=0.8,para=1.0" \
-        --script-balance "en=1.0,he=3.0,ru=3.0" \
+        --script-balance "en=1.0,he=2.5,ru=4.0" \
+        --head-weights "error=0.5,punct=1.0,case=1.0,disf=1.0,append=1.5,repl=1.5,merge=0.8,para=1.5" \
         > "$A/train_wispr.log" 2>&1
-    tail -5 "$A/train_wispr.log"
+    tail -10 "$A/train_wispr.log"
 fi
 
 # ── Step 5: calibrate ────────────────────────────────────────────────────────
 echo "=== 5/6 calibrate  $(date +%T)"
-# A fresh --cache: calib_rows_wispr.json holds proposals for the previous
-# checkpoint, and reusing it would calibrate thresholds for a model that no
-# longer exists.
+# Fresh cache — a stale calib_rows_wispr.json calibrates the WRONG checkpoint.
 run $PY calibrate.py \
     --model "$A/model-wispr" \
     --cache "$A/calib_rows_wispr.json" \
