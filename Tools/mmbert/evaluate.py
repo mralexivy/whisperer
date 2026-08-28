@@ -43,7 +43,7 @@ from transformers import AutoTokenizer
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from common import CASE_LABELS, HEADS, HEAD_SIZES, IGNORE, PUNCT_LABELS  # noqa: E402
 from data import EditDataset, collate  # noqa: E402
-from model import MMBERTEditingModel  # noqa: E402
+from model import MMBERTEditingModel, keep_bias_overrides_from_args  # noqa: E402
 
 HERE = Path(__file__).resolve().parent
 GATE = 0.99
@@ -227,7 +227,9 @@ def main() -> None:
     ck = torch.load(Path(args.model) / "model.pt", map_location="cpu",
                     weights_only=False)
     tok = AutoTokenizer.from_pretrained(args.model)
-    model = MMBERTEditingModel(args.base, keep_bias=ck["args"]["keep_bias"])
+    model = MMBERTEditingModel(
+        args.base, keep_bias=ck["args"]["keep_bias"],
+        keep_bias_by_head=keep_bias_overrides_from_args(ck["args"]))
     model.load_state_dict(ck["state_dict"])
     model.to(device).eval()
 
