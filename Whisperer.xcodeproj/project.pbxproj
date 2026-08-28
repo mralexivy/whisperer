@@ -27,6 +27,11 @@
 		AACC000E2F40000100000009 /* Hub in Frameworks */ = {isa = PBXBuildFile; productRef = AACC000C2F40000100000007 /* Hub */; };
 		AACC000F2F4000010000000A /* Tokenizers in Frameworks */ = {isa = PBXBuildFile; productRef = AACC000D2F40000100000008 /* Tokenizers */; };
 		WWKK00012F40000100000001 /* WhisperKit in Frameworks */ = {isa = PBXBuildFile; productRef = WWKK00022F40000100000002 /* WhisperKit */; };
+		MMBE00062F90000100000006 /* MMBERTEditing_32.mlpackage in Resources */ = {isa = PBXBuildFile; fileRef = MMBE00012F90000100000001 /* MMBERTEditing_32.mlpackage */; };
+		MMBE00072F90000100000007 /* MMBERTEditing_64.mlpackage in Resources */ = {isa = PBXBuildFile; fileRef = MMBE00022F90000100000002 /* MMBERTEditing_64.mlpackage */; };
+		MMBE00082F90000100000008 /* MMBERTEditing_128.mlpackage in Resources */ = {isa = PBXBuildFile; fileRef = MMBE00032F90000100000003 /* MMBERTEditing_128.mlpackage */; };
+		MMBE00092F90000100000009 /* tokenizer.json in Resources */ = {isa = PBXBuildFile; fileRef = MMBE00042F90000100000004 /* tokenizer.json */; };
+		MMBE000A2F9000010000000A /* tokenizer_config.json in Resources */ = {isa = PBXBuildFile; fileRef = MMBE00052F90000100000005 /* tokenizer_config.json */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -578,6 +583,11 @@
 		10DB4E112F3779900053C1FB /* whisperer.xcodeproj */ = {isa = PBXFileReference; lastKnownFileType = "wrapper.pb-project"; path = whisperer.xcodeproj; sourceTree = "<group>"; };
 		10DED0232F27E4B40054AFA2 /* whisperer.xcodeproj */ = {isa = PBXFileReference; lastKnownFileType = "wrapper.pb-project"; path = whisperer.xcodeproj; sourceTree = "<group>"; };
 		BBTT00022F50000100000002 /* WhispererTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = WhispererTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		MMBE00012F90000100000001 /* MMBERTEditing_32.mlpackage */ = {isa = PBXFileReference; lastKnownFileType = "wrapper.mlpackage"; name = MMBERTEditing_32.mlpackage; path = Tools/mmbert/artifacts/mmbert-v3.mlpackage/MMBERTEditing_32.mlpackage; sourceTree = SOURCE_ROOT; };
+		MMBE00022F90000100000002 /* MMBERTEditing_64.mlpackage */ = {isa = PBXFileReference; lastKnownFileType = "wrapper.mlpackage"; name = MMBERTEditing_64.mlpackage; path = Tools/mmbert/artifacts/mmbert-v3.mlpackage/MMBERTEditing_64.mlpackage; sourceTree = SOURCE_ROOT; };
+		MMBE00032F90000100000003 /* MMBERTEditing_128.mlpackage */ = {isa = PBXFileReference; lastKnownFileType = "wrapper.mlpackage"; name = MMBERTEditing_128.mlpackage; path = Tools/mmbert/artifacts/mmbert-v3.mlpackage/MMBERTEditing_128.mlpackage; sourceTree = SOURCE_ROOT; };
+		MMBE00042F90000100000004 /* tokenizer.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; name = "tokenizer.json"; path = Tools/mmbert/artifacts/mmbert-v3.mlpackage/tokenizer.json; sourceTree = SOURCE_ROOT; };
+		MMBE00052F90000100000005 /* tokenizer_config.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; name = "tokenizer_config.json"; path = Tools/mmbert/artifacts/mmbert-v3.mlpackage/tokenizer_config.json; sourceTree = SOURCE_ROOT; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
@@ -2131,6 +2141,11 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				MMBE00062F90000100000006 /* MMBERTEditing_32.mlpackage in Resources */,
+				MMBE00072F90000100000007 /* MMBERTEditing_64.mlpackage in Resources */,
+				MMBE00082F90000100000008 /* MMBERTEditing_128.mlpackage in Resources */,
+				MMBE00092F90000100000009 /* tokenizer.json in Resources */,
+				MMBE000A2F9000010000000A /* tokenizer_config.json in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
