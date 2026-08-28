@@ -13,10 +13,18 @@ fold the int8 quantisation delta (measured up to 0.49 in logit space) into the t
 that delta is exactly the thing the Swift side must be judged free of.
 
     .venv/bin/python build_swift_reference.py
+    .venv/bin/python build_swift_reference.py --mlpackage artifacts/mmbert-v3.mlpackage
+
+The package must be the one the app actually bundles -- see the `path =` entries for
+MMBERTEditing_*.mlpackage in project.pbxproj. Regenerating from a different export than
+the app ships is how `testHeadLogitsMatchPythonReference` ends up failing on 835
+assertions that are all the same fact: the fixture and the binary disagree about which
+checkpoint they are.
 """
 
 from __future__ import annotations
 
+import argparse
 import json
 from pathlib import Path
 
@@ -55,12 +63,18 @@ def shape_for(n: int) -> int:
 
 
 def main() -> None:
-    tok = AutoTokenizer.from_pretrained(MLPACKAGE / "model")
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--mlpackage", default=str(MLPACKAGE),
+                    help="the .mlpackage directory the app bundles")
+    args = ap.parse_args()
+    pkg = Path(args.mlpackage)
+
+    tok = AutoTokenizer.from_pretrained(pkg / "model")
     bos = tok.cls_token_id if tok.cls_token_id is not None else tok.bos_token_id
     eos = tok.sep_token_id if tok.sep_token_id is not None else tok.eos_token_id
     pad = tok.pad_token_id or 0
 
-    models = {s: ct.models.MLModel(str(MLPACKAGE / f"MMBERTEditing_{s}.mlpackage"))
+    models = {s: ct.models.MLModel(str(pkg / f"MMBERTEditing_{s}.mlpackage"))
               for s in (32, 64, 128)}
 
     out = {"bos": int(bos), "eos": int(eos), "pad": int(pad), "cases": []}
