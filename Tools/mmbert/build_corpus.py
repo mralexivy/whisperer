@@ -115,6 +115,24 @@ def norm_key(text: str, drop_fillers: bool = True) -> str:
 def load_db(path: Path) -> List[dict]:
     if not path.exists():
         return []
+    # The app's history lives inside its sandbox container, which macOS protects
+    # behind Full Disk Access. Without FDA, sqlite reports a bare "authorization
+    # denied" that surfaces upstream as "no rows in <path>" — indistinguishable
+    # from an empty database, and the reason a retrain looks like a data problem
+    # when it is a permissions problem.
+    try:
+        with open(path, "rb") as fh:
+            fh.read(16)
+    except PermissionError as exc:
+        raise SystemExit(
+            f"Cannot read {path}: {exc}\n"
+            "This is macOS Full Disk Access, not a missing database. Grant FDA to "
+            "the terminal (or IDE) running this script in System Settings > Privacy "
+            "& Security > Full Disk Access, then re-run.\n"
+            "Do NOT fall back to ~/Library/Application Support/Whisperer/history.sqlite: "
+            "that is the non-sandboxed store used by Debug builds and holds a different, "
+            "much smaller set of recordings."
+        ) from exc
     con = sqlite3.connect(f"file:{path}?mode=ro", uri=True)
     con.row_factory = sqlite3.Row
     rows = [dict(r) for r in con.execute(

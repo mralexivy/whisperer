@@ -219,15 +219,18 @@ def run_inference(model_dir: Path, data_dir: Path, base: str, batch: int,
     from transformers import AutoTokenizer
 
     from data import EditDataset, collate
-    from model import MMBERTEditingModel
+    from model import MMBERTEditingModel, keep_bias_overrides_from_args
 
     device = torch.device("mps" if torch.backends.mps.is_available() else "cpu")
     ck = torch.load(model_dir / "model.pt", map_location="cpu", weights_only=False)
     tok = AutoTokenizer.from_pretrained(str(model_dir))
-    model = MMBERTEditingModel(base, keep_bias=ck["args"]["keep_bias"])
+    kb_over = keep_bias_overrides_from_args(ck["args"])
+    model = MMBERTEditingModel(base, keep_bias=ck["args"]["keep_bias"],
+                               keep_bias_by_head=kb_over)
     model.load_state_dict(ck["state_dict"])
     model.to(device).eval()
-    print(f"[info] keep_bias={ck['args']['keep_bias']} device={device}")
+    print(f"[info] keep_bias={ck['args']['keep_bias']} overrides={kb_over} "
+          f"device={device}")
 
     coll = partial(collate, pad_id=tok.pad_token_id or 0)
     out: Dict[str, list] = {}

@@ -59,7 +59,8 @@ def set_seed(s: int) -> None:
 EXCLUDED_PUNCT = (",", ";", ":", "!")
 
 
-def class_weights(ds, head: str, keep_weight: float, device) -> torch.Tensor:
+def class_weights(ds, head: str, keep_weight: float, device,
+                  para_nonnone_boost: float = 1.0) -> torch.Tensor:
     """Inverse-frequency weights, then the no-change class is multiplied up."""
     cnt = Counter()
     for r in ds.rows:
@@ -85,10 +86,61 @@ def class_weights(ds, head: str, keep_weight: float, device) -> torch.Tensor:
     # append/repl/merge/para have NONE at index 0 and are extremely sparse —
     # without capping, NONE's sqrt-inverse weight dominates the mean and
     # effectively drives all non-NONE classes toward extreme over-weighting.
-    if head in ("append", "repl", "merge", "para"):
+    if head in ("append", "repl", "merge"):
         w[0] = min(float(w[0]), float(w[1:].mean()) if n > 1 else 1.0)
+    # `para` is excluded from that cap and gets an explicit non-NONE boost.
+    # Its imbalance is a different order of magnitude: 710 positives against
+    # 482k NONE (0.083%). sqrt-inverse frequency alone buys the positives a
+    # ~36x weight against a 680:1 count ratio, which -- with the +2.0 KEEP
+    # prior on top -- collapsed the head to "always NONE" and produced zero
+    # proposals at every threshold in calibration. The cap never bound here
+    # (w[0] is already the smallest weight), so removing para from it is a
+    # no-op; the boost is what supplies the gradient.
+    if head == "para" and n > 1 and para_nonnone_boost != 1.0:
+        w[1:] = w[1:] * para_nonnone_boost
     w = w / w.mean()
     return w.to(device)
+
+
+# Class index treated as "no edit / leave it alone" per head, for the
+# collapse check in validation. `case` has no NONE class (0 == LOWER), so its
+# number reads as "how often did it predict something other than lowercase".
+NONE_CLASS = 0
+
+
+def head_recall_report(model, vdl, device) -> dict:
+    """Per-head non-NONE gold / predicted counts and recall over the val set.
+
+    A pooled scalar loss cannot see a collapsed head: on a 680:1 imbalance a
+    head that always predicts NONE has a LOWER loss than one that risks a
+    proposal, so collapse looks like progress. These counts are what must
+    never be zero.
+    """
+    gold_n = Counter()
+    pred_n = Counter()
+    hit_n = Counter()
+    model.eval()
+    with torch.no_grad():
+        for batch in vdl:
+            b = {k: (v.to(device) if torch.is_tensor(v) else v)
+                 for k, v in batch.items()}
+            logits = model(b["input_ids"], b["attention_mask"],
+                           b["punct_state"], b["case_state"],
+                           dest_id=b.get("dest_id"))
+            for h in HEADS:
+                lb = b[f"labels_{h}"].reshape(-1)
+                pr = logits[h].reshape(-1, HEAD_SIZES[h]).argmax(-1)
+                valid = lb != IGNORE
+                lb, pr = lb[valid], pr[valid]
+                g = lb != NONE_CLASS
+                p = pr != NONE_CLASS
+                gold_n[h] += int(g.sum())
+                pred_n[h] += int(p.sum())
+                hit_n[h] += int((g & (pr == lb)).sum())
+    model.train()
+    return {h: {"gold": gold_n[h], "pred": pred_n[h], "hit": hit_n[h],
+                "recall": hit_n[h] / gold_n[h] if gold_n[h] else 0.0}
+            for h in HEADS}
 
 
 def main() -> None:
@@ -104,6 +156,13 @@ def main() -> None:
     ap.add_argument("--seed", type=int, default=1234)
     ap.add_argument("--keep-bias", type=float, default=2.0)
     ap.add_argument("--keep-weight", type=float, default=3.0)
+    ap.add_argument("--para-keep-bias", type=float, default=0.0,
+                    help="KEEP-logit prior for the para head only. 0 disables "
+                         "it: para positives are 0.08%% of positions and the "
+                         "global +2.0 prior collapses the head to always-NONE.")
+    ap.add_argument("--para-weight", type=float, default=8.0,
+                    help="extra multiplier on the para head's non-NONE class "
+                         "weights, applied after sqrt-inverse frequency")
     ap.add_argument("--warmup", type=float, default=0.06)
     ap.add_argument("--limit", type=int, default=None)
     ap.add_argument("--script-balance", default="en=1.0,he=2.0,ru=2.0",
@@ -180,11 +239,17 @@ def main() -> None:
     vdl = DataLoader(val_ds, batch_size=args.batch, shuffle=False,
                      collate_fn=coll, num_workers=0)
 
-    model = MMBERTEditingModel(args.base, keep_bias=args.keep_bias).to(device)
+    keep_bias_by_head = {"para": args.para_keep_bias}
+    model = MMBERTEditingModel(args.base, keep_bias=args.keep_bias,
+                               keep_bias_by_head=keep_bias_by_head).to(device)
+    print(f"[loss] keep_bias={args.keep_bias} overrides={keep_bias_by_head}",
+          flush=True)
 
     hw = dict(kv.split("=") for kv in args.head_weights.split(","))
     hw = {k: float(v) for k, v in hw.items()}
-    cw = {h: class_weights(train_ds, h, args.keep_weight, device) for h in HEADS}
+    cw = {h: class_weights(train_ds, h, args.keep_weight, device,
+                           para_nonnone_boost=args.para_weight)
+          for h in HEADS}
     print("[loss] class weights:",
           {h: [round(float(x), 3) for x in cw[h]] for h in HEADS}, flush=True)
 
@@ -323,6 +388,26 @@ def main() -> None:
                 vl += float(l)
                 vn += 1
         print(f"[val] epoch={epoch} loss={vl / max(vn, 1):.4f}", flush=True)
+
+        # Per-head collapse check. The pooled loss above cannot show it.
+        rep = head_recall_report(model, vdl, device)
+        for h in HEADS:
+            r = rep[h]
+            if r["gold"] == 0:
+                # Distinguish "the head is dead" from "the val set has nothing
+                # to measure it with" — val.jsonl currently carries no para
+                # gold at all, and reading that as a pass would repeat the
+                # exact failure this report exists to catch.
+                flag = "  <-- NO GOLD IN VAL (recall unmeasurable)"
+            elif r["pred"] == 0:
+                flag = "  <-- COLLAPSED (zero proposals)"
+            else:
+                flag = ""
+            print(f"[val] epoch={epoch} head={h} nonNONE_gold={r['gold']} "
+                  f"nonNONE_pred={r['pred']} recall={r['recall']:.3f}{flag}",
+                  flush=True)
+        log.append({"step": step, "val_epoch": epoch,
+                    "val_loss": vl / max(vn, 1), "head_report": rep})
         model.train()
 
     wall = time.time() - t_start

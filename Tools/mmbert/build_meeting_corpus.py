@@ -14,6 +14,10 @@ Alignment strategy
     [T_prev_ref - 2000, T_ref + 3000] ms.
   - Concatenate live.text as raw; use refined.text as target.
   - Quality gate: SequenceMatcher ratio ≥ MIN_RATIO and word delta ≤ MAX_WORD_DELTA.
+  - Consecutive surviving segments are grouped into ~60-120 word documents so
+    that paragraph boundaries land INSIDE an example (see GROUP_TARGET_WORDS).
+    Refined HTML is parsed with build_wispr_corpus.extract_html_structure, so
+    <li> becomes LIST_ITEM and each new segment in a group becomes PARA_BREAK.
 
 Scope
 -----
@@ -75,10 +79,11 @@ ALL_FILLERS = BC.ALL_FILLERS
 STRONG_FILLERS = BC.STRONG_FILLERS
 teacher_quality_reject = BC.teacher_quality_reject
 
-# Import the full aligner from build_wispr_corpus
+# Import the full aligner + HTML structure extractor from build_wispr_corpus
 try:
     import build_wispr_corpus as BWC
     wispr_align_pair = BWC.wispr_align_pair
+    extract_html_structure = BWC.extract_html_structure
     HAS_WISPR_ALIGNER = True
 except ImportError:
     HAS_WISPR_ALIGNER = False
@@ -98,7 +103,19 @@ WINDOW_BACK_MS = 2000  # ms before refined timestamp to include live segs
 WINDOW_FWD_MS = 3000   # ms after refined timestamp to include live segs
 
 PARA_NONE = "NONE"
+PARA_BREAK = "PARA_BREAK"
+PARA_LIST_ITEM = "LIST_ITEM"
 _HTML_TAG = re.compile(r"</?(?:ol|ul|li)\b[^>]*>", re.IGNORECASE)
+
+# Multi-segment grouping. One example per refined segment can never contain a
+# PARA_BREAK: a paragraph break is a boundary BETWEEN refined segments, so with
+# one segment per example there is no boundary inside the example and the para
+# head sees nothing but NONE. Consecutive refined segments are therefore
+# concatenated into documents, with the first word of every segment after the
+# first labelled PARA_BREAK. Sized to stay inside the trainer's 128-token cap
+# (mean ~1.6 wordpieces/word for en/he/ru here).
+GROUP_TARGET_WORDS = 60   # close the document once it reaches this many words
+GROUP_MAX_WORDS = 120     # never exceed this
 
 
 def parse_timestamp_ms(ts: str) -> int:
@@ -116,7 +133,13 @@ def parse_timestamp_ms(ts: str) -> int:
 
 
 def strip_html(text: str) -> str:
-    """Remove HTML list tags from text."""
+    """Remove HTML list tags from text.
+
+    Only for LIVE (raw ASR) segments, which carry no structure worth keeping.
+    Never call this on refined text -- it deletes the <ol>/<ul>/<li> markup that
+    is the only source of LIST_ITEM labels. Refined text goes through
+    build_wispr_corpus.extract_html_structure instead.
+    """
     return _HTML_TAG.sub("", text).strip()
 
 
@@ -147,7 +170,11 @@ def load_live_segments(path: Path) -> List[Dict]:
 
 
 def load_refined_segments(path: Path) -> List[Dict]:
-    """Load and sort refined segments by timestamp."""
+    """Load and sort refined segments by timestamp.
+
+    The text is kept VERBATIM, HTML markup included. Structure extraction
+    happens later, in group_pairs, via extract_html_structure.
+    """
     segs = []
     for line in path.read_text(encoding="utf-8").splitlines():
         line = line.strip()
@@ -159,7 +186,7 @@ def load_refined_segments(path: Path) -> List[Dict]:
             continue
         if "text" not in d or "timestamp" not in d:
             continue
-        text = strip_html(d["text"].strip())
+        text = d["text"].strip()
         if not text:
             continue
         segs.append({
@@ -239,12 +266,95 @@ def build_pair_example(
     raw: str,
     refined: str,
     script: str,
+    para_marks: Dict[int, str],
     dest: int = 0,
 ) -> Optional[Tuple[Optional[Example], Counter, int, int]]:
     """Build a training example from (raw, refined) using the wispr aligner."""
     if HAS_WISPR_ALIGNER:
-        return wispr_align_pair(raw, refined, script, "meeting", {}, dest)
+        return wispr_align_pair(raw, refined, script, "meeting", para_marks, dest)
     return None
+
+
+def _assemble_group(
+    segs: List[Tuple[str, str, Dict[int, str]]],
+    script: str,
+) -> Tuple[str, str, Dict[int, str], str]:
+    """Concatenate (raw, clean_refined, marks) segments into one document.
+
+    The first word of every segment after the first becomes PARA_BREAK, unless
+    that segment's own HTML already marked it LIST_ITEM (the more specific
+    label wins).
+    """
+    raws: List[str] = []
+    cleans: List[str] = []
+    marks: Dict[int, str] = {}
+    offset = 0
+    for idx, (raw, clean, seg_marks) in enumerate(segs):
+        words = clean.split()
+        for wi, label in seg_marks.items():
+            if 0 <= wi < len(words):
+                marks[offset + wi] = label
+        if idx > 0 and words and offset not in marks:
+            marks[offset] = PARA_BREAK
+        raws.append(raw)
+        cleans.append(clean)
+        offset += len(words)
+    return " ".join(raws).strip(), " ".join(cleans).strip(), marks, script
+
+
+def group_pairs(
+    pairs: List[Tuple[str, str]],
+    stats: Counter,
+) -> List[Tuple[str, str, Dict[int, str], str]]:
+    """Turn per-segment (raw, refined_html) pairs into multi-segment documents.
+
+    Segments are gated individually (so one bad alignment cannot poison a whole
+    document) and a failed or off-script segment closes the current group: a
+    PARA_BREAK is only honest between segments whose raw audio is actually
+    adjacent in the concatenated input.
+    """
+    groups: List[Tuple[str, str, Dict[int, str], str]] = []
+    cur: List[Tuple[str, str, Dict[int, str]]] = []
+    cur_words = 0
+    cur_script: Optional[str] = None
+
+    def flush() -> None:
+        nonlocal cur, cur_words, cur_script
+        if cur and cur_script:
+            groups.append(_assemble_group(cur, cur_script))
+        cur, cur_words, cur_script = [], 0, None
+
+    for raw, refined_html in pairs:
+        clean, seg_marks = extract_html_structure(refined_html)
+        clean = re.sub(r"\s+", " ", clean).strip()
+
+        if not quality_gate(raw, clean):
+            stats["dropped_quality"] += 1
+            flush()
+            continue
+
+        script = detect_script(clean)
+        if script not in ("en", "he", "ru"):
+            stats["dropped_script"] += 1
+            flush()
+            continue
+
+        if cur_script is not None and script != cur_script:
+            flush()
+
+        n_words = len(clean.split())
+        if cur and cur_words + n_words > GROUP_MAX_WORDS:
+            flush()
+
+        cur.append((raw, clean, seg_marks))
+        cur_words += n_words
+        cur_script = script
+
+        if cur_words >= GROUP_TARGET_WORDS:
+            flush()
+
+    flush()
+    return groups
 
 
 def run(args: argparse.Namespace) -> None:
@@ -263,6 +373,8 @@ def run(args: argparse.Namespace) -> None:
     stats: Counter = Counter()
     mask_totals: Counter = Counter()
     by_script: Counter = Counter()
+    para_dist: Counter = Counter()
+    para_by_script: Counter = Counter()
 
     for meeting_dir in meeting_dirs:
         live_segs = load_live_segments(meeting_dir / "live.ndjson")
@@ -271,24 +383,18 @@ def run(args: argparse.Namespace) -> None:
         pairs = align_meeting(live_segs, refined_segs)
         stats["pairs_raw"] += len(pairs)
 
-        for raw, refined in pairs:
-            # Quality gate
-            if not quality_gate(raw, refined):
-                stats["dropped_quality"] += 1
-                continue
+        # Group consecutive refined segments so paragraph boundaries exist
+        # INSIDE an example. Quality/script gating happens per segment inside.
+        groups = group_pairs(pairs, stats)
+        stats["groups"] += len(groups)
 
-            # Script detection on the refined (cleaner) text
-            script = detect_script(refined)
-            if script not in ("en", "he", "ru"):
-                stats["dropped_script"] += 1
-                continue
-
+        for raw, refined, para_marks, script in groups:
             # Holdout protection: check against eval set
             key = norm_key(raw)
             # (Skip holdout check for meeting corpus — different domain from eval set)
 
             # Build example
-            result = build_pair_example(raw, refined, script)
+            result = build_pair_example(raw, refined, script, para_marks)
             if result is None:
                 stats["dropped_aligner_unavailable"] += 1
                 continue
@@ -307,8 +413,14 @@ def run(args: argparse.Namespace) -> None:
             row["weight"] = 0.7  # down-weighted vs dictation pairs
             all_examples.append(row)
 
+            for v in row.get("para", []):
+                name = "IGNORE" if v == IGNORE else PARA_LABELS[v]
+                para_dist[name] += 1
+                para_by_script[f"{script}/{name}"] += 1
+
     print(f"\nCorpus stats:")
     print(f"  Raw pairs:     {stats['pairs_raw']}")
+    print(f"  Grouped docs:  {stats['groups']}")
     print(f"  Dropped (quality gate): {stats['dropped_quality']}")
     print(f"  Dropped (script):       {stats['dropped_script']}")
     print(f"  Dropped (alignment):    {stats['dropped_alignment']}")
@@ -317,6 +429,19 @@ def run(args: argparse.Namespace) -> None:
     print(f"    en:  {stats.get('accepted_en', 0)}")
     print(f"    he:  {stats.get('accepted_he', 0)}")
     print(f"    ru:  {stats.get('accepted_ru', 0)}")
+
+    print(f"\n  para label distribution: {dict(para_dist)}")
+    for sc in ("en", "he", "ru"):
+        row = {name: para_by_script[f"{sc}/{name}"]
+               for name in ("NONE", "PARA_BREAK", "LIST_ITEM", "IGNORE")
+               if para_by_script[f"{sc}/{name}"]}
+        pos = row.get("PARA_BREAK", 0) + row.get("LIST_ITEM", 0)
+        print(f"    {sc}: {row}  positives={pos}")
+    total_pos = para_dist["PARA_BREAK"] + para_dist["LIST_ITEM"]
+    print(f"  para positives (PARA_BREAK + LIST_ITEM): {total_pos}")
+    if total_pos == 0:
+        print("  WARNING: zero para positives — the para head cannot learn "
+              "from this corpus.")
 
     if args.report:
         return
@@ -362,6 +487,8 @@ def run(args: argparse.Namespace) -> None:
         "train": len(train_rows),
         "val": len(val_rows),
         "mask_counts": dict(mask_totals),
+        "para_dist": dict(para_dist),
+        "para_by_script": dict(para_by_script),
     }
     (out_dir / "meeting_coverage.json").write_text(
         json.dumps(coverage, indent=2, ensure_ascii=False), encoding="utf-8"

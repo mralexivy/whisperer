@@ -16,7 +16,10 @@ set -euo pipefail
 cd "$(dirname "$0")"
 
 PY=./.venv/bin/python
-GOLDEN=artifacts/raw/history-golden.json
+# The golden set that ships with the repo. The previous value pointed at
+# artifacts/raw/history-golden.json, which does not exist — step 2 died with
+# FileNotFoundError on every run.
+GOLDEN=../../WhispererTests/TestData/golden-set.json
 A=artifacts
 D=data                    # pre-existing history data dir
 AD=$A/data                # generated corpus output dir
@@ -61,7 +64,9 @@ if [ "$SKIP_CORPUS" -eq 0 ]; then
         > "$A/build_eval_large_wispr.log" 2>&1
     tail -5 "$A/build_eval_large_wispr.log" || true
 
-    # ── Step 2b: meeting corpus (he=820, ru=390, en=323) ────────────────────
+    # ── Step 2b: meeting corpus (he=499, ru=248, en=207 grouped documents) ──
+    # Segments are grouped into 60-120 word documents so PARA_BREAK exists
+    # inside an example; this is the only he/ru supply for the para head.
     echo "=== 2b/6 build_meeting_corpus  $(date +%T)"
     run $PY build_meeting_corpus.py \
         --out "$AD" \
@@ -95,8 +100,13 @@ if [ "$SKIP_TRAIN" -eq 0 ]; then
     # script-balance: ru=4.0 (least data), he=2.5 (1025 pairs but still under en),
     #                 en=1.0 (dominant by raw count, needs no boost)
     # head-weights: append/repl 1.5x (new heads, need more gradient)
-    #               para 1.5x (currently makes zero proposals)
+    #               para 1.5x — plus train.py defaults --para-keep-bias 0
+    #                    (no KEEP prior) and --para-weight 8 (non-NONE class
+    #                    weight boost). The head-weight alone did not stop the
+    #                    first run collapsing to zero proposals.
     #               error 0.5x (simpler task, reduce domination)
+    # Watch the per-epoch "[val] ... head=<h> nonNONE_pred=" lines: any head at
+    # 0 is a collapse and step 5b will fail the run over it.
     echo "=== 4/6 train  $(date +%T)"
     run $PY train.py \
         --epochs 4 \
@@ -117,6 +127,42 @@ run $PY calibrate.py \
     --out thresholds-calibrated-wispr.json \
     > "$A/calibrate_wispr.log" 2>&1
 tail -40 "$A/calibrate_wispr.log"
+
+# ── Step 5b: assert no head is collapsed ─────────────────────────────────────
+# `set -euo pipefail` catches crashes only. The first wispr run completed with a
+# clean exit code while the `para` head made ZERO proposals at every threshold —
+# all 27 of its cells came back support=0 — and it shipped. A head that proposes
+# nothing is a build failure, not a calibration result.
+echo "=== 5b/6 assert no collapsed head  $(date +%T)"
+if [ "$DRY_RUN" -eq 0 ]; then
+    $PY - thresholds-calibrated-wispr.json <<'PYEOF'
+import json, sys
+from collections import defaultdict
+
+path = sys.argv[1]
+cells = json.load(open(path))["cells"]
+
+support = defaultdict(int)
+seen = defaultdict(int)
+for name, c in cells.items():
+    if c.get("action") == "ALL":      # aggregate cell, never enabled
+        continue
+    head = c["head"]
+    seen[head] += 1
+    support[head] += int(c.get("max_support_any_threshold") or 0)
+
+dead = sorted(h for h, n in seen.items() if support[h] == 0)
+for head in sorted(seen):
+    print(f"  {head}: cells={seen[head]} max_support_any_threshold={support[head]}")
+if dead:
+    print(f"FAIL: head(s) with zero proposals at every threshold: "
+          f"{', '.join(dead)}", file=sys.stderr)
+    print("A collapsed head must not ship. Check the [val] head=... lines in "
+          f"the train log for nonNONE_pred=0.", file=sys.stderr)
+    sys.exit(1)
+print("OK: every head produced at least one proposal.")
+PYEOF
+fi
 
 # ── Step 6: export CoreML ────────────────────────────────────────────────────
 echo "=== 6/6 export_coreml  $(date +%T)"
