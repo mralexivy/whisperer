@@ -81,6 +81,45 @@ real history transcripts, on both builders.
 input that had them would diff to one deletion per token — the literal diff and the worst
 possible outcome — so that case is refused before alignment runs, and logged.
 
+## Wispr Flow edit distribution (1,639 en pairs, 60,878 words, measured 2026-08-27)
+
+From `~/wispr_corpus/corpus.jsonl` — Wispr's production cloud polisher against the user's own dictation:
+
+| edit class | volume | fraction |
+|---|---|---|
+| trailing punctuation | large | ~30% of words changed |
+| casing | large | ~15% of words changed |
+| filler / disfluency deletion | 2,064 word deletions | `like` 910, `so` 280, `and` 259, `basically` 231 |
+| **function-word insertion** | 1,521 inserts | 94% single-word; `the` 444, `a` 295, `is` 112, `are` 81, `an` 78 |
+| **1:1 word replacement** | 982 | 41% share a prefix (`ask→asked`, `need→needs`, `we→we're`) |
+| **merge / split** | 299 compound merges + 146 splits | `drop down→dropdown`, `up check→upcheck` |
+| **paragraph breaks** | 103 outputs with newlines | 33% of outputs ≥60 words are split |
+| **list structure** | 50 pairs | VS Code / Claude desktop / Chrome destinations |
+
+Destination effect — edit rate by app:
+- VS Code: 0.163 edits/word, 8% paragraph break rate
+- Cursor: 0.096 edits/word, 3% paragraph break rate  
+- Chrome: 0.159 edits/word, 5% paragraph break rate
+- Claude desktop: 0.109 edits/word, **18%** paragraph break rate
+- Slack: 0.124 edits/word, 8% paragraph break rate
+
+**1.7× spread in edit rate, 6× spread in paragraph rate across destinations** — the polisher is context-conditioned, not a pure function of the transcript.
+
+Insert vocabulary coverage (K=top-K words): K=50 → 92.4%, K=98 → ~96%, K=200 → 100%.
+
+## mmBERT Wispr retrain (2026-08-27): first calibration of 8-head model
+
+Run 4 of the model. Extended from 4 to 8 heads (append/repl/merge/para + destination conditioning). First time new heads were calibrated. No cells certified, which is expected at this data volume.
+
+Key findings:
+- **Append head is active**: making proposals (n=63-82 for `the`) but low precision (0.13-0.28). Model identifies when to insert but not which word. Needs more data or higher append loss weight.
+- **Merge MERGE_SPACE at P=1.00, n=10**: perfect precision, too few examples (needs 300). Will certify as Wispr corpus accumulates.
+- **Repl CONTRACT at P=0.81, n=16**: approaching useful. Needs more contraction examples.
+- **Para head makes zero proposals**: either too conservative or label sparsity in training. Needs investigation.
+- **Old heads worse than run 2b** (punct `.` P=0.582 vs 0.919): expected — adding 4 new heads creates more loss competition. Needs higher weights or more epochs for the old heads.
+
+The Wispr corpus (1,169 train pairs) is the first real dictation→formatted target data the model has trained on. All prior runs used synthetic Wikipedia corruption.
+
 ## Measured rates over 400 real transcripts (18,099 words)
 
 Kept together because each of these is the answer to "is this pass doing anything, and is it
