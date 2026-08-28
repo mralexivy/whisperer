@@ -472,6 +472,18 @@ final class HealthManager {
                 // blocking frame can be read.
                 MainThreadBacktrace.capture(reason: "Main thread unresponsive for \(elapsedStr)s")
                 Logger.error("Main thread unresponsive for \(elapsedStr)s — possible AppKit/AX hang", subsystem: .app)
+                // Log the blocking frames on every alert, not only when a dump fires. A 2s stall
+                // never crosses `mainThreadDumpThreshold`, so the stack this capture just took was
+                // recorded and then thrown away — which left the repeating 2s stalls during
+                // recording (34 in one day) with no evidence of what wedged the main thread.
+                if let report = MainThreadBacktrace.latestReport(maxAge: 5) {
+                    if let failure = report.failure {
+                        Logger.error("Main thread stack unavailable: \(failure)", subsystem: .app)
+                    } else {
+                        let top = report.frames.prefix(12).joined(separator: "\n  ")
+                        Logger.error("Main thread stack (top 12):\n  \(top)", subsystem: .app)
+                    }
+                }
                 EventRingBuffer.shared.record(
                     component: "MainThread",
                     operation: "hung",

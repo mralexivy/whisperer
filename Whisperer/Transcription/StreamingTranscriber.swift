@@ -503,6 +503,9 @@ class StreamingTranscriber {
 
     // Promotion state — serialized via promotionQueue
     private let promotionQueue = DispatchQueue(label: "streaming.promotion")
+    /// Runs the blocking V3 language probe. See `performLanguageDetection` for why a plain
+    /// `Task.detached` is not enough to keep that call off the main thread.
+    private let languageProbeQueue = DispatchQueue(label: "streaming.languageProbe", qos: .userInitiated)
     private var pendingPromotion: (backend: TranscriptionBackend, profile: ModelProfile)?
 
     // Nemotron bridge — when set, bypasses VAD chunking, ring buffer, and preview polling.
@@ -1013,7 +1016,11 @@ class StreamingTranscriber {
                     guard let self, !accumulatedText.isEmpty else { return }
                     // Deduplicate: FluidAudio sometimes fires the callback twice for the
                     // same chunk result (same text, ~1ms apart). Skip the duplicate.
-                    guard partialCounter.incrementIfNew(accumulatedText) != nil else { return }
+                    guard let partialIndex = partialCounter.incrementIfNew(accumulatedText) else { return }
+                    // The HUD is driven from here on the whisper.cpp path (`nemotronIsPreviewOnly`),
+                    // and nothing logged it — so a live preview that froze looked identical in the
+                    // log to one that was never fed. Cadence and word count are what say which.
+                    Logger.debug("[Nemotron] partial #\(partialIndex): \(accumulatedText.split(whereSeparator: { $0.isWhitespace }).count) words", subsystem: .transcription)
                     self.previewAccumulatedText = accumulatedText
                     DispatchQueue.main.async {
                         self.onTranscription?(accumulatedText)
@@ -3812,8 +3819,8 @@ class StreamingTranscriber {
 
     /// Perform language detection: VAD-filter the window, apply any existing arbiter verdict,
     /// then fire a Whisperer V3 probe asynchronously. The result lands in the arbiter and is
-    /// applied at the next cadence tick — never on the VAD scan thread, which must not wait on
-    /// the live decoder's `ctxLock`.
+    /// applied at the next cadence tick — never on the VAD scan thread, and never on the main
+    /// thread, neither of which may wait on the live decoder's `ctxLock`.
     private func performLanguageDetection(
         samples: [Float],
         pool: ModelPool,
@@ -3868,6 +3875,8 @@ class StreamingTranscriber {
         let probeStart = max(0, audioSeconds - windowSeconds)
         let samplesSnapshot = detectionSamples
 
+        let probeQueue = languageProbeQueue
+
         Task.detached(priority: .userInitiated) { [weak self] in
             guard let self else { return }
             defer {
@@ -3876,12 +3885,38 @@ class StreamingTranscriber {
                 self.accurateProbeLock.unlock()
             }
             guard !self.isStopped else { return }
-            let started = CACurrentMediaTime()
-            guard let probs = bridge.detectLanguage(samples: samplesSnapshot) else {
+
+            // The probe MUST run on `probeQueue`, not inline here. `StreamingTranscriber` has no
+            // isolation annotation, so `SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor` makes the class
+            // — and this closure — main-actor isolated; `Task.detached` does not undo that, so the
+            // body resumes on the main thread. `detectLanguage` then waits for the live decoder's
+            // `ctxLock`, and `SafeLock` waits by calling `Thread.sleep` in a 1ms loop. That slept
+            // the *main thread* for the whole wait: 4611ms in one capture, 8499ms in another, with
+            // the frames caught by `MainThreadBacktrace`. Nothing on main ran during it — not the
+            // HUD's word-reveal timers, not the `DispatchQueue.main.async` hops carrying Nemotron
+            // partials — which is exactly the live preview freezing mid-sentence and then flushing
+            // the whole backlog in a burst.
+            let probe: (probabilities: [String: Float], elapsedMs: Double)?
+                = await withCheckedContinuation { continuation in
+                    probeQueue.async {
+                        let started = CACurrentMediaTime()
+                        guard let probs = bridge.detectLanguage(samples: samplesSnapshot) else {
+                            continuation.resume(returning: nil)
+                            return
+                        }
+                        continuation.resume(
+                            returning: (probs, (CACurrentMediaTime() - started) * 1000)
+                        )
+                    }
+                }
+
+            guard let probe else {
                 Logger.warning("Language detection (V3) returned nil", subsystem: .transcription)
                 return
             }
-            let elapsed = (CACurrentMediaTime() - started) * 1000
+            guard !self.isStopped else { return }
+            let probs = probe.probabilities
+            let elapsed = probe.elapsedMs
             let counted = self.languageArbiter.recordAccurate(probabilities: probs, start: probeStart, end: audioSeconds)
             let top = probs.max(by: { $0.value < $1.value })
             Logger.info("Language probe (V3): top=\(top?.key ?? "?") "
