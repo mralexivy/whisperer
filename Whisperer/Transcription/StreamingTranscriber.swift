@@ -566,10 +566,29 @@ class StreamingTranscriber {
     /// back `it`, `ru`, `he`, `fr` — and each was decoded, displayed and committed as such. A
     /// settled route wins; failing that, the arbiter's running best guess; failing that only, the
     /// configured language (which is `.auto` exactly when the user asked for auto-detect).
+    /// The last *concrete* language this session actually decoded with, and never `.auto`.
+    ///
+    /// A one-way ratchet, and the short-utterance safety net. Push-to-talk recordings are often
+    /// too short to accumulate a confident verdict, so the arbiter's leading candidate can appear
+    /// on one pass and be gone on the next — and every gap is a window whisper re-detects from
+    /// scratch. Once the session has committed to a language, later passes reuse it rather than
+    /// reverting to `.auto`; a real probe or a settled route still overrides it, because both are
+    /// checked first.
+    private var sessionLanguageFloor: TranscriptionLanguage?
+
     var provisionalLanguage: TranscriptionLanguage {
         if let routed = routeDecision?.lang { return routed }
         if language != .auto { return language }
-        return languageArbiter.leadingCandidate?.language ?? .auto
+        if let lead = languageArbiter.leadingCandidate?.language { return lead }
+        return sessionLanguageFloor ?? .auto
+    }
+
+    /// Records a resolved provisional language as the session floor. Called from the eager passes
+    /// after they resolve `provisionalLanguage`, so the ratchet only ever holds a value that was
+    /// genuinely used for a decode.
+    private func noteProvisionalLanguage(_ lang: TranscriptionLanguage) {
+        guard lang != .auto else { return }
+        sessionLanguageFloor = lang
     }
 
     // Session audio file on disk (set by AppState after creation, used for saveRecording and tail)
@@ -665,9 +684,18 @@ class StreamingTranscriber {
     /// `EagerStreamEngine.confirmedTailOverlap`, which now filters rather than only reporting.
     var onEagerRepeatedConfirmedTail: (() -> Void)?
 
-    /// Effective language for transcription — driven by router or fallback to configured language
+    /// Effective language for transcription — driven by router, then by whatever the session's
+    /// detectors have actually concluded, and only then by the configured language.
+    ///
+    /// This is the language handed to the *authoritative* decode (tail, final pass, chunk decode),
+    /// so it was the one place that still resolved to `.auto` after the eager path had been taught
+    /// not to. `routeDecision?.lang ?? language` ignores the arbiter entirely: a session that
+    /// probed and accumulated real evidence, but never crossed the lock threshold, threw all of it
+    /// away at the moment it mattered most and let whisper re-detect the tail from scratch.
+    /// `provisionalLanguage` applies the same three-level fallback the eager stream uses, so both
+    /// decoders now answer to one definition.
     var effectiveLanguage: TranscriptionLanguage {
-        routeDecision?.lang ?? language
+        provisionalLanguage
     }
 
     /// Dictionary corrections applied to *this* session's final text, for the history record.
@@ -913,6 +941,7 @@ class StreamingTranscriber {
         #endif
         routeDecision = nil
         lastDetectionSampleCount = 0
+        sessionLanguageFloor = nil
         languageArbiter.reset()
         languageArbiter.configure(allowedLanguages: languageRouter?.allowedLanguages ?? [])
         lastProvisionalLanguage = nil
@@ -1216,16 +1245,29 @@ class StreamingTranscriber {
                 intervalSeconds = 60
             }
             let cadenceSamples = Int(intervalSeconds * sampleRate)
-            if totalInRing >= RoutingThresholds.minDetectionSamples,
-               totalInRing >= lastDetectionSampleCount + cadenceSamples {
-                lastDetectionSampleCount = totalInRing
+            // The *first* probe is not on the cadence. `lastDetectionSampleCount` starts at 0, so
+            // requiring `lastDetectionSampleCount + cadenceSamples` made the 15 s re-probe interval
+            // double as the initial delay — every dictation shorter than 15 s ran with no routing
+            // at all, i.e. `.auto`, i.e. whisper re-detecting per pass. Cadence governs re-probes.
+            let isFirstProbe = lastDetectionSampleCount == 0
+            let due = isFirstProbe
+                ? totalInRing >= RoutingThresholds.firstProbeSamples
+                : totalInRing >= max(RoutingThresholds.minDetectionSamples,
+                                     lastDetectionSampleCount + cadenceSamples)
+            if due {
                 let windowSize = min(allSamples.count, RoutingThresholds.fullDetectionSamples)
-                performLanguageDetection(
+                let fired = performLanguageDetection(
                     samples: Array(allSamples.suffix(windowSize)),
                     pool: pool,
                     langRouter: langRouter,
-                    mdlRouter: mdlRouter
+                    mdlRouter: mdlRouter,
+                    isFirstProbe: isFirstProbe
                 )
+                // Only a probe that actually reached the decoder consumes the cadence. Marking a
+                // rejected one as spent (too little voiced audio, another probe in flight) pushed
+                // the retry a full interval out and, for the very first probe, permanently off the
+                // first-probe path — which is how short recordings ended up never probing at all.
+                if fired { lastDetectionSampleCount = totalInRing }
             }
         }
 
@@ -1644,6 +1686,7 @@ class StreamingTranscriber {
         // Same reasoning as the eager path: a two-second preview window is the audio `.auto` is
         // worst on, and the arbiter's running guess is available for free.
         let lang = provisionalLanguage
+        noteProvisionalLanguage(lang)
 
         // Never feed WhisperKit provisional text or vocabulary prompt words into a
         // short preview window. Both strongly bias ambiguous audio. Only actual,
@@ -2089,6 +2132,7 @@ class StreamingTranscriber {
         }
 
         let lang = provisionalLanguage
+        noteProvisionalLanguage(lang)
         if lang != lastProvisionalLanguage {
             lastProvisionalLanguage = lang
             if let leading = languageArbiter.leadingCandidate, routeDecision == nil {
@@ -3774,8 +3818,9 @@ class StreamingTranscriber {
         samples: [Float],
         pool: ModelPool,
         langRouter: LanguageRouter,
-        mdlRouter: ModelRouter
-    ) {
+        mdlRouter: ModelRouter,
+        isFirstProbe: Bool = false
+    ) -> Bool {
         // Apply accumulated arbiter evidence before firing a new probe — a previous probe may
         // have landed since the last cadence tick.
         applyArbiterVerdict(pool: pool, langRouter: langRouter, mdlRouter: mdlRouter)
@@ -3787,10 +3832,12 @@ class StreamingTranscriber {
             let totalVoiced = segments.reduce(0) { acc, seg in
                 acc + min(seg.endSample, samples.count) - min(seg.startSample, samples.count)
             }
-            let minVoiced = RoutingThresholds.minVoicedDetectionSamples
+            let minVoiced = isFirstProbe
+                ? RoutingThresholds.minVoicedFirstProbeSamples
+                : RoutingThresholds.minVoicedDetectionSamples
             guard totalVoiced >= minVoiced else {
                 Logger.debug("Detection skipped: \(totalVoiced) voiced samples < \(minVoiced) required", subsystem: .transcription)
-                return
+                return false
             }
             var voiced = [Float]()
             voiced.reserveCapacity(totalVoiced)
@@ -3806,13 +3853,13 @@ class StreamingTranscriber {
         // only Nemotron's per-chunk tally feeds the arbiter — still better than tiny.
         guard let bridge = whisper as? WhisperBridge else {
             Logger.debug("No WhisperBridge available; language detection is Nemotron-native only", subsystem: .transcription)
-            return
+            return false
         }
 
         // One probe at a time — V3 waits on the live decoder's ctxLock, so queueing a second
         // behind the first would probe audio that has already moved on.
         accurateProbeLock.lock()
-        if accurateProbeInFlight { accurateProbeLock.unlock(); return }
+        if accurateProbeInFlight { accurateProbeLock.unlock(); return false }
         accurateProbeInFlight = true
         accurateProbeLock.unlock()
 
@@ -3842,6 +3889,7 @@ class StreamingTranscriber {
                 + "in \(String(format: "%.0f", elapsed))ms "
                 + "(\(self.languageArbiter.accurateProbeCount) probe(s) this session)", subsystem: .transcription)
         }
+        return true
     }
 
     /// Resolve a language decision to a model and put that model in place.
