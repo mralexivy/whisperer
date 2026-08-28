@@ -77,3 +77,13 @@ Tools/mmbert/artifacts/
 
 # graphify knowledge-graph artifacts — generated, rebuild with /graphify
 graphify-out/
+
+# Python virtualenvs — machine-specific build output, never source.
+# Tools/mmbert/.venv was committed by accident in b35dd0f (8,914 files, 153 MB)
+# and its __pycache__/*.pyc churn showed up as ~400 pending changes after every
+# run of the mmbert toolchain. Untracked in the commit that added this rule;
+# the blobs remain in history, which is a separate call to make.
+.venv/
+venv/
+__pycache__/
+*.pyc
