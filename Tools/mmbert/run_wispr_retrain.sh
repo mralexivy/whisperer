@@ -120,8 +120,13 @@ fi
 # ── Step 5: calibrate ────────────────────────────────────────────────────────
 echo "=== 5/6 calibrate  $(date +%T)"
 # Fresh cache — a stale calib_rows_wispr.json calibrates the WRONG checkpoint.
+# --primary pooled_all, NOT the default eval_real_large.jsonl. That split predates
+# the append/repl/merge/para heads and carries no labels for them, so every one of
+# their cells came back support=0 no matter what the model does. See the PARA note
+# on POOLS in calibrate.py.
 run $PY calibrate.py \
     --model "$A/model-wispr" \
+    --primary pooled_all \
     --cache "$A/calib_rows_wispr.json" \
     --sweeps "$A/calib_sweeps_wispr.json" \
     --out thresholds-calibrated-wispr.json \

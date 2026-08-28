@@ -110,6 +110,23 @@ AGGREGATE_ACTIONS = {"ALL"}
 
 def tier_for(head: str, action: str) -> tuple:
     """Return (tier_name, reason_if_excluded_or_None)."""
+    # Per-destination cells are labelled "<ACTION>/<dest>" (e.g. "PARA_BREAK/
+    # unknown"). Matching on the full label made every one of them miss its
+    # action arm and fall through to the permissive default -- so
+    # he/para/PARA_BREAK/unknown was judged at the cosmetic 0.45 and ENABLED on
+    # LCB95 0.4529 while he/para/PARA_BREAK, the identical evidence under the
+    # correct paragraph tier of 0.55, was rejected at 0.5438. A cell must not
+    # get a laxer gate for being sliced more finely.
+    action = action.split("/", 1)[0]
+    # Aggregate exclusion is a property of the cell, not of the head. It used to
+    # be re-stated inside the punct and case arms only, so para/ALL (and
+    # append/repl/merge ALL) reached a real tier and `he/para/ALL` + `ru/para/ALL`
+    # came out ENABLED -- a cell that mixes PARA_BREAK with LIST_ITEM, i.e. the
+    # paragraph tier averaged with the meaning tier. Enable the per-class cells.
+    if action in AGGREGATE_ACTIONS:
+        return None, ("aggregate cell mixing target classes of different risk "
+                      "tiers -- reported only, never enabled; enable the "
+                      "per-class cells")
     if head == "punct":
         if action in EXCLUDED_PUNCT:
             return None, (f"'{action}' insertion is EXCLUDED BY CONSTRUCTION: "
@@ -175,6 +192,9 @@ SPLITS = {
     "eval_synth.jsonl": "synthetic_indomain (held-out golden-set transcripts)",
     "eval_wiki.jsonl": "synthetic_wiki (held-out Wikipedia, synthetic corruption)",
     "wispr_val.jsonl": "wispr_val (held-out Wispr Flow formatted pairs)",
+    "meeting_val.jsonl": ("meeting_val (held-out grouped meeting documents, "
+                          "en/he/ru; the ONLY split carrying paragraph "
+                          "structure -- see PARA note below)"),
 }
 
 # Pooled evidence base. `eval_real` alone is far too small to certify anything
@@ -186,6 +206,24 @@ POOLS = {
     "pooled_indomain": ["eval_real.jsonl", "eval_synth.jsonl"],
     "pooled_indomain_large": ["eval_real_large.jsonl", "eval_synth.jsonl"],
     "pooled_wispr": ["wispr_val.jsonl", "eval_real_large.jsonl", "eval_synth.jsonl"],
+    # PARA note / why this pool exists.
+    #
+    # `eval_real_large.jsonl` was built before the append/repl/merge/para heads
+    # existed: its rows carry only error/punct/case/disf keys, so `EditDataset`
+    # fills the four new heads with IGNORE and NOT ONE position is eligible for
+    # their cells. Making it `--primary` therefore published 24 para cells (and
+    # every append/repl/merge cell) reading `support=0 ... "no proposals at any
+    # threshold"` — which reads exactly like a collapsed head and is not. The
+    # model demonstrably proposes para (69 predictions on 84 val gold edits);
+    # the *measuring instrument* had no para in it.
+    #
+    # `meeting_val.jsonl` is the only held-out split with real paragraph
+    # structure (166 positives, en/he/ru), because paragraph breaks only exist
+    # inside multi-segment documents and only `build_meeting_corpus.py` groups
+    # segments into them. Pool it with the three above so every head has a
+    # denominator, and use this as `--primary`.
+    "pooled_all": ["wispr_val.jsonl", "eval_real_large.jsonl",
+                   "eval_synth.jsonl", "meeting_val.jsonl"],
 }
 
 # Directories searched for each split file, in order.
