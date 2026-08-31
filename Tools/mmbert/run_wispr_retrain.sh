@@ -47,53 +47,68 @@ run() {
 mkdir -p "$AD"
 
 if [ "$SKIP_CORPUS" -eq 0 ]; then
-    # ── Step 1: Wispr dictation corpus (en-dominant) ─────────────────────────
-    echo "=== 1/6 build_wispr_corpus  $(date +%T)"
-    run $PY build_wispr_corpus.py \
-        --corpus ~/wispr_corpus/corpus.jsonl \
-        --out "$AD" \
-        > "$A/build_wispr_corpus.log" 2>&1
-    grep -E "train|val|Accepted|script" "$A/build_wispr_corpus.log" | tail -10 || true
+    # ── Steps 1, 2, 2b run in PARALLEL — all three are independent corpus builders ──
+    echo "=== 1+2+2b/6 corpus builders (parallel)  $(date +%T)"
 
-    # ── Step 2: pin history holdout (requires FDA to history.sqlite) ─────────
-    # Failure is non-fatal: build_corpus.py warns on missing holdout instead
-    # of erroring. Grant Full Disk Access to the terminal in System Settings
-    # > Privacy & Security > Full Disk Access to populate eval_real_large.jsonl.
-    echo "=== 2/6 build_eval_large  $(date +%T)"
-    run $PY build_eval_large.py \
-        --golden "$GOLDEN" \
-        --train-frac 0.55 \
-        --min-eval 300 \
-        > "$A/build_eval_large_wispr.log" 2>&1 || echo "  [warn] step 2 failed (FDA required) — continuing without eval holdout"
-    tail -5 "$A/build_eval_large_wispr.log" || true
+    # Step 1: Wispr dictation corpus — direct from flow.sqlite (1,380+ real en pairs)
+    if [ "$DRY_RUN" -eq 0 ]; then
+        $PY build_wispr_db_corpus.py \
+            --out "$AD" \
+            > "$A/build_wispr_db_corpus.log" 2>&1 &
+        PID1=$!
+    else
+        echo "  + $PY build_wispr_db_corpus.py --out $AD"
+    fi
 
-    # ── Step 2b: meeting corpus (he=499, ru=248, en=207 grouped documents) ──
-    # Segments are grouped into 60-120 word documents so PARA_BREAK exists
-    # inside an example; this is the only he/ru supply for the para head.
-    echo "=== 2b/6 build_meeting_corpus  $(date +%T)"
-    run $PY build_meeting_corpus.py \
-        --out "$AD" \
-        > "$A/build_meeting_corpus.log" 2>&1
+    # Step 2: pin history holdout (non-fatal if FDA missing)
+    if [ "$DRY_RUN" -eq 0 ]; then
+        $PY build_eval_large.py \
+            --golden "$GOLDEN" \
+            --train-frac 0.55 \
+            --min-eval 300 \
+            > "$A/build_eval_large_wispr.log" 2>&1 || true &
+        PID2=$!
+    else
+        echo "  + $PY build_eval_large.py --golden $GOLDEN --train-frac 0.55 --min-eval 300"
+    fi
+
+    # Step 2b: meeting corpus — the only he/ru source
+    if [ "$DRY_RUN" -eq 0 ]; then
+        $PY build_meeting_corpus.py \
+            --out "$AD" \
+            > "$A/build_meeting_corpus.log" 2>&1 &
+        PID2B=$!
+    else
+        echo "  + $PY build_meeting_corpus.py --out $AD"
+    fi
+
+    # Wait for all three to finish before merging
+    if [ "$DRY_RUN" -eq 0 ]; then
+        wait $PID1 && echo "  [1] wispr_db done" || echo "  [1] wispr_db FAILED"
+        wait $PID2 && echo "  [2] eval_large done" || echo "  [warn] eval_large failed (FDA)"
+        wait $PID2B && echo "  [2b] meeting done" || echo "  [2b] meeting FAILED"
+    fi
+
+    grep -E "train|val|Accepted|script" "$A/build_wispr_db_corpus.log" | tail -5 || true
     grep -E "Accepted|en:|he:|ru:|Wrote" "$A/build_meeting_corpus.log" || true
 
     # ── Step 3: merge — no Wikipedia, all 3 languages ────────────────────────
     # Weighting rationale (before script-balance in trainer):
-    #   wispr dictation: high quality en, 6x
-    #   meeting:         real he/ru, 5x (heavy)
-    #   train_real_large: in-domain en, 5x
-    #   gold_train:      authored, 8x
+    #   wispr_db_train:  1,100+ real en pairs from flow.sqlite (Wispr Llama-3.1-8B teacher), 8x
+    #   meeting:         real he/ru from Wispr meetings, 5x (only multilang source)
+    #   train_real_large: in-domain en from Whisperer recordings, 5x
+    #   gold_train:      authored golden set, 8x
     echo "=== 3/6 build_corpus  $(date +%T)"
     run $PY build_corpus.py \
         --golden "$GOLDEN" \
         --wiki-en 0 --wiki-he 0 --wiki-ru 0 \
         --indomain-repeats 5 \
-        --extra-train-weighted "$AD/wispr_train.jsonl:6" \
+        --extra-train-weighted "$AD/wispr_db_train.jsonl:8" \
         --extra-train-weighted "$AD/meeting_train.jsonl:5" \
         --extra-train-weighted "$D/train_real_large.jsonl:5" \
         --extra-train-weighted "$D/gold_train.jsonl:8" \
-        $( [ -f "$AD/wispr_relabeled.jsonl" ] && echo "--extra-train-weighted $AD/wispr_relabeled.jsonl:4" ) \
         --holdout "$D/eval_real_large.jsonl" \
-        --holdout "$AD/wispr_val.jsonl" \
+        --holdout "$AD/wispr_db_val.jsonl" \
         --holdout "$AD/meeting_val.jsonl" \
         > "$A/build_corpus_wispr.log" 2>&1
     tail -10 "$A/build_corpus_wispr.log" || true
@@ -113,7 +128,7 @@ if [ "$SKIP_TRAIN" -eq 0 ]; then
     # 0 is a collapse and step 5b will fail the run over it.
     echo "=== 4/6 train  $(date +%T)"
     run $PY train.py \
-        --epochs 4 \
+        --epochs 6 \
         --out "$A/model-wispr" \
         --script-balance "en=1.0,he=2.5,ru=4.0" \
         --head-weights "error=0.5,punct=1.0,case=1.0,disf=1.0,append=1.5,repl=1.5,merge=0.8,para=1.5" \
