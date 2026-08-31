@@ -58,16 +58,36 @@ struct TranscriptEdit: Sendable {
     /// to the rule that produced it rather than guessed at from the diff.
     let reason: String
 
+    /// The Clopper-Pearson 95% lower bound on the *measured precision* of the calibration cell
+    /// this edit came from, or `nil` when no cell certifies it.
+    ///
+    /// Carried separately from `confidence` because they are different quantities and the gate
+    /// must not compare them. `confidence` is a softmax product from one forward pass — how sure
+    /// the model is about *this* token. This is a frequentist bound over hundreds of held-out
+    /// proposals — how often the model is *right* when it says this, in this language, for this
+    /// edit class. Only the second is a precision claim, and precision is the thing the gate's
+    /// floors were always trying to approximate.
+    ///
+    /// Without this the certified cells are unreachable in practice. `MMBERTEditingModel` reports
+    /// `confidence` as the product of three probabilities, so clearing the 0.95 cosmetic floor
+    /// needs each of them above ~0.983; a cell calibrated to operate at 0.30 therefore proposes
+    /// constantly and applies never. The calibration run already enforced the operating point that
+    /// buys its measured precision — re-judging that decision against an uncalibrated softmax
+    /// threshold discards the measurement and keeps the guess.
+    let certifiedPrecisionLCB: Float?
+
     init(target: TokenID,
          operation: EditOperation,
          source: EditSource,
          confidence: Float,
-         reason: String) {
+         reason: String,
+         certifiedPrecisionLCB: Float? = nil) {
         self.target = target
         self.operation = operation
         self.source = source
         self.confidence = confidence
         self.reason = reason
+        self.certifiedPrecisionLCB = certifiedPrecisionLCB
     }
 }
 

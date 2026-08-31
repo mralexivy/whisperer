@@ -62,7 +62,7 @@ import Tokenizers
 /// A `final class` with an `NSLock`, not an `actor`: `TextEditingModelRuntime.isLoaded` is a
 /// synchronous property and an actor cannot supply one without `assumeIsolated` at every call
 /// site. Core ML prediction is itself thread-safe, so the lock only guards the loaded handles.
-final class MMBERTCoreMLRuntime: TextEditingModelRuntime, @unchecked Sendable {
+nonisolated final class MMBERTCoreMLRuntime: TextEditingModelRuntime, @unchecked Sendable {
 
     // MARK: - Label spaces
 
@@ -123,14 +123,22 @@ final class MMBERTCoreMLRuntime: TextEditingModelRuntime, @unchecked Sendable {
 
     // MARK: - Locating the weights
 
-    /// App bundle first, then the training tree.
+    /// Downloaded model first, then the app bundle, then the training tree.
     ///
-    /// The artifacts are 142 MB per shape and are **not** bundled today — shipping 427 MB of
-    /// weights is a decision that belongs after the precision gate is met, not before it. The
-    /// `#filePath` fallback is what lets the benchmark measure real weights on this machine
-    /// without that decision having been made, and it resolves to nothing in a shipped build.
+    /// The weights are 138 MB and are fetched on first launch rather than bundled — see
+    /// `PolishModelManager`. An earlier build did bundle all three fixed-shape packages, which
+    /// put 444 MB into the binary for a model that is 143 MB; the shipped artifact is now the
+    /// single enumerated-shape package covering all three lengths.
+    ///
+    /// The `#filePath` fallback resolves to nothing in a shipped build. It is what lets the
+    /// benchmarks run against real weights on a development machine that has never downloaded
+    /// anything, and it still accepts the three-package layout the calibration tooling writes.
     static func locate() -> URL? {
-        if let bundled = Bundle.main.url(forResource: "MMBERTEditing_32", withExtension: "mlmodelc") {
+        if let downloaded = PolishModelManager.shared.installedDirectory {
+            return downloaded
+        }
+        if let bundled = Bundle.main.url(forResource: "MMBERTEditing", withExtension: "mlmodelc")
+            ?? Bundle.main.url(forResource: "MMBERTEditing_32", withExtension: "mlmodelc") {
             return bundled.deletingLastPathComponent()
         }
         let artifacts = URL(fileURLWithPath: #filePath)
@@ -139,13 +147,22 @@ final class MMBERTCoreMLRuntime: TextEditingModelRuntime, @unchecked Sendable {
             .deletingLastPathComponent()      // Whisperer
             .deletingLastPathComponent()      // repository root
             .appendingPathComponent("Tools/mmbert/artifacts")
-        // Prefer the versioned model package over the flat layout.
+        let fm = FileManager.default
+        // Enumerated export first: it is what `package_model.py` ships, so it is what the
+        // fixture in `mmbert-runtime-reference.json` was generated from. Preferring the
+        // three-package calibration export here would make the parity test compare the Swift
+        // runtime against a model the app never runs, and fail on the three known argmax
+        // differences between the two exports.
+        let enumerated = artifacts.appendingPathComponent("mmbert-v3-enumerated")
+        if fm.fileExists(atPath: enumerated.appendingPathComponent("MMBERTEditing.mlpackage").path) {
+            return enumerated
+        }
         let versioned = artifacts.appendingPathComponent("mmbert-v3.mlpackage")
-        if FileManager.default.fileExists(atPath: versioned.appendingPathComponent("MMBERTEditing_32.mlpackage").path) {
+        if fm.fileExists(atPath: versioned.appendingPathComponent("MMBERTEditing_32.mlpackage").path) {
             return versioned
         }
         let probe = artifacts.appendingPathComponent("MMBERTEditing_32.mlpackage")
-        return FileManager.default.fileExists(atPath: probe.path) ? artifacts : nil
+        return fm.fileExists(atPath: probe.path) ? artifacts : nil
     }
 
     /// `nil` when no weights are on disk. Callers keep `StubEditingRuntime` in that case rather
@@ -194,20 +211,23 @@ final class MMBERTCoreMLRuntime: TextEditingModelRuntime, @unchecked Sendable {
         let configuration = MLModelConfiguration()
         configuration.computeUnits = computeUnits
 
-        for shape in EditingSequenceShape.allCases {
-            let compiled = directory.appendingPathComponent("MMBERTEditing_\(shape.rawValue).mlmodelc")
-            let package = directory.appendingPathComponent("MMBERTEditing_\(shape.rawValue).mlpackage")
-            let source: URL
-            if FileManager.default.fileExists(atPath: compiled.path) {
-                source = compiled
-            } else if FileManager.default.fileExists(atPath: package.path) {
-                // Compiling takes seconds and lands in a temporary directory the system reaps.
-                // Acceptable here because loading happens once per process, off the audio path.
-                source = try await MLModel.compileModel(at: package)
-            } else {
-                throw EditingRuntimeError.weightsUnavailable
+        // The shipped artifact is one `EnumeratedShapes` model covering 32/64/128, so all three
+        // shapes resolve to the same MLModel: 143 MB instead of the 428 MB the three fixed-shape
+        // packages cost, which differ only in baked shape constants. `check_enumerated_parity.py`
+        // is what certifies that substitution — 3 flipped argmaxes in 10,096 decisions, each at a
+        // position where the certified model's own margin was under 0.04.
+        //
+        // The per-shape branch stays for the calibration tooling, which still writes
+        // `MMBERTEditing_{32,64,128}` and must be loadable to certify the next enumerated export.
+        if let single = try await resolveModel(named: "MMBERTEditing") {
+            let model = try MLModel(contentsOf: single, configuration: configuration)
+            for shape in EditingSequenceShape.allCases { models[shape] = model }
+        } else {
+            for shape in EditingSequenceShape.allCases {
+                guard let source = try await resolveModel(named: "MMBERTEditing_\(shape.rawValue)")
+                else { throw EditingRuntimeError.weightsUnavailable }
+                models[shape] = try MLModel(contentsOf: source, configuration: configuration)
             }
-            models[shape] = try MLModel(contentsOf: source, configuration: configuration)
         }
 
         // `common.py` uses cls/sep with a bos/eos fallback; this tokenizer maps cls→<bos> and
@@ -220,6 +240,18 @@ final class MMBERTCoreMLRuntime: TextEditingModelRuntime, @unchecked Sendable {
         lock.unlock()
         Logger.info("mmBERT editing runtime loaded from \(directory.lastPathComponent)",
                     subsystem: .transcription)
+    }
+
+    /// A compiled `.mlmodelc` if one is there, otherwise compile the `.mlpackage`, otherwise nil.
+    ///
+    /// Compiling takes seconds and lands in a temporary directory the system reaps. Acceptable
+    /// here because loading happens once per process, off the audio path.
+    private func resolveModel(named name: String) async throws -> URL? {
+        let compiled = directory.appendingPathComponent("\(name).mlmodelc")
+        if FileManager.default.fileExists(atPath: compiled.path) { return compiled }
+        let package = directory.appendingPathComponent("\(name).mlpackage")
+        guard FileManager.default.fileExists(atPath: package.path) else { return nil }
+        return try await MLModel.compileModel(at: package)
     }
 
     func unload() async {

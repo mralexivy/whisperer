@@ -95,6 +95,11 @@ struct ConfidenceGate: Sendable {
         /// Inserts a punctuation mark, or changes the case of a token without changing its
         /// letters. Cannot change meaning; cosmetic only.
         case cosmetic
+        /// Inserts a paragraph break. Changes the *shape* of the output and not one character of
+        /// it, so it is the only class whose worst case is purely a matter of taste — but it is
+        /// also the most visible edit on the page, which is why it is its own tier rather than
+        /// being folded into `cosmetic`. `calibrate.py` tiers it separately for the same reason.
+        case paragraph
     }
 
     /// Which tier an operation falls in, computed from the text.
@@ -108,6 +113,12 @@ struct ConfidenceGate: Sendable {
         case .keep:
             return .substitution
         case .insertAfter(let text):
+            // Newline-only first: `isPunctuationOnly` trims whitespace and then finds nothing to
+            // classify, so a paragraph break used to fall through to `.substitution` and face the
+            // 0.99 bar. That is not a conservative default here, it is a wrong one — the break
+            // inserts no characters the reader sees as words — and it silently made `ru/para`,
+            // the best-measured cell in the table, unreachable.
+            if isParagraphBreak(text) { return .paragraph }
             return isPunctuationOnly(text) ? .cosmetic : .substitution
         case .replace(let text):
             return isCaseTransform(from: originalText, to: text) ? .cosmetic : .substitution
@@ -119,6 +130,11 @@ struct ConfidenceGate: Sendable {
     /// Same letters, different case. `deploy → Deploy` is cosmetic; `deploy → destroy` is not.
     private static func isCaseTransform(from original: String, to replacement: String) -> Bool {
         original.lowercased() == replacement.lowercased()
+    }
+
+    /// Whitespace containing at least one newline, and nothing else.
+    private static func isParagraphBreak(_ text: String) -> Bool {
+        !text.isEmpty && text.allSatisfy(\.isWhitespace) && text.contains(where: \.isNewline)
     }
 
     private static func isPunctuationOnly(_ text: String) -> Bool {
@@ -174,6 +190,41 @@ struct ConfidenceGate: Sendable {
         case .substitution:   return base
         case .fillerDeletion: return 0.97
         case .cosmetic:       return 0.95
+        // A break inserts no characters and can be deleted with one keystroke. It never reaches
+        // this path in practice — an uncertified `para` cell is capped below every floor here —
+        // so this is the bar it would face if a future model proposed one without calibration.
+        case .paragraph:      return 0.95
+        }
+    }
+
+    // MARK: - The certified path
+
+    /// Minimum **measured precision** (Clopper-Pearson 95% lower bound) a certified editor cell
+    /// must carry for an edit of this class to apply.
+    ///
+    /// This is the bar for `.editorModel` edits that arrive with a `certifiedPrecisionLCB`, and it
+    /// replaces the confidence floor for those edits rather than adding to it. The two numbers
+    /// answer different questions — see `TranscriptEdit.certifiedPrecisionLCB` — and a cell that
+    /// was measured has no need of a proxy for the thing that was measured.
+    ///
+    /// The values mirror `tiers` in `Tools/mmbert/thresholds-calibrated-wispr.json`, which is what
+    /// `calibrate.py` enforced when it set `enabled`. Restated here rather than read from the file
+    /// so that a recalibration cannot loosen the app's policy just by loosening its own: the gate
+    /// is the second, independent check, and a second check that reads its bar from the thing it
+    /// is checking is not one. `EditingModelTests.testGateTiersMatchTheCalibrationFile` fails if
+    /// the two ever disagree.
+    ///
+    /// They are far below the confidence floors above, and deliberately. A wrong sentence-final
+    /// period is a mark the user deletes; the alternative to a 0.45 bar on cosmetics is not a
+    /// safer feature, it is no feature, because no cell in the table clears 0.95 on real speech.
+    /// Meaning-changing edits get 0.70 — still the strictest tier by a wide margin, and still the
+    /// only class where a wrong edit costs the user a word they said.
+    static func precisionGate(for editClass: EditClass) -> Float {
+        switch editClass {
+        case .substitution:   return 0.70
+        case .fillerDeletion: return 0.45
+        case .cosmetic:       return 0.45
+        case .paragraph:      return 0.55
         }
     }
 
@@ -247,16 +298,28 @@ struct ConfidenceGate: Sendable {
         // so no threshold change can re-admit them.
         if let reason = deniedInsertion(edit) { return .keep(reason: reason) }
 
-        let floor = Self.floor(for: edit.source,
-                               operation: edit.operation,
-                               originalText: token.effectiveText,
-                               language: language)
-        if edit.confidence < floor {
-            return .keep(reason: String(format: "confidence %.2f below %.2f floor for %@ (%@)",
-                                        edit.confidence, floor, edit.source.rawValue,
-                                        String(describing: Self.editClass(
-                                            of: edit.operation,
-                                            originalText: token.effectiveText))))
+        let editClass = Self.editClass(of: edit.operation, originalText: token.effectiveText)
+
+        // A certified editor edit is judged on what was measured about it, not on how sure the
+        // model felt. Everything else — every other source, and every uncertified editor edit —
+        // takes the confidence floor unchanged.
+        if edit.source == .editorModel, let bound = edit.certifiedPrecisionLCB {
+            let bar = Self.precisionGate(for: editClass)
+            if bound < bar {
+                return .keep(reason: String(
+                    format: "measured precision %.3f below %.2f bar for %@",
+                    bound, bar, String(describing: editClass)))
+            }
+        } else {
+            let floor = Self.floor(for: edit.source,
+                                   operation: edit.operation,
+                                   originalText: token.effectiveText,
+                                   language: language)
+            if edit.confidence < floor {
+                return .keep(reason: String(format: "confidence %.2f below %.2f floor for %@ (%@)",
+                                            edit.confidence, floor, edit.source.rawValue,
+                                            String(describing: editClass)))
+            }
         }
 
         if let reason = negationViolation(edit, token: token) { return .keep(reason: reason) }

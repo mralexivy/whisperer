@@ -2205,13 +2205,46 @@ class AppState: ObservableObject {
         if PolishFeatureFlags.isFastPolishEnabled, isStrict {
             let polisher = DeterministicPolisher.forTranscript(
                 dictionaryEntries: DictionaryManager.shared.entries,
-                formatsLists: false)
+                formatsLists: false,
+                // No model on a fragment. See the `context` note below: a mid-stream chunk cannot
+                // be judged for the edits the certified cells make, and running the encoder on it
+                // would spend the latency without earning an edit.
+                editor: fragment ? nil : PolishEditor.current())
             // Chunks when they are still an honest description of this text, the string
             // otherwise. The chunk form is what carries the silence between them, and silence
             // is the only evidence of a sentence boundary that survives every backend.
             let chunks = fragment ? nil : committedChunks(matching: text)
-            let polished = chunks.map { polisher.polish(chunks: $0) }
-                ?? polisher.polish(text: text)
+
+            // The authoritative pass, so the model is allowed to see it. A fragment is not: its
+            // ends are artefacts of the VAD cut, and terminal punctuation and sentence-initial
+            // casing — most of what the certified cells do — are not decidable there.
+            //
+            // The language is the transcriber's resolved one, never `selectedLanguage`, which is
+            // `.auto` for most users. Handing `.auto` down would key every calibration lookup to a
+            // language that has no cells, and every proposal would be capped as unmeasured —
+            // the editor would run, cost its encoder pass, and apply nothing.
+            //
+            // `effectiveLanguage` alone is not enough, and the first build that shipped this
+            // logged `editor=on/unknown` on every English dictation because of it. It resolves
+            // through the route decision, then the configured language, then the arbiter, then
+            // the session floor — and on a short push-to-talk utterance under auto-detect none of
+            // those four ever fires. The floor in particular cannot bootstrap itself: it is only
+            // written from a *non*-`.auto` resolution, so a session that starts at `.auto` stays
+            // there. Meanwhile whisper detected `en` at p = 0.99 on the very pass that produced
+            // this text. `lastDetectedLanguage` is that answer, and falling back to it is the
+            // same thing the history record two thousand lines below already does.
+            let resolved = streamingTranscriber?.effectiveLanguage
+            let detected = resolved == nil || resolved == .auto
+                ? whisperBridge?.lastDetectedLanguage.flatMap(TranscriptionLanguage.init(rawValue:))
+                : resolved
+            let context = EditContext(language: detected == .auto ? nil : detected,
+                                      pass: fragment ? .live : .authoritative)
+            let polished: DeterministicPolisher.Result
+            if let chunks {
+                polished = await polisher.polish(chunks: chunks, context: context)
+            } else {
+                polished = await polisher.polish(text: text, context: context)
+            }
 
             // Arm B is terminal in strict correction modes: the 4B is not consulted at all, which
             // is the point — a decode the user waits ~1.8s for, to adjust punctuation the pipeline
@@ -2238,6 +2271,8 @@ class AppState: ObservableObject {
                         + "\(chunks?.count ?? 0) chunks"
                         + (gaps.isEmpty ? "" : " gaps=\(gaps)s") + ", "
                         + "residual=\(polished.needsGenerativePass), "
+                        + "editor=\(polisher.editor == nil ? "off" : "on")"
+                        + "/\(context.language?.rawValue ?? "unknown"), "
                         + "llm=\(llmEnabled ? "on" : "off")", subsystem: .transcription)
             return polished.text
         }

@@ -15,11 +15,17 @@ that delta is exactly the thing the Swift side must be judged free of.
     .venv/bin/python build_swift_reference.py
     .venv/bin/python build_swift_reference.py --mlpackage artifacts/mmbert-v3.mlpackage
 
-The package must be the one the app actually bundles -- see the `path =` entries for
-MMBERTEditing_*.mlpackage in project.pbxproj. Regenerating from a different export than
-the app ships is how `testHeadLogitsMatchPythonReference` ends up failing on 835
-assertions that are all the same fact: the fixture and the binary disagree about which
-checkpoint they are.
+The package must be the one the app actually runs. That is no longer anything in
+project.pbxproj: the weights were unbundled and are downloaded on first launch, so the
+shipped model is the single enumerated-shape package in `artifacts/mmbert-v3-enumerated`
+that `package_model.py` uploads. Regenerating from a different export than the app runs
+is how `testHeadLogitsMatchPythonReference` ends up failing on 835 assertions that are
+all the same fact: the fixture and the binary disagree about which checkpoint they are.
+
+Compute units matter as much as the checkpoint. `MMBERTCoreMLRuntime` pins `.cpuAndGPU`
+because on this model the ANE moves the logits enough to flip argmaxes -- 134 of 800 at
+shape 128 under ALL. Generating the fixture under a different unit would bake in numbers
+the app never produces. See `check_enumerated_parity.py`.
 """
 
 from __future__ import annotations
@@ -65,17 +71,32 @@ def shape_for(n: int) -> int:
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--mlpackage", default=str(MLPACKAGE),
-                    help="the .mlpackage directory the app bundles")
+                    help="the .mlpackage directory the app runs")
+    ap.add_argument("--tokenizer-from", default=None,
+                    help="directory holding model/, if not alongside --mlpackage")
+    # Must match `MMBERTCoreMLRuntime.init`'s default; see the module docstring.
+    ap.add_argument("--compute-units", default="CPU_AND_GPU",
+                    choices=["ALL", "CPU_ONLY", "CPU_AND_GPU", "CPU_AND_NE"])
     args = ap.parse_args()
     pkg = Path(args.mlpackage)
 
-    tok = AutoTokenizer.from_pretrained(pkg / "model")
+    tok_root = Path(args.tokenizer_from) if args.tokenizer_from else pkg
+    tok = AutoTokenizer.from_pretrained(tok_root / "model")
     bos = tok.cls_token_id if tok.cls_token_id is not None else tok.bos_token_id
     eos = tok.sep_token_id if tok.sep_token_id is not None else tok.eos_token_id
     pad = tok.pad_token_id or 0
 
-    models = {s: ct.models.MLModel(str(pkg / f"MMBERTEditing_{s}.mlpackage"))
-              for s in (32, 64, 128)}
+    units = getattr(ct.ComputeUnit, args.compute_units)
+    # One enumerated-shape package covering all three lengths is what ships; the per-shape
+    # layout is still accepted so the calibration tooling's own export stays checkable.
+    single = pkg / "MMBERTEditing.mlpackage"
+    if single.exists():
+        shared = ct.models.MLModel(str(single), compute_units=units)
+        models = {s: shared for s in (32, 64, 128)}
+    else:
+        models = {s: ct.models.MLModel(str(pkg / f"MMBERTEditing_{s}.mlpackage"),
+                                       compute_units=units)
+                  for s in (32, 64, 128)}
 
     out = {"bos": int(bos), "eos": int(eos), "pad": int(pad), "cases": []}
     for words in CASES:
