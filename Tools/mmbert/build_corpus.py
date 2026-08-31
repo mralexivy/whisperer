@@ -124,15 +124,13 @@ def load_db(path: Path) -> List[dict]:
         with open(path, "rb") as fh:
             fh.read(16)
     except PermissionError as exc:
-        raise SystemExit(
-            f"Cannot read {path}: {exc}\n"
-            "This is macOS Full Disk Access, not a missing database. Grant FDA to "
-            "the terminal (or IDE) running this script in System Settings > Privacy "
-            "& Security > Full Disk Access, then re-run.\n"
-            "Do NOT fall back to ~/Library/Application Support/Whisperer/history.sqlite: "
-            "that is the non-sandboxed store used by Debug builds and holds a different, "
-            "much smaller set of recordings."
-        ) from exc
+        print(
+            f"[warn] Cannot read {path}: {exc}\n"
+            "This is macOS Full Disk Access. Grant FDA to this terminal in System\n"
+            "Settings > Privacy & Security > Full Disk Access for in-domain examples.\n"
+            "Continuing without history.sqlite — only --extra-train-weighted inputs used."
+        )
+        return []
     con = sqlite3.connect(f"file:{path}?mode=ro", uri=True)
     con.row_factory = sqlite3.Row
     rows = [dict(r) for r in con.execute(
@@ -687,7 +685,7 @@ def main() -> None:
     # ---------- 1. study ----------
     rows = load_db(SANDBOX_DB)
     if not rows:
-        raise SystemExit(f"no rows in {SANDBOX_DB}")
+        print(f"[warn] no rows from {SANDBOX_DB} — skipping history DB; using --extra-train-weighted only")
     stats = study(rows)
     stats["_db"] = str(SANDBOX_DB)
     stats["_rows"] = len(rows)

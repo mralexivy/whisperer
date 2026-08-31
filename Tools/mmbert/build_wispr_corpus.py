@@ -181,23 +181,22 @@ def extract_html_structure(text: str) -> Tuple[str, Dict[int, str]]:
 # ---------------------------------------------------------------------------
 
 def _try_gtransform_repl(src_key: str, dst_key: str) -> Optional[int]:
-    """Try every GTRANSFORM; return the REPL label index (1-based, 0=NONE) or None.
+    """Try every non-NONE GTRANSFORM; return its REPL label index or None.
 
     Assumes REPL_VOCAB[:N_GTRANSFORM] corresponds 1-to-1 with GTRANSFORMS, so
-    label index = GTRANSFORMS.index(transform) + 1.
+    label index = GTRANSFORMS.index(transform).  Index 0 is NONE.
     """
-    for i, transform in enumerate(GTRANSFORMS):
+    for i, transform in enumerate(GTRANSFORMS[1:], start=1):
         result = apply_gtransform(src_key, transform)
         if result is not None and result.lower() == dst_key:
-            return i + 1  # 1-based; 0 reserved for NONE
+            return i
     return None
 
 
 def _try_literal_repl(dst_key: str) -> Optional[int]:
     """Return the REPL label index for a literal replacement, or None.
 
-    REPL_LITERALS is a dict mapping normalised target word → label index
-    (offset already includes the N_GTRANSFORM prefix, if any).
+    REPL_LITERALS is normally a list appended directly to REPL_VOCAB.
     """
     if isinstance(REPL_LITERALS, dict):
         return REPL_LITERALS.get(dst_key)
@@ -205,7 +204,7 @@ def _try_literal_repl(dst_key: str) -> Optional[int]:
     try:
         vocab = REPL_VOCAB  # type: ignore[name-defined]
         idx = vocab.index(dst_key)
-        return N_GTRANSFORM + idx + 1
+        return idx
     except (ValueError, AttributeError, NameError):
         return None
 
@@ -373,7 +372,9 @@ def wispr_align_pair(
                 combined = rws[i1].key + rws[i1 + 1].key
                 hyphen = rws[i1].key + "-" + rws[i1 + 1].key
                 if merged_out in (combined, hyphen):
-                    merge_label = "MERGE_2TO1"
+                    merge_label = (
+                        "MERGE_HYPHEN" if merged_out == hyphen else "MERGE_SPACE"
+                    )
                     m_idx = MERGE2ID.get(merge_label)
                     if m_idx is not None:
                         tgt_merge[i1] = m_idx
@@ -395,8 +396,9 @@ def wispr_align_pair(
 
             elif ni == 1 and nj == 2:
                 # 1-to-2: potential split (e.g., contraction expansion)
-                split_label = "MERGE_1TO2"
-                m_idx = MERGE2ID.get(split_label)
+                source_joined = rws[i1].key.replace("-", "")
+                target_joined = pws[j1].key + pws[j1 + 1].key
+                m_idx = MERGE2ID.get("SPLIT") if source_joined == target_joined else None
                 if m_idx is not None:
                     tgt_merge[i1] = m_idx
                     # Punct from the last target word of the pair

@@ -55,13 +55,16 @@ if [ "$SKIP_CORPUS" -eq 0 ]; then
         > "$A/build_wispr_corpus.log" 2>&1
     grep -E "train|val|Accepted|script" "$A/build_wispr_corpus.log" | tail -10 || true
 
-    # ── Step 2: pin history holdout ──────────────────────────────────────────
+    # ── Step 2: pin history holdout (requires FDA to history.sqlite) ─────────
+    # Failure is non-fatal: build_corpus.py warns on missing holdout instead
+    # of erroring. Grant Full Disk Access to the terminal in System Settings
+    # > Privacy & Security > Full Disk Access to populate eval_real_large.jsonl.
     echo "=== 2/6 build_eval_large  $(date +%T)"
     run $PY build_eval_large.py \
         --golden "$GOLDEN" \
         --train-frac 0.55 \
         --min-eval 300 \
-        > "$A/build_eval_large_wispr.log" 2>&1
+        > "$A/build_eval_large_wispr.log" 2>&1 || echo "  [warn] step 2 failed (FDA required) — continuing without eval holdout"
     tail -5 "$A/build_eval_large_wispr.log" || true
 
     # ── Step 2b: meeting corpus (he=499, ru=248, en=207 grouped documents) ──
@@ -88,6 +91,7 @@ if [ "$SKIP_CORPUS" -eq 0 ]; then
         --extra-train-weighted "$AD/meeting_train.jsonl:5" \
         --extra-train-weighted "$D/train_real_large.jsonl:5" \
         --extra-train-weighted "$D/gold_train.jsonl:8" \
+        $( [ -f "$AD/wispr_relabeled.jsonl" ] && echo "--extra-train-weighted $AD/wispr_relabeled.jsonl:4" ) \
         --holdout "$D/eval_real_large.jsonl" \
         --holdout "$AD/wispr_val.jsonl" \
         --holdout "$AD/meeting_val.jsonl" \

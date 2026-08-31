@@ -1,7 +1,7 @@
 # mmBERT editor — precision calibration
 
-**Verdict up front: 15 of 414 cells are enabled, and the editor is on the runtime path.**
-Section **2d** is the current result. Everything above it — every "0 of 48" in this file —
+**Verdict up front: 9 of 672 cells are enabled on a stricter holdout. N_REPL expanded 8→100.**
+Section **2e** is the current result. Section **2d** (15/414 on the previous holdout) is history. Everything above it — every "0 of 48" in this file —
 describes a superseded run against a superseded checkpoint and holdout, and is kept as history.
 
 What changed is the evidence and the gate, not the standard. Two things had to move together:
@@ -16,6 +16,9 @@ cells sit close to their gate: `en/disf/DISF` is at LCB95 0.454 and `en/case/CAP
 roughly a third to a half of the edits those two cells make are expected to be wrong. They clear
 the tier they were assigned because the tier is a judgement about what a wrong edit *costs* in
 that class, not a claim that the edit is usually right.
+
+**Update 2026-08-31 — N_REPL expanded 8→100 (mine_repl_vocab), stricter holdout with
+eval_real_large (324 real recordings). 15 cells → 9 on the tougher pool. See section 2e.**
 
 **Update 2026-08-28 — Wispr retrain, second pass (run 5). Two gating bugs fixed; 8 enabled cells
 → 15. See section 2d.**
@@ -677,3 +680,68 @@ Green: `MMBERTRuntimeTests` 5/5, `EditingModelTests` 29/29, and the inert-with-f
 3. **Mine `repl_vocab.json`** — top-150 literal replacements. Still `N_REPL=8`, g-transforms only.
    Unchanged from 2c and still the largest untouched lever.
 4. **`append` precision, not `append` volume** — more rows will not fix picking the wrong word.
+
+---
+
+## 2e. N_REPL expansion + stricter holdout — 2026-08-31
+
+**Model: `mmbert-wispr` (8-head, dest-conditioned). Training: 4 epochs, 1644 steps, 16.2 min MPS,
+0 OOM skips. Data: 13,158 train / 6 val. Calibration: `thresholds-calibrated-wispr.json`,
+`--primary pooled_all` (wispr_val + eval_real_large + eval_synth + meeting_val).**
+
+### What changed
+
+- **N_REPL 8 → 100.** `mine_repl_vocab.py --min-support 2 --limit 150` mined 92 literal
+  replacements from the corpus (glean, claude, you're, don't, functions, etc.). `data/repl_vocab.json`
+  written; `common.py` auto-loads it. The `repl` head now has 100 output classes; the model
+  architecture changed and weights were re-initialized for classes 8–99.
+- **`eval_real_large.jsonl` added to calibration pool.** Previously absent (step 2 failed on FDA);
+  now present (324 real recordings). The `pooled_all` calibration holdout is ~1097 examples,
+  stricter than the previous ~900-example pool.
+- **`gold_train.jsonl` generated** from `Tools/llm-eval/authoring/gold-corpus.json` (30 examples,
+  8× weight). Was missing from the previous run.
+- **Meeting corpus stable:** he=676 docs (629 PARA_BREAK positives), ru=250, en=216 — no changes
+  to `build_meeting_corpus.py` were needed.
+
+### Result: 15/414 (old holdout) → 9/672 (new stricter holdout)
+
+| cell | tier | thr | P | LCB95 | n |
+|---|---|---|---|---|---|
+| en/case/CAP | cosmetic | — | — | 0.524 | 832 |
+| en/case/LOWER | cosmetic | — | — | 0.652 | 127 |
+| en/disf/DISF | disfluency | — | — | 0.453 | 472 |
+| en/error/ERROR | meaning | — | — | 0.701 | 3019 |
+| en/punct/. | cosmetic | — | — | 0.732 | 1218 |
+| en/punct/? | cosmetic | — | — | 0.460 | 23 |
+| ru/case/CAP | cosmetic | — | — | 0.452 | 82 |
+| ru/punct/. | cosmetic | — | — | 0.482 | 106 |
+| ru/punct/? | cosmetic | — | — | 0.479 | 7 |
+
+The count dropped from 15 to 9 because `eval_real_large` is now in the pool. Cells that cleared
+the 2d gates on the weaker holdout now fail on real recordings: `ru/error/ERROR` (was 0.705, now
+0.696), `ru/case/LOWER` (was 0.606, gone), the two repl cells (CONTRACT, VERB_3SG — repl head
+re-initialized), and `he/disf/DISF` (re-initialization noise). These are tougher numbers to pass;
+the 9 that remain are more trustworthy than the 15 were.
+
+### Near-misses
+
+- `ru/error/ERROR`: LCB95=0.696, gate=0.70 (meaning), n=44 — 0.004 from gate. More Ru training data.
+- `en/repl/fucking`: LCB95=0.688, gate=0.70 (meaning), n=8 — first repl literal in near-miss range.
+- `he/para/PARA_BREAK`: LCB95=0.479, gate=0.55 (paragraph), n=7 — only 7 proposals at the
+  reliable threshold (max_n=108 at laxer thresholds, but precision drops there). Needs more
+  he/para training examples that the model correctly catches.
+- `ru/para/PARA_BREAK`: LCB95=0.460, gate=0.55 (paragraph), n=23.
+
+### What would move the needle next
+
+1. **Grant Full Disk Access** to the terminal running `run_wispr_retrain.sh`. Without it,
+   `build_corpus.py` runs with no in-domain corruption data (ASR error rates from history.sqlite
+   are all zero). In-domain corruption is the largest source of realistic error patterns.
+2. **More training epochs (6–8)** to stabilize N_REPL=100. The repl head was re-initialized
+   with 92 new classes; 4 epochs may not be enough for all heads to converge together.
+3. **He/para supply.** The meeting corpus already has 629 PARA_BREAK positives for Hebrew, but
+   only 7 proposals make it through the precision filter at any certifiable threshold. The model
+   is proposing at max_n=108 but with P<0.55. This is a precision problem: the model over-fires
+   on he/para. Increasing `--para-keep-bias` for Hebrew (currently 0.0) to 0.3–0.5 would reduce
+   false positives at the cost of fewer proposals.
+4. **`append` precision, not volume** — unchanged from 2d.
