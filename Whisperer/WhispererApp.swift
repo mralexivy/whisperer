@@ -67,6 +67,18 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         // Setup right-click menu on the status bar icon
         setupStatusItemRightClickMenu()
 
+        // Fetch the polish model in the background. `start()` returns immediately and nothing
+        // downstream waits on it — see PolishModelManager's startup contract. Deliberately not
+        // deferred behind a "first recording" trigger: the download is the one thing that cannot
+        // be made instant, so it begins the moment the app does.
+        PolishModelManager.shared.start()
+
+        // If the weights are already installed from a previous launch, begin compiling and loading
+        // them now. Also returns immediately; `PolishEditor.current()` keeps answering nil until
+        // the load lands, so a dictation in the first few seconds simply polishes deterministically
+        // instead of waiting on Core ML.
+        PolishEditor.prepare()
+
         // Receipt validation using StoreKit 2 (disabled for now)
         // TODO: Enable when in-app purchases are ready by setting receiptValidationEnabled = true
         let receiptValidationEnabled = false
@@ -809,6 +821,111 @@ private struct MBWaveformView: View {
     }
 }
 
+/// First-run progress for the polish model, shown only while there is something to say.
+///
+/// It is deliberately not a blocking or modal step. The model downloads in the background from
+/// launch; everything in the app works without it, so this card reports and then gets out of the
+/// way rather than demanding the user wait or acknowledge anything. Once installed it disappears
+/// for good — a permanent "Polish model: ready" row would be noise on every future launch.
+private struct PolishModelCard: View {
+    @ObservedObject var manager = PolishModelManager.shared
+    /// Held for one beat after install so the bar can visibly land on 100% instead of vanishing
+    /// mid-animation, which reads as a failure rather than a success.
+    @State private var lingerAfterReady = true
+
+    var body: some View {
+        Group {
+            switch manager.phase {
+            case .downloading, .unpacking:
+                card
+            case .ready where lingerAfterReady:
+                card.task {
+                    try? await Task.sleep(nanoseconds: 2_000_000_000)
+                    withAnimation { lingerAfterReady = false }
+                }
+            case .failed:
+                card
+            default:
+                EmptyView()
+            }
+        }
+        .onAppear {
+            // Nothing to linger over if it was already installed before this launch.
+            if manager.phase == .ready && manager.progress == 1 && manager.totalBytes == 0 {
+                lingerAfterReady = false
+            }
+        }
+    }
+
+    private var card: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 8) {
+                Image(systemName: icon)
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(MBColors.accentGradient)
+                Text("Smart Polish")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundColor(MBColors.textPrimary)
+                Spacer()
+                Text(detail)
+                    .font(.system(size: 11).monospacedDigit())
+                    .foregroundColor(MBColors.textSecondary)
+            }
+
+            if case .failed(let message) = manager.phase {
+                Text(message)
+                    .font(.system(size: 11))
+                    .foregroundColor(MBColors.textSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                Button("Try Again") { manager.retry() }
+                    .buttonStyle(.plain)
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(MBColors.accentGradient)
+            } else {
+                ProgressView(value: manager.progress)
+                    .progressViewStyle(.linear)
+                    .tint(MBColors.accent)
+                Text(subtitle)
+                    .font(.system(size: 11))
+                    .foregroundColor(MBColors.textTertiary)
+            }
+        }
+        .padding(12)
+        .background(MBColors.cardSurface)
+        .overlay(RoundedRectangle(cornerRadius: 10).stroke(MBColors.border, lineWidth: 1))
+        .clipShape(RoundedRectangle(cornerRadius: 10))
+        .transition(.opacity.combined(with: .move(edge: .top)))
+        .animation(.easeInOut(duration: 0.25), value: manager.phase)
+    }
+
+    private var icon: String {
+        switch manager.phase {
+        case .ready:  return "checkmark.seal.fill"
+        case .failed: return "exclamationmark.triangle.fill"
+        default:      return "wand.and.stars"
+        }
+    }
+
+    private var detail: String {
+        switch manager.phase {
+        case .downloading where manager.totalBytes > 0:
+            let mb = { (b: Int64) in String(format: "%.0f", Double(b) / 1_000_000) }
+            return "\(mb(manager.downloadedBytes)) / \(mb(manager.totalBytes)) MB"
+        case .unpacking: return "Installing"
+        case .ready:     return "Ready"
+        case .failed:    return "Failed"
+        default:         return ""
+        }
+    }
+
+    private var subtitle: String {
+        switch manager.phase {
+        case .ready: return "Smarter punctuation and capitalisation are now available."
+        default:     return "Downloading in the background — everything else works meanwhile."
+        }
+    }
+}
+
 struct StatusTabView: View {
     @Binding var selectedTab: MenuTab
     @Binding var settingsScrollTarget: SettingsScrollTarget?
@@ -860,6 +977,9 @@ struct StatusTabView: View {
                 if showPermissionWarning {
                     permissionWarningBanner
                 }
+
+                // Self-hides once the model is installed; see PolishModelCard.
+                PolishModelCard()
 
                 // In-App Transcription — core feature, no Accessibility required.
                 // Hidden during a meeting: the card reads AppState's live recording state, which a

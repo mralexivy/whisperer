@@ -480,6 +480,43 @@ final class EditingModelTests: XCTestCase {
         }
     }
 
+    /// The gate's precision bars are a hand-copy of the calibration file's `tiers`, so this is the
+    /// test that notices when the two drift apart.
+    ///
+    /// One-directional, in the direction that matters: a recalibration is free to *raise* its own
+    /// gate, and the app is free to be stricter than the measurement. What must never happen is the
+    /// app admitting a cell at a lower precision than the run that certified it — that would let a
+    /// loosened calibration file loosen the shipped policy without anyone editing Swift, which is
+    /// exactly the coupling `precisionGate(for:)` exists to break.
+    func testGateTiersMatchTheCalibrationFile() throws {
+        let url = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .appendingPathComponent("Tools/mmbert/thresholds-calibrated-wispr.json")
+        guard FileManager.default.fileExists(atPath: url.path) else {
+            throw XCTSkip("thresholds-calibrated-wispr.json absent")
+        }
+        let root = try JSONSerialization.jsonObject(with: Data(contentsOf: url))
+        let tiers = try XCTUnwrap((root as? [String: Any])?["tiers"] as? [String: Any],
+                                  "the file has no `tiers` block")
+
+        let mapping: [(ConfidenceGate.EditClass, String)] = [
+            (.substitution,   "meaning"),
+            (.fillerDeletion, "disfluency"),
+            (.cosmetic,       "cosmetic"),
+            (.paragraph,      "paragraph"),
+        ]
+        for (editClass, name) in mapping {
+            let tier = try XCTUnwrap(tiers[name] as? [String: Any], "tier `\(name)` is missing")
+            let measured = try XCTUnwrap(tier["gate"] as? Double, "tier `\(name)` has no gate")
+            // Compared as `Float`, which is what the gate stores. Widening the gate to `Double`
+            // instead turns an exactly-equal pair into 0.69999998 < 0.7 and fails every tier.
+            XCTAssertGreaterThanOrEqual(
+                ConfidenceGate.precisionGate(for: editClass), Float(measured),
+                "\(editClass) admits below the measured `\(name)` gate")
+        }
+    }
+
     /// An `enabled` cell with no operating point is a broken file, and a broken file must not
     /// open an edit class.
     func testEnabledCellWithoutAThresholdIsForbidden() throws {

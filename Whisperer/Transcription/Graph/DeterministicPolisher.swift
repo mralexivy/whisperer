@@ -68,13 +68,23 @@ struct DeterministicPolisher: Sendable {
     /// `forTranscript` is the seam that consults the flag.
     let splitsParagraphs: Bool
 
+    /// The model, when one is loaded. `nil` is the ordinary case on a fresh install and the
+    /// permanent case for a user who never downloads the weights — see `PolishEditor`.
+    ///
+    /// Only `polish(_:pauses:context:)`, the async form, consults it. The synchronous `polish`
+    /// remains exactly the deterministic pipeline it always was, which is what lets the live
+    /// per-utterance paths keep calling it from the main actor without an encoder pass landing
+    /// on the thread that draws the meeting preview.
+    let editor: (any EditingModel)?
+
     init(aliases: AliasEngine = AliasEngine(),
          gate: ConfidenceGate = ConfidenceGate(),
          dictionaryTerms: Set<String> = [],
          formatsLists: Bool = true,
          isFragment: Bool = false,
          terminatesUtteranceEnd: Bool = true,
-         splitsParagraphs: Bool = true) {
+         splitsParagraphs: Bool = true,
+         editor: (any EditingModel)? = nil) {
         self.aliases = aliases
         self.gate = gate
         self.dictionaryTerms = dictionaryTerms
@@ -83,6 +93,7 @@ struct DeterministicPolisher: Sendable {
         self.isFragment = isFragment
         self.terminatesUtteranceEnd = terminatesUtteranceEnd
         self.splitsParagraphs = splitsParagraphs
+        self.editor = editor
     }
 
     // MARK: - Polishing
@@ -92,6 +103,50 @@ struct DeterministicPolisher: Sendable {
     ///   in which case `ParagraphSplitter` falls back to its text-only rule.
     func polish(_ graph: TokenGraph, pauses: ParagraphSplitter.Pauses = [:]) -> Result {
         var working = graph
+        let applied = deterministicStages(&working, pauses: pauses)
+        return render(working, applied: applied)
+    }
+
+    /// The deterministic pipeline, then the model's proposals judged by the same gate.
+    ///
+    /// Separate from the synchronous `polish` rather than replacing it, because the model stage is
+    /// an `await` and the two live paths that call the sync form — the meeting preview setter and
+    /// the per-utterance pass — cannot suspend and must not pay an encoder pass at their cadence.
+    /// So the split is not merely about async: it is the live/authoritative seam that
+    /// `EditContext.Pass` already names. Only the authoritative callers get the model.
+    ///
+    /// The model runs **after** every deterministic stage and before rendering. Order matters in
+    /// one direction only: the tagger conditions on the text it is shown, so showing it text the
+    /// aliases and the normalizer have not touched yet would have it re-propose corrections the
+    /// pipeline already made, and re-propose them at a lower precision than the rule that made
+    /// them. Running it last means it sees settled text and its proposals are the residue.
+    ///
+    /// Its edits face `ConfidenceGate` exactly like every other stage's. The model has no path to
+    /// the graph that does not go through the gate; that is what `EditingModel`'s contract of
+    /// "propose, never mutate" buys, and it is why a mis-calibrated model costs rejected edits
+    /// rather than corrupted text.
+    func polish(_ graph: TokenGraph,
+                pauses: ParagraphSplitter.Pauses = [:],
+                context: EditContext) async -> Result {
+        var working = graph
+        var applied = deterministicStages(&working, pauses: pauses)
+
+        if let editor {
+            let proposals = await editor.propose(working.tokens, context: context)
+            if !proposals.isEmpty {
+                let accepted = gate.apply(proposals, to: &working)
+                applied += accepted
+                Logger.debug("Editor model: \(accepted.count)/\(proposals.count) proposals applied",
+                             subsystem: .transcription)
+            }
+        }
+
+        return render(working, applied: applied)
+    }
+
+    /// Stages 1–7: everything that does not need the model and cannot suspend.
+    private func deterministicStages(_ working: inout TokenGraph,
+                                     pauses: ParagraphSplitter.Pauses) -> [TranscriptEdit] {
         var applied: [TranscriptEdit] = []
 
         // 1. Protection first, unconditionally. Every later stage consults the mask, so a stage
@@ -138,8 +193,12 @@ struct DeterministicPolisher: Sendable {
                                   to: &working)
         }
 
-        // 8. Structure last, on text. `ListFormatter` rewrites line by line and reorders nothing,
-        //    so it has no token-level representation to preserve.
+        return applied
+    }
+
+    /// Stage 8. Structure last, on text: `ListFormatter` rewrites line by line and reorders
+    /// nothing, so it has no token-level representation to preserve.
+    private func render(_ working: TokenGraph, applied: [TranscriptEdit]) -> Result {
         let rendered = working.render()
         let text = formatsLists ? ListFormatter.format(rendered) : rendered
 
@@ -151,6 +210,10 @@ struct DeterministicPolisher: Sendable {
 
     func polish(text: String) -> Result {
         polish(TokenGraph.from(text: text))
+    }
+
+    func polish(text: String, context: EditContext) async -> Result {
+        await polish(TokenGraph.from(text: text), context: context)
     }
 
     func polish(words: [WhisperStreamWord]) -> Result {
@@ -184,6 +247,31 @@ struct DeterministicPolisher: Sendable {
     /// have received. The only thing the chunk form adds is *where* the joins are and how long the
     /// speaker was silent at each, which is exactly the information a string cannot carry.
     func polish(chunks: [Chunk]) -> Result {
+        guard let input = Self.join(chunks) else {
+            return polish(text: Self.soleText(chunks))
+        }
+        return polish(input.graph, pauses: input.pauses)
+    }
+
+    /// The chunked form with the model stage, for the authoritative dictation pass.
+    func polish(chunks: [Chunk], context: EditContext) async -> Result {
+        guard let input = Self.join(chunks) else {
+            return await polish(text: Self.soleText(chunks), context: context)
+        }
+        return await polish(input.graph, pauses: input.pauses, context: context)
+    }
+
+    private static func soleText(_ chunks: [Chunk]) -> String {
+        chunks.lazy
+            .map { $0.text.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .first { !$0.isEmpty } ?? ""
+    }
+
+    /// Join the chunks and locate the silence at each seam. `nil` when there is nothing to join —
+    /// fewer than two non-empty chunks — in which case there are no seams and the string form is
+    /// the identical input.
+    private static func join(_ chunks: [Chunk]) -> (graph: TokenGraph,
+                                                    pauses: ParagraphSplitter.Pauses)? {
         // Carry the whole chunk through the filter, not just its text. Matching a piece back to its
         // chunk by text looks equivalent and is not: two chunks with identical text — "yeah",
         // "okay", a repeated word — both resolve to the first, and every pause after the duplicate
@@ -192,9 +280,7 @@ struct DeterministicPolisher: Sendable {
             let text = chunk.text.trimmingCharacters(in: .whitespacesAndNewlines)
             return text.isEmpty ? nil : Chunk(text: text, start: chunk.start, end: chunk.end)
         }
-        guard kept.count > 1 else {
-            return polish(text: kept.first?.text ?? "")
-        }
+        guard kept.count > 1 else { return nil }
 
         let text = kept.map(\.text).joined(separator: " ")
         let graph = TokenGraph.from(text: text)
@@ -215,7 +301,7 @@ struct DeterministicPolisher: Sendable {
             cursor = separator.upperBound
         }
 
-        return polish(graph, pauses: pauses)
+        return (graph, pauses)
     }
 
     // MARK: - The remaining LLM job
@@ -295,17 +381,24 @@ extension DeterministicPolisher {
     /// - Parameter terminatesUtteranceEnd: whether the final sentence may be closed. False only for
     ///   the meetings per-utterance pass, whose text ends at a chunk cut rather than at a speaker's
     ///   full stop.
+    /// - Parameter editor: the model, defaulting to whatever `PolishEditor` has loaded. Nil until
+    ///   the weights are downloaded and compiled, and nil forever if the user never gets them —
+    ///   in which case every caller falls back to the deterministic pipeline, which is what
+    ///   shipped before the model existed. Passed explicitly only by tests and by the live paths
+    ///   that deliberately decline it.
     static func forTranscript(dictionaryEntries: [DictionaryEntry],
                               formatsLists: Bool,
                               terminatesUtteranceEnd: Bool = true,
-                              splitsParagraphs: Bool = PolishFeatureFlags.areParagraphsEnabled)
+                              splitsParagraphs: Bool = PolishFeatureFlags.areParagraphsEnabled,
+                              editor: (any EditingModel)? = PolishEditor.current())
         -> DeterministicPolisher {
         DeterministicPolisher(
             aliases: AliasEngine(entries: dictionaryEntries),
             dictionaryTerms: Set(dictionaryEntries.map(\.correctForm)),
             formatsLists: formatsLists,
             terminatesUtteranceEnd: terminatesUtteranceEnd,
-            splitsParagraphs: splitsParagraphs
+            splitsParagraphs: splitsParagraphs,
+            editor: editor
         )
     }
 }

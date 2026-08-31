@@ -87,3 +87,9 @@ graphify-out/
 venv/
 __pycache__/
 *.pyc
+
+# Generated at build time from ~/.whisperer-model-key by Tools/mmbert/gen_key_source.sh.
+# The polish-model AES key ships inside the binary by design, but it must not be
+# committed: version control is the one place it would outlive a key rotation.
+Whisperer/Transcription/Editing/PolishModelKey.generated.swift
+Tools/mmbert/lzfse_tool

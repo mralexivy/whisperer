@@ -95,18 +95,23 @@ enum PolishFeatureFlags {
 
     /// Sub-switch for the mmBERT editor's *certified* edit classes.
     ///
-    /// **Deliberately not surfaced in Settings, and the editor is deliberately not on the runtime
-    /// path.** Recalibration on 326 held-out real ASR → reference pairs — roughly four times the
-    /// evidence the first pass had — measured the model at P = 0.80 (en/error, n = 320) and
-    /// P = 0.92 (en sentence-final period). Those are point estimates, not confidence-bound
-    /// failures: the model is genuinely not precise enough on real speech, and the earlier
-    /// P = 1.0000 readings were small-sample artefacts of an 86-pair split. The risk-tiered floors
-    /// (0.99 meaning / 0.97 disfluency / 0.95 cosmetic) do not rescue it. See
-    /// `Tools/mmbert/CALIBRATION.md` and `thresholds-calibrated.json`: 0 of 48 cells enabled.
+    /// **On by default, and on the runtime path** — but only for the cells a calibration run has
+    /// measured and cleared. `MMBERTCalibrationTable.measured` enables 15 of 414 language × head ×
+    /// action cells from `Tools/mmbert/thresholds-calibrated-wispr.json`; every other cell either
+    /// produces no proposal at all (`forbidden`) or produces one capped below every gate floor
+    /// (`unmeasured`). Absence never means permitted.
     ///
-    /// The key is kept so the seam is named and a future recalibration has somewhere to land, and
-    /// so a developer can force the path on for measurement with `defaults write`. It has no UI
-    /// because a switch that provably changes no output is a lie about what the app can do.
+    /// The earlier corpus — 326 real ASR → reference pairs against the pre-Wispr checkpoint — put
+    /// 0 of 48 cells over the bar, and that verdict stands for `thresholds-calibrated.json`. The
+    /// Wispr recalibration is a different, larger measurement; what changed is the evidence, not
+    /// the policy. Certified edits are admitted on their Clopper-Pearson precision lower bound
+    /// against the tier gates in `ConfidenceGate.precisionGate(for:)`, never on softmax
+    /// confidence, which is a different quantity — see `TranscriptEdit.certifiedPrecisionLCB`.
+    ///
+    /// **Deliberately not surfaced in Settings.** The key exists so the seam is named and a
+    /// developer can turn the path off for measurement with `defaults write`. It has no UI because
+    /// the certified set is narrow enough that its effect is not a matter of taste, and a user
+    /// asked to choose could not evaluate the choice.
     static let editorKey = "fastPolishEditorEnabled"
 
     /// Sub-switch for paragraph segmentation.

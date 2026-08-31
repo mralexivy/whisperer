@@ -173,7 +173,10 @@ enum EditingRuntimeError: Error, LocalizedError {
 
 // MARK: - Runtime
 
-protocol TextEditingModelRuntime: Sendable {
+/// `nonisolated` for the same reason as `EditingModel`: under
+/// `SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor` an unannotated protocol puts `load()` and
+/// `encode(_:)` — a Core ML compile and a Core ML forward pass — on the main thread.
+nonisolated protocol TextEditingModelRuntime: Sendable {
     var isLoaded: Bool { get }
 
     func load() async throws

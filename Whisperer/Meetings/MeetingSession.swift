@@ -153,9 +153,17 @@ class MeetingSession: ObservableObject {
         // The per-utterance pass does not close the last sentence: its text ends where the VAD cut,
         // and only the silence carried by the *next* chunk says whether the speaker finished there.
         // The card pass below has that silence and makes the call.
+        // No model on the per-utterance editor, and explicitly rather than by omission. It runs on
+        // the main actor at the live tail's cadence — several times a second — through the
+        // synchronous `polish`, which ignores the model anyway; passing nil says that is intended
+        // and not an oversight that a later `await` would quietly turn into a stutter.
         utteranceEditor = DeterministicPolisher.forTranscript(dictionaryEntries: entries,
                                                               formatsLists: false,
-                                                              terminatesUtteranceEnd: false)
+                                                              terminatesUtteranceEnd: false,
+                                                              editor: nil)
+        // The card editor carries the model. Only `applyEditor` — the whole-transcript pass at the
+        // end of a meeting, already off the main actor — invokes the async form that consults it;
+        // the per-card `polishCard` calls the synchronous one and is unaffected.
         cardEditor = DeterministicPolisher.forTranscript(dictionaryEntries: entries,
                                                          formatsLists: true)
     }
@@ -225,13 +233,20 @@ class MeetingSession: ObservableObject {
 
     /// The batch card pass. Pure, so `applyEditor` can hand it to a detached task.
     private nonisolated static func polishAll(_ segments: [MeetingSegment],
-                                              with editor: DeterministicPolisher)
+                                              with editor: DeterministicPolisher,
+                                              context: EditContext) async
         -> (segments: [MeetingSegment], rewritten: Int) {
         var working = segments
         var rewritten = 0
         for index in working.indices {
             let original = working[index].text
-            let polished = polishCard(original, with: editor)
+            // The async form, so the model runs. This is the one meeting pass that may: it is the
+            // authoritative end-of-meeting sweep, every card is complete, and it is already off
+            // the main actor. Per segment rather than over the joined transcript because the
+            // tagger's window is 128 sub-words and a meeting is far longer — and because a
+            // segment is the unit the write-back and the Polished/Original toggle address.
+            let result = await editor.polish(text: original, context: context)
+            let polished = result.text.isEmpty ? original : result.text
             guard polished != original else { continue }
             if working[index].rawText == nil { working[index].rawText = original }
             working[index].text = polished
@@ -515,8 +530,12 @@ class MeetingSession: ObservableObject {
         if cardEditor == nil { makeEditors() }
         guard let editor = cardEditor else { return segments }
 
+        let selected = AppState.shared.selectedLanguage
+        let context = EditContext(language: selected == .auto ? nil : selected,
+                                  pass: .authoritative)
+
         let outcome = await Task.detached(priority: .utility) { [segments] in
-            Self.polishAll(segments, with: editor)
+            await Self.polishAll(segments, with: editor, context: context)
         }.value
 
         let working = outcome.segments

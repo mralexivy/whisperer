@@ -1,8 +1,24 @@
 # mmBERT editor — precision calibration
 
-**Verdict up front: 0 of 48 cells is enabled. The editor is muted on every language and
-every edit class, and it is muted because the model is not precise enough on real speech —
-not because the confidence bound is fussy.**
+**Verdict up front: 15 of 414 cells are enabled, and the editor is on the runtime path.**
+Section **2d** is the current result. Everything above it — every "0 of 48" in this file —
+describes a superseded run against a superseded checkpoint and holdout, and is kept as history.
+
+What changed is the evidence and the gate, not the standard. Two things had to move together:
+the Wispr retrain raised the model, and the flat 0.99 confidence rule was replaced by
+risk-tiered gates on *measured precision* (section 1, "Risk tiers"). A cell is admitted on its
+Clopper-Pearson 95% lower bound against its tier — 0.70 meaning / 0.45 disfluency /
+0.45 cosmetic / 0.55 paragraph — never on softmax confidence, which is a belief about one token
+and not a precision claim about a class of edits.
+
+**Read the enabled table in 2d before trusting any of this in production.** Several certified
+cells sit close to their gate: `en/disf/DISF` is at LCB95 0.454 and `en/case/CAP` at 0.609, so
+roughly a third to a half of the edits those two cells make are expected to be wrong. They clear
+the tier they were assigned because the tier is a judgement about what a wrong edit *costs* in
+that class, not a claim that the edit is usually right.
+
+**Update 2026-08-28 — Wispr retrain, second pass (run 5). Two gating bugs fixed; 8 enabled cells
+→ 15. See section 2d.**
 
 **Update 2026-08-27 — Wispr corpus retrain (run 4). Model extended to 8 heads; Wispr Flow
 pairs used as training targets. New heads measured for the first time; none yet certified.
@@ -615,7 +631,39 @@ budget. `build_swift_reference.py` gained `--mlpackage` and the parity fixture w
 from the package the app actually bundles — regenerating it from a different export is how 835
 identical assertion failures show up looking like a Swift bug.
 
-Green: `MMBERTRuntimeTests` 5/5, `EditingModelTests` 28/28, and the inert-with-flags-off set
+**Route-B parity delta.** Regenerating the fixture from the shipped `.mlpackage` left 3 flipped
+argmaxes across 10,096 decisions (0.03%). All three are at certified margins below 0.04 — i.e.
+cases where the top two labels were within float noise of each other to begin with, which is what
+a different-but-equivalent compute route is expected to move. No cell's operating point sits near
+enough to a decision boundary for this to change its measured precision.
+
+**Runtime wiring (2026-08-29).** The editor is now on the dictation and meeting polish paths.
+Three pieces had to exist for the certified cells to be reachable at all:
+
+1. `TranscriptEdit.certifiedPrecisionLCB` carries the measured bound from the table to the gate.
+   Without it, certification is decorative: `MMBERTEditingModel` reports `confidence` as a product
+   of three probabilities, so a cell calibrated to operate at 0.30 proposes constantly and — under
+   the old flat 0.95/0.97/0.99 confidence floors — applies never.
+2. `ConfidenceGate.precisionGate(for:)` restates the four tier gates in Swift and judges certified
+   editor edits against the *bound*, not the confidence. Restated rather than read from this file
+   on purpose, so a recalibration cannot loosen the app's policy by loosening its own;
+   `EditingModelTests.testGateTiersMatchTheCalibrationFile` fails if the two drift apart.
+3. `ConfidenceGate.EditClass.paragraph`. `insertAfter("\n\n")` used to classify as `.substitution`
+   — `isPunctuationOnly` trims the whitespace and then finds nothing to classify — which silently
+   made `ru/para/PARA_BREAK`, the best-measured cell in the table, unreachable.
+
+Everything downstream of the precision check is unchanged and still applies to model edits:
+negation and number violations, soft protections, script violations, and the denied-insertion set
+(`,` `;` `:` `،` `؛`).
+
+The model runs only on the authoritative pass — the dictation endpoint and the end-of-meeting
+sweep — after every deterministic stage, so it sees settled text and proposes only the residue.
+Live preview and the meeting per-utterance tail pass `editor: nil` explicitly. `PolishEditor`
+owns one process-wide instance and never loads on demand: `current()` returns `nil` until the
+load lands, and `nil` means "polish deterministically", which is exactly the pipeline that
+shipped before this existed.
+
+Green: `MMBERTRuntimeTests` 5/5, `EditingModelTests` 29/29, and the inert-with-flags-off set
 (`DeterministicPolisherTests`, `PolishInteriorBoundaryTests`, `PolishAuthoredGoldBoundaryTests`,
 `PolishPeriodPrecisionDiagnosticTests`, `ListFormatterMultilingualTests`) 37/37.
 

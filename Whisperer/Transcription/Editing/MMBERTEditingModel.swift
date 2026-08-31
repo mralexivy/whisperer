@@ -29,8 +29,12 @@
 //  states, and the difference between them is the whole design:
 //
 //  - **certified** — the cell was measured and cleared the bar. Its measured threshold is the
-//    action floor, and the confidence reported to the gate is uncapped so it can clear its
-//    tier.
+//    action floor, and the edit carries the cell's precision lower bound to the gate, which
+//    judges it on that bound instead of on a softmax floor. This is the only path by which a
+//    model edit is ever applied. Judging a certified edit by `confidence` instead would make
+//    certification decorative: `confidence` is a product of three probabilities, so the 0.95
+//    cosmetic floor needs each above ~0.983, and cells calibrated to operate at 0.30 — most of
+//    them — would propose forever and apply never.
 //  - **forbidden** — the cell was measured and refused. **No proposal at all** for that
 //    (language, class). An unmeasured class must be unreachable, not merely unlikely, and a
 //    low-confidence proposal is only the latter.
@@ -44,7 +48,7 @@
 
 import Foundation
 
-struct MMBERTEditingModel: EditingModel {
+nonisolated struct MMBERTEditingModel: EditingModel {
 
     // MARK: - Calibration
 
@@ -207,40 +211,44 @@ struct MMBERTEditingModel: EditingModel {
                                        language: language) else { return nil }
 
         let raw = errorProbability * operationProbabilities[choice] * action.probability
-        let confidence = action.certified ? raw : min(calibration.uncertifiedCeiling, raw)
+        let confidence = action.precisionLCB != nil ? raw
+            : min(calibration.uncertifiedCeiling, raw)
 
         return TranscriptEdit(target: token.id,
                               operation: action.operation,
                               source: .editorModel,
                               confidence: confidence,
-                              reason: "editor model: \(action.description)")
+                              reason: "editor model: \(action.description)",
+                              certifiedPrecisionLCB: action.precisionLCB)
     }
 
     private struct Action {
         let operation: EditOperation
         let probability: Float
         let description: String
-        /// Whether the (language, class) cell behind this action was measured *and* enabled.
-        /// An uncertified action still reaches the gate — capped below every floor — so the
-        /// benchmark can count what calibration would buy.
-        let certified: Bool
+        /// The measured precision bound of the (language, class) cell behind this action, or
+        /// `nil` when no cell certifies it. Non-nil is what makes the edit reachable: the gate
+        /// judges a certified edit by this number and an uncertified one by a capped softmax,
+        /// which no floor admits. An uncertified action still *reaches* the gate so the benchmark
+        /// can count what calibration would buy.
+        let precisionLCB: Float?
     }
 
-    /// The floor this action's probability must clear, and whether clearing it certifies
-    /// anything. `nil` means the class is forbidden in this language and no proposal exists.
+    /// The floor this action's probability must clear, and the precision bound that clearing it
+    /// certifies. `nil` means the class is forbidden in this language and no proposal exists.
     private func requirement(_ head: MMBERTCalibrationTable.Head,
                              _ action: String,
-                             _ language: String?) -> (floor: Float, certified: Bool)? {
+                             _ language: String?) -> (floor: Float, precisionLCB: Float?)? {
         switch calibration.table.verdict(language: language, head: head, action: action) {
         case .forbidden:
             return nil
-        case .certified(let threshold):
+        case .certified(let threshold, let bound):
             // The measured operating point itself, not a maximum against `actionFloor`: the
             // precision claim is attached to *that* threshold, and raising it would discard
             // certified recall on the strength of a number nobody measured.
-            return (threshold, true)
+            return (threshold, bound)
         case .unmeasured:
-            return (calibration.actionFloor, false)
+            return (calibration.actionFloor, nil)
         }
     }
 
@@ -269,7 +277,7 @@ struct MMBERTEditingModel: EditingModel {
             return Action(operation: .delete,
                           probability: drop,
                           description: "drop disfluency '\(token.effectiveText)'",
-                          certified: rule.certified)
+                          precisionLCB: rule.precisionLCB)
 
         case .insertAfter:
             // First try the punctuation head.
@@ -282,7 +290,7 @@ struct MMBERTEditingModel: EditingModel {
                     return Action(operation: .insertAfter(mark),
                                   probability: probabilities[index],
                                   description: "insert '\(mark)' after '\(token.effectiveText)'",
-                                  certified: rule.certified)
+                                  precisionLCB: rule.precisionLCB)
                 }
             }
             // Try the para head (surfaced via the .structure slot) for paragraph breaks.
@@ -293,7 +301,7 @@ struct MMBERTEditingModel: EditingModel {
                     return Action(operation: .insertAfter("\n\n"),
                                   probability: breakProb,
                                   description: "paragraph break after '\(token.effectiveText)'",
-                                  certified: rule.certified)
+                                  precisionLCB: rule.precisionLCB)
                 }
             }
             // TODO: word-level append (selecting WHICH word to insert) requires the raw
@@ -317,7 +325,7 @@ struct MMBERTEditingModel: EditingModel {
             return Action(operation: .replace(text),
                           probability: probabilities[index],
                           description: "recase '\(token.effectiveText)' → '\(text)'",
-                          certified: rule.certified)
+                          precisionLCB: rule.precisionLCB)
         }
     }
 
@@ -440,8 +448,10 @@ struct MMBERTCalibrationTable: Sendable {
 
     /// What the table says about one (language, class).
     enum Verdict: Sendable, Equatable {
-        /// Measured and cleared. `threshold` is the action floor for this class.
-        case certified(threshold: Float)
+        /// Measured and cleared. `threshold` is the action floor for this class, and
+        /// `precisionLCB` is the bound that certified it — the number `ConfidenceGate` judges a
+        /// certified edit by, in place of a softmax floor it has no calibration for.
+        case certified(threshold: Float, precisionLCB: Float)
         /// Measured and refused. No proposal of this class in this language, at any confidence.
         case forbidden
         /// Not in the table: unknown language, or an action the calibration run never saw.
@@ -467,12 +477,19 @@ struct MMBERTCalibrationTable: Sendable {
     /// A missing cell is `unmeasured`, never `certified`. An `enabled` cell with no threshold is
     /// `forbidden`, not certified-at-zero: a cell that claims to be open without naming an
     /// operating point is a broken file, and a broken file must not open a class.
+    ///
+    /// A missing `precisionLCB95` is also `forbidden`, for the same reason and with more force.
+    /// The bound is the entire evidence for the cell, and it is what the gate reads instead of a
+    /// confidence floor — so a cell that is `enabled` without one would be *more* permissive than
+    /// an unmeasured cell, which inverts the whole policy.
     func verdict(language: String?, head: Head, action: String) -> Verdict {
         guard let cell = cell(language: language, head: head, action: action) else {
             return .unmeasured
         }
-        guard cell.enabled, let threshold = cell.threshold else { return .forbidden }
-        return .certified(threshold: threshold)
+        guard cell.enabled,
+              let threshold = cell.threshold,
+              let bound = cell.precisionLCB95 else { return .forbidden }
+        return .certified(threshold: threshold, precisionLCB: bound)
     }
 
     // MARK: - Loading

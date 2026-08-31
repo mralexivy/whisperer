@@ -16,8 +16,11 @@
 //  - `LLMEditingModel` — scaffolding. The existing 4B behind the unmodified Correct prompt,
 //    diffed. Retired at the end of M4.
 //  - `MMBERTEditingModel` — a GECToR-style token tagger, one encoder pass and many small
-//    heads. It cannot ship until it is measured at ≥99% precision per language per action
-//    at `ASRCapabilities = []`, which is why the gate's `.editorModel` floor is 0.99 today.
+//    heads. Live, but only for the language × head × action cells a calibration run has
+//    measured and cleared. A certified proposal carries the measured precision that certified
+//    it (`TranscriptEdit.certifiedPrecisionLCB`) and is judged against the tier gates in
+//    `ConfidenceGate.precisionGate(for:)`; an uncertified one is capped below every floor and
+//    so can propose but never apply.
 //
 //  Nothing here reads audio or a `TokenGraph`. A model sees tokens and surrounding text, and
 //  the gate — not the model — decides what happens, so a model that is confidently wrong
@@ -72,7 +75,14 @@ struct EditContext: Sendable {
 
 // MARK: - Protocol
 
-protocol EditingModel: Sendable {
+/// `nonisolated` is load-bearing, not tidiness. The project sets
+/// `SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor`, so without it this protocol — and therefore every
+/// witness, however the conformer is declared — is `@MainActor`, and `await editor.propose(...)`
+/// from `AppState` runs the whole Core ML forward pass on the thread that draws the HUD. That is
+/// not a theoretical cost: the first inference specializes the MPSGraph, which measured as a 2.0 s
+/// main-thread stall between `rec.stop` and the paste, caught by `HealthManager`'s watchdog with
+/// `MPSGraphExecutable specializedModuleWithDevice` on top of the stack.
+nonisolated protocol EditingModel: Sendable {
     /// Propose edits against the tokens as given.
     ///
     /// Returning `[]` is always a valid answer and is the required answer under uncertainty —
