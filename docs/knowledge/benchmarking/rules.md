@@ -248,3 +248,25 @@ Rule 5 asks for ≥ 0.99. The Hebrew cell holds 48 events. A single wrong edit i
 the bar is unreachable at that n unless the cell is perfect, and a perfect cell at n=48 is not
 evidence of 0.99 either. Report the n beside every rate, and when a cell fails, say whether the bar
 was ever certifiable there. The fix for such a cell is usually more reference, not more code.
+
+---
+
+## A fix that improves every metric and clears no bar is still a revert
+
+**Confirmed 2026-09-01** (`PromptContextBenchmarkTests`, workstream 1, reverted).
+
+Run 1 failed three bars. The log showed a real, independently diagnosable defect in the arm's
+input — not a bad result to be explained away, an actual bug — so it got one bounded fix and a
+re-run of the identical bench. Run 2 improved every single metric: WER delta +0.0423 → +0.0142,
+leakage 7 → 1, recovery 1/26 → 4/12. It cleared none of them.
+
+That is the moment the discipline is actually worth something, because a third attempt is very easy
+to justify: the trend is monotone, the remaining gap is small, and there is always another plausible
+tweak. But the bars were fixed before run 1 and the arm has now been measured twice; a third round
+of tuning against the same 40 fixtures stops being engineering and starts being curve-fitting to the
+bench, and whatever passes on the fourth attempt would have no claim to generalise.
+
+**Fix an identified defect once, re-run unchanged, then honour the bar.** Improvement is not the
+bar — the bar is the bar. And record the numbers from both runs when you revert, because the
+strongest form of the negative result is "we made it as good as it gets and it was still worse",
+which is a far more durable finding than "our first attempt didn't work".

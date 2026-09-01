@@ -490,3 +490,50 @@ recorded as a fault. `-6` is "failed to encode" (`whisper.cpp:7037`), returned w
 `whisper_encode_internal` sees the same abort callback at `:2455`. Both codes are now suppressed,
 and only while `shouldAbort` is set: outside a stop the flag is clear, so a real -6/-9 still counts
 toward `maxConsecutiveFailures`.
+
+### A richer `initial_prompt` made transcription worse on this corpus, twice (2026-09-01)
+
+`wparams.initial_prompt` has always been wired end to end and fed only the user's hand-typed word
+list. The obvious upgrade — bias the decoder with vocabulary mined from the user's own history and
+from the destination app — was built (`PromptContextBuilder`, `PromptVocabularyCache`), measured
+against a pre-registered verdict rule, failed it twice, and was **reverted**. The code is gone; this
+is the record of why, so it is not rebuilt on the same theory.
+
+The bench: 40 paired real-audio decodes through the real `StreamingTranscriber`, arm A with no
+prompt, arm B with the built one, arm A always decoded first so thermal drift penalised B.
+
+| Metric | Bar | Run 1 (naive miner) | Run 2 (fixed miner) |
+|---|---|---|---|
+| WER vs decode gold, delta | ≤ +0.005 | +0.0423 | +0.0142 |
+| Prompt leakage | 0 | 7 | 1 |
+| Recovery (better / worse) | better > worse | 1 / 26 | 4 / 12 |
+| Decode p50 | ≤ +5% | +0.37% | +0.21% |
+
+**Run 1's miner was genuinely defective, and the defect is a general one.** `isDistinctive` treated
+any leading capital as a proper noun, so the prompt whisper actually received was
+`Like, I'm, Let's, The, This, Also, Prefect, What, 364, Docs, Google, How, It's, Let, MCP, Not, …`.
+Sentence-initial function words are the *most frequent* capitalised tokens in any transcript, so
+frequency ranking promoted them rather than suppressing them — the opposite of what the code's own
+comment predicted. Six of the seven leaks were exactly those words.
+
+The discriminator that fixes it: a real proper noun is almost never written lowercase, so a
+capitalised term that also appears lowercase somewhere in the same corpus was capitalised by
+position. That plus a two-sighting minimum produced a clean prompt —
+`I'm, Prefect, 364, Docs, Google, Let, MCP, Parakeet, Wow, Linkerd` — ten genuine terms, 65 chars,
+well inside budget.
+
+**Run 2 is the finding.** Every metric improved sharply and not one cleared its bar. A tightly
+relevant, correctly mined, short prompt of real proper nouns still cost 1.4 WER points, still
+leaked (`parakeet` into a recording that never said it), and still made three times as many
+recordings worse as better. Prompt biasing is not a free lever that was merely being fed badly: on
+this corpus it is a net negative even when fed well. Latency was never the problem — the prompt is
+essentially free at +0.2% p50.
+
+Two consequences worth carrying:
+
+- The `StreamingTranscriber` preview carve-out (`:1698-1720`), which withholds prompt words from
+  short preview windows because they "strongly bias ambiguous audio", is now supported by measured
+  evidence on full windows too. Do not weaken it.
+- The user-typed `promptWords` list is untouched and still ships. An explicit instruction from the
+  user is a different thing from vocabulary we inferred: it carries intent, it is small, and the
+  user can see and remove it. Nothing here argues against it — only against inferring more.
