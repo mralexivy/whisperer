@@ -145,6 +145,22 @@ so the meeting app keeps its main-window chrome.
 
 Same reason `OverlayPanel` uses `.orderFront(nil)`; this is the `NSWindow` form of that rule.
 
+### …but a `.nonactivatingPanel` *can* be made key deliberately, and text will land in it
+
+The rule above is about arriving unasked. When the user has clicked something in the overlay and
+is now typing into it, the panel does need key status, and it can have it without activating the
+app. Measured on `[.borderless, .nonactivatingPanel]` with `canBecomeKey = true` /
+`canBecomeMain = false` (`CorrectionCardFocusTests`): `makeKeyAndOrderFront` → `isKeyWindow` is
+true; `makeFirstResponder(field)` installs the field editor as first responder; synthesized
+`NSEvent` key-downs sent through `sendEvent` appear in `stringValue`; `isMainWindow` stays false
+and `NSApp.mainWindow` is untouched, so the frontmost app keeps its focus.
+
+The catch is on the SwiftUI side, not the window side: a SwiftUI `TextField` in a borderless panel
+is unreliable. Use an `NSTextField` through `NSViewRepresentable` with an explicit
+`makeKeyAndOrderFront` + `makeFirstResponder`, and verify `isKeyWindow` one runloop later — a
+focus-less text field accepts clicks and silently discards every keystroke, which looks like the
+app ignoring the user. `NSApp.activate` is never the fix.
+
 ### Persist the frame you want back, not the frame that exists
 
 A window with a collapsed state (header strip only) will be closed while collapsed. Saving

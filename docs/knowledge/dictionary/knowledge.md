@@ -65,21 +65,30 @@ being demoted to a review list. Accepting that offer writes a **hand-authored** 
 (`observedSource == nil`), not an auto-learned one: the user authored it, so it takes the
 hand-authored trust level and joins the fuzzy indexes immediately.
 
-Two implementation facts worth keeping:
+The card's behaviour is asserted rather than eyeballed — 11 tests over the tokenizer and commit
+path (`CorrectionPopoverTests`), the panel's focus contract (`CorrectionCardFocusTests`), its
+lifetime and dismissal (`CorrectionPromptLifecycleTests`) and its two outcomes
+(`CorrectionCardOutcomeTests`). The lifetime tests exist because "a stale card fought the recording
+HUD" is exactly the kind of defect nobody catches reliably by looking.
+
+Implementation facts worth keeping:
 
 - **Replace the clicked token by index, never by string.** "the report says the report is late"
   with a string replace changes both, which the miner reads as a two-substitution diff and
   discards — the user's correction vanishes with no error anywhere.
 - **The chips must use the extractor's own word pattern.** A chip the miner cannot learn from is a
   chip that should never have been clickable.
-- **Open question — does a `.nonactivatingPanel` actually take keystrokes?** The HUD panel is
-  `[.borderless, .nonactivatingPanel]` with `canBecomeKey = true`, which is *documented* to accept
-  key input without activating the app, but SwiftUI `TextField` in such a panel is a known soft
-  spot. The card therefore edits through an AppKit `NSTextField` with explicit
-  `makeKeyAndOrderFront` + `makeFirstResponder`, then re-checks `isKeyWindow` one runloop later and
-  closes itself with a logged warning rather than presenting a field that silently eats keystrokes.
-  `NSApp.activate` is not an option: stealing focus from the app being dictated into is worse than
-  the mishearing. Only an on-device run answers this — record the answer here when it exists.
+- **A `[.borderless, .nonactivatingPanel]` window does take keystrokes — measured, not assumed.**
+  With `canBecomeKey = true` / `canBecomeMain = false`, `makeKeyAndOrderFront` makes the panel key,
+  `makeFirstResponder(field)` installs the field editor as first responder, `NSEvent.keyEvent`s
+  dispatched through `sendEvent` land in `stringValue`, and the panel never becomes main — so the
+  app is not activated and the user is not pulled out of whatever they were dictating into
+  (`CorrectionCardFocusTests`, 4 assertions). This is why the editor is an AppKit `NSTextField`
+  rather than a SwiftUI `TextField`: the *window* is fine, SwiftUI's focus plumbing in a borderless
+  panel is the soft spot. `NSApp.activate` is never an option here. The card still re-checks
+  `isKeyWindow` one runloop later and closes itself with a logged warning, because a field that
+  silently eats keystrokes is the worst failure available to a feature whose whole job is to
+  capture a typed word.
 
 ## The 3-distinct-session gate is inert
 

@@ -423,10 +423,12 @@ class AppState: ObservableObject {
 
     /// Visible lifetime with no interaction, and the shorter grace granted after the pointer
     /// leaves the card.
-    private static let correctionPromptLifetime: TimeInterval = 7
-    private static let correctionPromptGrace: TimeInterval = 3
+    static let correctionPromptLifetime: TimeInterval = 7
+    static let correctionPromptGrace: TimeInterval = 3
 
-    func showCorrectionPrompt(_ text: String) {
+    /// - Parameter lifetime: overridable only so the dismissal behaviour can be asserted without a
+    ///   seven-second test. Callers in the app always take the default.
+    func showCorrectionPrompt(_ text: String, lifetime: TimeInterval = AppState.correctionPromptLifetime) {
         guard let prompt = CorrectionPrompt.make(
             for: text,
             learningEnabled: DictionaryManager.shared.correctionLearningEnabled,
@@ -435,7 +437,7 @@ class AppState: ObservableObject {
         ) else { return }
 
         correctionPromptHeld = false
-        correctionPromptDeadline = Date().addingTimeInterval(Self.correctionPromptLifetime)
+        correctionPromptDeadline = Date().addingTimeInterval(lifetime)
         correctionPrompt = prompt
 
         // A deadline rather than a single sleep, so hovering extends the card instead of racing
