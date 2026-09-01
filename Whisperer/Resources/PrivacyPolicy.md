@@ -46,6 +46,13 @@ The microphone permission allows the app to capture audio when you hold the reco
 
 If you enable the optional Auto-Paste feature, the Accessibility permission allows Whisperer to automatically paste transcribed text into the text field you're focused on. Without this permission, transcribed text is copied to your clipboard for manual pasting. This is a macOS system permission required for cross-application text pasting via simulated Cmd+V.
 
+Outside the App Store build, you can separately opt in to **Collect Correction Candidates**.
+When enabled, Whisperer re-reads the same focused text field for up to 60 seconds after a paste
+to notice isolated words you correct. It stops if focus changes or any text outside Whisperer's
+pasted region changes. It does not monitor keys, inspect other windows, send text over the
+network, or apply a candidate automatically. Candidate word pairs stay on device and can be
+deleted from Dictionary settings.
+
 ## Data Storage
 
 All data remains on your device:
@@ -53,6 +60,7 @@ All data remains on your device:
 - **AI Models**: Stored in `~/Library/Application Support/Whisperer/` (~500MB to 3GB depending on model)
 - **Optional Recordings**: Stored in `~/Library/Application Support/Whisperer/Recordings/` (if you enable saving)
 - **Settings**: Stored in macOS UserDefaults (locally)
+- **Optional Correction Candidates**: Stored in `~/Library/Application Support/Whisperer/correction-candidates.json` when you explicitly enable collection
 - **Logs**: Debug logs stored in `~/Library/Logs/Whisperer/` for troubleshooting
 
 **No data is stored in iCloud or any cloud service.**

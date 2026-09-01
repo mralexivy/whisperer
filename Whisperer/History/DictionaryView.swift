@@ -87,6 +87,7 @@ struct DictionaryView: View {
                     case .corrections:
                         Group {
                             DictionaryPacksView(selectedPackId: $selectedPackId, showDropdown: $showDropdown)
+                            CorrectionSuggestionsSection()
                             toolbarView
                             entryList
                         }
@@ -116,7 +117,20 @@ struct DictionaryView: View {
                         },
                         onDelete: {
                             Task {
-                                try? await dictionaryManager.deleteEntry(entry)
+                                // Deleting an auto-learned entry is a rejection, so it routes
+                                // through the service to leave a tombstone. Without one the
+                                // learner re-adds the word the next time it is corrected.
+                                if entry.isAutoLearned {
+                                    await CorrectionLearningService.undo(entry)
+                                } else {
+                                    try? await dictionaryManager.deleteEntry(entry)
+                                }
+                                selectedEntry = nil
+                            }
+                        },
+                        onConfirm: {
+                            Task {
+                                await CorrectionLearningService.confirm(entry)
                                 selectedEntry = nil
                             }
                         }
@@ -633,6 +647,26 @@ struct DictionaryEntryRow: View {
                         )
                 }
 
+                // Auto-learned badge. An entry the user never typed has to say so, and say what
+                // it was learned from — otherwise the first surprising correction reads as a bug.
+                if let observed = entry.observedSource {
+                    HStack(spacing: 4) {
+                        Image(systemName: "sparkles")
+                            .font(.system(size: 9, weight: .semibold))
+                        Text("heard as \(observed)")
+                            .font(.system(size: 10, weight: .medium))
+                            .lineLimit(1)
+                    }
+                    .foregroundColor(WhispererColors.accentPurple)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 4)
+                    .background(
+                        RoundedRectangle(cornerRadius: 6)
+                            .fill(WhispererColors.accentPurple.opacity(0.15))
+                    )
+                    .help("Learned automatically. Applies only to this exact word until you confirm it.")
+                }
+
                 // Built-in badge
                 if entry.isBuiltIn {
                     Image(systemName: "app.badge")
@@ -697,6 +731,8 @@ struct EntryDetailView: View {
     let onClose: () -> Void
     let onUpdate: (DictionaryEntry) -> Void
     let onDelete: () -> Void
+    /// Promotes an auto-learned entry to an ordinary one. No-op for entries the user authored.
+    let onConfirm: () -> Void
 
     @Environment(\.colorScheme) var colorScheme
     @State private var incorrectForm: String
@@ -706,12 +742,20 @@ struct EntryDetailView: View {
     @State private var isCloseHovered = false
     @State private var isSaveHovered = false
     @State private var isDeleteHovered = false
+    @State private var isConfirmHovered = false
 
-    init(entry: DictionaryEntry, onClose: @escaping () -> Void, onUpdate: @escaping (DictionaryEntry) -> Void, onDelete: @escaping () -> Void) {
+    init(
+        entry: DictionaryEntry,
+        onClose: @escaping () -> Void,
+        onUpdate: @escaping (DictionaryEntry) -> Void,
+        onDelete: @escaping () -> Void,
+        onConfirm: @escaping () -> Void = {}
+    ) {
         self.entry = entry
         self.onClose = onClose
         self.onUpdate = onUpdate
         self.onDelete = onDelete
+        self.onConfirm = onConfirm
         _incorrectForm = State(initialValue: entry.incorrectForm)
         _correctForm = State(initialValue: entry.correctForm)
         _category = State(initialValue: entry.category ?? "")
@@ -894,6 +938,41 @@ struct EntryDetailView: View {
                         }
                     }
 
+                    // Confirm button — only for entries the learner added on its own.
+                    // Until confirmed, an auto-learned entry only fires on the exact word that
+                    // was misheard. Confirming clears its provenance, which is what lets it also
+                    // match near-misses through the SymSpell and phonetic indexes.
+                    if entry.isAutoLearned {
+                        Button(action: onConfirm) {
+                            VStack(spacing: 2) {
+                                Text("Confirm Word")
+                                    .font(.system(size: 13, weight: .semibold))
+                                Text("Also fix close variations")
+                                    .font(.system(size: 11, weight: .medium))
+                                    .opacity(0.8)
+                            }
+                            .foregroundColor(.white)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 10)
+                            .background(
+                                RoundedRectangle(cornerRadius: 8)
+                                    .fill(WhispererColors.accentPurple)
+                            )
+                            .shadow(
+                                color: WhispererColors.accentPurple.opacity(isConfirmHovered ? 0.4 : 0.2),
+                                radius: isConfirmHovered ? 8 : 4,
+                                y: isConfirmHovered ? 2 : 1
+                            )
+                            .scaleEffect(isConfirmHovered ? 1.02 : 1.0)
+                        }
+                        .buttonStyle(.plain).pointerOnHover()
+                        .onHover { hovering in
+                            withAnimation(.easeOut(duration: 0.15)) {
+                                isConfirmHovered = hovering
+                            }
+                        }
+                    }
+
                     // Delete button
                     if !entry.isBuiltIn {
                         Button(action: onDelete) {
@@ -938,7 +1017,12 @@ struct EntryDetailView: View {
             notes: notes.isEmpty ? nil : notes,
             createdAt: entry.createdAt,
             lastModifiedAt: Date(),
-            useCount: entry.useCount
+            useCount: entry.useCount,
+            // Editing an entry is not confirming it — provenance survives a text edit, and only
+            // the Confirm button clears it. Dropping these here silently un-learned the entry
+            // and reset its boost.
+            boostWeight: entry.boostWeight,
+            observedSource: entry.observedSource
         )
         onUpdate(updated)
         onClose()

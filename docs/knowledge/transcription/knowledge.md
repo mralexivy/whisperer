@@ -537,3 +537,21 @@ Two consequences worth carrying:
 - The user-typed `promptWords` list is untouched and still ships. An explicit instruction from the
   user is a different thing from vocabulary we inferred: it carries intent, it is small, and the
   user can see and remove it. Nothing here argues against it — only against inferring more.
+
+### The explicit-correction W1 retry has no certifiable corpus yet (2026-09-01)
+
+A narrower retry was specified: only user-created dictionary corrections, and only after an
+unprompted hypothesis supplies alias/strict phonetic evidence. Built-in packs, history mining,
+destination context, and W2 collection-only candidates are excluded; short-preview prompt
+carve-outs remain untouched. The fixed gate is mean WER delta ≤ +0.005, zero negative-control
+leakage, more positive recordings improved than worsened, and decode p50 ≤ +5%, all against frozen
+authored gold. See `docs/exec-plans/explicit-correction-prompt.md`.
+
+The local database contained zero non-built-in dictionary entries. Therefore there were no eligible
+corrections, no recordings whose selection could be grounded in explicit correction evidence, and
+no honest way to author the required positive gold population. Existing recordings containing
+proper nouns are not substitutes: assigning them invented aliases would choose the answer after
+seeing the corpus, while using their stored same-model decode as gold cannot score improvement.
+
+Verdict: **UNMEASURED, runtime reverted/not landed**. W1 remains rejected until W2 produces reviewed
+corrections plus subsequent real recordings sufficient to certify the pre-registered population.

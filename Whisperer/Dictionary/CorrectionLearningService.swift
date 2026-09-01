@@ -73,6 +73,13 @@ enum CorrectionLearningService {
             }
         }
 
+        // Announce the most recent promotion. Only one card is shown even when a single edit
+        // taught several words — a stack of toasts is noise, and the rest are visible in the
+        // dictionary with the same badge and the same delete.
+        if let announced = outcome.learned.last {
+            AppState.shared.showLearnedEntryToast(announced)
+        }
+
         if !outcome.isEmpty {
             Logger.event(.dictLearn, .app, [
                 "source": .string(source.rawValue),

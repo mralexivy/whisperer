@@ -183,6 +183,11 @@ struct OverlayView: View {
             }
             #endif
 
+            if let learned = appState.learnedEntryToast {
+                LearnedWordCard(entry: learned)
+                    .id(learned.id)
+            }
+
             if appState.showClipboardToast {
                 ClipboardToastIndicator(scale: scale)
             } else if appState.showFileTranscribingToast {

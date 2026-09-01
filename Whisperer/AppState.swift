@@ -367,6 +367,32 @@ class AppState: ObservableObject {
         }
     }
 
+    // Dictionary learning notification — shown when a correction is promoted to an entry.
+    //
+    // Silent learning is indistinguishable from a bug the first time it surprises you, so a
+    // promotion is always announced and always undoable. Undo tombstones the pair, which is
+    // why the toast has to be reachable: it is the only place the user can reject a word at
+    // the moment they still remember correcting it.
+    @Published var learnedEntryToast: DictionaryEntry? = nil {
+        didSet {
+            NotificationCenter.default.post(name: NSNotification.Name("AppStateChanged"), object: nil)
+        }
+    }
+
+    func showLearnedEntryToast(_ entry: DictionaryEntry) {
+        learnedEntryToast = entry
+        let entryID = entry.id
+        Task { @MainActor [weak self] in
+            try? await Task.sleep(nanoseconds: 6_000_000_000)
+            guard let self, self.learnedEntryToast?.id == entryID else { return }
+            self.learnedEntryToast = nil
+        }
+    }
+
+    func dismissLearnedEntryToast() {
+        learnedEntryToast = nil
+    }
+
     // Meeting detection notification — shown when a conference app is detected while idle.
     #if !APP_STORE
     @Published var showMeetingDetectedToast: Bool = false {
