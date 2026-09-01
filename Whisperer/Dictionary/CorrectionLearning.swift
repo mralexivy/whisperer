@@ -218,6 +218,19 @@ actor CorrectionSuggestionStore {
         persist()
     }
 
+    /// Removes a pending suggestion identified by its pair rather than its id — the correction
+    /// card learns the pair through `CorrectionLearningService` and gets no id back.
+    func remove(observed: String, corrected: String) {
+        loadIfNeeded()
+        let before = suggestions.count
+        suggestions.removeAll {
+            $0.observed.caseInsensitiveCompare(observed) == .orderedSame &&
+            $0.corrected.caseInsensitiveCompare(corrected) == .orderedSame
+        }
+        guard suggestions.count != before else { return }
+        persist()
+    }
+
     func deleteAll() {
         loaded = true
         suggestions = []
