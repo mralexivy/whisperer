@@ -130,6 +130,20 @@ class AppState: ObservableObject {
         }
     }
 
+    // Per-app writing style. Resolved once at recording start from the destination bundle ID,
+    // which `TextInjector.captureTargetApp()` freezes before our overlay steals focus — the
+    // frontmost app at *injection* time is us, so this cannot be read later.
+    @Published var perAppStyleEnabled: Bool = true {
+        didSet {
+            UserDefaults.standard.set(perAppStyleEnabled, forKey: "perAppStyleEnabled")
+        }
+    }
+
+    /// The destination app's profile for the recording in flight. `.unknown` — today's behaviour
+    /// in every respect — whenever the feature is off, the app is unrecognised, or there is no
+    /// destination at all.
+    private(set) var currentStyleProfile: AppStyleProfile = .unknown
+
     // Prompt words — biases recognition toward specific vocabulary
     // Whisper: passed as initial_prompt. Parakeet: fed into CTC vocabulary boosting.
     @Published var promptWords: [String] = [] {
@@ -803,6 +817,9 @@ class AppState: ObservableObject {
         }
         if UserDefaults.standard.object(forKey: "promptWordsEnabled") != nil {
             _promptWordsEnabled = Published(wrappedValue: UserDefaults.standard.bool(forKey: "promptWordsEnabled"))
+        }
+        if UserDefaults.standard.object(forKey: "perAppStyleEnabled") != nil {
+            _perAppStyleEnabled = Published(wrappedValue: UserDefaults.standard.bool(forKey: "perAppStyleEnabled"))
         }
 
         // Load filler word, list formatting, and trailing space settings
@@ -2206,6 +2223,12 @@ class AppState: ObservableObject {
             let polisher = DeterministicPolisher.forTranscript(
                 dictionaryEntries: DictionaryManager.shared.entries,
                 formatsLists: false,
+                // Chat boxes: do not close the final sentence. This is only half of messaging
+                // suppression — it stops `SentenceTerminator` *inserting* a period, but whisper
+                // usually produces one itself. `TrailingPeriodSuppressor` in `insertText` is the
+                // other half. `.unknown` (every unrecognised app, and the feature switched off)
+                // resolves to `true`, which is the prior behaviour.
+                terminatesUtteranceEnd: currentStyleProfile.terminatesUtteranceEnd,
                 // No model on a fragment. See the `context` note below: a mid-stream chunk cannot
                 // be judged for the edits the certified cells make, and running the encoder on it
                 // would spend the latency without earning an edit.
@@ -3333,6 +3356,11 @@ class AppState: ObservableObject {
 
         // Capture the frontmost app BEFORE our overlay steals focus
         textInjector?.captureTargetApp()
+        // Resolve the writing style here, for the same reason: by the time the text is polished
+        // and injected, the frontmost app is us.
+        currentStyleProfile = perAppStyleEnabled
+            ? AppStyleProfile.profile(forBundleID: textInjector?.targetBundleID)
+            : .unknown
         if let frontApp = NSWorkspace.shared.frontmostApplication,
            frontApp.bundleIdentifier != Bundle.main.bundleIdentifier {
             lastTargetAppName = frontApp.localizedName
@@ -4117,6 +4145,12 @@ class AppState: ObservableObject {
             state = .idle
             return
         }
+
+        // Last mile: drop the ASR's trailing period when the destination is a chat box. Applied
+        // here rather than in the polisher because whisper produces the period itself, so
+        // `terminatesUtteranceEnd: false` alone does not remove it. A no-op for every profile
+        // except `.messaging`, and for most messaging text too — see `TrailingPeriodSuppressor`.
+        let text = TrailingPeriodSuppressor.suppress(text, profile: currentStyleProfile)
 
         // Store transcript for macOS Services provider
         lastTranscribedText = text

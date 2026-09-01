@@ -2212,22 +2212,44 @@ struct SettingsTabView: View {
 
                 // Add Space After Text
                 settingsCard(title: "Text Output", icon: "character.cursor.ibeam", color: .teal) {
-                    HStack {
-                        VStack(alignment: .leading, spacing: 3) {
-                            Text("Add space after text")
-                                .font(.system(size: 13, weight: .medium))
-                                .foregroundColor(MBColors.textPrimary)
-                            Text("Insert a trailing space so you can keep typing")
-                                .font(.system(size: 11))
-                                .foregroundColor(MBColors.textSecondary)
+                    VStack(alignment: .leading, spacing: 10) {
+                        HStack {
+                            VStack(alignment: .leading, spacing: 3) {
+                                Text("Add space after text")
+                                    .font(.system(size: 13, weight: .medium))
+                                    .foregroundColor(MBColors.textPrimary)
+                                Text("Insert a trailing space so you can keep typing")
+                                    .font(.system(size: 11))
+                                    .foregroundColor(MBColors.textSecondary)
+                            }
+
+                            Spacer()
+
+                            Toggle("", isOn: $appState.appendTrailingSpace)
+                                .toggleStyle(.switch)
+                                .tint(MBColors.accent)
+                                .labelsHidden()
                         }
 
-                        Spacer()
+                        Divider().overlay(MBColors.border)
 
-                        Toggle("", isOn: $appState.appendTrailingSpace)
-                            .toggleStyle(.switch)
-                            .tint(MBColors.accent)
-                            .labelsHidden()
+                        HStack {
+                            VStack(alignment: .leading, spacing: 3) {
+                                Text("Match the app you're writing in")
+                                    .font(.system(size: 13, weight: .medium))
+                                    .foregroundColor(MBColors.textPrimary)
+                                Text("Skips the full stop on one-line chat messages")
+                                    .font(.system(size: 11))
+                                    .foregroundColor(MBColors.textSecondary)
+                            }
+
+                            Spacer()
+
+                            Toggle("", isOn: $appState.perAppStyleEnabled)
+                                .toggleStyle(.switch)
+                                .tint(MBColors.accent)
+                                .labelsHidden()
+                        }
                     }
                 }
 

@@ -166,3 +166,13 @@
     the same change that swaps the model. Regenerating from a different export produces hundreds
     of numeric assertion failures that all read like a tokenisation or alignment bug in the Swift
     runtime.
+
+26. **When no reference can score an edit, gate it on provable scope instead — and never let the
+    bench that returned `unmeasured` be reported as the bench that passed.** Messaging trailing-
+    period suppression sits at the one position rules 15 and 24 established as unscoreable, and
+    `PolishInteriorBoundaryTests` duly returned `unmeas` in all six cells. The shippable bar is
+    then a disqualifier, not a metric: *every other profile is byte-identical to today* and
+    *unrecognised destinations resolve to the pre-existing behaviour*. A change that is provably
+    inert outside one narrow case cannot regress the cases outside it, which is a real guarantee.
+    A change with no trigger narrow enough to state — lighter polish for `code`, say — has neither
+    a bound nor a number, and does not ship.

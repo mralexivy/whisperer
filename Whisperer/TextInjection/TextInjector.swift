@@ -58,7 +58,7 @@ class TextInjector {
     // The PID and bundle ID of the app that was frontmost when recording started.
     // Must be captured BEFORE recording begins (before overlay shows).
     private var targetAppPID: pid_t?
-    private var targetBundleID: String?
+    private(set) var targetBundleID: String?
 
     private(set) var injectorProgressCounter: UInt64 = 0
     private var injectorIsInserting: Bool = false

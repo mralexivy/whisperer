@@ -140,3 +140,35 @@ dropping the dictation LLM invocation rate to ~67% on this corpus before any mod
 was never the right question — a 200-character sentence that already reads as finished prose
 gained nothing from a 4B decode, and a 12-character fragment that needed punctuation was skipped
 for being short.
+
+## Per-app style: the destination is known, and the messaging period is the only certifiable use of it
+
+`TextInjector.captureTargetApp()` freezes the destination bundle ID before recording starts, and
+`TranscriptionRecord.targetAppName` persists it — but until 2026-09-01 it drove only a clipboard
+restore delay. `AppStyleProfile` turns it into `messaging` / `code` / `prose` / `unknown`, resolved
+at recording start (not at injection time, when our own overlay may be frontmost).
+
+Two things this run established:
+
+- **`terminatesUtteranceEnd: false` is only half of messaging suppression.** The flag gates
+  `SentenceTerminator`'s *insertion* (`DeterministicPolisher.swift:174`). Whisper produces the
+  final period itself most of the time, so the flag alone changes nothing for the majority of
+  utterances. Removal has to happen after polish — `TrailingPeriodSuppressor`, applied in
+  `AppState.insertText`.
+- **The edit cannot be scored, and the interior bench proves it rather than substituting for it.**
+  `PolishInteriorBoundaryTests` scores exactly this configuration and reported `unmeas` in all six
+  script × reference cells (0 insertions over 439 joins, 187 recordings): the pause map is
+  empty on the shipped eager path, so with `terminatesUtteranceEnd: false` the *only* position that
+  differs is the utterance-final one — the position rules 15 and 24 already established as
+  unscoreable. The bench passing here is a statement that nothing else moved, not a quality number.
+
+So the change shipped on **scope** instead: `testNonMessagingProfilesAreByteIdentical` asserts every
+non-messaging profile is byte-identical to prior behaviour over the corpus, and unknown bundle IDs
+resolve to `.unknown`. The measured destination spread already in this file (Slack 0.124 edits/word
+and 8% paragraph rate vs Claude desktop's 0.109 and 18%) is the corroborating evidence that
+destination conditioning is real; it is not evidence that any *particular* conditioning helps.
+
+**Deliberately not shipped:** lighter polish for `code` destinations. Unlike the messaging period it
+has no narrow trigger — it would change every dictation into an editor, including prose comments —
+and no reference can score it either. Without both a bound and a number, it is an untested global
+behaviour change, which is the thing this workstream's gate exists to refuse.
