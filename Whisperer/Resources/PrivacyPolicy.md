@@ -46,12 +46,18 @@ The microphone permission allows the app to capture audio when you hold the reco
 
 If you enable the optional Auto-Paste feature, the Accessibility permission allows Whisperer to automatically paste transcribed text into the text field you're focused on. Without this permission, transcribed text is copied to your clipboard for manual pasting. This is a macOS system permission required for cross-application text pasting via simulated Cmd+V.
 
-Outside the App Store build, you can separately opt in to **Collect Correction Candidates**.
-When enabled, Whisperer re-reads the same focused text field for up to 60 seconds after a paste
-to notice isolated words you correct. It stops if focus changes or any text outside Whisperer's
-pasted region changes. It does not monitor keys, inspect other windows, send text over the
-network, or apply a candidate automatically. Candidate word pairs stay on device and can be
-deleted from Dictionary settings.
+**Learn From My Corrections** is on by default and can be turned off at any time in Dictionary
+settings. When a word you fix qualifies, Whisperer adds it to your dictionary, tells you it did
+so, and offers Undo; undone words are never learned again.
+
+In every build, including the App Store build, this learns from edits you make to a transcript in
+Whisperer's own History window, which needs no additional permission.
+
+Outside the App Store build, and only if you have also granted Accessibility for Auto-Paste, it
+additionally re-reads the same focused text field for up to about 30 seconds after a paste to
+notice isolated words you correct there. It stops as soon as focus leaves that app or the field
+changes identity. It does not monitor keys, inspect other windows, or send text over the network.
+Learned words and pending suggestions stay on device and can be deleted from Dictionary settings.
 
 ## Data Storage
 

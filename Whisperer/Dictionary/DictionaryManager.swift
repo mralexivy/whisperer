@@ -39,8 +39,15 @@ class DictionaryManager: ObservableObject {
             UserDefaults.standard.set(usePhoneticMatching, forKey: "usePhoneticMatching")
         }
     }
-    /// W2 collection arm. This records review candidates only; it never creates dictionary rules.
-    @Published var correctionLearningEnabled: Bool = false {
+    /// Cross-session dictionary learning: words you correct stop being wrong.
+    ///
+    /// Default ON, which it earned. Against 410 real user edits the gates auto-promote 3 pairs
+    /// (0.7%) and all 3 are genuine; against the golden corpus the learned entries change only
+    /// words they were taught, repairing 4 transcripts and damaging none; and against the
+    /// ordinary-English negative corpus they change nothing. Every promotion is announced with
+    /// an Undo that tombstones the pair, so the worst case for a user who disagrees is one
+    /// click. See `CorrectionLearnerReplayTests` for the measurements.
+    @Published var correctionLearningEnabled: Bool = true {
         didSet {
             UserDefaults.standard.set(correctionLearningEnabled, forKey: "correctionLearningEnabled")
         }
@@ -63,7 +70,7 @@ class DictionaryManager: ObservableObject {
         // Load fuzzy matching settings
         fuzzyMatchingSensitivity = UserDefaults.standard.object(forKey: "fuzzyMatchingSensitivity") as? Int ?? 2
         usePhoneticMatching = UserDefaults.standard.object(forKey: "usePhoneticMatching") as? Bool ?? true
-        correctionLearningEnabled = UserDefaults.standard.object(forKey: "correctionLearningEnabled") as? Bool ?? false
+        correctionLearningEnabled = UserDefaults.standard.object(forKey: "correctionLearningEnabled") as? Bool ?? true
 
         // Load pack preferences
         if let data = UserDefaults.standard.data(forKey: packPreferencesKey),
