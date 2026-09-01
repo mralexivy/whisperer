@@ -24,6 +24,21 @@ struct CorrectionPromptToken: Equatable, Identifiable, Sendable {
     var id: Int { index }
 }
 
+/// One dictation's worth of clickable words, as offered by the correction card.
+struct CorrectionPrompt: Identifiable, Equatable, Sendable {
+    /// How much of a transcript the card shows. The misheard word is nearly always near the end of
+    /// what was just said, and a 300-word chip wall is not a HUD.
+    static let maximumWords = 40
+
+    let id = UUID()
+    let tokens: [CorrectionPromptToken]
+    /// True when words were dropped off the front, so the card can show a leading ellipsis.
+    let isTruncated: Bool
+
+    /// What the learner is told the transcript was.
+    var text: String { CorrectionPromptTokenizer.text(of: tokens) }
+}
+
 enum CorrectionPromptTokenizer {
     /// Same pattern as `CorrectionLearningCandidateExtractor.tokens(in:)`.
     private static let wordPattern = #"[\p{L}\p{N}][\p{L}\p{N}'’-]*"#

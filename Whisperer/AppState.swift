@@ -60,6 +60,9 @@ class AppState: ObservableObject {
             NotificationCenter.default.post(name: NSNotification.Name("AppStateChanged"), object: nil)
             if case .recording = state {
                 waveformState.startDisplayLink()
+                // The previous dictation's correction card must not share the HUD with the next
+                // recording — the offer expires the moment the user moves on.
+                dismissCorrectionPrompt()
             }
             if state == .idle {
                 waveformState.stopDisplayLink()
@@ -391,6 +394,68 @@ class AppState: ObservableObject {
 
     func dismissLearnedEntryToast() {
         learnedEntryToast = nil
+    }
+
+    // Correction card — the explicit learning source.
+    //
+    // The other two sources infer a correction from an edit they happen to observe. This one is
+    // the user saying so directly, which is why it is offered unprompted for a few seconds after
+    // every dictation rather than hidden behind a shortcut: a mishearing is only worth a click
+    // while it is still on screen.
+    @Published var correctionPrompt: CorrectionPrompt? = nil {
+        didSet {
+            NotificationCenter.default.post(name: NSNotification.Name("AppStateChanged"), object: nil)
+        }
+    }
+
+    /// Set by the card while the pointer is over it or an editor is open. The card must never
+    /// disappear out from under someone mid-correction.
+    var correctionPromptHeld: Bool = false {
+        didSet {
+            guard correctionPromptHeld != oldValue else { return }
+            correctionPromptDeadline = correctionPromptHeld
+                ? .distantFuture
+                : Date().addingTimeInterval(Self.correctionPromptGrace)
+        }
+    }
+
+    private var correctionPromptDeadline: Date = .distantPast
+
+    /// Visible lifetime with no interaction, and the shorter grace granted after the pointer
+    /// leaves the card.
+    private static let correctionPromptLifetime: TimeInterval = 7
+    private static let correctionPromptGrace: TimeInterval = 3
+
+    func showCorrectionPrompt(_ text: String) {
+        guard DictionaryManager.shared.correctionLearningEnabled else { return }
+        guard !isMeetingMode, !isInAppMode else { return }
+        let tokens = CorrectionPromptTokenizer.tokenize(text, keepingLastWords: CorrectionPrompt.maximumWords)
+        guard tokens.contains(where: \.isWord) else { return }
+
+        let prompt = CorrectionPrompt(
+            tokens: tokens,
+            isTruncated: CorrectionPromptTokenizer.isTruncated(text, keepingLastWords: CorrectionPrompt.maximumWords)
+        )
+        correctionPromptHeld = false
+        correctionPromptDeadline = Date().addingTimeInterval(Self.correctionPromptLifetime)
+        correctionPrompt = prompt
+
+        // A deadline rather than a single sleep, so hovering extends the card instead of racing
+        // a timer that has already been scheduled.
+        Task { @MainActor [weak self] in
+            while true {
+                try? await Task.sleep(nanoseconds: 250_000_000)
+                guard let self, self.correctionPrompt?.id == prompt.id else { return }
+                guard Date() >= self.correctionPromptDeadline else { continue }
+                self.dismissCorrectionPrompt()
+                return
+            }
+        }
+    }
+
+    func dismissCorrectionPrompt() {
+        correctionPromptHeld = false
+        correctionPrompt = nil
     }
 
     // Meeting detection notification — shown when a conference app is detected while idle.
@@ -4188,6 +4253,9 @@ class AppState: ObservableObject {
 
         do {
             try await textInjector.insertText(text)
+            // Only after the text has landed. Nothing on this path may delay delivery — the card
+            // is an offer to fix the dictation, not part of producing it.
+            showCorrectionPrompt(text)
         } catch {
             errorMessage = "Failed to enter text: \(error.localizedDescription)"
         }
