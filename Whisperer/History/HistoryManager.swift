@@ -362,6 +362,7 @@ class HistoryManager: ObservableObject {
             throw HistoryError.recordNotFound
         }
 
+        let previousText = record.displayText
         entity.editedTranscription = newText
         entity.lastModifiedAt = Date()
 
@@ -370,6 +371,16 @@ class HistoryManager: ObservableObject {
         if let index = transcriptions.firstIndex(where: { $0.id == record.id }) {
             transcriptions[index] = TranscriptionRecord(from: entity)
         }
+
+        // A hand edit in History is the highest-confidence correction signal we have, and the only
+        // one available in every build — it needs no Accessibility access. `retranscribe` below
+        // writes the same field but is a machine rewrite, not a user correction, so it is not a
+        // learning source.
+        await CorrectionLearningService.observe(
+            original: previousText,
+            edited: newText,
+            source: .historyEdit
+        )
     }
 
     func retranscribe(_ record: TranscriptionRecord, newText: String, language: String, modelUsed: String) async throws {

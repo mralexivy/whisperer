@@ -114,6 +114,9 @@ extension LogEvent {
     static let muteOn: LogEvent             = "mute.on"
     static let muteOff: LogEvent            = "mute.off"
 
+    // dictionary learning
+    static let dictLearn: LogEvent          = "dict.learn"
+
     // transcription
     static let asrStart: LogEvent           = "asr.start"
     static let asrChunk: LogEvent           = "asr.chunk"

@@ -479,6 +479,26 @@ class DictionaryManager: ObservableObject {
         scheduleRebuild()
     }
 
+    /// Confirms an auto-learned entry. Clearing `observedSource` is what promotes it to an
+    /// ordinary user entry: it stops being held to the valid-English gate and joins the SymSpell
+    /// and PhoneticMatcher indexes on the next rebuild.
+    func clearAutoLearnedProvenance(_ entry: DictionaryEntry) async throws {
+        let fetchRequest: NSFetchRequest<DictionaryEntryEntity> = DictionaryEntryEntity.fetchRequest()
+        fetchRequest.predicate = NSPredicate(format: "id == %@", entry.id as CVarArg)
+        fetchRequest.fetchLimit = 1
+
+        guard let entity = try context.fetch(fetchRequest).first else {
+            throw DictionaryError.entryNotFound
+        }
+
+        entity.observedSource = nil
+        entity.lastModifiedAt = Date()
+
+        try context.save()
+        await loadEntries()
+        scheduleRebuild()
+    }
+
     func toggleEntry(_ entry: DictionaryEntry) {
         // 1. Optimistic UI update — flips instantly, triggers @Published
         let newEnabled = !entry.isEnabled

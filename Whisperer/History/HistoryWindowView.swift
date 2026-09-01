@@ -1123,6 +1123,7 @@ struct HistorySettingsView: View {
     @State private var showDeleteConfirmation = false
     @State private var selectedLanguages: Set<TranscriptionLanguage> = [.english]
     @State private var selectedPrimary: TranscriptionLanguage = .english
+    @State private var correctionCandidateCount = 0
 
     private var selectedTimeFormat: Binding<TimeFormatSetting> {
         Binding(
@@ -1350,6 +1351,78 @@ struct HistorySettingsView: View {
                             .tint(WhispererColors.accent)
                             .labelsHidden()
                     }
+                }
+
+                // Available in every build: the History-edit learning source needs no
+                // Accessibility access, so this is not gated on the distribution channel.
+                SettingsRow(colorScheme: colorScheme) {
+                    HStack(spacing: 14) {
+                        ZStack {
+                            RoundedRectangle(cornerRadius: 8)
+                                .fill(
+                                    LinearGradient(
+                                        colors: [
+                                            WhispererColors.accentPurple.opacity(0.18),
+                                            WhispererColors.accentBlue.opacity(0.10)
+                                        ],
+                                        startPoint: .topLeading,
+                                        endPoint: .bottomTrailing
+                                    )
+                                )
+                                .frame(width: 36, height: 36)
+
+                            Image(systemName: "text.badge.plus")
+                                .font(.system(size: 14, weight: .semibold))
+                                .foregroundColor(WhispererColors.accentPurple)
+                        }
+
+                        VStack(alignment: .leading, spacing: 3) {
+                            Text("Learn From My Corrections")
+                                .font(.system(size: 13, weight: .medium))
+                                .foregroundColor(WhispererColors.primaryText(colorScheme))
+
+                            Text("Add words you fix to your dictionary. Undo is always offered.")
+                                .font(.system(size: 11))
+                                .foregroundColor(WhispererColors.secondaryText(colorScheme))
+                        }
+
+                        Spacer()
+
+                        Toggle("", isOn: Binding(
+                            get: { DictionaryManager.shared.correctionLearningEnabled },
+                            set: { DictionaryManager.shared.correctionLearningEnabled = $0 }
+                        ))
+                            .toggleStyle(.switch)
+                            .tint(WhispererColors.accent)
+                            .labelsHidden()
+                    }
+                }
+
+                if correctionCandidateCount > 0 {
+                    HStack {
+                        Text("\(correctionCandidateCount) suggestion\(correctionCandidateCount == 1 ? "" : "s") awaiting review")
+                            .font(.system(size: 11))
+                            .foregroundColor(WhispererColors.secondaryText(colorScheme))
+                        Spacer()
+                        Button("Delete Suggestions") {
+                            Task {
+                                await CorrectionSuggestionStore.shared.deleteAll()
+                                await MainActor.run { correctionCandidateCount = 0 }
+                            }
+                        }
+                        .buttonStyle(.plain)
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundColor(.red)
+                    }
+                    .task {
+                        correctionCandidateCount = await CorrectionSuggestionStore.shared.all().count
+                    }
+                } else {
+                    Color.clear
+                        .frame(height: 0)
+                        .task {
+                            correctionCandidateCount = await CorrectionSuggestionStore.shared.all().count
+                        }
                 }
 
                 // Fuzzy matching sensitivity slider
