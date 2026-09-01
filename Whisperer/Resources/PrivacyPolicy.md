@@ -50,8 +50,10 @@ If you enable the optional Auto-Paste feature, the Accessibility permission allo
 settings. When a word you fix qualifies, Whisperer adds it to your dictionary, tells you it did
 so, and offers Undo; undone words are never learned again.
 
-In every build, including the App Store build, this learns from edits you make to a transcript in
-Whisperer's own History window, which needs no additional permission.
+In every build, including the App Store build, this learns from two things, neither of which needs
+an additional permission: edits you make to a transcript in Whisperer's own History window, and
+words you fix yourself on the card Whisperer shows for a few seconds after a dictation. That card
+only teaches the dictionary — it does not change text that has already been inserted.
 
 Outside the App Store build, and only if you have also granted Accessibility for Auto-Paste, it
 additionally re-reads the same focused text field for up to about 30 seconds after a paste to

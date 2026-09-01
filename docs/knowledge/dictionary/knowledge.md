@@ -50,6 +50,37 @@ the speaker said `Glean`) and touch no word they were not taught. **Byte-for-byt
 wrong bar for that metric** — an unchanged reference corpus would have meant the feature does
 nothing, because the reference contains the very mishearing the learner exists to repair.
 
+## The three sources, and what the explicit one is for
+
+| Source | Build | What it knows |
+|---|---|---|
+| History edit | all | inference — you changed a word, we guess why |
+| Post-paste AX observer | `#if !APP_STORE` | inference, plus a focus/field-identity boundary |
+| Correction card (HUD) | all | **statement** — you clicked the word and typed the fix |
+
+The card is the only source that works in the App Store build *and* carries unambiguous intent.
+It still commits through `CorrectionLearningService.observe`, so the gates cannot be bypassed by
+being explicit — but a pair the gates refuse is offered as a one-click **"Always fix"** rather than
+being demoted to a review list. Accepting that offer writes a **hand-authored** entry
+(`observedSource == nil`), not an auto-learned one: the user authored it, so it takes the
+hand-authored trust level and joins the fuzzy indexes immediately.
+
+Two implementation facts worth keeping:
+
+- **Replace the clicked token by index, never by string.** "the report says the report is late"
+  with a string replace changes both, which the miner reads as a two-substitution diff and
+  discards — the user's correction vanishes with no error anywhere.
+- **The chips must use the extractor's own word pattern.** A chip the miner cannot learn from is a
+  chip that should never have been clickable.
+- **Open question — does a `.nonactivatingPanel` actually take keystrokes?** The HUD panel is
+  `[.borderless, .nonactivatingPanel]` with `canBecomeKey = true`, which is *documented* to accept
+  key input without activating the app, but SwiftUI `TextField` in such a panel is a known soft
+  spot. The card therefore edits through an AppKit `NSTextField` with explicit
+  `makeKeyAndOrderFront` + `makeFirstResponder`, then re-checks `isKeyWindow` one runloop later and
+  closes itself with a logged warning rather than presenting a field that silently eats keystrokes.
+  `NSApp.activate` is not an option: stealing focus from the app being dictated into is worse than
+  the mishearing. Only an on-device run answers this — record the answer here when it exists.
+
 ## The 3-distinct-session gate is inert
 
 Across 1,779 dictations, **zero** candidate pairs recur even twice. A gate requiring 3 sightings

@@ -25,7 +25,16 @@ Confirmed. Apply by default.
    contains the errors the learner exists to fix, an unchanged corpus proves the feature is
    inert. Assert *no collateral*: every changed token must be one the learner was taught.
 
-7. **AX polling after a paste must be front-loaded and bounded, and must abandon on focus
+7. **Explicit intent buys a different offer, never a weaker gate.** Every source commits through
+   `CorrectionLearningService.observe`. When the gates refuse a pair the user stated outright, the
+   answer is a one-click confirmation that writes a *hand-authored* entry — not a bypass, and not
+   a silent demotion to a list nobody opens.
+
+8. **A learning affordance the user has to remember to open is a learning affordance nobody
+   uses.** The correction card is offered unasked for ~7 s after each dictation, extends itself
+   while hovered or being typed into, and disappears the moment the next recording starts.
+
+9. **AX polling after a paste must be front-loaded and bounded, and must abandon on focus
    change.** Each poll is a synchronous main-actor AX round-trip with a 100 ms messaging timeout;
    a flat 500 ms × 60 s schedule is 120 of them, up to 12 s of potential main-thread stall.
    The shipped schedule is 400 ms × 15 then 2 s × 12.
