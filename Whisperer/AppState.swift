@@ -427,15 +427,13 @@ class AppState: ObservableObject {
     private static let correctionPromptGrace: TimeInterval = 3
 
     func showCorrectionPrompt(_ text: String) {
-        guard DictionaryManager.shared.correctionLearningEnabled else { return }
-        guard !isMeetingMode, !isInAppMode else { return }
-        let tokens = CorrectionPromptTokenizer.tokenize(text, keepingLastWords: CorrectionPrompt.maximumWords)
-        guard tokens.contains(where: \.isWord) else { return }
+        guard let prompt = CorrectionPrompt.make(
+            for: text,
+            learningEnabled: DictionaryManager.shared.correctionLearningEnabled,
+            isMeeting: isMeetingMode,
+            isInApp: isInAppMode
+        ) else { return }
 
-        let prompt = CorrectionPrompt(
-            tokens: tokens,
-            isTruncated: CorrectionPromptTokenizer.isTruncated(text, keepingLastWords: CorrectionPrompt.maximumWords)
-        )
         correctionPromptHeld = false
         correctionPromptDeadline = Date().addingTimeInterval(Self.correctionPromptLifetime)
         correctionPrompt = prompt

@@ -37,6 +37,26 @@ struct CorrectionPrompt: Identifiable, Equatable, Sendable {
 
     /// What the learner is told the transcript was.
     var text: String { CorrectionPromptTokenizer.text(of: tokens) }
+
+    /// Whether a finished dictation is worth offering a card for, and what that card shows.
+    ///
+    /// A free function of its inputs rather than a method on `AppState`, so the conditions under
+    /// which the card appears can be asserted without standing up the app's singletons.
+    static func make(
+        for text: String,
+        learningEnabled: Bool,
+        isMeeting: Bool,
+        isInApp: Bool
+    ) -> CorrectionPrompt? {
+        // Off means off: the card is a learning source, not a viewer.
+        guard learningEnabled, !isMeeting, !isInApp else { return nil }
+        let tokens = CorrectionPromptTokenizer.tokenize(text, keepingLastWords: maximumWords)
+        guard tokens.contains(where: \.isWord) else { return nil }
+        return CorrectionPrompt(
+            tokens: tokens,
+            isTruncated: CorrectionPromptTokenizer.isTruncated(text, keepingLastWords: maximumWords)
+        )
+    }
 }
 
 enum CorrectionPromptTokenizer {
