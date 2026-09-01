@@ -64,6 +64,12 @@ class TextInjector {
     private var injectorIsInserting: Bool = false
 
     #if !APP_STORE
+    /// The in-flight post-paste correction watcher, if any. At most one runs at a time; a new
+    /// paste supersedes the previous one. Not cancelled in `deinit` — `TextInjector` lives for
+    /// the process, and `SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor` makes a synthesized isolated
+    /// `deinit` a test-host abort risk for no benefit.
+    private var correctionObservationTask: Task<Void, Never>?
+
     // CGEvent keyboardSetUnicodeString has a practical limit on UTF-16 units per event.
     private static let cgEventUnicodeLimit = 200
 
@@ -109,6 +115,13 @@ class TextInjector {
             throw InjectionError.emptyText
         }
 
+        #if !APP_STORE
+        // A new paste ends attribution for the previous one, including when collection was
+        // toggled off between dictations.
+        correctionObservationTask?.cancel()
+        correctionObservationTask = nil
+        #endif
+
         injectorIsInserting = true
         defer {
             injectorIsInserting = false
@@ -132,12 +145,24 @@ class TextInjector {
             try await activateApp(pid: pid)
         }
 
+        // Snapshot the destination field immediately before pasting, not when recording started:
+        // the user or the destination may have changed the field during transcription. No
+        // snapshot simply disables learning for this dictation; insertion is unaffected.
+        let learningSnapshot: AXTextFieldSnapshot? = {
+            guard DictionaryManager.shared.correctionLearningEnabled,
+                  let pid = targetAppPID else { return nil }
+            return AXTextFieldSnapshotReader.read(pid: pid)
+        }()
+
         // Tier 1: Clipboard + Cmd+V — the universal default.
         // Works with Chrome web inputs, Electron apps, Safari, AppKit, VS Code,
         // Slack, Notion, terminals, and every other destination. The target app
         // performs its own insertion (selection replacement, undo, DOM events).
         let pasted = try await enterViaClipboardPaste(text)
         if pasted {
+            if let snapshot = learningSnapshot {
+                beginCorrectionObservation(pastedText: text, snapshot: snapshot)
+            }
             return
         }
         Logger.warning("Clipboard paste attempt ended without confirmed success, trying unicode", subsystem: .textInjection)
@@ -151,6 +176,79 @@ class TextInjector {
         Logger.warning("CGEvent unicode also failed — text may be lost", subsystem: .textInjection)
         #endif
     }
+
+    // MARK: - Post-Paste Correction Observation (Developer ID only)
+
+    #if !APP_STORE
+    /// Watches the field we just pasted into and reports what the user changed.
+    ///
+    /// This is the one learning source that costs something at runtime: every poll is a
+    /// synchronous AX round-trip on the main actor with a 100 ms messaging timeout. A flat
+    /// 500 ms × 60 s schedule is 120 of those, up to 12 s of potential main-thread stall for a
+    /// signal that, in practice, arrives within seconds of the paste. So the schedule is
+    /// front-loaded: dense while the user is still looking at the text, sparse afterwards,
+    /// and abandoned the moment focus leaves the target app.
+    private func beginCorrectionObservation(pastedText: String, snapshot: AXTextFieldSnapshot) {
+        correctionObservationTask?.cancel()
+        guard let anchor = CorrectionLearningAnchor(
+            fieldValue: snapshot.value,
+            selectedRange: snapshot.selectedRange
+        ) else { return }
+
+        let pid = snapshot.pid
+        let elementHash = snapshot.elementHash
+        correctionObservationTask = Task { @MainActor [weak self] in
+            guard self != nil else { return }
+            var lastRegion = pastedText
+            var lastRecordedRegion = pastedText
+            var stablePolls = 0
+
+            for interval in Self.correctionPollSchedule {
+                do {
+                    try await Task.sleep(nanoseconds: interval)
+                } catch {
+                    return
+                }
+                guard !Task.isCancelled else { return }
+
+                // Cheap check first — if the user has moved to another app, the edit we would
+                // attribute to them is no longer ours to read.
+                guard NSWorkspace.shared.frontmostApplication?.processIdentifier == pid else { return }
+
+                guard let current = AXTextFieldSnapshotReader.read(
+                        pid: pid,
+                        expectedElementHash: elementHash
+                      ),
+                      let region = anchor.region(in: current.value),
+                      !region.isEmpty else { return }
+
+                // Two unchanged reads before believing an edit: mid-typing states are not
+                // corrections, and promoting one would learn a prefix of the real word.
+                if region == lastRegion {
+                    stablePolls += 1
+                } else {
+                    lastRegion = region
+                    stablePolls = 0
+                }
+
+                guard stablePolls >= 2,
+                      region != pastedText,
+                      region != lastRecordedRegion else { continue }
+                lastRecordedRegion = region
+                await CorrectionLearningService.observe(
+                    original: pastedText,
+                    edited: region,
+                    source: .pastePostEdit
+                )
+            }
+        }
+    }
+
+    /// Poll intervals, in nanoseconds: 400 ms for the first ~6 s, then 2 s out to ~30 s.
+    /// 27 AX reads instead of 120, with the dense part covering when corrections actually happen.
+    private static let correctionPollSchedule: [UInt64] =
+        Array(repeating: 400_000_000, count: 15) + Array(repeating: 2_000_000_000, count: 12)
+    #endif
 
     // MARK: - Activation
 
