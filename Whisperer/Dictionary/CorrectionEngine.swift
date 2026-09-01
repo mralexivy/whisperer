@@ -61,9 +61,14 @@ class CorrectionEngine {
             }
         }
 
-        // Rebuild SymSpell and PhoneticMatcher indexes
-        symSpell?.rebuild(with: entries.filter { $0.isEnabled })
-        phoneticMatcher?.rebuild(with: entries.filter { $0.isEnabled })
+        // Rebuild SymSpell and PhoneticMatcher indexes.
+        // Auto-learned entries are deliberately excluded: they were promoted from a single observed
+        // mishearing, so they are only trustworthy for the exact string that was observed. Feeding
+        // `glyn → Glean` to the fuzzy indexes would also pull in `glynn`, `glyns` and every soundex
+        // neighbour. Confirming an entry clears `observedSource` and it joins the indexes then.
+        let fuzzyEntries = entries.filter { $0.isEnabled && !$0.isAutoLearned }
+        symSpell?.rebuild(with: fuzzyEntries)
+        phoneticMatcher?.rebuild(with: fuzzyEntries)
 
         Logger.debug("CorrectionEngine rebuilt: \(exactLookup.count) words, \(phraseLookup.count) phrases", subsystem: .app)
     }
@@ -111,10 +116,15 @@ class CorrectionEngine {
             let wordLength = wordLower.count
 
             // Try exact match first (works for any word length).
-            // Safety gate for built-in entries: if the alias is a valid English word, skip.
-            // User-created entries (isBuiltIn == false) always fire — the user explicitly asked for it.
+            // Safety gate for built-in and auto-learned entries: if the alias is a valid English
+            // word, skip. Only entries the user authored by hand (isBuiltIn == false and not
+            // auto-learned) always fire — the user explicitly asked for those.
+            //
+            // Auto-learned entries already passed the same spell gate at promotion time; repeating
+            // it here is defence in depth, so an imported or hand-edited row cannot bypass it.
+            // Without it a learned `backend → firebase` would rewrite every "backend" ever dictated.
             if let entry = exactLookup[wordLower] {
-                let shouldApply = !entry.isBuiltIn || !isValidEnglishAlias(wordLower)
+                let shouldApply = (!entry.isBuiltIn && !entry.isAutoLearned) || !isValidEnglishAlias(wordLower)
                 if shouldApply {
                     processedText = replaceWord(processedText, word: String(word), entry: entry, corrections: &corrections)
                 }

@@ -11,6 +11,7 @@
         <attribute name="isEnabled" attributeType="Boolean" defaultValueString="YES" usesScalarValueType="YES"/>
         <attribute name="lastModifiedAt" attributeType="Date" usesScalarValueType="NO"/>
         <attribute name="notes" optional="YES" attributeType="String"/>
+        <attribute name="observedSource" optional="YES" attributeType="String"/>
         <attribute name="useCount" attributeType="Integer 32" defaultValueString="0" usesScalarValueType="YES"/>
     </entity>
     <entity name="MeetingEntity" representedClassName="MeetingEntity" syncable="YES">

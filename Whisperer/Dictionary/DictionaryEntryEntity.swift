@@ -22,6 +22,10 @@ public class DictionaryEntryEntity: NSManagedObject {
     @NSManaged public var useCount: Int32
     /// CTC boost weight for Parakeet vocabulary rescoring. 0.0 = use default (8.0 for custom, nil for built-in).
     @NSManaged public var boostWeight: Double
+    /// Provenance for auto-learned entries: the mishearing this entry was learned from.
+    /// `nil` for built-in and user-authored entries. Non-nil marks the entry auto-learned,
+    /// which keeps it out of the fuzzy indexes until the user confirms it.
+    @NSManaged public var observedSource: String?
 }
 
 extension DictionaryEntryEntity: Identifiable {}

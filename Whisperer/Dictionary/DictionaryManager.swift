@@ -39,6 +39,12 @@ class DictionaryManager: ObservableObject {
             UserDefaults.standard.set(usePhoneticMatching, forKey: "usePhoneticMatching")
         }
     }
+    /// W2 collection arm. This records review candidates only; it never creates dictionary rules.
+    @Published var correctionLearningEnabled: Bool = false {
+        didSet {
+            UserDefaults.standard.set(correctionLearningEnabled, forKey: "correctionLearningEnabled")
+        }
+    }
     @Published var selectedEntryId: UUID? = nil  // For navigation from correction popover
 
     private let database = HistoryDatabase.shared
@@ -57,6 +63,7 @@ class DictionaryManager: ObservableObject {
         // Load fuzzy matching settings
         fuzzyMatchingSensitivity = UserDefaults.standard.object(forKey: "fuzzyMatchingSensitivity") as? Int ?? 2
         usePhoneticMatching = UserDefaults.standard.object(forKey: "usePhoneticMatching") as? Bool ?? true
+        correctionLearningEnabled = UserDefaults.standard.object(forKey: "correctionLearningEnabled") as? Bool ?? false
 
         // Load pack preferences
         if let data = UserDefaults.standard.data(forKey: packPreferencesKey),
@@ -361,6 +368,7 @@ class DictionaryManager: ObservableObject {
         let context = database.newBackgroundContext()
 
         let entryBoostWeight = entry.boostWeight
+        let entryObservedSource = entry.observedSource
         await context.perform {
             let entity = DictionaryEntryEntity.create(
                 in: context,
@@ -371,6 +379,7 @@ class DictionaryManager: ObservableObject {
                 notes: entry.notes
             )
             entity.boostWeight = entryBoostWeight
+            entity.observedSource = entryObservedSource
 
             do {
                 try context.save()
@@ -408,7 +417,8 @@ class DictionaryManager: ObservableObject {
             createdAt: entry.createdAt,
             lastModifiedAt: entry.lastModifiedAt,
             useCount: entry.useCount,
-            boostWeight: entry.boostWeight
+            boostWeight: entry.boostWeight,
+            observedSource: entry.observedSource
         )
         try await addEntry(newEntry, skipRebuild: skipRebuild)
     }
@@ -483,7 +493,9 @@ class DictionaryManager: ObservableObject {
                 notes: entry.notes,
                 createdAt: entry.createdAt,
                 lastModifiedAt: Date(),
-                useCount: entry.useCount
+                useCount: entry.useCount,
+                boostWeight: entry.boostWeight,
+                observedSource: entry.observedSource
             )
         }
 

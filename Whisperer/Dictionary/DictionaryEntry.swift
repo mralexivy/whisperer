@@ -20,6 +20,12 @@ struct DictionaryEntry: Identifiable, Codable {
     let useCount: Int
     /// CTC boost weight for Parakeet vocabulary rescoring. 0 = use default (8.0 for custom, nil for built-in).
     let boostWeight: Double
+    /// The mishearing this entry was auto-learned from. `nil` for built-in and user-authored entries.
+    let observedSource: String?
+
+    /// Auto-learned entries are held to a stricter runtime gate and stay out of the fuzzy indexes
+    /// until the user confirms them. Confirmation clears `observedSource`.
+    var isAutoLearned: Bool { observedSource != nil }
 
     init(
         id: UUID = UUID(),
@@ -32,7 +38,8 @@ struct DictionaryEntry: Identifiable, Codable {
         createdAt: Date = Date(),
         lastModifiedAt: Date = Date(),
         useCount: Int = 0,
-        boostWeight: Double = 0.0
+        boostWeight: Double = 0.0,
+        observedSource: String? = nil
     ) {
         self.id = id
         self.incorrectForm = incorrectForm.lowercased()
@@ -45,6 +52,7 @@ struct DictionaryEntry: Identifiable, Codable {
         self.lastModifiedAt = lastModifiedAt
         self.useCount = useCount
         self.boostWeight = boostWeight
+        self.observedSource = observedSource
     }
 
     init(from entity: DictionaryEntryEntity) {
@@ -59,6 +67,7 @@ struct DictionaryEntry: Identifiable, Codable {
         self.lastModifiedAt = entity.lastModifiedAt
         self.useCount = Int(entity.useCount)
         self.boostWeight = entity.boostWeight
+        self.observedSource = entity.observedSource
     }
 }
 
