@@ -36,21 +36,34 @@ final class PolishModelManager: ObservableObject {
     /// `nonisolated` because `MMBERTCoreMLRuntime.locate()` is a plain static called from
     /// wherever a runtime is constructed; it only stats the filesystem, so there is no state
     /// to isolate.
+    ///
+    /// Scans installRoot dynamically so that a background update that installs "v4" is
+    /// discovered without a binary change. Returns the lexicographically latest complete
+    /// version directory (skipping "staging/", which holds in-progress downloads).
     nonisolated static var installedDirectory: URL? {
-        let dir = installRoot.appendingPathComponent(version)
-        let package = dir.appendingPathComponent("MMBERTEditing.mlpackage")
-        let compiled = dir.appendingPathComponent("MMBERTEditing.mlmodelc")
         let fm = FileManager.default
-        return fm.fileExists(atPath: package.path) || fm.fileExists(atPath: compiled.path)
-            ? dir : nil
+        guard let entries = try? fm.contentsOfDirectory(
+            at: installRoot, includingPropertiesForKeys: nil,
+            options: .skipsHiddenFiles) else { return nil }
+        for dir in entries.sorted(by: { $0.lastPathComponent > $1.lastPathComponent }) {
+            guard dir.lastPathComponent != "staging" else { continue }
+            let package = dir.appendingPathComponent("MMBERTEditing.mlpackage")
+            let compiled = dir.appendingPathComponent("MMBERTEditing.mlmodelc")
+            if fm.fileExists(atPath: package.path) || fm.fileExists(atPath: compiled.path) {
+                return dir
+            }
+        }
+        return nil
     }
+
+    /// The version string of the currently installed model (e.g. "v3"), or nil.
+    nonisolated static var installedVersion: String? { installedDirectory?.lastPathComponent }
 
     nonisolated var installedDirectory: URL? { Self.installedDirectory }
     nonisolated var isInstalled: Bool { Self.installedDirectory != nil }
 
     // MARK: - Configuration
 
-    nonisolated static let version = "v3"
     private static let repo = "mralexivy/whisperer-polish"
     private static var baseURL: URL {
         URL(string: "https://huggingface.co/\(repo)/resolve/main/")!
@@ -68,6 +81,7 @@ final class PolishModelManager: ObservableObject {
     }
 
     private var task: Task<Void, Never>?
+    private var updateTask: Task<Void, Never>?
     private var downloader: ResumableDownload?
 
     private init() {
@@ -77,11 +91,13 @@ final class PolishModelManager: ObservableObject {
     // MARK: - Lifecycle
 
     /// Kick off the fetch if it is needed. Safe to call repeatedly; returns at once.
+    /// If a model is already installed, silently checks for a newer version in the background.
     func start() {
         guard task == nil else { return }
         if isInstalled {
             phase = .ready
             progress = 1
+            scheduleUpdateCheck()
             return
         }
         phase = .downloading
@@ -91,10 +107,25 @@ final class PolishModelManager: ObservableObject {
         }
     }
 
+    /// Silently probe HuggingFace for a newer manifest once per launch, with a short
+    /// random jitter so that many users don't hammer the CDN simultaneously.
+    private func scheduleUpdateCheck() {
+        guard updateTask == nil else { return }
+        updateTask = Task { [weak self] in
+            // Jitter: 5–20 s after launch so startup stays snappy.
+            let jitter = UInt64.random(in: 5_000_000_000 ..< 20_000_000_000)
+            try? await Task.sleep(nanoseconds: jitter)
+            await self?.checkForUpdate()
+            await MainActor.run { self?.updateTask = nil }
+        }
+    }
+
     func cancel() {
         downloader?.cancel()
         task?.cancel()
+        updateTask?.cancel()
         task = nil
+        updateTask = nil
         downloader = nil
         if !isInstalled {
             phase = .notStarted
@@ -161,6 +192,72 @@ final class PolishModelManager: ObservableObject {
             phase = .failed(error.localizedDescription)
         }
         downloader = nil
+    }
+
+    // MARK: - Background update
+
+    private func checkForUpdate() async {
+        do {
+            let manifest = try await fetchManifest()
+            guard manifest.schema <= PolishModelPackage.supportedSchema else { return }
+            guard let current = Self.installedVersion, manifest.version != current else { return }
+            Logger.info("Polish model update available: \(current) → \(manifest.version)", subsystem: .model)
+            await runUpdate(manifest: manifest, replacingVersion: current)
+        } catch {
+            // Network unavailable or CDN hiccup — silently skip; we'll try next launch.
+            Logger.info("Polish model update check skipped: \(error)", subsystem: .model)
+        }
+    }
+
+    /// Download and install `manifest` silently while the old version stays live.
+    /// On success: atomically swap, delete old directory, reload the editor.
+    private func runUpdate(manifest: PolishModelPackage.Manifest, replacingVersion old: String) async {
+        do {
+            let staging = Self.installRoot.appendingPathComponent("staging")
+            try FileManager.default.createDirectory(at: staging, withIntermediateDirectories: true)
+            let part = staging.appendingPathComponent("\(manifest.file).part")
+
+            let updater = ResumableDownload(
+                url: Self.baseURL.appendingPathComponent(manifest.file),
+                destination: part,
+                expectedBytes: manifest.ciphertextBytes)
+
+            try await updater.run { _ in /* no UI progress for background updates */ }
+            try Task.checkCancellation()
+
+            try await Task.detached(priority: .utility) {
+                let unpacked = staging.appendingPathComponent(manifest.version)
+                let final = Self.installRoot.appendingPathComponent(manifest.version)
+                try? FileManager.default.removeItem(at: unpacked)
+                _ = try PolishModelPackage.install(
+                    ciphertextAt: part,
+                    manifest: manifest,
+                    keyHex: PolishModelKey.hex,
+                    destination: unpacked,
+                    progress: { _ in },
+                    isCancelled: { Task.isCancelled })
+
+                let fm = FileManager.default
+                try? fm.removeItem(at: final)
+                try fm.createDirectory(at: final.deletingLastPathComponent(),
+                                       withIntermediateDirectories: true)
+                try fm.moveItem(at: unpacked, to: final)
+                try? fm.removeItem(at: part)
+
+                // Remove the old version directory now that the new one is live.
+                let oldDir = Self.installRoot.appendingPathComponent(old)
+                try? fm.removeItem(at: oldDir)
+            }.value
+
+            Logger.info("Polish model silently updated to \(manifest.version)", subsystem: .model)
+            PolishEditor.reset()
+            PolishEditor.prepare()
+        } catch is CancellationError {
+            // App quit mid-update — the partial .part file survives for next launch's resumable download.
+        } catch {
+            Logger.warning("Polish model background update failed: \(error)", subsystem: .model)
+            // Old version still installed and fully functional — user experiences nothing.
+        }
     }
 
     private func fetchManifest() async throws -> PolishModelPackage.Manifest {
