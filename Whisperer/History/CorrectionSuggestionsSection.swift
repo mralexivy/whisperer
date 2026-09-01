@@ -21,9 +21,15 @@ struct CorrectionSuggestionsSection: View {
 
     @State private var suggestions: [CorrectionSuggestion] = []
     @State private var isExpanded = false
+    #if DEBUG
+    @State private var importStatus: String?
+    #endif
 
     var body: some View {
         Group {
+            #if DEBUG
+            wisprImportRow
+            #endif
             if !suggestions.isEmpty {
                 VStack(spacing: 0) {
                     header
@@ -52,6 +58,41 @@ struct CorrectionSuggestionsSection: View {
         }
         .task { await reload() }
     }
+
+    #if DEBUG
+    /// Developer-only seeding from a local Wispr Flow install. Never compiled into a build any
+    /// user receives; see `WisprDictionaryImporter` for what it does and does not read.
+    private var wisprImportRow: some View {
+        HStack(spacing: 8) {
+            Image(systemName: "ladybug.fill")
+                .font(.system(size: 11))
+                .foregroundColor(WhispererColors.secondaryText(colorScheme))
+
+            Text(importStatus ?? "Debug: seed suggestions from Wispr Flow")
+                .font(.system(size: 11))
+                .foregroundColor(WhispererColors.secondaryText(colorScheme))
+
+            Spacer()
+
+            Button("Import") {
+                Task {
+                    do {
+                        let report = try await WisprDictionaryImporter.run()
+                        importStatus = report.summary
+                        await reload()
+                        isExpanded = true
+                    } catch {
+                        importStatus = error.localizedDescription
+                    }
+                }
+            }
+            .controlSize(.small)
+            .pointerOnHover()
+        }
+        .padding(.horizontal, 16)
+        .padding(.top, 8)
+    }
+    #endif
 
     private var header: some View {
         Button {
