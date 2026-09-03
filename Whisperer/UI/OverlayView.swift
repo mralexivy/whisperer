@@ -288,6 +288,7 @@ struct OverlayView: View {
             }
         }
         .padding(.top, 35 * scale)  // Space for expand/collapse tooltip
+        .padding(.bottom, 20 * scale) // Breathing room so card rounded corners aren't flush with panel edge
         .environment(\.overlayScale, scale)
         .background(Color.clear)
     }

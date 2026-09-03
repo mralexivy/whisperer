@@ -216,7 +216,12 @@ class OverlayPanel: NSPanel {
         let sizePref = OverlaySize.current
         let dims = sizePref.dimensions
 
-        let neededHeight = max(dims.height, fittingSize.height)
+        // Allow the panel to shrink to content when only small cards are shown (no recording HUD).
+        // The recording HUD itself posts height changes and the panel will grow back as needed.
+        let appState = AppState.shared
+        let hasRecordingControls = appState.state != .idle
+        let minHeight: CGFloat = hasRecordingControls ? dims.height : 80
+        let neededHeight = max(minHeight, fittingSize.height)
         let currentFrame = self.frame
 
         // Skip if height hasn't meaningfully changed

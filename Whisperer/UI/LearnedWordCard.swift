@@ -25,19 +25,16 @@ struct LearnedWordCard: View {
 
     var body: some View {
         HStack(spacing: 12) {
-            Image(systemName: "character.book.closed.fill")
-                .font(.system(size: 15, weight: .medium))
-                .foregroundColor(.white.opacity(0.9))
-                .frame(width: 22)
+            iconContainer
 
             VStack(alignment: .leading, spacing: 2) {
                 Text("Learned: \(entry.correctForm)")
-                    .font(.system(size: 13, weight: .semibold))
+                    .font(.system(size: 13, weight: .semibold, design: .rounded))
                     .foregroundColor(.white)
                 if let observed = entry.observedSource {
                     Text("heard as \(observed)")
                         .font(.system(size: 11, weight: .medium))
-                        .foregroundColor(.white.opacity(0.45))
+                        .foregroundColor(.white.opacity(0.4))
                 }
             }
 
@@ -46,17 +43,10 @@ struct LearnedWordCard: View {
             undoButton
             dismissButton
         }
-        .padding(.leading, 14)
+        .padding(.leading, 12)
         .padding(.trailing, 6)
-        .padding(.vertical, 8)
-        .background(
-            RoundedRectangle(cornerRadius: 14)
-                .fill(Color(hex: "0C0C1A"))
-                .overlay(
-                    RoundedRectangle(cornerRadius: 14)
-                        .stroke(Color.white.opacity(0.06), lineWidth: 1)
-                )
-        )
+        .padding(.vertical, 10)
+        .background(cardBackground)
         .fixedSize(horizontal: true, vertical: false)
         .scaleEffect(isExiting ? 0.96 : (appeared ? 1.0 : 0.94))
         .offset(y: isExiting ? 8 : (appeared ? 0 : 16))
@@ -68,29 +58,60 @@ struct LearnedWordCard: View {
         }
     }
 
+    private var cardBackground: some View {
+        RoundedRectangle(cornerRadius: 16)
+            .fill(Color(hex: "14142B"))
+            .overlay(
+                RoundedRectangle(cornerRadius: 16)
+                    .stroke(Color.white.opacity(0.07), lineWidth: 1)
+            )
+            .shadow(color: Color.black.opacity(0.35), radius: 12, x: 0, y: 4)
+    }
+
+    private var iconContainer: some View {
+        ZStack {
+            RoundedRectangle(cornerRadius: 8)
+                .fill(Color(hex: "5B6CF7").opacity(0.15))
+                .frame(width: 34, height: 34)
+            Image(systemName: "character.book.closed.fill")
+                .font(.system(size: 15, weight: .medium))
+                .foregroundColor(Color(hex: "5B6CF7"))
+        }
+    }
+
     private var undoButton: some View {
         Button(action: handleUndo) {
             Text("Undo")
-                .font(.system(size: 12.5, weight: .semibold))
-                .foregroundColor(Color(hex: "0C0C1A"))
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundColor(.white.opacity(undoHovering ? 1.0 : 0.65))
                 .padding(.horizontal, 11)
                 .padding(.vertical, 6)
                 .background(
                     RoundedRectangle(cornerRadius: 9)
-                        .fill(Color.white.opacity(undoHovering ? 1.0 : 0.92))
+                        .fill(Color.white.opacity(undoHovering ? 0.12 : 0.07))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 9)
+                                .stroke(Color.white.opacity(undoHovering ? 0.18 : 0.08), lineWidth: 0.5)
+                        )
                 )
         }
         .buttonStyle(.plain)
         .onHover { undoHovering = $0 }
+        .animation(.easeInOut(duration: 0.15), value: undoHovering)
     }
 
     private var dismissButton: some View {
         Button(action: handleDismiss) {
-            Image(systemName: "xmark")
-                .font(.system(size: 10, weight: .semibold))
-                .foregroundColor(.white.opacity(dismissHovering ? 0.7 : 0.3))
-                .frame(width: 24, height: 24)
-                .contentShape(Rectangle())
+            ZStack {
+                RoundedRectangle(cornerRadius: 5)
+                    .fill(Color.white.opacity(dismissHovering ? 0.09 : 0))
+                    .frame(width: 20, height: 20)
+                Image(systemName: "xmark")
+                    .font(.system(size: 9, weight: .bold))
+                    .foregroundColor(.white.opacity(dismissHovering ? 0.75 : 0.28))
+            }
+            .frame(width: 28, height: 28)
+            .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .onHover { dismissHovering = $0 }

@@ -41,6 +41,7 @@ struct CorrectionPopoverCard: View {
     @State private var isExiting = false
     @State private var dismissHovering = false
     @State private var confirmHovering = false
+    @State private var iconBounce = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 7 * scale) {
@@ -48,17 +49,10 @@ struct CorrectionPopoverCard: View {
             content
         }
         .padding(.leading, 14 * scale)
-        .padding(.trailing, 8 * scale)
-        .padding(.vertical, 10 * scale)
+        .padding(.trailing, 10 * scale)
+        .padding(.vertical, 11 * scale)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(
-            RoundedRectangle(cornerRadius: 14)
-                .fill(Color(hex: "0C0C1A"))
-                .overlay(
-                    RoundedRectangle(cornerRadius: 14)
-                        .stroke(Color.white.opacity(0.06), lineWidth: 1)
-                )
-        )
+        .background(cardBackground)
         .scaleEffect(isExiting ? 0.96 : (appeared ? 1.0 : 0.94))
         .offset(y: isExiting ? 8 : (appeared ? 0 : 16))
         .opacity(isExiting ? 0 : (appeared ? 1 : 0))
@@ -69,39 +63,75 @@ struct CorrectionPopoverCard: View {
             withAnimation(.spring(response: 0.38, dampingFraction: 0.78).delay(0.03)) {
                 appeared = true
             }
+            // Delay so FlowLayout finishes wrapping before fittingSize is queried
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.12) {
+                NotificationCenter.default.post(name: .overlayContentHeightChanged, object: nil)
+            }
         }
+        .onChange(of: phase) { _ in
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
+                NotificationCenter.default.post(name: .overlayContentHeightChanged, object: nil)
+            }
+        }
+    }
+
+    private var cardBackground: some View {
+        RoundedRectangle(cornerRadius: 16)
+            .fill(Color(hex: "14142B"))
+            .overlay(
+                RoundedRectangle(cornerRadius: 16)
+                    .stroke(Color.white.opacity(0.07), lineWidth: 1)
+            )
+            .shadow(color: Color.black.opacity(0.35), radius: 12, x: 0, y: 4)
     }
 
     // MARK: - Header
 
     private var header: some View {
         HStack(spacing: 8 * scale) {
-            Image(systemName: "character.cursor.ibeam")
-                .font(.system(size: 11 * scale, weight: .medium))
-                .foregroundColor(.white.opacity(0.4))
+            headerIcon
 
             Text(headerTitle)
-                .font(.system(size: 11.5 * scale, weight: .semibold))
-                .foregroundColor(.white.opacity(0.55))
+                .font(.system(size: 11.5 * scale, weight: .semibold, design: .rounded))
+                .foregroundColor(.white.opacity(0.72))
+                .animation(.easeInOut(duration: 0.18), value: headerTitle)
 
             Spacer(minLength: 8 * scale)
 
             if editingIndex != nil {
-                Text("⏎ learn  ·  esc cancel")
-                    .font(.system(size: 10.5 * scale, weight: .medium))
-                    .foregroundColor(.white.opacity(0.3))
+                keyboardHints
             }
 
-            Button(action: dismiss) {
-                Image(systemName: "xmark")
-                    .font(.system(size: 10 * scale, weight: .semibold))
-                    .foregroundColor(.white.opacity(dismissHovering ? 0.7 : 0.3))
-                    .frame(width: 22 * scale, height: 22 * scale)
-                    .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-            .onHover { dismissHovering = $0 }
-            .accessibilityLabel("Dismiss")
+            dismissButton
+        }
+    }
+
+    private var headerIcon: some View {
+        ZStack {
+            RoundedRectangle(cornerRadius: 6 * scale)
+                .fill(headerIconColor.opacity(0.15))
+                .frame(width: 24 * scale, height: 24 * scale)
+            Image(systemName: headerIconName)
+                .font(.system(size: 11 * scale, weight: .medium))
+                .foregroundColor(headerIconColor)
+        }
+        .scaleEffect(iconBounce ? 1.2 : 1.0)
+        .animation(.spring(response: 0.3, dampingFraction: 0.55), value: iconBounce)
+    }
+
+    private var headerIconName: String {
+        switch phase {
+        case .picking: return "character.cursor.ibeam"
+        case .confirming: return "questionmark.circle"
+        case .finished(let msg): return msg.hasPrefix("Nothing") ? "slash.circle" : "checkmark.circle.fill"
+        }
+    }
+
+    private var headerIconColor: Color {
+        switch phase {
+        case .picking: return .orange
+        case .confirming: return Color(hex: "5B6CF7")
+        case .finished(let msg): return msg.hasPrefix("Nothing") ? .white.opacity(0.4) : .green
         }
     }
 
@@ -114,6 +144,54 @@ struct CorrectionPopoverCard: View {
         case .finished(let message):
             return message
         }
+    }
+
+    private var keyboardHints: some View {
+        HStack(spacing: 4 * scale) {
+            keyCap("⏎")
+            Text("learn")
+                .foregroundColor(.white.opacity(0.3))
+            Text("·")
+                .foregroundColor(.white.opacity(0.15))
+            keyCap("esc")
+            Text("cancel")
+                .foregroundColor(.white.opacity(0.3))
+        }
+        .font(.system(size: 10 * scale, weight: .medium))
+    }
+
+    private func keyCap(_ label: String) -> some View {
+        Text(label)
+            .font(.system(size: 9.5 * scale, weight: .semibold, design: .monospaced))
+            .foregroundColor(.white.opacity(0.45))
+            .padding(.horizontal, 4 * scale)
+            .padding(.vertical, 2 * scale)
+            .background(
+                RoundedRectangle(cornerRadius: 4)
+                    .fill(Color.white.opacity(0.08))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 4)
+                            .stroke(Color.white.opacity(0.1), lineWidth: 0.5)
+                    )
+            )
+    }
+
+    private var dismissButton: some View {
+        Button(action: dismiss) {
+            ZStack {
+                RoundedRectangle(cornerRadius: 5 * scale)
+                    .fill(Color.white.opacity(dismissHovering ? 0.09 : 0))
+                    .frame(width: 20 * scale, height: 20 * scale)
+                Image(systemName: "xmark")
+                    .font(.system(size: 9 * scale, weight: .bold))
+                    .foregroundColor(.white.opacity(dismissHovering ? 0.75 : 0.3))
+            }
+            .frame(width: 26 * scale, height: 26 * scale)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .onHover { dismissHovering = $0 }
+        .accessibilityLabel("Dismiss")
     }
 
     // MARK: - Content
@@ -135,7 +213,7 @@ struct CorrectionPopoverCard: View {
             if prompt.isTruncated {
                 Text("…")
                     .font(.system(size: 12.5 * scale))
-                    .foregroundColor(.white.opacity(0.3))
+                    .foregroundColor(.white.opacity(0.25))
             }
             ForEach(prompt.tokens) { token in
                 if token.isWord {
@@ -143,7 +221,7 @@ struct CorrectionPopoverCard: View {
                 } else if !token.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                     Text(token.text.trimmingCharacters(in: .whitespacesAndNewlines))
                         .font(.system(size: 12.5 * scale))
-                        .foregroundColor(.white.opacity(0.35))
+                        .foregroundColor(.white.opacity(0.3))
                 }
                 // Whitespace-only separators are dropped: the chips carry their own spacing.
             }
@@ -164,22 +242,27 @@ struct CorrectionPopoverCard: View {
             .padding(.horizontal, 6 * scale)
             .background(
                 RoundedRectangle(cornerRadius: 6)
-                    .fill(Color.white.opacity(0.14))
+                    .fill(Color.white.opacity(0.1))
                     .overlay(
                         RoundedRectangle(cornerRadius: 6)
-                            .stroke(Color(hex: "5B6CF7").opacity(0.6), lineWidth: 1)
+                            .stroke(Color(hex: "5B6CF7").opacity(0.7), lineWidth: 1)
                     )
             )
+            .shadow(color: Color(hex: "5B6CF7").opacity(0.28), radius: 8, x: 0, y: 0)
         } else {
             Button { beginEditing(token) } label: {
                 Text(token.text)
-                    .font(.system(size: 12.5 * scale))
-                    .foregroundColor(.white.opacity(hoveredIndex == token.index ? 1.0 : 0.75))
-                    .padding(.horizontal, 4 * scale)
-                    .padding(.vertical, 2 * scale)
+                    .font(.system(size: 12.5 * scale, weight: hoveredIndex == token.index ? .medium : .regular))
+                    .foregroundColor(.white.opacity(hoveredIndex == token.index ? 1.0 : 0.8))
+                    .padding(.horizontal, 6 * scale)
+                    .padding(.vertical, 3 * scale)
                     .background(
-                        RoundedRectangle(cornerRadius: 5)
-                            .fill(Color.white.opacity(hoveredIndex == token.index ? 0.12 : 0))
+                        RoundedRectangle(cornerRadius: 6)
+                            .fill(Color.white.opacity(hoveredIndex == token.index ? 0.1 : 0))
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 6)
+                                    .stroke(Color.white.opacity(hoveredIndex == token.index ? 0.14 : 0), lineWidth: 0.5)
+                            )
                     )
             }
             .buttonStyle(.plain)
@@ -201,15 +284,21 @@ struct CorrectionPopoverCard: View {
         HStack(spacing: 10 * scale) {
             HStack(spacing: 5 * scale) {
                 Text(observed)
-                    .strikethrough(true, color: .white.opacity(0.35))
-                    .foregroundColor(.white.opacity(0.4))
+                    .strikethrough(true, color: .white.opacity(0.3))
+                    .foregroundColor(.white.opacity(0.38))
                 Image(systemName: "arrow.right")
-                    .font(.system(size: 9 * scale, weight: .semibold))
-                    .foregroundColor(.white.opacity(0.3))
+                    .font(.system(size: 8.5 * scale, weight: .bold))
+                    .foregroundColor(.white.opacity(0.22))
                 Text(corrected)
                     .foregroundColor(.white)
             }
             .font(.system(size: 12.5 * scale, weight: .medium))
+            .padding(.horizontal, 8 * scale)
+            .padding(.vertical, 4 * scale)
+            .background(
+                RoundedRectangle(cornerRadius: 8)
+                    .fill(Color.white.opacity(0.05))
+            )
 
             Spacer(minLength: 8 * scale)
 
@@ -218,16 +307,26 @@ struct CorrectionPopoverCard: View {
             } label: {
                 Text("Always fix")
                     .font(.system(size: 12 * scale, weight: .semibold))
-                    .foregroundColor(Color(hex: "0C0C1A"))
-                    .padding(.horizontal, 11 * scale)
+                    .foregroundColor(.white)
+                    .padding(.horizontal, 12 * scale)
                     .padding(.vertical, 5 * scale)
                     .background(
                         RoundedRectangle(cornerRadius: 9)
-                            .fill(Color.white.opacity(confirmHovering ? 1.0 : 0.92))
+                            .fill(
+                                LinearGradient(
+                                    colors: [Color(hex: "5B6CF7"), Color(hex: "8B5CF6")],
+                                    startPoint: .leading,
+                                    endPoint: .trailing
+                                )
+                            )
+                            .opacity(confirmHovering ? 1.0 : 0.88)
                     )
+                    .shadow(color: Color(hex: "5B6CF7").opacity(confirmHovering ? 0.45 : 0.25), radius: 8, x: 0, y: 0)
             }
             .buttonStyle(.plain)
             .onHover { confirmHovering = $0 }
+            .scaleEffect(confirmHovering ? 1.03 : 1.0)
+            .animation(.spring(response: 0.25, dampingFraction: 0.7), value: confirmHovering)
         }
     }
 
@@ -267,6 +366,7 @@ struct CorrectionPopoverCard: View {
                 withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
                     phase = .confirming(observed: candidate.observed, corrected: candidate.corrected)
                 }
+                bounceIcon()
             } else {
                 // Tombstoned, already known, or too close to the original to mine.
                 finish("Nothing to learn there")
@@ -302,9 +402,18 @@ struct CorrectionPopoverCard: View {
 
     private func finish(_ message: String) {
         withAnimation(.easeOut(duration: 0.2)) { phase = .finished(message) }
+        bounceIcon()
         Task { @MainActor in
             try? await Task.sleep(nanoseconds: 1_600_000_000)
             dismiss()
+        }
+    }
+
+    private func bounceIcon() {
+        iconBounce = true
+        Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 200_000_000)
+            iconBounce = false
         }
     }
 
