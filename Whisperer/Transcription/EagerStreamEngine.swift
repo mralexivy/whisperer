@@ -526,6 +526,25 @@ struct EagerStreamEngine {
                             repeatedConfirmedTail: repeatedConfirmedTail)
     }
 
+    // MARK: - Stop-path accessor
+
+    /// The text and end sample index of all currently-confirmed (LocalAgreement-2) words,
+    /// plus the agreement boundary from which the tail decode should start.
+    ///
+    /// Called at stop time to credit confirmed-but-not-soft-committed words.  Soft-commit fires
+    /// every 6 s, so on short dictations `confirmedWords` may be non-empty while `lastCommittedIndex`
+    /// still sits at 0 — the whole reason the tail decode re-transcribes the full recording.
+    ///
+    /// Returns nil when there are no confirmed words to credit.
+    func confirmedSpan() -> (text: String, endIndex: Int, agreementIndex: Int)? {
+        guard !confirmedWords.isEmpty, let boundary = agreementStartIndex else { return nil }
+        let text = confirmedWords.map(\.text).joined()
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !text.isEmpty else { return nil }
+        let endIndex = confirmedWords.last!.endIndex
+        return (text: text, endIndex: endIndex, agreementIndex: boundary)
+    }
+
     // MARK: - Helpers
 
     /// Confirm words, refusing the ones that would extend a decoder repetition loop.

@@ -730,6 +730,7 @@ class AppState: ObservableObject {
                routingConfig.allowedLanguages != oldValue.allowedLanguages {
                 if routingConfig.isRoutingEnabled {
                     Logger.info("Routing config changed, re-initializing language routing", subsystem: .model)
+                    MLXLanguageDetector.shared.prepareAsync()
                     preloadLanguageRouting()
                 } else {
                     Logger.info("Routing disabled, releasing model pool", subsystem: .model)
@@ -2646,6 +2647,7 @@ class AppState: ObservableObject {
             Logger.debug("Language routing disabled (single language)", subsystem: .model)
             return
         }
+        MLXLanguageDetector.shared.prepareAsync()
 
         // Parakeet/Nemotron detect language natively — skip WhisperBridge detection + ModelPool.
         guard selectedBackendType != .parakeet && selectedBackendType != .nemotron && selectedBackendType != .nemotronHebrew else {

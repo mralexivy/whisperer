@@ -2907,10 +2907,34 @@ class StreamingTranscriber {
             }
 
             // Reuse was rejected — normally because the key was released mid-word, so the gap
-            // after the last preview contains speech that must be decoded. Credit the preview
-            // anyway and advance the commit boundary to its end, so the tail decode below covers
-            // only that uncovered remainder (typically well under a second) instead of
-            // re-decoding everything back to the last 6s soft-commit.
+            // after the last preview contains speech that must be decoded.
+            //
+            // Tier 1: credit the LocalAgreement-2 boundary unconditionally.
+            // `confirmedWords` are words agreed by two consecutive decode windows — no confidence
+            // gate needed, because the cross-window agreement IS the confidence signal. The soft-
+            // commit that normally promotes them to `completedChunkTexts` only fires every 6 s, so
+            // on a short dictation they sit in the engine while `lastTranscribedSampleIndex` stays
+            // at 0, forcing the tail to re-decode the full recording. Crediting them here shrinks
+            // the tail to the gap between the agreement boundary and key release (~0.5–1 s).
+            if let engine = eagerEngine, let span = engine.confirmedSpan() {
+                // Advance the tail start to the LocalAgreement-2 boundary so the tail only
+                // covers the uncovered gap, not the full recording. Don't emit the confirmed
+                // text here — the tail re-decodes from agreementIndex and produces it cleanly,
+                // matching what the soft-commit path does (commit.endIndex = agreementStartIndex).
+                if span.agreementIndex > lastTranscribedSampleIndex {
+                    let skippedSeconds = Double(span.agreementIndex - lastTranscribedSampleIndex) / sampleRate
+                    lastTranscribedSampleIndex = span.agreementIndex
+                    lastClaimedSampleIndex = max(lastClaimedSampleIndex, span.agreementIndex)
+                    Logger.info(
+                        "Eager stop: tail starts at agreement boundary (skipped \(String(format: "%.1f", skippedSeconds))s confirmed audio)",
+                        subsystem: .transcription
+                    )
+                }
+            }
+
+            // Tier 2: credit a high-confidence preview past the agreement boundary.
+            // Only fires when the preview extends beyond what the confirmed words already covered,
+            // giving an extra push when avgLogProb is strong enough to trust unconfirmed words.
             if !latestWhisperKitPreviewText.isEmpty,
                latestWhisperKitPreviewStartIndex <= lastTranscribedSampleIndex,
                latestWhisperKitPreviewEndIndex > lastTranscribedSampleIndex,
@@ -3856,10 +3880,10 @@ class StreamingTranscriber {
             detectionSamples = voiced
         }
 
-        // V3 is the live decoder bridge. Without it (Nemotron-native, low-memory eviction),
-        // only Nemotron's per-chunk tally feeds the arbiter — still better than tiny.
-        guard let bridge = whisper as? WhisperBridge else {
-            Logger.debug("No WhisperBridge available; language detection is Nemotron-native only", subsystem: .transcription)
+        let mlxDetector = MLXLanguageDetector.shared
+        let bridge = whisper as? WhisperBridge
+        guard mlxDetector.isReady || bridge != nil else {
+            Logger.debug("No language detector available (MLX not ready, no WhisperBridge)", subsystem: .transcription)
             return false
         }
 
@@ -3874,6 +3898,14 @@ class StreamingTranscriber {
         let windowSeconds = Double(detectionSamples.count) / sampleRate
         let probeStart = max(0, audioSeconds - windowSeconds)
         let samplesSnapshot = detectionSamples
+        // Capture routing state before dispatching.
+        // MLX (ECAPA-TDNN) runs on Metal GPU and contends with the concurrent whisper.cpp
+        // encoder pass (CLAUDE.md: detector bridge must not fight the main model for Metal).
+        // Limit MLX to: (a) first probe only (before a route decision exists), AND
+        //               (b) only when no eager pass is actively decoding.
+        // Refinement probes always use WhisperBridge (CPU-only via tiny model ctxLock path).
+        let alreadyDecided = routeDecision != nil
+        let whisperDecoding = isProcessing  // true while whisper_full is running on Metal
 
         let probeQueue = languageProbeQueue
 
@@ -3896,11 +3928,20 @@ class StreamingTranscriber {
             // HUD's word-reveal timers, not the `DispatchQueue.main.async` hops carrying Nemotron
             // partials — which is exactly the live preview freezing mid-sentence and then flushing
             // the whole backlog in a burst.
+            let useMLX = mlxDetector.isReady && !alreadyDecided && !whisperDecoding
             let probe: (probabilities: [String: Float], elapsedMs: Double)?
                 = await withCheckedContinuation { continuation in
                     probeQueue.async {
                         let started = CACurrentMediaTime()
-                        guard let probs = bridge.detectLanguage(samples: samplesSnapshot) else {
+                        // MLX ECAPA-TDNN for the first probe only, and only when no eager
+                        // pass is running on Metal — avoids GPU contention with whisper.cpp.
+                        if useMLX, let probs = mlxDetector.detect(samples: samplesSnapshot) {
+                            continuation.resume(
+                                returning: (probs, (CACurrentMediaTime() - started) * 1000)
+                            )
+                            return
+                        }
+                        guard let probs = bridge?.detectLanguage(samples: samplesSnapshot) else {
                             continuation.resume(returning: nil)
                             return
                         }
@@ -3911,7 +3952,7 @@ class StreamingTranscriber {
                 }
 
             guard let probe else {
-                Logger.warning("Language detection (V3) returned nil", subsystem: .transcription)
+                Logger.warning("Language detection returned nil", subsystem: .transcription)
                 return
             }
             guard !self.isStopped else { return }
@@ -3919,7 +3960,8 @@ class StreamingTranscriber {
             let elapsed = probe.elapsedMs
             let counted = self.languageArbiter.recordAccurate(probabilities: probs, start: probeStart, end: audioSeconds)
             let top = probs.max(by: { $0.value < $1.value })
-            Logger.info("Language probe (V3): top=\(top?.key ?? "?") "
+            let detector = useMLX ? "MLX" : "V3"
+            Logger.info("Language probe (\(detector)): top=\(top?.key ?? "?") "
                 + "p=\(String(format: "%.3f", top?.value ?? 0))\(counted ? "" : " — below floor") "
                 + "in \(String(format: "%.0f", elapsed))ms "
                 + "(\(self.languageArbiter.accurateProbeCount) probe(s) this session)", subsystem: .transcription)

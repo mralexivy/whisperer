@@ -587,8 +587,18 @@ class AudioRecorder: NSObject {
 
         isRecording = false  // stops deliverSamples — no new disk write dispatches
 
-        // Short drain to let in-flight callbacks deliver last buffers
-        try? await Task.sleep(nanoseconds: 200_000_000)
+        // Event-driven drain: poll `lastAudioCallbackTime` at 10ms intervals until the engine
+        // hasn't produced a buffer for one 10ms window, or until 200ms elapse (same ceiling as
+        // before). Typically resolves in ~30ms — the last CoreAudio callback arrives within
+        // one buffer period of setting isRecording=false. The 200ms hard ceiling preserves the
+        // previous worst-case behaviour for slow engines.
+        let drainDeadline = Date().addingTimeInterval(0.200)
+        while Date() < drainDeadline {
+            let before = lastAudioCallbackTime
+            try? await Task.sleep(nanoseconds: 10_000_000) // 10ms
+            // No new callback in this window → engine is drained
+            if lastAudioCallbackTime == before { break }
+        }
 
         // Drain pending encodes, then finalize the Ogg stream. Dropping the reference is not
         // enough — `close()` writes the terminating page.
