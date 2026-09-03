@@ -1025,25 +1025,18 @@ class MeetingSession: ObservableObject {
     }
 
     /// Applies a rename to the **live** session copy: every segment that speaker owns, plus
-    /// the label future flushes will use. A per-card rename would leave the same person
-    /// under two names in one transcript.
+    /// the label future flushes will use. Keyed by `speakerIndex` so two speakers that share
+    /// a name are always updated independently.
     ///
     /// In-memory only — persistence is the caller's job (`MeetingManager.renameSpeaker`),
     /// so the CoreData write isn't issued twice.
-    func updateSpeaker(segmentID: UUID, newName: String) {
+    func updateSpeaker(speakerIndex: Int, newName: String) {
         let trimmed = newName.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
 
-        // The renamed card may already have handed over to CoreData, in which case the
-        // session no longer holds it — fall back to the speaker currently being recorded.
-        let speakerIndex = segments.first(where: { $0.id == segmentID })?.speakerIndex
-            ?? currentSpeakerIndex
-
         // Recorded so segments flushed later in this same recording inherit the new name.
         speakerNames[speakerIndex] = trimmed
-        for i in segments.indices where segments[i].speakerIndex == speakerIndex {
-            segments[i].speakerName = trimmed
-        }
+        segments.renameSpeaker(index: speakerIndex, to: trimmed)
         if speakerIndex == currentSpeakerIndex { currentSpeakerName = trimmed }
         if speakerIndex == liveSpeakerIndex { liveSpeakerName = trimmed }
     }

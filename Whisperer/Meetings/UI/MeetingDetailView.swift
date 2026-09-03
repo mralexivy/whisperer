@@ -767,13 +767,14 @@ struct MeetingDetailView: View {
                         meeting: meeting,
                         session: session,
                         segments: transcriptSegments,
+                        speakerRoster: speakerRoster,
                         isLoadingSegments: detailVM.isLoading,
                         hasMoreSegments: detailVM.hasMoreSegments,
                         onLoadMoreSegments: detailVM.loadMoreSegments,
                         searchQuery: searchQuery,
                         playheadSeconds: playheadSeconds,
-                        onSpeakerRenamed: { segID, name in
-                            Task { await handleSpeakerRename(segID: segID, newName: name) }
+                        onSpeakerRenamed: { speakerIndex, name in
+                            Task { await handleSpeakerRename(speakerIndex: speakerIndex, newName: name) }
                         },
                         onTagToggled: { segID, tag in
                             Task { await handleTagToggle(segID: segID, tag: tag) }
@@ -815,23 +816,40 @@ struct MeetingDetailView: View {
 
     // MARK: - Actions
 
-    private func handleSpeakerRename(segID: UUID, newName: String) async {
-        guard let meetingID = meeting?.id else { return }
-        // Live segments live on the session until CoreData catches up, so the segment being
-        // renamed may exist in either collection.
-        let source = detailVM.allSegments.first(where: { $0.id == segID })
-            ?? session.segments.first(where: { $0.id == segID })
-        guard let seg = source else { return }
-        let oldName = seg.speakerName
-        let trimmed = newName.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty, trimmed != oldName else { return }
+    /// Full speaker roster built from all segments (not just the paged window) so conflict
+    /// checks are always complete even in long meetings.
+    private var speakerRoster: [(index: Int, name: String)] {
+        var seen: Set<Int> = []
+        var result: [(Int, String)] = []
+        // Prefer live session segments while recording; fall back to all persisted segments.
+        let source = (session.isRecording && session.meetingID == meeting?.id)
+            ? session.segments
+            : detailVM.allSegments
+        for seg in source where !seen.contains(seg.speakerIndex) {
+            seen.insert(seg.speakerIndex)
+            result.append((seg.speakerIndex, seg.speakerName))
+        }
+        return result.sorted { $0.0 < $1.0 }
+    }
 
-        // Rename every segment this speaker owns — a per-card rename would leave the same
-        // person under two names in one transcript.
-        detailVM.renameSpeakerInMemory(from: oldName, to: trimmed)
-        await MeetingManager.shared.renameSpeaker(meetingID: meetingID, oldName: oldName, newName: trimmed)
+    private func handleSpeakerRename(speakerIndex: Int, newName: String) async {
+        guard let meetingID = meeting?.id else { return }
+        let trimmed = newName.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+
+        // Defensive guard — UI should have blocked this already.
+        guard SpeakerNaming.conflictingName(for: trimmed,
+                                            in: speakerRoster,
+                                            excluding: speakerIndex) == nil else { return }
+
+        // Rename every segment this speaker owns — keyed by index so two speakers that share
+        // a name are always updated independently.
+        detailVM.renameSpeakerInMemory(index: speakerIndex, to: trimmed)
+        await MeetingManager.shared.renameSpeaker(meetingID: meetingID,
+                                                   speakerIndex: speakerIndex,
+                                                   newName: trimmed)
         if session.meetingID == meetingID {
-            session.updateSpeaker(segmentID: segID, newName: trimmed)
+            session.updateSpeaker(speakerIndex: speakerIndex, newName: trimmed)
         }
     }
 

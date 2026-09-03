@@ -12,6 +12,7 @@ struct MeetingRightPanel: View {
     let meeting: MeetingRecord?
     @ObservedObject var session: MeetingSession
     @ObservedObject var player: MeetingAudioPlayer
+    var onSpeakerRenamed: ((Int, String) -> Void)?
 
     var body: some View {
         ZStack {
@@ -28,7 +29,9 @@ struct MeetingRightPanel: View {
                         .fill(Color.white.opacity(0.06))
                         .frame(height: 1)
 
-                    MeetingAssistantPanel(meeting: meeting, session: session)
+                    MeetingAssistantPanel(meeting: meeting,
+                                         session: session,
+                                         onSpeakerRenamed: onSpeakerRenamed)
                 }
                 .transition(.opacity)
             }

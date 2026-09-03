@@ -29,12 +29,16 @@ struct MeetingTranscriptView: View {
     let meeting: MeetingRecord?
     @ObservedObject var session: MeetingSession
     let segments: [MeetingSegment]
+    /// Full speaker roster (all pages) for duplicate-name validation. Passed from
+    /// MeetingDetailView so the check covers every speaker, not just the visible window.
+    var speakerRoster: [(index: Int, name: String)] = []
     let isLoadingSegments: Bool
     let hasMoreSegments: Bool
     var onLoadMoreSegments: () -> Void
     var searchQuery: String
     var playheadSeconds: Double
-    var onSpeakerRenamed: ((UUID, String) -> Void)?
+    /// Fires with (speakerIndex, newName) — keyed by index, not by the old name string.
+    var onSpeakerRenamed: ((Int, String) -> Void)?
     var onTagToggled: ((UUID, SegmentTag) -> Void)?
 
     @ObservedObject private var refiner = MeetingTranscriptRefiner.shared
@@ -315,22 +319,41 @@ struct MeetingTranscriptView: View {
     }
 
     private func renamePopover(for segment: MeetingSegment) -> some View {
-        HStack(spacing: 8) {
+        let trimmed = renameDraft.trimmingCharacters(in: .whitespacesAndNewlines)
+        let conflict = SpeakerNaming.conflictingName(for: trimmed,
+                                                      in: speakerRoster,
+                                                      excluding: segment.speakerIndex)
+        let isSelf = SpeakerNaming.normalized(trimmed) == SpeakerNaming.normalized(segment.speakerName)
+        let canSave = !trimmed.isEmpty && conflict == nil && !isSelf
+
+        return VStack(alignment: .leading, spacing: 6) {
             TextField("Speaker name", text: $renameDraft)
                 .textFieldStyle(.roundedBorder)
-                .frame(width: 150)
-                .onSubmit { commitRename(for: segment) }
+                .frame(width: 168)
+                .onSubmit { if canSave { commitRename(for: segment) } }
+
+            if let existing = conflict {
+                Text("\u{201C}\(trimmed)\u{201D} is already \(existing)\u{2019}s name")
+                    .font(.system(size: 11))
+                    .foregroundColor(Color(hex: "EF4444"))
+            }
+
             Button("Save") { commitRename(for: segment) }
                 .keyboardShortcut(.defaultAction)
+                .disabled(!canSave)
         }
         .padding(12)
     }
 
     private func commitRename(for segment: MeetingSegment) {
         let name = renameDraft.trimmingCharacters(in: .whitespacesAndNewlines)
+        let conflict = SpeakerNaming.conflictingName(for: name,
+                                                      in: speakerRoster,
+                                                      excluding: segment.speakerIndex)
+        guard !name.isEmpty, conflict == nil else { return }
         renamingSegmentID = nil
-        guard !name.isEmpty, name != segment.speakerName else { return }
-        onSpeakerRenamed?(segment.id, name)
+        guard name != segment.speakerName else { return }
+        onSpeakerRenamed?(segment.speakerIndex, name)
     }
 
     private func iconButton(_ icon: String, action: @escaping () -> Void) -> some View {

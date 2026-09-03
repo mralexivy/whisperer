@@ -132,19 +132,15 @@ final class MeetingDetailViewModel: ObservableObject {
         hasMoreSegments = displayedSegments.count < allSegments.count
     }
 
-    func renameSpeakerInMemory(from oldName: String, to newName: String) {
+    /// Renames every segment belonging to `speakerIndex`, keyed by index so two speakers
+    /// sharing a name are always updated independently.
+    func renameSpeakerInMemory(index speakerIndex: Int, to newName: String) {
         if var m = meeting {
-            for i in m.segments.indices where m.segments[i].speakerName == oldName {
-                m.segments[i].speakerName = newName
-            }
+            m.segments.renameSpeaker(index: speakerIndex, to: newName)
             meeting = m
         }
-        for i in allSegments.indices where allSegments[i].speakerName == oldName {
-            allSegments[i].speakerName = newName
-        }
-        for i in displayedSegments.indices where displayedSegments[i].speakerName == oldName {
-            displayedSegments[i].speakerName = newName
-        }
+        allSegments.renameSpeaker(index: speakerIndex, to: newName)
+        displayedSegments.renameSpeaker(index: speakerIndex, to: newName)
     }
 
     func updateTitleInMemory(_ title: String) {

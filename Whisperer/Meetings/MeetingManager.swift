@@ -17,26 +17,34 @@ import Combine
 /// rather than a frozen screen.
 enum MeetingProcessingPhase: Equatable {
     case finalizing
-    case polishing
+    case fineTuning
     case naming
     case summarizing
+    /// Waiting in queue behind another meeting's post-processing.
+    case queued
+    /// Post-processing paused because a new recording is in progress.
+    case pausedForRecording
 
     var label: String {
         switch self {
-        case .finalizing:  return "Finalizing transcript"
-        case .polishing:   return "Re-transcribing audio"
-        case .naming:      return "Naming your note"
-        case .summarizing: return "Writing the overview"
+        case .finalizing:         return "Finalizing transcript"
+        case .fineTuning:         return "Fine-tuning the transcript"
+        case .naming:             return "Naming your note"
+        case .summarizing:        return "Writing the overview"
+        case .queued:             return "Waiting to post-process"
+        case .pausedForRecording: return "Paused — recording in progress"
         }
     }
 
     /// Short form for the header pill, where horizontal space is tight.
     var shortLabel: String {
         switch self {
-        case .finalizing:  return "Finalizing"
-        case .polishing:   return "Re-transcribing"
-        case .naming:      return "Naming"
-        case .summarizing: return "Summarizing"
+        case .finalizing:         return "Finalizing"
+        case .fineTuning:         return "Fine-tuning"
+        case .naming:             return "Naming"
+        case .summarizing:        return "Summarizing"
+        case .queued:             return "Queued"
+        case .pausedForRecording: return "Paused"
         }
     }
 }
@@ -290,7 +298,9 @@ class MeetingManager: ObservableObject {
 
     // MARK: - Bulk speaker rename
 
-    func renameSpeaker(meetingID: UUID, oldName: String, newName: String) async {
+    /// Renames every segment that belongs to `speakerIndex` — keyed by index, not by name,
+    /// so two speakers that happen to share a name are always updated independently.
+    func renameSpeaker(meetingID: UUID, speakerIndex: Int, newName: String) async {
         let ctx = database.newBackgroundContext()
         let enc = encoder
         let dec = decoder
@@ -304,9 +314,7 @@ class MeetingManager: ObservableObject {
             if let json = entity.segmentsJSON, let data = json.data(using: .utf8) {
                 segments = (try? dec.decode([MeetingSegment].self, from: data)) ?? []
             }
-            for i in segments.indices where segments[i].speakerName == oldName {
-                segments[i].speakerName = newName
-            }
+            segments.renameSpeaker(index: speakerIndex, to: newName)
             if let data = try? enc.encode(segments),
                let json = String(data: data, encoding: .utf8) {
                 entity.segmentsJSON = json
@@ -477,6 +485,7 @@ class MeetingManager: ObservableObject {
         // Stop any polish run first — it would otherwise keep writing segments to a row
         // that is about to be deleted.
         MeetingTranscriptRefiner.shared.cancel(meetingID: meetingID)
+        MeetingJobQueue.shared.remove(meetingID: meetingID)
         if let record = await meeting(id: meetingID), let url = record.resolvedAudioURL {
             try? FileManager.default.removeItem(at: url)
         }

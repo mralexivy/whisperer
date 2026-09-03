@@ -28,6 +28,8 @@ enum AssistantPaneTab: String, CaseIterable, Identifiable {
 struct MeetingAssistantPanel: View {
     let meeting: MeetingRecord?
     @ObservedObject var session: MeetingSession
+    /// Fires with (speakerIndex, newName) when the user renames a speaker from the Speakers pane.
+    var onSpeakerRenamed: ((Int, String) -> Void)?
     @State private var selectedPane: AssistantPaneTab = .askAI
 
     var body: some View {
@@ -39,7 +41,9 @@ struct MeetingAssistantPanel: View {
                 switch selectedPane {
                 case .askAI:     AskAIPane(meeting: meeting)
                 case .liveNotes: LiveNotesPane(session: session, meeting: meeting)
-                case .speakers:  SpeakersPane(meeting: meeting, session: session)
+                case .speakers:  SpeakersPane(meeting: meeting,
+                                              session: session,
+                                              onSpeakerRenamed: onSpeakerRenamed)
                 }
             }
         }
@@ -581,6 +585,8 @@ struct NoteCard: View {
 struct SpeakersPane: View {
     let meeting: MeetingRecord?
     @ObservedObject var session: MeetingSession
+    /// Fires with (speakerIndex, newName) when the user renames from this panel.
+    var onSpeakerRenamed: ((Int, String) -> Void)?
 
     private var segments: [MeetingSegment] {
         if session.isRecording && session.meetingID == meeting?.id {
@@ -599,6 +605,14 @@ struct SpeakersPane: View {
         }
         return stats.map { (index: $0.key, name: $0.value.name, wordCount: $0.value.words, turns: $0.value.turns) }
             .sorted { $0.wordCount > $1.wordCount }
+    }
+
+    private var roster: [(index: Int, name: String)] {
+        speakerStats.map { (index: $0.index, name: $0.name) }
+    }
+
+    private var duplicateIndices: Set<Int> {
+        SpeakerNaming.duplicateIndices(in: roster)
     }
 
     var body: some View {
@@ -620,7 +634,10 @@ struct SpeakersPane: View {
                     ForEach(speakerStats, id: \.index) { sp in
                         SpeakerStatRow(
                             speaker: sp,
-                            fraction: Double(sp.wordCount) / Double(totalWords)
+                            fraction: Double(sp.wordCount) / Double(totalWords),
+                            isDuplicate: duplicateIndices.contains(sp.index),
+                            speakerRoster: roster,
+                            onRenamed: onSpeakerRenamed
                         )
                     }
                 }
@@ -683,30 +700,122 @@ private struct ChatBubbleTextView: NSViewRepresentable {
 struct SpeakerStatRow: View {
     let speaker: (index: Int, name: String, wordCount: Int, turns: Int)
     let fraction: Double
+    var isDuplicate: Bool = false
+    var speakerRoster: [(index: Int, name: String)] = []
+    var onRenamed: ((Int, String) -> Void)?
+
+    @State private var isHovered = false
+    @State private var isEditing = false
+    @State private var draft = ""
+    @FocusState private var fieldFocused: Bool
+
+    private var accent: Color { speakerColor(for: speaker.index) }
+
+    /// Nil when the draft name is free; the conflicting display name when not.
+    private var conflict: String? {
+        let trimmed = draft.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return nil }
+        return SpeakerNaming.conflictingName(for: trimmed,
+                                             in: speakerRoster,
+                                             excluding: speaker.index)
+    }
+
+    private var isSelf: Bool {
+        SpeakerNaming.normalized(draft) == SpeakerNaming.normalized(speaker.name)
+    }
+
+    private var canSave: Bool {
+        let t = draft.trimmingCharacters(in: .whitespacesAndNewlines)
+        return !t.isEmpty && conflict == nil && !isSelf
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 10) {
+                // Avatar
                 ZStack {
                     Circle()
-                        .fill(speakerColor(for: speaker.index).opacity(0.2))
+                        .fill(accent.opacity(0.2))
                         .frame(width: 32, height: 32)
                     Text(String(speaker.name.prefix(1)))
                         .font(.system(size: 13, weight: .bold))
-                        .foregroundColor(speakerColor(for: speaker.index))
+                        .foregroundColor(accent)
                 }
+
+                // Name / editor
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(speaker.name)
-                        .font(.system(size: 13, weight: .semibold))
-                        .foregroundColor(.white)
+                    if isEditing {
+                        TextField("Speaker name", text: $draft)
+                            .font(.system(size: 13, weight: .semibold))
+                            .foregroundColor(.white)
+                            .textFieldStyle(.plain)
+                            .focused($fieldFocused)
+                            .onSubmit { commitEdit() }
+                            .onExitCommand { cancelEdit() }
+                        if let existing = conflict {
+                            let displayName = draft.trimmingCharacters(in: .whitespacesAndNewlines)
+                            Text("\u{201C}\(displayName)\u{201D} is already \(existing)\u{2019}s name")
+                                .font(.system(size: 10))
+                                .foregroundColor(Color(hex: "EF4444"))
+                        }
+                    } else {
+                        HStack(spacing: 6) {
+                            Text(speaker.name)
+                                .font(.system(size: 13, weight: .semibold))
+                                .foregroundColor(.white)
+                            if isDuplicate {
+                                Text("Duplicate name")
+                                    .font(.system(size: 9, weight: .bold))
+                                    .tracking(0.3)
+                                    .foregroundColor(Color(hex: "F59E0B"))
+                                    .padding(.horizontal, 6)
+                                    .padding(.vertical, 2)
+                                    .background(Color(hex: "F59E0B").opacity(0.12))
+                                    .clipShape(Capsule())
+                            }
+                        }
+                    }
                     Text("\(speaker.wordCount) words · \(speaker.turns) turns")
                         .font(.system(size: 11))
                         .foregroundColor(.white.opacity(0.4))
                 }
+
                 Spacer()
-                Text("\(Int(fraction * 100))%")
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundColor(speakerColor(for: speaker.index))
+
+                if isEditing {
+                    HStack(spacing: 6) {
+                        Button("Save") { commitEdit() }
+                            .font(.system(size: 11, weight: .semibold))
+                            .foregroundColor(canSave ? accent : .white.opacity(0.25))
+                            .disabled(!canSave)
+                            .buttonStyle(.plain)
+                        Button("Cancel") { cancelEdit() }
+                            .font(.system(size: 11))
+                            .foregroundColor(.white.opacity(0.4))
+                            .buttonStyle(.plain)
+                    }
+                } else {
+                    HStack(spacing: 6) {
+                        if isHovered {
+                            Button {
+                                draft = speaker.name
+                                isEditing = true
+                                fieldFocused = true
+                            } label: {
+                                Image(systemName: "pencil")
+                                    .font(.system(size: 10, weight: .medium))
+                                    .foregroundColor(.white.opacity(0.5))
+                                    .frame(width: 22, height: 20)
+                                    .background(Color.white.opacity(0.06),
+                                                in: RoundedRectangle(cornerRadius: 5))
+                            }
+                            .buttonStyle(.plain)
+                        }
+                        Text("\(Int(fraction * 100))%")
+                            .font(.system(size: 13, weight: .semibold))
+                            .foregroundColor(accent)
+                    }
+                }
             }
 
             GeometryReader { geo in
@@ -715,7 +824,7 @@ struct SpeakerStatRow: View {
                         .fill(Color.white.opacity(0.06))
                         .frame(height: 4)
                     RoundedRectangle(cornerRadius: 2)
-                        .fill(speakerColor(for: speaker.index).opacity(0.7))
+                        .fill(accent.opacity(0.7))
                         .frame(width: geo.size.width * fraction, height: 4)
                 }
             }
@@ -724,5 +833,18 @@ struct SpeakerStatRow: View {
         .padding(12)
         .background(Color(hex: "14142B"))
         .clipShape(RoundedRectangle(cornerRadius: 8))
+        .onHover { isHovered = $0 }
+    }
+
+    private func commitEdit() {
+        let name = draft.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard canSave else { return }
+        isEditing = false
+        onRenamed?(speaker.index, name)
+    }
+
+    private func cancelEdit() {
+        isEditing = false
+        draft = ""
     }
 }

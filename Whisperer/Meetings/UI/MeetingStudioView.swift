@@ -164,10 +164,49 @@ struct MeetingStudioView: View {
                 divider
 
                 // Right: player + assistant
-                MeetingRightPanel(meeting: detailVM.meeting, session: session, player: audioPlayer)
+                MeetingRightPanel(meeting: detailVM.meeting,
+                                  session: session,
+                                  player: audioPlayer,
+                                  onSpeakerRenamed: { speakerIndex, name in
+                                      Task { await handleSpeakerRename(speakerIndex: speakerIndex, newName: name) }
+                                  })
                     .frame(width: rightWidth(in: geo.size.width))
                     .id(selectedMeetingID)
             }
+        }
+    }
+
+    // MARK: - Speaker rename (from Speakers panel)
+
+    /// Roster for conflict checks in the Speakers panel — mirrors the same computed
+    /// property in MeetingDetailView so both surfaces agree on who exists.
+    private var speakerRoster: [(index: Int, name: String)] {
+        var seen: Set<Int> = []
+        var result: [(Int, String)] = []
+        let source = (session.isRecording && session.meetingID == detailVM.meeting?.id)
+            ? session.segments
+            : detailVM.allSegments
+        for seg in source where !seen.contains(seg.speakerIndex) {
+            seen.insert(seg.speakerIndex)
+            result.append((seg.speakerIndex, seg.speakerName))
+        }
+        return result.sorted { $0.0 < $1.0 }
+    }
+
+    private func handleSpeakerRename(speakerIndex: Int, newName: String) async {
+        guard let meetingID = detailVM.meeting?.id else { return }
+        let trimmed = newName.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        // Defensive: UI validated already; re-check here as a safety net.
+        guard SpeakerNaming.conflictingName(for: trimmed,
+                                            in: speakerRoster,
+                                            excluding: speakerIndex) == nil else { return }
+        detailVM.renameSpeakerInMemory(index: speakerIndex, to: trimmed)
+        await MeetingManager.shared.renameSpeaker(meetingID: meetingID,
+                                                   speakerIndex: speakerIndex,
+                                                   newName: trimmed)
+        if session.meetingID == meetingID {
+            session.updateSpeaker(speakerIndex: speakerIndex, newName: trimmed)
         }
     }
 
