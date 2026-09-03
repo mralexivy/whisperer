@@ -75,7 +75,7 @@ import Foundation
 /// if "off" merely means "mostly the old behaviour", the user cannot tell which arm produced a bad
 /// result and the comparison is worthless. It mattered when this was an experiment and it matters
 /// more now that it is the default, because off is the only way back.
-enum PolishFeatureFlags {
+nonisolated enum PolishFeatureFlags {
 
     // MARK: - Keys
 
@@ -122,6 +122,15 @@ enum PolishFeatureFlags {
     /// the rate wrong should be able to turn it off without losing punctuation and casing.
     static let paragraphsKey = "fastPolishParagraphsEnabled"
 
+    /// Sub-switch for pinning the mmBERT sequence shape to 128 (EnumeratedShapes long).
+    ///
+    /// On by default. Each distinct enumerated shape pays a ~2 s MPSGraph specialization on first
+    /// use. `EditingSequenceShape.fitting` picks the smallest shape, causing churn across 32/64/128
+    /// for variable-length segments. Pinning to 128 (the export's TRACE_LENGTH default) eliminates
+    /// churn. Numerically a no-op — padding positions have attention_mask=0.
+    /// To revert: `defaults write com.ivy.whisperer fastPolishPinnedShape -bool NO`
+    static let pinnedShapeKey = "fastPolishPinnedShape"
+
     // MARK: - Reads
 
     /// Whether the non-generative polishing path is live.
@@ -156,6 +165,11 @@ enum PolishFeatureFlags {
     /// Whether the paragraph pass may insert breaks.
     static var areParagraphsEnabled: Bool {
         isFastPolishEnabled && (UserDefaults.standard.object(forKey: paragraphsKey) as? Bool ?? true)
+    }
+
+    /// Whether the mmBERT sequence shape is pinned to 128 to avoid MPSGraph re-specialization.
+    static var pinnedShapeEnabled: Bool {
+        UserDefaults.standard.object(forKey: pinnedShapeKey) as? Bool ?? true
     }
 
     // MARK: - Diagnostics

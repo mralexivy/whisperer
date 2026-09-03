@@ -40,7 +40,7 @@
 
 import Foundation
 
-struct ConfidenceGate: Sendable {
+nonisolated struct ConfidenceGate: Sendable {
 
     // MARK: - Verdict
 

@@ -14,7 +14,7 @@ import Foundation
 
 // MARK: - Operation
 
-enum EditOperation: Sendable, Equatable {
+nonisolated enum EditOperation: Sendable, Equatable {
     /// Explicitly do nothing. Always available, and the answer whenever the gate is unsure.
     case keep
     /// Replace the token's text.
@@ -32,7 +32,7 @@ enum EditOperation: Sendable, Equatable {
 /// Where an edit came from. Thresholds are calibrated per source — a trie hit on the user's
 /// own dictionary is not the same kind of evidence as a tagger's softmax, and averaging them
 /// into one number loses exactly the distinction the gate needs.
-enum EditSource: String, Sendable {
+nonisolated enum EditSource: String, Sendable {
     case alias           // DictionaryManager / shipped lexicon trie
     case normalization   // whitespace, duplicate punctuation, adjacent-word dedupe
     case filler          // disfluency removal
@@ -44,7 +44,7 @@ enum EditSource: String, Sendable {
 
 // MARK: - Edit
 
-struct TranscriptEdit: Sendable {
+nonisolated struct TranscriptEdit: Sendable {
     let target: TokenID
     let operation: EditOperation
     let source: EditSource
@@ -96,7 +96,7 @@ struct TranscriptEdit: Sendable {
 /// One edit that actually survived the gate, plus what it replaced. Appended to the graph's
 /// log so the raw ASR output is always reconstructible and undo is per-edit rather than
 /// all-or-nothing.
-struct AppliedEdit: Sendable {
+nonisolated struct AppliedEdit: Sendable {
     let edit: TranscriptEdit
     let previousText: String
 }

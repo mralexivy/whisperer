@@ -242,16 +242,37 @@ nonisolated final class MMBERTCoreMLRuntime: TextEditingModelRuntime, @unchecked
                     subsystem: .transcription)
     }
 
-    /// A compiled `.mlmodelc` if one is there, otherwise compile the `.mlpackage`, otherwise nil.
+    /// A compiled `.mlmodelc` next to the package, compiling and persisting it if absent.
     ///
-    /// Compiling takes seconds and lands in a temporary directory the system reaps. Acceptable
-    /// here because loading happens once per process, off the audio path.
+    /// Without persisting, `MLModel.compileModel` writes to `NSTemporaryDirectory()` — a fresh
+    /// path every launch. Every launch pays the compile (seconds) and the MPSGraph
+    /// specialization (~2 s per enumerated shape), and the e5bundlecache accumulates 500 MB of
+    /// orphaned entries across launches. Persisting to a stable path next to the package means
+    /// the cost is paid once after installation. `PolishModelManager` uses versioned directories
+    /// (`PolishModel/v4/`), so a model update writes to a new directory and never inherits a
+    /// stale compiled artifact.
     private func resolveModel(named name: String) async throws -> URL? {
-        let compiled = directory.appendingPathComponent("\(name).mlmodelc")
-        if FileManager.default.fileExists(atPath: compiled.path) { return compiled }
+        let stable = directory.appendingPathComponent("\(name).mlmodelc")
+        if FileManager.default.fileExists(atPath: stable.path) {
+            Logger.info("mmBERT: using cached compiled model at \(stable.lastPathComponent)",
+                        subsystem: .transcription)
+            return stable
+        }
         let package = directory.appendingPathComponent("\(name).mlpackage")
         guard FileManager.default.fileExists(atPath: package.path) else { return nil }
-        return try await MLModel.compileModel(at: package)
+        let temp = try await MLModel.compileModel(at: package)
+        do {
+            // Move atomically so a failed/partial compile doesn't leave a corrupt .mlmodelc.
+            _ = try FileManager.default.replaceItemAt(stable, withItemAt: temp)
+            Logger.info("mmBERT: compiled and cached model at \(stable.lastPathComponent)",
+                        subsystem: .transcription)
+            return stable
+        } catch {
+            // Read-only directory, full disk, etc. — fall back to the temp URL this launch.
+            Logger.warning("mmBERT: could not persist compiled model (\(error.localizedDescription)); using temp path",
+                           subsystem: .transcription)
+            return temp
+        }
     }
 
     func unload() async {
@@ -339,6 +360,34 @@ nonisolated final class MMBERTCoreMLRuntime: TextEditingModelRuntime, @unchecked
             perPiece[group.pieceIndex] = perGroup[index]
         }
         return EditingRuntimeOutput(shape: largest, tokens: perPiece)
+    }
+
+    /// Warms every enumerated shape by running one synthetic prediction at each.
+    ///
+    /// The model is exported with `EnumeratedShapes([32, 64, 128])`. Core ML defers building the
+    /// MPSGraph executable to the first `prediction()` at each concrete shape — a measured ~2 s
+    /// each. `encode(["warm"])` warms only shape 32 because one word tokenises to ~3 sub-words.
+    /// Calling this after `load()` moves the cost for 64 and 128 to launch (where nothing waits)
+    /// rather than to the first meeting editor pass (where the user is watching).
+    func warmAllShapes() async {
+        lock.lock()
+        let state = loaded
+        lock.unlock()
+        guard let state else { return }
+
+        for shape in EditingSequenceShape.allCases {
+            guard let model = state.models[shape] else { continue }
+            // Synthetic batch: one "word" at sequence position 1 (after the BOS token),
+            // filling the shape with zeros. The result is thrown away — goal is MPSGraph compile.
+            var dummyBatch = Batch()
+            dummyBatch.ids = [Int](repeating: 0, count: shape.rawValue - 2)  // space for bos/eos
+            dummyBatch.firstSubword = [1]  // one word at position 1 (after BOS)
+            dummyBatch.punctuationState = [0]
+            dummyBatch.caseState = [nil]
+            dummyBatch.hasTrail = [false]
+            _ = try? Self.predict(model: model, shape: shape, batch: dummyBatch, state: state)
+            Logger.debug("mmBERT: warmed shape \(shape.rawValue)", subsystem: .transcription)
+        }
     }
 
     // MARK: - Grouping
@@ -447,10 +496,21 @@ nonisolated final class MMBERTCoreMLRuntime: TextEditingModelRuntime, @unchecked
     }
 
     private static func shape(forTokenCount count: Int) throws -> EditingSequenceShape {
-        guard let shape = EditingSequenceShape.fitting(count) else {
+        guard count <= EditingSequenceShape.long.rawValue else {
             throw EditingRuntimeError.sequenceTooLong(count)
         }
-        return shape
+        // Always use the largest (long/128) shape to avoid MPSGraph re-specialization.
+        // The model is exported with EnumeratedShapes [32, 64, 128]; each first-use of a distinct
+        // concrete shape pays a measured ~2 s MPSGraph compile. Meeting segments vary in length,
+        // so the smallest-fitting heuristic churns across all three shapes. Pinning to 128
+        // (the export's default TRACE_LENGTH) eliminates churn. Numerically a no-op: attention_mask
+        // is 0 on padding positions and heads are read at firstSubword[word] — padding cannot
+        // influence a returned logit except through FP16 accumulation order.
+        // Controlled by PolishFeatureFlags.pinnedShapeEnabled (default on); one default to revert.
+        if PolishFeatureFlags.pinnedShapeEnabled {
+            return .long
+        }
+        return EditingSequenceShape.fitting(count) ?? .long
     }
 
     // MARK: - Prediction

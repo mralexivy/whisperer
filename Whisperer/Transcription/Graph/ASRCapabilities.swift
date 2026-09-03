@@ -19,7 +19,7 @@
 
 import Foundation
 
-struct ASRCapabilities: OptionSet, Sendable, Hashable {
+nonisolated struct ASRCapabilities: OptionSet, Sendable, Hashable {
     let rawValue: Int
 
     init(rawValue: Int) { self.rawValue = rawValue }

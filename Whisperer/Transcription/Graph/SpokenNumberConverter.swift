@@ -25,7 +25,7 @@
 
 import Foundation
 
-enum SpokenNumberConverter {
+nonisolated enum SpokenNumberConverter {
 
     // MARK: - Vocabulary
 

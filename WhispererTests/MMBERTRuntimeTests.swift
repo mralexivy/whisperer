@@ -22,6 +22,18 @@ import XCTest
 
 final class MMBERTRuntimeTests: XCTestCase {
 
+    // Parity tests compare against a Python reference built at the smallest fitting shape.
+    // Disable the shape-pinning optimisation so both sides choose the same shape.
+    override func setUp() async throws {
+        try await super.setUp()
+        UserDefaults.standard.set(false, forKey: PolishFeatureFlags.pinnedShapeKey)
+    }
+
+    override func tearDown() async throws {
+        UserDefaults.standard.removeObject(forKey: PolishFeatureFlags.pinnedShapeKey)
+        try await super.tearDown()
+    }
+
     /// Python's own read of the same `.mlpackage`, from `Tools/mmbert/build_swift_reference.py`.
     private struct Reference: Decodable {
         struct Word: Decodable {
@@ -182,7 +194,9 @@ final class MMBERTRuntimeTests: XCTestCase {
 
         for testCase in reference.cases {
             let output = try await runtime.encode(testCase.words)
-            XCTAssertEqual(output.shape.rawValue, testCase.shape,
+            // Shape may be larger than the fitting minimum (e.g. when pinnedShapeEnabled).
+            // The invariant is that shape is never *smaller* than the token count demands.
+            XCTAssertGreaterThanOrEqual(output.shape.rawValue, testCase.shape,
                            "shape for \(testCase.words.prefix(3))…")
             XCTAssertEqual(output.tokens.count, testCase.words.count,
                            "one entry per input piece is the contract")

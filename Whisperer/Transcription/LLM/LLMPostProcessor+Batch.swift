@@ -95,6 +95,21 @@ extension LLMPostProcessor {
         max(30, 1.5 * Double(rowCount))
     }
 
+    /// Time budget for the map step of the meeting overview map-reduce pipeline.
+    ///
+    /// Each row in the map step is a transcript chunk being summarised with a cap of
+    /// `maxRowTokens` output tokens. `defaultTimeout(rowCount:)` sizes for dictation
+    /// correction rows (~256 tokens, ~0.4 s/row) — using it for summarisation produces
+    /// a too-tight deadline that consistently truncates half the rows before they finish.
+    ///
+    /// Derivation: aggregate batch throughput at this width is ~45 tok/s (measured on
+    /// 13-row map batches in Whisperer logs). Multiply by 1.5× safety and floor at 60 s.
+    /// `max(60, …)` rather than 30 because any map batch large enough to need map-reduce
+    /// is already known to need more than the correction floor.
+    nonisolated static func mapReduceTimeout(rowCount: Int, maxRowTokens: Int) -> Double {
+        max(60, Double(rowCount * maxRowTokens) / 45.0 * 1.5)
+    }
+
     /// Corrects every request in one batched generation, returning results in the caller's order.
     ///
     /// Rows are split into slices no wider than `BatchMemoryPlanner` allows and the slices run one

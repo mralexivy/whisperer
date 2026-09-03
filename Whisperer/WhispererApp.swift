@@ -155,6 +155,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             }
 
             await MeetingManager.shared.recoverCrashedSessions()
+            await MeetingJobQueue.shared.restore()
             await AudioRetentionService.shared.runLaunchSweep()
         }
     }
@@ -330,19 +331,34 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     // MARK: - Graceful Shutdown (Fixes crash on quit)
 
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
-        // Prevent re-entrancy
+        // A second Quit while shutdown is in flight (e.g. the user clicks Quit on a frozen app)
+        // must be a no-op, not .terminateNow. .terminateNow calls exit() immediately, which runs
+        // C++ static destructors before whisper contexts are freed → GGML_ASSERT abort (seen as
+        // four SIGABRT .ips reports). .terminateCancel keeps the first shutdown Task running.
         guard !isShuttingDown else {
-            return .terminateNow
+            Logger.info("App termination re-requested while shutdown in progress — ignoring",
+                        subsystem: .app)
+            return .terminateCancel
         }
         isShuttingDown = true
 
         Logger.info("App termination requested, starting graceful shutdown...", subsystem: .app)
 
-        // Start async cleanup
+        // Start async cleanup with a bounded watchdog: if gracefulShutdown hangs longer than 8 s,
+        // reply true anyway so the process exits rather than hanging forever. The user already
+        // asked to quit; indefinite suspension is a worse outcome than a slightly unclean exit.
         Task {
-            await gracefulShutdown()
+            let shutdownTask = Task { await gracefulShutdown() }
+            let watchdog = Task {
+                try? await Task.sleep(nanoseconds: 8_000_000_000)  // 8 s
+                if !Task.isCancelled {
+                    Logger.warning("Graceful shutdown watchdog fired — forcing exit", subsystem: .app)
+                    shutdownTask.cancel()
+                }
+            }
+            await shutdownTask.value
+            watchdog.cancel()
 
-            // Now it's safe to terminate
             Logger.info("Graceful shutdown complete, terminating", subsystem: .app)
             Logger.flush()
 

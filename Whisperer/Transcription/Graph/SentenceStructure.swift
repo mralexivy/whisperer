@@ -17,7 +17,7 @@
 
 import Foundation
 
-enum SentenceStructure {
+nonisolated enum SentenceStructure {
 
     // MARK: - Opening
 

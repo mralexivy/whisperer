@@ -19,9 +19,8 @@
 // Expected ~1.5× throughput at 67% acceptance with Apple Silicon batch amortization.
 //
 // Correctness: ACCEPT path is exact (identical to sequential execution).
-// ROLLBACK approximation: MambaCache restored to before-batch state (1-token SSM lag
-// on 33% of iterations). FA layers (7 of 28) see the correct KV sequence throughout.
-// Impact is negligible for 10–50 token text corrections.
+// ROLLBACK: MambaCache restored to before-batch state, KV trimmed by 2, then
+// `verified` re-applied in a single-token pass so all 28 layers agree. Exact.
 
 import Foundation
 import MLX
@@ -215,7 +214,23 @@ public func generateMTPTokens(
                 prefetchLogits = logitsBatch[0, 1, 0...]   // [vocabSize]
                 prefetchHidden = hBatch[0, 1, 0...]         // [hiddenDim]
             } else {
-                // ROLLBACK: draft was wrong. Restore SSM state + trim draft from FA.
+                // ROLLBACK: draft was wrong.
+                //
+                // The 2-token batch advanced BOTH the 7 attention layers (KVCacheSimple)
+                // AND the 21 GatedDeltaNet / Mamba layers (MambaCache). We want to land
+                // in the state after `verified` but before `draft` everywhere.
+                //
+                // For KVCacheSimple: trim(2) removes both batched positions, then a
+                // single-token pass below re-adds `verified` to the FA layers.
+                //
+                // For MambaCache: restore the pre-batch snapshot, then the same single-
+                // token pass below re-updates the recurrent state with `verified`.
+                //
+                // Previously this only called trim(1), which kept `verified` in the FA
+                // layers but DROPPED it from the Mamba layers — the model halves
+                // disagreed on what had been generated, and the divergence compounded
+                // over hundreds of tokens (accept rate fell from ~75% to 17-34% on long
+                // meeting overviews, producing gibberish in non-Latin scripts).
                 stats.rollbackCount += 1
                 for (slot, idx) in mambaIndices.enumerated() {
                     if let mc = cache[idx] as? MambaCache {
@@ -223,8 +238,11 @@ public func generateMTPTokens(
                     }
                 }
                 for c in cache {
-                    if let kvs = c as? KVCacheSimple { kvs.trim(1) }
+                    if let kvs = c as? KVCacheSimple { kvs.trim(2) }
                 }
+                // Re-apply `verified` to every layer so all 28 agree.
+                let verifiedArr = MLXArray([Int32(verified)]).reshaped(1, 1)
+                let (_, _) = model.forwardWithHiddenState(verifiedArr, cache: cache)
             }
         } else {
             // No draft (model has no MTP head or head returned nil): single-token path.

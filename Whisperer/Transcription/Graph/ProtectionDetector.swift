@@ -27,7 +27,7 @@
 
 import Foundation
 
-enum ProtectionDetector {
+nonisolated enum ProtectionDetector {
 
     // MARK: - Patterns
 

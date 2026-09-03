@@ -8,7 +8,7 @@
 import Foundation
 import NaturalLanguage
 
-enum MidSentenceCaseNormalizer {
+nonisolated enum MidSentenceCaseNormalizer {
 
     /// Normalizes a display hypothesis without running the rest of the transcript editor.
     /// Short-dictation preview uses this entry point; meetings run `proposals` as part of the

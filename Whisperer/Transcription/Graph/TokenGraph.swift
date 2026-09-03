@@ -20,7 +20,7 @@
 
 import Foundation
 
-struct TokenGraph: Sendable {
+nonisolated struct TokenGraph: Sendable {
 
     // MARK: - State
 

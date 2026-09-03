@@ -29,26 +29,51 @@ enum MeetingOverviewParser {
 
     /// Every label the format defines. Any line that starts with one of these ends
     /// a multi-paragraph OVERVIEW.
+    ///
+    /// Two spelling families are accepted for backward compatibility:
+    /// - English labels from the old prompt (TITLE:, OVERVIEW:, …)
+    /// - Numbered markers from the current prompt (1|, 2|, 3|, …)
+    ///   Digits and | survive any model translation, so they work in any language.
     private static let labels = [
-        "TITLE:", "OVERVIEW:", "SUMMARY:", "TOPIC:", "TOPICS:", "DECISION:", "OPEN:", "NEXT:", "ACTION:"
+        "TITLE:", "OVERVIEW:", "SUMMARY:", "TOPIC:", "TOPICS:", "DECISION:", "OPEN:", "NEXT:", "ACTION:",
+        "1|", "2|", "3|", "4|", "5|", "6|", "7|"
     ]
 
     // MARK: - Title
 
     private static let titleLabel = "TITLE:"
+    /// Numbered-marker spelling for the title (current prompt format).
+    private static let titleMarker = "1|"
+
+    /// Extracts the title text from a line that starts with either `TITLE:` or `1|`.
+    private static func extractTitle(from line: String) -> String? {
+        if line.hasPrefix(titleLabel) {
+            let v = cleanText(field(line, after: titleLabel))
+            return v.isEmpty ? nil : v
+        }
+        if line.hasPrefix(titleMarker) {
+            let v = cleanText(field(line, after: titleMarker))
+            return v.isEmpty ? nil : v
+        }
+        return nil
+    }
+
+    /// Whether a line is a title line in either format.
+    private static func isTitleLine(_ line: String) -> Bool {
+        line.hasPrefix(titleLabel) || line.hasPrefix(titleMarker)
+    }
 
     /// The TITLE field of a *complete* artifact, or nil when there is none.
     ///
-    /// Only a leading TITLE counts, same rule as the streaming path: a `TITLE:` the model
-    /// emits halfway through an OVERVIEW is the format coming apart, and naming the recording
-    /// from it is worse than leaving the placeholder in place.
+    /// Only a leading TITLE counts, same rule as the streaming path: a `TITLE:` or `1|` the
+    /// model emits halfway through an OVERVIEW is the format coming apart, and naming the
+    /// recording from it is worse than leaving the placeholder in place.
     static func title(in raw: String) -> String? {
         for rawLine in raw.components(separatedBy: "\n") {
             let line = undecorate(rawLine)
             guard !line.isEmpty else { continue }
-            guard line.hasPrefix(titleLabel) else { return nil }
-            let value = cleanText(field(line, after: titleLabel))
-            return value.isEmpty ? nil : value
+            guard isTitleLine(line) else { return nil }
+            return extractTitle(from: line)
         }
         return nil
     }
@@ -71,9 +96,8 @@ enum MeetingOverviewParser {
             // A finished line that is not the title means the artifact did not lead with one,
             // and no later line will change that — stop rather than pick up a TITLE the model
             // emitted in the middle of the OVERVIEW.
-            guard line.hasPrefix(titleLabel) else { return nil }
-            let value = cleanText(field(line, after: titleLabel))
-            return value.isEmpty ? nil : value
+            guard isTitleLine(line) else { return nil }
+            return extractTitle(from: line)
         }
         return nil
     }
@@ -123,33 +147,35 @@ enum MeetingOverviewParser {
             guard !line.isEmpty else { continue }
 
             // TITLE deliberately does not count: it carries no summary field, and a model that
-            // emits `TITLE:` and then a bare unlabeled paragraph — the failure mode short notes
-            // already had before the merge — must still reach the strayLines fallback below.
-            if isLabel && !line.hasPrefix(titleLabel) { sawLabel = true }
+            // emits `TITLE:` or `1|` and then a bare unlabeled paragraph — the failure mode
+            // short notes already had before the merge — must still reach the strayLines fallback.
+            if isLabel && !isTitleLine(line) { sawLabel = true }
 
-            if line.hasPrefix("OVERVIEW:") {
-                overviewLines = [field(line, after: "OVERVIEW:")]
+            if line.hasPrefix("OVERVIEW:") || line.hasPrefix("3|") {
+                let pfx = line.hasPrefix("3|") ? "3|" : "OVERVIEW:"
+                overviewLines = [field(line, after: pfx)]
                 inOverview = true
 
             } else if line.hasPrefix("SUMMARY:") {
                 summaryLines = [field(line, after: "SUMMARY:")]
                 inSummary = true
 
-            } else if line.hasPrefix("TITLE:") {
+            } else if isTitleLine(line) {
                 // Consumed by `title(in:)` and by the streaming path; recognized here only so
                 // it terminates an absorbing field instead of being pulled into one.
                 continue
 
-            } else if line.hasPrefix("TOPIC:") || line.hasPrefix("TOPICS:") {
-                let label = line.hasPrefix("TOPICS:") ? "TOPICS:" : "TOPIC:"
+            } else if line.hasPrefix("TOPIC:") || line.hasPrefix("TOPICS:") || line.hasPrefix("2|") {
+                let label = line.hasPrefix("TOPICS:") ? "TOPICS:" : (line.hasPrefix("2|") ? "2|" : "TOPIC:")
                 let parts = parts(line, after: label, count: 2)
                 if let text = parts.first.map(cleanItem), !text.isEmpty {
                     let secs = parts.count > 1 ? Double(parts[1]) ?? 0 : 0
                     keyTopics.append(TopicItem(text: text, timestampSeconds: secs))
                 }
 
-            } else if line.hasPrefix("DECISION:") {
-                let parts = parts(line, after: "DECISION:", count: 3)
+            } else if line.hasPrefix("DECISION:") || line.hasPrefix("4|") {
+                let pfx = line.hasPrefix("4|") ? "4|" : "DECISION:"
+                let parts = parts(line, after: pfx, count: 3)
                 if parts.count >= 2 {
                     let label = cleanItem(parts[0])
                     let text  = cleanItem(parts[1])
@@ -159,19 +185,22 @@ enum MeetingOverviewParser {
                     }
                 }
 
-            } else if line.hasPrefix("OPEN:") {
-                let parts = parts(line, after: "OPEN:", count: 2)
+            } else if line.hasPrefix("OPEN:") || line.hasPrefix("5|") {
+                let pfx = line.hasPrefix("5|") ? "5|" : "OPEN:"
+                let parts = parts(line, after: pfx, count: 2)
                 if let text = parts.first.map(cleanItem), !text.isEmpty {
                     let secs = parts.count > 1 ? Double(parts[1]) ?? 0 : 0
                     openQuestions.append(QuestionItem(text: text, timestampSeconds: secs))
                 }
 
-            } else if line.hasPrefix("NEXT:") {
-                let val = cleanItem(field(line, after: "NEXT:"))
+            } else if line.hasPrefix("NEXT:") || line.hasPrefix("6|") {
+                let pfx = line.hasPrefix("6|") ? "6|" : "NEXT:"
+                let val = cleanItem(field(line, after: pfx))
                 nextMeeting = (val.lowercased() == "none" || val.isEmpty) ? nil : val
 
-            } else if line.hasPrefix("ACTION:") {
-                let parts = parts(line, after: "ACTION:", count: 3)
+            } else if line.hasPrefix("ACTION:") || line.hasPrefix("7|") {
+                let pfx = line.hasPrefix("7|") ? "7|" : "ACTION:"
+                let parts = parts(line, after: pfx, count: 3)
                 if parts.count >= 2 {
                     let text  = cleanItem(parts[0])
                     let owner = cleanItem(parts[1])
@@ -188,14 +217,25 @@ enum MeetingOverviewParser {
             }
         }
 
-        // Unlabeled prose is used only when the model produced no OVERVIEW at all. It lets a
-        // refusal through as a summary, which is the cost of not throwing away every
-        // correctly-summarized short note — measured, both Qwen2.5-1.5B and Qwen3.5-4B drop
-        // the label on those.
+        // Unlabeled prose is used only when the model produced no OVERVIEW at all.
+        // It lets a correctly-summarized short note through when the model drops the
+        // label (measured on Qwen2.5-1.5B and Qwen3.5-4B). But a long raw generation
+        // that had no recognised label — because the model translated them or emitted
+        // an entirely different structure — must NOT be shipped as-is: the whole dump
+        // falls here and the user sees raw model output, labels, timestamps and all.
+        // Guard: only accept stray lines when they look like a short unlabeled note.
         var overview = joinParagraphs(overviewLines)
         if overview.isEmpty { overview = joinParagraphs(summaryLines) }
-        if overview.isEmpty { overview = joinParagraphs(strayLines) }
+        if overview.isEmpty {
+            let strayText = joinParagraphs(strayLines)
+            if isAcceptableStrayOverview(strayText) {
+                overview = strayText
+            } else if !strayText.isEmpty {
+                Logger.warning("Meeting overview: rejecting \(strayText.count)-char stray dump — no label recognised and content looks structured", subsystem: .transcription)
+            }
+        }
         overview = truncatingLoop(overview)
+        overview = stripTimestampDensity(overview)
         guard !overview.isEmpty else { return nil }
         return MeetingAISummary(
             overview:      overview,
@@ -298,6 +338,98 @@ enum MeetingOverviewParser {
             i = next
         }
         return found
+    }
+
+    // MARK: - Stray-lines guard
+
+    /// Maximum word count for an overview assembled entirely from unlabeled prose.
+    ///
+    /// Short notes sometimes come back as one bare sentence — both Qwen2.5-1.5B and
+    /// Qwen3.5-4B drop the label on them. That is the only case where stray lines are
+    /// the right answer. Anything longer is a broken artifact: the model emitted a
+    /// full structured generation but with translated or omitted labels, and the whole
+    /// raw dump fell here. 120 words is comfortably above the note tier (~70 words) and
+    /// comfortably below the brief tier (~146 words), so it draws the line correctly.
+    private static let maxStrayWords = 120
+
+    /// True when unlabeled prose looks like a short note rather than a raw model dump.
+    ///
+    /// Three conditions: short enough to be a note, no pipe-separated fields (which
+    /// indicate structured lines the parser should have parsed), and no unrecognised
+    /// `WORD:` or `N|` patterns (which indicate the model emitted labels we missed).
+    private static func isAcceptableStrayOverview(_ text: String) -> Bool {
+        guard !text.isEmpty else { return false }
+        let wordCount = text.split(whereSeparator: { $0.isWhitespace }).count
+        guard wordCount <= maxStrayWords else { return false }
+        // Pipe separators inside stray prose → structured fields that should have parsed.
+        if text.contains("|") { return false }
+        // Lines like "OVERVIEWING:" or "3|" — unrecognised label, do not let through.
+        let structuredLine = text.range(
+            of: #"(?m)^(?:[A-Z]{3,}:|[1-7]\|)"#, options: .regularExpression)
+        if structuredLine != nil { return false }
+        return true
+    }
+
+    // MARK: - Timestamp-density guard
+
+    /// Strips recognised timestamp markers and rejects the overview if they made up
+    /// more than `maxTimestampFraction` of its token mass, or if the prose that
+    /// remains is below `minProseWords` words.
+    ///
+    /// The prompt forbids [Ns] markers inside the OVERVIEW, so a high density of them
+    /// is unambiguously degenerate output — typically a model that reproduced the
+    /// transcript's `[95s] …` format verbatim, or put TOPIC/DECISION timestamps
+    /// inside the overview text. `loopStart` cannot catch this because the timestamps
+    /// are all distinct numbers.
+    private static let maxTimestampFraction: Double = 0.25
+    private static let minProseWords = 8
+
+    /// Timestamp patterns that should never appear in a clean OVERVIEW line.
+    private static let timestampPatterns: [NSRegularExpression] = {
+        let raw = [
+            #"\[\d+s\]"#,           // [95s]
+            #"\b\d+s\b"#,           // bare 95s
+            #"\|\s*\d+\s*\w*\s*$"#  // | 3480 שניות at end of a pipe field
+        ]
+        return raw.compactMap { try? NSRegularExpression(pattern: $0) }
+    }()
+
+    /// Returns `""` when the overview has too many timestamp markers; otherwise returns it
+    /// with the markers stripped so they don't appear in the rendered card.
+    private static func stripTimestampDensity(_ text: String) -> String {
+        guard !text.isEmpty else { return text }
+        var stripped = text
+        for re in timestampPatterns {
+            let nsText = stripped as NSString
+            stripped = re.stringByReplacingMatches(
+                in: stripped,
+                range: NSRange(location: 0, length: nsText.length),
+                withTemplate: "")
+        }
+        stripped = stripped
+            .components(separatedBy: .whitespacesAndNewlines)
+            .filter { !$0.isEmpty }
+            .joined(separator: " ")
+            .trimmingCharacters(in: .whitespaces)
+
+        // How many words did we strip?
+        let originalWords = Double(text.split(whereSeparator: { $0.isWhitespace }).count)
+        let strippedWords = Double(stripped.split(whereSeparator: { $0.isWhitespace }).count)
+        let removedFraction = originalWords > 0 ? (originalWords - strippedWords) / originalWords : 0
+
+        // Only apply the density gate when timestamps were actually found. A clean
+        // overview with no timestamps passes regardless of word count — the
+        // minProseWords floor only makes sense when we know markers were present.
+        guard removedFraction > 0 else { return stripped }
+
+        if removedFraction >= maxTimestampFraction || strippedWords < Double(minProseWords) {
+            Logger.warning(
+                "Meeting overview: rejected — timestamp density \(Int(removedFraction * 100))% " +
+                "(\(Int(originalWords - strippedWords)) of \(Int(originalWords)) words were markers)",
+                subsystem: .transcription)
+            return ""
+        }
+        return stripped
     }
 
     // MARK: - Private helpers

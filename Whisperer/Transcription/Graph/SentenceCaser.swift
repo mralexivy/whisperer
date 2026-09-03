@@ -24,7 +24,7 @@
 
 import Foundation
 
-enum SentenceCaser {
+nonisolated enum SentenceCaser {
 
     /// Capitalization edits for every sentence opening in `graph`.
     ///

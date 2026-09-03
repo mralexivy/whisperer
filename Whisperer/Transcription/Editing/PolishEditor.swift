@@ -103,13 +103,11 @@ enum PolishEditor {
 
                 // Loading an `MLModel` does not build its GPU graph. Core ML defers that to the
                 // first `prediction()`, where `MPSGraphExecutable specializedModuleWithDevice`
-                // compiles the whole thing — measured at 2.0 s, and it landed between `rec.stop`
-                // and the paste on the first dictation of every launch, which is the single worst
-                // moment to spend it. One throwaway encode here moves it to launch, where nothing
-                // is waiting. Failure is ignored on purpose: a warm-up that throws says nothing
-                // about whether a real encode will, and refusing to publish the model over it
-                // would trade a one-time stall for no editor at all.
-                _ = try? await runtime.encode(["warm"])
+                // compiles the whole thing — measured at 2.0 s per enumerated shape. The model
+                // exports EnumeratedShapes [32, 64, 128]; each distinct concrete shape pays the
+                // cost separately. `warmAllShapes()` runs one throwaway prediction at each shape
+                // here at launch, where nothing waits. Failure is ignored on purpose.
+                await runtime.warmAllShapes()
 
                 let model = MMBERTEditingModel(runtime: runtime)
                 lock.lock()

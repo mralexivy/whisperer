@@ -263,7 +263,8 @@ actor MeetingAIService {
         // A voice memo of a few sentences has nothing to structure — asking for the
         // full label set only makes the model invent decisions and owners.
         let wordCount = plain.split(whereSeparator: { $0 == " " || $0.isNewline }).count
-        let request = Self.overviewRequest(transcriptWords: wordCount, language: Self.dominantLanguage(of: segments))
+        let language = Self.dominantLanguage(of: segments)
+        let request = Self.overviewRequest(transcriptWords: wordCount, language: language)
         let isNote = request.isNote
 
         // An overview summarizes what the recording was about, not who said it, so the
@@ -307,20 +308,35 @@ actor MeetingAIService {
         if !isNote && wordCount >= 700 && mapReduceEnabled {
             let chunks = WholeTextSplitter.summarySplit(transcript)
             if chunks.count >= 3 {
+                let mapChunkTokens = 300
                 Logger.info("Meeting overview: map step — \(chunks.count) chunk(s) for \(meetingID)", subsystem: .transcription)
+                // Language is pinned here rather than inferred so the condensed text
+                // stays in the meeting's language even when individual chunks look
+                // multilingual. Without the pin the map step silently translated Hebrew
+                // transcripts to English, producing an English reduce output regardless
+                // of what `overviewPrompt(language:)` said.
                 let mapInstructions = """
                     Extract the key points from this portion of a meeting transcript. \
                     Preserve [Ns] timestamp markers for important moments. Be concise — \
-                    summarise what was actually said, not that it was said.
+                    summarise what was actually said, not that it was said. \
+                    Write nothing but the key points — no preamble, no labels. \
+                    \(Self.languageRule(for: language, subject: "transcript"))
                     """
                 let mapRequests = chunks.map { chunk in
                     LLMBatchRequest.make(text: chunk, userMessage: "PORTION:\n\(chunk)",
-                                        maxTokensCap: 300)
+                                        maxTokensCap: mapChunkTokens)
                 }
+                // `defaultTimeout(rowCount:)` is sized for 256-token correction rows
+                // (~0.4 s/row). Map rows produce up to `mapChunkTokens` tokens each
+                // and time out consistently under that budget. Use a dedicated formula
+                // that accounts for actual output length.
+                let mapTimeout = LLMPostProcessor.mapReduceTimeout(
+                    rowCount: chunks.count, maxRowTokens: mapChunkTokens)
                 let partials = await llm.processBatch(requests: mapRequests,
-                                                      instructions: mapInstructions)
+                                                      instructions: mapInstructions,
+                                                      timeoutSeconds: mapTimeout)
                 let joined = partials.joined(separator: "\n\n")
-                Logger.info("Meeting overview: map done — \(joined.count) chars condensed from \(transcript.count)", subsystem: .transcription)
+                Logger.info("Meeting overview: map done — \(joined.count) chars condensed from \(transcript.count) (chunks=\(chunks.count) timeout=\(Int(mapTimeout))s)", subsystem: .transcription)
                 effectiveTranscript = joined
             } else {
                 Logger.info("Meeting overview: map skipped — only \(chunks.count) chunk(s), using single-pass", subsystem: .transcription)
@@ -479,42 +495,43 @@ actor MeetingAIService {
         }
     }
 
-    /// Full-length summary. The bulk of the prompt is about OVERVIEW because that
+    /// Full-length summary. The bulk of the prompt is about line 3 (OVERVIEW) because that
     /// is what the user reads — the earlier "2-4 sentences" instruction produced
     /// summaries that said a topic was discussed without saying what was said.
-    /// Only the length and TOPIC-count rules vary by transcript size; everything
+    /// Only the length and line-2-count rules vary by transcript size; everything
     /// else is fixed, so the tiers cannot drift apart.
     ///
     /// Three things in here exist to stop the model answering in one sentence, which
     /// was the shipped behaviour at every tier:
     ///
-    /// - **TOPIC is emitted before OVERVIEW.** `MeetingOverviewParser.parse` dispatches
-    ///   each label independently, so the order costs nothing, and naming the sections
-    ///   first turns "write more" — which a 4B ignores — into "cover these", which it
-    ///   can execute. Five named sections cannot be covered in eighteen words.
-    /// - **The length and the TOPIC count sit directly under the FORMAT block**, not in a
+    /// - **Line 2 (topic) is emitted before line 3 (overview).** `MeetingOverviewParser.parse`
+    ///   dispatches each section independently, so the order costs nothing, and naming the
+    ///   sections first turns "write more" — which a 4B ignores — into "cover these", which
+    ///   it can execute. Five named sections cannot be covered in eighteen words.
+    /// - **The length and the section-2 count sit directly under the FORMAT block**, not in a
     ///   later bullet. Template shape beats a word count stated further down: while the
-    ///   counts lived in `THE OTHER LABELS:` the model wrote one TOPIC line or none, and
-    ///   over 34 meetings overview length tracks the number of TOPIC lines it actually
+    ///   counts lived in `THE OTHER LINES:` the model wrote one topic line or none, and
+    ///   over 34 meetings overview length tracks the number of topic lines it actually
     ///   emits (2 topics → 46-176 words; 0 or 1 → 2-69). They are **under** the template
     ///   rather than inside it because anything appended to a template line gets copied
-    ///   out as the value: `OVERVIEW: the summary — 140 to 240 words` produced literally
-    ///   `OVERVIEW: 140m`, and the annotated TOPIC line produced `TOPIC: 0s | TOP: 37s`.
+    ///   out as the value.
     /// - **Nothing tells it to stop any more.** "Say what it contained and stop", "do not
     ///   pad" and "padding it out is worse than a short answer" were anti-degeneration
     ///   hedges from before the repetition penalty reached the MTP decoder. Against
     ///   "write 140 to 240 words" a greedy decoder resolves the conflict toward the
     ///   instruction it can carry out immediately, and stopping is that instruction.
     ///
-    /// TITLE leads because the artifact is streamed: `generateOverview` reads the TITLE line
-    /// out of the partial output and names the library row from it while the OVERVIEW is still
-    /// decoding. It is also the one label OVERVIEW could never swallow, since it precedes it.
+    /// Line 1 (title) leads because the artifact is streamed: `generateOverview` reads it
+    /// out of the partial output and names the library row while line 3 is still decoding.
     ///
-    /// `ALWAYS` names the seven labels and pins them to English. "Write every line in the
-    /// language of the transcript" is true of the text and false of the labels, and on a
-    /// Hebrew transcript the model resolved that by emitting `OVERVIEWING:` — which
-    /// `MeetingOverviewParser` drops, and cannot recover from, because `sawLabel` is
-    /// already true by then and the `strayLines` fallback never fires.
+    /// **Numbered markers instead of English labels.** Previous versions used English
+    /// labels (TITLE:, OVERVIEW:, TOPIC:, …) but then told the model to write the text
+    /// in Hebrew. A 4B resolved that conflict toward the first instruction and translated
+    /// the labels — `כותרת:`, `מסעיפים:` — which the parser never recognised, so the
+    /// entire raw generation fell into the strayLines fallback and shipped as gibberish.
+    /// Digits and `|` are universal symbols: a model cannot "translate" `1|` to anything
+    /// else, so the contradiction disappears. The parser accepts both forms for backward
+    /// compatibility with stored artifacts.
     ///
     /// The worked example is contrastive rather than long: a full-length one would bias
     /// every tier toward its own length and triple the prefill. It is also entirely
@@ -523,53 +540,54 @@ actor MeetingAIService {
         """
     You summarize voice recordings. The input is a speech-to-text transcript, so it contains filler words, false starts and misheard words. Summarize what was meant, not the exact wording.
 
-    Every transcript line begins with a marker like [95s] giving the number of seconds from the start. Copy those numbers into the seconds fields below. Never put a marker inside the OVERVIEW. A line containing only … means quiet or repetitive material was left out there; say nothing about it.
+    Every transcript line begins with a marker like [95s] giving the number of seconds from the start. Copy those numbers into the seconds fields below. Never put a marker inside line 3. A line containing only … means quiet or repetitive material was left out there; say nothing about it.
 
-    OUTPUT FORMAT — each label on its own line, in this order: TITLE (3 to 7 words), \(topicCount) TOPIC lines (a short phrase each), OVERVIEW (\(lengthLine)), then DECISION, OPEN, NEXT and ACTION (one line each). Emit a label only when the recording actually contains that thing; TITLE and OVERVIEW are always required. Write each label bare, exactly as shown: OVERVIEW: — never **OVERVIEW:**, never ## OVERVIEW.
+    OUTPUT FORMAT — seven section numbers, each on its own line, in this order: line 1 (3 to 7 words), \(topicCount) lines starting with 2 (a short phrase each), line 3 (\(lengthLine)), then lines 4, 5, 6 and 7 (one line each). Emit a line only when the recording actually contains that thing; lines 1 and 3 are always required.
 
-    TITLE: what to call this recording
-    TOPIC: short phrase | seconds
-    OVERVIEW: the summary
-    DECISION: short label | what was decided | seconds
-    OPEN: a question that was raised and never answered | seconds
-    NEXT: when and where the next session is
-    ACTION: the task | the person's name | the due date
+    1| what to call this recording
+    2| short phrase | seconds
+    3| the summary
+    4| short label | what was decided | seconds
+    5| a question that was raised and never answered | seconds
+    6| when and where the next session is
+    7| the task | the person's name | the due date
 
-    Those seven lines are a template. Copy each label and each | exactly, and replace the description after it with real content — never with the description itself.
+    Each output line starts with its number, then |, then the content. Copy the | exactly, and replace the description with real content — never with the description itself.
 
-    Write the TITLE line first and finish it before you write anything else — it is read the moment it is complete.
+    Write line 1 first and finish it before you write anything else — it is read the moment it is complete.
 
-    HOW TO WRITE THE TITLE:
+    HOW TO WRITE LINE 1 (the title):
     - Between 3 and 7 words, on one line, with no quotes and no trailing period.
     - Name the actual subject matter. "Google AI course breakdown" is a good title. "Recording", "Meeting notes" and "Transcript" say nothing — never use them.
     - Do not begin with "Summary of", "Notes on", "Discussion about" or "A recording of".
 
-    Write \(topicCount) TOPIC lines next, one per section of the recording, in the order they occur. They are your plan: the OVERVIEW must then cover every one of them, in the same order, in \(lengthLine). The OVERVIEW is by far the longest thing you write; every other line is one line.
+    Write \(topicCount) lines starting with 2 next, one per section of the recording, in the order they occur. They are your plan: line 3 must then cover every one of them, in the same order, in \(lengthLine). Line 3 is by far the longest thing you write; every other line is one line.
 
-    HOW TO WRITE THE OVERVIEW — this is the part that matters:
+    HOW TO WRITE LINE 3 (the overview) — this is the part that matters:
     - \(lengthRule)
-    - Cover every TOPIC line you wrote. A section you named and then did not describe is the main way this goes wrong.
+    - Cover every section you named in a line starting with 2. A section you named and then did not describe is the main way this goes wrong.
     - Keep the specifics: names, numbers, tools, definitions, comparisons and examples that were given.
     - State the point that was made, not that a point was made. Write "machine learning is a subfield of AI in the way thermodynamics is a subfield of physics" — not "the speaker explained how machine learning relates to AI".
     - Do not open with "In this recording", "The speaker discusses" or "This transcript". Start with the substance.
-    - Plain sentences only inside the OVERVIEW. No bullets, no markdown, no headings.
+    - Plain sentences only inside line 3. No bullets, no markdown, no headings.
 
     THE LEVEL OF DETAIL EXPECTED. Suppose two people compared two databases and picked one.
 
     Too thin — never answer like this:
-    OVERVIEW: The team discussed which database to use and made a decision.
+    3| The team discussed which database to use and made a decision.
 
     Correct:
-    OVERVIEW: Postgres and DynamoDB were compared for the events table. Postgres won on the ad-hoc queries the analytics team runs weekly, which DynamoDB would have needed a second index and a nightly export to serve. Cost was close enough at the current 40 GB that it decided nothing, and they agreed to look again if the table passes 500 GB. Sara is writing the migration.
+    3| Postgres and DynamoDB were compared for the events table. Postgres won on the ad-hoc queries the analytics team runs weekly, which DynamoDB would have needed a second index and a nightly export to serve. Cost was close enough at the current 40 GB that it decided nothing, and they agreed to look again if the table passes 500 GB. Sara is writing the migration.
 
     The second one says what was compared, why one won, what the numbers were, and what was left open. Write at that density about every part of the recording.
 
-    THE OTHER LABELS:
-    - DECISION, OPEN, NEXT and ACTION apply to real discussions. A lecture, a video or a solo note usually has none of them, and leaving them out is the correct answer. Never invent a decision, an owner or a due date to fill the format.
-    - ACTION requires a real person named in the transcript. If nobody was named, write no ACTION line.
+    LINES 4-7:
+    - Lines 4, 5, 6 and 7 apply to real discussions. A lecture, a video or a solo note usually has none of them, and leaving them out is the correct answer. Never invent a decision, an owner or a due date to fill the format.
+    - Line 7 requires a real person named in the transcript. If nobody was named, write no line 7.
 
     ALWAYS:
-    - \(languageRule(for: language, subject: "transcript")) The labels themselves are not text: TITLE, TOPIC, OVERVIEW, DECISION, OPEN, NEXT and ACTION stay in English, spelled exactly as listed above, whatever language the transcript is in.
+    - \(languageRule(for: language, subject: "transcript"))
+    - The section numbers (1, 2, 3, 4, 5, 6, 7) and the | character are not text — never translate them, never replace them with words or labels in any language.
     - Never state anything the transcript does not say.
     - Never use the characters < or >.
     """
@@ -578,23 +596,26 @@ actor MeetingAIService {
     /// Very short recordings — one line out, nothing to structure. The word count is
     /// stated because "two or three sentences" was answered with one clause; reference
     /// overviews for notes this size run about 70 words.
+    ///
+    /// Uses the same numbered markers as `overviewPrompt` (1| for title, 3| for overview)
+    /// so the parser handles both formats identically.
     static func notePrompt(language: TranscriptionLanguage = .auto) -> String {
         """
-    You name and summarize short voice notes. Reply with exactly two lines — a TITLE line of 3 to 7 words, then an OVERVIEW line of 40 to 90 words:
+    You name and summarize short voice notes. Reply with exactly two lines — a title line and a summary line:
 
-    TITLE: 3 to 7 words naming what the note is about
-    OVERVIEW: 40 to 90 words — three or four sentences saying what the note is about
+    1| 3 to 7 words naming what the note is about
+    3| 40 to 90 words — three or four sentences saying what the note is about
 
     RULES:
-    1. Write the TITLE line first and finish it before the OVERVIEW — it is read the moment it is complete. No quotes, no trailing period. Never call it "Recording", "Note" or "Transcript"; name the actual subject.
-    2. Begin the second line with OVERVIEW: — bare, no asterisks and no heading marks. The reply is discarded without it.
+    1. Write line 1 first and finish it before line 3 — it is read the moment it is complete. No quotes, no trailing period. Never call it "Recording", "Note" or "Transcript"; name the actual subject.
+    2. Begin the second line with 3| — exactly those two characters, nothing else before them. The reply is discarded without it.
     3. Keep every specific detail from the note — names, numbers, places, tasks. A detail you leave out is lost; the note is all the reader gets.
     4. Say what was said, not that something was said. Never write "the note is about" or "the speaker mentions" — start with the content itself.
-    5. Write no other label. No TOPIC, no DECISION, no ACTION.
-    5. No markdown, no bullets, no quotes.
-    6. Never state anything the note does not say.
-    7. \(languageRule(for: language, subject: "note"))
-    8. Never use the characters < or >.
+    5. Write no other line. The only lines in your reply are 1| and 3|.
+    6. No markdown, no bullets, no quotes.
+    7. Never state anything the note does not say.
+    8. \(languageRule(for: language, subject: "note"))
+    9. Never use the characters < or >.
     """
     }
 

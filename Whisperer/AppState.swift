@@ -3273,6 +3273,7 @@ class AppState: ObservableObject {
                 if wasMeetingStop {
                     Task { @MainActor in
                         await ModelWorkQueue.shared.setMeetingActive(false)
+                        MeetingJobQueue.shared.resumeAfterRecording()
                         #if canImport(FluidAudio)
                         self.releaseMeetingNemotron()
                         #endif
@@ -4016,6 +4017,7 @@ class AppState: ObservableObject {
         Task { @MainActor in
             await session.abandonRecording()
             await ModelWorkQueue.shared.setMeetingActive(false)
+            MeetingJobQueue.shared.resumeAfterRecording()
             #if canImport(FluidAudio)
             self.releaseMeetingNemotron()
             if let coordinator = self.meetingSpeakerCoordinator {
@@ -4502,7 +4504,13 @@ class AppState: ObservableObject {
         // Only once recording actually began: startInAppRecording() bails out early when no
         // backend is ready, and a gate raised then would never be lowered.
         if case .recording = state {
-            Task { await ModelWorkQueue.shared.setMeetingActive(true) }
+            // suspendForRecording must be called BEFORE setMeetingActive(true) so the running
+            // job stops enqueueing inner work before the gate rises. Both calls in one Task
+            // with an explicit await between them — two Tasks have no ordering guarantee.
+            Task {
+                MeetingJobQueue.shared.suspendForRecording()
+                await ModelWorkQueue.shared.setMeetingActive(true)
+            }
         }
     }
 

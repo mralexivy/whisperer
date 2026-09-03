@@ -231,20 +231,29 @@ class MeetingSession: ObservableObject {
         return polished.isEmpty ? text : polished
     }
 
-    /// The batch card pass. Pure, so `applyEditor` can hand it to a detached task.
-    private nonisolated static func polishAll(_ segments: [MeetingSegment],
+    /// The batch card pass.
+    ///
+    /// `@concurrent` is the load-bearing isolation annotation here, not `nonisolated`. Under
+    /// `SWIFT_APPROACHABLE_CONCURRENCY = YES`, a `nonisolated async` function is
+    /// `nonisolated(nonsending)` — it inherits the caller's executor. `@concurrent` overrides
+    /// that and forces execution onto the cooperative thread pool regardless of the call site.
+    /// `DeterministicPolisher` is `nonisolated struct`, so `await editor.polish(text:context:)`
+    /// also stays on the cooperative pool rather than hopping back to the main actor.
+    /// See `ModelWorkQueue.offCallerExecutor` (ModelWorkQueue.swift:188) for the same pattern.
+    @concurrent
+    nonisolated static func polishAll(_ segments: [MeetingSegment],
                                               with editor: DeterministicPolisher,
                                               context: EditContext) async
         -> (segments: [MeetingSegment], rewritten: Int) {
+        if Thread.isMainThread {
+            Logger.error("Meeting editor: polishAll entered on the main thread — isolation inheritance is back",
+                         subsystem: .transcription)
+        }
         var working = segments
         var rewritten = 0
         for index in working.indices {
+            if Task.isCancelled { break }
             let original = working[index].text
-            // The async form, so the model runs. This is the one meeting pass that may: it is the
-            // authoritative end-of-meeting sweep, every card is complete, and it is already off
-            // the main actor. Per segment rather than over the joined transcript because the
-            // tagger's window is 128 sub-words and a meeting is far longer — and because a
-            // segment is the unit the write-back and the Polished/Original toggle address.
             let result = await editor.polish(text: original, context: context)
             let polished = result.text.isEmpty ? original : result.text
             guard polished != original else { continue }
@@ -361,28 +370,22 @@ class MeetingSession: ObservableObject {
             audioFileURL: audioFileName
         )
 
-        // Trigger AI cleanup + naming + overview in background.
-        // Order: cleanup first so title and summary are generated from corrected text.
         let currentTitle = MeetingManager.shared.meetings.first(where: { $0.id == id })?.title ?? ""
 
-        // Inherits @MainActor, so the phase updates land on the main actor between awaits.
-        Task { [weak self] in
-            // Everything below is built from the transcript, so it has to wait for the last
-            // of it. The backend's tail chunk is delivered *after* stopRecording() returns
-            // (see awaitTailDelivery) — snapshotting `segments` here would summarize, name
-            // and re-transcribe a meeting missing its final card. The refiner defends itself
-            // by re-reading CoreData, but the two skip paths below never reach it.
+        // Await the final tail chunk before handing off to the queue. The tail arrives
+        // asynchronously after stopRecording() returns; MeetingJobQueue owns everything after.
+        // [weak self] because awaitTailDelivery checks `activeMeetingSession === self` — if
+        // this session is destroyed before the tail lands, a `.finalizing` sidecar from a
+        // previous run will already be on disk and restore() will pick it up on relaunch.
+        Task { [weak self, capturedAudioURL] in
             await self?.awaitTailDelivery()
             guard let self else { return }
 
             let finalSegments = self.segments
             let transcript = finalSegments.map { $0.text }.joined(separator: " ")
-            let willPolish = MeetingTranscriptRefiner.shared.shouldRun(for: finalSegments, audioURL: capturedAudioURL)
-            Logger.info("Meeting session stop: segments=\(finalSegments.count), transcript=\(transcript.count) chars, polish=\(willPolish)", subsystem: .transcription)
+            Logger.info("Meeting session stop: segments=\(finalSegments.count), transcript=\(transcript.count) chars", subsystem: .transcription)
 
             guard !transcript.isEmpty else {
-                // A recording stopped within a couple of seconds legitimately has nothing to
-                // summarize. Only a longer one that produced no text points at a real bug.
                 if finalSegments.isEmpty && self.elapsedSeconds < 2 {
                     Logger.debug("Meeting session stop: nothing recorded — overview skipped", subsystem: .transcription)
                 } else {
@@ -392,71 +395,12 @@ class MeetingSession: ObservableObject {
                 return
             }
 
-            // Scope for the LLM borrow's `defer` — it must release before the Task ends,
-            // and after the last generation, not at some later suspension point.
-            do {
-                // 1. Cleanup (re-transcription)
-                MeetingManager.shared.setProcessing(.polishing, for: id)
-                var segmentsForSummary = finalSegments
-                if willPolish {
-                    if let reason = MeetingTranscriptRefiner.shared.blockingReason(for: id, audioURL: capturedAudioURL) {
-                        Logger.warning("Meeting session stop: cleanup skipped — \(reason)", subsystem: .transcription)
-                        MeetingManager.shared.setProcessing(.polishing, notice: "Cleanup skipped — model not downloaded", for: id)
-                    } else {
-                        segmentsForSummary = await MeetingTranscriptRefiner.shared.run(
-                            meetingID: id, segments: finalSegments
-                        )
-                        // The refiner replaces the text the per-chunk editor already polished, so
-                        // the editor has to run again on what came back. Order, not preference:
-                        // a second Whisper decode is better evidence than any text-only pass, so
-                        // the editor works on the refiner's output rather than defending its own.
-                        segmentsForSummary = await self.applyEditor(to: segmentsForSummary,
-                                                                    meetingID: id)
-                        self.applyRefined(segmentsForSummary, meetingID: id)
-                    }
-                }
-
-                // Title and overview run under ONE outer LLM borrow.
-                //
-                // Each MeetingAIService call borrows and releases on its own, and a release
-                // that drops the refcount to zero arms a 60s idle unload. Holding an outer
-                // borrow across both keeps the count ≥ 1 for the whole sequence, so the 3.2 GB
-                // model cannot unload between them and be paid for twice. Taken *after* the
-                // cleanup pass, not before: the refiner loads its own multi-GB Whisper model
-                // and gates on free memory, so keeping the LLM resident across it would work
-                // against that check.
-                #if canImport(FluidAudio)
-                let llmHeld = await MeetingEngines.shared.borrowLLM() != nil
-                defer { if llmHeld { MeetingEngines.shared.releaseLLM() } }
-                #endif
-
-                // 2. Title: a short generation — the library row picks up a real name in a
-                // couple of seconds instead of waiting out the full summary pass.
-                MeetingManager.shared.setProcessing(.naming, for: id)
-                await MeetingAIService.shared.generateTitle(
-                    segments: segmentsForSummary, meetingID: id, currentTitle: currentTitle
-                )
-
-                // 3. Overview — check intelligence engine readiness to surface a notice when
-                // the model is not available, so the user knows why no summary appears.
-                let intelligenceNotice: String?
-                #if canImport(FluidAudio)
-                switch MeetingEngines.shared.readiness[.intelligence] {
-                case .needsDownload:
-                    intelligenceNotice = "Summary skipped — meeting intelligence not downloaded"
-                case .unavailable(let msg):
-                    intelligenceNotice = "Summary skipped — \(msg)"
-                default:
-                    intelligenceNotice = nil
-                }
-                #else
-                intelligenceNotice = nil
-                #endif
-
-                MeetingManager.shared.setProcessing(.summarizing, notice: intelligenceNotice, for: id)
-                await MeetingAIService.shared.generateOverview(segments: segmentsForSummary, meetingID: id)
-                MeetingManager.shared.setProcessing(nil, for: id)
-            }
+            MeetingJobQueue.shared.enqueue(
+                meetingID: id,
+                segments: finalSegments,
+                audioURL: capturedAudioURL,
+                currentTitle: currentTitle
+            )
         }
 
         // Clear transient live state — segments kept for post-recording display via CoreData.
@@ -517,13 +461,12 @@ class MeetingSession: ObservableObject {
     /// has claimed it yet, so the Polished/Original toggle keeps showing the true raw ASR rather
     /// than an intermediate.
     ///
-    /// The polish itself runs **off** the main actor. This is the whole-transcript pass — every
-    /// segment of a finished meeting, hundreds of them, each a full protect/alias/normalize/
-    /// format cycle — and running it inline on `@MainActor` froze the UI for as long as it took.
-    /// `DeterministicPolisher` and `TokenGraph` are both `Sendable` and read nothing but their
-    /// argument, so the loop moves wholesale; only the write-back needs the actor, and this
-    /// function is already back on it after the `await`.
-    ///
+    /// The polish itself runs **off** the main actor. `polishAll` is `@concurrent` — that is
+    /// the load-bearing annotation, not `Sendable`. Under `SWIFT_APPROACHABLE_CONCURRENCY = YES`,
+    /// a `nonisolated async` function is `nonisolated(nonsending)` and inherits the caller's
+    /// executor; `@concurrent` overrides that and forces the cooperative thread pool. The `await`
+    /// here suspends this `@MainActor` function while `polishAll` (and every `DeterministicPolisher`
+    /// async method it calls) runs off-main, then resumes on the main actor for the write-back.
     /// The live per-utterance path stays on the main actor deliberately — see `livePreviewText`.
     private func applyEditor(to segments: [MeetingSegment], meetingID id: UUID) async -> [MeetingSegment] {
         guard PolishFeatureFlags.isFastPolishEnabled else { return segments }
@@ -534,9 +477,7 @@ class MeetingSession: ObservableObject {
         let context = EditContext(language: selected == .auto ? nil : selected,
                                   pass: .authoritative)
 
-        let outcome = await Task.detached(priority: .utility) { [segments] in
-            await Self.polishAll(segments, with: editor, context: context)
-        }.value
+        let outcome = await Self.polishAll(segments, with: editor, context: context)
 
         let working = outcome.segments
         let rewritten = outcome.rewritten

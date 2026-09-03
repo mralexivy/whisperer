@@ -110,24 +110,13 @@ nonisolated struct MMBERTEditingModel: EditingModel {
         let candidates = tokens.filter { $0.kind != .whitespace }
         guard !candidates.isEmpty else { return [] }
 
-        var allEdits: [TranscriptEdit] = []
-        var editedTexts: [TokenID: String] = [:]  // tracks tokens modified in pass 1
-
-        for pass in 0..<2 {
-            let passEdits = try? await singlePass(candidates, editedTexts: editedTexts, context: context)
-            guard let passEdits, !passEdits.isEmpty else { break }
-            // On pass 2, skip tokens already edited (append/repl only fire once per token).
-            let newEdits = pass == 0 ? passEdits : passEdits.filter { !editedTexts.keys.contains($0.target) }
-            guard !newEdits.isEmpty else { break }
-            allEdits.append(contentsOf: newEdits)
-            // Track what was edited for next pass.
-            for edit in newEdits {
-                if case .replace(let text) = edit.operation { editedTexts[edit.target] = text }
-                if case .insertAfter(_) = edit.operation { editedTexts[edit.target] = "" }
-            }
-            // Para/structural edits don't need a second pass.
-            if pass == 0 && newEdits.allSatisfy({ isPunct($0) || isPara($0) }) { break }
-        }
+        // Single pass — a second pass on byte-identical input produces identical logits and the
+        // same edits, wasting 2× the encoder budget. A genuine iterative refinement (re-render
+        // edited text, re-tokenize, re-encode) is a new feature that needs its own calibration
+        // run; deleting the loop removes both the wasted compute and a duplicate-.delete bug where
+        // the dedup filter was skipping .delete edits, producing two identical edits on the same
+        // TokenID.
+        let allEdits = (try? await singlePass(candidates, context: context)) ?? []
 
         if !allEdits.isEmpty {
             Logger.debug("Editor model: \(allEdits.count) edits over \(candidates.count) tokens",
@@ -137,7 +126,6 @@ nonisolated struct MMBERTEditingModel: EditingModel {
     }
 
     private func singlePass(_ candidates: [TranscriptToken],
-                             editedTexts: [TokenID: String],
                              context: EditContext) async throws -> [TranscriptEdit] {
         var edits: [TranscriptEdit] = []
         let window = EditingSequenceShape.long.rawValue
@@ -164,16 +152,6 @@ nonisolated struct MMBERTEditingModel: EditingModel {
             start += window
         }
         return edits
-    }
-
-    private func isPunct(_ edit: TranscriptEdit) -> Bool {
-        if case .insertAfter(let s) = edit.operation { return ".,?!;:".contains(s) }
-        return false
-    }
-
-    private func isPara(_ edit: TranscriptEdit) -> Bool {
-        if case .insertAfter(let s) = edit.operation { return s.hasPrefix("\n") }
-        return false
     }
 
     // MARK: - Tagging policy

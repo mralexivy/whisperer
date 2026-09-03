@@ -26,7 +26,7 @@
 
 import Foundation
 
-enum ParagraphSplitter {
+nonisolated enum ParagraphSplitter {
 
     // MARK: - Pause evidence
 

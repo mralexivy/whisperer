@@ -19,7 +19,10 @@
 
 import Foundation
 
-struct DeterministicPolisher: Sendable {
+// nonisolated: SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor would otherwise place every async
+// method on the main actor. This type is pure — no UI, no AppState — and must run off-main.
+// Same pattern as EditingModel.swift:78, MMBERTCoreMLRuntime.swift:65.
+nonisolated struct DeterministicPolisher: Sendable {
 
     // MARK: - Result
 

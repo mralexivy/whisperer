@@ -48,7 +48,7 @@ enum AliasSource: Int, Sendable, Comparable, CaseIterable {
 
 // MARK: - Engine
 
-struct AliasEngine: Sendable {
+nonisolated struct AliasEngine: Sendable {
 
     // MARK: Table
 

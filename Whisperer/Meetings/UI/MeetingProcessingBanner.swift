@@ -26,7 +26,7 @@ struct MeetingProcessingBanner: View {
     private let purple = Color(hex: "8B5CF6")
 
     /// Display order — also the source of the step-dot progress.
-    private let allPhases: [MeetingProcessingPhase] = [.finalizing, .polishing, .naming, .summarizing]
+    private let allPhases: [MeetingProcessingPhase] = [.finalizing, .fineTuning, .naming, .summarizing]
 
     private var stepIndex: Int {
         allPhases.firstIndex(of: phase) ?? 0

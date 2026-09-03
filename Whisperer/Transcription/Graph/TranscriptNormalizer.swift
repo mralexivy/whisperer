@@ -20,7 +20,7 @@
 
 import Foundation
 
-enum TranscriptNormalizer {
+nonisolated enum TranscriptNormalizer {
 
     // MARK: - Filler vocabulary
 

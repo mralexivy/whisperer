@@ -33,7 +33,7 @@
 
 import Foundation
 
-enum SentenceTerminator {
+nonisolated enum SentenceTerminator {
 
     // MARK: - Thresholds
 
