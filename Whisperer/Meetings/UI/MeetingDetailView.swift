@@ -27,6 +27,10 @@ struct MeetingDetailView: View {
     @State private var transcriptMode: TranscriptMode = .speakers
     @State private var didCopy = false
     @State private var floatHovering = false
+    /// Whether the inline re-transcribe panel is expanded.
+    @State private var showRetranscribePanel = false
+    /// Language selected in the re-transcribe panel — defaults to whatever was detected.
+    @State private var retranscribeLanguage: TranscriptionLanguage = .auto
 
     // Convenience shorthand — nil while loading
     private var meeting: MeetingRecord? { detailVM.meeting }
@@ -100,13 +104,17 @@ struct MeetingDetailView: View {
             fallback: TranscriptionLanguage(rawValue: meeting?.language ?? ""))
     }
 
-    /// The manual re-transcribe action is offered only when there is something left to correct,
-    /// the recording is still on disk, and no run is already in flight for this meeting.
-    private var canPolishManually: Bool {
-        guard let id = meeting?.id, !session.isRecording else { return false }
-        guard refiner.activeMeetingID == nil, manager.processingPhase(for: id) == nil else { return false }
-        return MeetingTranscriptRefiner.shared.shouldRun(for: detailVM.allSegments,
-                                                         audioURL: meeting?.resolvedAudioURL)
+    /// The re-transcribe button is offered whenever the audio is still on disk and the meeting
+    /// is not actively recording. The panel itself shows "Re-transcribing…" while a run is in
+    /// flight; it does not suppress the button.
+    private var canOpenRetranscribePanel: Bool {
+        guard !session.isRecording else { return false }
+        return MeetingTranscriptRefiner.shared.canForceRun(audioURL: meeting?.resolvedAudioURL)
+    }
+
+    /// A re-transcribe run is in flight for this specific meeting.
+    private var isRetranscribing: Bool {
+        refiner.activeMeetingID == meeting?.id || manager.processingPhase(for: meeting?.id) != nil
     }
 
     private var processingPhase: MeetingProcessingPhase? {
@@ -524,19 +532,23 @@ struct MeetingDetailView: View {
                 Spacer(minLength: 0)
             }
 
-            // Row 3: actions — language + copy + re-transcribe (max ~265px)
+            // Row 3: language badge + copy + re-transcribe button
             HStack(spacing: 8) {
                 languageChip
                 Spacer(minLength: 0)
                 copyButton
-                if canPolishManually {
-                    cleanUpButton
+                if canOpenRetranscribePanel {
+                    retranscribeButton
                         .transition(.opacity.combined(with: .scale(scale: 0.9)))
                 }
             }
+
+            // Inline re-transcribe panel (slides in below row 3)
+            retranscribePanel
         }
         .animation(.easeInOut(duration: 0.2), value: hasPolishedSegments)
-        .animation(.easeInOut(duration: 0.2), value: canPolishManually)
+        .animation(.easeInOut(duration: 0.2), value: canOpenRetranscribePanel)
+        .animation(.easeInOut(duration: 0.2), value: showRetranscribePanel)
         .animation(.easeInOut(duration: 0.2), value: transcriptMode)
     }
 
@@ -652,80 +664,38 @@ struct MeetingDetailView: View {
         return options
     }
 
-    private var canChangeLanguage: Bool {
-        guard !session.isRecording, refiner.activeMeetingID == nil,
-              manager.processingPhase(for: meeting?.id) == nil else { return false }
-        return MeetingTranscriptRefiner.shared.canForceRun(audioURL: meeting?.resolvedAudioURL)
-    }
-
-    /// Shows what the transcript was decoded in and lets the user overrule it.
-    ///
-    /// Worth surfacing because the failure it corrects is invisible otherwise: handed the wrong
-    /// language, Whisper writes fluent text in that language rather than failing, so a translated
-    /// transcript looks like a merely mediocre one. Naming the language is what makes it
-    /// recognisable, and the picker is what makes it fixable.
+    /// Shows the language the transcript was actually decoded in — read-only; the re-transcribe
+    /// button and its panel are the action point. Named so the chip never looks interactive when
+    /// the language was wrong; it is information, the panel is the fix.
     @ViewBuilder
     private var languageChip: some View {
         if resolvedLanguage != .auto || !detailVM.allSegments.isEmpty {
-            Menu {
-                ForEach(languageOptions, id: \.self) { language in
-                    Button {
-                        changeLanguage(to: language)
-                    } label: {
-                        Text(language == resolvedLanguage ? "✓ \(language.displayName)" : language.displayName)
-                    }
-                }
-            } label: {
-                HStack(spacing: 5) {
-                    Image(systemName: "globe")
+            HStack(spacing: 5) {
+                Image(systemName: "globe")
+                    .font(.system(size: 10, weight: .semibold))
+                Text(resolvedLanguage == .auto ? "Language" : resolvedLanguage.displayName)
+                    .font(.system(size: 11, weight: .medium))
+                if segmentLanguages.count > 1 {
+                    Text("+\(segmentLanguages.count - 1)")
                         .font(.system(size: 10, weight: .semibold))
-                    Text(resolvedLanguage == .auto ? "Language" : resolvedLanguage.displayName)
-                        .font(.system(size: 11, weight: .medium))
-                    if segmentLanguages.count > 1 {
-                        Text("+\(segmentLanguages.count - 1)")
-                            .font(.system(size: 10, weight: .semibold))
-                            .foregroundColor(.white.opacity(0.45))
-                    }
+                        .foregroundColor(.white.opacity(0.45))
                 }
-                .foregroundColor(.white.opacity(0.6))
             }
-            .menuStyle(.borderlessButton)
-            .menuIndicator(.hidden)
-            .fixedSize()
+            .foregroundColor(.white.opacity(0.6))
             .padding(.horizontal, 10)
             .padding(.vertical, 5)
             .background(Capsule().fill(Color.white.opacity(0.06)))
-            .disabled(!canChangeLanguage)
-            .opacity(canChangeLanguage ? 1 : 0.35)
             .help(segmentLanguages.count > 1
-                  ? "Spoken in \(segmentLanguages.map(\.displayName).joined(separator: ", ")). Pick one to re-transcribe the whole recording in it."
-                  : "The language this transcript was decoded in. Pick another to re-transcribe the recording in it.")
+                  ? "Spoken in \(segmentLanguages.map(\.displayName).joined(separator: ", ")). Use Re-transcribe to decode in a different language."
+                  : "The language this transcript was decoded in. Use Re-transcribe to change it.")
         }
     }
 
-    /// Re-decode the whole recording in a language the user has chosen. Every card is restored
-    /// from its raw ASR text first — see `MeetingTranscriptRefiner.run(forcedLanguage:)` — so the
-    /// new pass corrects what was heard rather than a previous pass's translation of it.
-    private func changeLanguage(to language: TranscriptionLanguage) {
-        // No `language != resolvedLanguage` guard. `resolvedLanguage` is only as honest as the
-        // stamps on the cards, and a pass that decoded correctly but could not accept the result
-        // used to stamp them anyway — so re-picking the language that is already displayed, in
-        // exactly the state that needs a re-run most, did nothing at all.
-        guard let id = meeting?.id else { return }
-        let segments = detailVM.allSegments
-        let audioURL = meeting?.resolvedAudioURL
-        Task {
-            await MeetingManager.shared.updateLanguage(meetingID: id, language: language.rawValue)
-            MeetingTranscriptRefiner.shared.start(meetingID: id, segments: segments,
-                                                  audioURL: audioURL, forcedLanguage: language)
-        }
-    }
-
-    private var cleanUpButton: some View {
+    /// Opens the inline re-transcribe panel, pre-selecting the current detected language.
+    private var retranscribeButton: some View {
         Button {
-            guard let id = meeting?.id else { return }
-            MeetingTranscriptRefiner.shared.start(meetingID: id, segments: detailVM.allSegments,
-                                                  audioURL: meeting?.resolvedAudioURL, redoAll: true)
+            retranscribeLanguage = resolvedLanguage
+            withAnimation(.easeInOut(duration: 0.2)) { showRetranscribePanel = true }
         } label: {
             HStack(spacing: 5) {
                 Image(systemName: "waveform.badge.magnifyingglass")
@@ -741,7 +711,115 @@ struct MeetingDetailView: View {
             .clipShape(Capsule())
         }
         .buttonStyle(.plain)
-        .help("Re-transcribe the whole recording with the best available model for the detected language, replacing every card, to fix misheard words and punctuation")
+        .disabled(showRetranscribePanel)
+        .help("Re-transcribe the whole recording — pick the language below to fix a wrong detection")
+    }
+
+    /// Inline panel that lets the user pick a language and kick off a full re-decode.
+    @ViewBuilder
+    private var retranscribePanel: some View {
+        if showRetranscribePanel {
+            VStack(alignment: .leading, spacing: 10) {
+                // Language row
+                HStack(spacing: 8) {
+                    ZStack {
+                        RoundedRectangle(cornerRadius: 6)
+                            .fill(Color(hex: "5B6CF7").opacity(0.15))
+                            .frame(width: 24, height: 24)
+                        Image(systemName: "globe")
+                            .font(.system(size: 11, weight: .semibold))
+                            .foregroundColor(Color(hex: "5B6CF7"))
+                    }
+
+                    Text("Language")
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundColor(.white)
+
+                    Spacer()
+
+                    Picker("", selection: $retranscribeLanguage) {
+                        Text(TranscriptionLanguage.auto.displayName).tag(TranscriptionLanguage.auto)
+                        Divider()
+                        ForEach(languageOptions, id: \.self) { lang in
+                            Text(lang.displayName).tag(lang)
+                        }
+                    }
+                    .pickerStyle(.menu)
+                    .tint(Color(hex: "5B6CF7"))
+                    .disabled(isRetranscribing)
+                }
+
+                // Action row
+                HStack {
+                    Button(action: startRetranscribe) {
+                        HStack(spacing: 6) {
+                            if isRetranscribing {
+                                ProgressView()
+                                    .controlSize(.mini)
+                                    .scaleEffect(0.7)
+                            } else {
+                                Image(systemName: "arrow.clockwise")
+                                    .font(.system(size: 11, weight: .semibold))
+                            }
+                            Text(isRetranscribing ? "Re-transcribing…" : "Re-transcribe")
+                                .font(.system(size: 12, weight: .semibold))
+                        }
+                        .foregroundColor(.white)
+                        .padding(.horizontal, 14)
+                        .padding(.vertical, 8)
+                        .background(
+                            Capsule().fill(
+                                LinearGradient(
+                                    colors: [Color(hex: "5B6CF7"), Color(hex: "7B5BF7")],
+                                    startPoint: .leading, endPoint: .trailing
+                                )
+                            )
+                        )
+                        .shadow(color: Color(hex: "5B6CF7").opacity(0.25), radius: 4, y: 1)
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(isRetranscribing)
+
+                    Spacer()
+
+                    if !isRetranscribing {
+                        Button {
+                            withAnimation(.easeInOut(duration: 0.2)) { showRetranscribePanel = false }
+                        } label: {
+                            Text("Cancel")
+                                .font(.system(size: 12, weight: .medium))
+                                .foregroundColor(.white.opacity(0.5))
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+            }
+            .padding(12)
+            .background(RoundedRectangle(cornerRadius: 10).fill(Color.white.opacity(0.06)))
+            .transition(.opacity.combined(with: .move(edge: .top)))
+        }
+    }
+
+    /// Start a re-transcribe run from the panel selection.
+    ///
+    /// No `language != resolvedLanguage` guard — `resolvedLanguage` is only as honest as the
+    /// stamps on the cards; a wrongly decoded pass may stamp the wrong language, so re-picking
+    /// the same language must still trigger a new run.
+    private func startRetranscribe() {
+        guard let id = meeting?.id else { return }
+        let segments = detailVM.allSegments
+        let audioURL = meeting?.resolvedAudioURL
+        let language = retranscribeLanguage
+        Task {
+            if language == .auto {
+                MeetingTranscriptRefiner.shared.start(meetingID: id, segments: segments,
+                                                      audioURL: audioURL, redoAll: true)
+            } else {
+                await MeetingManager.shared.updateLanguage(meetingID: id, language: language.rawValue)
+                MeetingTranscriptRefiner.shared.start(meetingID: id, segments: segments,
+                                                      audioURL: audioURL, forcedLanguage: language)
+            }
+        }
     }
 
     // MARK: - Content

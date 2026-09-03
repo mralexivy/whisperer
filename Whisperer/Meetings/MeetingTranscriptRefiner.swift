@@ -229,7 +229,11 @@ final class MeetingTranscriptRefiner: ObservableObject {
         if let forcedLanguage, forcedLanguage != .auto {
             timeline = .empty
             Logger.info("Transcript refine: language forced to \(forcedLanguage.displayName) by the user", subsystem: .transcription)
-        } else if AppState.shared.selectedLanguage == .auto {
+        } else if redoAll || AppState.shared.selectedLanguage == .auto {
+            // Build the timeline when: (a) the user explicitly requested a fresh detect pass
+            // (`redoAll`), even if the global dictation language is pinned to e.g. English, or
+            // (b) the global setting is already Auto, as before. This is what lets "Re-transcribe
+            // → Auto (detect)" work for users whose dictation language is set to English.
             let liveTally = AppState.shared.lastMeetingNemotronTally
             timeline = await Self.buildTimeline(
                 audioURL: audioURL,
@@ -270,13 +274,13 @@ final class MeetingTranscriptRefiner: ObservableObject {
                     guard let self else { return }
                     Task { @MainActor in
                         MeetingManager.shared.setProcessing(
-                            .polishing,
+                            .fineTuning,
                             notice: "Downloading \(model.displayName) — \(Int(prog * 100))%",
                             for: meetingID
                         )
                     }
                 })
-                MeetingManager.shared.setProcessing(.polishing, notice: nil, for: meetingID)
+                MeetingManager.shared.setProcessing(.fineTuning, notice: nil, for: meetingID)
                 Logger.info("Transcript refine: \(model.displayName) download complete", subsystem: .transcription)
             } catch {
                 Logger.warning("Transcript refine: \(model.displayName) download failed (\(error.localizedDescription)) — folding into baseline", subsystem: .transcription)
@@ -558,7 +562,7 @@ final class MeetingTranscriptRefiner: ObservableObject {
         guard forcedLanguage != nil || redoAll
                 ? canForceRun(audioURL: audioURL)
                 : shouldRun(for: segments, audioURL: audioURL) else { return }
-        MeetingManager.shared.setProcessing(.polishing, for: meetingID)
+        MeetingManager.shared.setProcessing(.fineTuning, for: meetingID)
         runTask = Task { [weak self] in
             guard let self else { return }
             _ = await self.run(meetingID: meetingID, segments: segments,
