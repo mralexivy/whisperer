@@ -25,16 +25,24 @@ Confirmed. Apply by default.
    contains the errors the learner exists to fix, an unchanged corpus proves the feature is
    inert. Assert *no collateral*: every changed token must be one the learner was taught.
 
-7. **Explicit intent buys a different offer, never a weaker gate.** Every source commits through
-   `CorrectionLearningService.observe`. When the gates refuse a pair the user stated outright, the
-   answer is a one-click confirmation that writes a *hand-authored* entry — not a bypass, and not
-   a silent demotion to a list nobody opens.
+7. **Correction learning must not add any latency to text insertion.** The pre-paste AX snapshot
+   was removed 2026-09-03: the observer now builds its anchor from the first post-paste read (400 ms
+   after paste), so `insertText` does zero AX work before the clipboard paste. Verified by
+   inspection: no AX call appears between `enterViaClipboardPaste` and `return` in `insertText`.
 
-8. **A learning affordance the user has to remember to open is a learning affordance nobody
-   uses.** The correction card is offered unasked for ~7 s after each dictation, extends itself
-   while hovered or being typed into, and disappears the moment the next recording starts.
+8. **AX polling after a paste must be front-loaded and bounded, and must abandon on focus change,
+   divergence, and after a correction is mined.** Schedule: 400 ms × 15 (6 s), 2 s × 12 (24 s),
+   5 s × 6 (30 s) = 33 reads at most over 60 s. Each poll is 50 ms AX timeout (polls, not a
+   blocking dependency). Early exit: frontmost-PID check before every AX call, divergence bail-out
+   at 35%, and immediate exit once a correction is mined and stable. The budget is asserted in
+   `CorrectionObservationScheduleBudgetTests`.
 
-9. **AX polling after a paste must be front-loaded and bounded, and must abandon on focus
-   change.** Each poll is a synchronous main-actor AX round-trip with a 100 ms messaging timeout;
-   a flat 500 ms × 60 s schedule is 120 of them, up to 12 s of potential main-thread stall.
-   The shipped schedule is 400 ms × 15 then 2 s × 12.
+9. **Insertion verification is anchoring.** The first post-paste AX read locates `pastedText` as a
+   unique substring of the field. Zero occurrences means the paste silently failed (end-reason
+   `notVerified`); two or more means attribution is ambiguous (`ambiguousAnchor`). Both bail with
+   nothing learned. This is exactly what Wispr calls "insertion verification" (`competitor.md:1436`).
+
+10. **End reasons are logged for threshold tuning.** Every observation exit logs
+    `Logger.event(.dictLearn, .textInjection, [endReason:, polls:, learned:])`. The `0.35`
+    divergence threshold is a **hypothesis** — tune it against real `endReason=editDistanceExceeded`
+    frequency in the logs before treating it as a rule.

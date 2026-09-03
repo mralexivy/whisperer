@@ -116,6 +116,21 @@ enum CorrectionLearningCandidateExtractor {
         return result
     }
 
+    /// Fraction of the original's word positions that changed: 0 = identical, 1 = fully replaced.
+    ///
+    /// Uses the same folded-token LCS as `extract`, so the two functions stay in sync.
+    /// Returned quickly without mining candidates — no allocations beyond the LCS table.
+    static func divergence(original: String, edited: String) -> Double {
+        guard original != edited else { return 0 }
+        let before = tokens(in: original)
+        guard !before.isEmpty else { return 0 }
+        let after = tokens(in: edited)
+        let matches = longestCommonSubsequence(before, after)
+        let unchanged = matches.count
+        let changed = before.count - unchanged
+        return Double(changed) / Double(before.count)
+    }
+
     private static func isEligible(original: String, replacement: String) -> Bool {
         let foldedOriginal = original.folding(options: [.caseInsensitive, .diacriticInsensitive], locale: .current)
         let foldedReplacement = replacement.folding(options: [.caseInsensitive, .diacriticInsensitive], locale: .current)
@@ -153,6 +168,33 @@ struct CorrectionLearningAnchor: Equatable, Sendable {
         suffix = value.substring(from: NSMaxRange(selectedRange))
     }
 
+    /// Builds an anchor by locating `target` as a unique substring of `fieldValue`.
+    ///
+    /// This is the post-paste anchoring path. By finding the pasted text in the field we get
+    /// insertion verification for free: `nil` means the paste silently failed (zero occurrences)
+    /// or cannot be unambiguously attributed (two or more occurrences).
+    init?(fieldValue: String, locating target: String) {
+        guard !target.isEmpty else { return nil }
+        let nsField = fieldValue as NSString
+        let nsTarget = target as NSString
+        let length = nsField.length
+        var firstRange = NSRange(location: NSNotFound, length: 0)
+        var found = 0
+        var searchStart = 0
+        while searchStart < length {
+            let remaining = NSRange(location: searchStart, length: length - searchStart)
+            let range = nsField.range(of: target, options: [], range: remaining)
+            guard range.location != NSNotFound else { break }
+            found += 1
+            if found == 1 { firstRange = range }
+            if found > 1 { return nil }  // ambiguous — bail immediately
+            searchStart = NSMaxRange(range)
+        }
+        guard found == 1 else { return nil }  // zero occurrences = paste didn't land
+        prefix = nsField.substring(to: firstRange.location)
+        suffix = nsField.substring(from: NSMaxRange(firstRange))
+    }
+
     /// Returns the current contents of the pasted region only while both outside anchors are
     /// untouched. This is the privacy and attribution boundary for the collector.
     func region(in currentFieldValue: String) -> String? {
@@ -167,6 +209,22 @@ struct CorrectionLearningAnchor: Equatable, Sendable {
             length: current.length - prefixLength - suffixLength
         ))
     }
+}
+
+/// Identifies why the post-paste observation task ended.
+///
+/// Logged as `endReason` in `Logger.event(.dictLearn, …)` so the divergence threshold and
+/// schedule can be tuned against real usage data.
+enum CorrectionObservationEndReason: String, Sendable {
+    case windowElapsed        // all poll intervals exhausted normally
+    case cancelled            // Task.isCancelled (next paste started)
+    case focusLost            // frontmost app changed away from the target
+    case elementLost          // AX read returned a different element or nil
+    case notVerified          // pasted text not found in field on first read (paste silently failed)
+    case ambiguousAnchor      // pasted text found more than once (can't attribute the edit)
+    case anchorBroken         // outside text changed (user edited beyond the pasted region)
+    case editDistanceExceeded // region diverged past the bail-out threshold (user is composing)
+    case learnedAndSettled    // a correction was mined and a confirming stable poll followed
 }
 
 actor CorrectionSuggestionStore {
@@ -272,9 +330,16 @@ struct AXTextFieldSnapshot: Sendable {
 }
 
 enum AXTextFieldSnapshotReader {
-    static func read(pid: pid_t, expectedElementHash: CFHashCode? = nil) -> AXTextFieldSnapshot? {
+    /// - Parameter messagingTimeout: Per-call AX messaging timeout in seconds.
+    ///   Use `0.1` (default) for the first read after paste; `0.05` for subsequent polls where a
+    ///   slow-responding field can simply be skipped on this tick rather than blocking the task.
+    static func read(
+        pid: pid_t,
+        expectedElementHash: CFHashCode? = nil,
+        messagingTimeout: Float = 0.1
+    ) -> AXTextFieldSnapshot? {
         let application = AXUIElementCreateApplication(pid)
-        AXUIElementSetMessagingTimeout(application, 0.1)
+        AXUIElementSetMessagingTimeout(application, messagingTimeout)
 
         var focusedValue: CFTypeRef?
         guard AXUIElementCopyAttributeValue(
@@ -284,7 +349,7 @@ enum AXTextFieldSnapshotReader {
         ) == .success,
         let focusedValue else { return nil }
         let focused = focusedValue as! AXUIElement
-        AXUIElementSetMessagingTimeout(focused, 0.1)
+        AXUIElementSetMessagingTimeout(focused, messagingTimeout)
         let elementHash = CFHash(focused)
         guard expectedElementHash == nil || expectedElementHash == elementHash else { return nil }
 

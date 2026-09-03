@@ -145,23 +145,16 @@ class TextInjector {
             try await activateApp(pid: pid)
         }
 
-        // Snapshot the destination field immediately before pasting, not when recording started:
-        // the user or the destination may have changed the field during transcription. No
-        // snapshot simply disables learning for this dictation; insertion is unaffected.
-        let learningSnapshot: AXTextFieldSnapshot? = {
-            guard DictionaryManager.shared.correctionLearningEnabled,
-                  let pid = targetAppPID else { return nil }
-            return AXTextFieldSnapshotReader.read(pid: pid)
-        }()
-
         // Tier 1: Clipboard + Cmd+V — the universal default.
         // Works with Chrome web inputs, Electron apps, Safari, AppKit, VS Code,
         // Slack, Notion, terminals, and every other destination. The target app
         // performs its own insertion (selection replacement, undo, DOM events).
         let pasted = try await enterViaClipboardPaste(text)
         if pasted {
-            if let snapshot = learningSnapshot {
-                beginCorrectionObservation(pastedText: text, snapshot: snapshot)
+            // The AX snapshot is taken inside the observer task (400 ms after the paste), not
+            // here, so insertion latency is not affected by any learning I/O.
+            if DictionaryManager.shared.correctionLearningEnabled, let pid = targetAppPID {
+                beginCorrectionObservation(pastedText: text, targetPID: pid)
             }
             return
         }
@@ -180,50 +173,97 @@ class TextInjector {
     // MARK: - Post-Paste Correction Observation (Developer ID only)
 
     #if !APP_STORE
-    /// Watches the field we just pasted into and reports what the user changed.
+    /// Watches the field we just pasted into and reports what the user changed — silently.
     ///
-    /// This is the one learning source that costs something at runtime: every poll is a
-    /// synchronous AX round-trip on the main actor with a 100 ms messaging timeout. A flat
-    /// 500 ms × 60 s schedule is 120 of those, up to 12 s of potential main-thread stall for a
-    /// signal that, in practice, arrives within seconds of the paste. So the schedule is
-    /// front-loaded: dense while the user is still looking at the text, sparse afterwards,
-    /// and abandoned the moment focus leaves the target app.
-    private func beginCorrectionObservation(pastedText: String, snapshot: AXTextFieldSnapshot) {
+    /// Design constraints:
+    /// - **Zero latency on the hot path.** No AX call happens before the paste returns; the first
+    ///   read is 400 ms after paste, inside this detached task.
+    /// - **Main-actor only.** AX calls on `DispatchQueue.global()` cause multi-second queue-
+    ///   contention delays (Critical Rules). A 50 ms timeout + low read count is the right trade.
+    /// - **Early exit.** Switching apps, losing the element, divergence past 35%, or mining a
+    ///   correction all end the task far ahead of the 60 s ceiling.
+    ///
+    /// First poll finds `pastedText` in the field to build the anchor and verify the paste landed.
+    /// Subsequent polls track the pasted region; `CorrectionLearningService.observe` fires when
+    /// an isolated 1:1 word substitution is stable across two consecutive reads.
+    private func beginCorrectionObservation(pastedText: String, targetPID: pid_t) {
         correctionObservationTask?.cancel()
-        guard let anchor = CorrectionLearningAnchor(
-            fieldValue: snapshot.value,
-            selectedRange: snapshot.selectedRange
-        ) else { return }
-
-        let pid = snapshot.pid
-        let elementHash = snapshot.elementHash
         correctionObservationTask = Task { @MainActor [weak self] in
             guard self != nil else { return }
+
+            var anchor: CorrectionLearningAnchor? = nil
+            var elementHash: CFHashCode? = nil
             var lastRegion = pastedText
             var lastRecordedRegion = pastedText
             var stablePolls = 0
+            var pollCount = 0
+            var learnedCount = 0
+
+            // `finish` logs once and exits — the single exit point keeps the reason enum honest.
+            func finish(_ reason: CorrectionObservationEndReason) {
+                guard learnedCount > 0 || reason != .windowElapsed else { return }
+                Logger.event(.dictLearn, .textInjection, [
+                    "endReason": .string(reason.rawValue),
+                    "polls": .int(pollCount),
+                    "learned": .int(learnedCount)
+                ])
+            }
 
             for interval in Self.correctionPollSchedule {
-                do {
-                    try await Task.sleep(nanoseconds: interval)
-                } catch {
-                    return
+                do { try await Task.sleep(nanoseconds: interval) } catch {
+                    finish(.cancelled); return
                 }
-                guard !Task.isCancelled else { return }
+                guard !Task.isCancelled else { finish(.cancelled); return }
+                pollCount += 1
 
-                // Cheap check first — if the user has moved to another app, the edit we would
-                // attribute to them is no longer ours to read.
-                guard NSWorkspace.shared.frontmostApplication?.processIdentifier == pid else { return }
+                // Cheap frontmost-PID check before any AX call.
+                guard NSWorkspace.shared.frontmostApplication?.processIdentifier == targetPID else {
+                    finish(.focusLost); return
+                }
 
+                // Read the current field value (50 ms timeout — these are polls, not a blocking dep).
                 guard let current = AXTextFieldSnapshotReader.read(
-                        pid: pid,
-                        expectedElementHash: elementHash
-                      ),
-                      let region = anchor.region(in: current.value),
-                      !region.isEmpty else { return }
+                    pid: targetPID,
+                    expectedElementHash: elementHash,
+                    messagingTimeout: 0.05
+                ) else {
+                    if anchor != nil { finish(.elementLost); return }
+                    // Pre-anchor: element disappeared before we could verify — give up.
+                    finish(.notVerified); return
+                }
+                elementHash = current.elementHash
 
-                // Two unchanged reads before believing an edit: mid-typing states are not
-                // corrections, and promoting one would learn a prefix of the real word.
+                // First successful read: build the anchor by locating pastedText in the field.
+                if anchor == nil {
+                    guard let built = CorrectionLearningAnchor(
+                        fieldValue: current.value,
+                        locating: pastedText
+                    ) else {
+                        // pastedText not found → paste silently failed; found twice → ambiguous.
+                        let reason: CorrectionObservationEndReason = current.value.contains(pastedText)
+                            ? .ambiguousAnchor : .notVerified
+                        finish(reason); return
+                    }
+                    anchor = built
+                    continue  // start tracking from next poll
+                }
+
+                guard let anchor else { finish(.notVerified); return }
+
+                // Require both outside anchors to be byte-identical (attribution boundary).
+                guard let region = anchor.region(in: current.value), !region.isEmpty else {
+                    finish(.anchorBroken); return
+                }
+
+                // Bail if the user has rewritten more than 35% of the pasted words — they are
+                // composing, not fixing a mishearing.
+                let div = CorrectionLearningCandidateExtractor.divergence(original: pastedText, edited: region)
+                if div > Self.correctionDivergenceThreshold {
+                    finish(.editDistanceExceeded); return
+                }
+
+                // Two consecutive identical reads before trusting an edit: prevents learning
+                // a mid-typing prefix of the real correction.
                 if region == lastRegion {
                     stablePolls += 1
                 } else {
@@ -235,19 +275,36 @@ class TextInjector {
                       region != pastedText,
                       region != lastRecordedRegion else { continue }
                 lastRecordedRegion = region
-                await CorrectionLearningService.observe(
+
+                let outcome = await CorrectionLearningService.observe(
                     original: pastedText,
                     edited: region,
                     source: .pastePostEdit
                 )
+                if !outcome.learned.isEmpty {
+                    learnedCount += outcome.learned.count
+                    // A correction is mined and the region was stable — further reads are unlikely
+                    // to produce another candidate from the same dictation.
+                    finish(.learnedAndSettled); return
+                }
             }
+
+            finish(.windowElapsed)
         }
     }
 
-    /// Poll intervals, in nanoseconds: 400 ms for the first ~6 s, then 2 s out to ~30 s.
-    /// 27 AX reads instead of 120, with the dense part covering when corrections actually happen.
-    private static let correctionPollSchedule: [UInt64] =
-        Array(repeating: 400_000_000, count: 15) + Array(repeating: 2_000_000_000, count: 12)
+    /// Word-level divergence threshold above which observation ends.
+    /// 0.35 = up to 35% of the original's words may change before we infer the user is composing.
+    /// Logged via `endReason=editDistanceExceeded`; tune against real usage data.
+    static let correctionDivergenceThreshold: Double = 0.35
+
+    /// Poll schedule, nanoseconds: dense for the first ~6 s (corrections usually happen here),
+    /// medium for the next ~24 s, sparse for the final ~30 s.
+    /// 33 reads at most; frontmost-PID check before each AX call exits early in the common case.
+    static let correctionPollSchedule: [UInt64] =
+        Array(repeating:   400_000_000, count: 15)   // 400 ms × 15 = 6 s
+      + Array(repeating: 2_000_000_000, count: 12)   // 2 s × 12  = 24 s
+      + Array(repeating: 5_000_000_000, count:  6)   // 5 s × 6   = 30 s
     #endif
 
     // MARK: - Activation

@@ -50,43 +50,24 @@ the speaker said `Glean`) and touch no word they were not taught. **Byte-for-byt
 wrong bar for that metric** — an unchanged reference corpus would have meant the feature does
 nothing, because the reference contains the very mishearing the learner exists to repair.
 
-## The three sources, and what the explicit one is for
+## The two automatic sources
 
 | Source | Build | What it knows |
 |---|---|---|
-| History edit | all | inference — you changed a word, we guess why |
+| History edit | all | inference — you changed a word in a transcript, we guess why |
 | Post-paste AX observer | `#if !APP_STORE` | inference, plus a focus/field-identity boundary |
-| Correction card (HUD) | all | **statement** — you clicked the word and typed the fix |
 
-The card is the only source that works in the App Store build *and* carries unambiguous intent.
-It still commits through `CorrectionLearningService.observe`, so the gates cannot be bypassed by
-being explicit — but a pair the gates refuse is offered as a one-click **"Always fix"** rather than
-being demoted to a review list. Accepting that offer writes a **hand-authored** entry
-(`observedSource == nil`), not an auto-learned one: the user authored it, so it takes the
-hand-authored trust level and joins the fuzzy indexes immediately.
+The correction card ("Got a word wrong?") was removed 2026-09-03. It appeared unconditionally after
+every dictation, whether or not anything was wrong. The Wispr Flow teardown (`competitor.md §12`)
+confirmed the right design is fully silent: the observer watches the field for 60 s, mines any
+isolated 1:1 word substitution once the region is stable across two polls, and fires the
+"Learned: X — heard as Y" toast *only when something was actually learned*. The only visible
+artifact of auto-learning is that toast with its Undo button and the Dictionary tab slowly filling.
 
-The card's behaviour is asserted rather than eyeballed — 11 tests over the tokenizer and commit
-path (`CorrectionPopoverTests`), the panel's focus contract (`CorrectionCardFocusTests`), its
-lifetime and dismissal (`CorrectionPromptLifecycleTests`) and its two outcomes
-(`CorrectionCardOutcomeTests`). The lifetime tests exist because "a stale card fought the recording
-HUD" is exactly the kind of defect nobody catches reliably by looking.
+For App Store builds (no AX) the only automatic source is `historyEdit`; borderline pairs surface in
+the Dictionary tab review list. Hand-authored entries can always be added from there.
 
-Implementation facts worth keeping:
-
-- **Replace the clicked token by index, never by string.** "the report says the report is late"
-  with a string replace changes both, which the miner reads as a two-substitution diff and
-  discards — the user's correction vanishes with no error anywhere.
-- **The chips must use the extractor's own word pattern.** A chip the miner cannot learn from is a
-  chip that should never have been clickable.
-- **A `[.borderless, .nonactivatingPanel]` window does take keystrokes — measured, not assumed.**
-  With `canBecomeKey = true` / `canBecomeMain = false`, `makeKeyAndOrderFront` makes the panel key,
-  `makeFirstResponder(field)` installs the field editor as first responder, `NSEvent.keyEvent`s
-  dispatched through `sendEvent` land in `stringValue`, and the panel never becomes main — so the
-  app is not activated and the user is not pulled out of whatever they were dictating into
-  (`CorrectionCardFocusTests`, 4 assertions). This is why the editor is an AppKit `NSTextField`
-  rather than a SwiftUI `TextField`: the *window* is fine, SwiftUI's focus plumbing in a borderless
-  panel is the soft spot. `NSApp.activate` is never an option here. The card still re-checks
-  `isKeyWindow` one runloop later and closes itself with a logged warning, because a field that
+Implementation notes carried forward:
   silently eats keystrokes is the worst failure available to a feature whose whole job is to
   capture a typed word.
 

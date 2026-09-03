@@ -188,11 +188,6 @@ struct OverlayView: View {
                     .id(learned.id)
             }
 
-            if let prompt = appState.correctionPrompt {
-                CorrectionPopoverCard(prompt: prompt)
-                    .id(prompt.id)
-            }
-
             if appState.showClipboardToast {
                 ClipboardToastIndicator(scale: scale)
             } else if appState.showFileTranscribingToast {

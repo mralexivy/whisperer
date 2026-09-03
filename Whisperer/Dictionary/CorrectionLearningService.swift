@@ -4,9 +4,9 @@
 //
 //  The one place an observed correction becomes a dictionary entry.
 //
-//  Every learning source — a History edit, the correction popover, the post-paste AX observer —
-//  funnels through `observe(original:edited:source:)`. Keeping the pipeline single means the
-//  gates in `CorrectionPromotion` cannot be bypassed by adding a source later.
+//  Every learning source — a History edit, the post-paste AX observer — funnels through
+//  `observe(original:edited:source:)`. Keeping the pipeline single means the gates in
+//  `CorrectionPromotion` cannot be bypassed by adding a source later.
 //
 //  Pipeline: mine isolated 1:1 substitutions → evaluate each against the promotion gates →
 //  tier 1 becomes a dictionary entry now, tier 2 becomes a suggestion, everything else is dropped.
@@ -16,7 +16,6 @@ import Foundation
 
 enum CorrectionLearningSource: String, Sendable {
     case historyEdit
-    case correctionPopover
     case pastePostEdit
 }
 
