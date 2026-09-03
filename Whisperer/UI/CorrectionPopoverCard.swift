@@ -63,6 +63,15 @@ struct CorrectionPopoverCard: View {
             withAnimation(.spring(response: 0.38, dampingFraction: 0.78).delay(0.03)) {
                 appeared = true
             }
+            // Delay so FlowLayout finishes wrapping before fittingSize is queried
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.12) {
+                NotificationCenter.default.post(name: .overlayContentHeightChanged, object: nil)
+            }
+        }
+        .onChange(of: phase) { _ in
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
+                NotificationCenter.default.post(name: .overlayContentHeightChanged, object: nil)
+            }
         }
     }
 

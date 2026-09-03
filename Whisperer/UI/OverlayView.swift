@@ -146,7 +146,6 @@ struct OverlayView: View {
     @ObservedObject var appState = AppState.shared
     @AppStorage("overlaySize") private var overlaySizeRaw: String = OverlaySize.medium.rawValue
     @State private var isCloseHovered = false
-    @State private var correctionCardHeight: CGFloat = 0
 
     private var scale: CGFloat {
         (OverlaySize(rawValue: overlaySizeRaw) ?? .medium).scale
@@ -165,18 +164,6 @@ struct OverlayView: View {
         appState.activeMode == .rewrite ? purpleAccent : blueAccent
     }
     #endif
-
-    private func reportCorrectionHeight(_ cardHeight: CGFloat) {
-        guard cardHeight > 0 else { return }
-        correctionCardHeight = cardHeight
-        // top padding + card + bottom padding, accounting for scale
-        let total = 35 * scale + cardHeight + 20 * scale
-        NotificationCenter.default.post(
-            name: .overlayContentHeightChanged,
-            object: nil,
-            userInfo: ["explicitHeight": total]
-        )
-    }
 
     // Scaled dimensions
     private var circleSize: CGFloat { 44 * scale }
@@ -204,13 +191,6 @@ struct OverlayView: View {
             if let prompt = appState.correctionPrompt {
                 CorrectionPopoverCard(prompt: prompt)
                     .id(prompt.id)
-                    .background(
-                        GeometryReader { geo in
-                            Color.clear
-                                .onAppear { reportCorrectionHeight(geo.size.height) }
-                                .onChange(of: geo.size.height) { h in reportCorrectionHeight(h) }
-                        }
-                    )
             }
 
             if appState.showClipboardToast {

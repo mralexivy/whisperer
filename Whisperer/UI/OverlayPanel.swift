@@ -143,20 +143,15 @@ class OverlayPanel: NSPanel {
             self?.positionAtBottomCenter()
         }
 
-        // Observe content height changes. Two cases:
-        // (a) LiveTranscriptionCard posts without userInfo — use debounced fittingSize resize.
-        // (b) CorrectionPopoverCard posts with "explicitHeight" — use that value directly,
-        //     bypassing fittingSize which underestimates FlowLayout height.
+        // Observe content height changes (expand/collapse of live transcription card).
+        // Debounced 100ms — during word animation height changes fire on every word,
+        // but a layout pass is only needed when text wraps to a new line.
         contentHeightObserver = NotificationCenter.default.addObserver(
             forName: .overlayContentHeightChanged,
             object: nil,
             queue: .main
-        ) { [weak self] notification in
-            if let explicit = notification.userInfo?["explicitHeight"] as? CGFloat {
-                self?.scheduleResizeToHeight(explicit)
-            } else {
-                self?.scheduleResize()
-            }
+        ) { [weak self] _ in
+            self?.scheduleResize()
         }
 
         // Check initial state
@@ -215,31 +210,21 @@ class OverlayPanel: NSPanel {
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.1, execute: item)
     }
 
-    private func scheduleResizeToHeight(_ height: CGFloat) {
-        resizeWorkItem?.cancel()
-        let item = DispatchWorkItem { [weak self] in self?.adjustFrameToHeight(height) }
-        resizeWorkItem = item
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.05, execute: item)
-    }
-
-    private func adjustFrameToHeight(_ targetHeight: CGFloat) {
-        let sizePref = OverlaySize.current
-        let dims = sizePref.dimensions
-        let neededHeight = max(dims.height * 0.25, targetHeight)
-        applyFrameHeight(neededHeight, dims: dims)
-    }
-
     private func adjustFrameForContent() {
         guard let hostingView = contentView?.subviews.first else { return }
         let fittingSize = hostingView.fittingSize
         let sizePref = OverlaySize.current
         let dims = sizePref.dimensions
-        let neededHeight = max(dims.height, fittingSize.height)
-        applyFrameHeight(neededHeight, dims: dims)
-    }
 
-    private func applyFrameHeight(_ neededHeight: CGFloat, dims: (width: CGFloat, height: CGFloat)) {
+        // Allow the panel to shrink to content when only small cards are shown (no recording HUD).
+        // The recording HUD itself posts height changes and the panel will grow back as needed.
+        let appState = AppState.shared
+        let hasRecordingControls = appState.state != .idle
+        let minHeight: CGFloat = hasRecordingControls ? dims.height : 80
+        let neededHeight = max(minHeight, fittingSize.height)
         let currentFrame = self.frame
+
+        // Skip if height hasn't meaningfully changed
         guard abs(neededHeight - currentFrame.height) > 1 else { return }
 
         let positionPref = UserDefaults.standard.string(forKey: "overlayPosition")
@@ -247,6 +232,7 @@ class OverlayPanel: NSPanel {
 
         let newFrame: NSRect
         if positionPref == .topCenter {
+            // Keep top edge fixed, grow downward
             newFrame = NSRect(
                 x: currentFrame.origin.x,
                 y: currentFrame.origin.y + currentFrame.height - neededHeight,
@@ -254,6 +240,7 @@ class OverlayPanel: NSPanel {
                 height: neededHeight
             )
         } else {
+            // Keep bottom edge fixed, grow upward
             newFrame = NSRect(
                 x: currentFrame.origin.x,
                 y: currentFrame.origin.y,
