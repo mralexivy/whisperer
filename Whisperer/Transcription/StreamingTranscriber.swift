@@ -3038,12 +3038,20 @@ class StreamingTranscriber {
 
         // Dispatch stop() — which runs synchronous whisper.cpp tail inference — off the main actor.
         // By this point all in-flight chunks are done, so completedChunkTexts/allSamplesLock are stable.
+        //
+        // IMPORTANT: Task.detached { self.stop() } does NOT run off the main actor here.
+        // StreamingTranscriber is @MainActor by default (SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor),
+        // so Swift hops self.stop() back to the main thread despite the Task.detached wrapper.
+        // The same limitation is documented at languageProbeQueue (line ~507): explicit DispatchQueue
+        // is the only way to truly run blocking C code (whisper_full_with_state, ggml_metal_synchronize)
+        // off the main thread. Without this fix, the main thread blocks for the duration of the tail
+        // decode — 500ms to 2s+ — causing the "Main thread unresponsive" health alert.
         return await withCheckedContinuation { [weak self] continuation in
             guard let self else {
                 continuation.resume(returning: "")
                 return
             }
-            Task.detached(priority: .userInitiated) { [weak self] in
+            DispatchQueue.global(qos: .userInitiated).async { [weak self] in
                 guard let self else {
                     continuation.resume(returning: "")
                     return
