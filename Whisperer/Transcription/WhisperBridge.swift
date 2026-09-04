@@ -347,6 +347,10 @@ class WhisperBridge: TranscriptionBackend {
         /// separate acquisitions, not inside one — so the question result-handling asks has to
         /// change from "are we aborting *now*" to "did anyone ask during *this* operation".
         var requestedDuringCurrentOp = false
+        /// Incremented by `encoder_begin_callback` on every encoder invocation. Reset at the
+        /// start of each operation via `beginAbortEpoch()`. Used by the tail-decode timing path
+        /// to distinguish a single-encoder run from a multi-encoder seek loop.
+        var encoderBeginCount: Int = 0
     }
 
     /// Read from `abort_callback` on whisper.cpp's decode thread and written from the stop path
@@ -371,8 +375,12 @@ class WhisperBridge: TranscriptionBackend {
     /// by the *previous* operation can never be attributed to this one. Seeds from `requested`
     /// so an abort already pending at entry still counts.
     private func beginAbortEpoch() {
-        abortFlag.withLock { $0.requestedDuringCurrentOp = $0.requested }
+        abortFlag.withLock { $0.requestedDuringCurrentOp = $0.requested; $0.encoderBeginCount = 0 }
     }
+
+    /// The number of encoder-begin callbacks fired since the last `beginAbortEpoch()`. Meaningful
+    /// only while holding `ctxLock`, since it is written on whisper.cpp's decode thread.
+    var encoderBeginCount: Int { abortFlag.withLock { $0.encoderBeginCount } }
 
     // Transcription timeout (default 30 seconds, longer on Intel)
     var transcriptionTimeout: TimeInterval = 30.0
@@ -945,6 +953,7 @@ class WhisperBridge: TranscriptionBackend {
         wparams.encoder_begin_callback = { _, _, userData -> Bool in
             guard let userData = userData else { return true }
             let bridge = Unmanaged<WhisperBridge>.fromOpaque(userData).takeUnretainedValue()
+            bridge.abortFlag.withLock { $0.encoderBeginCount += 1 }
             return !bridge.shouldAbort
         }
         wparams.encoder_begin_callback_user_data = userData
@@ -1098,6 +1107,59 @@ class WhisperBridge: TranscriptionBackend {
     }
 
     // MARK: - Timestamped transcription
+
+    // MARK: - Tail-decode instrumentation
+
+    /// Same as `transcribe` but also returns internal whisper timing counters for the tail-decode
+    /// diagnostic log line.
+    ///
+    /// `whisper_get_timings` returns **per-run averages** (cumulative since the last
+    /// `whisper_reset_timings`), so both the reset and the read must happen inside the same
+    /// `ctxLock` hold as the `whisper_full` call — a concurrent eager pass must not reset or
+    /// pollute the counters between them. All of this happens inside `performTranscription`.
+    ///
+    /// This method is debug-only overhead (one extra C call); callers should not use it on the
+    /// hot eager path.
+    func transcribeWithTimings(
+        samples: [Float],
+        initialPrompt: String?,
+        language: TranscriptionLanguage,
+        singleSegment: Bool,
+        maxTokens: Int32
+    ) -> (text: String, encoderBegins: Int, encodeMs: Float, decodeMs: Float) {
+        guard !isShuttingDown, isInitialized else { return ("", 0, 0, 0) }
+        var encodeMs: Float = 0
+        var decodeMs: Float = 0
+        var encodes: Int = 0
+        let result: String
+        do {
+            result = try ctxLock.withLock(timeout: lockTimeout) { [weak self] () -> String in
+                guard let self, let ctx = self.ctx else { return "" }
+                whisper_reset_timings(ctx)
+                let text = self.performTranscription(
+                    samples: samples, initialPrompt: initialPrompt,
+                    language: language, singleSegment: singleSegment, maxTokens: maxTokens
+                )
+                if let t = whisper_get_timings(ctx) {
+                    // encode_ms is the average per-encode, not the total. When language == .auto,
+                    // whisper_lang_auto_detect_with_state runs a full encoder pass before the
+                    // transcription encode — that pass never fires encoder_begin_callback, so
+                    // encoderBeginCount under-reports by one. Add the hidden encode back, and
+                    // multiply to get the true total encode time reported in tail.timing.
+                    let hiddenEncodes = language == .auto ? 1 : 0
+                    let trueEncodeCount = self.encoderBeginCount + hiddenEncodes
+                    encodeMs = t.pointee.encode_ms * Float(max(1, trueEncodeCount))
+                    encodes = trueEncodeCount
+                    decodeMs = t.pointee.decode_ms
+                }
+                return text
+            }
+        } catch {
+            Logger.error("transcribeWithTimings lock error: \(error)", subsystem: .transcription)
+            return ("", 0, 0, 0)
+        }
+        return (result, encodes, encodeMs, decodeMs)
+    }
 
     /// Transcribe and keep whisper's own segment boundaries.
     ///

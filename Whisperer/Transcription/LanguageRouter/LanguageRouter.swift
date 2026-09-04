@@ -42,18 +42,6 @@ enum RoutingThresholds {
     static let fullDetectionSamples = 480_000  // 30 s — 0.98-0.99 on measured data
     static let minVoicedDetectionSamples = 160_000  // 10 s of voiced audio required for detection
 
-    // First probe of a session — deliberately looser than the cadence floors above.
-    //
-    // Those floors were written for meetings, where waiting 10 s of *voiced* audio for a 0.93
-    // verdict is free. For push-to-talk dictation it is not: a 11 s utterance can never contain
-    // 10 s of voiced speech, so the guard above rejected every short recording and the session
-    // ran to completion with `routeDecision == nil`. That is not "no routing" — it is `.auto`,
-    // which makes whisper re-detect independently on every eager pass, and consecutive windows
-    // of the same English speech came back en, en, ru. A weak verdict is strictly better than
-    // per-pass re-detection, and the arbiter already weighs verdicts by confidence, so a 0.58
-    // first probe cannot outvote a 0.93 one that arrives later.
-    static let firstProbeSamples = 80_000        // 5 s of audio in the ring
-    static let minVoicedFirstProbeSamples = 40_000  // 2.5 s of voiced audio
     static let fastPathMargin: Float = 0.30    // Top must beat runner-up by this for early lock (empirical)
 
     // Scoring weights — initial routing (no transcript yet)

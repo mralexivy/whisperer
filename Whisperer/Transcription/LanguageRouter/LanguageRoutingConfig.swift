@@ -22,6 +22,21 @@ struct LanguageRoutingConfig: Codable {
 
     var isRoutingEnabled: Bool { allowedLanguages.count > 1 }
 
+    /// The concrete language to start a transcriber with when routing is disabled (single allowed
+    /// language). Returns nil when routing is enabled (the transcriber handles detection itself)
+    /// or when the allowed set is empty — which is not a normal state.
+    ///
+    /// When `isRoutingEnabled` is false, neither LanguageRouter nor ModelRouter is created, so the
+    /// transcriber never probes for a language. If `selectedLanguage` is `.auto` the transcriber
+    /// runs the whole session as `.auto`, meaning whisper re-detects per eager pass and
+    /// `languageIsLocked` is never true — confirmation is blocked for the full `unroutedCommitGrace`
+    /// (30 s). Passing the sole allowed language resolves this: `languageIsLocked` is true from
+    /// pass 1 without any detection machinery.
+    var singleLanguageStartLanguage: TranscriptionLanguage? {
+        guard !isRoutingEnabled, let sole = allowedLanguages.first, sole != .auto else { return nil }
+        return sole
+    }
+
     // MARK: - Persistence
 
     private static let userDefaultsKey = "languageRoutingConfig"

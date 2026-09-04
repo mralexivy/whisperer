@@ -665,7 +665,6 @@ class AppState: ObservableObject {
                routingConfig.allowedLanguages != oldValue.allowedLanguages {
                 if routingConfig.isRoutingEnabled {
                     Logger.info("Routing config changed, re-initializing language routing", subsystem: .model)
-                    MLXLanguageDetector.shared.prepareAsync()
                     preloadLanguageRouting()
                 } else {
                     Logger.info("Routing disabled, releasing model pool", subsystem: .model)
@@ -2582,7 +2581,6 @@ class AppState: ObservableObject {
             Logger.debug("Language routing disabled (single language)", subsystem: .model)
             return
         }
-        MLXLanguageDetector.shared.prepareAsync()
 
         // Parakeet/Nemotron detect language natively — skip WhisperBridge detection + ModelPool.
         guard selectedBackendType != .parakeet && selectedBackendType != .nemotron && selectedBackendType != .nemotronHebrew else {
@@ -2941,7 +2939,12 @@ class AppState: ObservableObject {
                 #else
                 let anyNemotronInApp: AnyObject? = nil
                 #endif
-                streamingTranscriber = StreamingTranscriber(backend: bridge, vad: sileroVAD, language: selectedLanguage, initialPrompt: promptWordsString, fillerWordRemovalEnabled: fillerWordRemovalEnabled, modelPool: modelPool, languageRouter: routingConfig.isRoutingEnabled ? LanguageRouter(allowed: routingConfig.allowedLanguages, primary: routingConfig.primaryLanguage) : nil, modelRouter: routingConfig.isRoutingEnabled ? ModelRouter(languageModelMap: buildLanguageModelMap(), fallbackProfile: buildFallbackProfile()) : nil, previewBridge: livePreviewBridge(for: bridge), nemotronBridge: anyNemotronInApp)
+                // When routing is disabled (single allowed language) and the user chose auto-detect,
+                // pass the sole allowed language explicitly. Without this the transcriber starts as
+                // .auto, whisper re-detects on every eager pass, and languageIsLocked is false for the
+                // full 30 s unroutedCommitGrace — blocking all LocalAgreement-2 confirmation.
+                let startLanguage = routingConfig.singleLanguageStartLanguage ?? selectedLanguage
+                streamingTranscriber = StreamingTranscriber(backend: bridge, vad: sileroVAD, language: startLanguage, initialPrompt: promptWordsString, fillerWordRemovalEnabled: fillerWordRemovalEnabled, modelPool: modelPool, languageRouter: routingConfig.isRoutingEnabled ? LanguageRouter(allowed: routingConfig.allowedLanguages, primary: routingConfig.primaryLanguage) : nil, modelRouter: routingConfig.isRoutingEnabled ? ModelRouter(languageModelMap: buildLanguageModelMap(), fallbackProfile: buildFallbackProfile()) : nil, previewBridge: livePreviewBridge(for: bridge), nemotronBridge: anyNemotronInApp)
 
                 // Wire language detection → UI update
                 streamingTranscriber?.onLanguageDetected = { [weak self] lang in
@@ -3440,7 +3443,9 @@ class AppState: ObservableObject {
                 #else
                 let nemotron: AnyObject? = nil
                 #endif
-                streamingTranscriber = StreamingTranscriber(backend: bridge, vad: sileroVAD, language: selectedLanguage, initialPrompt: promptWordsString, fillerWordRemovalEnabled: fillerWordRemovalEnabled, modelPool: modelPool, languageRouter: routingConfig.isRoutingEnabled ? LanguageRouter(allowed: routingConfig.allowedLanguages, primary: routingConfig.primaryLanguage) : nil, modelRouter: routingConfig.isRoutingEnabled ? ModelRouter(languageModelMap: buildLanguageModelMap(), fallbackProfile: buildFallbackProfile()) : nil, previewBridge: livePreviewBridge(for: bridge), nemotronBridge: nemotron)
+                // See the matching comment at the in-app transcriber creation above.
+                let startLanguage = routingConfig.singleLanguageStartLanguage ?? selectedLanguage
+                streamingTranscriber = StreamingTranscriber(backend: bridge, vad: sileroVAD, language: startLanguage, initialPrompt: promptWordsString, fillerWordRemovalEnabled: fillerWordRemovalEnabled, modelPool: modelPool, languageRouter: routingConfig.isRoutingEnabled ? LanguageRouter(allowed: routingConfig.allowedLanguages, primary: routingConfig.primaryLanguage) : nil, modelRouter: routingConfig.isRoutingEnabled ? ModelRouter(languageModelMap: buildLanguageModelMap(), fallbackProfile: buildFallbackProfile()) : nil, previewBridge: livePreviewBridge(for: bridge), nemotronBridge: nemotron)
 
                 // Wire language detection → UI update
                 streamingTranscriber?.onLanguageDetected = { [weak self] lang in

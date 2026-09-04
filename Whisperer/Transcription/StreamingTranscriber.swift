@@ -498,6 +498,11 @@ class StreamingTranscriber {
     private var lastDetectionSampleCount: Int = 0
     private var scriptMismatchCount: Int = 0
     private var chunkLangMismatchCount: Int = 0  // Weak signal from whisper_full_lang_id
+
+    // Agreement ratchet: two consecutive whisper per-pass detections that agree → pin the language.
+    // Resets when the router locks (agreement reached) or when the transcriber stops.
+    private var lastWhisperDetectedLanguage: String?
+    private var consecutiveWhisperAgreementCount: Int = 0
     private var lastSilenceStart: Date?
     private var newUtteranceAfterSilence: Bool = false
 
@@ -1258,7 +1263,7 @@ class StreamingTranscriber {
             // at all, i.e. `.auto`, i.e. whisper re-detecting per pass. Cadence governs re-probes.
             let isFirstProbe = lastDetectionSampleCount == 0
             let due = isFirstProbe
-                ? totalInRing >= RoutingThresholds.firstProbeSamples
+                ? totalInRing >= RoutingThresholds.minDetectionSamples
                 : totalInRing >= max(RoutingThresholds.minDetectionSamples,
                                      lastDetectionSampleCount + cadenceSamples)
             if due {
@@ -1267,8 +1272,7 @@ class StreamingTranscriber {
                     samples: Array(allSamples.suffix(windowSize)),
                     pool: pool,
                     langRouter: langRouter,
-                    mdlRouter: mdlRouter,
-                    isFirstProbe: isFirstProbe
+                    mdlRouter: mdlRouter
                 )
                 // Only a probe that actually reached the decoder consumes the cadence. Marking a
                 // rejected one as spent (too little voiced audio, another probe in flight) pushed
@@ -1438,7 +1442,9 @@ class StreamingTranscriber {
                 // Post-chunk script stabilizer — check for language mismatches
                 self.checkScriptStability(chunkText: trimmed)
 
-                // Weak reinforcement from whisper_full_lang_id (decoder state, not independent detection)
+                // Track whisper_full_lang_id against the locked language for script-mismatch signals.
+                // On the fixed-language path lang_id reflects the configured language, not a detect;
+                // on the .auto path it is a real mel-based detect. Both are useful for mismatch counting.
                 if let bridge = self.whisper as? WhisperBridge,
                    let detectedCode = bridge.lastDetectedLanguage,
                    let detectedLang = TranscriptionLanguage(rawValue: detectedCode),
@@ -2213,6 +2219,40 @@ class StreamingTranscriber {
                                        audioBaseIndex: base,
                                        candidateEndIndex: endIdx,
                                        decodedLanguage: lang)
+
+                // Agreement ratchet: harvest whisper's own per-pass language detection.
+                // `lastDetectedLanguage` on the bridge holds the lang_id from the last
+                // `whisper_full` call; on the `.auto` path this is set by
+                // `whisper_lang_auto_detect_with_state`, which is a genuine mel-based detect.
+                // Two consecutive agreeing passes → pin, so we avoid the second encoder pass
+                // on all subsequent eager passes and on the tail decode.
+                if self.routeDecision == nil,
+                   let bridge = self.whisper as? WhisperBridge,
+                   let pool = self.modelPool,
+                   let langRouter = self.languageRouter,
+                   let mdlRouter = self.modelRouter,
+                   let code = bridge.lastDetectedLanguage,
+                   let detected = TranscriptionLanguage(rawValue: code),
+                   detected != .auto {
+                    if self.lastWhisperDetectedLanguage == code {
+                        self.consecutiveWhisperAgreementCount += 1
+                        if self.consecutiveWhisperAgreementCount >= 2 {
+                            Logger.info("[\(langRouter.tag)] Whisper agreement: pinning "
+                                + "\(detected.displayName) after "
+                                + "\(self.consecutiveWhisperAgreementCount) consecutive passes",
+                                subsystem: .transcription)
+                            if let decision = langRouter.adopt(detected, confidence: 0.9) {
+                                self.applyRoute(for: decision, pool: pool, mdlRouter: mdlRouter)
+                            }
+                            self.pinNemotron(to: detected)
+                        }
+                    } else {
+                        self.lastWhisperDetectedLanguage = code
+                        self.consecutiveWhisperAgreementCount = 1
+                        Logger.debug("Whisper per-pass detection: \(code) (1/2 needed to pin)",
+                            subsystem: .transcription)
+                    }
+                }
             } else {
                 // Distinguish the benign case. Every recording ends with one nil pass a few
                 // tens of ms before `Transcribing tail:` — the stop path takes `ctxLock` out
@@ -2717,7 +2757,9 @@ class StreamingTranscriber {
         whisper.resetAbort()
 
         // Synchronous transcription for the tail
+        let t0Norm = CACurrentMediaTime()
         let normalizedSamples = normalizeSamples(tailChunk.samples)
+        let normMs = (CACurrentMediaTime() - t0Norm) * 1000
 
         // Deliberately NO `audio_ctx` here — the tail encodes the full 1500 frames.
         //
@@ -2738,13 +2780,37 @@ class StreamingTranscriber {
         // decoder loop and Metal graph setup are the remaining candidates. `audioCtxForSamples`
         // and the `audioCtx:` parameter are kept only so that test still compiles and runs as a
         // standing disproof; nothing on the production path passes a non-zero value.
-        let text = whisper.transcribe(
-            samples: normalizedSamples,
-            initialPrompt: prompt,
-            language: effectiveLanguage,
-            singleSegment: false,
-            maxTokens: 0
-        ).trimmingCharacters(in: .whitespacesAndNewlines)
+        let t0Decode = CACurrentMediaTime()
+        // Use the instrumented path when the bridge supports it — reads whisper_get_timings() and
+        // encoderBeginCount atomically inside ctxLock so concurrent eager passes cannot pollute them.
+        var whisperEncodeMs: Float = 0
+        var whisperDecodeMs: Float = 0
+        var encoderBegins: Int = 0
+        let rawText: String
+        if let wBridge = whisper as? WhisperBridge {
+            let r = wBridge.transcribeWithTimings(
+                samples: normalizedSamples,
+                initialPrompt: prompt,
+                language: effectiveLanguage,
+                singleSegment: false,
+                maxTokens: 0
+            )
+            rawText = r.text
+            encoderBegins = r.encoderBegins
+            whisperEncodeMs = r.encodeMs
+            whisperDecodeMs = r.decodeMs
+        } else {
+            rawText = whisper.transcribe(
+                samples: normalizedSamples,
+                initialPrompt: prompt,
+                language: effectiveLanguage,
+                singleSegment: false,
+                maxTokens: 0
+            )
+        }
+        let decodeWallMs = (CACurrentMediaTime() - t0Decode) * 1000
+        let t0Post = CACurrentMediaTime()
+        let text = rawText.trimmingCharacters(in: .whitespacesAndNewlines)
 
         if !text.isEmpty && !isHallucination(text) {
             let deduped: String
@@ -2769,6 +2835,26 @@ class StreamingTranscriber {
                 ))
             }
         }
+        let postMs = (CACurrentMediaTime() - t0Post) * 1000
+        // B1 tail-decode diagnostic. Appears on every actual tail decode (not every stop — preview
+        // reuse and no-speech exits return early above). Use this to determine whether the decode
+        // cost comes from multiple encoder passes (encodes > 1) or from the V3 decoder token loop.
+        // encodeMs / decodeMs are from whisper_get_timings() — 0 when the bridge is not WhisperBridge.
+        Logger.event(
+            .recStop, .transcription,
+            [
+                "tail.timing": .string(
+                    "norm=\(String(format: "%.0f", normMs))ms"
+                    + " decode=\(String(format: "%.0f", decodeWallMs))ms"
+                    + " post=\(String(format: "%.0f", postMs))ms"
+                    + " encodes=\(encoderBegins)"
+                    + " wEncode=\(String(format: "%.0f", whisperEncodeMs))ms"
+                    + " wDecode=\(String(format: "%.0f", whisperDecodeMs))ms"
+                    + " samples=\(normalizedSamples.count)"
+                    + " chars=\(text.count)"
+                )
+            ]
+        )
     }
 
     private func clearAndReturn(_ result: String) -> String {
@@ -3857,8 +3943,7 @@ class StreamingTranscriber {
         samples: [Float],
         pool: ModelPool,
         langRouter: LanguageRouter,
-        mdlRouter: ModelRouter,
-        isFirstProbe: Bool = false
+        mdlRouter: ModelRouter
     ) -> Bool {
         // Apply accumulated arbiter evidence before firing a new probe — a previous probe may
         // have landed since the last cadence tick.
@@ -3871,11 +3956,8 @@ class StreamingTranscriber {
             let totalVoiced = segments.reduce(0) { acc, seg in
                 acc + min(seg.endSample, samples.count) - min(seg.startSample, samples.count)
             }
-            let minVoiced = isFirstProbe
-                ? RoutingThresholds.minVoicedFirstProbeSamples
-                : RoutingThresholds.minVoicedDetectionSamples
-            guard totalVoiced >= minVoiced else {
-                Logger.debug("Detection skipped: \(totalVoiced) voiced samples < \(minVoiced) required", subsystem: .transcription)
+            guard totalVoiced >= RoutingThresholds.minVoicedDetectionSamples else {
+                Logger.debug("Detection skipped: \(totalVoiced) voiced samples < \(RoutingThresholds.minVoicedDetectionSamples) required", subsystem: .transcription)
                 return false
             }
             var voiced = [Float]()
@@ -3888,10 +3970,9 @@ class StreamingTranscriber {
             detectionSamples = voiced
         }
 
-        let mlxDetector = MLXLanguageDetector.shared
         let bridge = whisper as? WhisperBridge
-        guard mlxDetector.isReady || bridge != nil else {
-            Logger.debug("No language detector available (MLX not ready, no WhisperBridge)", subsystem: .transcription)
+        guard bridge != nil else {
+            Logger.debug("No language detector available (no WhisperBridge)", subsystem: .transcription)
             return false
         }
 
@@ -3907,14 +3988,6 @@ class StreamingTranscriber {
         let probeStart = max(0, audioSeconds - windowSeconds)
         let samplesSnapshot = detectionSamples
         // Capture routing state before dispatching.
-        // MLX (ECAPA-TDNN) runs on Metal GPU and contends with the concurrent whisper.cpp
-        // encoder pass (CLAUDE.md: detector bridge must not fight the main model for Metal).
-        // Limit MLX to: (a) first probe only (before a route decision exists), AND
-        //               (b) only when no eager pass is actively decoding.
-        // Refinement probes always use WhisperBridge (CPU-only via tiny model ctxLock path).
-        let alreadyDecided = routeDecision != nil
-        let whisperDecoding = isProcessing  // true while whisper_full is running on Metal
-
         let probeQueue = languageProbeQueue
 
         Task.detached(priority: .userInitiated) { [weak self] in
@@ -3936,19 +4009,10 @@ class StreamingTranscriber {
             // HUD's word-reveal timers, not the `DispatchQueue.main.async` hops carrying Nemotron
             // partials — which is exactly the live preview freezing mid-sentence and then flushing
             // the whole backlog in a burst.
-            let useMLX = mlxDetector.isReady && !alreadyDecided && !whisperDecoding
             let probe: (probabilities: [String: Float], elapsedMs: Double)?
                 = await withCheckedContinuation { continuation in
                     probeQueue.async {
                         let started = CACurrentMediaTime()
-                        // MLX ECAPA-TDNN for the first probe only, and only when no eager
-                        // pass is running on Metal — avoids GPU contention with whisper.cpp.
-                        if useMLX, let probs = mlxDetector.detect(samples: samplesSnapshot) {
-                            continuation.resume(
-                                returning: (probs, (CACurrentMediaTime() - started) * 1000)
-                            )
-                            return
-                        }
                         guard let probs = bridge?.detectLanguage(samples: samplesSnapshot) else {
                             continuation.resume(returning: nil)
                             return
@@ -3966,10 +4030,11 @@ class StreamingTranscriber {
             guard !self.isStopped else { return }
             let probs = probe.probabilities
             let elapsed = probe.elapsedMs
-            let counted = self.languageArbiter.recordAccurate(probabilities: probs, start: probeStart, end: audioSeconds)
+            let counted = self.languageArbiter.recordAccurate(
+                probabilities: probs, start: probeStart, end: audioSeconds
+            )
             let top = probs.max(by: { $0.value < $1.value })
-            let detector = useMLX ? "MLX" : "V3"
-            Logger.info("Language probe (\(detector)): top=\(top?.key ?? "?") "
+            Logger.info("Language probe (V3): top=\(top?.key ?? "?") "
                 + "p=\(String(format: "%.3f", top?.value ?? 0))\(counted ? "" : " — below floor") "
                 + "in \(String(format: "%.0f", elapsed))ms "
                 + "(\(self.languageArbiter.accurateProbeCount) probe(s) this session)", subsystem: .transcription)

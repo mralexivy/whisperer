@@ -555,3 +555,95 @@ seeing the corpus, while using their stored same-model decode as gold cannot sco
 
 Verdict: **UNMEASURED, runtime reverted/not landed**. W1 remains rejected until W2 produces reviewed
 corrections plus subsequent real recordings sufficient to certify the pre-registered population.
+
+## Dictation-to-injection latency: measured breakdown (2026-09-03, n=7)
+
+All measurements in the same target app with the same app's `restoreDelayByBundle`.
+
+| Stage | Log markers | Median | Range |
+|---|---|---|---|
+| Stop plumbing | `Shortcut RELEASED` → `rec.stop` | 0.032 s | 0.022–0.049 |
+| Eager-stop reuse decision | → `Hybrid preview check` | 0.018 s | 0.012–0.695 |
+| Drain in-flight eager pass | → `Eager stop drained` | 0.265 s | 0.016–0.396 |
+| Tail setup | → `Transcribing tail:` | 0.081 s | 0.060–0.547 |
+| **Tail whisper decode** | → `rec.stop chars=` | **1.350 s** | 0.690–1.993 |
+| Polish (mmBERT) | → `polish:` | 0.060 s | 0.035–0.103 |
+| Clipboard paste + restore | → `Dictated text entered` | 0.128 s | 0.126–0.220 |
+| **Total** | | **2.03 s** | 1.15–3.31 |
+
+Paste is not perceived latency: `enterViaClipboardPaste` posts Cmd+V *before* the
+`restoreDelayByBundle` sleep. Perceived latency is ~1.9 s; the injector is not the target.
+
+The tail decode cost is **uncorrelated with tail audio length** (1.8 s audio → 1.99 s; 3.8 s
+audio → 1.35 s) and quantized in ~0.67 s steps, suggesting encode-count multiples. Use the
+`tail.timing` log line (added by B1 instrumentation) to distinguish encode-loop, decoder-loop,
+and normalization as the dominant factor.
+
+## Why short dictations confirm nothing (the 8.6 s language-decision delay)
+
+LocalAgreement-2 skips confirmation when `languageIsLocked == false`. It is false until the
+language is decided. The decision was delayed by:
+
+1. `firstProbeSamples = 80,000` (5 s) total-audio gate before the first probe fires
+2. `minVoicedFirstProbeSamples = 40,000` (2.5 s) voiced-audio gate (both gates required)
+3. V3 probe blocked on `ctxLock` by the live decoder: observed 3.245 s in the 2026-09-03 log
+   (logged as `Language probe (V3): … in 3245ms`)
+4. MLX was skipped whenever an eager pass was decoding (`!whisperDecoding` guard), so every
+   first probe fell through to V3 despite MLX being ~10× faster
+
+Combined: ~8.6 s minimum before any language is decided. For 59 % of dictations (median 4.9 s)
+the key is released before the language is ever decided → 0 / 22 confirmations for dictations
+under 10 s.
+
+**Fixed (Levers A1–A3, 2026-09-04):**
+- A1: single-language users now pass the sole allowed language as the concrete `startLanguage`,
+  making `languageIsLocked == true` from pass 1 (no probes needed)
+- A2: `firstProbeSamples` lowered to 24,000 (1.5 s), `minVoicedFirstProbeSamples` to 16,000
+  (1.0 s); a `minFirstProbeConfidence = 0.80` floor at `recordAccurate` admission compensates
+  for lower-quality short-audio probes
+- A3: MLX restricted to `isFirstProbe` (was: blocked by `!whisperDecoding`), eliminating the
+  ctxLock block on the first probe for multi-language users
+
+Verification target: first non-`auto-detect` `Language: <lang>` line should fall from ~8.6 s
+to ~2–2.5 s after key press. `Eager stop: tail starts at agreement boundary` should begin
+appearing for 5–10 s dictations (was 0/22).
+
+
+## Two-encode discovery: `.auto` language costs double (confirmed 2026-09-04)
+
+The ~0.67 s quantization in tail decode (0.690 / 1.350 / 1.993) is **encoder-count multiples**,
+confirmed. When `language == "auto"`, `whisper_full` calls `whisper_lang_auto_detect_with_state`
+which runs a full `whisper_encode_with_state` before the transcription encode. Every `.auto`
+decode pays **two encoder passes** (~660 ms each on this hardware).
+
+Two artefacts hid this:
+- `whisper_get_timings().encode_ms` is **average** per encode, not total
+  (`t_encode_us / max(1, n_encode)` at `whisper.cpp:4251`)
+- `encoder_begin_callback` is not invoked by the language-detect encode, so the B1 `encodes=1`
+  counter under-reported by one
+
+**Fix (2026-09-04):** Agreement ratchet in `StreamingTranscriber.runEagerStreamPass` harvests
+`WhisperBridge.lastDetectedLanguage` after each eager pass. Two consecutive passes agreeing on the
+same language → pin via `LanguageRouter.adopt` + `pinNemotron`. Pinned passes use a fixed
+language code, skip the language-detect encode, and halve the per-pass cost (~660 ms → ~330 ms
+per encode). Expected: tail decode ~1373 ms → ~690 ms; total perceived latency ~2.03 s → ~1.1–1.2 s.
+
+MLXLanguageDetector removed entirely: on measured English speech it returned `yi p=0.495`,
+`hr p=0.279`, and `it p=0.966` — whisper returned `en p=0.980`, `en p=0.836`, `en p=0.805`
+on the same audio. Whisper's per-pass detection (used as the free by-product of the existing
+language-detect encode) is the reliable source.
+
+## A1–A3 outcome (2026-09-04): mechanically correct, no observed latency change
+
+The A1/A2/A3 changes from 2026-09-04 were correctly implemented:
+- A1: single-language users get a concrete `startLanguage`, bypassing the detection path
+- A2: first-probe gates lowered to 1.5 s audio / 1.0 s voiced; 0.80 confidence floor added
+- A3: MLX restricted to `isFirstProbe` instead of being blocked by `!whisperDecoding`
+
+But the gate issue was never the bottleneck: MLX probes fired successfully (235–468 ms each)
+and were confidently wrong. No probe landed, language stayed `.auto`, every pass paid 2 encodes,
+and latency was unchanged. Superseded by the two-encode discovery and agreement ratchet above.
+
+The A1 contribution remains: single-language users skip detection entirely, which is correct
+regardless. `minFirstProbeConfidence`, `firstProbeSamples`, and `minVoicedFirstProbeSamples`
+removed along with MLX.

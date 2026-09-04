@@ -98,3 +98,16 @@ reads as two separate short hangs. It is one continuous block, shaped by three c
 2s alert → 30s reset → 2s re-detect = 34s of wall clock covered by two log lines with a silent gap
 between them. When reading a log, treat repeated main-thread alerts ~32s apart as **one** stall, and
 size it from the queue/job timings around it, not from the alert count.
+
+## MPSGraph main-thread unresponsive alerts are historical (fixed 2026-09-03)
+
+In logs before commit `93bee25`, 117 entries of `Main thread unresponsive for 2.0s` with
+`MPSGraphExecutable` stacks appear. These are stalls from mmBERT graph compilation on first use;
+each successive call used a different input shape, triggering a fresh graph compile on the main
+thread. Fixed in `93bee25` (post-meeting pipeline: job queue, MTP rollback fix, mmBERT compile
+caching): graphs are now pre-compiled per shape on a background queue and cached, so subsequent
+calls are sub-millisecond.
+
+**If you see these alerts in a log, check the commit date.** Alerts sitting below the `93bee25`
+boundary (early September 2026) are from the old build and should not be re-diagnosed. Alerts in
+a post-`93bee25` build indicate a regression — mmBERT is being called with an uncached shape.

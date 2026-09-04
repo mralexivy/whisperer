@@ -137,10 +137,17 @@ nonisolated final class LiveLanguageArbiter: @unchecked Sendable {
     /// No extra weighting for the accurate tier: emissions are log-probabilities, so a 0.98 probe
     /// already outweighs a 0.66 one by the right amount. Up-weighting it on top of that would be
     /// double-counting.
+    ///
+    /// - Parameter minConfidence: caller-supplied floor, applied in addition to
+    ///   `config.minAccurateConfidence`. Use `RoutingThresholds.minFirstProbeConfidence` for the
+    ///   session's first probe, where less audio is available and a weak distribution must not be
+    ///   enough to unlock LocalAgreement-2 confirmation.
     @discardableResult
-    func recordAccurate(probabilities: [String: Float], start: Double, end: Double) -> Bool {
+    func recordAccurate(probabilities: [String: Float], start: Double, end: Double,
+                        minConfidence: Float = 0) -> Bool {
         let top = probabilities.values.max() ?? 0
-        guard top >= config.minAccurateConfidence else { return false }
+        let floor = max(config.minAccurateConfidence, minConfidence)
+        guard top >= floor else { return false }
         guard append(MeetingLanguageProbe(start: start, end: end, probabilities: probabilities)) else {
             return false
         }
