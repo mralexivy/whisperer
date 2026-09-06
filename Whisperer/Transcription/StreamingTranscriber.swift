@@ -405,6 +405,12 @@ class StreamingTranscriber {
         eagerPassLock.lock(); eagerPassInFlight = false; eagerPassLock.unlock()
     }
 
+    /// Thread-safe read for `healthState`, which runs on `HealthManager`'s poll queue.
+    private var isEagerPassCurrentlyInFlight: Bool {
+        eagerPassLock.lock(); defer { eagerPassLock.unlock() }
+        return eagerPassInFlight
+    }
+
     private var onTranscription: ((String) -> Void)?
     // Fires with ONLY the live preview tail (previewAccumulatedText), not the full accumulated display.
     // Used by MeetingSession to avoid echoing already-committed chunk text.
@@ -657,6 +663,11 @@ class StreamingTranscriber {
         /// The window was capped, held speech, and was decoded `eagerMaxStalledPasses` times
         /// without the agreement boundary moving. Seeked past, same as `silentBacklog`.
         case stalledBacklog
+        /// A decode is in flight but its deadline has already passed — `claimEagerPass` cannot
+        /// distinguish this from `.busy`, but the skip case can, and downstream diagnostics
+        /// (profile output, stuck dumps) need to tell them apart. Set **instead of** `.busy`
+        /// when the op deadline is in the past.
+        case stalledDecode
     }
 
     /// How many consecutive non-advancing passes over a capped window are tolerated before the
@@ -680,6 +691,10 @@ class StreamingTranscriber {
 
     /// Test-only probe, paired with `onEagerPassMeasured`. nil in the app.
     var onEagerPassSkipped: ((EagerPassSkip) -> Void)?
+
+    /// Override the health-report deadline for the eager pass. `nil` = use the production 30s.
+    /// Tests set this to a tiny value so they can assert `.stalled` without waiting.
+    var eagerPassDeadlineOverride: ContinuousClock.Duration?
 
     /// Test-only probe for passes that decoded and were then discarded by the anchor/retraction
     /// guard. Distinct from `onEagerPassSkipped`, which fires for passes that never decoded at
@@ -2034,7 +2049,15 @@ class StreamingTranscriber {
         // One decode outstanding at a time. Claimed atomically before any work, because two
         // callers race here — see `claimEagerPass`. Released on every path out; `handedOff`
         // transfers ownership of the release to the completion callback.
-        guard claimEagerPass() else { onEagerPassSkipped?(.busy); return }
+        guard claimEagerPass() else {
+            // Report `.stalledDecode` instead of `.busy` when the in-flight decode has already
+            // blown past its deadline — the two states look the same to the scheduler but carry
+            // very different diagnostic meaning. The deadline is set below (see stOpDeadline).
+            let skip: EagerPassSkip = (stCurrentOp == "eagerPass" && ContinuousClock.now > stOpDeadline)
+                ? .stalledDecode : .busy
+            onEagerPassSkipped?(skip)
+            return
+        }
         var handedOff = false
         defer { if !handedOff { releaseEagerPass() } }
 
@@ -2167,6 +2190,19 @@ class StreamingTranscriber {
 
         isProcessing = true
         handedOff = true
+        // Register this pass with the health reporter so a Metal/GPU wedge becomes visible.
+        //
+        // The deadline is conservative by design: on Apple Silicon with the 12s cap,
+        // `EagerStreamProfileTests` measures p99 ≈ 4s. The `ctxLock` acquisition timeout is
+        // already 10s (WhisperBridge.swift:533), and `runWhisperFull` itself has no timeout.
+        // 30s = ~7× observed p99 with the 12s cap — well above any healthy pass and far below
+        // the "wedged forever" case. Update this constant when the profile corpus changes
+        // significantly (e.g. cap raised, model changed). The corresponding `EagerPassSkip`
+        // case is `.stalledDecode`, which the skip collector already counts.
+        stCurrentOp = "eagerPass"
+        stOpStart = .now
+        stOpID &+= 1
+        stOpDeadline = .now + (eagerPassDeadlineOverride ?? .seconds(30))
         let passSubmittedAt = CFAbsoluteTimeGetCurrent()
         let passWindowSeconds = Double(normalizedSamples.count) / sampleRate
         // How far the decoded window ends behind the audio already captured. Zero before the cap
@@ -2192,6 +2228,10 @@ class StreamingTranscriber {
                 guard !released else { return }
                 released = true
                 self.releaseEagerPass()
+                // Clear the health fields set before submission so an idle transcriber does not
+                // look stalled. Matches the pattern on the VAD chunk path (lines 1503-1505).
+                self.stCurrentOp = nil
+                self.transcriptionProgressCounter &+= 1
             }
             defer { releaseOnce() }
             if let probe = self.onEagerPassMeasured {
@@ -4218,11 +4258,16 @@ extension StreamingTranscriber: HealthReportable {
         }
 
         let deadline = stOpDeadline
+        let eagerInFlight = isEagerPassCurrentlyInFlight
         let status: ComponentStatus
         if now < deadline {
             status = .healthy
-        } else if isTranscribingChunk {
-            status = .busy  // waiting on WhisperBridge
+        } else if isTranscribingChunk || eagerInFlight {
+            // Past deadline but a decode is still outstanding — WhisperBridge is the dependency.
+            // `isTranscribingChunk` covers the VAD chunk path; `eagerInFlight` covers the eager
+            // streaming path, which previously appeared healthy here because its op fields were
+            // never set.
+            status = .busy
         } else {
             status = .stalled
         }
@@ -4239,9 +4284,13 @@ extension StreamingTranscriber: HealthReportable {
         var h = ComponentHealth()
         h.status = status
         h.operation = op
-        h.progress = ProgressInfo(sequence: seq, completedWork: isTranscribingChunk ? 0.5 : 1.0, lastUpdate: now)
-        h.dependencies = isTranscribingChunk ? ["WhisperBridge"] : []
-        h.metadata = ["backlog": .int(pendingChunks.count), "isStopped": .bool(isStopped)]
+        h.progress = ProgressInfo(sequence: seq, completedWork: (isTranscribingChunk || eagerInFlight) ? 0.5 : 1.0, lastUpdate: now)
+        h.dependencies = (isTranscribingChunk || eagerInFlight) ? ["WhisperBridge"] : []
+        h.metadata = [
+            "backlog": .int(pendingChunks.count),
+            "isStopped": .bool(isStopped),
+            "eagerPassInFlight": .bool(eagerInFlight),
+        ]
         return h
     }
 }
