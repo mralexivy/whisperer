@@ -137,7 +137,11 @@ nonisolated struct DeterministicPolisher: Sendable {
         if let editor {
             let proposals = await editor.propose(working.tokens, context: context)
             if !proposals.isEmpty {
-                let accepted = gate.apply(proposals, to: &working)
+                // Use a language-aware gate for the editor stage so the calibrated per-language
+                // confidence floors apply. The stored `gate` keeps its nil language (correct for
+                // the deterministic stages above) — only the model's proposals need the tiered floors.
+                let languageGate = ConfidenceGate(language: context.language)
+                let accepted = languageGate.apply(proposals, to: &working)
                 applied += accepted
                 Logger.debug("Editor model: \(accepted.count)/\(proposals.count) proposals applied",
                              subsystem: .transcription)
@@ -234,11 +238,22 @@ nonisolated struct DeterministicPolisher: Sendable {
         let text: String
         let start: TimeInterval
         let end: TimeInterval
+        /// Per-word timing pairs (start, end) in seconds for interior-pause recovery.
+        /// Empty when no per-word evidence is available (non-eager backends, tail chunks).
+        let wordTimings: [(start: Double, end: Double)]
+        /// True when this chunk was emitted immediately after an eager-stop Tier-1 coverage skip.
+        /// The gap between the previous chunk and this one is a scheduling artifact — the audio
+        /// contains speech — so `join` must not write a pause for that seam.
+        let startsAtSkippedSeam: Bool
 
-        init(text: String, start: TimeInterval, end: TimeInterval) {
+        init(text: String, start: TimeInterval, end: TimeInterval,
+             wordTimings: [(start: Double, end: Double)] = [],
+             startsAtSkippedSeam: Bool = false) {
             self.text = text
             self.start = start
             self.end = end
+            self.wordTimings = wordTimings
+            self.startsAtSkippedSeam = startsAtSkippedSeam
         }
     }
 
@@ -281,7 +296,9 @@ nonisolated struct DeterministicPolisher: Sendable {
         // is then measured against the wrong span.
         let kept = chunks.compactMap { chunk -> Chunk? in
             let text = chunk.text.trimmingCharacters(in: .whitespacesAndNewlines)
-            return text.isEmpty ? nil : Chunk(text: text, start: chunk.start, end: chunk.end)
+            return text.isEmpty ? nil : Chunk(text: text, start: chunk.start, end: chunk.end,
+                                              wordTimings: chunk.wordTimings,
+                                              startsAtSkippedSeam: chunk.startsAtSkippedSeam)
         }
         guard kept.count > 1 else { return nil }
 
@@ -290,16 +307,59 @@ nonisolated struct DeterministicPolisher: Sendable {
 
         // The join offsets, walked in the same order the pieces were joined. Each is the single
         // space between two pieces, which is one whitespace token in the freshly built graph.
+        //
+        // Two pause sources:
+        //  A. Inter-chunk: the gap between chunk[N].end and chunk[N+1].start — but only when
+        //     chunk[N+1].startsAtSkippedSeam is false. A skipped-seam chunk starts at an
+        //     eager-stop Tier-1 agreement-boundary skip; that gap is confirmed speech the tail
+        //     re-decoded, not silence, and treating it as a pause would insert sentence boundaries
+        //     at a scheduling artifact.
+        //  B. Interior: pauses within a single chunk, derived from per-word timing. The gap
+        //     between word[i].end and word[i+1].start in the chunk's wordTimings is real silence
+        //     measured from the ASR decoder's sample indices — no VAD, no outer-envelope loss.
         var pauses: ParagraphSplitter.Pauses = [:]
         var cursor = text.startIndex
         for (offset, chunk) in kept.enumerated() {
+            let chunkStart = cursor   // start of this chunk's text in the joined string
+
+            // B. Interior pauses from per-word timing.
+            // Walk the chunk text looking for spaces that separate whisper words. Each space
+            // corresponds to the boundary between consecutive words in wordTimings.
+            if !chunk.wordTimings.isEmpty {
+                var wordIdx = 0
+                var pos = chunkStart
+                var inWord = chunk.text.first.map { $0 != " " } ?? false
+                for char in chunk.text {
+                    let atSpace = char == " "
+                    if atSpace && inWord {
+                        // Transition word → space: record the pause for this boundary.
+                        if wordIdx + 1 < chunk.wordTimings.count {
+                            let range = pos..<text.index(after: pos)
+                            if let id = graph.tokenIDs(overlappingRawRange: range).first {
+                                let gap = chunk.wordTimings[wordIdx + 1].start
+                                         - chunk.wordTimings[wordIdx].end
+                                if gap > 0 { pauses[id] = gap }
+                            }
+                        }
+                        wordIdx += 1
+                        inWord = false
+                    } else if !atSpace {
+                        inWord = true
+                    }
+                    pos = text.index(after: pos)
+                }
+            }
+
             cursor = text.index(cursor, offsetBy: chunk.text.count)
             guard offset + 1 < kept.count else { break }
 
+            // A. Inter-chunk boundary pause.
             let separator = cursor..<text.index(after: cursor)
-            let nextStart = kept[offset + 1].start
-            if let id = graph.tokenIDs(overlappingRawRange: separator).first, nextStart > chunk.end {
-                pauses[id] = nextStart - chunk.end
+            let nextChunk = kept[offset + 1]
+            if !nextChunk.startsAtSkippedSeam,
+               let id = graph.tokenIDs(overlappingRawRange: separator).first,
+               nextChunk.start > chunk.end {
+                pauses[id] = nextChunk.start - chunk.end
             }
             cursor = separator.upperBound
         }

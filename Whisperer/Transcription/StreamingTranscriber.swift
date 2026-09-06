@@ -226,19 +226,39 @@ struct TranscriptChunk {
     let voicedStart: Double?
     let voicedEnd: Double?
 
+    /// Per-word timing pairs (start, end) in seconds, for interior-pause recovery.
+    ///
+    /// Only populated on the whisper.cpp soft-commit path, where `EagerSoftCommit.wordTimings`
+    /// carries the sample indices. Empty for every other backend and for the tail chunk on
+    /// backends that do not emit per-word evidence (Nemotron, meetings).
+    let wordTimings: [(start: Double, end: Double)]
+
+    /// True when this chunk was emitted immediately after an eager-stop Tier-1 skip.
+    ///
+    /// In that case the gap between the previous chunk's `end` and this chunk's `start` is
+    /// a decode-coverage artifact (the interval of confirmed-but-not-soft-committed audio whose
+    /// tail decode re-covered), not a pause in the user's speech.
+    /// `DeterministicPolisher` uses this flag to suppress the inter-chunk pause write for that seam.
+    let startsAtSkippedSeam: Bool
+
     init(text: String, start: Double, end: Double, recordedDuration: Double,
-         voicedStart: Double? = nil, voicedEnd: Double? = nil) {
+         voicedStart: Double? = nil, voicedEnd: Double? = nil,
+         wordTimings: [(start: Double, end: Double)] = [],
+         startsAtSkippedSeam: Bool = false) {
         self.text = text
         self.start = start
         self.end = end
         self.recordedDuration = recordedDuration
         self.voicedStart = voicedStart
         self.voicedEnd = voicedEnd
+        self.wordTimings = wordTimings
+        self.startsAtSkippedSeam = startsAtSkippedSeam
     }
 
-    /// The span to measure silence against: voiced when known, the decode span otherwise.
-    var acousticStart: Double { voicedStart ?? start }
-    var acousticEnd: Double { voicedEnd ?? end }
+    /// The span to measure silence against: first/last word timing when known,
+    /// then voiced span, then the decode span.
+    var acousticStart: Double { wordTimings.first?.start ?? voicedStart ?? start }
+    var acousticEnd: Double { wordTimings.last?.end ?? voicedEnd ?? end }
 }
 
 // MARK: - StreamingTranscriber
@@ -306,6 +326,10 @@ class StreamingTranscriber {
     private var lastVADScanIndex: Int = 0
     private var lastTranscribedSampleIndex: Int = 0
     private var lastClaimedSampleIndex: Int = 0
+    /// Set when the Tier-1 eager-stop skip fires; consumed and cleared in `transcribeTail`.
+    /// Tells `transcribeTail` to mark its output chunk with `startsAtSkippedSeam = true` so
+    /// `DeterministicPolisher` does not treat the coverage gap as a sentence-boundary pause.
+    private var tailChunkStartsAtSeam: Bool = false
     private var completedChunkTexts: [String] = []
     private var currentChunkLiveText: String = ""
     // WhisperKit snapshot path: each progress callback replaces this (never appended)
@@ -2404,12 +2428,17 @@ class StreamingTranscriber {
                 completedChunkTexts.append(committedText)
                 // Measured before the `dropFront` below prunes this audio away.
                 let voiced = voicedSpanSeconds(from: commit.startIndex, until: commit.endIndex)
+                let wordTimings = commit.wordTimings.map {
+                    (start: Double($0.startSample) / sampleRate,
+                     end: Double($0.endSample) / sampleRate)
+                }
                 onChunkCompleted?(TranscriptChunk(text: committedText,
                     start: Double(commit.startIndex) / sampleRate,
                     end: Double(commit.endIndex) / sampleRate,
                     recordedDuration: recordedDuration,
                     voicedStart: voiced?.0,
-                    voicedEnd: voiced?.1))
+                    voicedEnd: voiced?.1,
+                    wordTimings: wordTimings))
             }
             // The audio boundary advances either way: the text was either committed or was a
             // duplicate of text already committed, and re-decoding it would only produce the
@@ -2867,11 +2896,14 @@ class StreamingTranscriber {
                 // chunk of every eager recording restart near zero and overlap everything before
                 // it (`3.92s starts before prev end 19.11s` in the regression gate); the ring is
                 // pruned at each soft-commit, so the error is exactly the audio already committed.
+                let seamFlag = tailChunkStartsAtSeam
+                tailChunkStartsAtSeam = false
                 onChunkCompleted?(TranscriptChunk(
                     text: deduped,
                     start: Double(ringBase + tailChunk.startSample) / sampleRate,
                     end: Double(ringBase + tailChunk.endSample) / sampleRate,
-                    recordedDuration: recordedDuration
+                    recordedDuration: recordedDuration,
+                    startsAtSkippedSeam: seamFlag
                 ))
             }
         }
@@ -3051,6 +3083,10 @@ class StreamingTranscriber {
                     let skippedSeconds = Double(span.agreementIndex - lastTranscribedSampleIndex) / sampleRate
                     lastTranscribedSampleIndex = span.agreementIndex
                     lastClaimedSampleIndex = max(lastClaimedSampleIndex, span.agreementIndex)
+                    // The gap between the previous soft-committed chunk and the tail chunk is now
+                    // a decode-coverage artifact, not silence. Flag the tail so the polisher
+                    // does not treat it as a sentence-boundary pause.
+                    tailChunkStartsAtSeam = true
                     Logger.info(
                         "Eager stop: tail starts at agreement boundary (skipped \(String(format: "%.1f", skippedSeconds))s confirmed audio)",
                         subsystem: .transcription
@@ -3072,6 +3108,9 @@ class StreamingTranscriber {
                                         endIndex: latestWhisperKitPreviewEndIndex)
                 lastTranscribedSampleIndex = latestWhisperKitPreviewEndIndex
                 lastClaimedSampleIndex = max(lastClaimedSampleIndex, latestWhisperKitPreviewEndIndex)
+                // The preview chunk is a legitimate emission; any remaining tail now covers
+                // only the audio after the preview, which is real audio (not a coverage seam).
+                tailChunkStartsAtSeam = false
                 Logger.info(
                     "Eager stop reused preview for \(String(format: "%.1f", skippedSeconds))s; tail decodes remainder only",
                     subsystem: .transcription

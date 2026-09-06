@@ -2145,9 +2145,12 @@ class AppState: ObservableObject {
     /// — their timestamps address the recording, not the speech, and moving them would shift
     /// diarizer alignment for a benefit that belongs only here.
     private func retainForPolish(_ chunk: TranscriptChunk) {
-        committedChunks.append(DeterministicPolisher.Chunk(text: chunk.text,
-                                                           start: chunk.acousticStart,
-                                                           end: chunk.acousticEnd))
+        committedChunks.append(DeterministicPolisher.Chunk(
+            text: chunk.text,
+            start: chunk.acousticStart,
+            end: chunk.acousticEnd,
+            wordTimings: chunk.wordTimings,
+            startsAtSkippedSeam: chunk.startsAtSkippedSeam))
     }
 
     /// The retained chunks, but only when they still describe `text`.
@@ -3318,6 +3321,9 @@ class AppState: ObservableObject {
                                          subsystem: .app)
                         }
                     }
+                } else {
+                    Logger.debug("post-process no-op: text unchanged after \(deterministicPolishHandlesPostProcessing ? "Fast Polish" : llmEnabled ? "LLM" : "list format")",
+                                 subsystem: .transcription)
                 }
             }
 
@@ -3737,6 +3743,9 @@ class AppState: ObservableObject {
                                          subsystem: .app)
                         }
                     }
+                } else {
+                    Logger.debug("post-process no-op: text unchanged after \(deterministicPolishHandlesPostProcessing ? "Fast Polish" : llmEnabled ? "LLM" : "list format")",
+                                 subsystem: .transcription)
                 }
 
                 Logger.step(.asrDone, .transcription, ["chars": .int(textToInsert.count), "text": .string(Logger.redact(textToInsert))])

@@ -35,6 +35,10 @@ struct EagerSoftCommit {
     let text: String
     let startIndex: Int     // was lastTranscribedSampleIndex before this commit
     let endIndex: Int       // new lastTranscribedSampleIndex (the agreement boundary)
+    /// Absolute sample index pairs (start, end) for each word in `text`, in order.
+    /// Used by the caller to build an interior-pause map so the polisher can insert
+    /// sentence boundaries at real silences rather than at decode-coverage seams.
+    let wordTimings: [(startSample: Int, endSample: Int)]
 }
 
 /// Why a pass was held. Only meaningful when `EagerOutcome.wasHeld` is true.
@@ -501,10 +505,12 @@ struct EagerStreamEngine {
             let text = confirmedWords.map(\.text).joined()
                 .trimmingCharacters(in: .whitespacesAndNewlines)
             if !text.isEmpty {
+                let timings = confirmedWords.map { ($0.startIndex, $0.endIndex) }
                 softCommit = EagerSoftCommit(
                     text: text,
                     startIndex: lastCommittedIndex,
-                    endIndex: nextStart
+                    endIndex: nextStart,
+                    wordTimings: timings
                 )
             }
             // Keep a short tail so the repetition guard's count survives the handoff.
