@@ -73,7 +73,7 @@ class AppState: ObservableObject {
                 isPaused = false
                 PermissionManager.shared.resumePolling()
                 // Reset key listener state so hands-free flags don't get stuck when
-                // recording ends naturally (time limit, watchdog) rather than via key press.
+                // recording ends naturally (stall watchdog) rather than via key press.
                 keyListener?.resetToggleState()
             }
         }

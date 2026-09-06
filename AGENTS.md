@@ -6,7 +6,7 @@
 2. `SafeLock` (timeout-based NSLock) for whisper.cpp thread safety, not Swift actors
 3. Unified dark navy palette (`WhispererColors` / `MBColors` / `OnboardingColors`) — no system semantic colors, no `Color.green` accents, always-dark theme
 4. `Logger.shared` — no `print()` statements
-5. 5-minute max recording limit prevents unbounded memory growth (~19MB)
+5. Stall watchdog (15 seconds with no audio buffers) prevents unbounded recording — forces idle if recording freezes
 6. `[weak self]` in all `Task.detached` closures and stored callbacks
 7. Audio pipeline: Microphone → AudioRecorder → StreamingTranscriber → WhisperBridge → CorrectionEngine → TextInjector
 8. **NEVER** use `CGEventTap`, `IOHIDManager`, or global `keyDown`/`keyUp` monitors — App Store rejection (Guideline 2.4.5)
