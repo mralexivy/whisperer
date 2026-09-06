@@ -66,7 +66,6 @@ class AppState: ObservableObject {
                 targetAppIcon = nil
                 activeMode = .dictation
                 activeAIModeName = nil
-                capturedSelectedText = nil
                 isHandsFreeRecording = false
                 showHandsFreeToast = false
                 isMicMuted = false
@@ -712,7 +711,6 @@ class AppState: ObservableObject {
     var textSelectionService: TextSelectionService?
     #endif
     var rewriteModeService: RewriteModeService?
-    private var capturedSelectedText: String?
 
     // Model path for selected whisper.cpp model
     private var modelPath: URL {
@@ -2474,10 +2472,17 @@ class AppState: ObservableObject {
 
         let mode = AIModeManager.shared.rewriteMode
         let rewritePrompt = mode.prompt.isEmpty ? nil : mode.prompt.replacingOccurrences(of: "{transcript}", with: "")
+        // Capture selected text at transcription-complete time via Cmd+C simulation.
+        // This replaces the old nil-forever capturedSelectedText field.
+        #if !APP_STORE
+        let selectedTextForRewrite = await textSelectionService?.getSelectedText()
+        #else
+        let selectedTextForRewrite: String? = nil
+        #endif
         do {
             let result = try await service.process(
                 instruction: transcription,
-                selectedText: capturedSelectedText,
+                selectedText: selectedTextForRewrite,
                 rewritePrompt: rewritePrompt
             )
             Logger.step(.asrDone, .transcription, ["mode": .string(mode.name), "in": .int(transcription.count), "out": .int(result.count)])
@@ -4001,12 +4006,22 @@ class AppState: ObservableObject {
         guard let processor = llmPostProcessor, processor.isModelLoaded else { return }
 
         #if !APP_STORE
-        // Read text from clipboard
-        guard let clipboardText = NSPasteboard.general.string(forType: .string), !clipboardText.isEmpty else {
-            Logger.warning("Rewrite: clipboard is empty", subsystem: .app)
+        // Snapshot the clipboard before Cmd+C (getSelectedText mutates the pasteboard).
+        let clipboardSnapshot = ClipboardSnapshot.capture(from: NSPasteboard.general)
+
+        // Prefer the actual selection via TextSelectionService (sends Cmd+C, waits for changeCount).
+        // Fall back to whatever is on the clipboard only when no selection is detected.
+        let selectedText: String
+        if let service = textSelectionService, let selection = await service.getSelectedText() {
+            selectedText = selection
+        } else if let clipboardText = NSPasteboard.general.string(forType: .string), !clipboardText.isEmpty {
+            Logger.debug("Rewrite: no selection detected, falling back to clipboard", subsystem: .app)
+            selectedText = clipboardText
+        } else {
+            Logger.warning("Rewrite: no selected text and clipboard is empty", subsystem: .app)
+            clipboardSnapshot.restore(to: NSPasteboard.general)
             return
         }
-        let selectedText = clipboardText
 
         let mode = AIModeManager.shared.rewriteMode
         activeMode = .rewrite
@@ -4031,9 +4046,11 @@ class AppState: ObservableObject {
             Logger.debug("Rewrite (\(mode.name)): \(selectedText.prefix(30))... → \(result.prefix(30))...", subsystem: .app)
             state = .idle
             await insertText(result)
+            clipboardSnapshot.restore(to: NSPasteboard.general)
         } catch {
             Logger.error("Rewrite failed: \(error)", subsystem: .transcription)
             state = .idle
+            clipboardSnapshot.restore(to: NSPasteboard.general)
         }
         #endif
     }
