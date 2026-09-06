@@ -293,6 +293,20 @@ final class WhisperKitBridge: TranscriptionBackend {
 
     var lastDetectedLanguage: String? { nil } // async path via detectedLanguage() instead
 
+    /// WhisperKit uses one serial Core ML runtime: eager engine required, VAD chunking suppressed,
+    /// 40 ms poll keeps batch-decode hypothesis latency low, and inference must be serialised.
+    var streamingPolicy: BackendStreamingPolicy {
+        BackendStreamingPolicy(
+            supportsEagerWordStream: false,
+            requiresEagerEngine: true,
+            suppressesVADChunking: true,
+            maxVADChunkDuration: 6.0,
+            previewPollInterval: 0.04,
+            previewSharesDecodeQueue: false,
+            serializesInferenceWithPreview: true
+        )
+    }
+
     func transcribe(
         samples: [Float], initialPrompt: String?,
         language: TranscriptionLanguage, singleSegment: Bool, maxTokens: Int32

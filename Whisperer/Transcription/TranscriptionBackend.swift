@@ -137,6 +137,10 @@ protocol TranscriptionBackend: AnyObject {
     /// Reset abort flag before starting a new chunk transcription.
     /// Called by StreamingTranscriber.processNextChunk() on all backends.
     func resetAbort()
+
+    /// Streaming-pipeline capabilities for this backend.
+    /// Must be a computed var — never stored — so it is always derived from immutable bridge config.
+    var streamingPolicy: BackendStreamingPolicy { get }
 }
 
 // MARK: - Default Parameter Values
@@ -146,6 +150,20 @@ extension TranscriptionBackend {
 
     func requestAbort() { }
     func resetAbort() { }
+
+    /// Default policy: all capabilities off, conservative timing.
+    /// Backends that need non-default behaviour override this computed var.
+    var streamingPolicy: BackendStreamingPolicy {
+        BackendStreamingPolicy(
+            supportsEagerWordStream: false,
+            requiresEagerEngine: false,
+            suppressesVADChunking: false,
+            maxVADChunkDuration: 30.0,
+            previewPollInterval: 0.5,
+            previewSharesDecodeQueue: false,
+            serializesInferenceWithPreview: false
+        )
+    }
 
     // NOTE — do NOT add `transcribe`/`transcribeAsync` shims here just to supply default
     // parameter values. A protocol-extension method whose signature matches a requirement
