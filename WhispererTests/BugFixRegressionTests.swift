@@ -136,12 +136,6 @@ final class NemotronCurrentTranscriptionFallbackTests: XCTestCase {
 
 final class HistoryManagerMergeConflictTests: XCTestCase {
 
-    // Held at class scope to avoid the @MainActor synthesized-deinit crash:
-    // SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor gives HistoryDatabase an isolated
-    // deinit; a local that drops at end of a sync scope aborts the test host.
-    static let db = HistoryDatabase(inMemory: true)
-    static let manager = HistoryManager(database: db)
-
     /// Pre-fix: discardSession raised NSMergeConflict (error 133020) when appendChunk
     ///          had already saved the entity in a separate background context.
     ///
@@ -151,7 +145,7 @@ final class HistoryManagerMergeConflictTests: XCTestCase {
     /// If a merge conflict fires and the save fails, the entity stays in the database
     /// with isInProgress=true — exactly the pre-fix symptom.
     func testDiscardSessionSucceedsAfterAppendChunk() async throws {
-        let manager = Self.manager
+        let manager = HistoryManager.shared
 
         // Use a temp path so the test doesn't create real audio files.
         let tempURL = URL(fileURLWithPath: NSTemporaryDirectory())
@@ -189,7 +183,7 @@ final class HistoryManagerMergeConflictTests: XCTestCase {
 
     /// Baseline: discard without any appendChunk call must also work.
     func testDiscardSessionWithNoChunksSucceeds() async throws {
-        let manager = Self.manager
+        let manager = HistoryManager.shared
 
         let tempURL = URL(fileURLWithPath: NSTemporaryDirectory())
             .appendingPathComponent(UUID().uuidString + ".caf")
@@ -211,7 +205,7 @@ final class HistoryManagerMergeConflictTests: XCTestCase {
     /// Rapid sequence: two appendChunk calls then discard. Exercises the most likely
     /// race in the real app (streaming recording with multiple chunk callbacks).
     func testDiscardSessionAfterMultipleAppendChunkCalls() async throws {
-        let manager = Self.manager
+        let manager = HistoryManager.shared
 
         let tempURL = URL(fileURLWithPath: NSTemporaryDirectory())
             .appendingPathComponent(UUID().uuidString + ".caf")

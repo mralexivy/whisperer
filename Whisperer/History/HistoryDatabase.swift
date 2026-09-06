@@ -14,8 +14,6 @@ class HistoryDatabase {
     /// Error that occurred during initialization, if any
     private(set) var initializationError: Error?
 
-    private let inMemory: Bool
-
     lazy var persistentContainer: NSPersistentContainer? = {
         // Find the model in the app bundle
         guard let modelURL = Bundle.main.url(forResource: "WhispererHistory", withExtension: "momd"),
@@ -27,26 +25,20 @@ class HistoryDatabase {
 
         let container = NSPersistentContainer(name: "WhispererHistory", managedObjectModel: model)
 
-        if inMemory {
-            let desc = NSPersistentStoreDescription()
-            desc.type = NSInMemoryStoreType
-            container.persistentStoreDescriptions = [desc]
-        } else {
-            // Set store location
-            let fileManager = FileManager.default
-            let appSupport = fileManager.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-            let whispererDir = appSupport.appendingPathComponent("Whisperer")
+        // Set store location
+        let fileManager = FileManager.default
+        let appSupport = fileManager.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+        let whispererDir = appSupport.appendingPathComponent("Whisperer")
 
-            // Create directory if needed
-            try? fileManager.createDirectory(at: whispererDir, withIntermediateDirectories: true)
+        // Create directory if needed
+        try? fileManager.createDirectory(at: whispererDir, withIntermediateDirectories: true)
 
-            let storeURL = whispererDir.appendingPathComponent("history.sqlite")
-            let description = NSPersistentStoreDescription(url: storeURL)
-            // Enable automatic migration
-            description.shouldMigrateStoreAutomatically = true
-            description.shouldInferMappingModelAutomatically = true
-            container.persistentStoreDescriptions = [description]
-        }
+        let storeURL = whispererDir.appendingPathComponent("history.sqlite")
+        let description = NSPersistentStoreDescription(url: storeURL)
+        // Enable automatic migration
+        description.shouldMigrateStoreAutomatically = true
+        description.shouldInferMappingModelAutomatically = true
+        container.persistentStoreDescriptions = [description]
 
         container.loadPersistentStores { description, error in
             if let error = error {
@@ -89,14 +81,23 @@ class HistoryDatabase {
         return container.newBackgroundContext()
     }
 
-    // Designated init. `shared` uses the on-disk store; tests build an in-memory instance.
-    init(inMemory: Bool) {
-        self.inMemory = inMemory
-        _ = persistentContainer
-        if !inMemory { migrateWordCountsIfNeeded() }
+    func saveContext() {
+        guard let container = persistentContainer else { return }
+        let context = container.viewContext
+        if context.hasChanges {
+            do {
+                try context.save()
+            } catch {
+                Logger.error("Failed to save context: \(error.localizedDescription)", subsystem: .app)
+            }
+        }
     }
 
-    private convenience init() { self.init(inMemory: false) }
+    private init() {
+        // Load persistent container
+        _ = persistentContainer
+        migrateWordCountsIfNeeded()
+    }
 
     // MARK: - Migrations
 

@@ -905,7 +905,7 @@ class StreamingTranscriber {
     ) {
         self.whisper = backend
         self.usesEagerStream = {
-            guard backend.streamingPolicy.supportsEagerWordStream else { return false }
+            guard backend is WhisperBridge else { return false }
             // Tests pass the arm explicitly. They must NOT write the rollback flag to
             // `UserDefaults.standard`, because the test host shares the shipping app's
             // preferences domain: a gate run that was killed or crashed mid-fixture left
@@ -925,7 +925,11 @@ class StreamingTranscriber {
         self.languageRouter = languageRouter
         self.previewBridge = previewBridge
         self.modelRouter = modelRouter
-        let maxChunkDuration = backend.streamingPolicy.maxVADChunkDuration
+        #if canImport(WhisperKit)
+        let maxChunkDuration = backend is WhisperKitBridge ? 6.0 : 10.0
+        #else
+        let maxChunkDuration = 10.0
+        #endif
         self.vadSegmenter = VADSegmenter(
             vad: vad,
             targetChunkDuration: 6.0,
@@ -1006,7 +1010,11 @@ class StreamingTranscriber {
         #endif
 
         // Eager engine: used by both WhisperKit (always) and whisper.cpp (when flag on)
-        let needsEagerEngine = whisper.streamingPolicy.requiresEagerEngine || usesEagerStream
+        #if canImport(WhisperKit)
+        let needsEagerEngine = (whisper is WhisperKitBridge) || usesEagerStream
+        #else
+        let needsEagerEngine = usesEagerStream
+        #endif
         eagerEngine = needsEagerEngine
             ? EagerStreamEngine(config: EagerStreamEngine.Config.default
                 .with(skipsAnchorCheckAfterBoundaryMove: eagerSkipsAnchorCheckAfterBoundaryMove,
@@ -1117,15 +1125,13 @@ class StreamingTranscriber {
             // WhisperKit is a batch decoder. Start the next timestamped pass promptly
             // after completion so there is no extra dead period between hypotheses.
             // 40 ms balances responsiveness against the ~600-700 ms inference budget.
-            // Policy-based: previewBridge.streamingPolicy.previewPollInterval overrides default
-            // (0.5 s) when the bridge needs faster polling (e.g., WhisperKit at 40 ms).
-            let previewInterval: UInt64 = {
-                guard let pb = self?.previewBridge else {
-                    return self?.usesEagerStream == true ? 150_000_000 : 500_000_000
-                }
-                if self?.usesEagerStream == true { return 150_000_000 }
-                return UInt64(pb.streamingPolicy.previewPollInterval * 1_000_000_000)
-            }()
+            #if canImport(WhisperKit)
+            let previewInterval: UInt64 = self?.previewBridge is WhisperKitBridge
+                ? 40_000_000
+                : (self?.usesEagerStream == true ? 150_000_000 : 500_000_000)
+            #else
+            let previewInterval: UInt64 = self?.usesEagerStream == true ? 150_000_000 : 500_000_000
+            #endif
             while !Task.isCancelled {
                 guard let self, !self.isStopped, !self.isPreparingToStop else { break }
                 self.runLivePreviewPass()
@@ -1291,13 +1297,15 @@ class StreamingTranscriber {
             }
         }
 
-        // Policy: backends whose streaming pass is already the committed decode path
-        // (e.g., WhisperKit's Core ML eager stream) skip VAD chunking to avoid
-        // transcribing the same audio twice and stalling live preview.
-        if whisper.streamingPolicy.suppressesVADChunking {
+        #if canImport(WhisperKit)
+        // WhisperKit has one serial Core ML runtime. Its eager word-agreement stream
+        // is already the committed path, so scheduling a second VAD chunk decode here
+        // would transcribe the same audio twice and stall live preview.
+        if whisper is WhisperKitBridge {
             lastVADScanIndex = ringBase + allSamples.count
             return
         }
+        #endif
 
         if usesEagerStream {
             lastVADScanIndex = ringBase + allSamples.count
@@ -1345,11 +1353,10 @@ class StreamingTranscriber {
         guard !usesEagerStream else { return }
 
         #if canImport(WhisperKit)
+        let usesWhisperKit = whisper is WhisperKitBridge
         // Preview and committed-chunk decodes share one WhisperKit runtime. Claim it
         // atomically so Core ML never receives overlapping decoder work.
-        // serializesInferenceWithPreview is only true for WhisperKitBridge — the
-        // claimWhisperKitInference call is WhisperKit-only and stays inside #if.
-        if whisper.streamingPolicy.serializesInferenceWithPreview, !claimWhisperKitInference(.chunk) { return }
+        if usesWhisperKit, !claimWhisperKitInference(.chunk) { return }
         #endif
 
         // Check for deferred model promotion at chunk boundary
@@ -1439,7 +1446,7 @@ class StreamingTranscriber {
                 bridge.onNewSegment = nil
             }
             #if canImport(WhisperKit)
-            if self.whisper.streamingPolicy.serializesInferenceWithPreview {
+            if usesWhisperKit {
                 (self.whisper as? WhisperKitBridge)?.clearCallbacks()
             }
             #endif
@@ -1537,7 +1544,7 @@ class StreamingTranscriber {
             self.updateLivePreview()
 
             #if canImport(WhisperKit)
-            if self.whisper.streamingPolicy.serializesInferenceWithPreview {
+            if usesWhisperKit {
                 self.releaseWhisperKitInference(.chunk)
             }
             #endif
@@ -1621,14 +1628,18 @@ class StreamingTranscriber {
             return
         }
         guard let preview = previewBridge else { return }
-        // Policy-based: serializesInferenceWithPreview is true for WhisperKitBridge (single Core ML runtime).
-        // previewSharesDecodeQueue is true for FluidAudioBridge (dedicated triple-manager queue).
-        let isWhisperKitPreview = preview.streamingPolicy.serializesInferenceWithPreview
-        let isFluidAudio = preview.streamingPolicy.previewSharesDecodeQueue
         #if canImport(WhisperKit)
+        let isWhisperKitPreview = preview is WhisperKitBridge
         // Avoid repeatedly copying, VAD-checking, and normalizing the same window while
         // the previous Core ML pass is still running.
         if isWhisperKitPreview, !isWhisperKitInferenceIdle() { return }
+        #else
+        let isWhisperKitPreview = false
+        #endif
+        #if canImport(FluidAudio)
+        let isFluidAudio = preview is FluidAudioBridge
+        #else
+        let isFluidAudio = false
         #endif
         // Whisper shares the same queue as chunk transcription — block preview during chunks to avoid contention.
         // FluidAudio has a dedicated preview queue and triple-manager, so it can run concurrently.

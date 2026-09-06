@@ -66,13 +66,14 @@ class AppState: ObservableObject {
                 targetAppIcon = nil
                 activeMode = .dictation
                 activeAIModeName = nil
+                capturedSelectedText = nil
                 isHandsFreeRecording = false
                 showHandsFreeToast = false
                 isMicMuted = false
                 isPaused = false
                 PermissionManager.shared.resumePolling()
                 // Reset key listener state so hands-free flags don't get stuck when
-                // recording ends naturally (stall watchdog) rather than via key press.
+                // recording ends naturally (time limit, watchdog) rather than via key press.
                 keyListener?.resetToggleState()
             }
         }
@@ -684,22 +685,8 @@ class AppState: ObservableObject {
         didSet { UserDefaults.standard.set(mcpPort, forKey: "mcpPort") }
     }
     @Published var mcpServerRunning: Bool = false
-    @Published var mcpLANEnabled: Bool = false {
-        didSet { UserDefaults.standard.set(mcpLANEnabled, forKey: "mcpLANEnabled") }
-    }
     @Published var mcpBonjourReady: Bool = false
     @Published var mcpBonjourHostname: String? = nil  // machine's .local hostname, set at launch
-
-    /// URL shown in the UI and copied to the clipboard.
-    /// Shows the .local mDNS URL when LAN access is enabled; localhost otherwise.
-    var mcpServerURL: String {
-        #if !APP_STORE
-        if mcpLANEnabled, let hostname = mcpBonjourHostname {
-            return "http://\(hostname):\(mcpPort)/mcp"
-        }
-        #endif
-        return "http://localhost:\(mcpPort)/mcp"
-    }
 
     private var currentAudioURL: URL?
     private var lastTargetAppName: String?
@@ -711,6 +698,7 @@ class AppState: ObservableObject {
     var textSelectionService: TextSelectionService?
     #endif
     var rewriteModeService: RewriteModeService?
+    private var capturedSelectedText: String?
 
     // Model path for selected whisper.cpp model
     private var modelPath: URL {
@@ -913,9 +901,6 @@ class AppState: ObservableObject {
         }
         if UserDefaults.standard.object(forKey: "mcpPort") != nil {
             _mcpPort = Published(wrappedValue: UserDefaults.standard.integer(forKey: "mcpPort"))
-        }
-        if UserDefaults.standard.object(forKey: "mcpLANEnabled") != nil {
-            _mcpLANEnabled = Published(wrappedValue: UserDefaults.standard.bool(forKey: "mcpLANEnabled"))
         }
 
         // Start monitoring audio device changes (for UI device picker only)
@@ -2472,17 +2457,10 @@ class AppState: ObservableObject {
 
         let mode = AIModeManager.shared.rewriteMode
         let rewritePrompt = mode.prompt.isEmpty ? nil : mode.prompt.replacingOccurrences(of: "{transcript}", with: "")
-        // Capture selected text at transcription-complete time via Cmd+C simulation.
-        // This replaces the old nil-forever capturedSelectedText field.
-        #if !APP_STORE
-        let selectedTextForRewrite = await textSelectionService?.getSelectedText()
-        #else
-        let selectedTextForRewrite: String? = nil
-        #endif
         do {
             let result = try await service.process(
                 instruction: transcription,
-                selectedText: selectedTextForRewrite,
+                selectedText: capturedSelectedText,
                 rewritePrompt: rewritePrompt
             )
             Logger.step(.asrDone, .transcription, ["mode": .string(mode.name), "in": .int(transcription.count), "out": .int(result.count)])
@@ -4006,22 +3984,12 @@ class AppState: ObservableObject {
         guard let processor = llmPostProcessor, processor.isModelLoaded else { return }
 
         #if !APP_STORE
-        // Snapshot the clipboard before Cmd+C (getSelectedText mutates the pasteboard).
-        let clipboardSnapshot = ClipboardSnapshot.capture(from: NSPasteboard.general)
-
-        // Prefer the actual selection via TextSelectionService (sends Cmd+C, waits for changeCount).
-        // Fall back to whatever is on the clipboard only when no selection is detected.
-        let selectedText: String
-        if let service = textSelectionService, let selection = await service.getSelectedText() {
-            selectedText = selection
-        } else if let clipboardText = NSPasteboard.general.string(forType: .string), !clipboardText.isEmpty {
-            Logger.debug("Rewrite: no selection detected, falling back to clipboard", subsystem: .app)
-            selectedText = clipboardText
-        } else {
-            Logger.warning("Rewrite: no selected text and clipboard is empty", subsystem: .app)
-            clipboardSnapshot.restore(to: NSPasteboard.general)
+        // Read text from clipboard
+        guard let clipboardText = NSPasteboard.general.string(forType: .string), !clipboardText.isEmpty else {
+            Logger.warning("Rewrite: clipboard is empty", subsystem: .app)
             return
         }
+        let selectedText = clipboardText
 
         let mode = AIModeManager.shared.rewriteMode
         activeMode = .rewrite
@@ -4046,11 +4014,9 @@ class AppState: ObservableObject {
             Logger.debug("Rewrite (\(mode.name)): \(selectedText.prefix(30))... → \(result.prefix(30))...", subsystem: .app)
             state = .idle
             await insertText(result)
-            clipboardSnapshot.restore(to: NSPasteboard.general)
         } catch {
             Logger.error("Rewrite failed: \(error)", subsystem: .transcription)
             state = .idle
-            clipboardSnapshot.restore(to: NSPasteboard.general)
         }
         #endif
     }
@@ -4201,7 +4167,6 @@ class AppState: ObservableObject {
                     Logger.debug("Transcription saved to history database", subsystem: .app)
                 } catch {
                     Logger.error("Failed to save transcription to history: \(error)", subsystem: .app)
-                    self.errorMessage = "Couldn't save that dictation to History — the text was still entered."
                 }
             }
         }

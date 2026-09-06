@@ -199,20 +199,6 @@ nonisolated class FluidAudioBridge: TranscriptionBackend {
 
     // MARK: - TranscriptionBackend
 
-    /// FluidAudio has a dedicated triple-manager queue so its preview can run concurrently
-    /// with committed-chunk decodes — `previewSharesDecodeQueue` signals this to the transcriber.
-    var streamingPolicy: BackendStreamingPolicy {
-        BackendStreamingPolicy(
-            supportsEagerWordStream: false,
-            requiresEagerEngine: false,
-            suppressesVADChunking: false,
-            maxVADChunkDuration: 30.0,
-            previewPollInterval: 0.5,
-            previewSharesDecodeQueue: true,
-            serializesInferenceWithPreview: false
-        )
-    }
-
     /// Runs transcription on the GCD queue with lock + semaphore bridge.
     /// Must ONLY be called from the GCD `queue` — never from a cooperative thread.
     private func performTranscription(samples: [Float]) -> String {

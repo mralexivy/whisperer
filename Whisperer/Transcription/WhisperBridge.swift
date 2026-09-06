@@ -371,19 +371,6 @@ class WhisperBridge: TranscriptionBackend {
     }
     func resetAbort() { abortFlag.withLock { $0.requested = false } }
 
-    /// whisper.cpp is the only backend that drives the eager word-by-word stream.
-    var streamingPolicy: BackendStreamingPolicy {
-        BackendStreamingPolicy(
-            supportsEagerWordStream: true,
-            requiresEagerEngine: false,
-            suppressesVADChunking: false,
-            maxVADChunkDuration: 30.0,
-            previewPollInterval: 0.5,
-            previewSharesDecodeQueue: false,
-            serializesInferenceWithPreview: false
-        )
-    }
-
     /// Open a new abort epoch. Called immediately before each `whisper_full`, so a code returned
     /// by the *previous* operation can never be attributed to this one. Seeds from `requested`
     /// so an abort already pending at entry still counts.

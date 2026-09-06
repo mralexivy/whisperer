@@ -79,14 +79,10 @@ enum CorrectionPromotion {
         guard !isPurelyNumeric(observed), !isPurelyNumeric(corrected) else {
             return .rejected(.notASingleWord)
         }
-        guard ScriptAnalyzer.scriptFamilies(in: observed) == ScriptAnalyzer.scriptFamilies(in: corrected) else {
+        guard scriptFamilies(in: observed) == scriptFamilies(in: corrected) else {
             return .rejected(.scriptMismatch)
         }
         guard !tombstones.contains(observedKey) else { return .rejected(.tombstoned) }
-
-        // Non-Latin script tokens mis-score against the English spell checker and produce
-        // degenerate Soundex codes — never auto-promote them; let the user confirm.
-        guard ScriptAnalyzer.scriptFamilies(in: observed).contains(.latin) else { return .suggestion }
 
         guard observed.count >= minimumObservedLengthForAutomatic else { return .suggestion }
         guard !spelling.isValidEnglishWord(observedKey) else { return .suggestion }
@@ -113,6 +109,21 @@ enum CorrectionPromotion {
         text.allSatisfy { $0.isNumber }
     }
 
+    private static func scriptFamilies(in text: String) -> Set<String> {
+        Set(text.unicodeScalars.compactMap { scalar in
+            guard CharacterSet.letters.contains(scalar) else { return nil }
+            switch scalar.value {
+            case 0x0041...0x007A,
+                 0x00C0...0x024F,
+                 0x1E00...0x1EFF: return "latin"
+            case 0x0590...0x05FF: return "hebrew"
+            case 0x0400...0x052F: return "cyrillic"
+            case 0x0600...0x06FF: return "arabic"
+            case 0x4E00...0x9FFF: return "han"
+            default: return "block-\(scalar.value >> 8)"
+            }
+        })
+    }
 }
 
 // MARK: - Tombstones

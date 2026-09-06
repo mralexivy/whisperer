@@ -14,23 +14,21 @@ Whisperer is a voice-to-text transcription app for macOS that processes audio en
 
 - All audio recording and transcription happens **100% locally** on your Mac
 - Audio is **never uploaded** to any server or cloud service
-- Audio recordings are **always saved** to your local disk (in `~/Library/Application Support/Whisperer/Recordings/`)
-- You can auto-delete old recordings: set retention to Never / 7 / 30 / 90 / 365 days in Settings
-- You have full control and can manually delete recordings at any time
+- Audio recordings are **optionally saved** to your local disk only (in `~/Library/Application Support/Whisperer/Recordings/`)
+- You have full control over saved recordings and can delete them at any time
 
 ### Network Usage
 
-The app uses network connectivity for:
+The app uses network connectivity only for:
 
-- **Model Downloads & Updates**: On launch, the app checks Hugging Face for model updates. Downloads contain no personal information.
+- **Model Downloads**: On first launch, the app downloads AI models from Hugging Face (a third-party service). These downloads are one-time and contain no personal information.
 - **No Telemetry**: We do not use analytics, tracking, or crash reporting services that transmit data.
 
-Once models are downloaded, **transcription works completely offline**. No internet connection is required to record and transcribe audio.
+After the initial model download, **the app works completely offline**. No internet connection is required for transcription.
 
 ### Third-Party Services
 
-- **Hugging Face**: Used to download open-source AI models including whisper.cpp (speech-to-text engine) and whisper-polish (fine-tuned model for improved transcription). No personal data is transmitted during these downloads.
-- **MCP Server**: Whisperer runs a local HTTP server on localhost:8080 that serves your transcript history. This allows AI tools like Claude Desktop and Cursor to access your transcripts for context. The server is local-only and disabled by default—you can turn it off in Settings.
+- **Hugging Face**: Used solely to download open-source whisper.cpp AI models. No personal data is transmitted during these downloads.
 - **No Analytics**: We do not use Google Analytics, Mixpanel, Segment, or any other analytics platform.
 - **No Ads**: The app contains no advertising or ad networks.
 
@@ -68,8 +66,7 @@ Learned words and pending suggestions stay on device and can be deleted from Dic
 All data remains on your device:
 
 - **AI Models**: Stored in `~/Library/Application Support/Whisperer/` (~500MB to 3GB depending on model)
-- **Audio Recordings**: Stored in `~/Library/Application Support/Whisperer/Recordings/` (always saved; auto-delete rules available in Settings)
-- **Dictionary**: Your learned words are stored in `~/Library/Application Support/Whisperer/` for offline use
+- **Optional Recordings**: Stored in `~/Library/Application Support/Whisperer/Recordings/` (if you enable saving)
 - **Settings**: Stored in macOS UserDefaults (locally)
 - **Optional Correction Candidates**: Stored in `~/Library/Application Support/Whisperer/correction-candidates.json` when you explicitly enable collection
 - **Logs**: Debug logs stored in `~/Library/Logs/Whisperer/` for troubleshooting

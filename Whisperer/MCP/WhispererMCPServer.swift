@@ -26,14 +26,11 @@ actor WhispererMCPServer {
     private var transport: StatefulHTTPServerTransport?
     private var mcpServer: Server?
     private var connectionSeq: Int = 0
-    private var listeningPort: Int = 0
 
     // MARK: - Lifecycle
 
     func start(port: Int) async {
         guard listener == nil else { return }
-
-        listeningPort = port
 
         // TCP keepalive: detect dead peers without waiting for RST.
         // noDelay: send JSON-RPC responses immediately (no Nagle buffering).
@@ -46,12 +43,6 @@ actor WhispererMCPServer {
 
         let params = NWParameters(tls: nil, tcp: tcpOptions)
         params.allowLocalEndpointReuse = true
-
-        // Restrict to loopback unless the user has explicitly enabled LAN access.
-        let lanEnabled = await MainActor.run { AppState.shared.mcpLANEnabled }
-        if !lanEnabled {
-            params.requiredInterfaceType = .loopback
-        }
 
         guard let nwPort = NWEndpoint.Port(rawValue: UInt16(port)) else {
             Logger.error("MCP: invalid port \(port)", subsystem: .app)
@@ -67,14 +58,12 @@ actor WhispererMCPServer {
             }
 
 #if !APP_STORE
-            if await MainActor.run(body: { AppState.shared.mcpLANEnabled }) {
-                l.service = NWListener.Service(
-                    name: "Whisperer MCP",
-                    type: "_whisperer-mcp._tcp",
-                    domain: nil,
-                    txtRecord: NWTXTRecord(["path": "/mcp"])
-                )
-            }
+            l.service = NWListener.Service(
+                name: "Whisperer MCP",
+                type: "_whisperer-mcp._tcp",
+                domain: nil,
+                txtRecord: NWTXTRecord(["path": "/mcp"])
+            )
 #endif
 
             l.stateUpdateHandler = { [weak self] state in
@@ -137,18 +126,9 @@ actor WhispererMCPServer {
     // MARK: - Session Lifecycle
 
     private func runOneSession() async {
-        // When LAN access is off (default), restrict to localhost-only origins.
-        // When the user has explicitly opted into LAN access, accept any origin (same
-        // as the previous behaviour) so LAN clients — whose Host header contains a
-        // LAN IP or hostname — are not rejected by the origin validator.
-        let lanEnabled = await MainActor.run { AppState.shared.mcpLANEnabled }
-        let originValidator = lanEnabled
-            ? OriginValidator.disabled
-            : OriginValidator.localhost(port: listeningPort)
-
         let t = StatefulHTTPServerTransport(
             validationPipeline: StandardValidationPipeline(validators: [
-                originValidator,
+                OriginValidator.disabled,
                 AcceptHeaderValidator(mode: .sseRequired),
                 ContentTypeValidator(),
                 ProtocolVersionValidator(),
