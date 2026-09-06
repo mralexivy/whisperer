@@ -200,12 +200,15 @@ class TextInjector {
             var learnedCount = 0
 
             // `finish` logs once and exits — the single exit point keeps the reason enum honest.
+            // .notVerified always logs so insertion failure rate is observable per destination.
+            // .windowElapsed with no corrections is the normal "user didn't edit" outcome — skip it.
             func finish(_ reason: CorrectionObservationEndReason) {
-                guard learnedCount > 0 || reason != .windowElapsed else { return }
+                if reason == .windowElapsed && learnedCount == 0 { return }
                 Logger.event(.dictLearn, .textInjection, [
                     "endReason": .string(reason.rawValue),
                     "polls": .int(pollCount),
-                    "learned": .int(learnedCount)
+                    "learned": .int(learnedCount),
+                    "targetBundle": .string(self?.targetBundleID ?? "unknown")
                 ])
             }
 
@@ -330,8 +333,9 @@ class TextInjector {
     /// Copies text to the clipboard, posts Cmd+V, waits for the target to consume it,
     /// then restores the previous clipboard — all types preserved.
     ///
-    /// Returns true always (paste is best-effort; we rely on it working rather than
-    /// doing AX-read verification which is unreliable for renderer-backed inputs).
+    /// Returns `true` after the paste is dispatched (best-effort; no AX-read verification,
+    /// which is unreliable for renderer-backed inputs). Returns `false` only if
+    /// `NSPasteboard.setString` fails, which prevents the paste from being issued at all.
     @discardableResult
     private func enterViaClipboardPaste(_ text: String) async throws -> Bool {
         let pasteboard = NSPasteboard.general
