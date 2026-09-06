@@ -4167,6 +4167,7 @@ class AppState: ObservableObject {
                     Logger.debug("Transcription saved to history database", subsystem: .app)
                 } catch {
                     Logger.error("Failed to save transcription to history: \(error)", subsystem: .app)
+                    self.errorMessage = "Couldn't save that dictation to History — the text was still entered."
                 }
             }
         }

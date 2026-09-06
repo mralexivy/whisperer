@@ -25,16 +25,22 @@ class HistoryManager: ObservableObject {
     private var currentDateRange: (start: Date, end: Date)?
     private var loadGeneration: Int = 0
 
-    private let database = HistoryDatabase.shared
+    private let database: HistoryDatabase
     private var context: NSManagedObjectContext {
         database.viewContext
     }
 
     private init() {
+        self.database = HistoryDatabase.shared
         Task {
             await loadTranscriptions()
             await updateStatistics()
         }
+    }
+
+    // For tests only — production uses .shared
+    init(database: HistoryDatabase) {
+        self.database = database
     }
 
     // MARK: - In-Progress Session (crash-resumable long recordings)
@@ -42,27 +48,28 @@ class HistoryManager: ObservableObject {
     /// Create an in-progress CoreData entity at recording start. Returns the session UUID.
     func beginSession(audioFileURL: URL, language: String, modelUsed: String) async -> UUID {
         let sessionID = UUID()
-        let context = database.newBackgroundContext()
-        await context.perform {
-            let entity = TranscriptionEntity(context: context)
-            let now = Date()
-            entity.id = sessionID
-            entity.timestamp = now
-            entity.createdAt = now
-            entity.lastModifiedAt = now
-            entity.transcription = ""
-            entity.language = language
-            entity.modelUsed = modelUsed
-            entity.duration = 0
-            entity.wordCount = 0
-            entity.isPinned = false
-            entity.isFlagged = false
-            entity.isInProgress = true
-            entity.sessionAudioURL = audioFileURL.path
-            entity.chunkTextsJSON = "[]"
-            do { try context.save() } catch {
-                Logger.error("beginSession save failed: \(error)", subsystem: .app)
+        let ctx = database.newBackgroundContext()
+        do {
+            _ = try await ctx.performAndSave("beginSession") { ctx in
+                let entity = TranscriptionEntity(context: ctx)
+                let now = Date()
+                entity.id = sessionID
+                entity.timestamp = now
+                entity.createdAt = now
+                entity.lastModifiedAt = now
+                entity.transcription = ""
+                entity.language = language
+                entity.modelUsed = modelUsed
+                entity.duration = 0
+                entity.wordCount = 0
+                entity.isPinned = false
+                entity.isFlagged = false
+                entity.isInProgress = true
+                entity.sessionAudioURL = audioFileURL.path
+                entity.chunkTextsJSON = "[]"
             }
+        } catch {
+            Logger.error("beginSession failed to save: \(error)", subsystem: .app)
         }
         return sessionID
     }
@@ -70,43 +77,44 @@ class HistoryManager: ObservableObject {
     /// Append a completed chunk text to the in-progress session. Idempotent — safe to call repeatedly.
     func appendChunk(sessionID: UUID, chunkText: String, totalDuration: Double) async {
         guard !chunkText.isEmpty else { return }
-        let context = database.newBackgroundContext()
-        await context.perform {
-            let req: NSFetchRequest<TranscriptionEntity> = TranscriptionEntity.fetchRequest()
-            req.predicate = NSPredicate(format: "id == %@", sessionID as CVarArg)
-            req.fetchLimit = 1
-            guard let entity = try? context.fetch(req).first else { return }
+        let ctx = database.newBackgroundContext()
+        do {
+            _ = try await ctx.performAndSave("appendChunk") { ctx in
+                let req: NSFetchRequest<TranscriptionEntity> = TranscriptionEntity.fetchRequest()
+                req.predicate = NSPredicate(format: "id == %@", sessionID as CVarArg)
+                req.fetchLimit = 1
+                guard let entity = try ctx.fetch(req).first else { return }
 
-            // Decode current array, append new chunk
-            var chunks: [String] = []
-            if let json = entity.chunkTextsJSON,
-               let data = json.data(using: .utf8),
-               let decoded = try? JSONDecoder().decode([String].self, from: data) {
-                chunks = decoded
+                // Decode current array, append new chunk
+                var chunks: [String] = []
+                if let json = entity.chunkTextsJSON,
+                   let data = json.data(using: .utf8),
+                   let decoded = try? JSONDecoder().decode([String].self, from: data) {
+                    chunks = decoded
+                }
+                chunks.append(chunkText)
+                if let encoded = try? JSONEncoder().encode(chunks),
+                   let json = String(data: encoded, encoding: .utf8) {
+                    entity.chunkTextsJSON = json
+                }
+                entity.transcription = chunks.joined(separator: " ")
+                entity.wordCount = Int32(entity.transcription.components(separatedBy: .whitespacesAndNewlines).filter { !$0.isEmpty }.count)
+                entity.duration = totalDuration
+                entity.lastModifiedAt = Date()
             }
-            chunks.append(chunkText)
-            if let encoded = try? JSONEncoder().encode(chunks),
-               let json = String(data: encoded, encoding: .utf8) {
-                entity.chunkTextsJSON = json
-            }
-            entity.transcription = chunks.joined(separator: " ")
-            entity.wordCount = Int32(entity.transcription.components(separatedBy: .whitespacesAndNewlines).filter { !$0.isEmpty }.count)
-            entity.duration = totalDuration
-            entity.lastModifiedAt = Date()
-            do { try context.save() } catch {
-                Logger.error("appendChunk save failed: \(error)", subsystem: .app)
-            }
+        } catch {
+            Logger.error("appendChunk failed to save: \(error)", subsystem: .app)
         }
     }
 
     /// Finalize a session — marks isInProgress = false, sets final text/duration, optionally promotes session file to permanent recording.
     func finalizeSession(sessionID: UUID, finalText: String, duration: Double, audioFileURL: String? = nil) async throws {
-        let context = database.newBackgroundContext()
-        await context.perform {
+        let ctx = database.newBackgroundContext()
+        try await ctx.performAndSave("finalizeSession") { ctx in
             let req: NSFetchRequest<TranscriptionEntity> = TranscriptionEntity.fetchRequest()
             req.predicate = NSPredicate(format: "id == %@", sessionID as CVarArg)
             req.fetchLimit = 1
-            guard let entity = try? context.fetch(req).first else { return }
+            guard let entity = try ctx.fetch(req).first else { return }
 
             entity.isInProgress = false
             if !finalText.isEmpty {
@@ -118,9 +126,6 @@ class HistoryManager: ObservableObject {
                 entity.audioFileURL = url
             }
             entity.lastModifiedAt = Date()
-            do { try context.save() } catch {
-                Logger.error("finalizeSession save failed: \(error)", subsystem: .app)
-            }
         }
         await loadTranscriptions(filter: currentFilter, searchQuery: currentSearchQuery, dateRange: currentDateRange)
         await updateStatistics()
@@ -129,20 +134,21 @@ class HistoryManager: ObservableObject {
 
     /// Discard an in-progress session (crash recovery cancelled or recording too short).
     func discardSession(sessionID: UUID) async {
-        let context = database.newBackgroundContext()
+        let ctx = database.newBackgroundContext()
         // appendChunk may have saved the entity (bumping store version) between when
         // this context fetched it and when we try to delete. NSOverwriteMergePolicy
         // lets our delete win without raising NSMergeConflict error 133020.
-        context.mergePolicy = NSOverwriteMergePolicy
-        await context.perform {
-            let req: NSFetchRequest<TranscriptionEntity> = TranscriptionEntity.fetchRequest()
-            req.predicate = NSPredicate(format: "id == %@", sessionID as CVarArg)
-            req.fetchLimit = 1
-            guard let entity = try? context.fetch(req).first else { return }
-            context.delete(entity)
-            do { try context.save() } catch {
-                Logger.error("discardSession save failed: \(error)", subsystem: .app)
+        ctx.mergePolicy = NSOverwriteMergePolicy
+        do {
+            _ = try await ctx.performAndSave("discardSession") { ctx in
+                let req: NSFetchRequest<TranscriptionEntity> = TranscriptionEntity.fetchRequest()
+                req.predicate = NSPredicate(format: "id == %@", sessionID as CVarArg)
+                req.fetchLimit = 1
+                guard let entity = try ctx.fetch(req).first else { return }
+                ctx.delete(entity)
             }
+        } catch {
+            Logger.error("discardSession failed to save: \(error)", subsystem: .app)
         }
     }
 
@@ -162,11 +168,11 @@ class HistoryManager: ObservableObject {
     // MARK: - Create
 
     func saveTranscription(_ record: TranscriptionRecord) async throws {
-        let context = database.newBackgroundContext()
+        let ctx = database.newBackgroundContext()
 
-        await context.perform {
+        try await ctx.performAndSave("saveTranscription") { ctx in
             _ = TranscriptionEntity.create(
-                in: context,
+                in: ctx,
                 id: record.id,
                 transcription: record.transcription,
                 audioFileURL: record.audioFileURL,
@@ -178,12 +184,6 @@ class HistoryManager: ObservableObject {
                 aiEnhancedText: record.aiEnhancedText,
                 aiModeName: record.aiModeName
             )
-
-            do {
-                try context.save()
-            } catch {
-                Logger.error("Failed to save transcription: \(error)", subsystem: .app)
-            }
         }
 
         await loadTranscriptions(filter: currentFilter, searchQuery: currentSearchQuery, dateRange: currentDateRange)

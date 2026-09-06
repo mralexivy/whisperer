@@ -102,8 +102,23 @@ class MeetingManager: ObservableObject {
     private let encoder = JSONEncoder()
     private let decoder = JSONDecoder()
 
+    /// Meetings whose first persistence failure has already been surfaced, so subsequent
+    /// failures for the same meeting don't spam the notice. Mirrors
+    /// `AppState.reportedUnforceableLanguages` — dedup once per session.
+    private var reportedPersistenceFailures: Set<UUID> = []
+
     private init() {
         Task { await loadMeetings() }
+    }
+
+    // MARK: - Persistence failure helper
+
+    private func notePersistenceFailure(_ error: Error, meetingID: UUID, operation: String) {
+        Logger.error("Meeting \(operation) not saved: \(error)", subsystem: .app)
+        guard reportedPersistenceFailures.insert(meetingID).inserted else { return }
+        setProcessing(processingPhases[meetingID],
+                      notice: "Some changes couldn't be saved to disk.",
+                      for: meetingID)
     }
 
     // MARK: - Read (paginated)
@@ -185,20 +200,24 @@ class MeetingManager: ObservableObject {
 
     // MARK: - Create
 
+    @discardableResult
     func beginSession(title: String, language: String, modelUsed: String) async -> UUID {
         let id = UUID()
         let ctx = database.newBackgroundContext()
-        await ctx.perform {
-            let entity = MeetingEntity(context: ctx)
-            entity.id = id
-            entity.title = title
-            entity.createdAt = Date()
-            entity.duration = 0
-            entity.language = language
-            entity.modelUsed = modelUsed
-            entity.isInProgress = true
-            entity.wordCount = 0
-            try? ctx.save()
+        do {
+            _ = try await ctx.performAndSave("beginSession") { ctx in
+                let entity = MeetingEntity(context: ctx)
+                entity.id = id
+                entity.title = title
+                entity.createdAt = Date()
+                entity.duration = 0
+                entity.language = language
+                entity.modelUsed = modelUsed
+                entity.isInProgress = true
+                entity.wordCount = 0
+            }
+        } catch {
+            Logger.error("Meeting beginSession not saved: \(error)", subsystem: .app)
         }
         // Prepend to in-memory list — no full reload
         let newItem = MeetingListItem(id: id, title: title, language: language)
@@ -209,31 +228,39 @@ class MeetingManager: ObservableObject {
 
     // MARK: - Append segment
 
-    func appendSegment(meetingID: UUID, segment: MeetingSegment, duration: Double) async {
+    @discardableResult
+    func appendSegment(meetingID: UUID, segment: MeetingSegment, duration: Double) async -> Bool {
         let ctx = database.newBackgroundContext()
         let enc = encoder
         let dec = decoder
         let words = segment.text.components(separatedBy: .whitespacesAndNewlines)
             .filter { !$0.isEmpty }.count
 
-        await ctx.perform {
-            let req = MeetingEntity.fetchRequest()
-            req.predicate = NSPredicate(format: "id == %@", meetingID as CVarArg)
-            req.fetchLimit = 1
-            guard let entity = try? ctx.fetch(req).first else { return }
+        do {
+            _ = try await ctx.performAndSave("appendSegment") { ctx in
+                let req = MeetingEntity.fetchRequest()
+                req.predicate = NSPredicate(format: "id == %@", meetingID as CVarArg)
+                req.fetchLimit = 1
+                guard let entity = try ctx.fetch(req).first else {
+                    Logger.debug("appendSegment: meeting \(meetingID) no longer exists", subsystem: .app)
+                    return
+                }
 
-            var segments: [MeetingSegment] = []
-            if let json = entity.segmentsJSON, let data = json.data(using: .utf8) {
-                segments = (try? dec.decode([MeetingSegment].self, from: data)) ?? []
+                var segments: [MeetingSegment] = []
+                if let json = entity.segmentsJSON, let data = json.data(using: .utf8) {
+                    segments = (try? dec.decode([MeetingSegment].self, from: data)) ?? []
+                }
+                segments.append(segment)
+                if let data = try? enc.encode(segments),
+                   let json = String(data: data, encoding: .utf8) {
+                    entity.segmentsJSON = json
+                }
+                entity.wordCount += Int32(words)
+                entity.duration = duration
             }
-            segments.append(segment)
-            if let data = try? enc.encode(segments),
-               let json = String(data: data, encoding: .utf8) {
-                entity.segmentsJSON = json
-            }
-            entity.wordCount += Int32(words)
-            entity.duration = duration
-            try? ctx.save()
+        } catch {
+            notePersistenceFailure(error, meetingID: meetingID, operation: "appendSegment")
+            return false
         }
 
         // Update scalar fields in-memory — no full reload
@@ -241,34 +268,44 @@ class MeetingManager: ObservableObject {
             $0.wordCount += words
             $0.duration = duration
         }
+        return true
     }
 
     // MARK: - Update segment (speaker rename / text edit)
 
-    func updateSegment(meetingID: UUID, segment: MeetingSegment) async {
+    @discardableResult
+    func updateSegment(meetingID: UUID, segment: MeetingSegment) async -> Bool {
         let ctx = database.newBackgroundContext()
         let enc = encoder
         let dec = decoder
-        await ctx.perform {
-            let req = MeetingEntity.fetchRequest()
-            req.predicate = NSPredicate(format: "id == %@", meetingID as CVarArg)
-            req.fetchLimit = 1
-            guard let entity = try? ctx.fetch(req).first else { return }
+        do {
+            _ = try await ctx.performAndSave("updateSegment") { ctx in
+                let req = MeetingEntity.fetchRequest()
+                req.predicate = NSPredicate(format: "id == %@", meetingID as CVarArg)
+                req.fetchLimit = 1
+                guard let entity = try ctx.fetch(req).first else {
+                    Logger.debug("updateSegment: meeting \(meetingID) no longer exists", subsystem: .app)
+                    return
+                }
 
-            var segments: [MeetingSegment] = []
-            if let json = entity.segmentsJSON, let data = json.data(using: .utf8) {
-                segments = (try? dec.decode([MeetingSegment].self, from: data)) ?? []
+                var segments: [MeetingSegment] = []
+                if let json = entity.segmentsJSON, let data = json.data(using: .utf8) {
+                    segments = (try? dec.decode([MeetingSegment].self, from: data)) ?? []
+                }
+                if let idx = segments.firstIndex(where: { $0.id == segment.id }) {
+                    segments[idx] = segment
+                }
+                if let data = try? enc.encode(segments),
+                   let json = String(data: data, encoding: .utf8) {
+                    entity.segmentsJSON = json
+                }
             }
-            if let idx = segments.firstIndex(where: { $0.id == segment.id }) {
-                segments[idx] = segment
-            }
-            if let data = try? enc.encode(segments),
-               let json = String(data: data, encoding: .utf8) {
-                entity.segmentsJSON = json
-            }
-            try? ctx.save()
+        } catch {
+            notePersistenceFailure(error, meetingID: meetingID, operation: "updateSegment")
+            return false
         }
         // In-memory update handled by MeetingDetailViewModel.updateSegmentInMemory
+        return true
     }
 
     /// Replace the whole segment array in one write.
@@ -276,24 +313,33 @@ class MeetingManager: ObservableObject {
     /// `updateSegment` decodes and re-encodes the entire blob per call, so writing N segments
     /// through it is quadratic. The polish pass rewrites every segment, so it uses this instead:
     /// one fetch, one encode, one save per batch.
-    func updateSegments(meetingID: UUID, segments: [MeetingSegment]) async {
+    @discardableResult
+    func updateSegments(meetingID: UUID, segments: [MeetingSegment]) async -> Bool {
         let ctx = database.newBackgroundContext()
         let enc = encoder
         let words = segments.reduce(0) {
             $0 + $1.text.components(separatedBy: .whitespacesAndNewlines).filter { !$0.isEmpty }.count
         }
-        await ctx.perform {
-            let req = MeetingEntity.fetchRequest()
-            req.predicate = NSPredicate(format: "id == %@", meetingID as CVarArg)
-            req.fetchLimit = 1
-            guard let entity = try? ctx.fetch(req).first else { return }
-            guard let data = try? enc.encode(segments),
-                  let json = String(data: data, encoding: .utf8) else { return }
-            entity.segmentsJSON = json
-            entity.wordCount = Int32(words)
-            try? ctx.save()
+        do {
+            _ = try await ctx.performAndSave("updateSegments") { ctx in
+                let req = MeetingEntity.fetchRequest()
+                req.predicate = NSPredicate(format: "id == %@", meetingID as CVarArg)
+                req.fetchLimit = 1
+                guard let entity = try ctx.fetch(req).first else {
+                    Logger.debug("updateSegments: meeting \(meetingID) no longer exists", subsystem: .app)
+                    return
+                }
+                guard let data = try? enc.encode(segments),
+                      let json = String(data: data, encoding: .utf8) else { return }
+                entity.segmentsJSON = json
+                entity.wordCount = Int32(words)
+            }
+        } catch {
+            notePersistenceFailure(error, meetingID: meetingID, operation: "updateSegments")
+            return false
         }
         updateItem(id: meetingID) { $0.wordCount = words }
+        return true
     }
 
     // MARK: - Bulk speaker rename
@@ -304,40 +350,53 @@ class MeetingManager: ObservableObject {
         let ctx = database.newBackgroundContext()
         let enc = encoder
         let dec = decoder
-        await ctx.perform {
-            let req = MeetingEntity.fetchRequest()
-            req.predicate = NSPredicate(format: "id == %@", meetingID as CVarArg)
-            req.fetchLimit = 1
-            guard let entity = try? ctx.fetch(req).first else { return }
+        do {
+            _ = try await ctx.performAndSave("renameSpeaker") { ctx in
+                let req = MeetingEntity.fetchRequest()
+                req.predicate = NSPredicate(format: "id == %@", meetingID as CVarArg)
+                req.fetchLimit = 1
+                guard let entity = try ctx.fetch(req).first else {
+                    Logger.debug("renameSpeaker: meeting \(meetingID) no longer exists", subsystem: .app)
+                    return
+                }
 
-            var segments: [MeetingSegment] = []
-            if let json = entity.segmentsJSON, let data = json.data(using: .utf8) {
-                segments = (try? dec.decode([MeetingSegment].self, from: data)) ?? []
+                var segments: [MeetingSegment] = []
+                if let json = entity.segmentsJSON, let data = json.data(using: .utf8) {
+                    segments = (try? dec.decode([MeetingSegment].self, from: data)) ?? []
+                }
+                segments.renameSpeaker(index: speakerIndex, to: newName)
+                if let data = try? enc.encode(segments),
+                   let json = String(data: data, encoding: .utf8) {
+                    entity.segmentsJSON = json
+                }
             }
-            segments.renameSpeaker(index: speakerIndex, to: newName)
-            if let data = try? enc.encode(segments),
-               let json = String(data: data, encoding: .utf8) {
-                entity.segmentsJSON = json
-            }
-            try? ctx.save()
+        } catch {
+            notePersistenceFailure(error, meetingID: meetingID, operation: "renameSpeaker")
         }
         // In-memory update handled by MeetingDetailViewModel.renameSpeakerInMemory
     }
 
     // MARK: - Finalize
 
-    func finalizeSession(meetingID: UUID, duration: Double, audioFileURL: String?) async {
+    @discardableResult
+    func finalizeSession(meetingID: UUID, duration: Double, audioFileURL: String?) async -> Bool {
         let ctx = database.newBackgroundContext()
-        let dec = decoder
-        await ctx.perform {
-            let req = MeetingEntity.fetchRequest()
-            req.predicate = NSPredicate(format: "id == %@", meetingID as CVarArg)
-            req.fetchLimit = 1
-            guard let entity = try? ctx.fetch(req).first else { return }
-            entity.isInProgress = false
-            entity.duration = duration
-            if let url = audioFileURL { entity.audioFileURL = url }
-            try? ctx.save()
+        do {
+            _ = try await ctx.performAndSave("finalizeSession") { ctx in
+                let req = MeetingEntity.fetchRequest()
+                req.predicate = NSPredicate(format: "id == %@", meetingID as CVarArg)
+                req.fetchLimit = 1
+                guard let entity = try ctx.fetch(req).first else {
+                    Logger.debug("finalizeSession: meeting \(meetingID) no longer exists", subsystem: .app)
+                    return
+                }
+                entity.isInProgress = false
+                entity.duration = duration
+                if let url = audioFileURL { entity.audioFileURL = url }
+            }
+        } catch {
+            notePersistenceFailure(error, meetingID: meetingID, operation: "finalizeSession")
+            return false
         }
 
         // Update in-memory list item — no full reload
@@ -346,38 +405,60 @@ class MeetingManager: ObservableObject {
             $0.duration = duration
             if let url = audioFileURL { $0.audioFileURL = url }
         }
+        return true
     }
 
     // MARK: - Discard
 
-    func discardSession(meetingID: UUID) async {
+    @discardableResult
+    func discardSession(meetingID: UUID) async -> Bool {
         let ctx = database.newBackgroundContext()
-        await ctx.perform {
-            ctx.mergePolicy = NSOverwriteMergePolicy
-            let req = MeetingEntity.fetchRequest()
-            req.predicate = NSPredicate(format: "id == %@", meetingID as CVarArg)
-            req.fetchLimit = 1
-            guard let entity = try? ctx.fetch(req).first else { return }
-            ctx.delete(entity)
-            try? ctx.save()
+        // appendSegment may have saved the entity (bumping store version) between when
+        // this context fetched it and when we try to delete. NSOverwriteMergePolicy
+        // lets our delete win without raising NSMergeConflict error 133020.
+        ctx.mergePolicy = NSOverwriteMergePolicy
+        do {
+            _ = try await ctx.performAndSave("discardSession") { ctx in
+                let req = MeetingEntity.fetchRequest()
+                req.predicate = NSPredicate(format: "id == %@", meetingID as CVarArg)
+                req.fetchLimit = 1
+                guard let entity = try ctx.fetch(req).first else {
+                    Logger.debug("discardSession: meeting \(meetingID) no longer exists", subsystem: .app)
+                    return
+                }
+                ctx.delete(entity)
+            }
+        } catch {
+            notePersistenceFailure(error, meetingID: meetingID, operation: "discardSession")
+            return false
         }
         meetings.removeAll { $0.id == meetingID }
         if currentOffset > 0 { currentOffset -= 1 }
+        return true
     }
 
     // MARK: - Metadata updates
 
-    func updateTitle(meetingID: UUID, title: String) async {
+    @discardableResult
+    func updateTitle(meetingID: UUID, title: String) async -> Bool {
         let ctx = database.newBackgroundContext()
-        await ctx.perform {
-            let req = MeetingEntity.fetchRequest()
-            req.predicate = NSPredicate(format: "id == %@", meetingID as CVarArg)
-            req.fetchLimit = 1
-            guard let entity = try? ctx.fetch(req).first else { return }
-            entity.title = title
-            try? ctx.save()
+        do {
+            _ = try await ctx.performAndSave("updateTitle") { ctx in
+                let req = MeetingEntity.fetchRequest()
+                req.predicate = NSPredicate(format: "id == %@", meetingID as CVarArg)
+                req.fetchLimit = 1
+                guard let entity = try ctx.fetch(req).first else {
+                    Logger.debug("updateTitle: meeting \(meetingID) no longer exists", subsystem: .app)
+                    return
+                }
+                entity.title = title
+            }
+        } catch {
+            notePersistenceFailure(error, meetingID: meetingID, operation: "updateTitle")
+            return false
         }
         updateItem(id: meetingID) { $0.title = title }
+        return true
     }
 
     /// Persist the language the meeting was actually spoken in.
@@ -385,59 +466,87 @@ class MeetingManager: ObservableObject {
     /// `beginSession` writes the *setting* into this column, which for the default Auto is the
     /// literal `"auto"` — never the resolved language. `MeetingLanguageTimeline` is what finally
     /// knows the answer, and the detail view's language chip reads it back from here.
-    func updateLanguage(meetingID: UUID, language: String) async {
+    @discardableResult
+    func updateLanguage(meetingID: UUID, language: String) async -> Bool {
         let ctx = database.newBackgroundContext()
-        await ctx.perform {
-            let req = MeetingEntity.fetchRequest()
-            req.predicate = NSPredicate(format: "id == %@", meetingID as CVarArg)
-            req.fetchLimit = 1
-            guard let entity = try? ctx.fetch(req).first else { return }
-            entity.language = language
-            try? ctx.save()
+        do {
+            _ = try await ctx.performAndSave("updateLanguage") { ctx in
+                let req = MeetingEntity.fetchRequest()
+                req.predicate = NSPredicate(format: "id == %@", meetingID as CVarArg)
+                req.fetchLimit = 1
+                guard let entity = try ctx.fetch(req).first else {
+                    Logger.debug("updateLanguage: meeting \(meetingID) no longer exists", subsystem: .app)
+                    return
+                }
+                entity.language = language
+            }
+        } catch {
+            notePersistenceFailure(error, meetingID: meetingID, operation: "updateLanguage")
+            return false
         }
+        return true
     }
 
-    func updateNotes(meetingID: UUID, notes: [MeetingNote]) async {
+    @discardableResult
+    func updateNotes(meetingID: UUID, notes: [MeetingNote]) async -> Bool {
         let ctx = database.newBackgroundContext()
         let enc = encoder
-        await ctx.perform {
-            let req = MeetingEntity.fetchRequest()
-            req.predicate = NSPredicate(format: "id == %@", meetingID as CVarArg)
-            req.fetchLimit = 1
-            guard let entity = try? ctx.fetch(req).first else { return }
-            if let data = try? enc.encode(notes),
-               let json = String(data: data, encoding: .utf8) {
-                entity.notesJSON = json
+        do {
+            _ = try await ctx.performAndSave("updateNotes") { ctx in
+                let req = MeetingEntity.fetchRequest()
+                req.predicate = NSPredicate(format: "id == %@", meetingID as CVarArg)
+                req.fetchLimit = 1
+                guard let entity = try ctx.fetch(req).first else {
+                    Logger.debug("updateNotes: meeting \(meetingID) no longer exists", subsystem: .app)
+                    return
+                }
+                if let data = try? enc.encode(notes),
+                   let json = String(data: data, encoding: .utf8) {
+                    entity.notesJSON = json
+                }
             }
-            try? ctx.save()
+        } catch {
+            notePersistenceFailure(error, meetingID: meetingID, operation: "updateNotes")
+            return false
         }
         // Notes live in full MeetingRecord; no scalar to update in MeetingListItem
+        return true
     }
 
-    func updateAISummary(meetingID: UUID, summary: MeetingAISummary) async {
+    @discardableResult
+    func updateAISummary(meetingID: UUID, summary: MeetingAISummary) async -> Bool {
         let ctx = database.newBackgroundContext()
         let enc = encoder
-        await ctx.perform {
-            let req = MeetingEntity.fetchRequest()
-            req.predicate = NSPredicate(format: "id == %@", meetingID as CVarArg)
-            req.fetchLimit = 1
-            guard let entity = try? ctx.fetch(req).first else { return }
-            if let data = try? enc.encode(summary),
-               let json = String(data: data, encoding: .utf8) {
-                entity.aiSummaryJSON = json
+        do {
+            _ = try await ctx.performAndSave("updateAISummary") { ctx in
+                let req = MeetingEntity.fetchRequest()
+                req.predicate = NSPredicate(format: "id == %@", meetingID as CVarArg)
+                req.fetchLimit = 1
+                guard let entity = try ctx.fetch(req).first else {
+                    Logger.debug("updateAISummary: meeting \(meetingID) no longer exists", subsystem: .app)
+                    return
+                }
+                if let data = try? enc.encode(summary),
+                   let json = String(data: data, encoding: .utf8) {
+                    entity.aiSummaryJSON = json
+                }
             }
-            try? ctx.save()
+        } catch {
+            notePersistenceFailure(error, meetingID: meetingID, operation: "updateAISummary")
+            return false
         }
         // MeetingDetailViewModel observes meetingOverviewDidGenerate and calls refreshDetail()
+        return true
     }
 
-    func updateActionItem(meetingID: UUID, item: MeetingActionItem) async {
-        guard let meeting = await meeting(id: meetingID) else { return }
-        guard var summary = meeting.aiSummary else { return }
+    @discardableResult
+    func updateActionItem(meetingID: UUID, item: MeetingActionItem) async -> Bool {
+        guard let meeting = await meeting(id: meetingID) else { return false }
+        guard var summary = meeting.aiSummary else { return false }
         if let idx = summary.actionItems.firstIndex(where: { $0.id == item.id }) {
             summary.actionItems[idx] = item
         }
-        await updateAISummary(meetingID: meetingID, summary: summary)
+        return await updateAISummary(meetingID: meetingID, summary: summary)
     }
 
     // MARK: - Crash recovery
