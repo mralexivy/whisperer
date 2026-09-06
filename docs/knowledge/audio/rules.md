@@ -85,3 +85,20 @@
     `CancellationError` and runs the body immediately, so a cancelled timeout fires instead of
     disappearing — which is how a 15 s timeout logged itself 4.4 s in. Write
     `do { try await Task.sleep(...) } catch { return }`.
+
+16. **`AVAudioPlayer` cannot seek the app's Ogg Opus format — use `AVAudioEngine` + `scheduleSegment`.**
+    Setting `AVAudioPlayer.currentTime = t` on an Ogg Opus file appears to work (read-back returns `t`),
+    but the underlying decoder never moves. Any playback path must use `AVAudioFile(forReading:)` for
+    random access and `AVAudioPlayerNode.scheduleSegment(file:startingFrame:frameCount:at:)` to start
+    from the correct frame. `AVAudioFile` frame seeks on `.opus` are exact and repeatable — this is the
+    same access pattern `WaveformGenerator` uses and it is verified correct.
+    
+    Empirical evidence (meeting file 47E20DE7…, 2786 s, 48 kHz / Ogg Opus):
+    - `AVAudioPlayer.currentTime = 600` → read-back 600.0 ✅, but decoder stayed at 0 ❌
+    - `AVAudioPlayer.currentTime = duration - 3`, then `play()` → still playing 12 s later, pinned at `duration` ❌
+    - `AVAudioEngine` + `scheduleSegment(startingFrame: 600 s)` → offline-render RMS 0.037986, matches
+      `AVAudioFile` direct read at 600 s (RMS 0.037991) ✅
+    
+    `SeekableAudioPlayer` (`Whisperer/Audio/SeekableAudioPlayer.swift`) encapsulates this pattern and
+    replaces both `AudioPlayer` (History) and `MeetingAudioPlayer` (Meetings). The regression guard is
+    `SeekableAudioPlayerTests.testSeekIntoToneRendersCorrectAudio`.

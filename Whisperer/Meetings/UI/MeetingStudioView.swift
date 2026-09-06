@@ -10,7 +10,9 @@ import SwiftUI
 struct MeetingStudioView: View {
     @ObservedObject private var appState = AppState.shared
     @StateObject private var localSession = MeetingSession()
-    @StateObject private var audioPlayer = MeetingAudioPlayer()
+    @StateObject private var audioPlayer = SeekableAudioPlayer()
+    /// Throttled to whole seconds so MeetingDetailView doesn't re-render 30× per second.
+    @State private var playheadIntSeconds: Int = 0
     @StateObject private var detailVM = MeetingDetailViewModel()
 
     private var session: MeetingSession {
@@ -152,7 +154,10 @@ struct MeetingStudioView: View {
 
                 // Center: transcript / overview — always show if a selection exists or is loading
                 if selectedMeetingID != nil || detailVM.isLoading {
-                    MeetingDetailView(detailVM: detailVM, session: session, playheadSeconds: audioPlayer.currentTime)
+                    MeetingDetailView(detailVM: detailVM, session: session, playheadSeconds: Double(playheadIntSeconds))
+                        .onChange(of: Int(audioPlayer.currentTime)) { _, newSec in
+                            playheadIntSeconds = newSec
+                        }
                         .id(selectedMeetingID)
                         .frame(minWidth: 200)
                         .layoutPriority(1)

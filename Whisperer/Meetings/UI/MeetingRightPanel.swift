@@ -11,7 +11,7 @@ import SwiftUI
 struct MeetingRightPanel: View {
     let meeting: MeetingRecord?
     @ObservedObject var session: MeetingSession
-    @ObservedObject var player: MeetingAudioPlayer
+    @ObservedObject var player: SeekableAudioPlayer
     var onSpeakerRenamed: ((Int, String) -> Void)?
 
     var body: some View {

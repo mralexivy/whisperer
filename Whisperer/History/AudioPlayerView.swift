@@ -2,22 +2,27 @@
 //  AudioPlayerView.swift
 //  Whisperer
 //
-//  Audio playback with waveform visualization - Matching Whisperer design
+//  Audio playback with waveform visualization — Matching Whisperer design.
+//  Backed by SeekableAudioPlayer (AVAudioEngine) so seeks on Ogg Opus files
+//  actually reposition the decoder.
 //
 
 import SwiftUI
 import AVFoundation
-import Combine
 
 struct AudioPlayerView: View {
     @Environment(\.colorScheme) var colorScheme
     let audioURL: URL
+    /// Metadata duration used as a placeholder label until the file finishes loading.
     let duration: Double
 
-    @StateObject private var player = AudioPlayer()
+    @StateObject private var player = SeekableAudioPlayer()
     @State private var waveformData: [Float] = []
-    @State private var isHoveringWaveform = false
-    @State private var hoverProgress: CGFloat = 0
+
+    // Scrub state
+    @State private var scrubProgress: CGFloat = 0
+    @State private var lastThrottledSeek: Date = .distantPast
+    private let seekThrottleInterval: TimeInterval = 0.1
 
     var body: some View {
         VStack(spacing: 16) {
@@ -30,9 +35,7 @@ struct AudioPlayerView: View {
             HStack(spacing: 16) {
                 playButton
                 timeDisplay
-
                 Spacer()
-
                 speedControl
             }
         }
@@ -59,21 +62,9 @@ struct AudioPlayerView: View {
                     }
                 }
                 .frame(maxHeight: .infinity, alignment: .center)
-                // Vertical fade — bars fade out at top and bottom edges
-                .mask(
-                    LinearGradient(
-                        stops: [
-                            .init(color: .clear, location: 0),
-                            .init(color: .white, location: 0.15),
-                            .init(color: .white, location: 0.85),
-                            .init(color: .clear, location: 1)
-                        ],
-                        startPoint: .top,
-                        endPoint: .bottom
-                    )
-                )
+                .mask(verticalFadeMask)
 
-                // Progress bars with glow
+                // Progress bars
                 HStack(spacing: 2) {
                     ForEach(0..<waveformData.count, id: \.self) { index in
                         RoundedRectangle(cornerRadius: 2)
@@ -85,40 +76,63 @@ struct AudioPlayerView: View {
                 .frame(maxHeight: .infinity, alignment: .center)
                 .mask(
                     Rectangle()
-                        .frame(width: geometry.size.width * CGFloat(player.progress))
+                        .frame(width: geometry.size.width * displayProgress)
                         .frame(maxWidth: .infinity, alignment: .leading)
                 )
-                // Vertical fade — bars fade out at top and bottom edges
-                .mask(
-                    LinearGradient(
-                        stops: [
-                            .init(color: .clear, location: 0),
-                            .init(color: .white, location: 0.15),
-                            .init(color: .white, location: 0.85),
-                            .init(color: .clear, location: 1)
-                        ],
-                        startPoint: .top,
-                        endPoint: .bottom
-                    )
-                )
+                .mask(verticalFadeMask)
 
-                // Playhead — outside the mask so it doesn't get clipped
+                // Playhead
                 Circle()
                     .fill(Color.white)
                     .frame(width: 10, height: 10)
                     .shadow(color: WhispererColors.accent.opacity(0.5), radius: 4, y: 2)
                     .shadow(color: Color.white.opacity(0.3), radius: 2, y: 0)
-                    .offset(x: geometry.size.width * CGFloat(player.progress) - 5)
+                    .offset(x: geometry.size.width * displayProgress - 5)
             }
             .contentShape(Rectangle())
             .gesture(
                 DragGesture(minimumDistance: 0)
                     .onChanged { value in
-                        let progress = max(0, min(1, value.location.x / geometry.size.width))
-                        player.seek(to: Double(progress) * duration)
+                        guard player.duration > 0 else { return }
+                        let p = max(0, min(1, value.location.x / geometry.size.width))
+                        scrubProgress = p
+                        player.isScrubbing = true
+
+                        // Throttle actual seeks to ~10 Hz
+                        let now = Date()
+                        if now.timeIntervalSince(lastThrottledSeek) > seekThrottleInterval {
+                            lastThrottledSeek = now
+                            player.seek(to: Double(p) * player.duration)
+                        }
+                    }
+                    .onEnded { value in
+                        guard player.duration > 0 else { return }
+                        let p = max(0, min(1, value.location.x / geometry.size.width))
+                        player.seek(to: Double(p) * player.duration)
+                        player.isScrubbing = false
+                        // Restart playback if it was playing before the drag.
+                        if player.isPlaying { player.play() }
                     }
             )
         }
+    }
+
+    /// Progress fraction for the playhead UI: uses the scrub position while dragging.
+    private var displayProgress: CGFloat {
+        player.isScrubbing ? scrubProgress : CGFloat(player.progress)
+    }
+
+    private var verticalFadeMask: some View {
+        LinearGradient(
+            stops: [
+                .init(color: .clear, location: 0),
+                .init(color: .white, location: 0.15),
+                .init(color: .white, location: 0.85),
+                .init(color: .clear, location: 1)
+            ],
+            startPoint: .top,
+            endPoint: .bottom
+        )
     }
 
     // MARK: - Play Button
@@ -150,13 +164,20 @@ struct AudioPlayerView: View {
                 isPlayButtonHovered = hovering
             }
         }
+        .disabled(player.duration == 0)
     }
 
     // MARK: - Time Display
 
     private var timeDisplay: some View {
         HStack(spacing: 6) {
-            Text(timeString(player.currentTime))
+            // Show scrub position while dragging; use player's loaded duration once known.
+            let displayTime = player.isScrubbing
+                ? scrubProgress * CGFloat(player.duration > 0 ? player.duration : duration)
+                : CGFloat(player.currentTime)
+            let displayDuration = player.duration > 0 ? player.duration : duration
+
+            Text(timeString(Double(displayTime)))
                 .font(.system(size: 13, weight: .semibold, design: .monospaced))
                 .foregroundColor(WhispererColors.primaryText(colorScheme))
 
@@ -164,7 +185,7 @@ struct AudioPlayerView: View {
                 .font(.system(size: 11))
                 .foregroundColor(WhispererColors.secondaryText(colorScheme))
 
-            Text(timeString(duration))
+            Text(timeString(displayDuration))
                 .font(.system(size: 13, weight: .medium, design: .monospaced))
                 .foregroundColor(WhispererColors.secondaryText(colorScheme))
         }
@@ -187,7 +208,7 @@ struct AudioPlayerView: View {
     private var speedControl: some View {
         Menu {
             ForEach([0.5, 0.75, 1.0, 1.25, 1.5, 2.0] as [Float], id: \.self) { rate in
-                Button(action: { player.setPlaybackRate(rate) }) {
+                Button(action: { player.setRate(rate) }) {
                     HStack {
                         Text(speedLabel(rate))
                         if player.playbackRate == rate {
@@ -246,94 +267,9 @@ struct AudioPlayerView: View {
     }
 
     private func timeString(_ seconds: Double) -> String {
+        guard seconds.isFinite && seconds >= 0 else { return "0:00" }
         let mins = Int(seconds) / 60
         let secs = Int(seconds) % 60
         return String(format: "%d:%02d", mins, secs)
-    }
-}
-
-// MARK: - Audio Player
-
-class AudioPlayer: NSObject, ObservableObject, AVAudioPlayerDelegate {
-    @Published var isPlaying = false
-    @Published var currentTime: Double = 0
-    @Published var progress: Double = 0
-    @Published var playbackRate: Float = 1.0
-
-    private var audioPlayer: AVAudioPlayer?
-    private var timer: Timer?
-
-    override init() {
-        super.init()
-        if UserDefaults.standard.object(forKey: "audioPlaybackSpeed") != nil {
-            playbackRate = UserDefaults.standard.float(forKey: "audioPlaybackSpeed")
-        }
-    }
-
-    func load(url: URL) {
-        do {
-            audioPlayer = try AVAudioPlayer(contentsOf: url)
-            audioPlayer?.delegate = self
-            audioPlayer?.enableRate = true
-            audioPlayer?.prepareToPlay()
-        } catch {
-            Logger.error("Failed to load audio: \(error)", subsystem: .app)
-        }
-    }
-
-    func play() {
-        audioPlayer?.rate = playbackRate
-        audioPlayer?.play()
-        isPlaying = true
-        startTimer()
-    }
-
-    func pause() {
-        audioPlayer?.pause()
-        isPlaying = false
-        stopTimer()
-    }
-
-    func stop() {
-        audioPlayer?.stop()
-        isPlaying = false
-        stopTimer()
-    }
-
-    func seek(to time: Double) {
-        audioPlayer?.currentTime = time
-        updateProgress()
-    }
-
-    func setPlaybackRate(_ rate: Float) {
-        playbackRate = rate
-        UserDefaults.standard.set(rate, forKey: "audioPlaybackSpeed")
-        if isPlaying {
-            audioPlayer?.rate = rate
-        }
-    }
-
-    private func startTimer() {
-        timer = Timer.scheduledTimer(withTimeInterval: 0.05, repeats: true) { [weak self] _ in
-            self?.updateProgress()
-        }
-    }
-
-    private func stopTimer() {
-        timer?.invalidate()
-        timer = nil
-    }
-
-    private func updateProgress() {
-        guard let player = audioPlayer else { return }
-        currentTime = player.currentTime
-        progress = player.duration > 0 ? player.currentTime / player.duration : 0
-    }
-
-    func audioPlayerDidFinishPlaying(_ player: AVAudioPlayer, successfully flag: Bool) {
-        isPlaying = false
-        stopTimer()
-        currentTime = 0
-        progress = 0
     }
 }

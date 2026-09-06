@@ -5,120 +5,29 @@
 //  Audio player card — identical structure to the Audio Recording section
 //  in TranscriptionDetailView: section label + reveal-in-finder + AudioPlayerView layout.
 //
+//  Uses SeekableAudioPlayer (AVAudioEngine) so seeks on the app's Ogg Opus files
+//  actually reposition the decoder.
+//
 
 import SwiftUI
 import AVFoundation
 import Combine
-
-// MARK: - Player model
-
-@MainActor
-class MeetingAudioPlayer: ObservableObject {
-    @Published var isPlaying = false
-    @Published var isLoading = false
-    @Published var currentTime: Double = 0
-    @Published var duration: Double = 0
-    @Published var playbackRate: Float = 1.0
-    @Published var loadedURL: URL?
-
-    private var player: AVAudioPlayer?
-    private var timer: Timer?
-
-    var progress: Double {
-        guard duration > 0 else { return 0 }
-        return min(1, max(0, currentTime / duration))
-    }
-
-    func load(url: URL) {
-        stop()
-        isLoading = true
-        let capturedURL = url
-        Task.detached(priority: .userInitiated) { [weak self] in
-            guard let p = try? AVAudioPlayer(contentsOf: capturedURL) else {
-                await MainActor.run { self?.isLoading = false }
-                return
-            }
-            p.enableRate = true
-            p.prepareToPlay()
-            let dur = p.duration
-            await MainActor.run { [weak self] in
-                guard let self else { return }
-                self.player = p
-                self.duration = dur
-                self.currentTime = 0
-                self.isLoading = false
-                self.loadedURL = capturedURL
-            }
-        }
-    }
-
-    func play() {
-        guard let p = player else { return }
-        p.rate = playbackRate
-        p.play()
-        isPlaying = true
-        startTimer()
-    }
-
-    func pause() {
-        player?.pause()
-        isPlaying = false
-        stopTimer()
-    }
-
-    func stop() {
-        player?.stop()
-        isPlaying = false
-        isLoading = false
-        currentTime = 0
-        duration = 0
-        loadedURL = nil
-        stopTimer()
-    }
-
-    func seek(to time: Double) {
-        currentTime = max(0, min(time, duration))
-        player?.currentTime = currentTime
-    }
-
-    func skipBack(_ seconds: Double = 15) { seek(to: currentTime - seconds) }
-    func skipForward(_ seconds: Double = 30) { seek(to: currentTime + seconds) }
-
-    func setRate(_ rate: Float) {
-        playbackRate = rate
-        if isPlaying { player?.rate = rate }
-    }
-
-    private func startTimer() {
-        stopTimer()
-        timer = Timer.scheduledTimer(withTimeInterval: 0.05, repeats: true) { [weak self] _ in
-            guard let self, let p = self.player else { return }
-            Task { @MainActor in
-                self.currentTime = p.currentTime
-                if !p.isPlaying && self.isPlaying {
-                    self.isPlaying = false
-                    self.currentTime = 0
-                }
-            }
-        }
-    }
-
-    private func stopTimer() {
-        timer?.invalidate()
-        timer = nil
-    }
-}
 
 // MARK: - Card view
 
 struct MeetingPlayerCard: View {
     let meeting: MeetingRecord?
     @ObservedObject var session: MeetingSession
-    @ObservedObject var player: MeetingAudioPlayer
+    @ObservedObject var player: SeekableAudioPlayer
 
     @State private var waveformData: [Float] = []
     @State private var isPlayButtonHovered = false
     @State private var isSpeedHovered = false
+
+    // Scrub state
+    @State private var scrubProgress: CGFloat = 0
+    @State private var lastThrottledSeek: Date = .distantPast
+    private let seekThrottleInterval: TimeInterval = 0.1
 
     private var audioURL: URL? { meeting?.resolvedAudioURL }
 
@@ -189,7 +98,7 @@ struct MeetingPlayerCard: View {
         }
     }
 
-    // MARK: - Section label (matches sectionLabel in TranscriptionDetailView)
+    // MARK: - Section label
 
     private var audioSectionLabel: some View {
         HStack(spacing: 8) {
@@ -211,7 +120,7 @@ struct MeetingPlayerCard: View {
         }
     }
 
-    // MARK: - Waveform (matches AudioPlayerView exactly)
+    // MARK: - Waveform
 
     private var waveformView: some View {
         GeometryReader { geometry in
@@ -239,7 +148,7 @@ struct MeetingPlayerCard: View {
                 .frame(maxHeight: .infinity, alignment: .center)
                 .mask(
                     Rectangle()
-                        .frame(width: geometry.size.width * CGFloat(player.progress))
+                        .frame(width: geometry.size.width * displayProgress)
                         .frame(maxWidth: .infinity, alignment: .leading)
                 )
                 .mask(fadeMask)
@@ -250,7 +159,7 @@ struct MeetingPlayerCard: View {
                     .frame(width: 10, height: 10)
                     .shadow(color: WhispererColors.accent.opacity(0.5), radius: 4, y: 2)
                     .shadow(color: Color.white.opacity(0.3), radius: 2, y: 0)
-                    .offset(x: geometry.size.width * CGFloat(player.progress) - 5)
+                    .offset(x: geometry.size.width * displayProgress - 5)
             }
             .contentShape(Rectangle())
             .gesture(
@@ -258,10 +167,31 @@ struct MeetingPlayerCard: View {
                     .onChanged { value in
                         guard player.duration > 0 else { return }
                         let p = max(0, min(1, value.location.x / geometry.size.width))
+                        scrubProgress = p
+                        player.isScrubbing = true
+
+                        // Throttle actual seeks to ~10 Hz
+                        let now = Date()
+                        if now.timeIntervalSince(lastThrottledSeek) > seekThrottleInterval {
+                            lastThrottledSeek = now
+                            player.seek(to: Double(p) * player.duration)
+                        }
+                    }
+                    .onEnded { value in
+                        guard player.duration > 0 else { return }
+                        let p = max(0, min(1, value.location.x / geometry.size.width))
                         player.seek(to: Double(p) * player.duration)
+                        player.isScrubbing = false
+                        // Restart playback if it was playing before the drag.
+                        if player.isPlaying { player.play() }
                     }
             )
         }
+    }
+
+    /// Progress fraction for the playhead UI: uses the scrub position while dragging.
+    private var displayProgress: CGFloat {
+        player.isScrubbing ? scrubProgress : CGFloat(player.progress)
     }
 
     private var fadeMask: some View {
@@ -290,7 +220,7 @@ struct MeetingPlayerCard: View {
         }
     }
 
-    // MARK: - Play button (matches AudioPlayerView exactly)
+    // MARK: - Play button
 
     private var playButton: some View {
         Button(action: { player.isPlaying ? player.pause() : player.play() }) {
@@ -318,11 +248,15 @@ struct MeetingPlayerCard: View {
         .disabled(player.duration == 0)
     }
 
-    // MARK: - Time display (matches AudioPlayerView exactly)
+    // MARK: - Time display
 
     private var timeDisplay: some View {
         HStack(spacing: 6) {
-            Text(timeString(player.currentTime))
+            let displayTime = player.isScrubbing
+                ? Double(scrubProgress) * player.duration
+                : player.currentTime
+
+            Text(timeString(displayTime))
                 .font(.system(size: 13, weight: .semibold, design: .monospaced))
                 .foregroundColor(WhispererColors.primaryText(.dark))
             Text("/")
@@ -334,7 +268,7 @@ struct MeetingPlayerCard: View {
         }
     }
 
-    // MARK: - Speed control (matches AudioPlayerView exactly)
+    // MARK: - Speed control
 
     private var speedAccentColor: Color {
         player.playbackRate != 1.0 ? .orange : WhispererColors.secondaryText(.dark)
