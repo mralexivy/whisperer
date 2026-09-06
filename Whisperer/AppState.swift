@@ -685,8 +685,22 @@ class AppState: ObservableObject {
         didSet { UserDefaults.standard.set(mcpPort, forKey: "mcpPort") }
     }
     @Published var mcpServerRunning: Bool = false
+    @Published var mcpLANEnabled: Bool = false {
+        didSet { UserDefaults.standard.set(mcpLANEnabled, forKey: "mcpLANEnabled") }
+    }
     @Published var mcpBonjourReady: Bool = false
     @Published var mcpBonjourHostname: String? = nil  // machine's .local hostname, set at launch
+
+    /// URL shown in the UI and copied to the clipboard.
+    /// Shows the .local mDNS URL when LAN access is enabled; localhost otherwise.
+    var mcpServerURL: String {
+        #if !APP_STORE
+        if mcpLANEnabled, let hostname = mcpBonjourHostname {
+            return "http://\(hostname):\(mcpPort)/mcp"
+        }
+        #endif
+        return "http://localhost:\(mcpPort)/mcp"
+    }
 
     private var currentAudioURL: URL?
     private var lastTargetAppName: String?
@@ -901,6 +915,9 @@ class AppState: ObservableObject {
         }
         if UserDefaults.standard.object(forKey: "mcpPort") != nil {
             _mcpPort = Published(wrappedValue: UserDefaults.standard.integer(forKey: "mcpPort"))
+        }
+        if UserDefaults.standard.object(forKey: "mcpLANEnabled") != nil {
+            _mcpLANEnabled = Published(wrappedValue: UserDefaults.standard.bool(forKey: "mcpLANEnabled"))
         }
 
         // Start monitoring audio device changes (for UI device picker only)

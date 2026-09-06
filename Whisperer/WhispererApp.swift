@@ -242,7 +242,14 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                 Task { await WhispererMCPServer.shared.restart(port: port) }
             }
             .store(in: &mcpCancellables)
-
+        appState.$mcpLANEnabled
+            .dropFirst()
+            .sink { [weak self] _ in
+                guard let self, self.appState.mcpEnabled else { return }
+                let port = self.appState.mcpPort
+                Task { await WhispererMCPServer.shared.restart(port: port) }
+            }
+            .store(in: &mcpCancellables)
 
         // Device selection is resolved fresh at recording time via
         // audioDeviceManager.resolveInputRouteForRecording() — no cached device IDs.
@@ -3516,14 +3523,7 @@ struct MCPSettingsView: View {
     @State private var copied = false
     @State private var pulse = false
 
-    private var serverURL: String {
-        #if !APP_STORE
-        if let hostname = appState.mcpBonjourHostname {
-            return "http://\(hostname):\(appState.mcpPort)/mcp"
-        }
-        #endif
-        return "http://localhost:\(appState.mcpPort)/mcp"
-    }
+    private var serverURL: String { appState.mcpServerURL }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -3637,6 +3637,26 @@ struct MCPSettingsView: View {
                                 )
                         )
                 )
+
+                Divider().background(MBColors.border)
+
+                // LAN access toggle
+                HStack {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Allow LAN access")
+                            .font(.system(size: 12, weight: .medium))
+                            .foregroundColor(MBColors.textPrimary)
+                        Text("Expose the server to other devices on your network")
+                            .font(.system(size: 10))
+                            .foregroundColor(MBColors.textSecondary)
+                    }
+                    Spacer()
+                    Toggle("", isOn: $appState.mcpLANEnabled)
+                        .toggleStyle(.switch)
+                        .tint(MBColors.accent)
+                        .labelsHidden()
+                        .disabled(!appState.mcpEnabled)
+                }
 
                 Divider().background(MBColors.border)
 

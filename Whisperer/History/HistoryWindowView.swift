@@ -2997,14 +2997,7 @@ struct WorkspaceMCPSettingsView: View {
     @State private var copied = false
     @State private var pulse = false
 
-    private var serverURL: String {
-        #if !APP_STORE
-        if let hostname = appState.mcpBonjourHostname {
-            return "http://\(hostname):\(appState.mcpPort)/mcp"
-        }
-        #endif
-        return "http://localhost:\(appState.mcpPort)/mcp"
-    }
+    private var serverURL: String { appState.mcpServerURL }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
@@ -3167,6 +3160,42 @@ struct WorkspaceMCPSettingsView: View {
                                     )
                             )
                     )
+                }
+
+                // LAN access toggle
+                SettingsRow(colorScheme: colorScheme) {
+                    HStack(spacing: 14) {
+                        ZStack {
+                            RoundedRectangle(cornerRadius: 8)
+                                .fill(
+                                    LinearGradient(
+                                        colors: [Color.orange.opacity(0.18), Color.orange.opacity(0.08)],
+                                        startPoint: .topLeading, endPoint: .bottomTrailing
+                                    )
+                                )
+                                .frame(width: 36, height: 36)
+                            Image(systemName: "network.badge.shield.half.filled")
+                                .font(.system(size: 15, weight: .semibold))
+                                .foregroundColor(.orange)
+                        }
+
+                        VStack(alignment: .leading, spacing: 3) {
+                            Text("Allow LAN access")
+                                .font(.system(size: 13, weight: .medium))
+                                .foregroundColor(WhispererColors.primaryText(colorScheme))
+                            Text("Expose the server to other devices on your local network")
+                                .font(.system(size: 11))
+                                .foregroundColor(WhispererColors.secondaryText(colorScheme))
+                        }
+
+                        Spacer()
+
+                        Toggle("", isOn: $appState.mcpLANEnabled)
+                            .toggleStyle(.switch)
+                            .tint(WhispererColors.accent)
+                            .labelsHidden()
+                            .disabled(!appState.mcpEnabled)
+                    }
                 }
 
                 // Capabilities
