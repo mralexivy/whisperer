@@ -110,6 +110,9 @@ struct MeetingListPanel: View {
                             .scaleEffect(1.4)
                     )
                     .animation(.easeInOut(duration: 0.8).repeatForever(autoreverses: true), value: session.isRecording)
+                MeetingSourceIcon(bundleID: session.sourceBundleID,
+                                  appName: session.sourceAppName,
+                                  size: 13)
                 Text("Recording")
                     .font(.system(size: 12, weight: .semibold))
                     .foregroundColor(.red)
@@ -339,10 +342,15 @@ struct MeetingLibraryRow: View {
             .onDisappear { pulse = false }
 
             VStack(alignment: .leading, spacing: 3) {
-                Text(meeting.title)
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundColor(isSelected ? .white : .white.opacity(0.85))
-                    .lineLimit(1)
+                HStack(spacing: 5) {
+                    MeetingSourceIcon(bundleID: meeting.sourceBundleID,
+                                      appName: meeting.sourceAppName,
+                                      size: 13)
+                    Text(meeting.title)
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundColor(isSelected ? .white : .white.opacity(0.85))
+                        .lineLimit(1)
+                }
 
                 Text(meeting.formattedTime)
                     .font(.system(size: 11, weight: .regular))

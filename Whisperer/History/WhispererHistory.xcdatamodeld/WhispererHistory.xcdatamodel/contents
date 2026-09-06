@@ -27,6 +27,8 @@
         <attribute name="language" attributeType="String"/>
         <attribute name="modelUsed" attributeType="String"/>
         <attribute name="isInProgress" attributeType="Boolean" defaultValueString="NO" usesScalarValueType="YES"/>
+        <attribute name="sourceBundleID" optional="YES" attributeType="String"/>
+        <attribute name="sourceAppName" optional="YES" attributeType="String"/>
     </entity>
     <entity name="TranscriptionEntity" representedClassName="TranscriptionEntity" syncable="YES">
         <attribute name="aiEnhancedText" optional="YES" attributeType="String"/>

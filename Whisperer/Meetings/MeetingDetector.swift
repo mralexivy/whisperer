@@ -509,6 +509,23 @@ final class MeetingDetector {
 
     private init() {}
 
+    // MARK: - Public utility
+
+    /// SF Symbol name + tint colour for a persisted source bundle ID.
+    ///
+    /// Searches the provider registry so callers don't need to duplicate it.
+    /// Falls back to `("video.fill", .gray)` for any ID not in the registry.
+    /// Compiles in ALL configurations (only `showMeetingNotification` calls are `#if !APP_STORE`).
+    func fallbackIcon(for bundleID: String) -> (symbol: String, color: Color) {
+        if let def = nativeApps.first(where: { $0.bundleIDs.contains(bundleID) }) {
+            return (def.iconSystemName, def.iconColor)
+        }
+        if browserBundleIDs.contains(bundleID) {
+            return ("video.fill", .blue)
+        }
+        return ("video.fill", .gray)
+    }
+
     // MARK: - Lifecycle
 
     func start() {

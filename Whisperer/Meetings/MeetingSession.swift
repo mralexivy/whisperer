@@ -124,6 +124,11 @@ class MeetingSession: ObservableObject {
     /// interrupted session(s)" on the next launch.
     private var isStarting = false
 
+    /// The app that triggered this recording (toast-started meetings only).
+    /// Cleared at the start of each recording so nothing from a previous session leaks.
+    @Published private(set) var sourceBundleID: String? = nil
+    @Published private(set) var sourceAppName: String? = nil
+
     // MARK: - Deterministic editor
 
     /// The two configurations of the shared editor this session runs.
@@ -266,7 +271,8 @@ class MeetingSession: ObservableObject {
 
     // MARK: - Start
 
-    func startRecording(title: String, surface: MeetingLiveSurface) async {
+    func startRecording(title: String, surface: MeetingLiveSurface,
+                        sourceBundleID: String? = nil, sourceAppName: String? = nil) async {
         guard !isRecording, !isStarting else { return }
         isStarting = true
         defer { isStarting = false }
@@ -301,6 +307,8 @@ class MeetingSession: ObservableObject {
         liveSpeakerName = "Speaker 1"
         hasSpeakerSignal = false
         speakerNames = [:]
+        self.sourceBundleID = sourceBundleID
+        self.sourceAppName = sourceAppName
         makeEditors()
 
         let language = await AppState.shared.selectedLanguage.rawValue
@@ -309,7 +317,9 @@ class MeetingSession: ObservableObject {
         let id = await MeetingManager.shared.beginSession(
             title: title,
             language: language,
-            modelUsed: model
+            modelUsed: model,
+            sourceBundleID: sourceBundleID,
+            sourceAppName: sourceAppName
         )
 
         // Set live state last — meetingID triggers onChange in MeetingStudioView.

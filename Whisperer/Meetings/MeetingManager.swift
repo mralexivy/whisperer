@@ -185,7 +185,8 @@ class MeetingManager: ObservableObject {
 
     // MARK: - Create
 
-    func beginSession(title: String, language: String, modelUsed: String) async -> UUID {
+    func beginSession(title: String, language: String, modelUsed: String,
+                      sourceBundleID: String? = nil, sourceAppName: String? = nil) async -> UUID {
         let id = UUID()
         let ctx = database.newBackgroundContext()
         await ctx.perform {
@@ -198,10 +199,13 @@ class MeetingManager: ObservableObject {
             entity.modelUsed = modelUsed
             entity.isInProgress = true
             entity.wordCount = 0
+            entity.sourceBundleID = sourceBundleID
+            entity.sourceAppName = sourceAppName
             try? ctx.save()
         }
         // Prepend to in-memory list — no full reload
-        let newItem = MeetingListItem(id: id, title: title, language: language)
+        let newItem = MeetingListItem(id: id, title: title, language: language,
+                                     sourceBundleID: sourceBundleID, sourceAppName: sourceAppName)
         meetings.insert(newItem, at: 0)
         currentOffset += 1
         return id

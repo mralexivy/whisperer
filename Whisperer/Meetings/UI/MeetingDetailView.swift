@@ -279,6 +279,9 @@ struct MeetingDetailView: View {
     private var meetingHeader: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack(spacing: 10) {
+                MeetingSourceIcon(bundleID: meeting?.sourceBundleID,
+                                  appName: meeting?.sourceAppName,
+                                  size: 20)
                 TextField("Meeting title", text: $editableTitle)
                     .font(.system(size: 20, weight: .bold, design: .rounded))
                     .foregroundColor(.white)

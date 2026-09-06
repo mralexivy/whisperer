@@ -22,6 +22,8 @@ public class MeetingEntity: NSManagedObject {
     @NSManaged public var language: String
     @NSManaged public var modelUsed: String
     @NSManaged public var isInProgress: Bool
+    @NSManaged public var sourceBundleID: String?
+    @NSManaged public var sourceAppName: String?
 }
 
 extension MeetingEntity: Identifiable {}

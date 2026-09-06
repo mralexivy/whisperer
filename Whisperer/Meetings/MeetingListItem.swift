@@ -17,6 +17,8 @@ struct MeetingListItem: Identifiable, Equatable {
     var audioFileURL: String?
     let language: String
     var isInProgress: Bool
+    var sourceBundleID: String?
+    var sourceAppName: String?
 
     // MARK: - Computed (mirrors MeetingRecord)
 
@@ -70,11 +72,14 @@ struct MeetingListItem: Identifiable, Equatable {
         self.wordCount = Int(entity.wordCount)
         self.language = entity.language
         self.isInProgress = entity.isInProgress
+        self.sourceBundleID = entity.sourceBundleID
+        self.sourceAppName = entity.sourceAppName
     }
 
     // MARK: - Init for new session (before CoreData write)
 
-    init(id: UUID, title: String, language: String) {
+    init(id: UUID, title: String, language: String,
+         sourceBundleID: String? = nil, sourceAppName: String? = nil) {
         self.id = id
         self.title = title
         self.createdAt = Date()
@@ -83,5 +88,7 @@ struct MeetingListItem: Identifiable, Equatable {
         self.audioFileURL = nil
         self.language = language
         self.isInProgress = true
+        self.sourceBundleID = sourceBundleID
+        self.sourceAppName = sourceAppName
     }
 }

@@ -28,6 +28,8 @@ struct MeetingRecord: Identifiable, Equatable {
     var language: String
     var modelUsed: String
     var isInProgress: Bool
+    var sourceBundleID: String?
+    var sourceAppName: String?
 
     // MARK: - Computed
 
@@ -83,6 +85,8 @@ struct MeetingRecord: Identifiable, Equatable {
         self.language = entity.language
         self.modelUsed = entity.modelUsed
         self.isInProgress = entity.isInProgress
+        self.sourceBundleID = entity.sourceBundleID
+        self.sourceAppName = entity.sourceAppName
 
         let decoder = JSONDecoder()
 
@@ -110,7 +114,8 @@ struct MeetingRecord: Identifiable, Equatable {
 
     // MARK: - New meeting init
 
-    init(id: UUID = UUID(), title: String, language: String, modelUsed: String) {
+    init(id: UUID = UUID(), title: String, language: String, modelUsed: String,
+         sourceBundleID: String? = nil, sourceAppName: String? = nil) {
         let now = Date()
         self.id = id
         self.title = title
@@ -124,5 +129,7 @@ struct MeetingRecord: Identifiable, Equatable {
         self.language = language
         self.modelUsed = modelUsed
         self.isInProgress = true
+        self.sourceBundleID = sourceBundleID
+        self.sourceAppName = sourceAppName
     }
 }

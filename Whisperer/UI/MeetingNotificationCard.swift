@@ -138,7 +138,9 @@ struct MeetingNotificationCard: View {
         let capturedApp = app
         Task { @MainActor in
             let session = MeetingSession()
-            await session.startRecording(title: capturedApp.name, surface: .floatingWindow)
+            await session.startRecording(title: capturedApp.name, surface: .floatingWindow,
+                                         sourceBundleID: capturedApp.bundleID,
+                                         sourceAppName: capturedApp.name)
             // activeMeetingSession is now set in AppState (strong @Published reference).
         }
         animateOut {
