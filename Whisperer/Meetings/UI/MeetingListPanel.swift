@@ -12,10 +12,32 @@ struct MeetingListPanel: View {
     @Binding var selectedMeetingID: UUID?
     @ObservedObject private var manager = MeetingManager.shared
     @State private var searchText = ""
+    @State private var collapsedDays: Set<Date> = []
 
     private var filtered: [MeetingListItem] {
         if searchText.isEmpty { return manager.meetings }
         return manager.meetings.filter { $0.title.localizedCaseInsensitiveContains(searchText) }
+    }
+
+    private var dayGroups: [(day: Date, items: [MeetingListItem])] {
+        Dictionary(grouping: filtered) { Calendar.current.startOfDay(for: $0.createdAt) }
+            .map { (day: $0.key, items: $0.value.sorted { $0.createdAt > $1.createdAt }) }
+            .sorted { $0.day > $1.day }
+    }
+
+    private func dayHeaderString(for date: Date) -> String {
+        let calendar = Calendar.current
+        let fmt = DateFormatter()
+        if calendar.isDateInToday(date) {
+            fmt.dateFormat = "MMM d"
+            return "TODAY, \(fmt.string(from: date).uppercased())"
+        } else if calendar.isDateInYesterday(date) {
+            fmt.dateFormat = "MMM d"
+            return "YESTERDAY, \(fmt.string(from: date).uppercased())"
+        } else {
+            fmt.dateFormat = "EEE, MMM d"
+            return fmt.string(from: date).uppercased()
+        }
     }
 
     var body: some View {
@@ -129,19 +151,6 @@ struct MeetingListPanel: View {
     private var libraryList: some View {
         ScrollView {
             LazyVStack(spacing: 2) {
-                // Header label — shown when there's content or while loading
-                if !filtered.isEmpty || manager.isLoadingPage {
-                    HStack {
-                        Text("LIBRARY")
-                            .font(.system(size: 10, weight: .bold))
-                            .tracking(0.8)
-                            .foregroundColor(.white.opacity(0.3))
-                        Spacer()
-                    }
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 6)
-                }
-
                 // Skeleton placeholder for initial load
                 if manager.meetings.isEmpty && manager.isLoadingPage {
                     ForEach(0..<5, id: \.self) { _ in
@@ -150,20 +159,57 @@ struct MeetingListPanel: View {
                     .transition(.opacity)
                 }
 
-                ForEach(filtered) { meeting in
-                    MeetingLibraryRow(
-                        meeting: meeting,
-                        isSelected: selectedMeetingID == meeting.id,
-                        isLive: session.isRecording && session.meetingID == meeting.id,
-                        processing: manager.processingPhase(for: meeting.id)
-                    )
-                    .onTapGesture { selectedMeetingID = meeting.id }
-                    .contextMenu {
-                        Button("Delete", role: .destructive) {
-                            Task {
-                                await MeetingManager.shared.deleteMeeting(meetingID: meeting.id)
-                                if selectedMeetingID == meeting.id {
-                                    selectedMeetingID = manager.meetings.first?.id
+                // Day-grouped library
+                ForEach(dayGroups, id: \.day) { group in
+                    // Day header
+                    Button {
+                        withAnimation(.easeInOut(duration: 0.18)) {
+                            if collapsedDays.contains(group.day) {
+                                collapsedDays.remove(group.day)
+                            } else {
+                                collapsedDays.insert(group.day)
+                            }
+                        }
+                    } label: {
+                        HStack(spacing: 4) {
+                            Image(systemName: "chevron.down")
+                                .font(.system(size: 8, weight: .bold))
+                                .foregroundColor(.white.opacity(0.3))
+                                .rotationEffect(collapsedDays.contains(group.day) ? .degrees(-90) : .degrees(0))
+                                .animation(.easeInOut(duration: 0.18), value: collapsedDays.contains(group.day))
+                            Text(dayHeaderString(for: group.day))
+                                .font(.system(size: 10, weight: .bold))
+                                .tracking(0.8)
+                                .foregroundColor(.white.opacity(0.3))
+                            Spacer()
+                            Text("\(group.items.count)")
+                                .font(.system(size: 10, weight: .semibold))
+                                .foregroundColor(.white.opacity(0.2))
+                        }
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 6)
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+
+                    // Rows for this day
+                    if !collapsedDays.contains(group.day) {
+                        ForEach(group.items) { meeting in
+                            MeetingLibraryRow(
+                                meeting: meeting,
+                                isSelected: selectedMeetingID == meeting.id,
+                                isLive: session.isRecording && session.meetingID == meeting.id,
+                                processing: manager.processingPhase(for: meeting.id)
+                            )
+                            .onTapGesture { selectedMeetingID = meeting.id }
+                            .contextMenu {
+                                Button("Delete", role: .destructive) {
+                                    Task {
+                                        await MeetingManager.shared.deleteMeeting(meetingID: meeting.id)
+                                        if selectedMeetingID == meeting.id {
+                                            selectedMeetingID = manager.meetings.first?.id
+                                        }
+                                    }
                                 }
                             }
                         }
@@ -263,16 +309,34 @@ struct MeetingLibraryRow: View {
 
     var body: some View {
         HStack(alignment: .top, spacing: 10) {
-            Circle()
-                .fill(dotColor)
-                .frame(width: 7, height: 7)
-                .scaleEffect(processing != nil && pulse ? 1.45 : 1.0)
-                .opacity(processing != nil && pulse ? 0.55 : 1.0)
-                .padding(.top, 4)
-                .onAppear { syncPulse() }
-                // The phase usually turns on while the row is already on screen, so onAppear
-                // alone would never start the pulse.
-                .onChange(of: processing) { _, _ in syncPulse() }
+            // Fixed-footprint dot + optional halo ring.
+            // The halo scales beyond the 7pt frame so the row layout never reflows during animation.
+            // The core dot is never scaled or faded — both rows stay in a straight column.
+            ZStack {
+                if processing != nil {
+                    Circle()
+                        .strokeBorder(dotColor.opacity(0.6), lineWidth: 1)
+                        .frame(width: 7, height: 7)
+                        .scaleEffect(pulse ? 2.4 : 1.0)
+                        .opacity(pulse ? 0.0 : 0.8)
+                        .animation(
+                            processing != nil
+                                ? .easeInOut(duration: 0.85).repeatForever(autoreverses: false)
+                                : .easeOut(duration: 0.2),
+                            value: pulse
+                        )
+                }
+                Circle()
+                    .fill(dotColor)
+                    .frame(width: 7, height: 7)
+            }
+            .frame(width: 7, height: 7)
+            .padding(.top, 4)
+            .onAppear { pulse = processing != nil }
+            // The phase usually turns on while the row is already on screen, so onAppear
+            // alone would never start the pulse.
+            .onChange(of: processing) { _, _ in pulse = processing != nil }
+            .onDisappear { pulse = false }
 
             VStack(alignment: .leading, spacing: 3) {
                 Text(meeting.title)
@@ -280,7 +344,7 @@ struct MeetingLibraryRow: View {
                     .foregroundColor(isSelected ? .white : .white.opacity(0.85))
                     .lineLimit(1)
 
-                Text(meeting.formattedDate)
+                Text(meeting.formattedTime)
                     .font(.system(size: 11, weight: .regular))
                     .foregroundColor(.white.opacity(0.4))
 
@@ -320,16 +384,6 @@ struct MeetingLibraryRow: View {
         if isLive { return .red }
         if processing != nil { return Color(hex: "8B5CF6") }
         return isSelected ? Color(hex: "5B6CF7") : Color.white.opacity(0.15)
-    }
-
-    private func syncPulse() {
-        if processing != nil {
-            withAnimation(.easeInOut(duration: 0.85).repeatForever(autoreverses: true)) {
-                pulse = true
-            }
-        } else {
-            withAnimation(.easeOut(duration: 0.2)) { pulse = false }
-        }
     }
 
     private func pill(_ text: String, icon: String, color: Color) -> some View {

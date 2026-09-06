@@ -30,11 +30,28 @@ struct MeetingListItem: Identifiable, Equatable {
     }
 
     var formattedDate: String {
+        MeetingListItem.dateFormatter.string(from: createdAt)
+    }
+
+    var formattedTime: String {
+        MeetingListItem.timeFormatter.string(from: createdAt)
+    }
+
+    // MARK: - Static formatters (one allocation per process)
+
+    private static let dateFormatter: DateFormatter = {
         let fmt = DateFormatter()
         fmt.dateStyle = .medium
         fmt.timeStyle = .short
-        return fmt.string(from: createdAt)
-    }
+        return fmt
+    }()
+
+    private static let timeFormatter: DateFormatter = {
+        let fmt = DateFormatter()
+        fmt.dateStyle = .none
+        fmt.timeStyle = .short
+        return fmt
+    }()
 
     var resolvedAudioURL: URL? {
         guard let rel = audioFileURL else { return nil }
