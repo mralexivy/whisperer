@@ -54,7 +54,7 @@ class DictionaryManager: ObservableObject {
     }
     @Published var selectedEntryId: UUID? = nil  // For navigation from correction popover
 
-    private let database = HistoryDatabase.shared
+    private let database: HistoryDatabase
     private var context: NSManagedObjectContext {
         database.viewContext
     }
@@ -63,7 +63,14 @@ class DictionaryManager: ObservableObject {
     private var packPreferences = DictionaryPackPreferences()
     private let packPreferencesKey = "dictionaryPackPreferences"
 
+    // For tests only — production uses .shared
+    init(database: HistoryDatabase) {
+        self.database = database
+        isLoadingEntries = false
+    }
+
     private init() {
+        self.database = HistoryDatabase.shared
         // Load enabled state
         isEnabled = UserDefaults.standard.object(forKey: "dictionaryEnabled") as? Bool ?? true
 
@@ -372,13 +379,13 @@ class DictionaryManager: ObservableObject {
     // MARK: - Create
 
     func addEntry(_ entry: DictionaryEntry, skipRebuild: Bool = false) async throws {
-        let context = database.newBackgroundContext()
-
+        let ctx = database.newBackgroundContext()
         let entryBoostWeight = entry.boostWeight
         let entryObservedSource = entry.observedSource
-        try await context.perform {
+
+        try await ctx.performAndSave("addEntry") { ctx in
             let entity = DictionaryEntryEntity.create(
-                in: context,
+                in: ctx,
                 incorrectForm: entry.incorrectForm,
                 correctForm: entry.correctForm,
                 category: entry.category,
@@ -387,7 +394,6 @@ class DictionaryManager: ObservableObject {
             )
             entity.boostWeight = entryBoostWeight
             entity.observedSource = entryObservedSource
-            try context.save()
         }
 
         if !skipRebuild {

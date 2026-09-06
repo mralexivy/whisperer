@@ -304,22 +304,27 @@ class MeetingManager: ObservableObject {
         let ctx = database.newBackgroundContext()
         let enc = encoder
         let dec = decoder
-        await ctx.perform {
-            let req = MeetingEntity.fetchRequest()
-            req.predicate = NSPredicate(format: "id == %@", meetingID as CVarArg)
-            req.fetchLimit = 1
-            guard let entity = try? ctx.fetch(req).first else { return }
-
-            var segments: [MeetingSegment] = []
-            if let json = entity.segmentsJSON, let data = json.data(using: .utf8) {
-                segments = (try? dec.decode([MeetingSegment].self, from: data)) ?? []
+        do {
+            _ = try await ctx.performAndSave("renameSpeaker") { ctx in
+                let req = MeetingEntity.fetchRequest()
+                req.predicate = NSPredicate(format: "id == %@", meetingID as CVarArg)
+                req.fetchLimit = 1
+                guard let entity = try ctx.fetch(req).first else {
+                    Logger.debug("renameSpeaker: meeting \(meetingID) no longer exists", subsystem: .app)
+                    return
+                }
+                var segments: [MeetingSegment] = []
+                if let json = entity.segmentsJSON, let data = json.data(using: .utf8) {
+                    segments = (try? dec.decode([MeetingSegment].self, from: data)) ?? []
+                }
+                segments.renameSpeaker(index: speakerIndex, to: newName)
+                if let data = try? enc.encode(segments),
+                   let json = String(data: data, encoding: .utf8) {
+                    entity.segmentsJSON = json
+                }
             }
-            segments.renameSpeaker(index: speakerIndex, to: newName)
-            if let data = try? enc.encode(segments),
-               let json = String(data: data, encoding: .utf8) {
-                entity.segmentsJSON = json
-            }
-            try? ctx.save()
+        } catch {
+            Logger.error("renameSpeaker failed to save for meeting \(meetingID): \(error)", subsystem: .app)
         }
         // In-memory update handled by MeetingDetailViewModel.renameSpeakerInMemory
     }
