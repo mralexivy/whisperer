@@ -57,10 +57,10 @@ struct MeetingListSkeletonRow: View {
                     SkeletonRect(cornerRadius: 10)
                         .frame(width: 72, height: 20)
                 }
+                .frame(height: 20, alignment: .leading)
                 .padding(.top, 1)
             }
-
-            Spacer()
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 10)

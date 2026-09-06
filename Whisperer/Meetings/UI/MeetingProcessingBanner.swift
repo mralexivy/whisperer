@@ -162,3 +162,112 @@ struct MeetingProcessingBanner: View {
         }
     }
 }
+
+// MARK: - Compact chip for the detail header line
+
+/// Inline processing indicator that lives in the existing header metadata line so that
+/// nothing below ever shifts when a phase starts or ends.
+///
+/// Uses `ViewThatFits` to degrade gracefully at narrow widths:
+///   full chip → orb + label only → orb only
+struct MeetingProcessingChip: View {
+    let phase: MeetingProcessingPhase
+    /// 0…1 when progress is known (polish pass), nil otherwise.
+    var progress: Double? = nil
+
+    @State private var breathe = false
+    @State private var slide = false
+
+    private let accent = Color(hex: "5B6CF7")
+    private let purple = Color(hex: "8B5CF6")
+
+    private let railWidth: CGFloat = 52
+    private let segmentWidth: CGFloat = 20
+
+    var body: some View {
+        ViewThatFits(in: .horizontal) {
+            fullChip
+            labelChip
+            orbOnly
+        }
+        .onAppear {
+            withAnimation(.easeInOut(duration: 1.6).repeatForever(autoreverses: true)) {
+                breathe = true
+            }
+            withAnimation(.easeInOut(duration: 1.4).repeatForever(autoreverses: false)) {
+                slide = true
+            }
+        }
+        .help(phase.label)
+    }
+
+    // All three variants — ViewThatFits tries them in order.
+
+    private var fullChip: some View {
+        HStack(spacing: 5) {
+            dot
+            Text(phase.shortLabel)
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundColor(accent)
+                .contentTransition(.opacity)
+                .fixedSize()
+            miniTrack
+        }
+        .padding(.horizontal, 7)
+        .padding(.vertical, 3)
+        .background(Capsule().fill(accent.opacity(0.10)))
+        .overlay(Capsule().stroke(accent.opacity(0.20), lineWidth: 0.5))
+    }
+
+    private var labelChip: some View {
+        HStack(spacing: 5) {
+            dot
+            Text(phase.shortLabel)
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundColor(accent)
+                .contentTransition(.opacity)
+                .fixedSize()
+        }
+        .padding(.horizontal, 7)
+        .padding(.vertical, 3)
+        .background(Capsule().fill(accent.opacity(0.10)))
+        .overlay(Capsule().stroke(accent.opacity(0.20), lineWidth: 0.5))
+    }
+
+    private var orbOnly: some View {
+        dot
+            .padding(4)
+            .background(Circle().fill(accent.opacity(0.10)))
+    }
+
+    private var dot: some View {
+        Circle()
+            .fill(LinearGradient(colors: [accent, purple], startPoint: .topLeading, endPoint: .bottomTrailing))
+            .frame(width: 6, height: 6)
+            .scaleEffect(breathe ? 1.3 : 0.8)
+            .opacity(breathe ? 1.0 : 0.5)
+    }
+
+    private var miniTrack: some View {
+        Capsule()
+            .fill(Color.white.opacity(0.07))
+            .frame(width: railWidth, height: 2)
+            .overlay(alignment: .leading) {
+                if let progress {
+                    Capsule()
+                        .fill(LinearGradient(colors: [accent, purple], startPoint: .leading, endPoint: .trailing))
+                        .frame(width: max(4, railWidth * min(max(progress, 0), 1)), height: 2)
+                        .animation(.easeInOut(duration: 0.35), value: progress)
+                } else {
+                    Capsule()
+                        .fill(LinearGradient(
+                            colors: [accent.opacity(0), accent, purple.opacity(0)],
+                            startPoint: .leading, endPoint: .trailing
+                        ))
+                        .frame(width: segmentWidth, height: 2)
+                        .offset(x: slide ? railWidth : -segmentWidth)
+                }
+            }
+            .clipShape(Capsule())
+    }
+}

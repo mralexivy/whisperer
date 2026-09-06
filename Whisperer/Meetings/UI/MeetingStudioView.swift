@@ -216,11 +216,13 @@ struct MeetingStudioView: View {
     }
 
     private func listWidth(in total: CGFloat) -> CGFloat {
-        min(260, max(200, total * 0.18))
+        // Floor raised to 216 so all three pills fit without dropping at the minimum window size.
+        min(280, max(216, total * 0.20))
     }
 
     private func rightWidth(in total: CGFloat) -> CGFloat {
-        min(400, max(280, total * 0.28))
+        // Yield space to the transcript first — the right panel compresses a little more.
+        min(400, max(260, total * 0.26))
     }
 
     private var divider: some View {

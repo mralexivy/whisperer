@@ -348,23 +348,22 @@ struct MeetingLibraryRow: View {
                     .font(.system(size: 11, weight: .regular))
                     .foregroundColor(.white.opacity(0.4))
 
-                HStack(spacing: 6) {
-                    if let processing {
-                        pill(processing.shortLabel, icon: "sparkles", color: Color(hex: "8B5CF6"))
-                            .transition(.opacity.combined(with: .scale(scale: 0.9)))
-                    }
-                    if meeting.duration > 0 {
-                        pill(meeting.displayDuration, icon: "clock", color: Color(hex: "5B6CF7"))
-                    }
-                    if meeting.wordCount > 0 {
-                        pill("\(meeting.wordCount) words", icon: "text.alignleft", color: Color(hex: "F59E0B"))
-                    }
+                // Adaptive pill row: priority-ordered so higher-priority pills survive at
+                // narrow widths. ViewThatFits picks the longest variant that fits.
+                // One line only — never wraps so the row height is constant regardless of
+                // which pills are present.
+                ViewThatFits(in: .horizontal) {
+                    pillHStack(processing: processing, duration: meeting.duration > 0, words: meeting.wordCount > 0)
+                    pillHStack(processing: processing, duration: meeting.duration > 0, words: false)
+                    pillHStack(processing: processing, duration: false, words: false)
+                    pillHStack(processing: nil, duration: meeting.duration > 0, words: false)
+                    EmptyView()
                 }
+                .frame(height: 20, alignment: .leading)
                 .padding(.top, 2)
                 .animation(.spring(response: 0.3, dampingFraction: 0.85), value: processing)
             }
-
-            Spacer()
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 8)
@@ -384,6 +383,24 @@ struct MeetingLibraryRow: View {
         if isLive { return .red }
         if processing != nil { return Color(hex: "8B5CF6") }
         return isSelected ? Color(hex: "5B6CF7") : Color.white.opacity(0.15)
+    }
+
+    /// Builds a horizontal pill row with exactly the requested slots.
+    /// Passing `false` for a slot omits it — `ViewThatFits` uses this to probe widths.
+    @ViewBuilder
+    private func pillHStack(processing: MeetingProcessingPhase?, duration: Bool, words: Bool) -> some View {
+        HStack(spacing: 6) {
+            if let processing {
+                pill(processing.shortLabel, icon: "sparkles", color: Color(hex: "8B5CF6"))
+                    .transition(.opacity.combined(with: .scale(scale: 0.9)))
+            }
+            if duration {
+                pill(meeting.displayDuration, icon: "clock", color: Color(hex: "5B6CF7"))
+            }
+            if words {
+                pill("\(meeting.wordCount) words", icon: "text.alignleft", color: Color(hex: "F59E0B"))
+            }
+        }
     }
 
     private func pill(_ text: String, icon: String, color: Color) -> some View {

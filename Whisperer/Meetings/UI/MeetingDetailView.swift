@@ -132,15 +132,6 @@ struct MeetingDetailView: View {
             } else {
                 meetingHeader
                 tabBar
-                if let phase = processingPhase {
-                    MeetingProcessingBanner(
-                        phase: phase,
-                        // Only the polish pass counts anything, and only for its own meeting.
-                        progress: refiner.activeMeetingID == meeting?.id ? refiner.progress : nil,
-                        notice: processingNotice
-                    )
-                    .transition(.move(edge: .top).combined(with: .opacity))
-                }
                 tabContent
             }
         }
@@ -307,6 +298,16 @@ struct MeetingDetailView: View {
                     Text(meeting?.displayDuration ?? "")
                         .font(.system(size: 12, weight: .regular))
                         .foregroundColor(.white.opacity(0.4))
+                }
+
+                // Processing chip lives here so nothing below ever shifts when a phase
+                // starts/ends. The chip fills the existing Spacer gap at no extra height cost.
+                if let phase = processingPhase {
+                    MeetingProcessingChip(
+                        phase: phase,
+                        progress: refiner.activeMeetingID == meeting?.id ? refiner.progress : nil
+                    )
+                    .transition(.opacity.combined(with: .scale(scale: 0.9)))
                 }
 
                 Spacer()
