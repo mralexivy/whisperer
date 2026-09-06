@@ -27,6 +27,8 @@ struct MeetingDetailView: View {
     @State private var transcriptMode: TranscriptMode = .speakers
     @State private var didCopy = false
     @State private var floatHovering = false
+    /// Active speaker filter. Empty = show all. Multi-select: each index is a toggle.
+    @State private var speakerFilter: Set<Int> = []
     /// Whether the inline re-transcribe panel is expanded.
     @State private var showRetranscribePanel = false
     /// Language selected in the re-transcribe panel — defaults to whatever was detected.
@@ -89,6 +91,17 @@ struct MeetingDetailView: View {
         )
     }
 
+    /// What the transcript card list renders.
+    ///
+    /// When a speaker filter is active, pull from `completeSegments` (all pages) so every
+    /// card for that speaker is visible immediately — a paged filter would show a fragment.
+    /// When the filter is clear, fall back to the normal paginated `transcriptSegments` so
+    /// the existing load-more behaviour is unchanged.
+    private var filteredSegments: [MeetingSegment] {
+        guard !speakerFilter.isEmpty else { return transcriptSegments }
+        return completeSegments.filter { speakerFilter.contains($0.speakerIndex) }
+    }
+
     /// The prose rendering, shared by the Full Text view and the clipboard so the two cannot
     /// disagree. The Polished/Original choice flows through `completeSegments`.
     private var plainProse: String {
@@ -146,6 +159,7 @@ struct MeetingDetailView: View {
             transcriptMode = .speakers
             didCopy = false
             overviewIsUnread = false
+            speakerFilter = []
         }
         // Opening the tab *is* reading it — clear here rather than in the button so the
         // indicator cannot survive a programmatic switch (the toast) either.
@@ -392,29 +406,104 @@ struct MeetingDetailView: View {
     }
 
     private var speakerPills: some View {
-        let speakers = meeting?.uniqueSpeakers ?? []
-        return HStack(spacing: -6) {
-            ForEach(speakers.prefix(4), id: \.index) { sp in
-                ZStack {
-                    Circle()
-                        .fill(speakerColor(for: sp.index).opacity(0.25))
-                        .overlay(Circle().stroke(Color(hex: "0C0C1A"), lineWidth: 2))
-                        .frame(width: 26, height: 26)
-                    Text(String(sp.name.prefix(1)))
-                        .font(.system(size: 10, weight: .bold))
-                        .foregroundColor(speakerColor(for: sp.index))
+        // Use speakerRoster (live-aware) instead of meeting?.uniqueSpeakers.
+        // When a filter is active, sort selected speakers first so they are never
+        // hidden behind the +N overflow.
+        let speakers: [(index: Int, name: String)] = {
+            let roster = speakerRoster
+            guard !speakerFilter.isEmpty else { return roster }
+            let selected = roster.filter { speakerFilter.contains($0.index) }
+            let rest = roster.filter { !speakerFilter.contains($0.index) }
+            return selected + rest
+        }()
+        let maxVisible = 4
+        let visible = speakers.prefix(maxVisible)
+        let overflow = speakers.dropFirst(maxVisible)
+        let hasFilter = !speakerFilter.isEmpty
+
+        return HStack(spacing: 4) {
+            HStack(spacing: -6) {
+                ForEach(Array(visible), id: \.index) { sp in
+                    let color = speakerColor(for: sp.index)
+                    let isSelected = speakerFilter.contains(sp.index)
+                    let dimmed = hasFilter && !isSelected
+                    Button {
+                        withAnimation(.easeInOut(duration: 0.18)) {
+                            selectedTab = .transcript
+                            if isSelected {
+                                speakerFilter.remove(sp.index)
+                            } else {
+                                speakerFilter.insert(sp.index)
+                            }
+                        }
+                    } label: {
+                        ZStack {
+                            Circle()
+                                .fill(isSelected ? color.opacity(0.35) : color.opacity(0.25))
+                                .overlay(
+                                    Circle().stroke(
+                                        isSelected ? color : Color(hex: "0C0C1A"),
+                                        lineWidth: isSelected ? 1.5 : 2
+                                    )
+                                )
+                                .frame(width: 26, height: 26)
+                            Text(String(sp.name.prefix(1)))
+                                .font(.system(size: 10, weight: .bold))
+                                .foregroundColor(color)
+                        }
+                        .opacity(dimmed ? 0.35 : 1)
+                        .zIndex(isSelected ? 1 : 0)
+                    }
+                    .buttonStyle(.plain)
+                    .help(isSelected ? "Stop filtering by \(sp.name)" : "Show only \(sp.name)")
+                }
+
+                if !overflow.isEmpty {
+                    Menu {
+                        ForEach(Array(overflow), id: \.index) { sp in
+                            let isSelected = speakerFilter.contains(sp.index)
+                            Button {
+                                withAnimation(.easeInOut(duration: 0.18)) {
+                                    selectedTab = .transcript
+                                    if isSelected {
+                                        speakerFilter.remove(sp.index)
+                                    } else {
+                                        speakerFilter.insert(sp.index)
+                                    }
+                                }
+                            } label: {
+                                Label(sp.name, systemImage: isSelected ? "checkmark" : "person")
+                            }
+                        }
+                    } label: {
+                        ZStack {
+                            Circle()
+                                .fill(Color.white.opacity(0.08))
+                                .overlay(Circle().stroke(Color(hex: "0C0C1A"), lineWidth: 2))
+                                .frame(width: 26, height: 26)
+                            Text("+\(overflow.count)")
+                                .font(.system(size: 9, weight: .bold))
+                                .foregroundColor(.white.opacity(0.5))
+                        }
+                    }
+                    .menuStyle(.borderlessButton)
+                    .menuIndicator(.hidden)
+                    .frame(width: 26, height: 26)
                 }
             }
-            if speakers.count > 4 {
-                ZStack {
-                    Circle()
-                        .fill(Color.white.opacity(0.08))
-                        .overlay(Circle().stroke(Color(hex: "0C0C1A"), lineWidth: 2))
-                        .frame(width: 26, height: 26)
-                    Text("+\(speakers.count - 4)")
-                        .font(.system(size: 9, weight: .bold))
-                        .foregroundColor(.white.opacity(0.5))
+
+            // Clear-filter button — appears only when a filter is active.
+            if hasFilter {
+                Button {
+                    withAnimation(.easeInOut(duration: 0.18)) { speakerFilter = [] }
+                } label: {
+                    Image(systemName: "xmark.circle.fill")
+                        .font(.system(size: 13))
+                        .foregroundColor(.white.opacity(0.4))
                 }
+                .buttonStyle(.plain)
+                .help("Clear speaker filter")
+                .transition(.opacity.combined(with: .scale(scale: 0.9)))
             }
         }
     }
@@ -845,13 +934,14 @@ struct MeetingDetailView: View {
                     MeetingTranscriptView(
                         meeting: meeting,
                         session: session,
-                        segments: transcriptSegments,
+                        segments: filteredSegments,
                         speakerRoster: speakerRoster,
                         isLoadingSegments: detailVM.isLoading,
-                        hasMoreSegments: detailVM.hasMoreSegments,
+                        hasMoreSegments: speakerFilter.isEmpty && detailVM.hasMoreSegments,
                         onLoadMoreSegments: detailVM.loadMoreSegments,
                         searchQuery: searchQuery,
                         playheadSeconds: playheadSeconds,
+                        visibleSpeakerIndices: speakerFilter,
                         onSpeakerRenamed: { speakerIndex, name in
                             Task { await handleSpeakerRename(speakerIndex: speakerIndex, newName: name) }
                         },

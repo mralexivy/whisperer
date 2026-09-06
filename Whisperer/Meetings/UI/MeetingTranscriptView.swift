@@ -38,6 +38,9 @@ struct MeetingTranscriptView: View {
     var searchQuery: String
     var playheadSeconds: Double
     /// Fires with (speakerIndex, newName) — keyed by index, not by the old name string.
+    /// Active speaker filter from the detail view. Empty = show all speakers.
+    /// Used to gate the live bubble so an excluded speaker's card doesn't leak through.
+    var visibleSpeakerIndices: Set<Int> = []
     var onSpeakerRenamed: ((Int, String) -> Void)?
     var onTagToggled: ((UUID, SegmentTag) -> Void)?
 
@@ -98,7 +101,14 @@ struct MeetingTranscriptView: View {
                         completedSegmentsView
                     }
 
-                    if isLive && (!session.currentSegmentText.isEmpty || !session.livePreviewText.isEmpty) {
+                    // Gate the live bubble: if a speaker filter is active, only show it for
+                    // the speaker currently being recorded. Excluded speakers' live cards
+                    // must not appear — `filteredSegments` already removes their committed
+                    // cards, so this keeps the open card consistent.
+                    let liveSpeakerVisible = visibleSpeakerIndices.isEmpty
+                        || visibleSpeakerIndices.contains(session.liveSpeakerIndex)
+                    if isLive && liveSpeakerVisible
+                        && (!session.currentSegmentText.isEmpty || !session.livePreviewText.isEmpty) {
                         liveSegmentBubble
                             .id("livePreview")
                     }
@@ -115,6 +125,11 @@ struct MeetingTranscriptView: View {
             .onChange(of: transcriptHeight)           { _, _ in scrollToLive(proxy) }
             .onChange(of: session.livePreviewText)    { _, _ in scrollToLive(proxy) }
             .onChange(of: session.currentSegmentText) { _, _ in scrollToLive(proxy) }
+            // When the speaker filter changes, start at the top of the filtered result
+            // rather than staying wherever the scroll position was for the previous view.
+            .onChange(of: visibleSpeakerIndices) { _, _ in
+                withAnimation { proxy.scrollTo("transcriptBody", anchor: .top) }
+            }
         }
     }
 
