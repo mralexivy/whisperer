@@ -153,10 +153,30 @@ class PermissionManager: ObservableObject {
 
     // MARK: - Permission Requests
 
+    /// Requests microphone access, falling back to System Settings when the OS will not prompt.
+    ///
+    /// `AVCaptureDevice.requestAccess` only shows the system alert while the status is
+    /// `.notDetermined`. Once TCC holds a denial it returns `granted = false` immediately and
+    /// silently, so calling it alone leaves the user tapping a button that does nothing. This
+    /// mirrors `requestAccessibilityPermission`, which has always had the settings fallback.
     func requestMicrophonePermission() {
+        guard AVCaptureDevice.authorizationStatus(for: .audio) == .notDetermined else {
+            checkMicrophonePermission()
+            if microphoneStatus != .granted {
+                openSystemSettings(for: .microphone)
+            }
+            return
+        }
+
         AVCaptureDevice.requestAccess(for: .audio) { granted in
             Task { @MainActor [weak self] in
-                self?.microphoneStatus = granted ? .granted : .denied
+                guard let self else { return }
+                self.microphoneStatus = granted ? .granted : .denied
+                // A denial here is the user dismissing the one prompt macOS will ever show;
+                // System Settings is the only remaining route to a grant.
+                if !granted {
+                    self.openSystemSettings(for: .microphone)
+                }
             }
         }
     }

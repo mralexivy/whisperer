@@ -1364,9 +1364,12 @@ struct StatusTabView: View {
                 #endif
             }
 
+            // One permission per press, microphone first — two simultaneous requests race
+            // System Settings panes against each other and against a live mic prompt.
             Button(action: {
                 if permissionManager.microphoneStatus != .granted {
                     permissionManager.requestMicrophonePermission()
+                    return
                 }
                 #if !APP_STORE
                 if appState.autoPasteEnabled && permissionManager.accessibilityStatus != .granted {
@@ -3504,9 +3507,15 @@ struct PermissionsView: View {
         }
     }
 
+    /// Resolves one permission per press, microphone first.
+    ///
+    /// Both requests can now open System Settings, and firing them together races two panes —
+    /// the second replaces the first — or lets Settings steal focus from a live mic prompt.
+    /// The banner stays visible until everything is granted, so the next press picks up the rest.
     private func requestAllPermissions() {
         if permissionManager.microphoneStatus != .granted {
             permissionManager.requestMicrophonePermission()
+            return
         }
         #if !APP_STORE
         if appState.autoPasteEnabled && permissionManager.accessibilityStatus != .granted {
