@@ -82,6 +82,14 @@ class MeetingSession: ObservableObject {
     /// "Detecting…" instead of asserting "Speaker 1" before it knows.
     @Published var hasSpeakerSignal: Bool = false
 
+    /// Set to `true` by AppState when `MeetingSpeakerCoordinator` is active. When true,
+    /// `livePreviewText` is owned exclusively by the coordinator's `onPendingTail` callback —
+    /// `accumulate` must not clear it when committing attributed text, because the coordinator
+    /// will republish the correct pending tail immediately after. Clearing it here and relying
+    /// on the next `onPendingTail` to restore it creates a one-task race that can strand the
+    /// tail blank for the duration of a pause.
+    var coordinatorOwnsTail: Bool = false
+
     /// Custom names typed during the recording, keyed by speaker index, so segments
     /// flushed *after* a rename pick the new name up too.
     private var speakerNames: [Int: String] = [:]
@@ -654,7 +662,12 @@ class MeetingSession: ObservableObject {
         // the paragraph closes.
         let utterance = polishUtterance(trimmed)
 
-        livePreviewText = ""  // chunk committed — clear the live tail
+        // On the coordinator path `livePreviewText` is owned by `onPendingTail` — the
+        // coordinator republishes the correct tail immediately after this attribution lands.
+        // Clearing here creates a one-task race that can strand the bubble blank.
+        if !coordinatorOwnsTail {
+            livePreviewText = ""
+        }
 
         // Clamp: an out-of-order or overlapping span would otherwise produce a segment
         // that runs backwards on the timeline.

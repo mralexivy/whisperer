@@ -2990,13 +2990,20 @@ class AppState: ObservableObject {
                 let capturedGeneration = activeMeetingSession?.chunkGeneration ?? 0
 
                 #if canImport(FluidAudio)
-                // Speaker diarization runs only on the Nemotron path: it is the backend whose
-                // partial callback delivers a growing accumulated transcript, which is what the
-                // coordinator diffs into per-speaker deltas. whisper.cpp meetings keep their
-                // VAD-chunk behaviour with no speaker labels.
+                // The coordinator is created whenever Nemotron is resident — that includes the
+                // whisper.cpp + Nemotron preview-only path, where `previewOwnsNemotron == true`
+                // causes `anyNemotronInApp != nil`. On that path Nemotron partials carry the
+                // growing accumulated transcript; whisper.cpp commits carry per-chunk deltas.
+                // The coordinator's diff expects accumulated text only — see `onFinalText` doc.
+                // `coordinatorUsesNemotronPartials` is captured here so `onChunkCompleted` can
+                // gate the `onFinalText` call without reading `inAppBackend` off `self`.
+                let coordinatorUsesNemotronPartials = (inAppBackend == .whisperCpp)
                 if let meetingSession = capturedMeetingSession, anyNemotronInApp != nil {
                     let coordinator = MeetingSpeakerCoordinator()
                     meetingSpeakerCoordinator = coordinator
+                    // Signal to MeetingSession that livePreviewText is now owned by the
+                    // coordinator's onPendingTail callback — accumulate() must not clear it.
+                    meetingSession.coordinatorOwnsTail = true
                     Task {
                         await coordinator.setCallbacks(
                             onAttributed: { text, speakerIndex, start, end in
@@ -3044,15 +3051,29 @@ class AppState: ObservableObject {
                         let meetingSession = self.activeMeetingSession ?? capturedMeetingSession
                         if let meetingSession = meetingSession {
                             #if canImport(FluidAudio)
-                            // With a coordinator active, this final text goes through the same diff
-                            // as the partials — sending it to onNewChunk as well would append the
-                            // whole meeting a second time.
                             if let coordinator = self.meetingSpeakerCoordinator {
-                                let finalText = chunk.text
-                                self.diarizerFeedTask = Task { [previous = self.diarizerFeedTask] in
-                                    await previous?.value
-                                    await coordinator.onFinalText(finalText)
+                                // On the Nemotron-final-decoder path (`inAppBackend == .nemotron`
+                                // or `.nemotronHebrew`), `chunk.text` is the full accumulated
+                                // transcript — route it through the coordinator's diff so the
+                                // tail benefits from the higher-quality final decode.
+                                //
+                                // On the whisper.cpp + Nemotron preview-only path
+                                // (`coordinatorUsesNemotronPartials == true`), `chunk.text` is a
+                                // per-commit DELTA (~1.8 s fragment). Feeding a delta into the
+                                // coordinator's accumulated-transcript diff triggers the "Nemotron
+                                // rewrote its tail" branch and destroys the pending queue — which
+                                // blanked the live meeting tail ~148× in a 4.5-min Hebrew session
+                                // (2026-09-07). On this path Nemotron partials via `onPreviewTail`
+                                // already drive the coordinator; the whisper delta has no role.
+                                if !coordinatorUsesNemotronPartials {
+                                    let finalText = chunk.text
+                                    self.diarizerFeedTask = Task { [previous = self.diarizerFeedTask] in
+                                        await previous?.value
+                                        await coordinator.onFinalText(finalText)
+                                    }
                                 }
+                                // Either way, do not also send to onNewChunk — that would append
+                                // the meeting text a second time.
                                 return
                             }
                             #endif
@@ -3286,6 +3307,7 @@ class AppState: ObservableObject {
                 diarizerFeedTask = nil
                 await coordinator.finish()
                 meetingSpeakerCoordinator = nil
+                activeMeetingSession?.coordinatorOwnsTail = false
                 // Let the callbacks' MainActor hops land before activeMeetingSession is nilled.
                 await Task.yield()
             }
@@ -3996,6 +4018,7 @@ class AppState: ObservableObject {
                 self.diarizerFeedTask = nil
                 await coordinator.finish()
                 self.meetingSpeakerCoordinator = nil
+                self.activeMeetingSession?.coordinatorOwnsTail = false
                 await Task.yield()
             }
             #endif

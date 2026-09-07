@@ -144,18 +144,23 @@ actor MeetingSpeakerCoordinator {
 
     /// Feeds the same 16 kHz mono buffer the ASR receives. Advances the audio clock even when
     /// the diarizer is absent, so timestamps stay right in the degraded path.
+    ///
+    /// `drainPending()` is called unconditionally so the age-based deadline fires even when
+    /// Sortformer is not loaded — without this, a meeting recorded without a diarizer model
+    /// would keep the entire transcript in pending forever (finalizedUntil stays 0, and the
+    /// only drain path was through the diarizer's process() loop).
     func feed(_ samples: [Float]) {
         samplesFed += samples.count
-        guard let diarizer else { return }
-
-        diarizer.addAudio(samples)
-        // addAudio buffers internally; process() returns nil until a chunk's worth of mel
-        // features exists, and may have several chunks queued after a burst.
-        var iterations = 0
-        while iterations < maxDrainIterations,
-              let update = ((try? diarizer.process()) ?? nil) {
-            integrate(update)
-            iterations += 1
+        if let diarizer {
+            diarizer.addAudio(samples)
+            // addAudio buffers internally; process() returns nil until a chunk's worth of mel
+            // features exists, and may have several chunks queued after a burst.
+            var iterations = 0
+            while iterations < maxDrainIterations,
+                  let update = ((try? diarizer.process()) ?? nil) {
+                integrate(update)
+                iterations += 1
+            }
         }
         drainPending()
     }
@@ -165,13 +170,21 @@ actor MeetingSpeakerCoordinator {
     /// A Nemotron partial. The callback delivers the **full accumulated transcript** every
     /// ~1120 ms, not a delta, so the new text has to be diffed out.
     func onPartial(_ accumulated: String) {
-        ingest(accumulated)
+        ingestAccumulated(accumulated)
     }
 
-    /// Nemotron's final pass. Same diff, higher-quality text — the tail benefits from the
-    /// final decode rather than being frozen at the last partial.
-    func onFinalText(_ text: String) {
-        ingest(text)
+    /// Nemotron's final pass. The argument MUST be the **full accumulated transcript**,
+    /// never a per-commit delta from a different decoder. Same diff as `onPartial`, but with
+    /// higher-quality text — the tail benefits from the final decode rather than being frozen
+    /// at the last partial.
+    ///
+    /// **Do not call this with a whisper.cpp per-commit delta.** On the whisper.cpp + Nemotron
+    /// preview-only meeting path, `onChunkCompleted` delivers disjoint deltas — feeding those
+    /// here triggers the "Nemotron rewrote its tail" branch and destroys the pending queue.
+    /// `AppState.startInAppRecording` guards this at the call site by not calling `onFinalText`
+    /// when `inAppBackend == .whisperCpp`.
+    func onFinalText(_ accumulated: String) {
+        ingestAccumulated(accumulated)
     }
 
     /// Closes the stream: drain the diarizer, then commit whatever text is left with the
@@ -189,9 +202,24 @@ actor MeetingSpeakerCoordinator {
     /// Word-level longest-common-prefix diff. Word granularity rather than character
     /// granularity because Nemotron routinely re-cases or re-punctuates its tail words —
     /// a character diff would treat "hello" → "Hello," as a full rewrite of the tail.
-    private func ingest(_ accumulated: String) {
+    ///
+    /// **Contract:** `accumulated` MUST be the full transcript seen so far, not a delta.
+    /// A delta has `words.count < emittedWordCount`; that case is rejected here with an error
+    /// log rather than silently destroying the pending queue.
+    private func ingestAccumulated(_ accumulated: String) {
         let words = accumulated.split(separator: " ", omittingEmptySubsequences: true).map(String.init)
         let now = audioSeconds
+
+        // Guard: a per-commit delta from a different decoder (whisper.cpp) has
+        // `words.count < emittedWordCount` — it can never be a full accumulated transcript.
+        // Feeding it would treat the mismatch as a Nemotron tail-rewrite and destroy pending.
+        // The primary guard is in AppState (don't call onFinalText on the whisper.cpp path),
+        // but this layer catches any future misrouting before it corrupts state.
+        if words.count < emittedWordCount {
+            Logger.error("Coordinator received text shorter than emittedWordCount (\(words.count) < \(emittedWordCount)) — rejecting as delta, not accumulated transcript",
+                         subsystem: .transcription)
+            return
+        }
 
         var lcp = 0
         while lcp < words.count, lcp < lastWords.count, words[lcp] == lastWords[lcp] { lcp += 1 }
@@ -264,8 +292,18 @@ actor MeetingSpeakerCoordinator {
 
     /// Emits every queued item the finalized timeline now covers. Strictly in order — an item
     /// that isn't ready blocks the ones behind it so the transcript never reorders.
+    ///
+    /// Additionally enforces a 3 s audio-age deadline: an item older than `drainDeadlineSeconds`
+    /// behind the current audio clock is emitted with the best available speaker guess rather
+    /// than waiting for Sortformer to finalize. This prevents unbounded tail growth during long
+    /// monologues (Sortformer finalizes only when a turn *closes*) and bounds the main-actor
+    /// work done by `MeetingSession.livePreviewText`'s synchronous polish setter.
+    private static let drainDeadlineSeconds: TimeInterval = 3.0
+
     private func drainPending() {
-        while let first = pending.first, first.end <= finalizedUntil {
+        let deadline = audioSeconds - Self.drainDeadlineSeconds
+        while let first = pending.first,
+              first.end <= finalizedUntil || first.end <= deadline {
             pending.removeFirst()
             emit(first)
         }
