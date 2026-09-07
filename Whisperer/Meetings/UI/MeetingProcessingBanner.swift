@@ -37,20 +37,45 @@ struct MeetingProcessingBanner: View {
             orb
 
             VStack(alignment: .leading, spacing: 7) {
-                Text(phase.label)
-                    .font(.system(size: 12.5, weight: .semibold))
-                    .foregroundColor(.white.opacity(0.85))
-                    .contentTransition(.opacity)
+                ViewThatFits(in: .horizontal) {
+                    // Variant 1: full label fits — prefer it.
+                    Text(phase.label)
+                        .font(.system(size: 12.5, weight: .semibold))
+                        .foregroundColor(.white.opacity(0.85))
+                        .contentTransition(.opacity)
+                        .lineLimit(1)
+                        .fixedSize()
+
+                    // Variant 2: short label fits without truncation.
+                    Text(phase.shortLabel)
+                        .font(.system(size: 12.5, weight: .semibold))
+                        .foregroundColor(.white.opacity(0.85))
+                        .contentTransition(.opacity)
+                        .lineLimit(1)
+                        .fixedSize()
+
+                    // Variant 3: short label with ellipsis — always fits.
+                    Text(phase.shortLabel)
+                        .font(.system(size: 12.5, weight: .semibold))
+                        .foregroundColor(.white.opacity(0.85))
+                        .contentTransition(.opacity)
+                        .lineLimit(1)
+                        .truncationMode(.tail)
+                }
 
                 if let notice {
                     Text(notice)
                         .font(.system(size: 12, weight: .regular))
                         .foregroundColor(.white.opacity(0.5))
+                        .lineLimit(2)
+                        .truncationMode(.tail)
+                        .fixedSize(horizontal: false, vertical: true)
                         .transition(.opacity)
                 }
 
                 track
             }
+            .layoutPriority(1)
 
             Spacer(minLength: 12)
 
@@ -58,6 +83,7 @@ struct MeetingProcessingBanner: View {
         }
         .padding(.horizontal, 18)
         .padding(.vertical, 12)
+        .help(phase.label)
         .background(
             LinearGradient(
                 colors: [accent.opacity(0.10), purple.opacity(0.05), Color(hex: "0C0C1A")],
@@ -115,38 +141,41 @@ struct MeetingProcessingBanner: View {
     // MARK: - Track
 
     private var track: some View {
-        let railWidth: CGFloat = 168
+        let maxRailWidth: CGFloat = 168
         let segmentWidth: CGFloat = 58
 
-        return Capsule()
-            .fill(Color.white.opacity(0.07))
-            .frame(width: railWidth, height: 3)
-            .overlay(alignment: .leading) {
-                if let progress {
-                    // Determinate: batch count is genuinely known during the polish pass.
-                    // A minimum width keeps the fill visible at 0% so the bar never looks dead.
-                    Capsule()
-                        .fill(
-                            LinearGradient(
-                                colors: [accent, purple],
-                                startPoint: .leading, endPoint: .trailing
+        return GeometryReader { geo in
+            let railW = geo.size.width
+            Capsule()
+                .fill(Color.white.opacity(0.07))
+                .overlay(alignment: .leading) {
+                    if let progress {
+                        // Determinate: batch count is genuinely known during the polish pass.
+                        // A minimum width keeps the fill visible at 0% so the bar never looks dead.
+                        Capsule()
+                            .fill(
+                                LinearGradient(
+                                    colors: [accent, purple],
+                                    startPoint: .leading, endPoint: .trailing
+                                )
                             )
-                        )
-                        .frame(width: max(6, railWidth * min(max(progress, 0), 1)), height: 3)
-                        .animation(.easeInOut(duration: 0.35), value: progress)
-                } else {
-                    Capsule()
-                        .fill(
-                            LinearGradient(
-                                colors: [accent.opacity(0), accent, purple, purple.opacity(0)],
-                                startPoint: .leading, endPoint: .trailing
+                            .frame(width: max(6, railW * min(max(progress, 0), 1)), height: 3)
+                            .animation(.easeInOut(duration: 0.35), value: progress)
+                    } else {
+                        Capsule()
+                            .fill(
+                                LinearGradient(
+                                    colors: [accent.opacity(0), accent, purple, purple.opacity(0)],
+                                    startPoint: .leading, endPoint: .trailing
+                                )
                             )
-                        )
-                        .frame(width: segmentWidth, height: 3)
-                        .offset(x: slide ? railWidth : -segmentWidth)
+                            .frame(width: segmentWidth, height: 3)
+                            .offset(x: slide ? railW : -segmentWidth)
+                    }
                 }
-            }
-            .clipShape(Capsule())
+                .clipShape(Capsule())
+        }
+        .frame(maxWidth: maxRailWidth, minHeight: 3, maxHeight: 3)
     }
 
     // MARK: - Step dots
