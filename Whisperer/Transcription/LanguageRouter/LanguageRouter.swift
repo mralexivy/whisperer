@@ -220,11 +220,16 @@ nonisolated final class LanguageRouter {
     /// which the live path never asked — so when the two disagree the fused verdict is the one to
     /// honour. Returns the decision to route with, or nil when the lock already says this and
     /// there is nothing to do.
-    func adopt(_ lang: TranscriptionLanguage, confidence: Float) -> RouteDecision? {
+    ///
+    /// - Parameter persist: when `false` the pin is applied in-session but `lastSessionLanguage`
+    ///   is NOT written to `UserDefaults`. Use this for provisional ratchet pins so a misfire
+    ///   cannot bias the prior for the next recording. The arbiter's fused-verdict caller leaves
+    ///   this at its default `true` because the verdict carries high confidence.
+    func adopt(_ lang: TranscriptionLanguage, confidence: Float, persist: Bool = true) -> RouteDecision? {
         if case .locked(let current) = state, current == lang { return nil }
         state = .locked(lang)
         lastDetectionTime = Date()
-        saveLastSessionLanguage(lang)
+        if persist { saveLastSessionLanguage(lang) }
         return RouteDecision(lang: lang, confidence: confidence, source: .detection)
     }
 

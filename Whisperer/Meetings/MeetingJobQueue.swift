@@ -224,7 +224,17 @@ final class MeetingJobQueue: ObservableObject {
             transition(meetingID: meetingID, to: .fineTuning, status: .running)
             MeetingManager.shared.setProcessing(.fineTuning, for: meetingID)
 
-            let audioURL = capturedAudioURL
+            // When `enqueue` fires while the queue is suspended for a recording, `startNext`
+            // is called later (by `resumeAfterRecording`) with no captured state. Recover from
+            // CoreData so `shouldRun` and `run` have what they need — mirroring what the naming
+            // stage already does below.
+            var audioURL = capturedAudioURL
+            if segments.isEmpty || audioURL == nil,
+               let record = await MeetingManager.shared.meeting(id: meetingID) {
+                if segments.isEmpty { segments = record.segments }
+                if audioURL == nil  { audioURL = record.resolvedAudioURL }
+            }
+
             let willPolish = MeetingTranscriptRefiner.shared.shouldRun(for: segments, audioURL: audioURL)
 
             if willPolish {
@@ -233,10 +243,18 @@ final class MeetingJobQueue: ObservableObject {
                     MeetingManager.shared.setProcessing(.fineTuning, notice: "Cleanup skipped — model not downloaded", for: meetingID)
                 } else {
                     if Task.isCancelled { return await finishCancelled(meetingID: meetingID) }
-                    let refined = await MeetingTranscriptRefiner.shared.run(meetingID: meetingID, segments: segments)
+                    // `redoAll: true` re-runs language detection over the whole recording and
+                    // resets every card, so a wrong live pin (e.g. "ru" on a Hebrew meeting)
+                    // is caught and corrected without a manual re-transcribe.
+                    let refined = await MeetingTranscriptRefiner.shared.run(
+                        meetingID: meetingID, segments: segments, redoAll: true)
                     if Task.isCancelled { return await finishCancelled(meetingID: meetingID) }
                     segments = await runEditorPass(segments: refined, meetingID: meetingID)
                 }
+            } else {
+                let skipReason = audioURL == nil ? "audio file not found on disk"
+                    : "all segments already polished"
+                Logger.info("MeetingJobQueue: fine-tuning skipped — \(skipReason)", subsystem: .transcription)
             }
         }
 

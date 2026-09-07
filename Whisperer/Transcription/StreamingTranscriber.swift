@@ -2279,6 +2279,14 @@ class StreamingTranscriber {
                 // `whisper_lang_auto_detect_with_state`, which is a genuine mel-based detect.
                 // Two consecutive agreeing passes → pin, so we avoid the second encoder pass
                 // on all subsequent eager passes and on the tail decode.
+                //
+                // Gate: the ratchet must not count a pass as evidence unless the window is long
+                // enough and decode quality is acceptable. Evidence from 2026-09-06:
+                //   • three passes at 1.5/3.3/4.9 s, 2–6 words, logProb −0.89/−0.79 pinned "ru"
+                //   • pure pink noise returns "en p=0.51" — sub-10 s windows are not reliable
+                // If the arbiter's leading candidate disagrees, defer to it rather than racing it.
+                // Ratchet pins do NOT persist lastSessionLanguage (persist: false) — a misfire
+                // must not bias the prior for the next recording.
                 if self.routeDecision == nil,
                    let bridge = self.whisper as? WhisperBridge,
                    let pool = self.modelPool,
@@ -2287,23 +2295,42 @@ class StreamingTranscriber {
                    let code = bridge.lastDetectedLanguage,
                    let detected = TranscriptionLanguage(rawValue: code),
                    detected != .auto {
-                    if self.lastWhisperDetectedLanguage == code {
-                        self.consecutiveWhisperAgreementCount += 1
-                        if self.consecutiveWhisperAgreementCount >= 2 {
-                            Logger.info("[\(langRouter.tag)] Whisper agreement: pinning "
-                                + "\(detected.displayName) after "
-                                + "\(self.consecutiveWhisperAgreementCount) consecutive passes",
-                                subsystem: .transcription)
-                            if let decision = langRouter.adopt(detected, confidence: 0.9) {
-                                self.applyRoute(for: decision, pool: pool, mdlRouter: mdlRouter)
+                    let windowSamples = endIdx - base
+                    let meetsQuality = windowSamples >= RoutingThresholds.minVoicedDetectionSamples
+                        && result.words.count >= 5
+                        && result.averageLogProbability >= -0.65
+                    let arbiterConflict: Bool = {
+                        guard let candidate = self.languageArbiter.leadingCandidate else { return false }
+                        return candidate.language != detected && candidate.confidence >= 0.70
+                    }()
+
+                    if meetsQuality && !arbiterConflict {
+                        if self.lastWhisperDetectedLanguage == code {
+                            self.consecutiveWhisperAgreementCount += 1
+                            if self.consecutiveWhisperAgreementCount >= 2 {
+                                Logger.info("[\(langRouter.tag)] Whisper agreement: pinning "
+                                    + "\(detected.displayName) after "
+                                    + "\(self.consecutiveWhisperAgreementCount) consecutive passes",
+                                    subsystem: .transcription)
+                                if let decision = langRouter.adopt(detected, confidence: 0.9, persist: false) {
+                                    self.applyRoute(for: decision, pool: pool, mdlRouter: mdlRouter)
+                                }
+                                self.pinNemotron(to: detected)
                             }
-                            self.pinNemotron(to: detected)
+                        } else {
+                            self.lastWhisperDetectedLanguage = code
+                            self.consecutiveWhisperAgreementCount = 1
+                            Logger.debug("Whisper per-pass detection: \(code) (1/2 needed to pin)",
+                                subsystem: .transcription)
                         }
                     } else {
-                        self.lastWhisperDetectedLanguage = code
-                        self.consecutiveWhisperAgreementCount = 1
-                        Logger.debug("Whisper per-pass detection: \(code) (1/2 needed to pin)",
+                        Logger.debug("Whisper per-pass detection: \(code) — gate rejected "
+                            + "(window=\(windowSamples / 16000)s, words=\(result.words.count), "
+                            + "logProb=\(String(format: "%.2f", result.averageLogProbability))"
+                            + (arbiterConflict ? ", arbiter≠" : "") + ")",
                             subsystem: .transcription)
+                        self.lastWhisperDetectedLanguage = nil
+                        self.consecutiveWhisperAgreementCount = 0
                     }
                 }
             } else {

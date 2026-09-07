@@ -35,6 +35,10 @@ enum TranscriptLayout {
     /// Paragraph spacing before a body paragraph that has no speaker line of its own —
     /// covers both cards' vertical padding plus the gap between them.
     static var groupedSegmentSpacing: CGFloat { cardVPad * 2 + groupedCardGap }
+
+    /// Visual spacing between consecutive paragraphs *within* a single segment's card.
+    /// Kept small so the break reads as structure, not as a card boundary.
+    static let intraSegmentSpacing: CGFloat = 8
 }
 
 // MARK: - Per-segment layout metrics reported to SwiftUI
@@ -189,20 +193,48 @@ struct SelectableTranscriptView: NSViewRepresentable {
             }
 
             // Body text — the region the card is drawn behind.
+            //
+            // ParagraphSplitter writes "\n\n" into segment.text as a break marker. Emitting the
+            // whole text as one NSAttributedString with a single NSParagraphStyle would apply
+            // `paragraphSpacingBefore` to every internal paragraph — turning the intended ~8 pt
+            // gap into 36 + ~22 + 36 ≈ 94 pt of dead space. Emit each paragraph with its own
+            // style instead: the first keeps the segment-level spacing, subsequent ones get a
+            // small `intraSegmentSpacing`. The empty string from "\n\n" is dropped — the spacing
+            // carries the break so the blank line's ~22 pt is not also paid.
             let bodyStart = result.length
-            let bodyStyle = NSMutableParagraphStyle()
-            bodyStyle.lineSpacing = 5
-            bodyStyle.paragraphSpacing = 0
-            // Without a speaker line above it the body paragraph has to open the gap itself.
-            bodyStyle.paragraphSpacingBefore = startsTurn ? 0 : TranscriptLayout.groupedSegmentSpacing
-            bodyStyle.baseWritingDirection = direction
-            bodyStyle.alignment = alignment
-            let bodyText = segment.text + (index < segments.count - 1 ? "\n" : "")
-            result.append(NSAttributedString(string: bodyText, attributes: [
-                .font: bodyFont,
-                .foregroundColor: NSColor.white.withAlphaComponent(0.88),
-                .paragraphStyle: bodyStyle
-            ]))
+            let isLastSegment = index == segments.count - 1
+            let nonEmptyLines = segment.text.components(separatedBy: "\n").filter { !$0.isEmpty }
+            if nonEmptyLines.isEmpty {
+                // Degenerate empty segment — keep NSTextStorage structurally sound.
+                let paraStyle = NSMutableParagraphStyle()
+                paraStyle.lineSpacing = 5
+                paraStyle.paragraphSpacingBefore = startsTurn ? 0 : TranscriptLayout.groupedSegmentSpacing
+                paraStyle.baseWritingDirection = direction; paraStyle.alignment = alignment
+                result.append(NSAttributedString(
+                    string: isLastSegment ? "" : "\n",
+                    attributes: [.font: bodyFont,
+                                 .foregroundColor: NSColor.white.withAlphaComponent(0.88),
+                                 .paragraphStyle: paraStyle]))
+            } else {
+                for (pIdx, para) in nonEmptyLines.enumerated() {
+                    let isLastPara = pIdx == nonEmptyLines.count - 1
+                    let lineText = (isLastPara && isLastSegment) ? para : para + "\n"
+                    let paraStyle = NSMutableParagraphStyle()
+                    paraStyle.lineSpacing = 5
+                    paraStyle.paragraphSpacing = 0
+                    // First paragraph opens the card gap; subsequent paragraphs use the smaller
+                    // intra-segment spacing so they read as structure within one card.
+                    paraStyle.paragraphSpacingBefore = pIdx == 0
+                        ? (startsTurn ? 0 : TranscriptLayout.groupedSegmentSpacing)
+                        : TranscriptLayout.intraSegmentSpacing
+                    paraStyle.baseWritingDirection = direction; paraStyle.alignment = alignment
+                    result.append(NSAttributedString(
+                        string: lineText,
+                        attributes: [.font: bodyFont,
+                                     .foregroundColor: NSColor.white.withAlphaComponent(0.88),
+                                     .paragraphStyle: paraStyle]))
+                }
+            }
             bodyRanges.append(NSRange(location: bodyStart, length: result.length - bodyStart))
         }
 
