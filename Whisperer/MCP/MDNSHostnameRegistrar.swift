@@ -4,10 +4,11 @@
 //
 //  Resolves the machine's own mDNS hostname (e.g. "alexs-macbook-pro.local").
 //  mDNSResponder already manages the machine's A record — no custom registration needed.
-//  Excluded from App Store binary via #if !APP_STORE.
+//
+//  Available in all build configurations so that the AppStore build and the Release
+//  build behave identically when the user enables LAN access.
 //
 
-#if !APP_STORE
 import Foundation
 import SystemConfiguration
 
@@ -33,4 +34,3 @@ final class MDNSHostnameRegistrar {
         registeredHostname = nil
     }
 }
-#endif

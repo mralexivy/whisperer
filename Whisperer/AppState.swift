@@ -687,17 +687,33 @@ class AppState: ObservableObject {
     @Published var mcpLANEnabled: Bool = false {
         didSet { UserDefaults.standard.set(mcpLANEnabled, forKey: "mcpLANEnabled") }
     }
+    /// Optional user-supplied public URL (e.g. from Cloudflare Tunnel, Tailscale Funnel, ngrok).
+    /// When non-empty and valid, this overrides the derived URL in the UI and client configs.
+    @Published var mcpCustomURL: String = "" {
+        didSet { UserDefaults.standard.set(mcpCustomURL, forKey: "mcpCustomURL") }
+    }
     @Published var mcpBonjourReady: Bool = false
     @Published var mcpBonjourHostname: String? = nil  // machine's .local hostname, set at launch
 
+    /// Returns true when mcpCustomURL contains a parseable http/https URL.
+    var mcpCustomURLIsValid: Bool {
+        let trimmed = mcpCustomURL.trimmingCharacters(in: .whitespaces)
+        guard !trimmed.isEmpty,
+              let url = URL(string: trimmed),
+              let scheme = url.scheme,
+              (scheme == "http" || scheme == "https"),
+              url.host != nil else { return false }
+        return true
+    }
+
     /// URL shown in the UI and copied to the clipboard.
-    /// Shows the .local mDNS URL when LAN access is enabled; localhost otherwise.
+    /// Priority: custom URL (if valid) → .local mDNS (if LAN enabled) → localhost.
     var mcpServerURL: String {
-        #if !APP_STORE
+        let custom = mcpCustomURL.trimmingCharacters(in: .whitespaces)
+        if !custom.isEmpty && mcpCustomURLIsValid { return custom }
         if mcpLANEnabled, let hostname = mcpBonjourHostname {
             return "http://\(hostname):\(mcpPort)/mcp"
         }
-        #endif
         return "http://localhost:\(mcpPort)/mcp"
     }
 
@@ -916,6 +932,9 @@ class AppState: ObservableObject {
         }
         if UserDefaults.standard.object(forKey: "mcpLANEnabled") != nil {
             _mcpLANEnabled = Published(wrappedValue: UserDefaults.standard.bool(forKey: "mcpLANEnabled"))
+        }
+        if let custom = UserDefaults.standard.string(forKey: "mcpCustomURL") {
+            _mcpCustomURL = Published(wrappedValue: custom)
         }
 
         // Start monitoring audio device changes (for UI device picker only)

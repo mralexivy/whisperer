@@ -93,6 +93,7 @@ enum HistorySidebarItem: String, CaseIterable, Identifiable {
     case dictionary = "Dictionary"
     case aiModes = "AI Modes"
     case statistics = "Statistics"
+    case mcp = "MCP"
     case settings = "Settings"
     case commandMode = "Command Mode"
     case setup = "Setup"
@@ -108,6 +109,7 @@ enum HistorySidebarItem: String, CaseIterable, Identifiable {
         case .statistics: return "chart.xyaxis.line"
         case .dictionary: return "book.closed"
         case .aiModes: return "wand.and.sparkles"
+        case .mcp: return "point.3.connected.trianglepath.dotted"
         case .settings: return "gearshape"
         case .commandMode: return "terminal.fill"
         case .setup: return "checkmark.circle.fill"
@@ -123,6 +125,7 @@ enum HistorySidebarItem: String, CaseIterable, Identifiable {
         case .statistics: return .cyan
         case .dictionary: return .red
         case .aiModes: return Color(hex: "8B5CF6")
+        case .mcp: return Color(hex: "06B6D4")  // cyan — matches the network theme
         case .settings: return .orange
         case .commandMode: return Color(hex: "22C55E")
         case .setup: return .blue
@@ -133,10 +136,10 @@ enum HistorySidebarItem: String, CaseIterable, Identifiable {
     /// Items shown in the sidebar
     static var visibleItems: [HistorySidebarItem] {
         #if !APP_STORE
-        var items: [HistorySidebarItem] = [.transcriptions, .meetingStudio, .fileTranscription, .dictionary, .aiModes, .statistics, .setup, .feedback, .settings]
+        var items: [HistorySidebarItem] = [.transcriptions, .meetingStudio, .fileTranscription, .dictionary, .aiModes, .statistics, .mcp, .setup, .feedback, .settings]
         items.insert(.commandMode, at: items.count - 3) // Before setup
         #else
-        let items: [HistorySidebarItem] = [.transcriptions, .meetingStudio, .fileTranscription, .dictionary, .aiModes, .statistics, .setup, .settings]
+        let items: [HistorySidebarItem] = [.transcriptions, .meetingStudio, .fileTranscription, .dictionary, .aiModes, .statistics, .mcp, .setup, .settings]
         #endif
         return items
     }
@@ -189,6 +192,8 @@ struct HistoryWindowView: View {
                     DictionaryView()
                 case .aiModes:
                     AIModesView()
+                case .mcp:
+                    MCPConnectPageView(colorScheme: colorScheme)
                 case .settings:
                     HistorySettingsView()
                 case .commandMode:

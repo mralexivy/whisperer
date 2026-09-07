@@ -200,7 +200,6 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
         // mDNS: resolve the machine's .local hostname at startup so the UI can
         // show a friendly URL (e.g. "alexs-macbook-pro.local:8080/mcp").
-        #if !APP_STORE
         Task {
             let ok = MDNSHostnameRegistrar.shared.register()
             let hostname = MDNSHostnameRegistrar.shared.registeredHostname
@@ -209,7 +208,6 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                 AppState.shared.mcpBonjourHostname = hostname
             }
         }
-        #endif
 
         // MCP server
         // Not in tests. `start()` early-returns on `guard listener == nil`, so a launch-started
@@ -420,9 +418,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         // 7. Stop MCP server
         Logger.debug("Stopping MCP server...", subsystem: .app)
         await WhispererMCPServer.shared.stop()
-        #if !APP_STORE
         MDNSHostnameRegistrar.shared.unregister()
-        #endif
 
         // 8. Remove crash marker (clean exit)
         CrashHandler.shared.uninstall()

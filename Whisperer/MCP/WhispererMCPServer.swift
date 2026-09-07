@@ -3,15 +3,20 @@
 //  Whisperer
 //
 //  Local MCP server exposing meeting notes and transcription search.
-//  HTTP/SSE transport via NWListener; one session per lifecycle cycle.
+//  HTTP transport via NWListener; multiple concurrent clients are supported via
+//  MCPSessionRegistry — each client gets its own MCP session identified by the
+//  Mcp-Session-Id header.
 //
 //  Connection lifecycle notes:
-//  - MCP clients (Claude Desktop, Cursor) open a GET /mcp SSE stream, then POST JSON-RPC
-//    requests on the same or separate connections. When done they often RST rather than FIN.
-//  - Network.framework logs nw_socket_* / nw_protocol_socket_reset_linger messages for RST
-//    internally via os_log — these cannot be suppressed at the application level.
-//    They are expected and harmless; we classify ECONNRESET / EPIPE as silent lifecycle events.
-//  - TCP keepalive detects dead peers within ~20 s so idle SSE streams don't accumulate.
+//  - MCP clients (Claude Desktop, Claude Code, Cursor, ChatGPT Desktop…) open a
+//    GET /mcp SSE stream, then POST JSON-RPC requests on the same or separate
+//    connections. When done they often RST rather than FIN.
+//  - Network.framework logs nw_socket_* / nw_protocol_socket_reset_linger messages
+//    for RST internally via os_log — these cannot be suppressed at the application
+//    level. They are expected and harmless; we classify ECONNRESET / EPIPE as silent
+//    lifecycle events.
+//  - TCP keepalive detects dead peers within ~20 s so idle SSE streams don't
+//    accumulate.
 //
 
 import Foundation
@@ -22,10 +27,7 @@ actor WhispererMCPServer {
     static let shared = WhispererMCPServer()
 
     private var listener: NWListener?
-    private var serverTask: Task<Void, Never>?
-    private var transport: StatefulHTTPServerTransport?
-    private var mcpServer: Server?
-    private var connectionSeq: Int = 0
+    private let registry = MCPSessionRegistry()
     private var listeningPort: Int = 0
 
     // MARK: - Lifecycle
@@ -66,7 +68,6 @@ actor WhispererMCPServer {
                 Task { [weak self] in await self?.handleConnection(conn) }
             }
 
-#if !APP_STORE
             if await MainActor.run(body: { AppState.shared.mcpLANEnabled }) {
                 l.service = NWListener.Service(
                     name: "Whisperer MCP",
@@ -75,7 +76,6 @@ actor WhispererMCPServer {
                     txtRecord: NWTXTRecord(["path": "/mcp"])
                 )
             }
-#endif
 
             l.stateUpdateHandler = { [weak self] state in
                 Task { [weak self] in await self?.listenerStateChanged(state) }
@@ -83,16 +83,7 @@ actor WhispererMCPServer {
 
             l.start(queue: .global(qos: .utility))
 
-            serverTask = Task { [weak self] in
-                while !Task.isCancelled {
-                    guard let self else { break }
-                    await self.runOneSession()
-                    if Task.isCancelled { break }
-                    // Brief pause before recreating the session so spin-loops can't form.
-                    try? await Task.sleep(for: .milliseconds(50))
-                }
-            }
-
+            await registry.startReaper()
             await MainActor.run { AppState.shared.mcpServerRunning = true }
             Logger.info("MCP server started on port \(port)", subsystem: .app)
         } catch {
@@ -101,13 +92,9 @@ actor WhispererMCPServer {
     }
 
     func stop() async {
-        serverTask?.cancel()
-        serverTask = nil
         listener?.cancel()
         listener = nil
-        await mcpServer?.stop()
-        mcpServer = nil
-        transport = nil
+        await registry.shutdown()
         await MainActor.run { AppState.shared.mcpServerRunning = false }
         Logger.info("MCP server stopped", subsystem: .app)
     }
@@ -123,7 +110,6 @@ actor WhispererMCPServer {
     private func listenerStateChanged(_ state: NWListener.State) {
         switch state {
         case .failed(let error):
-            // Only log non-cancelled failures; cancellation is expected on stop().
             if !isCancelledError(error) {
                 Logger.error("MCP listener failed: \(error.localizedDescription)", subsystem: .app)
             }
@@ -134,86 +120,16 @@ actor WhispererMCPServer {
         }
     }
 
-    // MARK: - Session Lifecycle
-
-    private func runOneSession() async {
-        // When LAN access is off (default), restrict to localhost-only origins.
-        // When the user has explicitly opted into LAN access, accept any origin (same
-        // as the previous behaviour) so LAN clients — whose Host header contains a
-        // LAN IP or hostname — are not rejected by the origin validator.
-        let lanEnabled = await MainActor.run { AppState.shared.mcpLANEnabled }
-        let originValidator = lanEnabled
-            ? OriginValidator.disabled
-            : OriginValidator.localhost(port: listeningPort)
-
-        let t = StatefulHTTPServerTransport(
-            validationPipeline: StandardValidationPipeline(validators: [
-                originValidator,
-                AcceptHeaderValidator(mode: .sseRequired),
-                ContentTypeValidator(),
-                ProtocolVersionValidator(),
-                SessionValidator(),
-            ])
-        )
-        let s = await buildMCPServer()
-        transport = t
-        mcpServer = s
-
-        do {
-            try await s.start(transport: t)
-        } catch {
-            if !isCancelledError(error) {
-                Logger.error("MCP session failed to start: \(error.localizedDescription)", subsystem: .app)
-            }
-            transport = nil
-            mcpServer = nil
-            return
-        }
-
-        await s.waitUntilCompleted()
-        transport = nil
-        mcpServer = nil
-    }
-
-    private func buildMCPServer() async -> Server {
-        let version = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.0"
-        let s = Server(
-            name: "Whisperer",
-            version: version,
-            capabilities: .init(tools: .init())
-        )
-
-        await s.withMethodHandler(ListTools.self) { _ in
-            ListTools.Result(tools: MCPMeetingTools.toolDefinitions + MCPTranscriptionTools.toolDefinitions)
-        }
-
-        await s.withMethodHandler(CallTool.self) { params in
-            if let result = try await MCPMeetingTools.handle(name: params.name, arguments: params.arguments) {
-                return result
-            }
-            if let result = try await MCPTranscriptionTools.handle(name: params.name, arguments: params.arguments) {
-                return result
-            }
-            return CallTool.Result(
-                content: [.text(text: "Unknown tool: \(params.name)", annotations: nil, _meta: nil)],
-                isError: true
-            )
-        }
-
-        return s
-    }
-
     // MARK: - Connection Handling
 
     private func handleConnection(_ conn: NWConnection) async {
-        connectionSeq += 1
-        let connID = connectionSeq
+        let connID = UUID().uuidString.prefix(8)
 
         conn.start(queue: .global(qos: .utility))
 
-        // Each connection gets an idle read timeout. If no data arrives within this
-        // window the connection is dead (peer gone without RST) — cancel it cleanly.
         let idleTimeout: TimeInterval = 120
+        let port = listeningPort
+        let lanEnabled = await MainActor.run { AppState.shared.mcpLANEnabled }
 
         var requestCount = 0
         loop: while !Task.isCancelled {
@@ -222,15 +138,24 @@ actor WhispererMCPServer {
             }
             requestCount += 1
 
-            let currentTransport = transport
-            if currentTransport == nil {
-                // Session is restarting — tell the client to retry momentarily.
-                await writePlain(conn: conn, status: 503, extraHeaders: ["Retry-After": "1"], body: "MCP server session restarting")
-                break loop
+            let response = await registry.route(request, lanEnabled: lanEnabled, port: port)
+
+            // Extract session id from the response headers so we can bracket SSE streams.
+            let sessionID = response.headers[HTTPHeaderName.sessionID]
+
+            let isStream: Bool
+            if case .stream = response { isStream = true } else { isStream = false }
+
+            if isStream, let sid = sessionID {
+                await registry.streamOpened(id: sid)
             }
 
-            let response = await currentTransport!.handleRequest(request)
-            let keepAlive = await writeHTTPResponse(response, conn: conn, connID: connID)
+            let keepAlive = await writeHTTPResponse(response, conn: conn, connID: String(connID))
+
+            if isStream, let sid = sessionID {
+                await registry.streamClosed(id: sid)
+            }
+
             if !keepAlive { break loop }
         }
 
@@ -243,11 +168,10 @@ actor WhispererMCPServer {
         let separator = Data("\r\n\r\n".utf8)
         var accumulated = Data()
 
-        // Read header section with overall timeout guard.
         let deadline = Date().addingTimeInterval(timeout)
         while accumulated.count < 1_048_576 {
             let remaining = deadline.timeIntervalSinceNow
-            guard remaining > 0 else { return nil }  // idle timeout
+            guard remaining > 0 else { return nil }
 
             guard let chunk = await nwReceive(conn: conn) else { return nil }
             accumulated.append(chunk)
@@ -294,7 +218,7 @@ actor WhispererMCPServer {
     // MARK: - HTTP Response Writing
 
     /// Returns true if the connection should be kept alive for a next request.
-    private func writeHTTPResponse(_ response: HTTPResponse, conn: NWConnection, connID: Int) async -> Bool {
+    private func writeHTTPResponse(_ response: HTTPResponse, conn: NWConnection, connID: String) async -> Bool {
         switch response {
         case .stream(let stream, let headers):
             var resp = "HTTP/1.1 200 OK\r\n"
@@ -381,32 +305,6 @@ actor WhispererMCPServer {
     }
 
     // MARK: - Error Classification
-
-    /// Returns true for connection lifecycle events that are expected and require no logging.
-    /// These produce Network.framework os_log messages internally which we cannot suppress,
-    /// so we at minimum avoid duplicating them via our own Logger.
-    private func isExpectedConnectionError(_ error: NWError) -> Bool {
-        switch error {
-        case .posix(let code):
-            switch code {
-            case .ECONNRESET,   // 54 — peer sent RST (common for MCP clients on disconnect)
-                 .EPIPE,        // 32 — write to closed socket
-                 .ECANCELED,    // 89 — NWConnection cancelled
-                 .ENOTCONN,     // 57 — socket not connected
-                 .EBADF,        // 9  — bad file descriptor (post-cancel)
-                 .ETIMEDOUT:    // 60 — TCP keepalive timeout
-                return true
-            default:
-                return false
-            }
-        case .dns:
-            return false
-        case .tls:
-            return false
-        @unknown default:
-            return false
-        }
-    }
 
     private func isCancelledError(_ error: any Error) -> Bool {
         guard let nwError = error as? NWError else { return false }
