@@ -93,3 +93,4 @@ __pycache__/
 # committed: version control is the one place it would outlive a key rotation.
 Whisperer/Transcription/Editing/PolishModelKey.generated.swift
 Tools/mmbert/lzfse_tool
+docs/competitive/

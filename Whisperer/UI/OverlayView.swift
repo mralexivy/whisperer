@@ -219,11 +219,9 @@ struct OverlayView: View {
                     )
                 }
 
-                // Main control bar — meeting fallback or normal dictation controls
-                if appState.isMeetingMode {
-                    // Shown when the meeting window is closed — lets user reopen or stop
-                    MeetingFallbackBar(appState: appState, scale: scale)
-                } else {
+                // Main control bar — normal dictation controls
+                // (Meeting mode uses the Island instead — no HUD shown during meetings)
+                if !appState.isMeetingMode {
                     // Normal recording controls — crossfades to hands-free toast when activated
                     ZStack {
                         HStack(spacing: spacing) {
@@ -286,91 +284,6 @@ struct OverlayView: View {
         .padding(.bottom, 20 * scale) // Breathing room so card rounded corners aren't flush with panel edge
         .environment(\.overlayScale, scale)
         .background(Color.clear)
-    }
-}
-
-// MARK: - Meeting Fallback Bar
-
-/// Minimal HUD shown when a meeting is recording but the meeting window has been closed.
-/// Gives the user a clear way to reopen the window or stop the recording without exposing
-/// dictation-mode controls that don't apply to meetings.
-private struct MeetingFallbackBar: View {
-    @ObservedObject var appState: AppState
-    var scale: CGFloat
-
-    @State private var isStopHovered = false
-    @State private var isOpenHovered = false
-
-    private var hudBackground: Color { Color(hex: "14142B") }
-    private var hudBorder: Color { Color.white.opacity(0.06) }
-    private var hPadding: CGFloat { 16 * scale }
-    private var vPadding: CGFloat { 10 * scale }
-    private var spacing: CGFloat { 12 * scale }
-    private var buttonSize: CGFloat { 36 * scale }
-
-    var body: some View {
-        HStack(spacing: spacing) {
-            // Pulsing dot + label
-            HStack(spacing: 6 * scale) {
-                Circle()
-                    .fill(Color.red)
-                    .frame(width: 7 * scale, height: 7 * scale)
-                    .overlay(
-                        Circle()
-                            .stroke(Color.red.opacity(0.35), lineWidth: 3 * scale)
-                            .scaleEffect(1.6)
-                    )
-                    .animation(.easeInOut(duration: 0.9).repeatForever(autoreverses: true), value: appState.isMeetingMode)
-
-                Text("Meeting")
-                    .font(.system(size: 13 * scale, weight: .semibold, design: .rounded))
-                    .foregroundColor(.white)
-
-                if let elapsed = appState.activeMeetingSession?.elapsedDisplay {
-                    Text(elapsed)
-                        .font(.system(size: 12 * scale, weight: .medium).monospacedDigit())
-                        .foregroundColor(.white.opacity(0.5))
-                }
-            }
-
-            Spacer()
-
-            // Open window button
-            Button {
-                // Recovery path: the user closed the floating window mid-meeting, which
-                // un-suppressed this HUD. Bring the same session's window back.
-                MeetingLiveWindowManager.shared.show(session: appState.activeMeetingSession)
-            } label: {
-                Image(systemName: "rectangle.on.rectangle")
-                    .font(.system(size: 13 * scale, weight: .medium))
-                    .foregroundColor(isOpenHovered ? .white : .white.opacity(0.7))
-                    .frame(width: buttonSize, height: buttonSize)
-                    .background(Color.white.opacity(isOpenHovered ? 0.12 : 0.07))
-                    .clipShape(Circle())
-            }
-            .buttonStyle(.plain)
-            .onHover { isOpenHovered = $0 }
-            .help("Open Meeting Window")
-
-            // Stop meeting button
-            Button {
-                appState.stopActiveRecording()
-            } label: {
-                Image(systemName: "xmark")
-                    .font(.system(size: 11 * scale, weight: .semibold))
-                    .foregroundColor(isStopHovered ? .white : Color.red.opacity(0.9))
-                    .frame(width: buttonSize, height: buttonSize)
-                    .background(Color.red.opacity(isStopHovered ? 0.25 : 0.12))
-                    .clipShape(Circle())
-            }
-            .buttonStyle(.plain)
-            .onHover { isStopHovered = $0 }
-            .help("Stop Meeting Recording")
-        }
-        .padding(.horizontal, hPadding)
-        .padding(.vertical, vPadding)
-        .background(Capsule().fill(hudBackground))
-        .overlay(Capsule().stroke(Color.red.opacity(0.18), lineWidth: 1))
     }
 }
 

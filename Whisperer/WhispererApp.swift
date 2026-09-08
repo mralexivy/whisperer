@@ -33,6 +33,7 @@ struct WhispererApp: App {
 class AppDelegate: NSObject, NSApplicationDelegate {
     var overlayPanel: OverlayPanel?
     var pickerPanel: TranscriptionPickerPanel?
+    var islandCoordinator: IslandCoordinator?
     let appState = AppState.shared
     private var isShuttingDown = false
     private var rightClickMenu: NSMenu?
@@ -297,6 +298,9 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
         pickerPanel = TranscriptionPickerPanel()
         // Panel manages its own visibility based on TranscriptionPickerState
+
+        islandCoordinator = IslandCoordinator()
+        // Coordinator observes AppStateChanged and shows/hides the Island automatically
     }
 
     private func checkPermissions() async {

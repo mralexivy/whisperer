@@ -4302,6 +4302,13 @@ class AppState: ObservableObject {
         }
     }
 
+    /// Toggle microphone mute during recording (samples are discarded when muted).
+    func toggleMicMute() {
+        guard state.isRecording else { return }
+        isMicMuted.toggle()
+        Logger.info("Mic mute toggled → \(isMicMuted)", subsystem: .audio)
+    }
+
     /// Toggle system output audio mute during recording
     func toggleOutputAudioMute() {
         guard state.isRecording else { return }

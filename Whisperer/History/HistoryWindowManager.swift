@@ -147,6 +147,7 @@ class HistoryWindowManager {
             // Skip overlay panels (non-activating NSPanels for recording UI and picker)
             if window is OverlayPanel { continue }
             if window is TranscriptionPickerPanel { continue }
+            if window is IslandPanel { continue }  // Island must not be dismissed by workspace open
 
             // The MenuBarExtra window is an NSPanel with a specific size (360x580)
             // or at a high window level. Match by type + level.

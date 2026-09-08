@@ -52,6 +52,21 @@ final class WaveformState: ObservableObject {
         lastAmplitude = 0
     }
 
+    /// Update the mute / pause gates without touching the stored amplitude. Callers that learn
+    /// about these flags on a different cadence than audio arrives must use this — pushing a
+    /// placeholder amplitude alongside them flatlines the waveform between real samples.
+    func setGating(isMuted: Bool, isPaused: Bool) {
+        self.isMuted = isMuted
+        self.isPaused = isPaused
+    }
+
+    /// Stop updates but leave the bars where they are. Used when a recording is paused, so the
+    /// waveform holds its last shape instead of collapsing to a flat line.
+    func freezeDisplayLink() {
+        displayTimer?.invalidate()
+        displayTimer = nil
+    }
+
     /// Backward-compatible entry point — routes through push(); timer drives timing.
     func update(amplitude: Float, isMuted: Bool, isPaused: Bool) {
         push(amplitude: amplitude, isMuted: isMuted, isPaused: isPaused)
