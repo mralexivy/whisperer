@@ -235,6 +235,14 @@ struct HistoryWindowView: View {
                 }
             }
         }
+        .onReceive(NotificationCenter.default.publisher(for: .switchToFileTranscriptionTab)) { _ in
+            withAnimation(.spring(response: 0.3)) {
+                selectedSidebarItem = .fileTranscription
+                if isSidebarCollapsed {
+                    isSidebarCollapsed = false
+                }
+            }
+        }
         .onReceive(NotificationCenter.default.publisher(for: .toggleWorkspaceSidebar)) { _ in
             withAnimation(.spring(response: 0.3)) {
                 isSidebarCollapsed.toggle()

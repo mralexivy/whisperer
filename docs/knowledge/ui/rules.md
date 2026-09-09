@@ -49,3 +49,51 @@ Latin technical terms, which is what the 0.3 RTL-letter threshold is for.
 
 The dictation HUD (`LiveTranscriptionCard.detectRTL`) deliberately keeps a first-50-chars
 rule — it renders one utterance, not a document.
+
+## Only one surface may own bottom-center
+
+The Island (`IslandGeometryProvider.C.bottomInset = 12`) and the dictation HUD
+(`OverlayPanel.positionAtBottomCenter()`, `margin: 10`) occupy the same strip of screen.
+They must never be visible together.
+
+Ownership, in priority order, is decided in `IslandCoordinator.syncFromAppState()`:
+
+1. Onboarding — nothing else is on screen.
+2. `meetingWindowIsVisible` — the meeting window owns the live UI.
+3. `!isMeetingMode && AppState.state != .idle` — a dictation (or its transcribe/insert tail)
+   is running, so the HUD owns the strip and the Island goes `.hidden`.
+4. Otherwise the Island is visible: the idle launcher nub, or the recording tiers.
+
+The HUD's own suppression is the mirror image: `shouldShow` in `OverlayPanel.updateVisibility()`
+ends in `&& !appState.isMeetingMode`.
+
+Consequence for launcher actions: "Dictate" in the Island launcher row calls
+`AppState.startRecording()` and then hands the screen to the HUD, whose `CloseButton` is the
+stop control. Do not build a second dictation UI inside the Island — `startRecording()` can
+also bail silently (model still loading, file transcription holding the engine), so the Island
+must never optimistically enter a dictating state; it reads `state.isRecording` back before
+setting `isHandsFreeRecording`.
+
+## The Island's screen must have exactly one owner
+
+`IslandCoordinator` owns which display the Island lives on (`homeScreen` / `currentScreen`);
+`IslandPanelController.apply(viewModel:screen:)` takes it as a parameter and must never call
+`IslandGeometryProvider.activeScreen()` for itself. Both used to poll it independently, one
+publish apart, so the SwiftUI content could be laid out for one display inside an NSPanel framed
+for another — the pill then rendered at the wrong offset and the placement looked inconsistent
+between screens.
+
+`activeScreen()` follows the mouse pointer and `publishViewModel()` runs on every AppState change,
+so re-picking is gated: only while the Island is a passive `.peek` nub and not hovered. A display
+*configuration* change is the one unconditional re-pick, via `rehomeToActiveScreen()`.
+
+Rehoming reframes the existing panel when the display is unchanged; it only rebuilds the panel
+(and the hosting view, and with it the hit box and hover state) when the display itself changes.
+
+## bottomSlack must mirror the envelope clamp, not panelSlack
+
+`panelEnvelope` inflates by `panelSlack` (24) and then clamps to `visibleFrame`. The bottom edge
+always hits that clamp, because the island sits only `bottomInset` above it. Reserving the full
+slack as bottom padding therefore floated the Island `panelSlack - bottomInset` too high on every
+display. `IslandContentSizer.bottomSlack` recomputes the clamp, so the pill lands exactly
+`bottomInset` above `visibleFrame.minY`. `IslandContentSizerTests` pins that identity.

@@ -50,21 +50,32 @@ final class IslandPanelController {
 
     /// Apply a new view model snapshot. Creates the panel if needed, updates its frame and
     /// visibility. The SwiftUI content is updated reactively via the coordinator's @Published model.
-    func apply(viewModel: IslandViewModel) {
+    /// `screen` is the coordinator's home display — the same one its `currentScreen` describes.
+    /// The controller must NOT pick its own, or the window frame and the SwiftUI layout inside
+    /// it end up describing different displays.
+    func apply(viewModel: IslandViewModel, screen: NSScreen?) {
         if viewModel.presentation == .hidden {
             hide()
             return
         }
 
-        let screen = IslandGeometryProvider.activeScreen() ?? NSScreen.main!
-        currentScreen = screen
+        guard let screen = screen
+                ?? IslandGeometryProvider.activeScreen()
+                ?? NSScreen.main else { return }
 
-        if panel == nil {
+        if panel == nil || currentScreen !== screen {
+            if panel != nil {
+                Logger.debug("Island rehoming to \(screen.localizedName)", subsystem: .ui)
+            }
+            currentScreen = screen
             buildPanel(on: screen)
-        } else if let panel = panel, panel.screen != screen {
-            // User has moved their pointer to a different display while recording.
-            Logger.debug("Island rehoming to new screen", subsystem: .ui)
-            buildPanel(on: screen)
+        } else if let panel = panel {
+            // Same display, but its visibleFrame may have moved (Dock shown / hidden / relocated).
+            // Reframing in place keeps the hosting view — and its hover state — alive.
+            let envelope = geo.panelEnvelope(for: .from(screen))
+            if panel.frame != envelope {
+                panel.setFrame(envelope, display: true)
+            }
         }
 
         showPanel()
@@ -119,24 +130,13 @@ final class IslandPanelController {
         }
     }
 
-    /// Records which of the two placements the display resolved to. A notched Mac that reports
-    /// no auxiliary areas silently falls back to the floating pill, which looks like the island
-    /// is "next to" the hardware notch rather than replacing it — this line tells them apart.
+    /// Log the bottom placement for this display.
     private func logPlacement(for description: ScreenDescription, screen: NSScreen) {
-        if let notch = geo.notchGeometry(for: description) {
-            Logger.debug("""
-                Island placement: NOTCHED on \(screen.localizedName) — \
-                housing \(Int(notch.exclusionWidth))pt, inset \(Int(notch.topInset))pt, \
-                bleed \(Int(geo.topBleed(for: description)))pt
-                """, subsystem: .ui)
-        } else {
-            Logger.debug("""
-                Island placement: FLOATING on \(screen.localizedName) — \
-                safeAreaTop \(description.safeAreaTopInset), \
-                auxLeft \(description.auxiliaryTopLeft.map(NSStringFromRect) ?? "nil"), \
-                auxRight \(description.auxiliaryTopRight.map(NSStringFromRect) ?? "nil")
-                """, subsystem: .ui)
-        }
+        Logger.debug("""
+            Island placement: BOTTOM on \(screen.localizedName) — \
+            visibleFrame.minY \(Int(description.visibleFrame.minY)), \
+            envelope \(geo.panelEnvelope(for: description))
+            """, subsystem: .ui)
     }
 
     private func showPanel() {
@@ -164,12 +164,10 @@ final class IslandPanelController {
         // Feed a displayChanged event so the coordinator re-queries geometry.
         coordinator?.send(.displayChanged)
 
-        // Reposition the existing panel on the (possibly new) active screen.
-        guard let panel = panel, panel.isVisible,
-              let screen = IslandGeometryProvider.activeScreen() else { return }
-        currentScreen = screen
-        let envelope = geo.panelEnvelope(for: .from(screen))
-        panel.setFrame(envelope, display: true)
+        // The coordinator owns which display the Island lives on; a configuration change is
+        // the one moment it must re-pick unconditionally. It republishes, which lands back in
+        // `apply(viewModel:screen:)` and reframes the panel.
+        coordinator?.rehomeToActiveScreen()
     }
 
     // MARK: - Orphan cleanup

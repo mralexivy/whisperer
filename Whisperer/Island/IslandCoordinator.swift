@@ -5,13 +5,15 @@
 //  @MainActor ObservableObject orchestrator — the only Island component that touches AppState.
 //
 //  Responsibilities:
-//  - Subscribe to AppStateChanged and translate it into IslandEvents.
+//  - Subscribe to AppState.objectWillChange and translate it into IslandEvents.
 //  - Feed events into IslandReducer to produce a new IslandModel.
 //  - Publish `currentViewModel` and `currentScreen` for IslandContentView to observe.
 //  - Execute effects by calling AppState APIs.
 //  - Own IslandLevelBridge (wired to AudioRecorder.onAmplitudeUpdate) and IslandElapsedTimer.
-//  - Manage hover-to-open with dwell/debounce/top-edge retention (Atoll DynamicIslandViewModel).
-//  - Forward scroll wheel gestures from IslandContainerView as rubber-band expand/collapse.
+//  - Hover management: peek → compact after 120 ms dwell; compact → expanded via scroll/click.
+//  - Scroll gesture: UP = expand (pull island out of bottom edge), DOWN = collapse.
+//  - Bottom-edge hover retention: ignore spurious exit when cursor is at screen.frame.minY.
+//  - Waveform timer gating: 60 Hz only when compact or expanded; silent during peek.
 //  - Rate-limited haptic feedback (300 ms minimum between firings).
 //  - Deterministic teardown via teardownHook before panel recycling.
 //
@@ -31,14 +33,14 @@ final class IslandCoordinator: ObservableObject {
     @Published private(set) var currentScreen:     ScreenDescription = ScreenDescription(
         frame: NSRect(x: 0, y: 0, width: 1440, height: 900),
         visibleFrame: NSRect(x: 0, y: 0, width: 1440, height: 837),
-        safeAreaTopInset: 0, auxiliaryTopLeft: nil, auxiliaryTopRight: nil, backingScale: 2
+        backingScale: 2
     )
 
     // MARK: - Interaction state (observed by IslandContentView)
 
     /// True while the pointer is inside the hover rect (drives lift animation + shadow)
     @Published private(set) var isHovering: Bool = false
-    /// 0–20 rubber-band value driven by downward scroll (feeds width stretch)
+    /// 0–20 rubber-band value driven by upward scroll (feeds width stretch)
     @Published private(set) var gestureProgress: CGFloat = 0
     /// Toggles to trigger .alignment haptic; rate-limited to 300 ms
     @Published private(set) var hapticToken: Bool = false
@@ -59,7 +61,7 @@ final class IslandCoordinator: ObservableObject {
     // Hover
     private var hoverTask:         Task<Void, Never>?
     private var lastHapticDate:    Date = .distantPast
-    private let hoverDwell:        Double = 0.18  // seconds before auto-expand
+    private let peekDwell:         Double = 0.12  // peek → compact dwell (120 ms)
     private let hoverExitDebounce: Duration = .milliseconds(100)
 
     // Amplitude callback dedup
@@ -69,7 +71,7 @@ final class IslandCoordinator: ObservableObject {
     var teardownHook: (() -> Void)?
 
     /// The forgiving hover rect in global screen coordinates. Written by IslandContentView so
-    /// the top-edge retention test can check the pointer against the real island span.
+    /// the bottom-edge retention test can check the pointer against the real island span.
     var hoverRectOnScreen: NSRect = .zero
 
     // MARK: - Init / Deinit
@@ -102,7 +104,7 @@ final class IslandCoordinator: ObservableObject {
         publishViewModel()
     }
 
-    // MARK: - Hover management (Atoll DynamicIslandViewModel.handleHover equivalent)
+    // MARK: - Hover management
 
     func handleHover(_ hovering: Bool) {
         hoverTask?.cancel()
@@ -112,22 +114,21 @@ final class IslandCoordinator: ObservableObject {
             withAnimation(.bouncy.speed(1.2)) { isHovering = true }
             triggerHapticIfAllowed()
 
-            // Dwell → auto-expand (only while compact, not finalizing/starting etc.)
-            let dwell = hoverDwell
+            // Peek → compact dwell (120 ms). Only fires from .peek.
+            let dwell = peekDwell
             hoverTask = Task { [weak self] in
                 try? await Task.sleep(for: .seconds(dwell))
                 guard !Task.isCancelled, let self else { return }
                 guard self.isHovering else { return }
-                guard self.currentViewModel.presentation == .compact else { return }
-                guard case .recording = self.currentViewModel.capture else { return }
-                self.send(.expand)
+                guard self.currentViewModel.presentation == .peek else { return }
+                self.send(.expand)   // peek → compact
             }
         } else {
-            // Debounce exit — check top-edge retention after delay
+            // Debounce exit — check bottom-edge retention after delay
             hoverTask = Task { [weak self] in
                 try? await Task.sleep(for: self?.hoverExitDebounce ?? .milliseconds(100))
                 guard !Task.isCancelled, let self else { return }
-                if self.shouldRetainHoverAtTopEdge() { return }
+                if self.shouldRetainHoverAtBottomEdge() { return }
                 self.finishHoverExit()
             }
         }
@@ -135,27 +136,28 @@ final class IslandCoordinator: ObservableObject {
 
     private func finishHoverExit() {
         withAnimation(.bouncy.speed(1.2)) { isHovering = false }
-        if currentViewModel.presentation == .expanded {
-            send(.collapse)
-        }
+        // Return to peek (or compact if state requires it).
+        send(.peekRequested)
     }
 
-    /// Ignore hover-exit when cursor parks on the screen's top pixel row and is inside
-    /// the hover rect. macOS reports a spurious exit there — Atoll's shouldRetainHoverAtScreenTopEdge.
-    private func shouldRetainHoverAtTopEdge() -> Bool {
+    /// Ignore hover-exit when cursor parks on the screen's bottom pixel row and is inside
+    /// the hover rect. macOS occasionally reports spurious exits at the screen edge.
+    private func shouldRetainHoverAtBottomEdge() -> Bool {
         let loc = NSEvent.mouseLocation
         guard let screen = NSScreen.screens.first(where: {
-            $0.frame.contains(loc) || abs($0.frame.maxY - loc.y) < 2
+            $0.frame.contains(loc) || abs($0.frame.minY - loc.y) < 2
         }) else { return false }
-        // Only the very top pixel row produces the spurious exit.
-        guard loc.y >= screen.frame.maxY - 1.5 else { return false }
-        // CGRect.contains is half-open on the max edges, so test the horizontal span inclusively.
+        // Only the very bottom pixel row produces the spurious exit.
+        guard loc.y <= screen.frame.minY + 1.5 else { return false }
         let span = hoverRectOnScreen
         guard span.width > 0 else { return false }
         return loc.x >= span.minX && loc.x <= span.maxX
     }
 
-    // MARK: - Scroll gesture (Atoll handleOpenScrollGesture / handleCloseScrollGesture)
+    // MARK: - Scroll gesture
+    //
+    // Bottom-anchored island: scroll UP = expand (pull island up), scroll DOWN = collapse.
+    // This is the inverse of the top-anchored Island where scrolling down opened it.
 
     func handleScrollWheel(delta: CGFloat, phase: NSEvent.Phase) {
         let sensitivity: CGFloat = 50
@@ -166,24 +168,24 @@ final class IslandCoordinator: ObservableObject {
             return
         }
 
-        if delta > 0 {
-            // Scroll down → stretch → expand
-            guard presentation == .compact else { return }
-            let progress = min((delta / sensitivity) * 20, 20)
+        if delta < 0 {
+            // Scroll up (negative delta on a standard trackpad) → stretch → expand
+            guard presentation == .peek || presentation == .compact else { return }
+            let progress = min(((-delta) / sensitivity) * 20, 20)
             withAnimation(.smooth) { gestureProgress = progress }
 
-            if delta > sensitivity {
+            if -delta > sensitivity {
                 withAnimation(.smooth) { gestureProgress = 0 }
                 send(.expand)
                 triggerHapticIfAllowed()
             }
-        } else if delta < 0 {
-            // Scroll up → collapse
-            guard presentation == .expanded else {
+        } else if delta > 0 {
+            // Scroll down → collapse
+            guard presentation == .expanded || presentation == .compact else {
                 withAnimation(.smooth) { gestureProgress = 0 }
                 return
             }
-            if delta < -sensitivity {
+            if delta > sensitivity {
                 send(.collapse)
                 withAnimation(.bouncy.speed(1.2)) { isHovering = false }
                 withAnimation(.smooth) { gestureProgress = 0 }
@@ -219,16 +221,6 @@ final class IslandCoordinator: ObservableObject {
 
     // MARK: - AppState subscription
 
-    /// Observe AppState directly rather than the "AppStateChanged" notification.
-    ///
-    /// That notification is posted by only a handful of `didSet` blocks — `isPaused`,
-    /// `isMicMuted`, `isOutputAudioMuted` and `activeMeetingSession` do NOT post it. Listening
-    /// to it alone left the Island blind to every control it is supposed to reflect: pausing
-    /// from the menu bar never froze the bars, muting never swapped the glyph, and a meeting
-    /// starting only surfaced the Island by luck of some other property changing.
-    ///
-    /// `objectWillChange` fires for every `@Published` on the singleton. It fires *before* the
-    /// value lands, so hop through the main run loop to read the settled state.
     private func wireAppState() {
         AppState.shared.objectWillChange
             .receive(on: RunLoop.main)
@@ -244,15 +236,15 @@ final class IslandCoordinator: ObservableObject {
 
         let inMeeting     = appState.isMeetingMode
         let windowVisible = appState.meetingWindowIsVisible
-        let islandActive  = inMeeting && !windowVisible
 
-        if !inMeeting {
-            if model.capture != .idle { send(.captureEnded) }
-            return
-        }
+        // A dictation (or its transcribe/insert tail) puts the OverlayPanel HUD at
+        // bottom-center — exactly where the Island lives. The HUD is the richer surface and
+        // already carries pause/stop, so the Island yields the spot for the whole session.
+        let dictationHUDVisible = !inMeeting && appState.state != .idle
 
-        if !islandActive {
-            // A meeting window is handling the UI — suppress Island without stopping capture
+        // The meeting window owns the live UI when it is up; onboarding owns the screen
+        // outright. In all these cases the Island stands down entirely.
+        if windowVisible || dictationHUDVisible || !appState.hasCompletedOnboarding {
             if model.presentation != .hidden {
                 model.presentation = .hidden
                 publishViewModel()
@@ -261,7 +253,17 @@ final class IslandCoordinator: ObservableObject {
             return
         }
 
-        // Ensure session is started
+        if !inMeeting {
+            // No capture: rest as the idle launcher nub rather than disappearing.
+            if model.capture != .idle {
+                send(.captureEnded)
+            } else if model.presentation == .hidden {
+                model.presentation = .peek
+                publishViewModel()
+            }
+            return
+        }
+
         if model.capture == .idle {
             if let session = appState.activeMeetingSession,
                let sessionID = session.meetingID {
@@ -269,8 +271,6 @@ final class IslandCoordinator: ObservableObject {
             }
         }
 
-        // Mirror the authoritative mute flags — the reducer's optimistic toggle is only a
-        // placeholder until AppState confirms, and mutes can also change from the menu bar.
         if model.isMicMuted != appState.isMicMuted {
             model.isMicMuted = appState.isMicMuted
         }
@@ -278,7 +278,6 @@ final class IslandCoordinator: ObservableObject {
             model.isOutputMuted = appState.isOutputAudioMuted
         }
 
-        // Sync mute / pause / recording state
         if appState.isPaused {
             if model.capture == .recording { send(.capturePaused) }
         } else {
@@ -288,7 +287,10 @@ final class IslandCoordinator: ObservableObject {
 
         levelBridge.setState(isMuted: appState.isMicMuted, isPaused: appState.isPaused)
 
-        if model.presentation != .hidden && model.capture == .recording {
+        // Waveform timer only runs when the row is visible (compact or expanded).
+        // During peek the 12 Hz peekLevel path handles the nub glow at much lower CPU cost.
+        let waveformActive = model.presentation == .compact || model.presentation == .expanded
+        if waveformActive && model.capture == .recording {
             levelBridge.startTimer()
         } else {
             levelBridge.stopTimer(freezeAtCurrent: appState.isPaused)
@@ -328,6 +330,38 @@ final class IslandCoordinator: ObservableObject {
                     MeetingLiveWindowManager.shared.show(session: session)
                 }
 
+            case .startDictation:
+                // Hands-free: no key is held, so nothing will release to stop it. The dictation
+                // HUD owns the bottom of the screen from here (the Island stands down in
+                // syncFromAppState) and its stop button ends the session.
+                let appState = AppState.shared
+                appState.startRecording()
+                // startRecording() bails silently when a model is still loading or a file
+                // transcription holds the engine — only claim hands-free if it actually started.
+                if appState.state.isRecording {
+                    appState.isHandsFreeRecording = true
+                } else {
+                    Logger.info("Island dictate: startRecording() declined — leaving the launcher up",
+                                subsystem: .ui)
+                }
+
+            case .openFileTranscription:
+                HistoryWindowManager.shared.showWindow()
+                postWorkspaceSection(.switchToFileTranscriptionTab)
+
+            case .openWorkspace:
+                HistoryWindowManager.shared.showWindow()
+
+            case .startMeeting:
+                let session = MeetingSession()
+                Task { @MainActor in
+                    await session.startRecording(
+                        title: NSLocalizedString("island.newMeeting", value: "Meeting",
+                                                 comment: "Default title for a meeting started from the Island"),
+                        surface: .floatingWindow
+                    )
+                }
+
             case .scheduleHide(let delay):
                 scheduleHide(after: delay)
 
@@ -338,16 +372,32 @@ final class IslandCoordinator: ObservableObject {
         }
     }
 
+    /// Selects a workspace sidebar section. Posted twice on purpose: `HistoryWindowView`
+    /// subscribes in `onReceive`, which is not wired yet on the very first `showWindow()`,
+    /// so the immediate post is a no-op on a cold open. Re-selecting the same section is
+    /// idempotent, so the follow-up costs nothing when the first post already landed.
+    private func postWorkspaceSection(_ name: Notification.Name) {
+        NotificationCenter.default.post(name: name, object: nil)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
+            NotificationCenter.default.post(name: name, object: nil)
+        }
+    }
+
     // MARK: - Publish
 
     private func publishViewModel() {
         currentViewModel = model.viewModel()
 
-        // Sync elapsed display
+        // Elapsed timer: the recording nub shows the clock too, so it ticks on every
+        // visible tier. Only a hidden Island pauses it.
         switch model.capture {
         case .recording:
-            if let session = AppState.shared.activeMeetingSession {
-                elapsedTimer.sync(to: session.elapsedSeconds)
+            if model.presentation != .hidden {
+                if let session = AppState.shared.activeMeetingSession {
+                    elapsedTimer.sync(to: session.elapsedSeconds)
+                }
+            } else {
+                elapsedTimer.pause()
             }
         case .paused:
             break // frozen
@@ -355,12 +405,53 @@ final class IslandCoordinator: ObservableObject {
             elapsedTimer.stop()
         }
 
-        // Update screen description
-        if let screen = IslandGeometryProvider.activeScreen() {
-            currentScreen = ScreenDescription.from(screen)
+        updateHomeScreenIfSettled()
+
+        // Waveform timer gating (also done in syncFromAppState — this catches reducer-driven
+        // transitions like stop/collapse that don't go through syncFromAppState).
+        let waveformActive = model.presentation == .compact || model.presentation == .expanded
+        if waveformActive && model.capture == .recording {
+            levelBridge.startTimer()
+        } else {
+            let freeze = model.capture == .paused
+            levelBridge.stopTimer(freezeAtCurrent: freeze)
         }
 
-        panelController?.apply(viewModel: currentViewModel)
+        panelController?.apply(viewModel: currentViewModel, screen: homeScreen)
+    }
+
+    // MARK: - Home screen
+
+    /// The one display the Island is placed on.
+    ///
+    /// Single source of truth on purpose. The panel frame and the SwiftUI content geometry
+    /// used to resolve `activeScreen()` independently, one publish apart, so the pill could be
+    /// laid out for one display inside a window framed for another — which is exactly what
+    /// made placement look inconsistent between screens.
+    private var homeScreen: NSScreen?
+
+    /// Re-picks the home display, but only when the Island is a passive nub.
+    ///
+    /// `activeScreen()` follows the pointer, and `publishViewModel()` runs on every AppState
+    /// change. Re-picking unconditionally would yank the bar out from under the pointer
+    /// mid-hover and hop it between displays while a row is open.
+    private func updateHomeScreenIfSettled() {
+        let settled = homeScreen == nil || (model.presentation == .peek && !isHovering)
+        guard settled,
+              let screen = IslandGeometryProvider.activeScreen(),
+              screen !== homeScreen else { return }
+        homeScreen = screen
+        currentScreen = ScreenDescription.from(screen)
+    }
+
+    /// Force the Island back onto the active display and re-publish. Called when the display
+    /// configuration itself changes (resolution, Dock, monitor plugged in), where the settled
+    /// guard above must not apply.
+    func rehomeToActiveScreen() {
+        guard let screen = IslandGeometryProvider.activeScreen() else { return }
+        homeScreen = screen
+        currentScreen = ScreenDescription.from(screen)
+        publishViewModel()
     }
 
     // MARK: - Auto-hide

@@ -2,29 +2,34 @@
 //  IslandContentView.swift
 //  Whisperer
 //
-//  Island UI — built on Atoll's animation architecture.
+//  Island UI — bottom-anchored, three-tier morph.
 //
-//  Key Atoll techniques reproduced here:
+//  The Island is always on screen once onboarding is done. While idle it rests as a
+//  near-transparent launcher nub; hovering opens a four-action launcher row
+//  (Dictate · Meeting · File · Workspace).
+//
+//  Tiers (bottom-up growth):
+//   .peek     → 104 × 24 pt idle launcher, or 208 × 30 pt recording nub.
+//   .compact  → 147 × 36 pt launcher bar, or 420 × 60 pt recording row.
+//   .expanded → 460 × 150 pt recording + controls row (recording only).
+//
+//  Key Atoll techniques preserved:
 //   1. Animation split: outer root frame carries .animation(nil) so the panel VStack
 //      never animates; the inner island body carries the springs so only its own
-//      frame springs to the target size. This is the entire "growing" illusion.
-//   2. Distinct open/close springs: .spring(response:0.42,damping:1.0) open,
-//      .spring(response:0.45,damping:1.0) close, .bouncy.speed(1.2) hover lift.
-//   3. Animatable uneven corners — square on top when the island absorbs the hardware
-//      notch, rounded pill when it floats. The radii interpolate during the morph.
-//   4. Content-driven size: IslandContentSizer returns the target CGSize per capture
-//      state; narrow "Starting…" → wide recording pill → narrow "Finishing…".
-//   5. The island REPLACES the hardware notch on notched Macs: its top edge is flush
-//      with screen.frame.maxY, it is at least as tall as safeAreaInsets.top, and its
-//      content flanks the camera housing (IslandContentSizer.notchGap).
-//   6. Hover-to-open with dwell (180 ms), debounced exit (100 ms), and top-edge retention.
-//   7. Scroll gesture: down → rubber-band stretch → expand; up → collapse.
-//   8. Haptic feedback (.alignment) rate-limited to 300 ms.
+//      frame springs to the target size.
+//   2. Distinct open/close springs + hover lift spring.
+//   3. Content-driven size via IslandContentSizer.
+//   4. Hover-to-open with dwell (120 ms peek→compact), debounced exit (100 ms).
+//   5. Scroll gesture: UP → expand, DOWN → collapse (bottom-anchored surface).
+//   6. Haptic feedback (.alignment) rate-limited to 300 ms.
 //
-//  NOTE — no NSViewRepresentable inside the island body. SwiftUI's `.clipShape` cannot
-//  clip a hosted AppKit NSView (it is a real sibling view, not a drawn layer), so the old
-//  CALayer waveform escaped the pill and painted over the expanded control row. The
-//  waveform is pure SwiftUI (see IslandLayout.swift).
+//  Root layout (bottom-aligned):
+//    [Spacer (flexible)]
+//    [islandBody]
+//    [Color.clear height: bottomSlack]
+//
+//  islandBody grows upward from the fixed bottom, which is exactly what a
+//  bottom-anchored floating widget should do.
 //
 
 import AppKit
@@ -52,9 +57,10 @@ struct IslandContentView: View {
     private var level: IslandLevelBridge   { coordinator.levelBridge }
     private var clock: IslandElapsedTimer  { coordinator.elapsedTimer }
     private var isExpanded: Bool           { vm.presentation == .expanded }
+    private var isPeek: Bool               { vm.presentation == .peek }
     private var isHovering: Bool           { coordinator.isHovering }
 
-    // MARK: - Animation constants (from Atoll's measured values)
+    // MARK: - Animation constants
 
     private var openSpring: Animation {
         reduceMotion ? .linear(duration: 0.12)
@@ -86,13 +92,12 @@ struct IslandContentView: View {
 
     // MARK: - Geometry
 
-    /// Closed notch + wings (Atoll's `hudWidth`/`hudHeight`), so the housing is always covered.
     private var targetSize: CGSize {
         IslandContentSizer.targetSize(
             capture: vm.capture,
             presentation: vm.presentation,
             screen: screen,
-            isHovering: coordinator.isHovering,
+            isHovering: isHovering,
             gestureProgress: coordinator.gestureProgress
         )
     }
@@ -113,13 +118,56 @@ struct IslandContentView: View {
         )
     }
 
-    private var topSlack: CGFloat { IslandContentSizer.topSlack(screen: screen) }
+    // MARK: - Surface
+
+    /// The resting launcher: near-invisible until the pointer arrives.
+    private var isIdleNub: Bool { isPeek && vm.capture == .idle }
+    /// The opened launcher bar. Still an idle surface — it must not read as heavy as a
+    /// live recording row, which is genuinely demanding attention.
+    private var isIdleBar: Bool { !isPeek && vm.capture == .idle }
+
+    @ViewBuilder
+    private var surface: some View {
+        if isIdleNub {
+            // Almost transparent — a hint of the pill, not a black slab on the wallpaper.
+            Color.black.opacity(isHovering ? 0.38 : 0.14)
+        } else {
+            ZStack {
+                Rectangle().fill(.ultraThinMaterial).environment(\.colorScheme, .dark)
+                Rectangle().fill(Color.black.opacity(scrimOpacity))
+                LinearGradient(
+                    colors: [Color.white.opacity(0.10), Color.white.opacity(0.0)],
+                    startPoint: .top, endPoint: .bottom
+                )
+            }
+        }
+    }
+
+    /// How dark the scrim over the blur is. The launcher bar keeps the wallpaper visible
+    /// through it; a recording row does not, because its content has to stay readable.
+    private var scrimOpacity: Double {
+        if isIdleBar { return 0.42 }
+        return isPeek ? 0.62 : 0.78
+    }
+
+    private var hairlineColor: Color {
+        if isIdleNub { return Color.white.opacity(isHovering ? 0.22 : 0.10) }
+        return Color.white.opacity(isIdleBar ? 0.12 : 0.16)
+    }
+
+    private var shadowOpacity: Double {
+        if isIdleNub { return isHovering ? 0.28 : 0.10 }
+        if isIdleBar { return 0.22 }
+        return (isHovering || isExpanded) ? 0.55 : 0.34
+    }
+
+    /// Bottom padding that pins the island flush against the bottom of the panel envelope.
+    private var bottomSlack: CGFloat { IslandContentSizer.bottomSlack(screen: screen) }
     private var rowMetrics: IslandRowMetrics {
         IslandContentSizer.rowMetrics(screen: screen,
-                                      isHovering: coordinator.isHovering,
+                                      isHovering: isHovering,
                                       gestureProgress: coordinator.gestureProgress)
     }
-    private var drawShadow: Bool  { IslandGeometryProvider().shouldDrawShadow(for: screen) }
 
     // MARK: - Body
 
@@ -132,7 +180,6 @@ struct IslandContentView: View {
                 hitBox.onHoverChanged = { [weak coordinator] hovering in
                     coordinator?.handleHover(hovering)
                 }
-                // Deterministic teardown — .onDisappear is unreliable for borderless panels.
                 coordinator.teardownHook = { [weak coordinator] in
                     coordinator?.cancelHoverTask()
                 }
@@ -144,14 +191,14 @@ struct IslandContentView: View {
 
     private var rootBodyView: some View {
         VStack(spacing: 0) {
-            Color.clear.frame(height: topSlack)
-            islandBody
             Spacer(minLength: 0)
+            islandBody
+            Color.clear.frame(height: bottomSlack)
         }
-        // ← Atoll's key trick: barrier stops any morphKey spring from propagating to the
-        //   VStack frame, so the panel never jitters on state change.
+        // Atoll's key trick: barrier stops any morphKey spring from propagating to the
+        // VStack frame, so the panel never jitters on state change.
         .animation(nil, value: morphKey)
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
         .sensoryFeedback(.alignment, trigger: coordinator.hapticToken)
     }
 
@@ -164,19 +211,20 @@ struct IslandContentView: View {
             clock: clock,
             metrics: rowMetrics
         )
-        .frame(width: targetSize.width, height: targetSize.height, alignment: .top)
-        .background(Color.black)
+        .frame(width: targetSize.width, height: targetSize.height, alignment: .center)
+        .background(surface)
+        .overlay(pillShape.strokeBorder(hairlineColor, lineWidth: 0.75))
         .clipShape(pillShape)
         .compositingGroup()
         .shadow(
-            color: drawShadow
-                ? .black.opacity((isHovering || isExpanded) ? 0.6 : 0.22)
-                : .clear,
-            radius: 12, x: 0, y: 4
+            color: .black.opacity(shadowOpacity),
+            radius: isIdleNub ? 6 : (isIdleBar ? 10 : 18),
+            x: 0,
+            y: isIdleNub ? 2 : (isIdleBar ? 4 : 8)
         )
         // Springs live HERE — never on the root.
         .animation(activeSpring, value: morphKey)
-        .animation(hoverAnim, value: coordinator.isHovering)
+        .animation(hoverAnim, value: isHovering)
         .animation(.smooth, value: coordinator.gestureProgress)
         .frame(maxWidth: .infinity, alignment: .center)
         .contentShape(pillShape)
@@ -185,7 +233,7 @@ struct IslandContentView: View {
             Color.clear
                 .onAppear { updateHitBox(proxy) }
                 .onChange(of: targetSize) { updateHitBox(proxy) }
-                .onChange(of: topSlack)   { updateHitBox(proxy) }
+                .onChange(of: bottomSlack) { updateHitBox(proxy) }
         })
     }
 
@@ -193,8 +241,20 @@ struct IslandContentView: View {
 
     private func handleTap() {
         switch vm.capture {
+        case .idle:
+            // Tapping the nub opens the launcher row. Taps on the open row are ignored —
+            // the four action buttons own it, and a stray background click must not launch
+            // anything.
+            if vm.presentation == .peek {
+                coordinator.send(.expand)
+            }
         case .recording, .paused:
-            coordinator.send(isExpanded ? .collapse : .expand)
+            switch vm.presentation {
+            case .peek:     coordinator.send(.expand)   // peek → compact
+            case .compact:  coordinator.send(.expand)   // compact → expanded
+            case .expanded: coordinator.send(.collapse) // expanded → compact
+            default:        break
+            }
         default:
             break
         }
@@ -203,8 +263,8 @@ struct IslandContentView: View {
     // MARK: - Hit box
 
     /// Publishes two rects in the hosting view's TOP-LEFT origin space:
-    ///  - `rect`      the exact pill — the click-through boundary
-    ///  - `hoverRect` 24 pt wider / 6 pt taller, so hover is forgiving while clicks stay tight
+    ///  - `rect`      the exact pill — click-through boundary
+    ///  - `hoverRect` generously padded so the nub (10 pt tall) is still reachable
     ///
     /// `IslandContainerView` flips these into AppKit's bottom-left space before testing.
     private func updateHitBox(_ proxy: GeometryProxy? = nil) {
@@ -216,29 +276,46 @@ struct IslandContentView: View {
             return
         }
 
-        let originY: CGFloat
+        let originY: CGFloat  // top-left Y of the pill in the panel's SwiftUI coordinate space
         let centerX: CGFloat
+
         if let proxy {
             let frame = proxy.frame(in: .global)
             originY = frame.minY
             centerX = frame.midX
         } else {
-            originY = topSlack
-            centerX = IslandGeometryProvider().panelEnvelope(for: screen).width / 2
+            // Fallback before first layout: place pill at panel bottom minus bottomSlack.
+            let envH = IslandGeometryProvider().panelEnvelope(for: screen).height
+            originY  = envH - bottomSlack - size.height
+            centerX  = IslandGeometryProvider().panelEnvelope(for: screen).width / 2
         }
 
         let pillX = centerX - size.width / 2
-        hitBox.rect = NSRect(x: pillX, y: originY, width: size.width, height: size.height)
-        hitBox.hoverRect = NSRect(x: pillX - 12, y: originY - 3,
-                                  width: size.width + 24, height: size.height + 6)
 
-        // Screen-space span, used by the top-edge hover-retention test.
+        hitBox.rect = NSRect(x: pillX, y: originY, width: size.width, height: size.height)
+
+        // Hover rect: for the nub, pad generously upward (the target is only 10 pt tall).
+        // For compact/expanded the standard ±12/±3 is fine.
+        let hPad: CGFloat = isPeek ? 40 : 12
+        let vPadUp: CGFloat = isPeek ? 22 : 3
+        let vPadDown: CGFloat = 3
+        hitBox.hoverRect = NSRect(
+            x:      pillX  - hPad,
+            y:      originY - vPadUp,
+            width:  size.width + hPad * 2,
+            height: size.height + vPadUp + vPadDown
+        )
+
+        // Screen-space span, used by the bottom-edge hover-retention test.
         let envelope = IslandGeometryProvider().panelEnvelope(for: screen)
+        // Convert from SwiftUI top-left space to AppKit bottom-left:
+        // AppKit Y = envelope.height - (swiftUI_originY + height)
+        let appKitY = envelope.origin.y + (envelope.height - (originY + size.height))
         coordinator.hoverRectOnScreen = NSRect(
-            x: envelope.minX + pillX - 12,
-            y: envelope.maxY - originY - size.height - 3,
-            width: size.width + 24,
-            height: size.height + 6
+            x:      envelope.origin.x + pillX - hPad,
+            y:      appKitY - vPadDown,
+            width:  size.width + hPad * 2,
+            height: size.height + vPadUp + vPadDown
         )
     }
 }

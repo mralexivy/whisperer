@@ -15,211 +15,232 @@ final class IslandGeometryTests: XCTestCase {
 
     // MARK: - Helpers
 
-    /// A 2560×1600 non-retina notchless display at origin zero.
-    private var notchlessScreen: ScreenDescription {
+    /// A 2560×1600 non-retina display at origin zero, with a typical Dock/menu-bar inset.
+    private var standardScreen: ScreenDescription {
         ScreenDescription(
             frame: NSRect(x: 0, y: 0, width: 2560, height: 1600),
-            visibleFrame: NSRect(x: 0, y: 0, width: 2560, height: 1537),  // 63pt menu bar
-            safeAreaTopInset: 0,
-            auxiliaryTopLeft: nil,
-            auxiliaryTopRight: nil,
+            visibleFrame: NSRect(x: 0, y: 23, width: 2560, height: 1480),  // Dock on bottom, menu top
             backingScale: 2
         )
     }
 
-    /// A 3456×2234 Liquid Retina XDR (16" MBP) with a notch (N ≈ 250pt, T = 32pt).
-    private var notchedScreen: ScreenDescription {
+    /// A 1920×1080 screen with no Dock inset.
+    private var hdScreen: ScreenDescription {
         ScreenDescription(
-            frame: NSRect(x: 0, y: 0, width: 1728, height: 1117),   // logical points @2x
-            visibleFrame: NSRect(x: 0, y: 0, width: 1728, height: 1085),
-            safeAreaTopInset: 32,
-            auxiliaryTopLeft:  NSRect(x: 0,    y: 1085, width: 739,  height: 32),
-            auxiliaryTopRight: NSRect(x: 989,  y: 1085, width: 739,  height: 32),
+            frame: NSRect(x: 0, y: 0, width: 1920, height: 1080),
+            visibleFrame: NSRect(x: 0, y: 0, width: 1920, height: 1080),
             backingScale: 2
         )
     }
 
-    /// A display at a negative origin (multi-display left of primary).
+    /// A display at a negative origin (multi-display to the left of primary).
     private var negativeOriginScreen: ScreenDescription {
         ScreenDescription(
             frame: NSRect(x: -1920, y: 0, width: 1920, height: 1200),
-            visibleFrame: NSRect(x: -1920, y: 0, width: 1920, height: 1137),
-            safeAreaTopInset: 0,
-            auxiliaryTopLeft: nil,
-            auxiliaryTopRight: nil,
+            visibleFrame: NSRect(x: -1920, y: 23, width: 1920, height: 1100),
             backingScale: 1
         )
     }
 
-    /// A very narrow display (e.g. a USB-C monitor at 800pt wide).
+    /// Very narrow display (e.g. a small USB-C monitor at 500 pt wide).
     private var narrowScreen: ScreenDescription {
         ScreenDescription(
-            frame: NSRect(x: 0, y: 0, width: 800, height: 600),
-            visibleFrame: NSRect(x: 0, y: 0, width: 800, height: 537),
-            safeAreaTopInset: 0,
-            auxiliaryTopLeft: nil,
-            auxiliaryTopRight: nil,
+            frame: NSRect(x: 0, y: 0, width: 500, height: 600),
+            visibleFrame: NSRect(x: 0, y: 23, width: 500, height: 537),
             backingScale: 1
         )
     }
 
-    // MARK: - Notch detection
+    // MARK: - All frames share the same bottom anchor
 
-    func testNotchDetected() {
-        XCTAssertNotNil(geo.notchGeometry(for: notchedScreen))
+    func testPeekFrameBottomAnchoredToVisibleFrameMinY() {
+        let screen = standardScreen
+        let frame  = geo.peekFrame(for: screen)
+        XCTAssertEqual(frame.minY, screen.visibleFrame.minY + IslandGeometryProvider.C.bottomInset, accuracy: 0.5)
     }
 
-    func testNotchlessNotDetected() {
-        XCTAssertNil(geo.notchGeometry(for: notchlessScreen))
-    }
-
-    func testMissingOneAuxiliaryFallsBack() {
-        var s = notchedScreen
-        s.auxiliaryTopLeft = nil
-        XCTAssertNil(geo.notchGeometry(for: s))
-    }
-
-    func testZeroInsetFallsBack() {
-        var s = notchedScreen
-        s.safeAreaTopInset = 0
-        XCTAssertNil(geo.notchGeometry(for: s))
-    }
-
-    func testNonPositiveExclusionFallsBack() {
-        var s = notchedScreen
-        // Make right.minX <= left.maxX
-        s.auxiliaryTopRight = NSRect(x: 700, y: 1085, width: 100, height: 32)
-        // left.maxX = 739, right.minX = 700 → N = -39
-        XCTAssertNil(geo.notchGeometry(for: s))
-    }
-
-    // MARK: - Notchless compact frame
-
-    func testNotchlessCompactDimensions() {
-        let frame = geo.compactFrame(for: notchlessScreen)
-        XCTAssertEqual(frame.width,  IslandGeometryProvider.C.notchlessCompactWidth,  accuracy: 0.5)
-        XCTAssertEqual(frame.height, IslandGeometryProvider.C.notchlessCompactHeight, accuracy: 0.5)
-    }
-
-    func testNotchlessCompactCenteredHorizontally() {
-        let screen = notchlessScreen
+    func testCompactFrameBottomAnchoredToVisibleFrameMinY() {
+        let screen = standardScreen
         let frame  = geo.compactFrame(for: screen)
-        let center = frame.midX
-        XCTAssertEqual(center, screen.frame.midX, accuracy: 1.0)
+        XCTAssertEqual(frame.minY, screen.visibleFrame.minY + IslandGeometryProvider.C.bottomInset, accuracy: 0.5)
     }
 
-    func testNotchlessCompactBelowVisibleTop() {
-        let screen = notchlessScreen
+    func testExpandedFrameBottomAnchoredToVisibleFrameMinY() {
+        let screen = standardScreen
+        let frame  = geo.expandedFrame(for: screen)
+        XCTAssertEqual(frame.minY, screen.visibleFrame.minY + IslandGeometryProvider.C.bottomInset, accuracy: 0.5)
+    }
+
+    // MARK: - Tiers grow upward (larger frames have a higher top edge)
+
+    func testCompactIsTallerThanPeek() {
+        let peek    = geo.peekFrame(for: standardScreen)
+        let compact = geo.compactFrame(for: standardScreen)
+        XCTAssertGreaterThan(compact.height, peek.height)
+        XCTAssertGreaterThan(compact.maxY, peek.maxY)
+    }
+
+    func testExpandedIsTallerThanCompact() {
+        let compact  = geo.compactFrame(for: standardScreen)
+        let expanded = geo.expandedFrame(for: standardScreen)
+        XCTAssertGreaterThan(expanded.height, compact.height)
+        XCTAssertGreaterThan(expanded.maxY, compact.maxY)
+    }
+
+    // MARK: - Horizontal centering
+
+    func testPeekFrameCenteredHorizontally() {
+        let screen = standardScreen
+        let frame  = geo.peekFrame(for: screen)
+        XCTAssertEqual(frame.midX, screen.frame.midX, accuracy: 1.0)
+    }
+
+    func testCompactFrameCenteredHorizontally() {
+        let screen = standardScreen
         let frame  = geo.compactFrame(for: screen)
-        let expectedMaxY = screen.visibleFrame.maxY - IslandGeometryProvider.C.notchlessGapFromTop
-        XCTAssertLessThanOrEqual(frame.maxY, expectedMaxY + 0.5)
+        XCTAssertEqual(frame.midX, screen.frame.midX, accuracy: 1.0)
     }
 
-    // MARK: - Notched compact frame
-
-    func testNotchedCompactWidth() {
-        guard let notch = geo.notchGeometry(for: notchedScreen) else {
-            return XCTFail("Expected notch")
-        }
-        let frame = geo.compactFrame(for: notchedScreen)
-        let expectedW = notch.exclusionWidth + IslandGeometryProvider.C.notchedWingWidth * 2
-        XCTAssertEqual(frame.width, expectedW, accuracy: 0.5)
+    func testExpandedFrameCenteredHorizontally() {
+        let screen = standardScreen
+        let frame  = geo.expandedFrame(for: screen)
+        XCTAssertEqual(frame.midX, screen.frame.midX, accuracy: 1.0)
     }
 
-    func testNotchedCompactAnchoredToTop() {
-        let frame = geo.compactFrame(for: notchedScreen)
-        // maxY sits at `topEdgeY` — the top of the screen PLUS the notch bleed, so the black
-        // body seals against the camera housing instead of stopping on the last pixel row.
-        XCTAssertEqual(frame.maxY, geo.topEdgeY(for: notchedScreen), accuracy: 0.5)
-        XCTAssertGreaterThan(frame.maxY, notchedScreen.frame.maxY)
+    // MARK: - Dimensions match constants
+
+    func testPeekFrameDimensions() {
+        let frame = geo.peekFrame(for: standardScreen)
+        XCTAssertEqual(frame.width,  IslandGeometryProvider.C.peekWidth,    accuracy: 0.5)
+        XCTAssertEqual(frame.height, IslandGeometryProvider.C.peekHeight,   accuracy: 0.5)
     }
 
-    func testNotchedCompactNothingBehindNotch() {
-        // The exclusion zone must not overlap the compact wing content area
-        guard let notch = geo.notchGeometry(for: notchedScreen) else { return XCTFail() }
-        let exclusion = NSRect(x: notch.exclusionMinX, y: 0,
-                               width: notch.exclusionWidth,
-                               height: notchedScreen.frame.height)
-        // The LEFT wing (0..exclusionMinX) should not intersect the exclusion zone in X
-        XCTAssertLessThanOrEqual(notch.leftWing.maxX, notch.exclusionMinX)
-        XCTAssertGreaterThanOrEqual(notch.rightWing.minX, notch.exclusionMaxX)
-        _ = exclusion // silence unused warning
+    func testCompactFrameDimensions() {
+        let frame = geo.compactFrame(for: standardScreen)
+        XCTAssertEqual(frame.width,  IslandGeometryProvider.C.compactWidth,  accuracy: 0.5)
+        XCTAssertEqual(frame.height, IslandGeometryProvider.C.compactHeight, accuracy: 0.5)
+    }
+
+    func testExpandedFrameDimensions() {
+        let frame = geo.expandedFrame(for: standardScreen)
+        XCTAssertEqual(frame.width,  IslandGeometryProvider.C.expandedWidth,  accuracy: 0.5)
+        XCTAssertEqual(frame.height, IslandGeometryProvider.C.expandedHeight, accuracy: 0.5)
+    }
+
+    // MARK: - Minimum horizontal clearance on narrow displays
+
+    func testNarrowDisplayPeekClamped() {
+        let screen = narrowScreen
+        let frame  = geo.peekFrame(for: screen)
+        let clr    = IslandGeometryProvider.C.minHClearance
+        XCTAssertGreaterThanOrEqual(frame.minX - screen.frame.minX, clr - 1)
+        XCTAssertGreaterThanOrEqual(screen.frame.maxX - frame.maxX, clr - 1)
+    }
+
+    func testNarrowDisplayCompactClamped() {
+        let screen = narrowScreen
+        let frame  = geo.compactFrame(for: screen)
+        let clr    = IslandGeometryProvider.C.minHClearance
+        XCTAssertGreaterThanOrEqual(frame.minX - screen.frame.minX, clr - 1)
+        XCTAssertGreaterThanOrEqual(screen.frame.maxX - frame.maxX, clr - 1)
+    }
+
+    // MARK: - Panel envelope contains all tiers
+
+    func testPanelEnvelopeContainsPeekFrame() {
+        let env  = geo.panelEnvelope(for: standardScreen)
+        let peek = geo.peekFrame(for: standardScreen)
+        XCTAssertTrue(env.contains(peek))
+    }
+
+    func testPanelEnvelopeContainsCompactFrame() {
+        let env     = geo.panelEnvelope(for: standardScreen)
+        let compact = geo.compactFrame(for: standardScreen)
+        XCTAssertTrue(env.contains(compact))
+    }
+
+    func testPanelEnvelopeContainsExpandedFrame() {
+        let env      = geo.panelEnvelope(for: standardScreen)
+        let expanded = geo.expandedFrame(for: standardScreen)
+        XCTAssertTrue(env.contains(expanded))
+    }
+
+    func testPanelEnvelopeDoesNotExceedVisibleFrame() {
+        let screen = standardScreen
+        let env    = geo.panelEnvelope(for: screen)
+        XCTAssertGreaterThanOrEqual(env.minX, screen.visibleFrame.minX - 1)
+        XCTAssertLessThanOrEqual(env.maxX,    screen.visibleFrame.maxX + 1)
+        XCTAssertGreaterThanOrEqual(env.minY, screen.visibleFrame.minY - 1)
+        XCTAssertLessThanOrEqual(env.maxY,    screen.visibleFrame.maxY + 1)
+    }
+
+    // MARK: - Local (panel-relative) frames
+
+    func testLocalPeekFrameIsOffsetFromGlobal() {
+        let env    = geo.panelEnvelope(for: standardScreen)
+        let global = geo.peekFrame(for: standardScreen)
+        let local  = geo.localPeekFrame(for: standardScreen)
+        XCTAssertEqual(local.origin.x, global.origin.x - env.origin.x, accuracy: 0.5)
+        XCTAssertEqual(local.origin.y, global.origin.y - env.origin.y, accuracy: 0.5)
+    }
+
+    func testLocalCompactFrameIsOffsetFromGlobal() {
+        let env    = geo.panelEnvelope(for: standardScreen)
+        let global = geo.compactFrame(for: standardScreen)
+        let local  = geo.localCompactFrame(for: standardScreen)
+        XCTAssertEqual(local.origin.x, global.origin.x - env.origin.x, accuracy: 0.5)
+        XCTAssertEqual(local.origin.y, global.origin.y - env.origin.y, accuracy: 0.5)
     }
 
     // MARK: - Negative-origin display
 
-    func testNegativeOriginCompactInsideScreen() {
+    func testNegativeOriginDisplayFramesAreInsideScreen() {
+        let screen  = negativeOriginScreen
+        let compact = geo.compactFrame(for: screen)
+        XCTAssertGreaterThanOrEqual(compact.minX, screen.frame.minX)
+        XCTAssertLessThanOrEqual(compact.maxX, screen.frame.maxX)
+    }
+
+    func testNegativeOriginDisplayBottomAnchor() {
         let screen = negativeOriginScreen
         let frame  = geo.compactFrame(for: screen)
-        XCTAssertGreaterThanOrEqual(frame.minX, screen.frame.minX)
-        XCTAssertLessThanOrEqual(frame.maxX, screen.frame.maxX)
+        XCTAssertEqual(frame.minY, screen.visibleFrame.minY + IslandGeometryProvider.C.bottomInset, accuracy: 0.5)
     }
 
-    // MARK: - Narrow display clamping
+    // MARK: - Shadow always drawn
 
-    func testNarrowDisplayMinClearance() {
-        let screen = narrowScreen
-        let frame  = geo.compactFrame(for: screen)
-        let minClearance = IslandGeometryProvider.C.notchlessMinHClearance
-        XCTAssertGreaterThanOrEqual(frame.minX - screen.frame.minX, minClearance - 1)
-        XCTAssertGreaterThanOrEqual(screen.frame.maxX - frame.maxX, minClearance - 1)
+    func testShadowAlwaysDrawn() {
+        XCTAssertTrue(geo.shouldDrawShadow(for: standardScreen))
+        XCTAssertTrue(geo.shouldDrawShadow(for: narrowScreen))
+        XCTAssertTrue(geo.shouldDrawShadow(for: negativeOriginScreen))
     }
 
-    // MARK: - Expanded frame top edge pinned to compact top edge
+    // MARK: - Corner radii
 
-    func testNotchlessExpandedTopEdgePinnedToCompact() {
-        let compact  = geo.compactFrame(for: notchlessScreen)
-        let expanded = geo.expandedFrame(for: notchlessScreen)
-        XCTAssertEqual(expanded.maxY, compact.maxY, accuracy: 0.5)
+    func testPeekIsATrueCapsule() {
+        let r = geo.cornerRadii(for: .peek)
+        XCTAssertEqual(r.topLeading, IslandGeometryProvider.C.peekRadius)
+        XCTAssertEqual(r.bottomLeading, r.topLeading,
+                       "The nub floats above the screen edge, so it is a full capsule")
+        XCTAssertEqual(r.topLeading, IslandGeometryProvider.C.peekHeight / 2, accuracy: 0.01)
     }
 
-    func testNotchedExpandedTopEdgePinnedToCompact() {
-        let compact  = geo.compactFrame(for: notchedScreen)
-        let expanded = geo.expandedFrame(for: notchedScreen)
-        XCTAssertEqual(expanded.maxY, compact.maxY, accuracy: 0.5)
+    /// The nub floats clear of the Dock rather than being glued to the screen edge.
+    func testFramesFloatAboveTheVisibleFrameBottom() {
+        XCTAssertGreaterThan(IslandGeometryProvider.C.bottomInset, 0)
+        XCTAssertGreaterThan(geo.peekFrame(for: standardScreen).minY,
+                             standardScreen.visibleFrame.minY)
     }
 
-    // MARK: - Panel envelope contains all states
-
-    func testPanelEnvelopeContainsCompact() {
-        let env     = geo.panelEnvelope(for: notchlessScreen)
-        let compact = geo.compactFrame(for: notchlessScreen)
-        XCTAssertTrue(env.contains(compact))
+    func testCompactIsFullPill() {
+        let r = geo.cornerRadii(for: .compact)
+        XCTAssertEqual(r.topLeading, r.bottomLeading)
+        XCTAssertEqual(r.topLeading, IslandGeometryProvider.C.compactRadius)
     }
 
-    func testPanelEnvelopeContainsExpanded() {
-        let env      = geo.panelEnvelope(for: notchlessScreen)
-        let expanded = geo.expandedFrame(for: notchlessScreen)
-        XCTAssertTrue(env.contains(expanded))
-    }
-
-    func testPanelEnvelopeWithinScreen() {
-        let screen = notchedScreen
-        let env    = geo.panelEnvelope(for: screen)
-        XCTAssertGreaterThanOrEqual(env.minX, screen.frame.minX - 1)
-        XCTAssertLessThanOrEqual(env.maxX, screen.frame.maxX + 1)
-        XCTAssertGreaterThanOrEqual(env.minY, screen.frame.minY - 1)
-        // The top is clamped to `topEdgeY`, not `frame.maxY` — the bleed is intentional.
-        XCTAssertLessThanOrEqual(env.maxY, geo.topEdgeY(for: screen) + 1)
-    }
-
-    // MARK: - Shadow eligibility
-
-    func testShadowNotDrawnOnNotchedDisplay() {
-        XCTAssertFalse(geo.shouldDrawShadow(for: notchedScreen))
-    }
-
-    func testShadowDrawnOnNotchlessDisplay() {
-        XCTAssertTrue(geo.shouldDrawShadow(for: notchlessScreen))
-    }
-
-    // MARK: - Status capsule width
-
-    func testStatusCapsuleWidthDoesNotExceedScreen() {
-        let w = geo.statusCapsuleWidth(for: narrowScreen)
-        XCTAssertLessThanOrEqual(
-            w,
-            narrowScreen.frame.width - IslandGeometryProvider.C.notchlessMinHClearance * 2 + 1
-        )
+    func testExpandedIsFullPill() {
+        let r = geo.cornerRadii(for: .expanded)
+        XCTAssertEqual(r.topLeading, r.bottomLeading)
+        XCTAssertEqual(r.topLeading, IslandGeometryProvider.C.expandedRadius)
     }
 }

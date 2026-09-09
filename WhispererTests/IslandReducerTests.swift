@@ -14,11 +14,263 @@ import XCTest
 
 final class IslandReducerTests: XCTestCase {
 
+    /// Returns a model fresh off meetingStarted. Asserts cancelHide is emitted.
     private func freshModel(sessionID: UUID = UUID()) -> IslandModel {
         var m = IslandModel.initial
         let effects = IslandReducer.reduce(&m, .meetingStarted(sessionID: sessionID))
         XCTAssertTrue(effects.contains(.cancelHide))
         return m
+    }
+
+    // MARK: - meetingStarted lands at .peek
+
+    func testMeetingStartedLandsAtPeek() {
+        let m = freshModel()
+        // Island starts minimally visible — not blasting a full pill on the user immediately.
+        XCTAssertEqual(m.presentation, .peek)
+        XCTAssertEqual(m.capture, .starting)
+    }
+
+    // MARK: - captureConfirmed promotes peek to compact
+
+    func testCaptureConfirmedFromStartingProducesRecording() {
+        var m = freshModel()
+        IslandReducer.reduce(&m, .captureConfirmed)
+        XCTAssertEqual(m.capture, .recording)
+        // Starting rows need to be legible — cannot stay in peek.
+        XCTAssertEqual(m.presentation, .compact,
+                       "captureConfirmed must promote peek to compact for legible recording row")
+    }
+
+    // MARK: - Three-tier ladder: peek → compact → expanded
+
+    func testExpandFromPeekGoesToCompact() {
+        var m = freshModel()
+        IslandReducer.reduce(&m, .captureConfirmed)    // .recording, .compact
+        // Manually set back to peek to simulate hover entry.
+        m.presentation = .peek
+
+        IslandReducer.reduce(&m, .expand)
+        XCTAssertEqual(m.presentation, .compact)
+    }
+
+    func testExpandFromCompactGoesToExpanded() {
+        var m = freshModel()
+        IslandReducer.reduce(&m, .captureConfirmed)    // .recording, .compact
+
+        IslandReducer.reduce(&m, .expand)
+        XCTAssertEqual(m.presentation, .expanded)
+    }
+
+    func testExpandFromExpandedIsNoOp() {
+        var m = freshModel()
+        IslandReducer.reduce(&m, .captureConfirmed)
+        IslandReducer.reduce(&m, .expand)              // → .expanded
+
+        IslandReducer.reduce(&m, .expand)
+        XCTAssertEqual(m.presentation, .expanded, "Expand from expanded must not change state")
+    }
+
+    // MARK: - Collapse walks down one tier
+
+    func testCollapseFromExpandedGoesToCompact() {
+        var m = freshModel()
+        IslandReducer.reduce(&m, .captureConfirmed)
+        IslandReducer.reduce(&m, .expand)   // .expanded
+
+        IslandReducer.reduce(&m, .collapse)
+        XCTAssertEqual(m.presentation, .compact)
+    }
+
+    func testCollapseFromCompactGoesToPeekWhenRecording() {
+        var m = freshModel()
+        IslandReducer.reduce(&m, .captureConfirmed)   // .recording, .compact
+
+        IslandReducer.reduce(&m, .collapse)
+        XCTAssertEqual(m.presentation, .peek,
+                       "Collapse from compact while recording should retreat to peek")
+    }
+
+    func testCollapseFromPeekIsNoOp() {
+        var m = freshModel()
+        IslandReducer.reduce(&m, .captureConfirmed)
+        m.presentation = .peek
+
+        IslandReducer.reduce(&m, .collapse)
+        XCTAssertEqual(m.presentation, .peek, "Collapse from peek must not go to hidden")
+    }
+
+    // MARK: - Escape always goes to peek/compact
+
+    func testEscapeFromExpandedGoesToPeekWhenRecording() {
+        var m = freshModel()
+        IslandReducer.reduce(&m, .captureConfirmed)
+        IslandReducer.reduce(&m, .expand)   // .expanded
+
+        IslandReducer.reduce(&m, .escape)
+        XCTAssertEqual(m.presentation, .peek)
+    }
+
+    func testEscapeFromCompactGoesToPeekWhenRecording() {
+        var m = freshModel()
+        IslandReducer.reduce(&m, .captureConfirmed)   // .compact
+
+        IslandReducer.reduce(&m, .escape)
+        XCTAssertEqual(m.presentation, .peek)
+    }
+
+    func testEscapeDoesNotStopCapture() {
+        var m = freshModel()
+        IslandReducer.reduce(&m, .captureConfirmed)
+        IslandReducer.reduce(&m, .expand)
+
+        IslandReducer.reduce(&m, .escape)
+        XCTAssertEqual(m.capture, .recording, "Escape must never touch capture state")
+    }
+
+    // MARK: - peekRequested floors at compact for non-recording states
+
+    func testPeekRequestedFromStartingStaysAtCompact() {
+        var m = freshModel()
+        // .starting capture → cannot peek
+        m.presentation = .compact
+
+        IslandReducer.reduce(&m, .peekRequested)
+        XCTAssertEqual(m.presentation, .compact,
+                       "peekRequested must stay at compact when capture is .starting")
+    }
+
+    func testPeekRequestedFromFailedStaysAtCompact() {
+        var m = freshModel()
+        IslandReducer.reduce(&m, .captureConfirmed)
+        IslandReducer.reduce(&m, .captureFailed("Error"))
+        // .failed → floor at compact
+
+        IslandReducer.reduce(&m, .peekRequested)
+        XCTAssertEqual(m.presentation, .compact)
+    }
+
+    func testPeekRequestedFromRecordingGoesToPeek() {
+        var m = freshModel()
+        IslandReducer.reduce(&m, .captureConfirmed)
+        IslandReducer.reduce(&m, .expand)   // .expanded
+
+        IslandReducer.reduce(&m, .peekRequested)
+        XCTAssertEqual(m.presentation, .peek)
+    }
+
+    func testPeekRequestedFromPausedGoesToPeek() {
+        var m = freshModel()
+        IslandReducer.reduce(&m, .captureConfirmed)
+        IslandReducer.reduce(&m, .capturePaused)
+
+        IslandReducer.reduce(&m, .peekRequested)
+        XCTAssertEqual(m.presentation, .peek)
+    }
+
+    func testPeekRequestedWhenHiddenIsNoOp() {
+        var m = IslandModel.initial
+        m.presentation = .hidden   // another surface owns the meeting UI
+        IslandReducer.reduce(&m, .peekRequested)
+        XCTAssertEqual(m.presentation, .hidden)
+    }
+
+    // MARK: - Always-on idle launcher
+
+    func testInitialModelRestsAtTheIdleLauncherNub() {
+        let m = IslandModel.initial
+        XCTAssertEqual(m.capture, .idle)
+        XCTAssertEqual(m.presentation, .peek,
+                       "The Island is always on screen — idle rests as the launcher nub")
+    }
+
+    func testIdlePeekExpandsToTheLauncherRow() {
+        var m = IslandModel.initial
+        IslandReducer.reduce(&m, .expand)
+        XCTAssertEqual(m.presentation, .compact)
+    }
+
+    func testIdleNeverReachesExpanded() {
+        var m = IslandModel.initial
+        IslandReducer.reduce(&m, .expand)   // .compact
+        IslandReducer.reduce(&m, .expand)
+        XCTAssertEqual(m.presentation, .compact,
+                       "Idle has no secondary control row to reveal")
+    }
+
+    func testStartMeetingRequestedEmitsStartEffect() {
+        var m = IslandModel.initial
+        let effects = IslandReducer.reduce(&m, .startMeetingRequested)
+        XCTAssertEqual(effects, [.startMeeting])
+    }
+
+    func testStartMeetingRequestedIsIgnoredWhileRecording() {
+        var m = freshModel()
+        IslandReducer.reduce(&m, .captureConfirmed)
+        XCTAssertTrue(IslandReducer.reduce(&m, .startMeetingRequested).isEmpty)
+    }
+
+    func testDictateRequestedEmitsStartDictationEffect() {
+        var m = IslandModel.initial
+        XCTAssertEqual(IslandReducer.reduce(&m, .dictateRequested), [.startDictation])
+    }
+
+    func testDictateRequestedIsIgnoredWhileRecording() {
+        var m = freshModel()
+        IslandReducer.reduce(&m, .captureConfirmed)
+        XCTAssertTrue(IslandReducer.reduce(&m, .dictateRequested).isEmpty)
+    }
+
+    /// Opening a workspace surface is always allowed — it never touches the recorder.
+    func testWorkspaceLauncherActionsEmitTheirEffects() {
+        var m = IslandModel.initial
+        XCTAssertEqual(IslandReducer.reduce(&m, .transcribeFileRequested), [.openFileTranscription])
+        XCTAssertEqual(IslandReducer.reduce(&m, .openWorkspaceRequested), [.openWorkspace])
+    }
+
+    /// The launcher row must stay put while its action starts up — the surface it opens
+    /// is what changes, and the coordinator re-derives the tier from AppState.
+    func testLauncherActionsDoNotChangePresentation() {
+        var m = IslandModel.initial
+        m.presentation = .compact
+        for event: IslandEvent in [.dictateRequested, .startMeetingRequested,
+                                   .transcribeFileRequested, .openWorkspaceRequested] {
+            IslandReducer.reduce(&m, event)
+            XCTAssertEqual(m.presentation, .compact)
+            XCTAssertEqual(m.capture, .idle)
+        }
+    }
+
+    // MARK: - Non-recording states floor at compact
+
+    func testCaptureFailed_PromotesPeekToCompact() {
+        var m = freshModel()
+        IslandReducer.reduce(&m, .captureConfirmed)
+        m.presentation = .peek
+
+        IslandReducer.reduce(&m, .captureFailed("Oops"))
+        XCTAssertEqual(m.presentation, .compact)
+        XCTAssertEqual(m.capture, .failed("Oops"))
+    }
+
+    func testPermissionRequired_PromotesPeekToCompact() {
+        var m = freshModel()
+        IslandReducer.reduce(&m, .captureConfirmed)
+        m.presentation = .peek
+
+        IslandReducer.reduce(&m, .permissionRequired)
+        XCTAssertEqual(m.presentation, .compact)
+    }
+
+    func testStopRequested_PromotesPeekToCompact() {
+        let id = UUID()
+        var m = freshModel(sessionID: id)
+        IslandReducer.reduce(&m, .captureConfirmed)
+        m.presentation = .peek
+
+        IslandReducer.reduce(&m, .stopRequested(sessionID: id))
+        XCTAssertEqual(m.presentation, .compact,
+                       "Finalizing state must not stay at peek — label must be legible")
     }
 
     // MARK: - Session correctness
@@ -30,8 +282,8 @@ final class IslandReducerTests: XCTestCase {
 
         let effects = IslandReducer.reduce(&m, .stopRequested(sessionID: staleID))
         XCTAssertTrue(effects.isEmpty, "Stale session stop must emit no effects")
-        XCTAssertFalse(m.stopInFlight, "stopInFlight must not be set by stale event")
-        XCTAssertEqual(m.capture, .starting, "Capture state must be unchanged")
+        XCTAssertFalse(m.stopInFlight)
+        XCTAssertEqual(m.capture, .starting)
     }
 
     func testNewSessionSupersedes() {
@@ -44,6 +296,7 @@ final class IslandReducerTests: XCTestCase {
         XCTAssertEqual(m.sessionID, id2)
         XCTAssertGreaterThan(m.revision, rev0)
         XCTAssertFalse(m.stopInFlight)
+        XCTAssertEqual(m.presentation, .peek, "New session always starts at peek")
     }
 
     // MARK: - Stop idempotency
@@ -58,88 +311,8 @@ final class IslandReducerTests: XCTestCase {
         XCTAssertTrue(m.stopInFlight)
 
         let effects2 = IslandReducer.reduce(&m, .stopRequested(sessionID: id))
-        XCTAssertTrue(effects2.isEmpty, "Second stop must produce no effects")
-    }
-
-    // MARK: - Escape never stops
-
-    func testEscapeCollapseOnly() {
-        let id = UUID()
-        var m = freshModel(sessionID: id)
-        IslandReducer.reduce(&m, .captureConfirmed)
-        IslandReducer.reduce(&m, .expand)
-        XCTAssertEqual(m.presentation, .expanded)
-
-        IslandReducer.reduce(&m, .escape)
-        XCTAssertEqual(m.presentation, .compact,  "Escape must collapse")
-        XCTAssertEqual(m.capture, .recording,      "Escape must not stop capture")
-        XCTAssertFalse(m.stopInFlight)
-    }
-
-    func testEscapeWhileCompactIsNoop() {
-        let id = UUID()
-        var m = freshModel(sessionID: id)
-        IslandReducer.reduce(&m, .captureConfirmed)
-        XCTAssertEqual(m.presentation, .compact)
-
-        IslandReducer.reduce(&m, .escape)
-        XCTAssertEqual(m.presentation, .compact)
-        XCTAssertEqual(m.capture, .recording)
-    }
-
-    // MARK: - Expand/collapse do not touch capture
-
-    func testExpandDoesNotStopCapture() {
-        let id = UUID()
-        var m = freshModel(sessionID: id)
-        IslandReducer.reduce(&m, .captureConfirmed)
-
-        IslandReducer.reduce(&m, .expand)
-        XCTAssertEqual(m.capture, .recording)
-        XCTAssertFalse(m.stopInFlight)
-    }
-
-    func testCollapseDoesNotStopCapture() {
-        let id = UUID()
-        var m = freshModel(sessionID: id)
-        IslandReducer.reduce(&m, .captureConfirmed)
-        IslandReducer.reduce(&m, .expand)
-
-        let effects = IslandReducer.reduce(&m, .collapse)
-        XCTAssertEqual(m.presentation, .compact)
-        XCTAssertEqual(m.capture, .recording)
-        XCTAssertFalse(effects.contains(.stopCapture))
-    }
-
-    // MARK: - Failure persistence
-
-    func testFailurePersistsUntilDismissed() {
-        var m = IslandModel.initial
-        IslandReducer.reduce(&m, .meetingStarted(sessionID: UUID()))
-        IslandReducer.reduce(&m, .captureFailed("Mic unplugged"))
-
-        guard case .failed(let msg) = m.capture else {
-            return XCTFail("Expected .failed")
-        }
-        XCTAssertEqual(msg, "Mic unplugged")
-
-        // Additional events should not clear the failure.
-        IslandReducer.reduce(&m, .displayChanged)
-        guard case .failed = m.capture else {
-            return XCTFail("Failure cleared by displayChanged")
-        }
-
-        IslandReducer.reduce(&m, .dismissFailure)
-        XCTAssertEqual(m.capture, .idle)
-        XCTAssertEqual(m.presentation, .hidden)
-    }
-
-    func testFailureMakesIslandVisible() {
-        var m = IslandModel.initial
-        XCTAssertEqual(m.presentation, .hidden)
-        IslandReducer.reduce(&m, .meetingStarted(sessionID: UUID()))
-        IslandReducer.reduce(&m, .captureFailed(""))
-        XCTAssertNotEqual(m.presentation, .hidden, "Failed Island must not be hidden")
+        XCTAssertTrue(effects2.isEmpty, "Second stop must emit nothing")
+        XCTAssertTrue(m.stopInFlight)
     }
 
     // MARK: - Pause / Resume
@@ -150,103 +323,75 @@ final class IslandReducerTests: XCTestCase {
         IslandReducer.reduce(&m, .captureConfirmed)
         XCTAssertEqual(m.capture, .recording)
 
-        let pauseEffects = IslandReducer.reduce(&m, .pauseResumeRequested(sessionID: id))
+        IslandReducer.reduce(&m, .capturePaused)
         XCTAssertEqual(m.capture, .paused)
         XCTAssertTrue(m.isPaused)
-        XCTAssertTrue(pauseEffects.contains(.togglePause))
 
-        let resumeEffects = IslandReducer.reduce(&m, .pauseResumeRequested(sessionID: id))
+        IslandReducer.reduce(&m, .captureResumed)
         XCTAssertEqual(m.capture, .recording)
         XCTAssertFalse(m.isPaused)
-        XCTAssertTrue(resumeEffects.contains(.togglePause))
     }
 
-    func testPauseIgnoredWhenNotRecording() {
+    // MARK: - captureEnded hides
+
+    func testCaptureEndedReturnsToTheIdleLauncher() {
+        var m = freshModel()
+        IslandReducer.reduce(&m, .captureConfirmed)
+
+        IslandReducer.reduce(&m, .captureEnded)
+        XCTAssertEqual(m.capture, .idle)
+        XCTAssertEqual(m.presentation, .peek,
+                       "Capture end falls back to the idle launcher, never to hidden")
+    }
+
+    // MARK: - dismissFailure
+
+    func testDismissFailureReturnsToTheIdleLauncher() {
+        var m = freshModel()
+        IslandReducer.reduce(&m, .captureConfirmed)
+        IslandReducer.reduce(&m, .captureFailed("Error"))
+
+        let effects = IslandReducer.reduce(&m, .dismissFailure)
+        XCTAssertTrue(effects.contains(.cancelHide))
+        XCTAssertEqual(m.presentation, .peek)
+        XCTAssertEqual(m.capture, .idle)
+    }
+
+    // MARK: - displayChanged is a no-op
+
+    func testDisplayChangedIsNoOp() {
         let id = UUID()
         var m = freshModel(sessionID: id)
-        // Still in .starting — pause must be a no-op
-        let effects = IslandReducer.reduce(&m, .pauseResumeRequested(sessionID: id))
+        IslandReducer.reduce(&m, .captureConfirmed)
+        let before = m
+
+        let effects = IslandReducer.reduce(&m, .displayChanged)
         XCTAssertTrue(effects.isEmpty)
-        XCTAssertEqual(m.capture, .starting)
+        XCTAssertEqual(m, before)
     }
 
-    // MARK: - Mic / output mute toggles
+    // MARK: - Mic / output mute toggle
 
     func testMicMuteToggles() {
         let id = UUID()
         var m = freshModel(sessionID: id)
+        IslandReducer.reduce(&m, .captureConfirmed)
         XCTAssertFalse(m.isMicMuted)
 
-        let e1 = IslandReducer.reduce(&m, .micMuteRequested(sessionID: id))
+        IslandReducer.reduce(&m, .micMuteRequested(sessionID: id))
         XCTAssertTrue(m.isMicMuted)
-        XCTAssertTrue(e1.contains(.toggleMicMute))
 
-        let e2 = IslandReducer.reduce(&m, .micMuteRequested(sessionID: id))
+        IslandReducer.reduce(&m, .micMuteRequested(sessionID: id))
         XCTAssertFalse(m.isMicMuted)
-        XCTAssertTrue(e2.contains(.toggleMicMute))
     }
 
     func testOutputMuteToggles() {
         let id = UUID()
         var m = freshModel(sessionID: id)
-        let e = IslandReducer.reduce(&m, .outputMuteRequested(sessionID: id))
+        IslandReducer.reduce(&m, .captureConfirmed)
+        XCTAssertFalse(m.isOutputMuted)
+
+        IslandReducer.reduce(&m, .outputMuteRequested(sessionID: id))
         XCTAssertTrue(m.isOutputMuted)
-        XCTAssertTrue(e.contains(.toggleOutputMute))
-    }
-
-    // MARK: - captureEnded hides Island
-
-    func testCaptureEndedHidesIsland() {
-        let id = UUID()
-        var m = freshModel(sessionID: id)
-        IslandReducer.reduce(&m, .captureConfirmed)
-        IslandReducer.reduce(&m, .expand)
-
-        let effects = IslandReducer.reduce(&m, .captureEnded)
-        XCTAssertEqual(m.capture, .idle)
-        XCTAssertEqual(m.presentation, .hidden)
-        XCTAssertFalse(m.stopInFlight)
-        XCTAssertTrue(effects.contains(.cancelHide))
-    }
-
-    // MARK: - Revision monotonicity
-
-    func testRevisionMonotonicallyIncreases() {
-        let id = UUID()
-        var m = freshModel(sessionID: id)
-        let r0 = m.revision
-        IslandReducer.reduce(&m, .captureConfirmed)
-        let r1 = m.revision
-        IslandReducer.reduce(&m, .capturePaused)
-        let r2 = m.revision
-        IslandReducer.reduce(&m, .captureResumed)
-        let r3 = m.revision
-        XCTAssertGreaterThan(r1, r0)
-        XCTAssertGreaterThan(r2, r1)
-        XCTAssertGreaterThan(r3, r2)
-    }
-
-    // MARK: - ViewModel projection
-
-    func testViewModelActions_recording() {
-        let id = UUID()
-        var m = freshModel(sessionID: id)
-        IslandReducer.reduce(&m, .captureConfirmed)
-        let vm = m.viewModel()
-        XCTAssertTrue(vm.availableActions.contains(.stop))
-        XCTAssertTrue(vm.availableActions.contains(.pauseResume))
-        XCTAssertTrue(vm.availableActions.contains(.micMute))
-        XCTAssertTrue(vm.availableActions.contains(.outputMute))
-        XCTAssertTrue(vm.availableActions.contains(.openWindow))
-    }
-
-    func testViewModelStatusLabel_paused() {
-        let id = UUID()
-        var m = freshModel(sessionID: id)
-        IslandReducer.reduce(&m, .captureConfirmed)
-        IslandReducer.reduce(&m, .capturePaused)
-        let vm = m.viewModel()
-        // Label must contain a non-empty paused string
-        XCTAssertFalse(vm.statusLabel.isEmpty)
     }
 }

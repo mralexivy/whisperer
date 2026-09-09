@@ -25,6 +25,9 @@ struct IslandHoverButton: View {
     /// button plus padding does not fit.
     var diameter: CGFloat? = nil
     var iconColor: Color = IslandHoverButton.defaultColor
+    /// Colour the glyph animates to under the pointer. Set this when `iconColor` is
+    /// deliberately faint at rest, so the button still confirms it is live on hover.
+    var hoverIconColor: Color? = nil
     var action: () -> Void
 
     enum Scale { case small, large }
@@ -46,7 +49,7 @@ struct IslandHoverButton: View {
 
                     Image(systemName: icon)
                         .font(.system(size: iconSize, weight: .medium))
-                        .foregroundColor(iconColor)
+                        .foregroundColor(isHovering ? (hoverIconColor ?? iconColor) : iconColor)
                         .contentTransition(.symbolEffect(.replace))
                 }
                 .frame(width: size, height: size)

@@ -3,58 +3,74 @@
 //  Whisperer
 //
 //  Pure, nonisolated struct that maps (capture state, presentation, screen) → target geometry.
-//  This is Whisperer's equivalent of Atoll's `dynamicNotchSize` computed property and
-//  `getClosedNotchSize()` / `openNotchSize` helpers in matters.swift.
 //
-//  The island body springs to a different CGSize per active content type. Width changing
-//  per state is the entire "growing" illusion — a narrow "Starting…" capsule widens into
-//  the recording pill, then contracts into the "Finishing…" rule.
+//  Three presentation tiers, all bottom-anchored:
+//   - .peek     → capsule nub (plus hover swell)
+//   - .compact  → content-driven width × compactHeight pill
+//   - .expanded → compact + secondary control row
 //
-//  The IslandPanel frame stays at its fixed union envelope (IslandGeometryProvider.panelEnvelope);
-//  only the SwiftUI content frame moves, giving Atoll's morph without NSWindow resize jitter.
+//  The Island is always on screen: while idle it rests as a near-transparent launcher nub,
+//  which is deliberately smaller than the recording nub.
+//
+//  Sizes come from IslandGeometryProvider.C, which is nonisolated for exactly this reason.
 //
 
 import AppKit
 
-/// The horizontal zones of the compact row, mirroring Atoll's `RecordingLiveActivity` geometry.
+private typealias GC = IslandGeometryProvider.C
+
+/// The horizontal zones of the compact row.
+/// There is no center dead zone — the Island no longer has a notch to route around.
 nonisolated struct IslandRowMetrics: Equatable {
-    /// Camera-housing dead zone. Must stay empty. Zero on notchless displays.
-    var centerWidth: CGFloat
-    /// Leading badge wing — one square glyph, nothing more.
-    var leadingWidth: CGFloat
-    /// Height of the content inside the compact strip (housing height minus breathing room).
-    var rowHeight: CGFloat
-    /// Height of the whole compact strip — the housing height, so the island stays flush.
+    /// Height of the content inside the compact strip.
+    var rowHeight:     CGFloat
+    /// Height of the whole compact strip (the pill height).
     var compactHeight: CGFloat
-    /// Diameter for inline controls, scaled to the strip rather than fixed.
-    var controlSize: CGFloat
+    /// Diameter for inline controls, scaled to the strip.
+    var controlSize:   CGFloat
 }
 
 nonisolated struct IslandContentSizer {
 
-    // MARK: - Wing widths (Atoll `RecordingHUDPresentation.extraWidth`)
+    // MARK: - Content-driven widths for the compact row
 
-    /// Wing width added to the closed notch for the recording / paused row. Everything the
-    /// island shows lives in these wings — the center is the housing and is unusable.
-    static let recordingExtraWidth: CGFloat = 248
-    /// Wing width for the single-line status rows (starting, finishing).
-    static let statusExtraWidth: CGFloat = 210
-    /// Wing width for the permission / failure rows, which carry a longer message.
-    static let attentionExtraWidth: CGFloat = 260
-    /// Extra height added when expanded — the secondary control row. Atoll uses 70; ours is
-    /// taller because our secondary buttons are labelled.
+    /// Width for the recording / paused row (waveform + timer + controls).
+    /// Mirrors GC.compactWidth.
+    static let recordingWidth:   CGFloat = 420
+    /// Width for single-line status rows (starting, finishing).
+    static let statusWidth:      CGFloat = 280
+    /// Width for the permission / failure rows (longer message).
+    static let attentionWidth:   CGFloat = 340
+
+    // MARK: - Idle launcher
+
+    /// Resting launcher nub — deliberately smaller than the recording nub so an idle
+    /// Island reads as an affordance rather than as an active capture.
+    static let idlePeekWidth:    CGFloat = 104
+    static let idlePeekHeight:   CGFloat = 24
+    /// The launcher row the nub opens into: four bare 15 pt glyphs and a hairline divider.
+    /// Captions and large targets belong in the workspace — this is a bar, so it stays
+    /// SHORTER than the recording row rather than towering over it.
+    /// 4 × 28 (item) + 4 × 2 (spacing) + 11 (divider + its padding) + 2 × 8 (row padding).
+    static let idleCompactWidth:  CGFloat = 147
+    static let idleCompactHeight: CGFloat = 36
+    /// Width of one action in the launcher row — the glyph's hover capsule, nothing more.
+    /// Drives the glyph size too: `IslandHoverButton` renders it at half the diameter.
+    static let launcherItemWidth: CGFloat = 28
+
+    /// Extra height added when expanded — the secondary control row.
     static let expandedExtraHeight: CGFloat = 84
-    /// Extra width added when expanded (Atoll: 132 compact → 140 opened). The secondary row is
-    /// three 40 pt labelled buttons at 24 pt spacing, so the opened pill must be wider than the
-    /// compact one or the labels crush — and a morph that only grows downwards reads as a drawer
-    /// sliding out, not as the island opening.
-    static let expandedExtraWidth: CGFloat = 56
+    /// Extra width: GC.expandedWidth - GC.compactWidth = 56.
+    static let expandedExtraWidth:  CGFloat = 56
+
+    // MARK: - Hover lift for nub
+
+    /// How much the nub widens on hover — gives immediate tactile feedback before the dwell fires.
+    static let peekHoverLift: CGFloat = 30
 
     // MARK: - Target size
 
-    /// Atoll's `hudWidth` / `hudHeight`: the island is the closed notch **plus** wings, never a
-    /// fixed slab. That is what keeps the compact row flush with the housing on a notched Mac
-    /// and continuous (no dead center) on a notchless one.
+    /// The island springs to this CGSize per active content type.
     static func targetSize(
         capture: IslandCaptureState,
         presentation: IslandPresentation,
@@ -62,104 +78,99 @@ nonisolated struct IslandContentSizer {
         isHovering: Bool,
         gestureProgress: CGFloat
     ) -> CGSize {
-        guard presentation != .hidden, capture != .idle else { return .zero }
+        guard presentation != .hidden else { return .zero }
 
-        let closed = IslandGeometryProvider().closedNotchSize(for: screen)
-        let isExpanded = presentation == .expanded
-        // Hover widens the center by 8 pt (Atoll `centerWidth`); it does not change the height.
+        let isIdle = capture == .idle
+
+        // Peek tier: nub with optional hover swell.
+        if presentation == .peek {
+            let hoverExtra: CGFloat = isHovering ? peekHoverLift : 0
+            let stretchExtra: CGFloat = max(gestureProgress * 0.5, 0)
+            let base = isIdle ? idlePeekWidth : GC.peekWidth
+            let width = min(base + hoverExtra + stretchExtra,
+                            screen.frame.width - GC.minHClearance * 2)
+            return CGSize(width: width, height: isIdle ? idlePeekHeight : GC.peekHeight)
+        }
+
+        // Idle never reaches the expanded tier — it has no controls to reveal.
+        let isExpanded = presentation == .expanded && !isIdle
+
+        // Hover widens the compact row by 8 pt.
         let hoverLift: CGFloat = isHovering && !isExpanded ? 8 : 0
         let stretch: CGFloat = max(gestureProgress * 0.8, 0)
 
-        let extraW: CGFloat
+        let baseW: CGFloat
         switch capture {
-        case .idle:                        extraW = 0
-        case .starting, .finalizing:       extraW = statusExtraWidth
-        case .permissionRequired, .failed: extraW = attentionExtraWidth
-        case .recording, .paused:          extraW = recordingExtraWidth
+        case .idle:                        baseW = idleCompactWidth
+        case .starting, .finalizing:       baseW = statusWidth
+        case .permissionRequired, .failed: baseW = attentionWidth
+        case .recording, .paused:          baseW = recordingWidth
         }
 
-        var size = CGSize(
-            width:  closed.width + extraW + hoverLift + stretch
-                    + (isExpanded ? expandedExtraWidth : 0),
-            height: closed.height + (isExpanded ? expandedExtraHeight : 0)
+        let width = min(
+            baseW + hoverLift + stretch + (isExpanded ? expandedExtraWidth : 0),
+            screen.frame.width - GC.minHClearance * 2
         )
-        // Clamp to screen width with minimum side clearance, but never below the housing.
-        size.width = max(min(size.width, screen.frame.width - 32), closed.width)
-        return size
+        let height = compactHeight(for: capture) + (isExpanded ? expandedExtraHeight : 0)
+        return CGSize(width: max(width, 0), height: height)
     }
 
-    // MARK: - Row metrics (Atoll `leadingWidth` / `centerWidth` / `rowHeight`)
+    /// Height of the compact strip. Only the idle launcher deviates — its captioned
+    /// buttons need more vertical room than the recording row's inline controls.
+    static func compactHeight(for capture: IslandCaptureState) -> CGFloat {
+        capture == .idle ? idleCompactHeight : GC.compactHeight
+    }
 
-    /// The three horizontal zones of the compact row. `centerWidth` is the camera housing and
-    /// must stay empty; `leadingWidth` is a single square badge; everything else is trailing.
+    // MARK: - Row metrics
+
     static func rowMetrics(
         screen: ScreenDescription,
         isHovering: Bool,
         gestureProgress: CGFloat
     ) -> IslandRowMetrics {
-        let closed = IslandGeometryProvider().closedNotchSize(for: screen)
-        let rowHeight = max(closed.height - 12, 18)
+        let height = GC.compactHeight
+        let rowH = max(height - 12, 18)
         return IslandRowMetrics(
-            centerWidth:  closed.width > 0 ? closed.width + (isHovering ? 8 : 0) : 0,
-            leadingWidth: max(0, rowHeight + max(gestureProgress, 0) / 2),
-            rowHeight:    rowHeight,
-            compactHeight: closed.height,
-            controlSize:  min(max(closed.height - 8, 22), 30)
+            rowHeight:     rowH,
+            compactHeight: height,
+            controlSize:   min(max(height - 8, 22), 30)
         )
     }
 
-    // MARK: - Notch-aware placement
+    // MARK: - Bottom slack
 
-    /// Horizontal dead zone the camera housing occupies. Content must flank it — nothing may be
-    /// laid out under the housing, or it is simply invisible. Zero on notchless displays.
-    /// Superseded for layout by `rowMetrics(...).centerWidth`; kept as the geometry query.
-    static func notchGap(screen: ScreenDescription) -> CGFloat {
-        IslandGeometryProvider().closedNotchSize(for: screen).width
+    /// Padding below the island body inside the panel.
+    ///
+    /// NOT simply `panelSlack`. `panelEnvelope` inflates by `panelSlack` and then clamps to
+    /// `visibleFrame`, and the bottom edge always hits that clamp (the island sits only
+    /// `bottomInset` above it). Reserving the full slack therefore pushed the pill
+    /// `panelSlack - bottomInset` too high on every display. Mirror the clamp instead.
+    static func bottomSlack(screen: ScreenDescription) -> CGFloat {
+        let islandBottom   = screen.visibleFrame.minY + GC.bottomInset
+        let envelopeBottom = max(islandBottom - GC.panelSlack, screen.visibleFrame.minY)
+        return max(0, islandBottom - envelopeBottom)
     }
 
-    /// Distance from the top of the panel envelope down to where the island's top edge belongs.
-    /// Notched: flush with the physical screen top so the black body merges with the housing
-    /// instead of floating a rounded pill next to it. Notchless: 8 pt below the menu bar.
-    static func topSlack(screen: ScreenDescription) -> CGFloat {
-        let geo = IslandGeometryProvider()
-        let envelope = geo.panelEnvelope(for: screen)
-        // On a notched display the top edge is `topEdgeY` — `screen.frame.maxY` plus the bleed
-        // that seals the body against the camera housing. Using the raw maxY here would push
-        // the island down by exactly the bleed and reopen the hairline it exists to close.
-        let desiredTopY = geo.notchGeometry(for: screen) != nil
-            ? geo.topEdgeY(for: screen)
-            : screen.visibleFrame.maxY - IslandGeometryProvider.C.notchlessGapFromTop
-        return max(0, envelope.maxY - desiredTopY)
-    }
+    // MARK: - Corner radius
 
-    /// Top corners are square on a notched display so the body reads as one shape with the
-    /// hardware housing; the bottom corners carry the pill radius.
     static func cornerRadii(
         capture: IslandCaptureState,
         presentation: IslandPresentation,
         screen: ScreenDescription
     ) -> (top: CGFloat, bottom: CGFloat) {
-        let geo = IslandGeometryProvider()
-        let height = targetSize(capture: capture, presentation: presentation, screen: screen,
-                                isHovering: false, gestureProgress: 0).height
-        // Never round more than half the height, or the strip collapses into a lozenge.
-        let r = min(cornerRadius(capture: capture, presentation: presentation), height / 2)
-        if geo.notchGeometry(for: screen) != nil {
-            return (top: 0, bottom: r)
+        switch presentation {
+        case .peek:
+            let r: CGFloat = capture == .idle ? idlePeekHeight / 2 : GC.peekHeight / 2
+            return (top: r, bottom: r)
+        case .compact:
+            // Every compact row is a true capsule, so the idle launcher tracks its own height.
+            let r = compactHeight(for: capture) / 2
+            return (top: r, bottom: r)
+        case .expanded:
+            let r = capture == .idle ? GC.compactRadius : GC.expandedRadius
+            return (top: r, bottom: r)
+        case .hidden:
+            return (top: 0, bottom: 0)
         }
-        return (top: r, bottom: r)
-    }
-
-    // MARK: - Corner radius
-
-    /// Atoll `dynamicIslandPillCornerRadiusInsets` (matters.swift:355): 16 closed, 24 opened.
-    /// The old 22–28 pt values were larger than half the compact strip's height, which rounds
-    /// the pill into a lozenge instead of a notch.
-    static func cornerRadius(
-        capture: IslandCaptureState,
-        presentation: IslandPresentation
-    ) -> CGFloat {
-        guard presentation != .hidden, capture != .idle else { return 0 }
-        return presentation == .expanded ? 24 : 16
     }
 }

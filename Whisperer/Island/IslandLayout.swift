@@ -2,19 +2,20 @@
 //  IslandLayout.swift
 //  Whisperer
 //
-//  The live-activity chain — Atoll's NotchLayout() equivalent.
-//  One prioritized switch on vm.capture picks the compact body; expanded controls
-//  drop below when vm.presentation == .expanded.
+//  The live-activity chain — three-tier layout for the bottom-anchored Island.
 //
-//  Compact recording row (always visible, no tap required):
-//    [● pulse] [~~~waveform~~~]  ⟨notch gap⟩  [0:06] [⏸ pause] [■ stop]
+//  Tier routing by vm.presentation:
+//   .peek     → peekBody  (pulsing dot + level glow, ~120×10 pt)
+//   .compact  → compactBody (state-branching recording/status rows)
+//   .expanded → compactBody + secondaryRow
 //
-//  Expanded secondary row (added by tap / hover dwell / scroll down):
+//  Compact recording row (always visible while recording):
+//    [● pulse] [~~~waveform~~~] [0:06] [⏸ pause] [■ stop]
+//
+//  Expanded secondary row (added by tap / hover dwell / scroll):
 //    [🎤 Mic] [🔈 Speaker] [↗ Open]
 //
-//  On a notched Mac the island REPLACES the camera housing, so every row reserves a
-//  centred dead zone `notchGap` wide. Anything laid out there is invisible — this is the
-//  bug that made the old compact row look like it had a giant unexplained hole in it.
+//  There is no camera-housing dead zone — the Island is bottom-anchored with no notch.
 //
 
 import SwiftUI
@@ -27,13 +28,14 @@ struct IslandLayout: View {
     @ObservedObject var levelBridge: IslandLevelBridge
     @ObservedObject var clock: IslandElapsedTimer
 
-    /// Zone widths for the compact strip — see `IslandContentSizer.rowMetrics`.
+    /// Row metrics for the compact strip.
     var metrics: IslandRowMetrics
 
     private var vm: IslandViewModel { coordinator.currentViewModel }
-    private var isExpanded: Bool { vm.presentation == .expanded }
+    private var isExpanded: Bool    { vm.presentation == .expanded }
+    private var isPeek: Bool        { vm.presentation == .peek }
 
-    // Swap transition between capture states — Atoll's closedLiveActivitySwapTransition
+    // Swap transition between capture states
     private var swapTransition: AnyTransition {
         .asymmetric(
             insertion: .opacity.combined(with: .scale(scale: 0.965, anchor: .center))
@@ -44,25 +46,74 @@ struct IslandLayout: View {
     }
 
     var body: some View {
-        VStack(spacing: 0) {
-            compactBody
-                .frame(height: metrics.compactHeight)
+        if isPeek {
+            peekBody
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+        } else {
+            VStack(spacing: 0) {
+                compactBody
+                    .frame(height: IslandContentSizer.compactHeight(for: vm.capture))
 
-            if isExpanded {
-                secondaryRow
-                    .frame(maxWidth: .infinity)
-                    .frame(height: IslandContentSizer.expandedExtraHeight)
-                    .overlay(alignment: .top) {
-                        Rectangle()
-                            .fill(IC.secondary.opacity(0.16))
-                            .frame(height: 1)
-                            .padding(.horizontal, 18)
-                    }
-                    .transition(.opacity.combined(with: .move(edge: .top)))
+                if isExpanded {
+                    secondaryRow
+                        .frame(maxWidth: .infinity)
+                        .frame(height: IslandContentSizer.expandedExtraHeight)
+                        .overlay(alignment: .top) {
+                            Rectangle()
+                                .fill(IC.secondary.opacity(0.16))
+                                .frame(height: 1)
+                                .padding(.horizontal, 18)
+                        }
+                        .transition(.opacity.combined(with: .move(edge: .bottom)))
+                }
             }
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+            .clipped()
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-        .clipped()
+    }
+
+    // MARK: - Peek body
+
+    /// Idle: a whisper of a capsule holding a dimmed waveform glyph. Recording: dot + a
+    /// five-bar level meter + the elapsed clock, all driven by `levelBridge.peekLevel`
+    /// (≤12 Hz), so no 60 Hz timer runs at rest.
+    @ViewBuilder
+    private var peekBody: some View {
+        if vm.capture == .idle {
+            idleNubBody
+        } else {
+            recordingNubBody
+        }
+    }
+
+    private var idleNubBody: some View {
+        Image(systemName: "waveform")
+            .font(.system(size: 12, weight: .medium))
+            .foregroundStyle(IC.primary.opacity(coordinator.isHovering ? 0.85 : 0.42))
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .help("Whisperer — dictate, record a meeting, or transcribe a file")
+            .accessibilityLabel("Whisperer launcher")
+            .accessibilityAddTraits(.isButton)
+    }
+
+    private var recordingNubBody: some View {
+        HStack(spacing: 8) {
+            RecordingDot(isPaused: vm.isPaused)
+
+            PeekLevelMeter(level: levelBridge.peekLevel,
+                           isPaused: vm.isPaused || vm.isMicMuted)
+                .frame(maxWidth: .infinity)
+
+            Text(clock.displayText)
+                .font(.system(size: 11, weight: .semibold, design: .rounded).monospacedDigit())
+                .foregroundColor(IC.primary.opacity(0.82))
+                .lineLimit(1)
+                .fixedSize()
+                .contentTransition(.numericText())
+                .animation(.smooth(duration: 0.3), value: clock.displayText)
+        }
+        .padding(.horizontal, 12)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
     // MARK: - Compact body (state-branching)
@@ -87,29 +138,90 @@ struct IslandLayout: View {
         case .failed(let msg):
             statusRow(failedRow(msg)).transition(swapTransition)
         case .idle:
-            EmptyView()
+            idleLauncherRow.transition(swapTransition)
         }
     }
 
-    /// Every compact body uses Atoll's three-zone strip: a fixed-width leading badge, the
-    /// camera-housing dead zone, and a trailing zone that absorbs all remaining width.
-    ///
-    /// The zones are deliberately asymmetric. Giving leading and trailing an equal
-    /// `maxWidth: .infinity` share — as this file used to — strands dead space in the middle of
-    /// the pill and caps the waveform at half the width, which is the "cut" waveform.
+    // MARK: - Idle launcher row
+
+    /// Four bare glyphs, grouped: the two that *start* a capture, a hairline, then the two
+    /// that *open* a surface. No captions and no filled chips — the whole point of the bar
+    /// is that it stays out of the way. Hierarchy comes from colour alone: Dictate is the
+    /// default action and is the only one tinted with the accent.
+    private var idleLauncherRow: some View {
+        HStack(spacing: 2) {
+            launcherItem(
+                icon: "mic.fill",
+                help: "Start dictation — click the stop button in the recording bar to finish",
+                iconColor: IC.accentGlyph,
+                hoverIconColor: IC.accentGlyphHover
+            ) {
+                coordinator.send(.dictateRequested)
+            }
+
+            launcherItem(
+                icon: "person.2.fill",
+                help: "Start a meeting recording"
+            ) {
+                coordinator.send(.startMeetingRequested)
+            }
+
+            launcherDivider
+
+            launcherItem(
+                icon: "waveform",
+                help: "Transcribe an audio or video file"
+            ) {
+                coordinator.send(.transcribeFileRequested)
+            }
+
+            launcherItem(
+                icon: "square.grid.2x2.fill",
+                help: "Open the Whisperer workspace"
+            ) {
+                coordinator.send(.openWorkspaceRequested)
+            }
+        }
+        .padding(.horizontal, 8)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .environment(\.layoutDirection, .leftToRight)
+    }
+
+    private func launcherItem(
+        icon: String,
+        help: String,
+        iconColor: Color = IC.glyph,
+        hoverIconColor: Color = IC.glyphHover,
+        action: @escaping () -> Void
+    ) -> some View {
+        IslandHoverButton(
+            icon: icon,
+            diameter: IslandContentSizer.launcherItemWidth,
+            iconColor: iconColor,
+            hoverIconColor: hoverIconColor,
+            action: action
+        )
+        .help(help)
+        .accessibilityLabel(help)
+    }
+
+    private var launcherDivider: some View {
+        Rectangle()
+            .fill(IC.primary.opacity(0.12))
+            .frame(width: 1, height: 16)
+            .padding(.horizontal, 5)
+            .accessibilityHidden(true)
+    }
+
+    /// Simplified strip without the notch dead zone — content spans the full width.
     private func strip<Leading: View, Trailing: View>(
         @ViewBuilder leading: () -> Leading,
         @ViewBuilder trailing: () -> Trailing
     ) -> some View {
         HStack(spacing: 0) {
             leading()
-                .frame(width: metrics.leadingWidth, height: metrics.rowHeight)
+                .frame(width: metrics.rowHeight, height: metrics.rowHeight)
                 .padding(.leading, 10)
-
-            if metrics.centerWidth > 0 {
-                // The housing. Must stay empty — anything drawn here is simply not visible.
-                Color.clear.frame(width: metrics.centerWidth, height: metrics.rowHeight)
-            }
 
             trailing()
                 .frame(maxWidth: .infinity, alignment: .trailing)
@@ -119,7 +231,6 @@ struct IslandLayout: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
-    /// A single-line status body: glyph or rule in the leading badge, message trailing.
     private func statusRow<Content: View>(_ content: Content) -> some View {
         strip(leading: { Color.clear }, trailing: { content })
     }
@@ -141,7 +252,6 @@ struct IslandLayout: View {
                     .foregroundColor(IC.primary)
                     .lineLimit(1)
                     .fixedSize(horizontal: true, vertical: false)
-                    // Reserve room for h:mm:ss so the digits never clip mid-recording.
                     .frame(minWidth: 40, alignment: .trailing)
                     .contentTransition(.numericText())
                     .animation(.smooth(duration: 0.3), value: clock.displayText)
@@ -161,14 +271,12 @@ struct IslandLayout: View {
         }
     }
 
-    // MARK: - Inline stop button (Atoll RecordingLiveActivity style)
+    // MARK: - Inline stop button
 
     private var inlineStopButton: some View {
         Button {
             coordinator.send(.stopRequested(sessionID: vm.sessionID))
         } label: {
-            // Atoll `stopButton(size:lineWidth:)` — the square is 38 % of the circle, and the
-            // circle is sized to the strip rather than fixed, so it fits a 32 pt notch.
             ZStack {
                 Circle()
                     .strokeBorder(
@@ -270,18 +378,37 @@ struct IslandLayout: View {
             .help("Open the meeting window")
         }
         .frame(maxWidth: .infinity)
-        .environment(\.layoutDirection, .leftToRight) // always LTR regardless of locale
+        .environment(\.layoutDirection, .leftToRight)
+    }
+}
+
+// MARK: - Peek level meter
+
+/// Five bars driven by the 12 Hz `peekLevel` — the nub's cheap stand-in for the 20-bar,
+/// 60 Hz waveform that only runs once the compact row is open.
+private struct PeekLevelMeter: View {
+    var level: Float
+    var isPaused: Bool
+
+    private static let weights: [CGFloat] = [0.45, 0.75, 1.0, 0.7, 0.4]
+
+    var body: some View {
+        HStack(spacing: 3) {
+            ForEach(Array(Self.weights.enumerated()), id: \.offset) { _, weight in
+                Capsule()
+                    .fill(IC.primary.opacity(isPaused ? 0.22 : 0.78))
+                    .frame(width: 2.5,
+                           height: max(3, CGFloat(level) * 14 * weight + 3))
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .center)
+        .animation(.easeOut(duration: 0.12), value: level)
+        .animation(.easeOut(duration: 0.2), value: isPaused)
     }
 }
 
 // MARK: - Waveform
 
-/// The Island renders the HUD's own `WaveformView` — same 60 Hz scroll, same perceptual curve,
-/// same bar geometry and accent. The Island's earlier bespoke 30 fps version read as sluggish
-/// next to it; two visualizers for one signal was the bug.
-///
-/// Deliberately NOT an NSViewRepresentable: SwiftUI's `.clipShape` does not clip hosted
-/// AppKit views, so a CALayer waveform escapes the pill and paints over whatever is below it.
 private struct IslandWaveform: View {
     @ObservedObject var levelBridge: IslandLevelBridge
     var isPaused: Bool
@@ -293,7 +420,7 @@ private struct IslandWaveform: View {
     }
 }
 
-// MARK: - Color palette (local mirror — same values as the Island design tokens)
+// MARK: - Color palette
 
 enum IC {
     static let surface   = Color.black
@@ -302,6 +429,12 @@ enum IC {
     static let secondary = Color(red: 0.631, green: 0.631, blue: 0.671)
     static let accent    = Color(red: 0.357, green: 0.424, blue: 0.969)
     static let error     = Color(red: 1, green: 0.502, blue: 0.478)
+    /// Launcher glyphs are deliberately faint. The bar is on screen all day, so at rest it
+    /// should read as a watermark; the pointer is what brings it to full strength.
+    static let glyph            = Color(red: 0.961, green: 0.961, blue: 0.969).opacity(0.45)
+    static let glyphHover       = Color(red: 0.961, green: 0.961, blue: 0.969).opacity(0.95)
+    static let accentGlyph      = Color(red: 0.541, green: 0.596, blue: 0.988).opacity(0.7)
+    static let accentGlyphHover = Color(red: 0.541, green: 0.596, blue: 0.988)
     static let attention = Color(red: 0.941, green: 0.745, blue: 0.384)
 }
 
@@ -332,7 +465,7 @@ struct PulsingModifier: ViewModifier {
     }
 }
 
-private struct RecordingDot: View {
+struct RecordingDot: View {
     var isPaused: Bool
     var body: some View {
         if isPaused {
@@ -343,7 +476,7 @@ private struct RecordingDot: View {
     }
 }
 
-// MARK: - Progress rule (Atoll LiveStreamProgressIndicator equivalent)
+// MARK: - Progress rule
 
 struct IslandProgressRule: View {
     var tint: Color

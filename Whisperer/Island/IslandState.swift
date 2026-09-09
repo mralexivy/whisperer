@@ -12,7 +12,7 @@ import Foundation
 // MARK: - Capture state
 
 /// The current audio/capture state, independent of how the Island is presented.
-enum IslandCaptureState: Equatable {
+nonisolated enum IslandCaptureState: Equatable {
     case idle
     case starting
     case permissionRequired
@@ -25,8 +25,11 @@ enum IslandCaptureState: Equatable {
 // MARK: - Presentation state
 
 /// How the Island panel is displayed, independent of capture state.
-enum IslandPresentation: Equatable {
+/// Tiers ordered by size: hidden → peek → compact → expanded.
+nonisolated enum IslandPresentation: Equatable {
     case hidden
+    /// Minimal bottom nub. Near-transparent launcher while idle; dot + level glow while recording.
+    case peek
     case compact
     case expanded
 }
@@ -61,11 +64,18 @@ enum IslandEvent {
     case outputMuteRequested(sessionID: UUID)
     case openWindowRequested
 
+    // Idle launcher row — one event per action.
+    case dictateRequested                   // start a hands-free dictation
+    case startMeetingRequested              // start a meeting recording
+    case transcribeFileRequested            // open the workspace on File Transcription
+    case openWorkspaceRequested             // open the workspace
+
     // Presentation / UI
-    case expand
-    case collapse
-    case escape                            // never stops, only collapses
-    case displayChanged                    // relayout without touching capture
+    case expand                             // peek→compact, compact→expanded
+    case collapse                           // expanded→compact, compact→peek
+    case escape                             // never stops, always goes to peek
+    case peekRequested                      // hover exit — return to nub (floors at compact for non-recording states)
+    case displayChanged                     // relayout without touching capture
 
     // Session corrections
     case dismissFailure
@@ -79,6 +89,10 @@ enum IslandEffect: Equatable {
     case toggleMicMute
     case toggleOutputMute
     case openMeetingWindow
+    case startDictation
+    case startMeeting
+    case openFileTranscription
+    case openWorkspace
     case scheduleHide(after: TimeInterval)   // auto-hide after dwell
     case cancelHide
 }
@@ -101,7 +115,7 @@ struct IslandModel: Equatable {
         sessionID: UUID(),
         revision: 0,
         capture: .idle,
-        presentation: .hidden,
+        presentation: .peek,
         isMicMuted: false,
         isOutputMuted: false,
         isPaused: false,
@@ -141,20 +155,23 @@ struct IslandViewModel: Equatable {
 extension IslandModel {
     func viewModel() -> IslandViewModel {
         var actions: [IslandAction] = []
-        switch capture {
-        case .recording, .paused:
-            actions = [.pauseResume, .micMute, .outputMute, .openWindow, .stop]
-        case .starting:
-            actions = [.openWindow]
-        case .finalizing:
-            actions = [.openWindow]
-        default:
-            actions = []
+        // Peek tier has no visible hit targets — actions are only surfaced in compact/expanded.
+        if presentation != .peek {
+            switch capture {
+            case .recording, .paused:
+                actions = [.pauseResume, .micMute, .outputMute, .openWindow, .stop]
+            case .starting:
+                actions = [.openWindow]
+            case .finalizing:
+                actions = [.openWindow]
+            default:
+                actions = []
+            }
         }
 
         let label: String
         switch capture {
-        case .idle:              label = ""
+        case .idle:              label = NSLocalizedString("island.start",      value: "Start meeting",     comment: "Island launcher: start a meeting recording")
         case .starting:          label = NSLocalizedString("island.starting",  value: "Starting…",         comment: "Island compact status: starting up")
         case .permissionRequired:label = NSLocalizedString("island.permission", value: "Microphone needed", comment: "Island compact status: permission required")
         case .recording:         label = NSLocalizedString("island.meeting",    value: "Meeting",           comment: "Island compact status: meeting in progress")
