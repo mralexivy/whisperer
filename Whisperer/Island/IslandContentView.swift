@@ -226,6 +226,12 @@ struct IslandContentView: View {
         .animation(activeSpring, value: morphKey)
         .animation(hoverAnim, value: isHovering)
         .animation(.smooth, value: coordinator.gestureProgress)
+        // Idle nub is fully invisible until the pointer arrives. The NSTrackingArea hover
+        // detection runs at the NSView level and is unaffected by SwiftUI opacity, so the
+        // mouse-enter event still fires and the reveal animation plays. During any capture
+        // state other than idle the island is always fully opaque.
+        .opacity(isIdleNub && !isHovering ? 0 : 1)
+        .allowsHitTesting(!(isIdleNub && !isHovering))
         .frame(maxWidth: .infinity, alignment: .center)
         .contentShape(pillShape)
         .onTapGesture { handleTap() }
