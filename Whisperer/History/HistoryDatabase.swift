@@ -96,9 +96,62 @@ class HistoryDatabase {
         if !inMemory { migrateWordCountsIfNeeded() }
     }
 
-    private convenience init() { self.init(inMemory: false) }
+    private convenience init() {
+        self.init(inMemory: false)
+        migrateNullUUIDsIfNeeded()
+    }
 
     // MARK: - Migrations
+
+    /// One-time migration that assigns a fresh UUID to any TranscriptionEntity rows whose
+    /// `id` column is NULL. This happens when the attribute was added to the model after
+    /// the store was created — lightweight migration leaves existing rows with NULL, which
+    /// causes EXC_BAD_ACCESS when Swift bridges the nil ObjC value to a non-optional UUID.
+    private func migrateNullUUIDsIfNeeded() {
+        let migrationKey = "nullUUIDMigrationV1Done"
+        guard !UserDefaults.standard.bool(forKey: migrationKey) else { return }
+        guard let container = persistentContainer else { return }
+
+        let context = container.newBackgroundContext()
+        context.perform {
+            let request: NSFetchRequest<TranscriptionEntity> = TranscriptionEntity.fetchRequest()
+            do {
+                let entities = try context.fetch(request)
+                var patched = 0
+                for entity in entities {
+                    if entity.value(forKey: "id") == nil {
+                        entity.setValue(UUID(), forKey: "id")
+                        patched += 1
+                    }
+                    if entity.value(forKey: "timestamp") == nil {
+                        entity.setValue(Date(), forKey: "timestamp")
+                    }
+                    if entity.value(forKey: "createdAt") == nil {
+                        entity.setValue(Date(), forKey: "createdAt")
+                    }
+                    if entity.value(forKey: "lastModifiedAt") == nil {
+                        entity.setValue(Date(), forKey: "lastModifiedAt")
+                    }
+                    if entity.value(forKey: "transcription") == nil {
+                        entity.setValue("", forKey: "transcription")
+                    }
+                    if entity.value(forKey: "language") == nil {
+                        entity.setValue("en", forKey: "language")
+                    }
+                    if entity.value(forKey: "modelUsed") == nil {
+                        entity.setValue("", forKey: "modelUsed")
+                    }
+                }
+                if context.hasChanges {
+                    try context.save()
+                    Logger.info("Null UUID migration: patched \(patched) of \(entities.count) records", subsystem: .app)
+                }
+                UserDefaults.standard.set(true, forKey: migrationKey)
+            } catch {
+                Logger.error("Null UUID migration failed: \(error)", subsystem: .app)
+            }
+        }
+    }
 
     /// One-time migration to recalculate wordCount for all existing records
     /// using the corrected algorithm (components by whitespace+newlines).
