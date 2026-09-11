@@ -242,6 +242,8 @@ struct OverlayView: View {
 
                             WaveformView(waveformState: appState.waveformState)
                                 .frame(width: waveformWidth, height: waveformHeight)
+                                .onAppear  { appState.waveformState.addRenderer() }
+                                .onDisappear { appState.waveformState.removeRenderer() }
 
                             if case .transcribing = appState.state {
                                 TranscribingIndicator(scale: scale)

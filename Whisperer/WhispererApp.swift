@@ -841,6 +841,8 @@ private struct MBWaveformView: View {
         }
         .frame(height: 30)
         .animation(.easeOut(duration: 0.1), value: waveformState.amplitudes)
+        .onAppear  { waveformState.addRenderer() }
+        .onDisappear { waveformState.removeRenderer() }
     }
 }
 

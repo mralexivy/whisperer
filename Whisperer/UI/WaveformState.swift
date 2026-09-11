@@ -25,6 +25,11 @@ final class WaveformState: ObservableObject {
 
     private var displayTimer: Timer?
 
+    /// Reference count of active renderers. Timer runs iff count > 0.
+    /// Fail-safe: an unregistered renderer wastes energy (timer keeps running) but never
+    /// produces a frozen UI (which is the worse outcome).
+    private var rendererCount: Int = 0
+
     // MARK: - Public API
 
     /// Store latest amplitude from onAmplitudeUpdate (main thread). Timer reads on next tick.
@@ -34,7 +39,29 @@ final class WaveformState: ObservableObject {
         self.isPaused = isPaused
     }
 
-    /// Start 60Hz updates. Call when recording begins.
+    /// Register a renderer. Starts the 60 Hz timer when the first renderer attaches.
+    /// Call from `.onAppear` in every view that reads `amplitudes`.
+    func addRenderer() {
+        rendererCount += 1
+        if rendererCount == 1 { startDisplayLink() }
+    }
+
+    /// Deregister a renderer. Stops the timer when the last renderer detaches.
+    /// Call from `.onDisappear` in every view that reads `amplitudes`.
+    func removeRenderer() {
+        rendererCount = max(0, rendererCount - 1)
+        if rendererCount == 0 { stopDisplayLink() }
+    }
+
+    /// Zero the stored amplitudes without touching the timer or renderer count.
+    /// Use instead of `stopDisplayLink()` when recording ends but a renderer may still be attached.
+    func resetAmplitudes() {
+        amplitudes = Array(repeating: 0, count: 20)
+        lastAmplitude = 0
+    }
+
+    /// Start 60Hz updates directly. Used by IslandLevelBridge for its own WaveformState instance
+    /// (separate from the renderer-counted AppState.waveformState path).
     func startDisplayLink() {
         guard displayTimer == nil else { return }
         let t = Timer.scheduledTimer(withTimeInterval: 1.0 / 60.0, repeats: true) { [weak self] _ in
@@ -44,7 +71,9 @@ final class WaveformState: ObservableObject {
         displayTimer = t
     }
 
-    /// Stop updates and silence waveform. Call when recording ends.
+    /// Stop updates and silence waveform. Does not touch `rendererCount` — prefer
+    /// `removeRenderer()` for renderer-driven teardown, and `resetAmplitudes()` when a renderer
+    /// is still attached and only the data should be cleared.
     func stopDisplayLink() {
         displayTimer?.invalidate()
         displayTimer = nil

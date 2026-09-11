@@ -58,11 +58,10 @@ class AppState: ObservableObject {
         didSet {
             // Notify observers when state changes
             NotificationCenter.default.post(name: NSNotification.Name("AppStateChanged"), object: nil)
-            if case .recording = state {
-                waveformState.startDisplayLink()
-            }
             if state == .idle {
-                waveformState.stopDisplayLink()
+                // Zero waveform data without touching renderer count or the timer — the timer
+                // stays running if the menu bar popover or dictation HUD is still visible.
+                waveformState.resetAmplitudes()
                 targetAppIcon = nil
                 activeMode = .dictation
                 activeAIModeName = nil

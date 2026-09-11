@@ -64,6 +64,9 @@ final class IslandCoordinator: ObservableObject {
     private let peekDwell:         Double = 0.12  // peek → compact dwell (120 ms)
     private let hoverExitDebounce: Duration = .milliseconds(100)
 
+    // AppState dedup snapshot — syncFromAppState() only runs when these 8 fields change.
+    private var lastSnapshot: AppStateSnapshot?
+
     // Amplitude callback dedup
     private var amplitudeWiredToRecorder: ObjectIdentifier?
 
@@ -224,9 +227,19 @@ final class IslandCoordinator: ObservableObject {
     private func wireAppState() {
         AppState.shared.objectWillChange
             .receive(on: RunLoop.main)
-            .sink { [weak self] _ in self?.syncFromAppState() }
+            .sink { [weak self] _ in
+                guard let self else { return }
+                // Rewire amplitude callback on every change — it is guard-guarded and fast.
+                self.rewireAmplitudeCallback()
+                // Expensive sync only when Island-relevant fields change.
+                let snap = AppStateSnapshot()
+                guard snap != self.lastSnapshot else { return }
+                self.lastSnapshot = snap
+                self.syncFromAppState()
+            }
             .store(in: &cancellables)
         rewireAmplitudeCallback()
+        lastSnapshot = AppStateSnapshot()
         syncFromAppState()
     }
 
@@ -463,5 +476,33 @@ final class IslandCoordinator: ObservableObject {
         }
         hideWorkItem = work
         DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: work)
+    }
+}
+
+// MARK: - AppState snapshot (Island dedup)
+
+/// The 8 AppState fields that IslandCoordinator.syncFromAppState() reads.
+/// A change in any other @Published AppState property is filtered out, eliminating
+/// the per-property-change full sync that was the main source of redundant Island work.
+private struct AppStateSnapshot: Equatable {
+    let isMeetingMode:          Bool
+    let meetingWindowIsVisible: Bool
+    let state:                  RecordingState
+    let hasCompletedOnboarding: Bool
+    let isMicMuted:             Bool
+    let isOutputAudioMuted:     Bool
+    let isPaused:               Bool
+    let activeMeetingID:        UUID?
+
+    init() {
+        let a = AppState.shared
+        isMeetingMode          = a.isMeetingMode
+        meetingWindowIsVisible = a.meetingWindowIsVisible
+        state                  = a.state
+        hasCompletedOnboarding = a.hasCompletedOnboarding
+        isMicMuted             = a.isMicMuted
+        isOutputAudioMuted     = a.isOutputAudioMuted
+        isPaused               = a.isPaused
+        activeMeetingID        = a.activeMeetingSession?.meetingID
     }
 }
