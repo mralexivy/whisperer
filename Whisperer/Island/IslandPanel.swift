@@ -20,6 +20,12 @@
 //  Hover tracking: IslandContainerView overrides mouseMoved / mouseEntered / mouseExited
 //  (backed by an NSTrackingArea) to forward hover state changes to IslandCoordinator.
 //
+//  Keyboard focus: IslandPanel.canBecomeKey is FALSE. The Island has no text fields or
+//  keyboard-driven affordances, and `.nonactivatingPanel` with canBecomeKey = true causes
+//  the panel to receive key events that the user directed at whichever app they are typing
+//  in. Clicks still work because `acceptsFirstMouse` is overridden on both the container
+//  and FirstMouseHostingView.
+//
 
 import AppKit
 import SwiftUI
@@ -129,7 +135,18 @@ private final class IslandContainerView: NSView {
         }
     }
 
-    override var acceptsFirstResponder: Bool { true }
+    // The Island is never a keyboard target — it has no text fields and no keyboard actions.
+    // (acceptsFirstMouse above keeps clicks working in a non-key, nonactivating panel.)
+    override var acceptsFirstResponder: Bool { false }
+}
+
+// MARK: - Hosting view that accepts the first mouse click
+
+/// NSHostingView forwarded clicks without `acceptsFirstMouse` when the owning panel is not
+/// key. Override it here so a single click on an Island button fires even when another app
+/// is frontmost and the Island is a non-key, nonactivating panel.
+private final class FirstMouseHostingView<V: View>: NSHostingView<V> {
+    override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
 }
 
 // MARK: - Panel
@@ -153,7 +170,9 @@ final class IslandPanel: NSPanel {
             defer: false
         )
 
-        isFloatingPanel = true
+        isFloatingPanel      = true
+        // Belt-and-suspenders: even if something calls makeKey, we opt out.
+        becomesKeyOnlyIfNeeded = true
         level = NSWindow.Level(rawValue: NSWindow.Level.mainMenu.rawValue + 3)
         collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .stationary, .ignoresCycle]
         backgroundColor = .clear
@@ -171,7 +190,9 @@ final class IslandPanel: NSPanel {
     func setContent<V: View>(_ view: V) {
         container.subviews.forEach { $0.removeFromSuperview() }
 
-        let hosting = NSHostingView(rootView: view)
+        // Use FirstMouseHostingView so a single click on an Island button fires immediately
+        // even though canBecomeKey is false and the app may not be frontmost.
+        let hosting = FirstMouseHostingView(rootView: view)
         hosting.translatesAutoresizingMaskIntoConstraints = false
         hosting.wantsLayer = true
         hosting.layer?.backgroundColor = NSColor.clear.cgColor
@@ -184,6 +205,8 @@ final class IslandPanel: NSPanel {
         ])
     }
 
-    override var canBecomeKey: Bool { true }
+    // Never take keyboard focus. The Island is pointer-only; allowing key focus causes it
+    // to intercept Return/Escape from whichever app the user is typing in.
+    override var canBecomeKey:  Bool { false }
     override var canBecomeMain: Bool { false }
 }

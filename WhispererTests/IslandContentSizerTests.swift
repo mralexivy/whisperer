@@ -282,9 +282,8 @@ final class IslandContentSizerTests: XCTestCase {
 
     // MARK: - Bottom slack
 
-    /// `panelEnvelope` clamps its bottom inflation to `visibleFrame`, so the real gap below the
-    /// pill is `bottomInset`, not `panelSlack`. Reserving the full slack floated the Island
-    /// `panelSlack - bottomInset` too high on every display.
+    /// Core invariant: bottomSlack == peekFrame.minY - panelEnvelope.minY.
+    /// This catches drift between the envelope clamp and the SwiftUI spacer.
     func testBottomSlackMatchesTheClampedEnvelope() {
         let screen = standardScreen()
         let envelope = IslandGeometryProvider().panelEnvelope(for: screen)
@@ -295,15 +294,24 @@ final class IslandContentSizerTests: XCTestCase {
                        accuracy: 0.01)
     }
 
-    /// The pill must land exactly `bottomInset` above the usable bottom edge — the placement
-    /// the user actually sees. Guards the slack and the frame drifting apart again.
-    func testIslandBottomEdgeSitsAtBottomInsetAboveVisibleFrame() {
-        let screen = standardScreen()
-        let envelope = IslandGeometryProvider().panelEnvelope(for: screen)
+    /// Dock-present: the pill bottom lands at `visibleFrame.minY + dockGap`.
+    func testIslandBottomEdge_withDock() {
+        let screen     = standardScreen()   // visibleFrame.minY=23, frame.minY=0
+        let envelope   = IslandGeometryProvider().panelEnvelope(for: screen)
         let pillBottom = envelope.minY + IslandContentSizer.bottomSlack(screen: screen)
-
         XCTAssertEqual(pillBottom,
-                       screen.visibleFrame.minY + IslandGeometryProvider.C.bottomInset,
+                       screen.visibleFrame.minY + IslandGeometryProvider.C.dockGap,
+                       accuracy: 0.01)
+    }
+
+    /// No Dock: the pill bottom lands at `frame.minY + edgeInset`.
+    /// `narrowScreen()` has visibleFrame.minY == frame.minY == 0 → no bottom obstruction.
+    func testIslandBottomEdge_withoutDock() {
+        let screen     = narrowScreen()
+        let envelope   = IslandGeometryProvider().panelEnvelope(for: screen)
+        let pillBottom = envelope.minY + IslandContentSizer.bottomSlack(screen: screen)
+        XCTAssertEqual(pillBottom,
+                       screen.frame.minY + IslandGeometryProvider.C.edgeInset,
                        accuracy: 0.01)
     }
 

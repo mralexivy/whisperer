@@ -5,6 +5,7 @@
 //  SwiftUI-friendly wrapper for TranscriptionEntity
 //
 
+import CoreData
 import Foundation
 
 struct TranscriptionRecord: Identifiable {
@@ -53,20 +54,24 @@ struct TranscriptionRecord: Identifiable {
 
     // Initialize from Core Data entity
     init(from entity: TranscriptionEntity) {
-        self.id = entity.id
-        self.timestamp = entity.timestamp
-        self.transcription = entity.transcription
+        // Safe KVC casting guards against nil in non-optional @NSManaged fields —
+        // old rows written before a column was added have NULL in SQLite, which
+        // EXC_BAD_ACCESSes when Swift tries to bridge nil ObjC to a non-optional.
+        let now = Date()
+        self.id = entity.value(forKey: "id") as? UUID ?? UUID()
+        self.timestamp = entity.value(forKey: "timestamp") as? Date ?? now
+        self.transcription = entity.value(forKey: "transcription") as? String ?? ""
         self.audioFileURL = entity.audioFileURL
         self.duration = entity.duration
         self.wordCount = Int(entity.wordCount)
-        self.language = entity.language
-        self.modelUsed = entity.modelUsed
+        self.language = entity.value(forKey: "language") as? String ?? "en"
+        self.modelUsed = entity.value(forKey: "modelUsed") as? String ?? ""
         self.isPinned = entity.isPinned
         self.isFlagged = entity.isFlagged
         self.editedTranscription = entity.editedTranscription
         self.notes = entity.notes
-        self.createdAt = entity.createdAt
-        self.lastModifiedAt = entity.lastModifiedAt
+        self.createdAt = entity.value(forKey: "createdAt") as? Date ?? now
+        self.lastModifiedAt = entity.value(forKey: "lastModifiedAt") as? Date ?? now
         self.corrections = entity.corrections
         self.targetAppName = entity.targetAppName
         self.aiEnhancedText = entity.aiEnhancedText

@@ -141,14 +141,11 @@ nonisolated struct IslandContentSizer {
 
     /// Padding below the island body inside the panel.
     ///
-    /// NOT simply `panelSlack`. `panelEnvelope` inflates by `panelSlack` and then clamps to
-    /// `visibleFrame`, and the bottom edge always hits that clamp (the island sits only
-    /// `bottomInset` above it). Reserving the full slack therefore pushed the pill
-    /// `panelSlack - bottomInset` too high on every display. Mirror the clamp instead.
+    /// Derived from the same `bottomAnchor` / `envelopeBottom` helpers that
+    /// `IslandGeometryProvider` uses, so placement and the SwiftUI spacer always agree.
     static func bottomSlack(screen: ScreenDescription) -> CGFloat {
-        let islandBottom   = screen.visibleFrame.minY + GC.bottomInset
-        let envelopeBottom = max(islandBottom - GC.panelSlack, screen.visibleFrame.minY)
-        return max(0, islandBottom - envelopeBottom)
+        max(0, IslandGeometryProvider.bottomAnchor(for: screen)
+             - IslandGeometryProvider.envelopeBottom(for: screen))
     }
 
     // MARK: - Corner radius

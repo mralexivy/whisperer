@@ -56,19 +56,53 @@ final class IslandGeometryTests: XCTestCase {
     func testPeekFrameBottomAnchoredToVisibleFrameMinY() {
         let screen = standardScreen
         let frame  = geo.peekFrame(for: screen)
-        XCTAssertEqual(frame.minY, screen.visibleFrame.minY + IslandGeometryProvider.C.bottomInset, accuracy: 0.5)
+        // standardScreen has a bottom Dock (visibleFrame.minY 23 > frame.minY 0)
+        XCTAssertEqual(frame.minY,
+                       IslandGeometryProvider.bottomAnchor(for: screen),
+                       accuracy: 0.5)
     }
 
     func testCompactFrameBottomAnchoredToVisibleFrameMinY() {
         let screen = standardScreen
         let frame  = geo.compactFrame(for: screen)
-        XCTAssertEqual(frame.minY, screen.visibleFrame.minY + IslandGeometryProvider.C.bottomInset, accuracy: 0.5)
+        XCTAssertEqual(frame.minY,
+                       IslandGeometryProvider.bottomAnchor(for: screen),
+                       accuracy: 0.5)
     }
 
     func testExpandedFrameBottomAnchoredToVisibleFrameMinY() {
         let screen = standardScreen
         let frame  = geo.expandedFrame(for: screen)
-        XCTAssertEqual(frame.minY, screen.visibleFrame.minY + IslandGeometryProvider.C.bottomInset, accuracy: 0.5)
+        XCTAssertEqual(frame.minY,
+                       IslandGeometryProvider.bottomAnchor(for: screen),
+                       accuracy: 0.5)
+    }
+
+    // MARK: - Dock-aware bottom anchor cases
+
+    /// Screen WITH a bottom Dock: pill sits above the Dock by `dockGap`.
+    func testBottomAnchor_withDock() {
+        let screen = standardScreen   // visibleFrame.minY=23, frame.minY=0 → has obstruction
+        XCTAssertTrue(IslandGeometryProvider.hasBottomObstruction(screen))
+        XCTAssertEqual(IslandGeometryProvider.bottomAnchor(for: screen),
+                       screen.visibleFrame.minY + IslandGeometryProvider.C.dockGap,
+                       accuracy: 0.5)
+    }
+
+    /// Screen WITHOUT a bottom Dock: pill hugs the actual screen edge by `edgeInset`.
+    func testBottomAnchor_withoutDock() {
+        let screen = hdScreen   // visibleFrame.minY == frame.minY == 0
+        XCTAssertFalse(IslandGeometryProvider.hasBottomObstruction(screen))
+        XCTAssertEqual(IslandGeometryProvider.bottomAnchor(for: screen),
+                       screen.frame.minY + IslandGeometryProvider.C.edgeInset,
+                       accuracy: 0.5)
+    }
+
+    /// Without a Dock the panel envelope can reach the raw screen bottom edge.
+    func testEnvelopeReachesScreenEdge_withoutDock() {
+        let screen = hdScreen
+        let env    = geo.panelEnvelope(for: screen)
+        XCTAssertEqual(env.minY, screen.frame.minY, accuracy: 1.0)
     }
 
     // MARK: - Tiers grow upward (larger frames have a higher top edge)
@@ -170,7 +204,8 @@ final class IslandGeometryTests: XCTestCase {
         let env    = geo.panelEnvelope(for: screen)
         XCTAssertGreaterThanOrEqual(env.minX, screen.visibleFrame.minX - 1)
         XCTAssertLessThanOrEqual(env.maxX,    screen.visibleFrame.maxX + 1)
-        XCTAssertGreaterThanOrEqual(env.minY, screen.visibleFrame.minY - 1)
+        // Bottom: envelope clamps to screen.frame.minY (raw edge), not visibleFrame.minY.
+        XCTAssertGreaterThanOrEqual(env.minY, screen.frame.minY - 1)
         XCTAssertLessThanOrEqual(env.maxY,    screen.visibleFrame.maxY + 1)
     }
 
@@ -202,9 +237,11 @@ final class IslandGeometryTests: XCTestCase {
     }
 
     func testNegativeOriginDisplayBottomAnchor() {
-        let screen = negativeOriginScreen
+        let screen = negativeOriginScreen   // has bottom Dock (visibleFrame.minY > frame.minY)
         let frame  = geo.compactFrame(for: screen)
-        XCTAssertEqual(frame.minY, screen.visibleFrame.minY + IslandGeometryProvider.C.bottomInset, accuracy: 0.5)
+        XCTAssertEqual(frame.minY,
+                       IslandGeometryProvider.bottomAnchor(for: screen),
+                       accuracy: 0.5)
     }
 
     // MARK: - Shadow always drawn
@@ -225,11 +262,14 @@ final class IslandGeometryTests: XCTestCase {
         XCTAssertEqual(r.topLeading, IslandGeometryProvider.C.peekHeight / 2, accuracy: 0.01)
     }
 
-    /// The nub floats clear of the Dock rather than being glued to the screen edge.
+    /// With a bottom Dock the nub floats above it; without a Dock it clears the edge by edgeInset.
     func testFramesFloatAboveTheVisibleFrameBottom() {
-        XCTAssertGreaterThan(IslandGeometryProvider.C.bottomInset, 0)
+        // Dock present: peekFrame.minY > visibleFrame.minY (the Dock's top edge)
         XCTAssertGreaterThan(geo.peekFrame(for: standardScreen).minY,
                              standardScreen.visibleFrame.minY)
+        // No Dock: peekFrame.minY > raw screen edge
+        XCTAssertGreaterThan(geo.peekFrame(for: hdScreen).minY,
+                             hdScreen.frame.minY)
     }
 
     func testCompactIsFullPill() {
