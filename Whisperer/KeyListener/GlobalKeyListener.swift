@@ -24,6 +24,8 @@ class GlobalKeyListener {
     var onPickerActivated: (() -> Void)?
     var onPickerCycled: (() -> Void)?
     var onPickerConfirmed: (() -> Void)?
+    /// Escape pressed while the picker is on screen — dismiss without copying.
+    var onPickerCancelled: (() -> Void)?
     // Legacy callbacks (for backwards compatibility)
     var onFnPressed: (() -> Void)? {
         get { onShortcutPressed }
@@ -58,6 +60,10 @@ class GlobalKeyListener {
     // Carbon hotkey for picker (Option+V)
     private var pickerHotKeyRef: EventHotKeyRef?
     private var pickerEventHandler: EventHandlerRef?
+
+    // Carbon hotkey for Escape — registered ONLY while the picker is on screen
+    private var escapeHotKeyRef: EventHotKeyRef?
+    private var escapeEventHandler: EventHandlerRef?
 
     // Carbon hotkey for rewrite mode
     private var rewriteHotKeyRef: EventHotKeyRef?
@@ -135,6 +141,7 @@ class GlobalKeyListener {
         unregisterPickerHotKey()
         unregisterRewriteHotKey()
         unregisterHandsFreeHotKey()
+        endEscapeCapture()
         pickerVisible = false
         rewriteRecordingInProgress = false
 
@@ -775,6 +782,98 @@ class GlobalKeyListener {
         if let handler = pickerEventHandler {
             RemoveEventHandler(handler)
             pickerEventHandler = nil
+        }
+    }
+
+    // MARK: - Escape Hot Key (picker dismissal)
+
+    /// Claims Escape for as long as the picker is on screen.
+    ///
+    /// The picker panel is non-activating and returns false from `canBecomeKey`, on purpose —
+    /// it must not pull focus out of whatever the user was typing in. That also means it never
+    /// receives a `keyDown`, so Escape has to be caught outside the responder chain. A Carbon
+    /// hotkey is the only route left: `CGEventTap` and `IOHIDManager` are banned (Guideline
+    /// 2.4.5), and an `NSEvent` global monitor is keystroke monitoring, which is the same
+    /// rejection. The registration is scoped to the picker's lifetime so Escape behaves
+    /// normally in every other app the rest of the time.
+    func beginEscapeCapture() {
+        guard escapeHotKeyRef == nil else { return }
+
+        let hotKeyID = EventHotKeyID(signature: OSType(0x57485350), id: 4)   // "WHSP"
+
+        let status = RegisterEventHotKey(
+            UInt32(kVK_Escape),
+            0,                        // no modifiers — bare Escape
+            hotKeyID,
+            GetApplicationEventTarget(),
+            0,
+            &escapeHotKeyRef
+        )
+
+        guard status == noErr else {
+            Logger.error("Failed to register Escape hotkey for picker: \(status)", subsystem: .keyListener)
+            escapeHotKeyRef = nil
+            return
+        }
+
+        var eventSpecs = [
+            EventTypeSpec(eventClass: OSType(kEventClassKeyboard), eventKind: UInt32(kEventHotKeyPressed))
+        ]
+
+        let handlerResult = InstallEventHandler(
+            GetApplicationEventTarget(),
+            { (_, event, userData) -> OSStatus in
+                guard let userData = userData, let event = event else { return OSStatus(eventNotHandledErr) }
+                var hotKeyID = EventHotKeyID()
+                let idStatus = GetEventParameter(
+                    event,
+                    EventParamName(kEventParamDirectObject),
+                    EventParamType(typeEventHotKeyID),
+                    nil,
+                    MemoryLayout<EventHotKeyID>.size,
+                    nil,
+                    &hotKeyID
+                )
+                guard idStatus == noErr, hotKeyID.id == 4 else { return OSStatus(eventNotHandledErr) }
+                let listener = Unmanaged<GlobalKeyListener>.fromOpaque(userData).takeUnretainedValue()
+                listener.handleEscapeHotKeyEvent()
+                return noErr
+            },
+            eventSpecs.count,
+            &eventSpecs,
+            Unmanaged.passUnretained(self).toOpaque(),
+            &escapeEventHandler
+        )
+
+        if handlerResult == noErr {
+            Logger.debug("Escape hotkey registered for picker", subsystem: .keyListener)
+        } else {
+            Logger.error("Failed to install Escape event handler: \(handlerResult)", subsystem: .keyListener)
+        }
+    }
+
+    /// Hands Escape back to the rest of the system.
+    func endEscapeCapture() {
+        if let hotKeyRef = escapeHotKeyRef {
+            UnregisterEventHotKey(hotKeyRef)
+            escapeHotKeyRef = nil
+        }
+        if let handler = escapeEventHandler {
+            RemoveEventHandler(handler)
+            escapeEventHandler = nil
+        }
+    }
+
+    private func handleEscapeHotKeyEvent() {
+        stateQueue.async { [weak self] in
+            // No pickerVisible guard: the hotkey only exists while the picker is on screen,
+            // and the picker can also be opened from the Island, which never sets that flag.
+            guard let self = self else { return }
+            Logger.info("Picker cancelled (Escape)", subsystem: .keyListener)
+            self.pickerVisible = false
+            DispatchQueue.main.async { [weak self] in
+                self?.onPickerCancelled?()
+            }
         }
     }
 

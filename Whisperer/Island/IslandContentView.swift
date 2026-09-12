@@ -225,6 +225,7 @@ struct IslandContentView: View {
     private var rootBodyView: some View {
         VStack(spacing: 0) {
             Spacer(minLength: 0)
+            hintLabel
             islandBody
             Color.clear.frame(height: bottomSlack)
         }
@@ -233,6 +234,38 @@ struct IslandContentView: View {
         .animation(nil, value: morphKey)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
         .sensoryFeedback(.alignment, trigger: coordinator.hapticToken)
+    }
+
+    // MARK: - Hint label (floats above the pill, outside its clip)
+
+    /// Names the launcher glyph under the pointer.
+    ///
+    /// Lives in the root VStack rather than inside `islandBody` because the body is clipped
+    /// to its capsule — a label drawn in there would be sliced off. The band is a constant
+    /// height whether or not a hint is showing, so revealing one eats into the Spacer above
+    /// instead of shoving the bar down.
+    private var hintLabel: some View {
+        ZStack {
+            if let hint = coordinator.launcherHint, isIdleBar, isHovering {
+                IslandLauncherHintLabel(title: hint.title)
+                    .offset(x: hint.anchorX - envelopeWidth / 2)
+                    .transition(
+                        .opacity.combined(with: .offset(y: 4)).combined(with: .scale(scale: 0.94))
+                    )
+                    .id(hint.title)
+            }
+        }
+        .frame(maxWidth: .infinity)
+        .frame(height: Self.hintBandHeight)
+        .allowsHitTesting(false)
+        .animation(.smooth(duration: 0.18), value: coordinator.launcherHint)
+    }
+
+    /// Chip height (23) + the gap that keeps it clear of the pill.
+    private static let hintBandHeight: CGFloat = 31
+
+    private var envelopeWidth: CGFloat {
+        IslandGeometryProvider().panelEnvelope(for: screen).width
     }
 
     // MARK: - Island body (inner, springs)

@@ -10,6 +10,8 @@ import SwiftUI
 struct TranscriptionPickerView: View {
     @ObservedObject private var pickerState = TranscriptionPickerState.shared
 
+    @State private var isCloseHovered = false
+
     // Design system colors
     private let cardBackground = Color(red: 0.078, green: 0.078, blue: 0.169)   // #14142B
     private let panelBackground = Color(red: 0.047, green: 0.047, blue: 0.102)  // #0C0C1A
@@ -75,11 +77,38 @@ struct TranscriptionPickerView: View {
             Text("⌥+V to cycle")
                 .font(.system(size: 10, weight: .medium))
                 .foregroundColor(.white.opacity(0.35))
+
+            closeButton
         }
         .padding(.horizontal, 16)
         .padding(.top, 14)
         .padding(.bottom, 10)
 
+    }
+
+    // MARK: - Close button
+
+    /// The third way out, alongside Escape and releasing ⌥. Uses a tap gesture rather than a
+    /// Button for the same reason the rows do: the panel is non-activating and never becomes
+    /// key, so a Button would not reliably fire.
+    private var closeButton: some View {
+        Image(systemName: "xmark")
+            .font(.system(size: 9, weight: .bold))
+            .foregroundColor(.white.opacity(isCloseHovered ? 0.9 : 0.4))
+            .frame(width: 18, height: 18)
+            .background(
+                Circle().fill(Color.white.opacity(isCloseHovered ? 0.12 : 0.05))
+            )
+            .contentShape(Circle())
+            .onHover { isCloseHovered = $0 }
+            .onTapGesture {
+                // Clear the hover state on the way out, or the button comes back lit on the
+                // next show — the pointer is long gone by then and never sends an exit.
+                isCloseHovered = false
+                pickerState.dismiss()
+            }
+            .animation(.easeOut(duration: 0.12), value: isCloseHovered)
+            .accessibilityLabel("Close")
     }
 
     // MARK: - Divider
@@ -136,7 +165,7 @@ struct TranscriptionPickerView: View {
 
     private var footerView: some View {
         HStack {
-            Text("Click, or release ⌥, to copy")
+            Text("Click, or release ⌥, to copy · esc to close")
                 .font(.system(size: 10.5, weight: .medium))
                 .foregroundColor(.white.opacity(0.35))
             Spacer()

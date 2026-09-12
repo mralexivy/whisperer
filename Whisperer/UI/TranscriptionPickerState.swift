@@ -29,6 +29,10 @@ class TranscriptionPickerState: ObservableObject {
 
     /// Called when the picker is dismissed — use to sync external state (e.g. GlobalKeyListener.pickerVisible).
     var onDismiss: (() -> Void)?
+    /// Called when the picker actually appears. Paired with `onDismiss`, this brackets the
+    /// window in which Escape is claimed — both hooks fire however the picker was opened,
+    /// by Option+V or by the Island launcher.
+    var onShow: (() -> Void)?
 
     private init() {}
 
@@ -53,6 +57,7 @@ class TranscriptionPickerState: ObservableObject {
         showCopiedFeedback = false
         isVisible = true
         scrollToken &+= 1
+        onShow?()
         Logger.info("Transcription picker shown with \(items.count) items", subsystem: .ui)
     }
 

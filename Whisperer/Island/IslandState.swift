@@ -123,6 +123,15 @@ struct IslandModel: Equatable {
     )
 }
 
+// MARK: - Launcher hint
+
+/// The name of the launcher glyph under the pointer, plus where to centre its label.
+/// `anchorX` is in the panel's SwiftUI coordinate space (the same space the hit box uses).
+nonisolated struct IslandLauncherHint: Equatable {
+    var title: String
+    var anchorX: CGFloat
+}
+
 // MARK: - View model (immutable snapshot sent to SwiftUI)
 
 struct IslandViewModel: Equatable {

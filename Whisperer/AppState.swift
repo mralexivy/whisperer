@@ -2891,9 +2891,22 @@ class AppState: ObservableObject {
             }
         }
 
+        listener.onPickerCancelled = {
+            Task { @MainActor in
+                TranscriptionPickerState.shared.dismiss()
+            }
+        }
+
+        // Escape is claimed only for as long as the picker is on screen, whichever way it
+        // was opened — Option+V or the Island launcher.
+        TranscriptionPickerState.shared.onShow = { [weak listener] in
+            listener?.beginEscapeCapture()
+        }
+
         // Reset pickerVisible when the picker is dismissed without Option release
         // (e.g., user clicks away or presses Escape)
         TranscriptionPickerState.shared.onDismiss = { [weak listener] in
+            listener?.endEscapeCapture()
             listener?.resetPickerVisible()
         }
     }

@@ -126,12 +126,13 @@ struct IslandLayout: View {
 
     /// Four bare glyphs, grouped: the two that *start* a capture, a hairline, then the two
     /// that *open* a surface. No captions and no filled chips — the whole point of the bar
-    /// is that it stays out of the way. Hierarchy comes from colour alone: Dictate is the
-    /// default action and is the only one tinted with the accent.
+    /// is that it stays out of the way. What each glyph does is named by the hint label the
+    /// root view floats above the bar on hover, not by a caption baked into the row.
     private var idleLauncherRow: some View {
         HStack(spacing: 2) {
             launcherItem(
                 icon: "mic.fill",
+                title: "Dictate",
                 help: "Start dictation — click the stop button in the recording bar to finish"
             ) {
                 coordinator.send(.dictateRequested)
@@ -139,6 +140,7 @@ struct IslandLayout: View {
 
             launcherItem(
                 icon: "person.2.fill",
+                title: "Meeting",
                 help: "Start a meeting recording"
             ) {
                 coordinator.send(.startMeetingRequested)
@@ -148,6 +150,7 @@ struct IslandLayout: View {
 
             launcherItem(
                 icon: "list.clipboard.fill",
+                title: "Paste Bin",
                 help: "Open recent transcriptions"
             ) {
                 coordinator.send(.openPasteBinRequested)
@@ -155,6 +158,7 @@ struct IslandLayout: View {
 
             launcherItem(
                 icon: "square.grid.2x2.fill",
+                title: "Workspace",
                 help: "Open the Whisperer workspace"
             ) {
                 coordinator.send(.openWorkspaceRequested)
@@ -167,20 +171,17 @@ struct IslandLayout: View {
 
     private func launcherItem(
         icon: String,
+        title: String,
         help: String,
-        iconColor: Color = IC.glyph,
-        hoverIconColor: Color = IC.glyphHover,
         action: @escaping () -> Void
     ) -> some View {
-        IslandHoverButton(
+        LauncherItem(
+            coordinator: coordinator,
             icon: icon,
-            diameter: IslandContentSizer.launcherItemWidth,
-            iconColor: iconColor,
-            hoverIconColor: hoverIconColor,
+            title: title,
+            help: help,
             action: action
         )
-        .help(help)
-        .accessibilityLabel(help)
     }
 
     private var launcherDivider: some View {
@@ -357,6 +358,79 @@ struct IslandLayout: View {
         }
         .frame(maxWidth: .infinity)
         .environment(\.layoutDirection, .leftToRight)
+    }
+}
+
+// MARK: - Launcher item
+
+/// One glyph in the idle launcher bar, wired to the floating hint label.
+///
+/// The glyph tracks its own centre in panel coordinates so the label can sit directly over
+/// it rather than over the middle of the bar. `.help` is deliberately not used: the system
+/// tooltip would fade in a second later on top of the hint and say the same thing twice.
+private struct LauncherItem: View {
+    @ObservedObject var coordinator: IslandCoordinator
+    let icon: String
+    let title: String
+    let help: String
+    let action: () -> Void
+
+    @State private var anchorX: CGFloat = 0
+
+    var body: some View {
+        IslandHoverButton(
+            icon: icon,
+            diameter: IslandContentSizer.launcherItemWidth,
+            iconColor: IC.glyph,
+            hoverIconColor: IC.glyphHover,
+            action: action
+        )
+        .background(
+            GeometryReader { geo in
+                Color.clear
+                    .onAppear { anchorX = geo.frame(in: .global).midX }
+                    .onChange(of: geo.frame(in: .global).midX) { _, newX in anchorX = newX }
+            }
+        )
+        .onHover { hovering in
+            if hovering {
+                coordinator.setLauncherHint(title, anchorX: anchorX)
+            } else {
+                coordinator.clearLauncherHint(ifTitleIs: title)
+            }
+        }
+        .accessibilityLabel(help)
+    }
+}
+
+// MARK: - Launcher hint label
+
+/// The floating name of the hovered glyph. Deliberately tiny: a hairline-bordered glass
+/// chip with one word in it, so it reads as a caption for the bar rather than as a second
+/// piece of chrome competing with it.
+struct IslandLauncherHintLabel: View {
+    let title: String
+
+    var body: some View {
+        Text(title)
+            .font(.system(size: 11, weight: .medium, design: .rounded))
+            .foregroundColor(IC.primary.opacity(0.92))
+            .lineLimit(1)
+            .fixedSize()
+            .padding(.horizontal, 9)
+            .padding(.vertical, 4)
+            .background {
+                ZStack {
+                    Capsule().fill(.ultraThinMaterial).environment(\.colorScheme, .dark)
+                    Capsule().fill(Color.black.opacity(0.18))
+                }
+            }
+            .overlay {
+                Capsule().strokeBorder(Color.white.opacity(0.14), lineWidth: 0.5)
+            }
+            .compositingGroup()
+            .shadow(color: .black.opacity(0.22), radius: 8, y: 2)
+            .allowsHitTesting(false)
     }
 }
 

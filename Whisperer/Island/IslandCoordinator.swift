@@ -45,6 +45,13 @@ final class IslandCoordinator: ObservableObject {
     /// Toggles to trigger .alignment haptic; rate-limited to 300 ms
     @Published private(set) var hapticToken: Bool = false
 
+    /// The launcher glyph currently under the pointer, if any.
+    ///
+    /// The bar is four bare icons with no captions, so it needs to name them on hover.
+    /// The label is drawn by the root view *above* the pill — the pill itself is clipped
+    /// to its capsule, so anything rendered inside it would be cut off.
+    @Published private(set) var launcherHint: IslandLauncherHint?
+
     // MARK: - Owned objects
 
     let levelBridge  = IslandLevelBridge()
@@ -137,7 +144,26 @@ final class IslandCoordinator: ObservableObject {
         }
     }
 
+    /// Pointer entered or left a launcher glyph. `anchorX` is the glyph's centre in the
+    /// panel's SwiftUI coordinate space, which is what the label offsets itself against.
+    ///
+    /// Leaving is keyed on the title so a fast slide between two glyphs cannot have the
+    /// outgoing button's exit clear the incoming button's hint.
+    func setLauncherHint(_ title: String?, anchorX: CGFloat) {
+        if let title {
+            launcherHint = IslandLauncherHint(title: title, anchorX: anchorX)
+        } else {
+            launcherHint = nil
+        }
+    }
+
+    func clearLauncherHint(ifTitleIs title: String) {
+        guard launcherHint?.title == title else { return }
+        launcherHint = nil
+    }
+
     private func finishHoverExit() {
+        launcherHint = nil
         withAnimation(.bouncy.speed(1.2)) { isHovering = false }
         // Return to peek (or compact if state requires it).
         send(.peekRequested)
