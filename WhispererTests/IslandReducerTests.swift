@@ -177,17 +177,21 @@ final class IslandReducerTests: XCTestCase {
 
     // MARK: - Always-on idle launcher
 
-    func testInitialModelRestsAtTheIdleLauncherNub() {
+    func testInitialModelRestsAtTheIdleLauncherBar() {
         let m = IslandModel.initial
         XCTAssertEqual(m.capture, .idle)
-        XCTAssertEqual(m.presentation, .peek,
-                       "The Island is always on screen — idle rests as the launcher nub")
+        XCTAssertEqual(m.presentation, .compact,
+                       "Idle has a single tier — the launcher bar. The view hides it until hover.")
     }
 
-    func testIdlePeekExpandsToTheLauncherRow() {
-        var m = IslandModel.initial
-        IslandReducer.reduce(&m, .expand)
-        XCTAssertEqual(m.presentation, .compact)
+    /// Idle has exactly one tier. Collapse, escape and hover-exit must all leave the
+    /// launcher bar at compact — the view, not the reducer, is what hides it at rest.
+    func testIdleNeverCollapsesBelowTheLauncherBar() {
+        for event: IslandEvent in [.collapse, .escape, .peekRequested] {
+            var m = IslandModel.initial
+            IslandReducer.reduce(&m, event)
+            XCTAssertEqual(m.presentation, .compact, "\(event) must not drop idle below compact")
+        }
     }
 
     func testIdleNeverReachesExpanded() {
@@ -224,7 +228,7 @@ final class IslandReducerTests: XCTestCase {
     /// Opening a workspace surface is always allowed — it never touches the recorder.
     func testWorkspaceLauncherActionsEmitTheirEffects() {
         var m = IslandModel.initial
-        XCTAssertEqual(IslandReducer.reduce(&m, .transcribeFileRequested), [.openFileTranscription])
+        XCTAssertEqual(IslandReducer.reduce(&m, .openPasteBinRequested), [.openPasteBin])
         XCTAssertEqual(IslandReducer.reduce(&m, .openWorkspaceRequested), [.openWorkspace])
     }
 
@@ -234,7 +238,7 @@ final class IslandReducerTests: XCTestCase {
         var m = IslandModel.initial
         m.presentation = .compact
         for event: IslandEvent in [.dictateRequested, .startMeetingRequested,
-                                   .transcribeFileRequested, .openWorkspaceRequested] {
+                                   .openPasteBinRequested, .openWorkspaceRequested] {
             IslandReducer.reduce(&m, event)
             XCTAssertEqual(m.presentation, .compact)
             XCTAssertEqual(m.capture, .idle)
@@ -340,7 +344,7 @@ final class IslandReducerTests: XCTestCase {
 
         IslandReducer.reduce(&m, .captureEnded)
         XCTAssertEqual(m.capture, .idle)
-        XCTAssertEqual(m.presentation, .peek,
+        XCTAssertEqual(m.presentation, .compact,
                        "Capture end falls back to the idle launcher, never to hidden")
     }
 
@@ -353,7 +357,7 @@ final class IslandReducerTests: XCTestCase {
 
         let effects = IslandReducer.reduce(&m, .dismissFailure)
         XCTAssertTrue(effects.contains(.cancelHide))
-        XCTAssertEqual(m.presentation, .peek)
+        XCTAssertEqual(m.presentation, .compact)
         XCTAssertEqual(m.capture, .idle)
     }
 

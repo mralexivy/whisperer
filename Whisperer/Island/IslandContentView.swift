@@ -120,17 +120,15 @@ struct IslandContentView: View {
 
     // MARK: - Surface
 
-    /// The resting launcher: near-invisible until the pointer arrives.
-    private var isIdleNub: Bool { isPeek && vm.capture == .idle }
-    /// The opened launcher bar. Still an idle surface — it must not read as heavy as a
-    /// live recording row, which is genuinely demanding attention.
-    private var isIdleBar: Bool { !isPeek && vm.capture == .idle }
+    /// Idle launcher bar — always compact now; no nub transition.
+    private var isIdleBar: Bool { vm.capture == .idle }
+    /// Resting idle launcher: on screen but not yet revealed.
+    private var isIdleHidden: Bool { isIdleBar && !isHovering }
 
     @ViewBuilder
     private var surface: some View {
-        if isIdleNub {
-            // Almost transparent — a hint of the pill, not a black slab on the wallpaper.
-            Color.black.opacity(isHovering ? 0.38 : 0.14)
+        if isIdleBar {
+            idleGlass
         } else {
             ZStack {
                 Rectangle().fill(.ultraThinMaterial).environment(\.colorScheme, .dark)
@@ -143,21 +141,56 @@ struct IslandContentView: View {
         }
     }
 
-    /// How dark the scrim over the blur is. The launcher bar keeps the wallpaper visible
-    /// through it; a recording row does not, because its content has to stay readable.
+    /// Flat glass launcher pill — a thin sheet, not a lozenge.
+    ///
+    /// A strong top sheen paired with a bottom bounce shades the pill like a cylinder, and
+    /// a cylinder reads as bulky at this size. Flat glass wants the opposite: mostly just
+    /// the backdrop blur, the faintest tint to hold glyph contrast, and one short highlight
+    /// hugging the top edge to say "this surface is lit" without implying any thickness.
+    private var idleGlass: some View {
+        ZStack {
+            Rectangle().fill(.ultraThinMaterial).environment(\.colorScheme, .dark)
+
+            Rectangle().fill(Color.black.opacity(0.07))
+
+            LinearGradient(
+                stops: [
+                    .init(color: Color.white.opacity(0.13), location: 0.00),
+                    .init(color: Color.white.opacity(0.03), location: 0.18),
+                    .init(color: Color.clear,               location: 0.42),
+                ],
+                startPoint: .top, endPoint: .bottom
+            )
+        }
+    }
+
     private var scrimOpacity: Double {
-        if isIdleBar { return 0.42 }
-        return isPeek ? 0.62 : 0.78
+        isPeek ? 0.62 : 0.78
+    }
+
+    /// Rim light — a hairline catch along the top edge only, fading out by the middle.
+    /// Relighting the bottom edge is what wraps the outline around a solid-looking body;
+    /// leaving it dark keeps the pill reading as a flat sheet seen face-on.
+    private var idleRim: LinearGradient {
+        LinearGradient(
+            stops: [
+                .init(color: Color.white.opacity(0.24), location: 0.00),
+                .init(color: Color.white.opacity(0.09), location: 0.35),
+                .init(color: Color.white.opacity(0.05), location: 1.00),
+            ],
+            startPoint: .top, endPoint: .bottom
+        )
     }
 
     private var hairlineColor: Color {
-        if isIdleNub { return Color.white.opacity(isHovering ? 0.22 : 0.10) }
-        return Color.white.opacity(isIdleBar ? 0.12 : 0.16)
+        if isIdleBar { return Color.white.opacity(isHovering ? 0.16 : 0.06) }
+        return Color.white.opacity(0.16)
     }
 
     private var shadowOpacity: Double {
-        if isIdleNub { return isHovering ? 0.28 : 0.10 }
-        if isIdleBar { return 0.22 }
+        // Wide and faint rather than tight and dark — a contact shadow under a thin sheet.
+        // A dense shadow is most of what made the pill look like a solid block.
+        if isIdleBar { return isHovering ? 0.16 : 0.06 }
         return (isHovering || isExpanded) ? 0.55 : 0.34
     }
 
@@ -213,25 +246,34 @@ struct IslandContentView: View {
         )
         .frame(width: targetSize.width, height: targetSize.height, alignment: .center)
         .background(surface)
-        .overlay(pillShape.strokeBorder(hairlineColor, lineWidth: 0.75))
+        .overlay {
+            if isIdleBar {
+                // Sub-pixel on Retina — a hairline edge, not a drawn border.
+                pillShape.strokeBorder(idleRim, lineWidth: 0.5)
+            } else {
+                pillShape.strokeBorder(hairlineColor, lineWidth: 0.75)
+            }
+        }
         .clipShape(pillShape)
         .compositingGroup()
         .shadow(
             color: .black.opacity(shadowOpacity),
-            radius: isIdleNub ? 6 : (isIdleBar ? 10 : 18),
+            radius: isIdleBar ? 14 : 18,
             x: 0,
-            y: isIdleNub ? 2 : (isIdleBar ? 4 : 8)
+            y: isIdleBar ? 2 : 8
         )
         // Springs live HERE — never on the root.
         .animation(activeSpring, value: morphKey)
         .animation(hoverAnim, value: isHovering)
         .animation(.smooth, value: coordinator.gestureProgress)
-        // Idle nub is fully invisible until the pointer arrives. The NSTrackingArea hover
+        // The idle launcher is invisible until the pointer arrives. NSTrackingArea hover
         // detection runs at the NSView level and is unaffected by SwiftUI opacity, so the
-        // mouse-enter event still fires and the reveal animation plays. During any capture
-        // state other than idle the island is always fully opaque.
-        .opacity(isIdleNub && !isHovering ? 0 : 1)
-        .allowsHitTesting(!(isIdleNub && !isHovering))
+        // mouse-enter event still fires and the reveal plays. Any non-idle capture state is
+        // always fully opaque.
+        .opacity(isIdleHidden ? 0 : 1)
+        .scaleEffect(isIdleHidden ? 0.94 : 1, anchor: .bottom)
+        .offset(y: isIdleHidden ? 5 : 0)
+        .allowsHitTesting(!isIdleHidden)
         .frame(maxWidth: .infinity, alignment: .center)
         .contentShape(pillShape)
         .onTapGesture { handleTap() }
@@ -300,11 +342,13 @@ struct IslandContentView: View {
 
         hitBox.rect = NSRect(x: pillX, y: originY, width: size.width, height: size.height)
 
-        // Hover rect: for the nub, pad generously upward (the target is only 10 pt tall).
-        // For compact/expanded the standard ±12/±3 is fine.
-        let hPad: CGFloat = isPeek ? 40 : 12
-        let vPadUp: CGFloat = isPeek ? 22 : 3
-        let vPadDown: CGFloat = 3
+        // Hover rect. The recording nub (10 pt tall) and the idle launcher (invisible until
+        // hovered) both need a generous catch area — you cannot aim at something you cannot
+        // see. An open recording row is visible, so the standard ±12/±3 is fine there.
+        let generousCatch = isPeek || isIdleBar
+        let hPad: CGFloat = generousCatch ? 40 : 12
+        let vPadUp: CGFloat = generousCatch ? 22 : 3
+        let vPadDown: CGFloat = generousCatch ? 12 : 3
         hitBox.hoverRect = NSRect(
             x:      pillX  - hPad,
             y:      originY - vPadUp,

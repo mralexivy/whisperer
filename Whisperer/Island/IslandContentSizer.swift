@@ -48,12 +48,13 @@ nonisolated struct IslandContentSizer {
     /// Island reads as an affordance rather than as an active capture.
     static let idlePeekWidth:    CGFloat = 104
     static let idlePeekHeight:   CGFloat = 24
-    /// The launcher row the nub opens into: four bare 15 pt glyphs and a hairline divider.
-    /// Captions and large targets belong in the workspace — this is a bar, so it stays
-    /// SHORTER than the recording row rather than towering over it.
+    /// The launcher row: four bare glyphs and a hairline divider. Captions and large targets
+    /// belong in the workspace — this is a bar, so it stays SHORTER than the recording row
+    /// rather than towering over it. The height is only 4 pt more than the hover capsule it
+    /// has to contain, which is what keeps it reading as a thin sheet rather than a lozenge.
     /// 4 × 28 (item) + 4 × 2 (spacing) + 11 (divider + its padding) + 2 × 8 (row padding).
     static let idleCompactWidth:  CGFloat = 147
-    static let idleCompactHeight: CGFloat = 36
+    static let idleCompactHeight: CGFloat = 32
     /// Width of one action in the launcher row — the glyph's hover capsule, nothing more.
     /// Drives the glyph size too: `IslandHoverButton` renders it at half the diameter.
     static let launcherItemWidth: CGFloat = 28

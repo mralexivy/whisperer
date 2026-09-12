@@ -29,6 +29,8 @@ class TranscriptionPickerPanel: NSPanel {
         self.backgroundColor = NSColor.clear
         self.isOpaque = false
         self.hasShadow = false
+        // Rows highlight under the pointer, so the panel has to see moves — not just clicks.
+        self.acceptsMouseMovedEvents = true
 
         // Create SwiftUI content
         let pickerView = TranscriptionPickerView()

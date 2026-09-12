@@ -267,11 +267,14 @@ final class IslandCoordinator: ObservableObject {
         }
 
         if !inMeeting {
-            // No capture: rest as the idle launcher nub rather than disappearing.
+            // No capture: rest as the idle launcher bar rather than disappearing.
             if model.capture != .idle {
                 send(.captureEnded)
-            } else if model.presentation == .hidden {
-                model.presentation = .peek
+            } else {
+                if model.presentation == .hidden { model.presentation = .compact }
+                // Always publish. The panel is built lazily inside apply(), so skipping the
+                // publish on an already-correct model means the panel is never created at all
+                // and the Island stays absent until some later state change forces it.
                 publishViewModel()
             }
             return
@@ -358,9 +361,17 @@ final class IslandCoordinator: ObservableObject {
                                 subsystem: .ui)
                 }
 
-            case .openFileTranscription:
-                HistoryWindowManager.shared.showWindow()
-                postWorkspaceSection(.switchToFileTranscriptionTab)
+            case .openPasteBin:
+                // Same surface Option+V drives, but as a toggle: the launcher icon is the
+                // only way back out of a picker opened by mouse, since there is no Option
+                // key to release. Dismissal routes through onDismiss → resetPickerVisible(),
+                // so GlobalKeyListener's own flag stays consistent either way.
+                let picker = TranscriptionPickerState.shared
+                if picker.isVisible {
+                    picker.dismiss()
+                } else {
+                    picker.show()
+                }
 
             case .openWorkspace:
                 HistoryWindowManager.shared.showWindow()

@@ -106,7 +106,9 @@ struct TranscriptionPickerView: View {
                         PickerRow(
                             item: item,
                             index: index,
-                            isSelected: index == pickerState.selectedIndex
+                            isSelected: index == pickerState.selectedIndex,
+                            onHover: { pickerState.highlight(index: index) },
+                            onTap:   { pickerState.choose(index: index) }
                         )
                         .id(index)
                     }
@@ -115,9 +117,10 @@ struct TranscriptionPickerView: View {
                 .padding(.vertical, 6)
             }
             .frame(maxHeight: maxListHeight)
-            .onChange(of: pickerState.selectedIndex) { newIndex in
+            // Follows hotkey cycling only — see TranscriptionPickerState.scrollToken.
+            .onChange(of: pickerState.scrollToken) { _ in
                 withAnimation(.easeInOut(duration: 0.1)) {
-                    proxy.scrollTo(newIndex, anchor: .center)
+                    proxy.scrollTo(pickerState.selectedIndex, anchor: .center)
                 }
             }
         }
@@ -133,7 +136,7 @@ struct TranscriptionPickerView: View {
 
     private var footerView: some View {
         HStack {
-            Text("Release ⌥ to copy")
+            Text("Click, or release ⌥, to copy")
                 .font(.system(size: 10.5, weight: .medium))
                 .foregroundColor(.white.opacity(0.35))
             Spacer()
@@ -179,6 +182,8 @@ private struct PickerRow: View {
     let item: PickerItem
     let index: Int
     let isSelected: Bool
+    var onHover: () -> Void = {}
+    var onTap:   () -> Void = {}
 
     private let accentBlue = Color(red: 0.357, green: 0.424, blue: 0.969)
 
@@ -232,7 +237,12 @@ private struct PickerRow: View {
                 .stroke(isSelected ? accentBlue.opacity(0.25) : Color.clear, lineWidth: 1)
         )
         .animation(.easeInOut(duration: 0.1), value: isSelected)
-
+        // The panel is non-activating and never becomes key, so a SwiftUI Button would not
+        // reliably fire. A hit-shaped tap gesture is delivered through the normal mouse-event
+        // path and works without the window taking focus from whatever the user was typing in.
+        .contentShape(RoundedRectangle(cornerRadius: 10))
+        .onHover { if $0 { onHover() } }
+        .onTapGesture { onTap() }
     }
 
     private func relativeTime(_ date: Date) -> String {

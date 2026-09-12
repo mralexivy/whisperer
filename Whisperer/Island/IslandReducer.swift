@@ -82,8 +82,8 @@ enum IslandReducer {
 
         case .captureEnded:
             state.capture = .idle
-            // The Island never disappears — it falls back to the idle launcher nub.
-            state.presentation = .peek
+            // The Island never disappears — it falls back to the idle launcher bar.
+            state.presentation = .compact
             state.stopInFlight = false
             state.revision &+= 1
             return [.cancelHide]
@@ -163,8 +163,8 @@ enum IslandReducer {
             guard state.capture == .idle else { return [] }
             return [.startMeeting]
 
-        case .transcribeFileRequested:
-            return [.openFileTranscription]
+        case .openPasteBinRequested:
+            return [.openPasteBin]
 
         case .openWorkspaceRequested:
             return [.openWorkspace]
@@ -207,7 +207,7 @@ enum IslandReducer {
         case .dismissFailure:
             guard case .failed = state.capture else { return [] }
             state.capture = .idle
-            state.presentation = .peek
+            state.presentation = .compact
             state.revision &+= 1
             return [.cancelHide]
         }
@@ -216,12 +216,12 @@ enum IslandReducer {
     // MARK: - Helpers
 
     /// Returns .peek when the capture state can legitimately show the nub, else .compact.
-    /// Idle (launcher), recording and paused can sit at peek; transient and error states
-    /// must show a label, so they floor at compact.
+    /// Recording and paused can sit at peek; idle always shows the launcher bar (compact),
+    /// and transient/error states must show a label, so they floor at compact.
     private static func peekOrCompact(for capture: IslandCaptureState) -> IslandPresentation {
         switch capture {
-        case .idle, .recording, .paused: return .peek
-        default:                         return .compact
+        case .recording, .paused: return .peek
+        default:                  return .compact
         }
     }
 }

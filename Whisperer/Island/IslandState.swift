@@ -67,7 +67,7 @@ enum IslandEvent {
     // Idle launcher row — one event per action.
     case dictateRequested                   // start a hands-free dictation
     case startMeetingRequested              // start a meeting recording
-    case transcribeFileRequested            // open the workspace on File Transcription
+    case openPasteBinRequested              // open recent transcriptions (paste bin)
     case openWorkspaceRequested             // open the workspace
 
     // Presentation / UI
@@ -91,7 +91,7 @@ enum IslandEffect: Equatable {
     case openMeetingWindow
     case startDictation
     case startMeeting
-    case openFileTranscription
+    case openPasteBin
     case openWorkspace
     case scheduleHide(after: TimeInterval)   // auto-hide after dwell
     case cancelHide
@@ -115,7 +115,7 @@ struct IslandModel: Equatable {
         sessionID: UUID(),
         revision: 0,
         capture: .idle,
-        presentation: .peek,
+        presentation: .compact,
         isMicMuted: false,
         isOutputMuted: false,
         isPaused: false,

@@ -23,6 +23,9 @@ class TranscriptionPickerState: ObservableObject {
     @Published var selectedIndex: Int = 0
     @Published var items: [PickerItem] = []
     @Published var showCopiedFeedback: Bool = false
+    /// Bumped only when the hotkey moves the selection. The list scrolls to follow Option+V
+    /// cycling, but must not yank itself around under a pointer that is already on a row.
+    @Published private(set) var scrollToken: Int = 0
 
     /// Called when the picker is dismissed — use to sync external state (e.g. GlobalKeyListener.pickerVisible).
     var onDismiss: (() -> Void)?
@@ -49,12 +52,27 @@ class TranscriptionPickerState: ObservableObject {
         selectedIndex = 0
         showCopiedFeedback = false
         isVisible = true
+        scrollToken &+= 1
         Logger.info("Transcription picker shown with \(items.count) items", subsystem: .ui)
     }
 
     func cycleNext() {
         guard !items.isEmpty else { return }
         selectedIndex = (selectedIndex + 1) % items.count
+        scrollToken &+= 1
+    }
+
+    /// Pointer moved onto a row. Moves the highlight without scrolling the list.
+    func highlight(index: Int) {
+        guard isVisible, items.indices.contains(index) else { return }
+        selectedIndex = index
+    }
+
+    /// Pointer clicked a row — select and copy in one step.
+    func choose(index: Int) {
+        guard isVisible, items.indices.contains(index) else { return }
+        selectedIndex = index
+        confirmSelection()
     }
 
     func confirmSelection() {

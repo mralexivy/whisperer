@@ -72,29 +72,9 @@ struct IslandLayout: View {
         }
     }
 
-    // MARK: - Peek body
+    // MARK: - Peek body (recording only — idle always shows the compact launcher bar)
 
-    /// Idle: a whisper of a capsule holding a dimmed waveform glyph. Recording: dot + a
-    /// five-bar level meter + the elapsed clock, all driven by `levelBridge.peekLevel`
-    /// (≤12 Hz), so no 60 Hz timer runs at rest.
-    @ViewBuilder
-    private var peekBody: some View {
-        if vm.capture == .idle {
-            idleNubBody
-        } else {
-            recordingNubBody
-        }
-    }
-
-    private var idleNubBody: some View {
-        Image(systemName: "waveform")
-            .font(.system(size: 12, weight: .medium))
-            .foregroundStyle(IC.primary.opacity(coordinator.isHovering ? 0.85 : 0.42))
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .help("Whisperer — dictate, record a meeting, or transcribe a file")
-            .accessibilityLabel("Whisperer launcher")
-            .accessibilityAddTraits(.isButton)
-    }
+    private var peekBody: some View { recordingNubBody }
 
     private var recordingNubBody: some View {
         HStack(spacing: 8) {
@@ -152,9 +132,7 @@ struct IslandLayout: View {
         HStack(spacing: 2) {
             launcherItem(
                 icon: "mic.fill",
-                help: "Start dictation — click the stop button in the recording bar to finish",
-                iconColor: IC.accentGlyph,
-                hoverIconColor: IC.accentGlyphHover
+                help: "Start dictation — click the stop button in the recording bar to finish"
             ) {
                 coordinator.send(.dictateRequested)
             }
@@ -169,10 +147,10 @@ struct IslandLayout: View {
             launcherDivider
 
             launcherItem(
-                icon: "waveform",
-                help: "Transcribe an audio or video file"
+                icon: "list.clipboard.fill",
+                help: "Open recent transcriptions"
             ) {
-                coordinator.send(.transcribeFileRequested)
+                coordinator.send(.openPasteBinRequested)
             }
 
             launcherItem(
@@ -429,12 +407,15 @@ enum IC {
     static let secondary = Color(red: 0.631, green: 0.631, blue: 0.671)
     static let accent    = Color(red: 0.357, green: 0.424, blue: 0.969)
     static let error     = Color(red: 1, green: 0.502, blue: 0.478)
-    /// Launcher glyphs are deliberately faint. The bar is on screen all day, so at rest it
-    /// should read as a watermark; the pointer is what brings it to full strength.
-    static let glyph            = Color(red: 0.961, green: 0.961, blue: 0.969).opacity(0.45)
-    static let glyphHover       = Color(red: 0.961, green: 0.961, blue: 0.969).opacity(0.95)
-    static let accentGlyph      = Color(red: 0.541, green: 0.596, blue: 0.988).opacity(0.7)
-    static let accentGlyphHover = Color(red: 0.541, green: 0.596, blue: 0.988)
+    /// The launcher bar only exists on screen while the pointer is over it, so its glyphs
+    /// are legible from the moment they appear; the per-button hover state is what picks
+    /// one out of the row, not a rest-vs-active brightness jump for the whole bar.
+    ///
+    /// All four glyphs share one colour on purpose. Tinting Dictate blue to mark it as the
+    /// default action just made one icon look mismatched against the glass — the divider
+    /// already carries the grouping, so the row reads better as a single neutral set.
+    static let glyph            = Color(red: 0.961, green: 0.961, blue: 0.969).opacity(0.72)
+    static let glyphHover       = Color(red: 0.961, green: 0.961, blue: 0.969)
     static let attention = Color(red: 0.941, green: 0.745, blue: 0.384)
 }
 
