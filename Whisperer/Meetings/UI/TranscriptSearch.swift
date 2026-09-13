@@ -185,6 +185,10 @@ enum TranscriptSearch {
         }
     }
 
+    /// Bumped when a new raw match set arrives from the scanner. This is the coordinator's
+    /// input signal — never written by `report(located:)` to avoid re-triggering geometry.
+    @Published private(set) var scanToken: Int = 0
+
     /// Bumped each time a new located match set lands. SwiftUI compares `Int` instead of
     /// deep-comparing `[TranscriptMatch]`, keeping diffing cost negligible.
     @Published private(set) var matchesVersion: Int = 0
@@ -251,6 +255,7 @@ enum TranscriptSearch {
 
     /// Called by the text view coordinator once Y positions have been computed.
     func report(located: [TranscriptMatch], contentHeight: CGFloat) {
+        let unchanged = located == matches && abs(contentHeight - self.contentHeight) < 0.5
         matches = located
         self.contentHeight = contentHeight
         // Keep the cursor clamped to the new bounds; initialise to 0 when geometry first
@@ -262,6 +267,7 @@ enum TranscriptSearch {
         } else {
             currentIndex = 0
         }
+        guard !unchanged else { return }
         matchesVersion &+= 1
     }
 
@@ -300,6 +306,7 @@ enum TranscriptSearch {
         } else {
             currentIndex = 0
         }
+        scanToken &+= 1
         matchesVersion &+= 1
     }
 }

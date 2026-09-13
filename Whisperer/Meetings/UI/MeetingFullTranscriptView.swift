@@ -53,7 +53,10 @@ struct MeetingFullTranscriptView: NSViewRepresentable {
 
         func bindSearch(_ model: TranscriptSearchModel) {
             searchModel = model
-            searchCancellable = Publishers.CombineLatest(model.$matchesVersion, model.$currentIndex)
+            // Subscribe to scanToken (new scan result) and currentIndex (navigation).
+            // scanToken is only bumped by the scanner — never by report() — so this sink
+            // does not feed back into the publisher and cannot form an infinite cycle.
+            searchCancellable = Publishers.CombineLatest(model.$scanToken, model.$currentIndex)
                 .receive(on: DispatchQueue.main)
                 .sink { [weak self] _, _ in
                     self?.applySearchHighlights(model: model)
