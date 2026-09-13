@@ -22,6 +22,46 @@ final class MeetingDetailViewModel: ObservableObject {
     private var loadedMeetingID: UUID? = nil
     private let pageSize = 20
 
+    // MARK: Prose / RTL cache
+    //
+    // `MeetingTranscriptText.plainProse` joins every segment and `isRightToLeft` scans
+    // up to 2 000 characters — both are expensive on large meetings. They are recomputed
+    // only when the segment content or the original-toggle flag changes, preventing
+    // unnecessary work on every playhead tick or speaker-filter update.
+
+    private(set) var cachedProse: String = ""
+    private(set) var cachedIsRTL: Bool = false
+    private var proseCacheKey: ProseCacheKey = .empty
+
+    private struct ProseCacheKey: Equatable {
+        let segmentCount: Int
+        let lastID: UUID?
+        let lastTextHash: Int
+        let showOriginal: Bool
+        static let empty = ProseCacheKey(segmentCount: 0, lastID: nil, lastTextHash: 0, showOriginal: false)
+    }
+
+    /// Must be called by the view before reading `cachedProse` or `cachedIsRTL`.
+    ///
+    /// - Parameters:
+    ///   - segments: The full segment array (all pages, original-toggle applied).
+    ///   - showOriginal: Whether the raw ASR text is being shown.
+    ///   - languageCode: The meeting's configured language, used as a direction fallback.
+    func updateProseCache(segments: [MeetingSegment], showOriginal: Bool, languageCode: String?) {
+        let key = ProseCacheKey(
+            segmentCount: segments.count,
+            lastID: segments.last?.id,
+            lastTextHash: segments.last?.text.hashValue ?? 0,
+            showOriginal: showOriginal
+        )
+        guard key != proseCacheKey else { return }
+        proseCacheKey = key
+        cachedProse = MeetingTranscriptText.plainProse(from: segments)
+        cachedIsRTL = MeetingTranscriptText.isRightToLeft(
+            segments: segments,
+            fallback: TranscriptionLanguage(rawValue: languageCode ?? ""))
+    }
+
     private var notificationObservers = Set<AnyCancellable>()
 
     init() {
@@ -93,6 +133,9 @@ final class MeetingDetailViewModel: ObservableObject {
         allSegments = []
         hasMoreSegments = false
         isLoading = false
+        cachedProse = ""
+        cachedIsRTL = false
+        proseCacheKey = .empty
     }
 
     // MARK: - In-memory mutation helpers

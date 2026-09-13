@@ -35,7 +35,8 @@ struct MeetingTranscriptView: View {
     let isLoadingSegments: Bool
     let hasMoreSegments: Bool
     var onLoadMoreSegments: () -> Void
-    var searchQuery: String
+    /// The shared search model — observed here so match changes scroll and pulse correctly.
+    @ObservedObject var search: TranscriptSearchModel
     var playheadSeconds: Double
     /// Fires with (speakerIndex, newName) — keyed by index, not by the old name string.
     /// Active speaker filter from the detail view. Empty = show all speakers.
@@ -130,6 +131,13 @@ struct MeetingTranscriptView: View {
             .onChange(of: visibleSpeakerIndices) { _, _ in
                 withAnimation { proxy.scrollTo("transcriptBody", anchor: .top) }
             }
+            // Jump to the current search match — guard against live auto-scroll fighting it.
+            .onChange(of: search.currentIndex) { _, idx in
+                guard let idx, idx < search.matches.count else { return }
+                withAnimation(.easeInOut(duration: 0.25)) {
+                    proxy.scrollTo("sm-\(idx)", anchor: .center)
+                }
+            }
         }
     }
 
@@ -158,7 +166,7 @@ struct MeetingTranscriptView: View {
 
             SelectableTranscriptView(
                 segments: segments,
-                searchQuery: searchQuery,
+                search: search,
                 isRTL: isRTL,
                 contentHeight: $transcriptHeight,
                 segmentMetrics: $segmentMetrics
@@ -168,6 +176,10 @@ struct MeetingTranscriptView: View {
             ForEach(segmentMetrics) { info in
                 segmentAccessories(for: info)
             }
+
+            // Match anchors (for scroll-to) and current-match pulse.
+            // Kept in a dedicated leaf view so match changes don't re-render the cards.
+            MatchOverlay(search: search)
         }
         .frame(height: transcriptHeight, alignment: .top)
         .onContinuousHover { phase in

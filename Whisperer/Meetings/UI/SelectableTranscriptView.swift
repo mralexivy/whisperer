@@ -6,9 +6,15 @@
 //  segment boundaries natively. Card backgrounds and the timestamp gutter are
 //  drawn by SwiftUI from the layout metrics reported here.
 //
+//  Search highlighting uses NSLayoutManager.addTemporaryAttributes — display-only,
+//  no storage mutation, no relayout, selection is unaffected.  The query is NOT part
+//  of contentSignature; highlight application is a post-build step driven by the
+//  Coordinator's Combine subscription to TranscriptSearchModel.
+//
 
 import SwiftUI
 import AppKit
+import Combine
 
 // MARK: - Shared layout constants
 
@@ -57,7 +63,9 @@ struct SegmentMetrics: Equatable, Identifiable {
 
 struct SelectableTranscriptView: NSViewRepresentable {
     let segments: [MeetingSegment]
-    let searchQuery: String
+    /// The search model — held by reference, not observed by this struct. The Coordinator
+    /// subscribes directly via Combine so highlights update without re-rendering the view.
+    let search: TranscriptSearchModel
     let isRTL: Bool
     @Binding var contentHeight: CGFloat
     @Binding var segmentMetrics: [SegmentMetrics]
@@ -93,19 +101,25 @@ struct SelectableTranscriptView: NSViewRepresentable {
         let coordinator = context.coordinator
         coordinator.textView = textView
         coordinator.layoutManager = layoutManager
+        coordinator.storage = storage
+        coordinator.inset = TranscriptLayout.textInset
+
         NotificationCenter.default.addObserver(
             coordinator,
             selector: #selector(Coordinator.frameDidChange(_:)),
             name: NSView.frameDidChangeNotification,
             object: textView
         )
+
+        // Subscribe to search model so highlights stay in sync without re-rendering the view.
+        coordinator.bindSearch(search)
         return textView
     }
 
     func updateNSView(_ textView: NSTextView, context: Context) {
         let coordinator = context.coordinator
 
-        // Refresh the publish closure so it always writes to the current bindings.
+        // Refresh publish closure so it always writes to current bindings.
         let heightBinding = $contentHeight
         let metricsBinding = $segmentMetrics
         coordinator.publish = { metrics, height in
@@ -119,10 +133,9 @@ struct SelectableTranscriptView: NSViewRepresentable {
             }
         }
 
-        // Rebuilding the text storage clears an in-progress selection, so only do it when
-        // the content genuinely changed. Playhead ticks and metric write-backs must not
-        // reach this path or selection becomes impossible during playback.
-        let signature = Self.contentSignature(segments: segments, query: searchQuery, isRTL: isRTL)
+        // Query is deliberately NOT part of the signature — highlights are applied as a
+        // post-build step via temporary attributes, not by rebuilding storage.
+        let signature = Self.contentSignature(segments: segments, isRTL: isRTL)
         if signature != coordinator.signature {
             coordinator.signature = signature
 
@@ -138,6 +151,12 @@ struct SelectableTranscriptView: NSViewRepresentable {
                previousSelection.location + previousSelection.length <= length {
                 textView.setSelectedRange(previousSelection)
             }
+
+            // Feed updated text snapshot to the search model so scans stay current.
+            let snapshot = textView.string
+            Task { @MainActor in
+                coordinator.searchModel?.ingest(text: snapshot)
+            }
         }
 
         coordinator.recomputeMetrics()
@@ -145,6 +164,7 @@ struct SelectableTranscriptView: NSViewRepresentable {
 
     static func dismantleNSView(_ textView: NSTextView, coordinator: Coordinator) {
         NotificationCenter.default.removeObserver(coordinator)
+        coordinator.searchCancellable = nil
     }
 
     // MARK: - Attributed string builder
@@ -166,15 +186,12 @@ struct SelectableTranscriptView: NSViewRepresentable {
         let alignment: NSTextAlignment = isRTL ? .right : .left
 
         for (index, segment) in segments.enumerated() {
-            // A run of consecutive segments from one speaker is a single turn: only the
-            // first card carries the name, the rest stack tightly underneath it.
             let previous = index > 0 ? segments[index - 1] : nil
             let startsTurn = previous.map {
                 $0.speakerIndex != segment.speakerIndex || $0.speakerName != segment.speakerName
             } ?? true
 
             if startsTurn {
-                // Speaker name — its own paragraph so it sits above the card.
                 let speakerStart = result.length
                 let speakerStyle = NSMutableParagraphStyle()
                 speakerStyle.paragraphSpacingBefore = index == 0 ? 0 : TranscriptLayout.interSegmentSpacing
@@ -188,24 +205,13 @@ struct SelectableTranscriptView: NSViewRepresentable {
                 ]))
                 speakerRanges.append(NSRange(location: speakerStart, length: result.length - speakerStart))
             } else {
-                // Kept parallel with `segments` — NSNotFound means "no speaker line".
                 speakerRanges.append(NSRange(location: NSNotFound, length: 0))
             }
 
-            // Body text — the region the card is drawn behind.
-            //
-            // ParagraphSplitter writes "\n\n" into segment.text as a break marker. Emitting the
-            // whole text as one NSAttributedString with a single NSParagraphStyle would apply
-            // `paragraphSpacingBefore` to every internal paragraph — turning the intended ~8 pt
-            // gap into 36 + ~22 + 36 ≈ 94 pt of dead space. Emit each paragraph with its own
-            // style instead: the first keeps the segment-level spacing, subsequent ones get a
-            // small `intraSegmentSpacing`. The empty string from "\n\n" is dropped — the spacing
-            // carries the break so the blank line's ~22 pt is not also paid.
             let bodyStart = result.length
             let isLastSegment = index == segments.count - 1
             let nonEmptyLines = segment.text.components(separatedBy: "\n").filter { !$0.isEmpty }
             if nonEmptyLines.isEmpty {
-                // Degenerate empty segment — keep NSTextStorage structurally sound.
                 let paraStyle = NSMutableParagraphStyle()
                 paraStyle.lineSpacing = 5
                 paraStyle.paragraphSpacingBefore = startsTurn ? 0 : TranscriptLayout.groupedSegmentSpacing
@@ -222,8 +228,6 @@ struct SelectableTranscriptView: NSViewRepresentable {
                     let paraStyle = NSMutableParagraphStyle()
                     paraStyle.lineSpacing = 5
                     paraStyle.paragraphSpacing = 0
-                    // First paragraph opens the card gap; subsequent paragraphs use the smaller
-                    // intra-segment spacing so they read as structure within one card.
                     paraStyle.paragraphSpacingBefore = pIdx == 0
                         ? (startsTurn ? 0 : TranscriptLayout.groupedSegmentSpacing)
                         : TranscriptLayout.intraSegmentSpacing
@@ -238,19 +242,8 @@ struct SelectableTranscriptView: NSViewRepresentable {
             bodyRanges.append(NSRange(location: bodyStart, length: result.length - bodyStart))
         }
 
-        if !searchQuery.isEmpty {
-            let plain = result.string
-            var cursor = plain.startIndex
-            while cursor < plain.endIndex,
-                  let match = plain.range(of: searchQuery, options: .caseInsensitive, range: cursor..<plain.endIndex) {
-                result.addAttribute(
-                    .backgroundColor,
-                    value: NSColor(red: 0.357, green: 0.424, blue: 0.969, alpha: 0.35),
-                    range: NSRange(match, in: plain)
-                )
-                cursor = match.upperBound
-            }
-        }
+        // Highlights are NOT applied here — they are applied as temporary attributes by
+        // the Coordinator after storage is set, so the query never invalidates layout.
 
         return BuiltText(string: result, speakerRanges: speakerRanges, bodyRanges: bodyRanges)
     }
@@ -267,9 +260,10 @@ struct SelectableTranscriptView: NSViewRepresentable {
         )
     }
 
-    private static func contentSignature(segments: [MeetingSegment], query: String, isRTL: Bool) -> Int {
+    /// Segment content hash — deliberately excludes the search query so changing the query
+    /// does not rebuild text storage or drop the user's selection.
+    private static func contentSignature(segments: [MeetingSegment], isRTL: Bool) -> Int {
         var hasher = Hasher()
-        hasher.combine(query)
         hasher.combine(isRTL)
         hasher.combine(segments.count)
         for segment in segments {
@@ -286,18 +280,65 @@ struct SelectableTranscriptView: NSViewRepresentable {
     final class Coordinator: NSObject {
         weak var textView: NSTextView?
         var layoutManager: NSLayoutManager?
+        var storage: NSTextStorage?
+        var inset: NSSize = .zero
         var speakerRanges: [NSRange] = []
         var bodyRanges: [NSRange] = []
         var segmentIDs: [UUID] = []
         var signature: Int = 0
         var publish: (([SegmentMetrics], CGFloat) -> Void)?
 
+        // Search
+        weak var searchModel: TranscriptSearchModel?
+        var searchCancellable: AnyCancellable?
+
         private var lastWidth: CGFloat = 0
+
+        // MARK: Search subscription
+
+        func bindSearch(_ model: TranscriptSearchModel) {
+            searchModel = model
+            // Subscribe to both matchesVersion (new match set) and currentIndex (navigation).
+            searchCancellable = Publishers.CombineLatest(model.$matchesVersion, model.$currentIndex)
+                .receive(on: DispatchQueue.main)
+                .sink { [weak self] _, _ in
+                    self?.applySearchHighlights(model: model)
+                }
+        }
+
+        func applySearchHighlights(model: TranscriptSearchModel) {
+            guard let lm = layoutManager, let s = storage else { return }
+            TranscriptSearch.applyHighlights(
+                layoutManager: lm,
+                storageLength: s.length,
+                matches: model.matches,
+                currentIndex: model.currentIndex
+            )
+            // Locate match Y positions after layout is up to date, then push geometry back.
+            locateAndReport(model: model)
+        }
+
+        private func locateAndReport(model: TranscriptSearchModel) {
+            guard let lm = layoutManager, let tv = textView else { return }
+            lm.ensureLayout(for: lm.textContainers.first ?? NSTextContainer())
+            let located = TranscriptSearch.locateMatches(
+                model.matches,
+                layoutManager: lm,
+                textContainerInset: tv.textContainerInset)
+            let totalHeight = max(
+                (lm.usedRect(for: lm.textContainers.first ?? NSTextContainer()).height
+                 + tv.textContainerInset.height * 2),
+                40)
+            model.report(located: located, contentHeight: totalHeight)
+        }
+
+        // MARK: Layout
 
         @objc func frameDidChange(_ notification: Notification) {
             guard let width = textView?.bounds.width, abs(width - lastWidth) > 0.5 else { return }
             lastWidth = width
             recomputeMetrics()
+            if let m = searchModel { locateAndReport(model: m) }
         }
 
         func recomputeMetrics() {
@@ -323,8 +364,6 @@ struct SelectableTranscriptView: NSViewRepresentable {
                     : lineBounds(layoutManager, speakerRange)
                 let cardTop = insetY + body.minY - TranscriptLayout.cardVPad
 
-                // Continuation cards have no speaker line, so the accessory row and the
-                // hover region anchor to the card's own top edge instead.
                 metrics.append(SegmentMetrics(
                     id: id,
                     speakerY: speaker.map { insetY + $0.minY } ?? cardTop - 1,

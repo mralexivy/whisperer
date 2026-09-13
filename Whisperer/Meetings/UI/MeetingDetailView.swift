@@ -15,7 +15,9 @@ struct MeetingDetailView: View {
     let playheadSeconds: Double
 
     @State private var selectedTab: DetailTab = .transcript
-    @State private var searchQuery = ""
+    /// Held as @State (not @StateObject) so typing never invalidates this view's body.
+    /// Only leaf views that need updates observe it directly as @ObservedObject.
+    @State private var search = TranscriptSearchModel()
     @State private var editableTitle: String = ""
     @State private var showOverviewReadyToast = false
     /// The Overview tab has a summary the user has not looked at yet — drives the glowing dot.
@@ -102,20 +104,24 @@ struct MeetingDetailView: View {
         return completeSegments.filter { speakerFilter.contains($0.speakerIndex) }
     }
 
-    /// The prose rendering, shared by the Full Text view and the clipboard so the two cannot
-    /// disagree. The Polished/Original choice flows through `completeSegments`.
-    private var plainProse: String {
+    /// Prose for the clipboard — still computed directly so it always reflects the current
+    /// segments rather than a cached snapshot. Clipboard actions are rare; the cost is fine.
+    private var plainProseForClipboard: String {
         MeetingTranscriptText.plainProse(from: completeSegments)
     }
 
-    /// Content decides direction, by majority over the whole transcript; the configured
-    /// language is only the fallback when there is not enough text yet. Same rule as
-    /// `MeetingTranscriptView`, and it drives Full Text as well as Speakers.
-    private var isRTL: Bool {
-        MeetingTranscriptText.isRightToLeft(
+    /// Prose for Full Text display — from the prose cache, avoiding recomputation on
+    /// playhead ticks and other frequent re-renders.
+    private var cachedProse: String {
+        detailVM.updateProseCache(
             segments: completeSegments,
-            fallback: TranscriptionLanguage(rawValue: meeting?.language ?? ""))
+            showOriginal: showOriginal,
+            languageCode: meeting?.language)
+        return detailVM.cachedProse
     }
+
+    /// RTL for Full Text — from the prose cache (computed alongside `cachedProse`).
+    private var cachedIsRTL: Bool { detailVM.cachedIsRTL }
 
     /// The re-transcribe button is offered whenever the audio is still on disk and the meeting
     /// is not actively recording. The panel itself shows "Re-transcribing…" while a run is in
@@ -154,7 +160,7 @@ struct MeetingDetailView: View {
         .onChange(of: detailVM.meeting?.id) { _, _ in
             editableTitle = meeting?.title ?? ""
             selectedTab = .transcript
-            searchQuery = ""
+            search.clear()
             showOriginal = false
             transcriptMode = .speakers
             didCopy = false
@@ -583,37 +589,17 @@ struct MeetingDetailView: View {
         return .white.opacity(0.4)
     }
 
-    private var searchField: some View {
-        HStack(spacing: 6) {
-            Image(systemName: "magnifyingglass")
-                .font(.system(size: 11))
-                .foregroundColor(.white.opacity(0.3))
-            TextField("Search transcript…", text: $searchQuery)
-                .font(.system(size: 12))
-                .foregroundColor(.white)
-                .textFieldStyle(.plain)
-        }
-        .padding(.horizontal, 8)
-        .padding(.vertical, 6)
-        .background(Color.white.opacity(0.06))
-        .clipShape(RoundedRectangle(cornerRadius: 6))
-    }
-
     /// Search, view mode, copy, and the polish controls. The polish controls only exist once
     /// there is something to control: no toggle before a run has produced raw/polished pairs,
     /// no manual action while one is running or while there is nothing left to clean.
     ///
-    /// Search is dropped in Full Text mode. `searchQuery` drives per-segment highlighting
-    /// inside `SelectableTranscriptView`, which the prose path does not use — a search box
-    /// that silently does nothing is worse than no search box.
+    /// The search row is visible in both Speakers and Full Text mode: both views now support
+    /// full search, highlight, navigation, and the tick gutter.
     private var transcriptToolbar: some View {
         VStack(alignment: .leading, spacing: 6) {
-            // Row 1: search (speakers mode only)
-            if transcriptMode == .speakers {
-                searchField
-                    .frame(maxWidth: .infinity)
-                    .transition(.opacity.combined(with: .move(edge: .top)))
-            }
+            // Row 1: search — always visible across both transcript modes
+            TranscriptSearchRow(search: search)
+                .frame(maxWidth: .infinity)
 
             // Row 2: view-mode toggles (max ~325px each row — safe at any allowed window size)
             HStack(spacing: 8) {
@@ -932,28 +918,36 @@ struct MeetingDetailView: View {
                     .fill(Color.white.opacity(0.04))
                     .frame(height: 1)
 
-                switch transcriptMode {
-                case .speakers:
-                    MeetingTranscriptView(
-                        meeting: meeting,
-                        session: session,
-                        segments: filteredSegments,
-                        speakerRoster: speakerRoster,
-                        isLoadingSegments: detailVM.isLoading,
-                        hasMoreSegments: speakerFilter.isEmpty && detailVM.hasMoreSegments,
-                        onLoadMoreSegments: detailVM.loadMoreSegments,
-                        searchQuery: searchQuery,
-                        playheadSeconds: playheadSeconds,
-                        visibleSpeakerIndices: speakerFilter,
-                        onSpeakerRenamed: { speakerIndex, name in
-                            Task { await handleSpeakerRename(speakerIndex: speakerIndex, newName: name) }
-                        },
-                        onTagToggled: { segID, tag in
-                            Task { await handleTagToggle(segID: segID, tag: tag) }
-                        }
-                    )
-                case .fullText:
-                    fullTextContent
+                Group {
+                    switch transcriptMode {
+                    case .speakers:
+                        MeetingTranscriptView(
+                            meeting: meeting,
+                            session: session,
+                            segments: filteredSegments,
+                            speakerRoster: speakerRoster,
+                            isLoadingSegments: detailVM.isLoading,
+                            hasMoreSegments: speakerFilter.isEmpty && detailVM.hasMoreSegments,
+                            onLoadMoreSegments: detailVM.loadMoreSegments,
+                            search: search,
+                            playheadSeconds: playheadSeconds,
+                            visibleSpeakerIndices: speakerFilter,
+                            onSpeakerRenamed: { speakerIndex, name in
+                                Task { await handleSpeakerRename(speakerIndex: speakerIndex, newName: name) }
+                            },
+                            onTagToggled: { segID, tag in
+                                Task { await handleTagToggle(segID: segID, tag: tag) }
+                            }
+                        )
+                    case .fullText:
+                        fullTextContent
+                    }
+                }
+                .overlay(alignment: cachedIsRTL ? .leading : .trailing) {
+                    // Tick gutter — 10 pt canvas showing every match's vertical position.
+                    // Tapping a tick jumps to that match. RTL mirrors to the leading edge.
+                    TranscriptMatchTicks(search: search, isRTL: cachedIsRTL)
+                        .padding(.vertical, 8)
                 }
             }
         case .overview:
@@ -963,11 +957,11 @@ struct MeetingDetailView: View {
 
     @ViewBuilder
     private var fullTextContent: some View {
-        let prose = plainProse
+        let prose = cachedProse
         if prose.isEmpty {
             fullTextEmptyState
         } else {
-            MeetingFullTranscriptView(text: prose, isRTL: isRTL)
+            MeetingFullTranscriptView(text: prose, isRTL: cachedIsRTL, search: search)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .background(Color(hex: "0C0C1A"))
         }
@@ -1043,7 +1037,7 @@ struct MeetingDetailView: View {
         let segments = completeSegments
         guard !segments.isEmpty else { return }
         let text = transcriptMode == .fullText
-            ? MeetingTranscriptText.plainProse(from: segments)
+            ? plainProseForClipboard
             : MeetingTranscriptText.labelled(from: segments)
         guard !text.isEmpty else { return }
 
