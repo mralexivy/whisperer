@@ -177,6 +177,18 @@ struct OverlayView: View {
 
     var body: some View {
         VStack(spacing: 8 * scale) {
+            // Silent-meeting toast — shown during meeting mode, independently of other HUD cards.
+            if appState.showSilentMeetingToast {
+                SilentMeetingCard(watcher: appState.meetingSilenceWatcher)
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
+            }
+
+            // In meeting mode the Island / MeetingLiveWindow own the recording UI — nothing else
+            // from the HUD should appear. Guard at the outermost level so we never accidentally
+            // render the live transcript, the stop indicator, or any other dictation card on top
+            // of a meeting.
+            if !appState.isMeetingMode {
+
             #if !APP_STORE
             if appState.showMeetingDetectedToast, let meetingApp = appState.detectedMeetingApp {
                 MeetingNotificationCard(app: meetingApp)
@@ -281,6 +293,7 @@ struct OverlayView: View {
                     .animation(.easeInOut(duration: 0.3), value: appState.showHandsFreeToast)
                 }
             }
+        } // end if !appState.isMeetingMode
         }
         .padding(.top, 35 * scale)  // Space for expand/collapse tooltip
         .padding(.bottom, 20 * scale) // Breathing room so card rounded corners aren't flush with panel edge

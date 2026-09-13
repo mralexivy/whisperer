@@ -347,6 +347,9 @@ class MeetingSession: ObservableObject {
         silenceFlushTask = nil
         stopElapsedTimer()
 
+        // Capture before stopMeetingRecording() tears down the watcher.
+        let silenceWatcherSpeechDetected = AppState.shared.meetingSilenceWatcher.speechDetected
+
         AppState.shared.stopMeetingRecording()
 
         // Show the processing indicator from the instant the LIVE badge goes away, so the
@@ -395,7 +398,7 @@ class MeetingSession: ObservableObject {
         // [weak self] because awaitTailDelivery checks `activeMeetingSession === self` — if
         // this session is destroyed before the tail lands, a `.finalizing` sidecar from a
         // previous run will already be on disk and restore() will pick it up on relaunch.
-        Task { [weak self, capturedAudioURL] in
+        Task { [weak self, capturedAudioURL, silenceWatcherSpeechDetected] in
             await self?.awaitTailDelivery()
             guard let self else { return }
 
@@ -404,6 +407,21 @@ class MeetingSession: ObservableObject {
             Logger.info("Meeting session stop: segments=\(finalSegments.count), transcript=\(transcript.count) chars", subsystem: .transcription)
 
             guard !transcript.isEmpty else {
+                // Silent discard: short recording with no words and no confirmed speech.
+                if MeetingSilencePolicy.shouldDiscard(
+                    elapsed: self.elapsedSeconds,
+                    hasTranscript: false,
+                    hasNotes: !self.notes.isEmpty,
+                    speechDetected: silenceWatcherSpeechDetected
+                ) {
+                    Logger.info("Meeting discarded: \(String(format: "%.1f", self.elapsedSeconds))s, no speech detected",
+                                subsystem: .app)
+                    MeetingManager.shared.setProcessing(nil, for: id)
+                    self.meetingID = nil
+                    await MeetingManager.shared.deleteMeeting(meetingID: id)
+                    return
+                }
+
                 if finalSegments.isEmpty && self.elapsedSeconds < 2 {
                     Logger.debug("Meeting session stop: nothing recorded — overview skipped", subsystem: .transcription)
                 } else {
@@ -594,6 +612,9 @@ class MeetingSession: ObservableObject {
     func onNewChunk(text: String, start: Double, end: Double) {
         // whisper.cpp emits one chunk per voiced VAD segment, so chunk *arrival* really does
         // track speech — the idle timer is a valid pause signal on this path.
+        if !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            AppState.shared.meetingSilenceWatcher.noteSpeech()
+        }
         accumulate(text: text, start: start, end: end, idleFlushTracksSpeech: true)
     }
 
@@ -604,6 +625,7 @@ class MeetingSession: ObservableObject {
     func onAttributedText(text: String, speakerIndex: Int, startTimestamp: Double, endTimestamp: Double) {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty, meetingID != nil else { return }
+        AppState.shared.meetingSilenceWatcher.noteSpeech()
 
         if speakerIndex != currentSpeakerIndex {
             // Close at the last voiced sample of the previous turn, not at this turn's start —

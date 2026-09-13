@@ -271,6 +271,13 @@ class AppState: ObservableObject {
         if amplitude >= 0.001 {
             lastNonSilentAmplitudeTime = Date()
         }
+        // RMS fallback for the silence watcher (no-op when VAD is available or speech latched).
+        if isMeetingMode {
+            meetingSilenceWatcher.feedRMS(amplitude)
+            if let session = activeMeetingSession {
+                meetingSilenceWatcher.updateElapsed(session.elapsedSeconds)
+            }
+        }
     }
 
     /// Read-only accessors for StuckStateDumper.
@@ -577,6 +584,13 @@ class AppState: ObservableObject {
     // Pre-loaded Silero VAD for voice activity detection
     private var sileroVAD: SileroVAD?
     @Published var isVADLoaded: Bool = false
+
+    // Silent-meeting detection
+    private(set) var meetingSilenceWatcher: MeetingSilenceWatcher = MeetingSilenceWatcher()
+    @Published var showSilentMeetingToast: Bool = false {
+        didSet { NotificationCenter.default.post(name: NSNotification.Name("AppStateChanged"), object: nil) }
+    }
+    private var silenceWatcherObserver: AnyCancellable?
 
     // Streaming transcription
     private var streamingTranscriber: StreamingTranscriber?
@@ -3179,6 +3193,8 @@ class AppState: ObservableObject {
                 audioRecorder?.onStreamingSamples = { [weak self] samples in
                     guard let self = self, !self.isMicMuted, !self.isPaused else { return }
                     self.streamingTranscriber?.addSamples(samples)
+                    // Feed the silence watcher (no-op once speech latches).
+                    self.meetingSilenceWatcher.feed(samples)
                     #if canImport(FluidAudio)
                     // Same buffers the ASR sees, so the coordinator's sample counter is an exact
                     // audio clock. Chained rather than fire-and-forget: SortformerDiarizer is not
@@ -3600,6 +3616,8 @@ class AppState: ObservableObject {
                 audioRecorder?.onStreamingSamples = { [weak self] samples in
                     guard let self = self, !self.isMicMuted, !self.isPaused else { return }
                     self.streamingTranscriber?.addSamples(samples)
+                    // Feed the silence watcher (no-op once speech latches).
+                    self.meetingSilenceWatcher.feed(samples)
                 }
 
                 // Guard: if stopRecording() was called before we got here, bail out
@@ -4551,6 +4569,14 @@ class AppState: ObservableObject {
             MeetingLiveWindowManager.shared.show(session: session)
         }
 
+        // Start silent-meeting watcher before audio begins.
+        meetingSilenceWatcher.start(vad: sileroVAD)
+        silenceWatcherObserver = meetingSilenceWatcher.$stage
+            .receive(on: RunLoop.main)
+            .sink { [weak self] stage in
+                self?.showSilentMeetingToast = (stage == .warning || stage == .confident)
+            }
+
         // Reuse in-app recording path (isInAppMode = true suppresses text injection)
         isInAppMode = true
         startInAppRecording()
@@ -4570,6 +4596,11 @@ class AppState: ObservableObject {
 
     func stopMeetingRecording() {
         guard isMeetingMode else { return }
+
+        // Stop the silence watcher — caller must have already captured speechDetected if needed.
+        meetingSilenceWatcher.stop()
+        silenceWatcherObserver = nil
+        showSilentMeetingToast = false
 
         // Do NOT clear meetingWindowIsVisible here — the OverlayPanel uses it to suppress the HUD,
         // and we need that suppression to hold during the .stopping/.transcribing states.
