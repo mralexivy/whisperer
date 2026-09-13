@@ -1155,6 +1155,7 @@ struct HistorySettingsView: View {
                 // Settings content
                 VStack(alignment: .leading, spacing: 28) {
                     displaySection
+                    islandSection
                     overlaySection
                     #if !APP_STORE
                     rewriteSection
@@ -1549,6 +1550,56 @@ struct HistorySettingsView: View {
         case 2: return "Balanced corrections (up to 2 character differences) — recommended"
         case 3: return "Lenient corrections (up to 3 character differences) — may have false positives"
         default: return "Balanced corrections — recommended"
+        }
+    }
+
+    // MARK: - Island Section
+
+    private var islandSection: some View {
+        SettingsCard(colorScheme: colorScheme) {
+            VStack(alignment: .leading, spacing: 20) {
+                SettingsSectionHeader(
+                    icon: "rectangle.on.rectangle",
+                    title: "Recording Bar",
+                    colorScheme: colorScheme,
+                    color: .blue
+                )
+
+                VStack(alignment: .leading, spacing: 14) {
+                    Text("Position")
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundColor(WhispererColors.primaryText(colorScheme))
+
+                    HStack(spacing: 12) {
+                        let currentPlacement = Binding<IslandPlacement>(
+                            get: { IslandPlacement.current },
+                            set: {
+                                IslandPlacement.save($0)
+                                NotificationCenter.default.post(name: .islandPlacementChanged,
+                                                                object: nil)
+                            }
+                        )
+
+                        ForEach(IslandPlacement.allCases) { placement in
+                            IslandPlacementCard(
+                                placement: placement,
+                                isSelected: currentPlacement.wrappedValue == placement,
+                                colorScheme: colorScheme
+                            ) {
+                                withAnimation(.spring(response: 0.25, dampingFraction: 0.8)) {
+                                    currentPlacement.wrappedValue = placement
+                                }
+                            }
+                        }
+
+                        Spacer()
+                    }
+
+                    Text("The bar appears at the chosen screen edge after a brief hover dwell.")
+                        .font(.system(size: 12))
+                        .foregroundColor(WhispererColors.secondaryText(colorScheme))
+                }
+            }
         }
     }
 
@@ -2501,6 +2552,64 @@ struct TimeFormatCard: View {
             withAnimation(.easeInOut(duration: 0.15)) {
                 isHovered = hovering
             }
+        }
+    }
+}
+
+struct IslandPlacementCard: View {
+    let placement: IslandPlacement
+    let isSelected: Bool
+    let colorScheme: ColorScheme
+    let action: () -> Void
+
+    @State private var isHovered = false
+
+    var body: some View {
+        Button(action: action) {
+            VStack(spacing: 8) {
+                // Mini screen diagram with a bar on the chosen edge.
+                ZStack {
+                    RoundedRectangle(cornerRadius: 6, style: .continuous)
+                        .strokeBorder(WhispererColors.primaryText(colorScheme).opacity(isSelected ? 0.6 : 0.25),
+                                      lineWidth: 1)
+                        .frame(width: 44, height: 32)
+
+                    // Bar on the chosen edge.
+                    RoundedRectangle(cornerRadius: 2, style: .continuous)
+                        .fill(isSelected ? WhispererColors.accent : WhispererColors.primaryText(colorScheme).opacity(0.55))
+                        .frame(
+                            width:  placement.isVertical ? 4 : 22,
+                            height: placement.isVertical ? 14 : 4
+                        )
+                        .offset(
+                            x: placement == .leftCenter  ? -18 : placement == .rightCenter  ? 18 : 0,
+                            y: placement == .bottomCenter ? 12  : placement == .topCenter ? -12 : 0
+                        )
+                }
+
+                Text(placement.displayName)
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundColor(isSelected ? WhispererColors.accent : WhispererColors.secondaryText(colorScheme))
+            }
+            .frame(width: 72, height: 68)
+            .background(
+                RoundedRectangle(cornerRadius: 12)
+                    .fill(isSelected
+                          ? WhispererColors.accent.opacity(0.12)
+                          : (isHovered ? WhispererColors.elevatedBackground(colorScheme) : WhispererColors.background(colorScheme)))
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 12)
+                    .stroke(
+                        isSelected ? WhispererColors.accent.opacity(0.7) : WhispererColors.border(colorScheme),
+                        lineWidth: isSelected ? 1.5 : 1
+                    )
+            )
+            .scaleEffect(isHovered && !isSelected ? 1.02 : 1.0)
+        }
+        .buttonStyle(.plain).pointerOnHover()
+        .onHover { hovering in
+            withAnimation(.easeInOut(duration: 0.15)) { isHovered = hovering }
         }
     }
 }
