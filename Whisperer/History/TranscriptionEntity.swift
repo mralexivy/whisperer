@@ -25,6 +25,7 @@ public class TranscriptionEntity: NSManagedObject {
     @NSManaged public var createdAt: Date
     @NSManaged public var lastModifiedAt: Date
     @NSManaged public var correctionsData: Data?
+    @NSManaged public var targetAppBundleID: String?
     @NSManaged public var targetAppName: String?
     @NSManaged public var aiEnhancedText: String?
     @NSManaged public var aiModeName: String?
@@ -87,7 +88,7 @@ extension TranscriptionEntity {
 // MARK: - Convenience Initializer
 
 extension TranscriptionEntity {
-    static func create(in context: NSManagedObjectContext, id: UUID = UUID(), transcription: String, audioFileURL: String?, duration: Double, language: String, modelUsed: String, corrections: [AppliedCorrection] = [], targetAppName: String? = nil, aiEnhancedText: String? = nil, aiModeName: String? = nil) -> TranscriptionEntity {
+    static func create(in context: NSManagedObjectContext, id: UUID = UUID(), transcription: String, audioFileURL: String?, duration: Double, language: String, modelUsed: String, corrections: [AppliedCorrection] = [], targetAppName: String? = nil, targetAppBundleID: String? = nil, aiEnhancedText: String? = nil, aiModeName: String? = nil) -> TranscriptionEntity {
         let entity = TranscriptionEntity(context: context)
         let now = Date()
 
@@ -106,6 +107,7 @@ extension TranscriptionEntity {
         entity.createdAt = now
         entity.lastModifiedAt = now
         entity.corrections = corrections
+        entity.targetAppBundleID = targetAppBundleID
         entity.targetAppName = targetAppName
         entity.aiEnhancedText = aiEnhancedText
         entity.aiModeName = aiModeName

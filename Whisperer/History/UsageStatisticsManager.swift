@@ -58,6 +58,7 @@ struct DailyActivity: Identifiable {
 struct AppUsage: Identifiable {
     let id = UUID()
     let appName: String
+    let bundleID: String?
     let wordCount: Int
     let sessionCount: Int
     var percentage: Double
@@ -350,13 +351,17 @@ class UsageStatisticsManager: ObservableObject {
     // MARK: - App Usage
 
     private func computeAppUsage(entities: [TranscriptionEntity]) {
-        var appMap: [String: (words: Int, sessions: Int)] = [:]
+        // Group by name; carry the first non-nil bundle ID seen for each app.
+        var appMap: [String: (words: Int, sessions: Int, bundleID: String?)] = [:]
 
         for entity in entities {
             let name = entity.targetAppName ?? "Unknown"
-            var entry = appMap[name] ?? (0, 0)
+            var entry = appMap[name] ?? (0, 0, nil)
             entry.words += Int(entity.wordCount)
             entry.sessions += 1
+            if entry.bundleID == nil {
+                entry.bundleID = entity.value(forKey: "targetAppBundleID") as? String
+            }
             appMap[name] = entry
         }
 
@@ -365,6 +370,7 @@ class UsageStatisticsManager: ObservableObject {
         appUsage = appMap.map { key, value in
             AppUsage(
                 appName: key,
+                bundleID: value.bundleID,
                 wordCount: value.words,
                 sessionCount: value.sessions,
                 percentage: Double(value.words) / Double(totalWords) * 100

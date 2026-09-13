@@ -25,7 +25,7 @@ struct MeetingSourceIcon: View {
 
     @ViewBuilder
     private func resolvedIcon(for bundleID: String) -> some View {
-        if let nsImage = MeetingSourceIconCache.image(for: bundleID) {
+        if let nsImage = AppIconCache.image(for: bundleID) {
             Image(nsImage: nsImage)
                 .resizable()
                 .interpolation(.high)
@@ -41,23 +41,4 @@ struct MeetingSourceIcon: View {
     }
 }
 
-// MARK: - Cache
-
-/// Thread-safe (main-actor) LaunchServices icon cache.
-///
-/// `NSWorkspace.icon(forFile:)` hits LaunchServices and is visually noticeable if called
-/// per-body-evaluation inside a scrolling `LazyVStack`. Both hits and misses are memoised;
-/// a miss stores `nil` so the SF Symbol fallback appears instantly on subsequent renders.
-@MainActor
-enum MeetingSourceIconCache {
-    private static var cache: [String: NSImage?] = [:]
-
-    static func image(for bundleID: String) -> NSImage? {
-        if let cached = cache[bundleID] { return cached }
-        let image = NSWorkspace.shared
-            .urlForApplication(withBundleIdentifier: bundleID)
-            .map { NSWorkspace.shared.icon(forFile: $0.path) }
-        cache[bundleID] = image
-        return image
-    }
-}
+// MeetingSourceIconCache has been merged into AppIconCache (Whisperer/Core/AppIconCache.swift).

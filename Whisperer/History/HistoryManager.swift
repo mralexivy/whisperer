@@ -181,6 +181,7 @@ class HistoryManager: ObservableObject {
                 modelUsed: record.modelUsed,
                 corrections: record.corrections,
                 targetAppName: record.targetAppName,
+                targetAppBundleID: record.targetAppBundleID,
                 aiEnhancedText: record.aiEnhancedText,
                 aiModeName: record.aiModeName
             )

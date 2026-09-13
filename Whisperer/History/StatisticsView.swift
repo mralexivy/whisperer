@@ -1543,16 +1543,27 @@ private struct AppUsageRow: View {
 
     var body: some View {
         HStack(spacing: 10) {
-            // App icon
-            ZStack {
-                RoundedRectangle(cornerRadius: 7)
-                    .fill(color.opacity(0.15))
-                    .frame(width: 28, height: 28)
+            // App icon — real macOS icon when available, tinted SF Symbol otherwise
+            Group {
+                if let bundleID = app.bundleID, let nsImage = AppIconCache.image(for: bundleID) {
+                    Image(nsImage: nsImage)
+                        .resizable()
+                        .interpolation(.high)
+                        .frame(width: 22, height: 22)
+                        .clipShape(RoundedRectangle(cornerRadius: 6))
+                } else {
+                    ZStack {
+                        RoundedRectangle(cornerRadius: 7)
+                            .fill(color.opacity(0.15))
+                            .frame(width: 28, height: 28)
 
-                Image(systemName: iconName)
-                    .font(.system(size: 12, weight: .medium))
-                    .foregroundColor(color)
+                        Image(systemName: iconName)
+                            .font(.system(size: 12, weight: .medium))
+                            .foregroundColor(color)
+                    }
+                }
             }
+            .frame(width: 28, height: 28)
 
             VStack(alignment: .leading, spacing: 5) {
                 HStack {

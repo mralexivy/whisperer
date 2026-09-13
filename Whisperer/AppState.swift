@@ -63,6 +63,7 @@ class AppState: ObservableObject {
                 // stays running if the menu bar popover or dictation HUD is still visible.
                 waveformState.resetAmplitudes()
                 targetAppIcon = nil
+                lastTargetAppBundleID = nil
                 activeMode = .dictation
                 activeAIModeName = nil
                 isHandsFreeRecording = false
@@ -718,6 +719,7 @@ class AppState: ObservableObject {
 
     private var currentAudioURL: URL?
     private var lastTargetAppName: String?
+    private var lastTargetAppBundleID: String?
     @Published var targetAppIcon: NSImage?
 
     // Rewrite mode
@@ -3477,9 +3479,18 @@ class AppState: ObservableObject {
         if let frontApp = NSWorkspace.shared.frontmostApplication,
            frontApp.bundleIdentifier != Bundle.main.bundleIdentifier {
             lastTargetAppName = frontApp.localizedName
+            lastTargetAppBundleID = frontApp.bundleIdentifier
             targetAppIcon = frontApp.icon
+            // Snapshot the icon off the critical path so the recording-start latency is unaffected.
+            if let bundleID = frontApp.bundleIdentifier, let icon = frontApp.icon {
+                let iconCopy = icon
+                Task.detached(priority: .utility) {
+                    AppIconSnapshotStore.store(iconCopy, bundleID: bundleID)
+                }
+            }
         } else {
             lastTargetAppName = nil
+            lastTargetAppBundleID = nil
             targetAppIcon = nil
         }
 
@@ -4258,7 +4269,8 @@ class AppState: ObservableObject {
                         language: recordedLanguage,
                         modelUsed: activeModelDisplayName,
                         corrections: transcriber.lastAppliedCorrections,
-                        targetAppName: self.lastTargetAppName
+                        targetAppName: self.lastTargetAppName,
+                        targetAppBundleID: self.lastTargetAppBundleID
                     )
                     try await HistoryManager.shared.saveTranscription(record)
                     Logger.debug("Transcription saved to history database", subsystem: .app)

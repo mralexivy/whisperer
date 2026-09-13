@@ -26,6 +26,7 @@ struct TranscriptionRecord: Identifiable {
     let createdAt: Date
     let lastModifiedAt: Date
     let corrections: [AppliedCorrection]
+    let targetAppBundleID: String?
     let targetAppName: String?
     let aiEnhancedText: String?
     let aiModeName: String?
@@ -73,13 +74,14 @@ struct TranscriptionRecord: Identifiable {
         self.createdAt = entity.value(forKey: "createdAt") as? Date ?? now
         self.lastModifiedAt = entity.value(forKey: "lastModifiedAt") as? Date ?? now
         self.corrections = entity.corrections
+        self.targetAppBundleID = entity.value(forKey: "targetAppBundleID") as? String
         self.targetAppName = entity.targetAppName
         self.aiEnhancedText = entity.aiEnhancedText
         self.aiModeName = entity.aiModeName
     }
 
     // For creating new records
-    init(id: UUID = UUID(), transcription: String, audioFileURL: String?, duration: Double, language: String, modelUsed: String, corrections: [AppliedCorrection] = [], targetAppName: String? = nil, aiEnhancedText: String? = nil, aiModeName: String? = nil) {
+    init(id: UUID = UUID(), transcription: String, audioFileURL: String?, duration: Double, language: String, modelUsed: String, corrections: [AppliedCorrection] = [], targetAppName: String? = nil, targetAppBundleID: String? = nil, aiEnhancedText: String? = nil, aiModeName: String? = nil) {
         let now = Date()
         self.id = id
         self.timestamp = now
@@ -96,6 +98,7 @@ struct TranscriptionRecord: Identifiable {
         self.createdAt = now
         self.lastModifiedAt = now
         self.corrections = corrections
+        self.targetAppBundleID = targetAppBundleID
         self.targetAppName = targetAppName
         self.aiEnhancedText = aiEnhancedText
         self.aiModeName = aiModeName
