@@ -248,7 +248,7 @@ struct IslandContentView: View {
         ZStack {
             if let hint = coordinator.launcherHint, isIdleBar, isHovering {
                 IslandLauncherHintLabel(title: hint.title)
-                    .offset(x: hint.anchorX - envelopeWidth / 2)
+                    .offset(x: hint.anchor - envelopeWidth / 2)
                     .transition(
                         .opacity.combined(with: .offset(y: 4)).combined(with: .scale(scale: 0.94))
                     )

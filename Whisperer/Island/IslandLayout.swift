@@ -375,7 +375,7 @@ private struct LauncherItem: View {
     let help: String
     let action: () -> Void
 
-    @State private var anchorX: CGFloat = 0
+    @State private var anchor: CGFloat = 0
 
     var body: some View {
         IslandHoverButton(
@@ -388,13 +388,13 @@ private struct LauncherItem: View {
         .background(
             GeometryReader { geo in
                 Color.clear
-                    .onAppear { anchorX = geo.frame(in: .global).midX }
-                    .onChange(of: geo.frame(in: .global).midX) { _, newX in anchorX = newX }
+                    .onAppear { anchor = geo.frame(in: .global).midX }
+                    .onChange(of: geo.frame(in: .global).midX) { _, newX in anchor = newX }
             }
         )
         .onHover { hovering in
             if hovering {
-                coordinator.setLauncherHint(title, anchorX: anchorX)
+                coordinator.setLauncherHint(title, anchor: anchor)
             } else {
                 coordinator.clearLauncherHint(ifTitleIs: title)
             }

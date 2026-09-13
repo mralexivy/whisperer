@@ -144,14 +144,14 @@ final class IslandCoordinator: ObservableObject {
         }
     }
 
-    /// Pointer entered or left a launcher glyph. `anchorX` is the glyph's centre in the
+    /// Pointer entered or left a launcher glyph. `anchor` is the glyph's centre along the
     /// panel's SwiftUI coordinate space, which is what the label offsets itself against.
     ///
     /// Leaving is keyed on the title so a fast slide between two glyphs cannot have the
     /// outgoing button's exit clear the incoming button's hint.
-    func setLauncherHint(_ title: String?, anchorX: CGFloat) {
+    func setLauncherHint(_ title: String?, anchor: CGFloat) {
         if let title {
-            launcherHint = IslandLauncherHint(title: title, anchorX: anchorX)
+            launcherHint = IslandLauncherHint(title: title, anchor: anchor)
         } else {
             launcherHint = nil
         }
