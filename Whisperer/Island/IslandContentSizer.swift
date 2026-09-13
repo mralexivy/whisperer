@@ -2,17 +2,23 @@
 //  IslandContentSizer.swift
 //  Whisperer
 //
-//  Pure, nonisolated struct that maps (capture state, presentation, screen) → target geometry.
+//  Pure, nonisolated struct that maps (capture state, presentation, screen, placement,
+//  revealPhase) → target geometry.
 //
-//  Three presentation tiers, all bottom-anchored:
+//  Three presentation tiers:
 //   - .peek     → capsule nub (plus hover swell)
 //   - .compact  → content-driven width × compactHeight pill
 //   - .expanded → compact + secondary control row
 //
-//  The Island is always on screen: while idle it rests as a near-transparent launcher nub,
-//  which is deliberately smaller than the recording nub.
+//  Placement awareness:
+//   - Horizontal placements (topCenter, bottomCenter): long axis = width, thick axis = height.
+//   - Vertical placements (leftCenter, rightCenter): axes are swapped.
+//   - The long axis is always clamped against the screen dimension it runs along.
 //
-//  Sizes come from IslandGeometryProvider.C, which is nonisolated for exactly this reason.
+//  Progressive reveal:
+//   - .hidden  → zero size (standard)
+//   - .sliver  → a 3-pt stripe at the anchored edge (real geometry so hit-testing stays correct)
+//   - .revealed → normal target size
 //
 
 import AppKit
@@ -35,7 +41,6 @@ nonisolated struct IslandContentSizer {
     // MARK: - Content-driven widths for the compact row
 
     /// Width for the recording / paused row (waveform + timer + controls).
-    /// Mirrors GC.compactWidth.
     static let recordingWidth:   CGFloat = 420
     /// Width for single-line status rows (starting, finishing).
     static let statusWidth:      CGFloat = 280
@@ -44,19 +49,13 @@ nonisolated struct IslandContentSizer {
 
     // MARK: - Idle launcher
 
-    /// Resting launcher nub — deliberately smaller than the recording nub so an idle
-    /// Island reads as an affordance rather than as an active capture.
+    /// Resting launcher nub — deliberately smaller than the recording nub.
     static let idlePeekWidth:    CGFloat = 104
     static let idlePeekHeight:   CGFloat = 24
-    /// The launcher row: four bare glyphs and a hairline divider. Captions and large targets
-    /// belong in the workspace — this is a bar, so it stays SHORTER than the recording row
-    /// rather than towering over it. The height is only 4 pt more than the hover capsule it
-    /// has to contain, which is what keeps it reading as a thin sheet rather than a lozenge.
-    /// 4 × 28 (item) + 4 × 2 (spacing) + 11 (divider + its padding) + 2 × 8 (row padding).
+    /// 4 × 28 (item) + 4 × 2 (spacing) + 11 (divider + padding) + 2 × 8 (row padding).
     static let idleCompactWidth:  CGFloat = 147
     static let idleCompactHeight: CGFloat = 32
-    /// Width of one action in the launcher row — the glyph's hover capsule, nothing more.
-    /// Drives the glyph size too: `IslandHoverButton` renders it at half the diameter.
+    /// Width of one action in the launcher row.
     static let launcherItemWidth: CGFloat = 28
 
     /// Extra height added when expanded — the secondary control row.
@@ -66,39 +65,58 @@ nonisolated struct IslandContentSizer {
 
     // MARK: - Hover lift for nub
 
-    /// How much the nub widens on hover — gives immediate tactile feedback before the dwell fires.
     static let peekHoverLift: CGFloat = 30
 
     // MARK: - Target size
 
-    /// The island springs to this CGSize per active content type.
+    /// CGSize the Island springs to. For vertical placements, width/height are swapped
+    /// so that `width` is always the thick axis and `height` the long axis.
     static func targetSize(
         capture: IslandCaptureState,
         presentation: IslandPresentation,
         screen: ScreenDescription,
         isHovering: Bool,
-        gestureProgress: CGFloat
+        gestureProgress: CGFloat,
+        placement: IslandPlacement = .bottomCenter,
+        revealPhase: IslandRevealPhase = .revealed
     ) -> CGSize {
+        // Hidden phase always zero.
         guard presentation != .hidden else { return .zero }
+
+        // Sliver phase: a real 3-pt stripe at the anchored edge.
+        // Width/height are assigned so that the sliver occupies the anchored edge correctly.
+        if revealPhase == .sliver && capture == .idle {
+            let sliver = IslandUX.sliverThickness
+            let longAxis = placement.isVertical
+                ? min(idlePeekWidth, screen.frame.height - GC.minHClearance * 2)
+                : min(idlePeekWidth, screen.frame.width  - GC.minHClearance * 2)
+            return placement.isVertical
+                ? CGSize(width: sliver, height: longAxis)
+                : CGSize(width: longAxis, height: sliver)
+        }
 
         let isIdle = capture == .idle
 
-        // Peek tier: nub with optional hover swell.
+        // --- Peek tier ---
         if presentation == .peek {
-            let hoverExtra: CGFloat = isHovering ? peekHoverLift : 0
+            let hoverExtra:   CGFloat = isHovering ? peekHoverLift : 0
             let stretchExtra: CGFloat = max(gestureProgress * 0.5, 0)
-            let base = isIdle ? idlePeekWidth : GC.peekWidth
-            let width = min(base + hoverExtra + stretchExtra,
-                            screen.frame.width - GC.minHClearance * 2)
-            return CGSize(width: width, height: isIdle ? idlePeekHeight : GC.peekHeight)
+            let baseLong = isIdle ? idlePeekWidth : GC.peekWidth
+            let baseThick = isIdle ? idlePeekHeight : GC.peekHeight
+            let maxLong = placement.isVertical
+                ? screen.frame.height - GC.minHClearance * 2
+                : screen.frame.width  - GC.minHClearance * 2
+            let long  = min(baseLong + hoverExtra + stretchExtra, maxLong)
+            let thick = baseThick
+            return placement.isVertical
+                ? CGSize(width: thick, height: long)
+                : CGSize(width: long,  height: thick)
         }
 
-        // Idle never reaches the expanded tier — it has no controls to reveal.
-        let isExpanded = presentation == .expanded && !isIdle
-
-        // Hover widens the compact row by 8 pt.
-        let hoverLift: CGFloat = isHovering && !isExpanded ? 8 : 0
-        let stretch: CGFloat = max(gestureProgress * 0.8, 0)
+        // --- Compact / Expanded tiers ---
+        let isExpanded  = presentation == .expanded && !isIdle
+        let hoverLift:  CGFloat = isHovering && !isExpanded ? 8 : 0
+        let stretch:    CGFloat = max(gestureProgress * 0.8, 0)
 
         let baseW: CGFloat
         switch capture {
@@ -108,16 +126,18 @@ nonisolated struct IslandContentSizer {
         case .recording, .paused:          baseW = recordingWidth
         }
 
-        let width = min(
-            baseW + hoverLift + stretch + (isExpanded ? expandedExtraWidth : 0),
-            screen.frame.width - GC.minHClearance * 2
-        )
-        let height = compactHeight(for: capture) + (isExpanded ? expandedExtraHeight : 0)
-        return CGSize(width: max(width, 0), height: height)
+        let maxLong = placement.isVertical
+            ? screen.frame.height - GC.minHClearance * 2
+            : screen.frame.width  - GC.minHClearance * 2
+        let long  = min(baseW + hoverLift + stretch + (isExpanded ? expandedExtraWidth : 0),
+                        maxLong)
+        let thick = compactHeight(for: capture) + (isExpanded ? expandedExtraHeight : 0)
+        return placement.isVertical
+            ? CGSize(width: max(thick, 0), height: max(long, 0))
+            : CGSize(width: max(long, 0),  height: max(thick, 0))
     }
 
-    /// Height of the compact strip. Only the idle launcher deviates — its captioned
-    /// buttons need more vertical room than the recording row's inline controls.
+    /// Height of the compact strip (or long-axis thickness for vertical).
     static func compactHeight(for capture: IslandCaptureState) -> CGFloat {
         capture == .idle ? idleCompactHeight : GC.compactHeight
     }
@@ -138,15 +158,22 @@ nonisolated struct IslandContentSizer {
         )
     }
 
-    // MARK: - Bottom slack
+    // MARK: - Anchor slack
 
-    /// Padding below the island body inside the panel.
-    ///
-    /// Derived from the same `bottomAnchor` / `envelopeBottom` helpers that
-    /// `IslandGeometryProvider` uses, so placement and the SwiftUI spacer always agree.
+    /// Padding between the Island body and the anchored screen edge, inside the panel envelope.
+    /// This generalises the old `bottomSlack` to all four placements.
+    static func anchorSlack(screen: ScreenDescription,
+                            placement: IslandPlacement = .bottomCenter) -> CGFloat {
+        let anchor = IslandGeometryProvider.edgeAnchor(for: screen, placement: placement)
+        let outer  = IslandGeometryProvider.envelopeOuterEdge(for: screen, placement: placement)
+        return max(0, abs(anchor - outer))
+    }
+
+    // MARK: - Deprecated alias
+
+    @available(*, deprecated, renamed: "anchorSlack(screen:placement:)")
     static func bottomSlack(screen: ScreenDescription) -> CGFloat {
-        max(0, IslandGeometryProvider.bottomAnchor(for: screen)
-             - IslandGeometryProvider.envelopeBottom(for: screen))
+        anchorSlack(screen: screen, placement: .bottomCenter)
     }
 
     // MARK: - Corner radius
@@ -161,7 +188,6 @@ nonisolated struct IslandContentSizer {
             let r: CGFloat = capture == .idle ? idlePeekHeight / 2 : GC.peekHeight / 2
             return (top: r, bottom: r)
         case .compact:
-            // Every compact row is a true capsule, so the idle launcher tracks its own height.
             let r = compactHeight(for: capture) / 2
             return (top: r, bottom: r)
         case .expanded:
