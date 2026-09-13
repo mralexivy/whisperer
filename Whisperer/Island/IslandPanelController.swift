@@ -23,7 +23,11 @@ final class IslandPanelController {
 
     // MARK: - Dependencies
 
-    private let geo = IslandGeometryProvider()
+    private var geo: IslandGeometryProvider = {
+        var g = IslandGeometryProvider()
+        g.placement = IslandPlacement.current
+        return g
+    }()
     private weak var coordinator: IslandCoordinator?
 
     // MARK: - Panel
@@ -81,6 +85,18 @@ final class IslandPanelController {
         showPanel()
     }
 
+    /// Update placement without rebuilding the panel — teleports the window to the new edge.
+    /// Called when the user changes the placement setting while the Island is visible.
+    func applyPlacementChange(placement: IslandPlacement, screen: NSScreen?) {
+        geo.placement = placement
+        guard let screen = screen ?? currentScreen ?? NSScreen.main,
+              let panel = panel else { return }
+        let envelope = geo.panelEnvelope(for: .from(screen))
+        // No animation — the bar teleports; a sliding transition across the desktop is jarring.
+        panel.setFrame(envelope, display: true)
+        Logger.debug("Island placement changed to \(placement.rawValue)", subsystem: .ui)
+    }
+
     /// Dismiss the panel with a fade animation.
     func hide() {
         guard let panel = panel, panel.isVisible else { return }
@@ -130,11 +146,9 @@ final class IslandPanelController {
         }
     }
 
-    /// Log the bottom placement for this display.
     private func logPlacement(for description: ScreenDescription, screen: NSScreen) {
         Logger.debug("""
-            Island placement: BOTTOM on \(screen.localizedName) — \
-            visibleFrame.minY \(Int(description.visibleFrame.minY)), \
+            Island placement: \(geo.placement.rawValue) on \(screen.localizedName) — \
             envelope \(geo.panelEnvelope(for: description))
             """, subsystem: .ui)
     }

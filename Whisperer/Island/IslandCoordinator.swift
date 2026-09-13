@@ -52,6 +52,13 @@ final class IslandCoordinator: ObservableObject {
     /// to its capsule, so anything rendered inside it would be cut off.
     @Published private(set) var launcherHint: IslandLauncherHint?
 
+    /// Progressive reveal phase for the idle launcher bar.
+    /// Non-idle capture states are always `.revealed` (they bypass the gate).
+    @Published private(set) var idleRevealPhase: IslandRevealPhase = .hidden
+
+    /// Current placement (read by IslandContentView and IslandPanelController).
+    @Published private(set) var placement: IslandPlacement = IslandPlacement.current
+
     // MARK: - Owned objects
 
     let levelBridge  = IslandLevelBridge()
@@ -59,7 +66,11 @@ final class IslandCoordinator: ObservableObject {
 
     // MARK: - Private
 
-    private let geo                = IslandGeometryProvider()
+    private var geo: IslandGeometryProvider = {
+        var g = IslandGeometryProvider()
+        g.placement = IslandPlacement.current
+        return g
+    }()
     private var model              = IslandModel.initial
     private(set) var panelController: IslandPanelController?
     private var cancellables       = Set<AnyCancellable>()
@@ -71,6 +82,9 @@ final class IslandCoordinator: ObservableObject {
     private let peekDwell:         Double = 0.12  // peek → compact dwell (120 ms)
     private let hoverExitDebounce: Duration = .milliseconds(100)
 
+    // Idle reveal gate
+    private var revealGate: IslandRevealGate = IslandRevealGate()
+
     // AppState dedup snapshot — syncFromAppState() only runs when these 8 fields change.
     private var lastSnapshot: AppStateSnapshot?
 
@@ -81,7 +95,7 @@ final class IslandCoordinator: ObservableObject {
     var teardownHook: (() -> Void)?
 
     /// The forgiving hover rect in global screen coordinates. Written by IslandContentView so
-    /// the bottom-edge retention test can check the pointer against the real island span.
+    /// the edge-retention test can check the pointer against the real island span.
     var hoverRectOnScreen: NSRect = .zero
 
     // MARK: - Init / Deinit
@@ -89,6 +103,7 @@ final class IslandCoordinator: ObservableObject {
     init() {
         panelController = IslandPanelController(coordinator: self)
         wireAppState()
+        wirePlacementNotification()
     }
 
     deinit { }
@@ -104,6 +119,44 @@ final class IslandCoordinator: ObservableObject {
     func cancelHoverTask() {
         hoverTask?.cancel()
         hoverTask = nil
+    }
+
+    // MARK: - Placement
+
+    private func wirePlacementNotification() {
+        NotificationCenter.default.addObserver(
+            forName: .islandPlacementChanged,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            guard let self else { return }
+            let p = IslandPlacement.current
+            self.placement = p
+            self.geo.placement = p
+            // Reset the reveal gate so the bar doesn't appear at the new edge instantly.
+            self.revealGate.reset()
+            self.idleRevealPhase = .hidden
+            self.panelController?.applyPlacementChange(placement: p, screen: self.homeScreen)
+        }
+    }
+
+    // MARK: - Pointer tracking (reveal gate)
+
+    /// Called by IslandContainerView.updateHover on every NSMouseMoved event inside the panel.
+    /// Drives the progressive reveal gate for the idle launcher.
+    func handlePointerMoved(point: NSPoint, inside: Bool) {
+        guard model.capture == .idle else {
+            // Non-idle states are always fully revealed — no gate needed.
+            if idleRevealPhase != .revealed { idleRevealPhase = .revealed }
+            return
+        }
+        let phase = revealGate.step(point: point, inside: inside,
+                                    now: Date().timeIntervalSinceReferenceDate)
+        if phase != idleRevealPhase {
+            withAnimation(.easeIn(duration: IslandUX.hintFadeDuration)) {
+                idleRevealPhase = phase
+            }
+        }
     }
 
     // MARK: - Public (events)
@@ -134,11 +187,11 @@ final class IslandCoordinator: ObservableObject {
                 self.send(.expand)   // peek → compact
             }
         } else {
-            // Debounce exit — check bottom-edge retention after delay
+            // Debounce exit — check anchored-edge retention after delay
             hoverTask = Task { [weak self] in
                 try? await Task.sleep(for: self?.hoverExitDebounce ?? .milliseconds(100))
                 guard !Task.isCancelled, let self else { return }
-                if self.shouldRetainHoverAtBottomEdge() { return }
+                if self.shouldRetainHoverAtAnchoredEdge() { return }
                 self.finishHoverExit()
             }
         }
@@ -164,23 +217,43 @@ final class IslandCoordinator: ObservableObject {
 
     private func finishHoverExit() {
         launcherHint = nil
-        withAnimation(.bouncy.speed(1.2)) { isHovering = false }
+        revealGate.reset()
+        withAnimation(.bouncy.speed(1.2)) {
+            isHovering = false
+            idleRevealPhase = .hidden
+        }
         // Return to peek (or compact if state requires it).
         send(.peekRequested)
     }
 
-    /// Ignore hover-exit when cursor parks on the screen's bottom pixel row and is inside
-    /// the hover rect. macOS occasionally reports spurious exits at the screen edge.
-    private func shouldRetainHoverAtBottomEdge() -> Bool {
+    /// Ignore spurious hover-exit when the cursor parks on the anchored screen edge pixel row
+    /// and is inside the hover rect. macOS reports these exits at every physical screen edge.
+    private func shouldRetainHoverAtAnchoredEdge() -> Bool {
         let loc = NSEvent.mouseLocation
+        let p = placement
         guard let screen = NSScreen.screens.first(where: {
-            $0.frame.contains(loc) || abs($0.frame.minY - loc.y) < 2
+            $0.frame.contains(loc)
+                || abs($0.frame.minY - loc.y) < 2
+                || abs($0.frame.maxY - loc.y) < 2
+                || abs($0.frame.minX - loc.x) < 2
+                || abs($0.frame.maxX - loc.x) < 2
         }) else { return false }
-        // Only the very bottom pixel row produces the spurious exit.
-        guard loc.y <= screen.frame.minY + 1.5 else { return false }
+        // Only the anchored edge pixel strip produces spurious exits.
+        switch p {
+        case .bottomCenter: guard loc.y <= screen.frame.minY + 1.5 else { return false }
+        case .topCenter:    guard loc.y >= screen.frame.maxY - 1.5 else { return false }
+        case .leftCenter:   guard loc.x <= screen.frame.minX + 1.5 else { return false }
+        case .rightCenter:  guard loc.x >= screen.frame.maxX - 1.5 else { return false }
+        }
         let span = hoverRectOnScreen
-        guard span.width > 0 else { return false }
-        return loc.x >= span.minX && loc.x <= span.maxX
+        switch p {
+        case .bottomCenter, .topCenter:
+            guard span.width > 0 else { return false }
+            return loc.x >= span.minX && loc.x <= span.maxX
+        case .leftCenter, .rightCenter:
+            guard span.height > 0 else { return false }
+            return loc.y >= span.minY && loc.y <= span.maxY
+        }
     }
 
     // MARK: - Scroll gesture
