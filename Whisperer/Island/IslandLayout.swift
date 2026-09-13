@@ -31,9 +31,10 @@ struct IslandLayout: View {
     /// Row metrics for the compact strip.
     var metrics: IslandRowMetrics
 
-    private var vm: IslandViewModel { coordinator.currentViewModel }
-    private var isExpanded: Bool    { vm.presentation == .expanded }
-    private var isPeek: Bool        { vm.presentation == .peek }
+    private var vm: IslandViewModel    { coordinator.currentViewModel }
+    private var isExpanded: Bool       { vm.presentation == .expanded }
+    private var isPeek: Bool           { vm.presentation == .peek }
+    private var isVertical: Bool       { coordinator.placement.isVertical }
 
     // Swap transition between capture states
     private var swapTransition: AnyTransition {
@@ -125,48 +126,56 @@ struct IslandLayout: View {
     // MARK: - Idle launcher row
 
     /// Four bare glyphs, grouped: the two that *start* a capture, a hairline, then the two
-    /// that *open* a surface. No captions and no filled chips — the whole point of the bar
-    /// is that it stays out of the way. What each glyph does is named by the hint label the
-    /// root view floats above the bar on hover, not by a caption baked into the row.
+    /// that *open* a surface. Horizontal by default; stacks vertically for left/right placements.
     private var idleLauncherRow: some View {
-        HStack(spacing: 2) {
-            launcherItem(
-                icon: "mic.fill",
-                title: "Dictate",
-                help: "Start dictation — click the stop button in the recording bar to finish"
-            ) {
-                coordinator.send(.dictateRequested)
-            }
-
-            launcherItem(
-                icon: "person.2.fill",
-                title: "Meeting",
-                help: "Start a meeting recording"
-            ) {
-                coordinator.send(.startMeetingRequested)
-            }
-
-            launcherDivider
-
-            launcherItem(
-                icon: "list.clipboard.fill",
-                title: "Paste Bin",
-                help: "Open recent transcriptions"
-            ) {
-                coordinator.send(.openPasteBinRequested)
-            }
-
-            launcherItem(
-                icon: "square.grid.2x2.fill",
-                title: "Workspace",
-                help: "Open the Whisperer workspace"
-            ) {
-                coordinator.send(.openWorkspaceRequested)
+        Group {
+            if isVertical {
+                VStack(spacing: 2) { launcherItems }
+                    .padding(.vertical, 8)
+            } else {
+                HStack(spacing: 2) { launcherItems }
+                    .padding(.horizontal, 8)
+                    .environment(\.layoutDirection, .leftToRight)
             }
         }
-        .padding(.horizontal, 8)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .environment(\.layoutDirection, .leftToRight)
+    }
+
+    @ViewBuilder
+    private var launcherItems: some View {
+        launcherItem(
+            icon: "mic.fill",
+            title: "Dictate",
+            help: "Start dictation — click the stop button in the recording bar to finish"
+        ) {
+            coordinator.send(.dictateRequested)
+        }
+
+        launcherItem(
+            icon: "person.2.fill",
+            title: "Meeting",
+            help: "Start a meeting recording"
+        ) {
+            coordinator.send(.startMeetingRequested)
+        }
+
+        if isVertical { launcherDividerV } else { launcherDivider }
+
+        launcherItem(
+            icon: "list.clipboard.fill",
+            title: "Paste Bin",
+            help: "Open recent transcriptions"
+        ) {
+            coordinator.send(.openPasteBinRequested)
+        }
+
+        launcherItem(
+            icon: "square.grid.2x2.fill",
+            title: "Workspace",
+            help: "Open the Whisperer workspace"
+        ) {
+            coordinator.send(.openWorkspaceRequested)
+        }
     }
 
     private func launcherItem(
@@ -189,6 +198,14 @@ struct IslandLayout: View {
             .fill(IC.primary.opacity(0.12))
             .frame(width: 1, height: 16)
             .padding(.horizontal, 5)
+            .accessibilityHidden(true)
+    }
+
+    private var launcherDividerV: some View {
+        Rectangle()
+            .fill(IC.primary.opacity(0.12))
+            .frame(width: 16, height: 1)
+            .padding(.vertical, 5)
             .accessibilityHidden(true)
     }
 
@@ -216,7 +233,16 @@ struct IslandLayout: View {
 
     // MARK: - Recording / Paused row
 
+    @ViewBuilder
     private func recordingRow(isPaused: Bool) -> some View {
+        if isVertical {
+            verticalRecordingRow(isPaused: isPaused)
+        } else {
+            horizontalRecordingRow(isPaused: isPaused)
+        }
+    }
+
+    private func horizontalRecordingRow(isPaused: Bool) -> some View {
         strip {
             RecordingDot(isPaused: isPaused)
         } trailing: {
@@ -248,6 +274,42 @@ struct IslandLayout: View {
                 inlineStopButton
             }
         }
+    }
+
+    private func verticalRecordingRow(isPaused: Bool) -> some View {
+        VStack(spacing: 8) {
+            RecordingDot(isPaused: isPaused)
+                .padding(.top, 10)
+
+            // Waveform rotated -90° so bars run along the pill's long axis.
+            IslandWaveform(levelBridge: levelBridge,
+                           isPaused: isPaused || vm.isMicMuted)
+                .frame(maxHeight: .infinity)
+                .frame(width: metrics.rowHeight)
+                .rotationEffect(.degrees(-90))
+
+            Text(clock.displayText)
+                .font(.system(size: 11, weight: .semibold, design: .rounded).monospacedDigit())
+                .foregroundColor(IC.primary)
+                .lineLimit(1)
+                .fixedSize()
+                .contentTransition(.numericText())
+                .rotationEffect(.degrees(-90))
+
+            IslandHoverButton(
+                icon: isPaused ? "play.fill" : "pause.fill",
+                diameter: metrics.controlSize,
+                iconColor: IC.primary
+            ) {
+                coordinator.send(.pauseResumeRequested(sessionID: vm.sessionID))
+            }
+            .help(isPaused ? "Resume recording" : "Pause recording")
+            .accessibilityLabel(isPaused ? "Resume recording" : "Pause recording")
+
+            inlineStopButton
+                .padding(.bottom, 10)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
     // MARK: - Inline stop button
@@ -377,6 +439,8 @@ private struct LauncherItem: View {
 
     @State private var anchor: CGFloat = 0
 
+    private var isVertical: Bool { coordinator.placement.isVertical }
+
     var body: some View {
         IslandHoverButton(
             icon: icon,
@@ -387,9 +451,10 @@ private struct LauncherItem: View {
         )
         .background(
             GeometryReader { geo in
+                let f = geo.frame(in: .global)
                 Color.clear
-                    .onAppear { anchor = geo.frame(in: .global).midX }
-                    .onChange(of: geo.frame(in: .global).midX) { _, newX in anchor = newX }
+                    .onAppear { anchor = isVertical ? f.midY : f.midX }
+                    .onChange(of: isVertical ? f.midY : f.midX) { _, v in anchor = v }
             }
         )
         .onHover { hovering in
