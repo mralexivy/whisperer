@@ -3,17 +3,19 @@
 //  Whisperer
 //
 //  Pure, nonisolated struct computing Island frames from an injected ScreenDescription.
-//  Unit-testable without a display: inject a synthetic ScreenDescription in tests.
+//  Unit-testable without a display: inject a synthetic ScreenDescription + set placement.
 //
-//  Placement strategy (bottom-center, Dock-aware):
-//    - The Island lives at the BOTTOM of the screen, centered horizontally.
-//    - Every tier shares the same bottom anchor, chosen by `IslandGeometryProvider.bottomAnchor`:
-//        • Bottom Dock present  → visibleFrame.minY + C.dockGap (just above the Dock).
-//        • No bottom Dock       → screen.frame.minY  + C.edgeInset (hugs the edge).
-//      Auto-hidden Docks are treated as present (their reveal strip still shows ~4 pt of inset)
-//      so the pill never sits on top of the Dock's ghost edge.
-//    - Growth is upward only, so the anchor never moves as tiers change.
-//    - There is no notch / top-edge placement. Notch detection code is entirely removed.
+//  Placement strategy (edge-anchored, Dock/chrome-aware):
+//    - The Island lives at one of four screen edges: bottom-center (default), top-center,
+//      left-center, or right-center.
+//    - The anchored edge uses `edgeAnchor(for:placement:)`:
+//        • OS chrome present on that edge (Dock, menu bar, Stage Manager strip)
+//          → visibleFrame inset + C.dockGap.
+//        • No chrome → raw screen edge + C.edgeInset.
+//      Top always has the menu bar, so it always takes the inset branch.
+//      Auto-hidden Docks are treated as present (~4 pt reveal strip).
+//    - Growth is away from the anchored edge only, so the anchor never moves as tiers change.
+//    - Left/right placements swap the long and thick axes: the pill becomes a vertical column.
 //
 //  Panel strategy:
 //    - The panel frame is the UNION of all state frames plus 8 pt animation slack on each side.
@@ -21,11 +23,10 @@
 //
 //  Coordinate system:
 //    - NSRect uses bottom-left origin (Core Graphics / AppKit convention).
-//    - "Bottom" in English = minY in NSRect terms.
 //    - Negative-origin multi-display setups are fully handled.
 //
 
-import AppKit    // NSRect, NSScreen — no SwiftUI needed in this struct
+import AppKit
 
 // MARK: - Screen description (injectable)
 
@@ -74,38 +75,87 @@ struct IslandGeometryProvider {
         static let expandedRadius:      CGFloat = 34
 
         // Placement
-        // Two bottom-gap constants to distinguish the two cases detected by `bottomAnchor(for:)`.
-        static let dockGap:             CGFloat = 6     // gap above a bottom Dock (or auto-hide strip)
-        static let edgeInset:           CGFloat = 2     // gap above the raw screen bottom edge
-        static let minHClearance:       CGFloat = 16    // min horizontal margin from screen edge
+        static let dockGap:             CGFloat = 6     // gap above/beside a Dock or auto-hide strip
+        static let edgeInset:           CGFloat = 2     // gap from the raw screen edge
+        static let minHClearance:       CGFloat = 16    // min margin from screen edge (both axes)
         static let panelSlack:          CGFloat = 24    // envelope inflation — room for the shadow
     }
+
+    // MARK: - Placement
+
+    /// Which screen edge the Island is anchored to. Defaults to .bottomCenter.
+    var placement: IslandPlacement = .bottomCenter
 
     // MARK: - Frame builders
 
     /// Frame for the peek nub.
     func peekFrame(for screen: ScreenDescription) -> NSRect {
-        centeredFrame(width: C.peekWidth, height: C.peekHeight, screen: screen)
+        if placement.isVertical {
+            return anchoredFrame(long: IslandContentSizer.idlePeekWidth,
+                                 thick: IslandContentSizer.idlePeekHeight, screen: screen)
+        }
+        return anchoredFrame(long: C.peekWidth, thick: C.peekHeight, screen: screen)
     }
 
     /// Frame for the compact recording row.
     func compactFrame(for screen: ScreenDescription) -> NSRect {
-        centeredFrame(width: C.compactWidth, height: C.compactHeight, screen: screen)
+        if placement.isVertical {
+            return anchoredFrame(long: C.compactWidth, thick: C.compactHeight, screen: screen)
+        }
+        return anchoredFrame(long: C.compactWidth, thick: C.compactHeight, screen: screen)
     }
 
     /// Frame for the expanded pill (compact + secondary control row).
     func expandedFrame(for screen: ScreenDescription) -> NSRect {
-        centeredFrame(width: C.expandedWidth, height: C.expandedHeight, screen: screen)
+        if placement.isVertical {
+            return anchoredFrame(long: C.expandedWidth, thick: C.expandedHeight, screen: screen)
+        }
+        return anchoredFrame(long: C.expandedWidth, thick: C.expandedHeight, screen: screen)
     }
 
-    /// Horizontal center on screen, bottom edge at `IslandGeometryProvider.bottomAnchor(for:)`.
-    private func centeredFrame(width: CGFloat, height: CGFloat, screen: ScreenDescription) -> NSRect {
-        var x = screen.frame.origin.x + (screen.frame.width - width) / 2
-        let minX = screen.frame.origin.x + C.minHClearance
-        let maxX = screen.frame.maxX - width - C.minHClearance
-        x = max(minX, min(maxX, x))
-        let y = IslandGeometryProvider.bottomAnchor(for: screen)
-        return NSRect(x: x, y: y, width: width, height: height)
+    // MARK: - Internal frame math
+
+    /// Axis-agnostic frame: `long` runs along the anchored edge, `thick` is the pill's depth.
+    /// Growth is always away from the anchored edge.
+    private func anchoredFrame(long: CGFloat, thick: CGFloat, screen: ScreenDescription) -> NSRect {
+        let anchor = IslandGeometryProvider.edgeAnchor(for: screen, placement: placement)
+
+        switch placement {
+        case .bottomCenter:
+            // Horizontal pill, bottom-anchored. minY == anchor, grows upward.
+            var x = screen.frame.origin.x + (screen.frame.width - long) / 2
+            let minX = screen.frame.origin.x + C.minHClearance
+            let maxX = screen.frame.maxX - long - C.minHClearance
+            x = max(minX, min(maxX, x))
+            return NSRect(x: x, y: anchor, width: long, height: thick)
+
+        case .topCenter:
+            // Horizontal pill, top-anchored. maxY == anchor, grows downward.
+            var x = screen.frame.origin.x + (screen.frame.width - long) / 2
+            let minX = screen.frame.origin.x + C.minHClearance
+            let maxX = screen.frame.maxX - long - C.minHClearance
+            x = max(minX, min(maxX, x))
+            return NSRect(x: x, y: anchor - thick, width: long, height: thick)
+
+        case .leftCenter:
+            // Vertical pill, left-anchored. minX == anchor, grows rightward.
+            // long runs along Y axis, thick along X axis.
+            let clampedLong = min(long, screen.frame.height - C.minHClearance * 2)
+            var y = screen.frame.origin.y + (screen.frame.height - clampedLong) / 2
+            let minY = screen.frame.origin.y + C.minHClearance
+            let maxY = screen.frame.maxY - clampedLong - C.minHClearance
+            y = max(minY, min(maxY, y))
+            return NSRect(x: anchor, y: y, width: thick, height: clampedLong)
+
+        case .rightCenter:
+            // Vertical pill, right-anchored. maxX == anchor, grows leftward.
+            let clampedLong = min(long, screen.frame.height - C.minHClearance * 2)
+            var y = screen.frame.origin.y + (screen.frame.height - clampedLong) / 2
+            let minY = screen.frame.origin.y + C.minHClearance
+            let maxY = screen.frame.maxY - clampedLong - C.minHClearance
+            y = max(minY, min(maxY, y))
+            return NSRect(x: anchor - thick, y: y, width: thick, height: clampedLong)
+        }
     }
 
     // MARK: - Panel envelope
@@ -126,14 +176,37 @@ struct IslandGeometryProvider {
             height: union.height   + s * 2
         )
 
-        // Bottom: clamp to the raw screen edge so the envelope can reach it when there is no
-        // bottom Dock. Left/right/top keep their Dock-aware clamps.
-        let minX = max(inflated.minX, screen.visibleFrame.minX)
-        let maxX = min(inflated.maxX, screen.visibleFrame.maxX)
-        let minY = max(inflated.minY, IslandGeometryProvider.envelopeBottom(for: screen))
-        let maxY = min(inflated.maxY, screen.visibleFrame.maxY)
-        return NSRect(x: minX, y: minY,
-                      width: max(0, maxX - minX), height: max(0, maxY - minY))
+        let outerEdge = IslandGeometryProvider.envelopeOuterEdge(for: screen, placement: placement)
+
+        switch placement {
+        case .bottomCenter:
+            let minX = max(inflated.minX, screen.visibleFrame.minX)
+            let maxX = min(inflated.maxX, screen.visibleFrame.maxX)
+            let maxY = min(inflated.maxY, screen.visibleFrame.maxY)
+            return NSRect(x: minX, y: outerEdge,
+                          width: max(0, maxX - minX), height: max(0, maxY - outerEdge))
+
+        case .topCenter:
+            let minX = max(inflated.minX, screen.visibleFrame.minX)
+            let maxX = min(inflated.maxX, screen.visibleFrame.maxX)
+            let minY = max(inflated.minY, screen.visibleFrame.minY)
+            return NSRect(x: minX, y: minY,
+                          width: max(0, maxX - minX), height: max(0, outerEdge - minY))
+
+        case .leftCenter:
+            let minY = max(inflated.minY, screen.visibleFrame.minY)
+            let maxY = min(inflated.maxY, screen.visibleFrame.maxY)
+            let maxX = min(inflated.maxX, screen.visibleFrame.maxX)
+            return NSRect(x: outerEdge, y: minY,
+                          width: max(0, maxX - outerEdge), height: max(0, maxY - minY))
+
+        case .rightCenter:
+            let minY = max(inflated.minY, screen.visibleFrame.minY)
+            let maxY = min(inflated.maxY, screen.visibleFrame.maxY)
+            let minX = max(inflated.minX, screen.visibleFrame.minX)
+            return NSRect(x: minX, y: minY,
+                          width: max(0, outerEdge - minX), height: max(0, maxY - minY))
+        }
     }
 
     // MARK: - Local (panel-relative) frames
@@ -186,40 +259,86 @@ struct IslandGeometryProvider {
 
     // MARK: - Shadow
 
-    /// Shadow is always drawn — the Island always floats (no hardware notch to merge with).
+    /// Shadow is always drawn — the Island always floats.
     func shouldDrawShadow(for screen: ScreenDescription) -> Bool { true }
 }
 
-// MARK: - Dock-aware bottom anchor (nonisolated, shared with IslandContentSizer)
+// MARK: - Generic edge anchor (nonisolated, shared with IslandContentSizer)
 
 extension IslandGeometryProvider {
 
-    /// True when something (Dock, auto-hide strip, or any other reservation) raises
-    /// `visibleFrame.minY` above `frame.minY` by more than 1 point.
-    /// Auto-hidden Docks expose ~4 pt; we still treat them as present so the pill
-    /// never sits on the reveal strip.
-    nonisolated static func hasBottomObstruction(_ s: ScreenDescription) -> Bool {
-        s.visibleFrame.minY - s.frame.minY > 1
+    /// True when the OS (Dock, Stage Manager, menu bar, etc.) insets `visibleFrame`
+    /// from `frame` by more than 1 pt on the given edge.
+    nonisolated static func hasEdgeObstruction(_ s: ScreenDescription,
+                                               placement: IslandPlacement) -> Bool {
+        switch placement {
+        case .bottomCenter: return s.visibleFrame.minY - s.frame.minY > 1
+        case .topCenter:    return s.frame.maxY - s.visibleFrame.maxY > 1
+        case .leftCenter:   return s.visibleFrame.minX - s.frame.minX > 1
+        case .rightCenter:  return s.frame.maxX - s.visibleFrame.maxX > 1
+        }
     }
 
-    /// Global Y of the pill's bottom edge — the bottom anchor for every tier.
+    /// Global coordinate of the pill's edge that touches the screen border.
+    nonisolated static func edgeAnchor(for s: ScreenDescription,
+                                       placement: IslandPlacement) -> CGFloat {
+        switch placement {
+        case .bottomCenter:
+            return hasEdgeObstruction(s, placement: .bottomCenter)
+                ? s.visibleFrame.minY + C.dockGap
+                : s.frame.minY        + C.edgeInset
+        case .topCenter:
+            return hasEdgeObstruction(s, placement: .topCenter)
+                ? s.visibleFrame.maxY - C.dockGap
+                : s.frame.maxY        - C.edgeInset
+        case .leftCenter:
+            return hasEdgeObstruction(s, placement: .leftCenter)
+                ? s.visibleFrame.minX + C.dockGap
+                : s.frame.minX        + C.edgeInset
+        case .rightCenter:
+            return hasEdgeObstruction(s, placement: .rightCenter)
+                ? s.visibleFrame.maxX - C.dockGap
+                : s.frame.maxX        - C.edgeInset
+        }
+    }
+
+    /// Outer-edge coordinate for the panel envelope clamp (slack extended outward).
+    nonisolated static func envelopeOuterEdge(for s: ScreenDescription,
+                                              placement: IslandPlacement) -> CGFloat {
+        switch placement {
+        case .bottomCenter:
+            return max(edgeAnchor(for: s, placement: .bottomCenter) - C.panelSlack, s.frame.minY)
+        case .topCenter:
+            return min(edgeAnchor(for: s, placement: .topCenter) + C.panelSlack, s.frame.maxY)
+        case .leftCenter:
+            return max(edgeAnchor(for: s, placement: .leftCenter) - C.panelSlack, s.frame.minX)
+        case .rightCenter:
+            return min(edgeAnchor(for: s, placement: .rightCenter) + C.panelSlack, s.frame.maxX)
+        }
+    }
+
+    // MARK: - Deprecated forwarding aliases
+
+    @available(*, deprecated, renamed: "edgeAnchor(for:placement:)")
     nonisolated static func bottomAnchor(for s: ScreenDescription) -> CGFloat {
-        hasBottomObstruction(s)
-            ? s.visibleFrame.minY + C.dockGap    // float just above the Dock
-            : s.frame.minY        + C.edgeInset   // hug the raw screen edge
+        edgeAnchor(for: s, placement: .bottomCenter)
     }
 
-    /// Global Y of the panel envelope's bottom edge (what `panelEnvelope` clamps to).
+    @available(*, deprecated, renamed: "hasEdgeObstruction(_:placement:)")
+    nonisolated static func hasBottomObstruction(_ s: ScreenDescription) -> Bool {
+        hasEdgeObstruction(s, placement: .bottomCenter)
+    }
+
+    @available(*, deprecated, renamed: "envelopeOuterEdge(for:placement:)")
     nonisolated static func envelopeBottom(for s: ScreenDescription) -> CGFloat {
-        max(bottomAnchor(for: s) - C.panelSlack, s.frame.minY)
+        envelopeOuterEdge(for: s, placement: .bottomCenter)
     }
 }
 
 // MARK: - Screen-picking (main-actor, real NSScreen)
 
 extension IslandGeometryProvider {
-    /// Picks the screen the user is actively working on, using the same policy as OverlayPanel
-    /// and MeetingLiveWindowManager: screen under the pointer, then NSScreen.main, then first.
+    /// Picks the screen the user is actively working on.
     @MainActor
     static func activeScreen() -> NSScreen? {
         let mouse = NSEvent.mouseLocation

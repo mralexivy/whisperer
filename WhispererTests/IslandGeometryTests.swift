@@ -283,4 +283,92 @@ final class IslandGeometryTests: XCTestCase {
         XCTAssertEqual(r.topLeading, r.bottomLeading)
         XCTAssertEqual(r.topLeading, IslandGeometryProvider.C.expandedRadius)
     }
+
+    // MARK: - Multi-placement anchor tests
+
+    /// Compact frame lands on the anchored edge for bottomCenter.
+    func testCompactFrameAnchoredEdge_bottomCenter() {
+        var g = IslandGeometryProvider(); g.placement = .bottomCenter
+        let s = standardScreen
+        let f = g.compactFrame(for: s)
+        XCTAssertEqual(f.minY, IslandGeometryProvider.edgeAnchor(for: s, placement: .bottomCenter),
+                       accuracy: 0.5, "bottomCenter: compact minY must equal edgeAnchor")
+    }
+
+    /// Compact frame for topCenter: maxY touches the top anchor.
+    func testCompactFrameAnchoredEdge_topCenter() {
+        var g = IslandGeometryProvider(); g.placement = .topCenter
+        let s = standardScreen
+        let f = g.compactFrame(for: s)
+        XCTAssertEqual(f.maxY, IslandGeometryProvider.edgeAnchor(for: s, placement: .topCenter),
+                       accuracy: 0.5, "topCenter: compact maxY must equal edgeAnchor")
+    }
+
+    /// Compact frame for leftCenter: minX touches the left anchor.
+    func testCompactFrameAnchoredEdge_leftCenter() {
+        var g = IslandGeometryProvider(); g.placement = .leftCenter
+        let s = standardScreen
+        let f = g.compactFrame(for: s)
+        XCTAssertEqual(f.minX, IslandGeometryProvider.edgeAnchor(for: s, placement: .leftCenter),
+                       accuracy: 0.5, "leftCenter: compact minX must equal edgeAnchor")
+    }
+
+    /// Compact frame for rightCenter: maxX touches the right anchor.
+    func testCompactFrameAnchoredEdge_rightCenter() {
+        var g = IslandGeometryProvider(); g.placement = .rightCenter
+        let s = standardScreen
+        let f = g.compactFrame(for: s)
+        XCTAssertEqual(f.maxX, IslandGeometryProvider.edgeAnchor(for: s, placement: .rightCenter),
+                       accuracy: 0.5, "rightCenter: compact maxX must equal edgeAnchor")
+    }
+
+    /// Envelope contains all three tier frames for every placement.
+    func testEnvelopeContainsAllTiers_allPlacements() {
+        let screens = [standardScreen, hdScreen, negativeOriginScreen, narrowScreen]
+        for placement in IslandPlacement.allCases {
+            var g = IslandGeometryProvider(); g.placement = placement
+            for s in screens {
+                let env = g.panelEnvelope(for: s)
+                XCTAssert(env.contains(g.peekFrame(for: s)),
+                          "\(placement) on \(s.frame): envelope must contain peekFrame")
+                XCTAssert(env.contains(g.compactFrame(for: s)),
+                          "\(placement) on \(s.frame): envelope must contain compactFrame")
+                XCTAssert(env.contains(g.expandedFrame(for: s)),
+                          "\(placement) on \(s.frame): envelope must contain expandedFrame")
+            }
+        }
+    }
+
+    /// Pill stays within screen bounds for every placement × screen fixture.
+    func testPillInsideScreenBounds_allPlacementsAllScreens() {
+        let screens = [standardScreen, hdScreen, negativeOriginScreen, narrowScreen]
+        for placement in IslandPlacement.allCases {
+            var g = IslandGeometryProvider(); g.placement = placement
+            for s in screens {
+                let f = g.compactFrame(for: s)
+                XCTAssertGreaterThanOrEqual(f.minX, s.frame.minX - 0.5,
+                    "\(placement) on \(s.frame): pill left of screen")
+                XCTAssertLessThanOrEqual(f.maxX, s.frame.maxX + 0.5,
+                    "\(placement) on \(s.frame): pill right of screen")
+                XCTAssertGreaterThanOrEqual(f.minY, s.frame.minY - 0.5,
+                    "\(placement) on \(s.frame): pill below screen")
+                XCTAssertLessThanOrEqual(f.maxY, s.frame.maxY + 0.5,
+                    "\(placement) on \(s.frame): pill above screen")
+            }
+        }
+    }
+
+    /// Left Dock must be cleared when placement is leftCenter.
+    func testLeftCenterClearsLeftDock() {
+        let leftDockScreen = ScreenDescription(
+            frame:        NSRect(x: 0, y: 0,   width: 2560, height: 1600),
+            visibleFrame: NSRect(x: 80, y: 25, width: 2480, height: 1543),
+            backingScale: 2
+        )
+        var g = IslandGeometryProvider(); g.placement = .leftCenter
+        let f = g.compactFrame(for: leftDockScreen)
+        let anchor = IslandGeometryProvider.edgeAnchor(for: leftDockScreen, placement: .leftCenter)
+        XCTAssertGreaterThanOrEqual(f.minX, anchor - 0.5,
+            "leftCenter pill must clear the left Dock")
+    }
 }
