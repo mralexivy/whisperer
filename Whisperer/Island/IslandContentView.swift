@@ -59,6 +59,10 @@ struct IslandContentView: View {
     private var isExpanded: Bool           { vm.presentation == .expanded }
     private var isPeek: Bool               { vm.presentation == .peek }
     private var isHovering: Bool           { coordinator.isHovering }
+    private var placement: IslandPlacement { coordinator.placement }
+    private var revealPhase: IslandRevealPhase {
+        vm.capture == .idle ? coordinator.idleRevealPhase : .revealed
+    }
 
     // MARK: - Animation constants
 
@@ -98,7 +102,9 @@ struct IslandContentView: View {
             presentation: vm.presentation,
             screen: screen,
             isHovering: isHovering,
-            gestureProgress: coordinator.gestureProgress
+            gestureProgress: coordinator.gestureProgress,
+            placement: placement,
+            revealPhase: revealPhase
         )
     }
 
@@ -122,8 +128,10 @@ struct IslandContentView: View {
 
     /// Idle launcher bar — always compact now; no nub transition.
     private var isIdleBar: Bool { vm.capture == .idle }
-    /// Resting idle launcher: on screen but not yet revealed.
-    private var isIdleHidden: Bool { isIdleBar && !isHovering }
+    /// True when the idle bar should be fully invisible (hidden phase).
+    private var isIdleHidden: Bool { isIdleBar && revealPhase == .hidden }
+    /// True when showing only the sliver hint at the anchored edge.
+    private var isIdleSliver: Bool { isIdleBar && revealPhase == .sliver }
 
     @ViewBuilder
     private var surface: some View {
@@ -194,8 +202,12 @@ struct IslandContentView: View {
         return (isHovering || isExpanded) ? 0.55 : 0.34
     }
 
-    /// Bottom padding that pins the island flush against the bottom of the panel envelope.
-    private var bottomSlack: CGFloat { IslandContentSizer.bottomSlack(screen: screen) }
+    /// Padding between the island body and the anchored edge of the panel envelope.
+    private var anchorSlack: CGFloat {
+        IslandContentSizer.anchorSlack(screen: screen, placement: placement)
+    }
+    @available(*, deprecated, renamed: "anchorSlack")
+    private var bottomSlack: CGFloat { anchorSlack }
     private var rowMetrics: IslandRowMetrics {
         IslandContentSizer.rowMetrics(screen: screen,
                                       isHovering: isHovering,
@@ -223,17 +235,52 @@ struct IslandContentView: View {
     // MARK: - Root (outer, never animates)
 
     private var rootBodyView: some View {
-        VStack(spacing: 0) {
-            Spacer(minLength: 0)
-            hintLabel
-            islandBody
-            Color.clear.frame(height: bottomSlack)
+        placementContainer
+            // Atoll's key trick: barrier stops any morphKey spring from propagating to the
+            // outer frame, so the panel never jitters on state change.
+            .animation(nil, value: morphKey)
+            .sensoryFeedback(.alignment, trigger: coordinator.hapticToken)
+    }
+
+    @ViewBuilder
+    private var placementContainer: some View {
+        switch placement {
+        case .bottomCenter:
+            VStack(spacing: 0) {
+                Spacer(minLength: 0)
+                hintLabel
+                islandBody
+                Color.clear.frame(height: anchorSlack)
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
+
+        case .topCenter:
+            VStack(spacing: 0) {
+                Color.clear.frame(height: anchorSlack)
+                islandBody
+                hintLabel
+                Spacer(minLength: 0)
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+
+        case .leftCenter:
+            HStack(spacing: 0) {
+                Color.clear.frame(width: anchorSlack)
+                islandBody
+                hintLabel
+                Spacer(minLength: 0)
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
+
+        case .rightCenter:
+            HStack(spacing: 0) {
+                Spacer(minLength: 0)
+                hintLabel
+                islandBody
+                Color.clear.frame(width: anchorSlack)
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .trailing)
         }
-        // Atoll's key trick: barrier stops any morphKey spring from propagating to the
-        // VStack frame, so the panel never jitters on state change.
-        .animation(nil, value: morphKey)
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
-        .sensoryFeedback(.alignment, trigger: coordinator.hapticToken)
     }
 
     // MARK: - Hint label (floats above the pill, outside its clip)
@@ -248,24 +295,60 @@ struct IslandContentView: View {
         ZStack {
             if let hint = coordinator.launcherHint, isIdleBar, isHovering {
                 IslandLauncherHintLabel(title: hint.title)
-                    .offset(x: hint.anchor - envelopeWidth / 2)
+                    .offset(hintOffset(for: hint))
                     .transition(
                         .opacity.combined(with: .offset(y: 4)).combined(with: .scale(scale: 0.94))
                     )
                     .id(hint.title)
             }
         }
-        .frame(maxWidth: .infinity)
-        .frame(height: Self.hintBandHeight)
+        .frame(maxWidth: placement.isVertical ? Self.hintBandHeight : .infinity,
+               maxHeight: placement.isVertical ? .infinity : Self.hintBandHeight)
         .allowsHitTesting(false)
         .animation(.smooth(duration: 0.18), value: coordinator.launcherHint)
     }
 
+    private func hintOffset(for hint: IslandLauncherHint) -> CGSize {
+        if placement.isVertical {
+            return CGSize(width: 0, height: hint.anchor - envelopeHeight / 2)
+        }
+        return CGSize(width: hint.anchor - envelopeWidth / 2, height: 0)
+    }
+
     /// Chip height (23) + the gap that keeps it clear of the pill.
-    private static let hintBandHeight: CGFloat = 31
+    private static let hintBandHeight: CGFloat = IslandUX.hintBandHeight
 
     private var envelopeWidth: CGFloat {
-        IslandGeometryProvider().panelEnvelope(for: screen).width
+        var g = IslandGeometryProvider(); g.placement = placement
+        return g.panelEnvelope(for: screen).width
+    }
+
+    private var envelopeHeight: CGFloat {
+        var g = IslandGeometryProvider(); g.placement = placement
+        return g.panelEnvelope(for: screen).height
+    }
+
+    /// UnitPoint from which the pill scales toward the anchored edge when hidden.
+    private var anchorForScale: UnitPoint {
+        switch placement {
+        case .bottomCenter: return .bottom
+        case .topCenter:    return .top
+        case .leftCenter:   return .leading
+        case .rightCenter:  return .trailing
+        }
+    }
+
+    /// Offset that nudges the pill toward the anchored edge when hidden,
+    /// creating a "slide in from the edge" reveal effect.
+    private var offsetForReveal: CGSize {
+        guard isIdleHidden else { return .zero }
+        let d: CGFloat = 5
+        switch placement {
+        case .bottomCenter: return CGSize(width: 0, height:  d)
+        case .topCenter:    return CGSize(width: 0, height: -d)
+        case .leftCenter:   return CGSize(width: -d, height: 0)
+        case .rightCenter:  return CGSize(width:  d, height: 0)
+        }
     }
 
     // MARK: - Island body (inner, springs)
@@ -303,9 +386,9 @@ struct IslandContentView: View {
         // detection runs at the NSView level and is unaffected by SwiftUI opacity, so the
         // mouse-enter event still fires and the reveal plays. Any non-idle capture state is
         // always fully opaque.
-        .opacity(isIdleHidden ? 0 : 1)
-        .scaleEffect(isIdleHidden ? 0.94 : 1, anchor: .bottom)
-        .offset(y: isIdleHidden ? 5 : 0)
+        .opacity(isIdleHidden ? 0 : isIdleSliver ? 0.35 : 1)
+        .scaleEffect(isIdleHidden ? 0.94 : 1, anchor: anchorForScale)
+        .offset(offsetForReveal)
         .allowsHitTesting(!isIdleHidden)
         .frame(maxWidth: .infinity, alignment: .center)
         .contentShape(pillShape)
@@ -313,8 +396,9 @@ struct IslandContentView: View {
         .background(GeometryReader { proxy in
             Color.clear
                 .onAppear { updateHitBox(proxy) }
-                .onChange(of: targetSize) { updateHitBox(proxy) }
-                .onChange(of: bottomSlack) { updateHitBox(proxy) }
+                .onChange(of: targetSize)  { updateHitBox(proxy) }
+                .onChange(of: anchorSlack) { updateHitBox(proxy) }
+                .onChange(of: placement)   { updateHitBox(proxy) }
         })
     }
 
@@ -357,6 +441,9 @@ struct IslandContentView: View {
             return
         }
 
+        var g = IslandGeometryProvider(); g.placement = placement
+        let envelope = g.panelEnvelope(for: screen)
+
         let originY: CGFloat  // top-left Y of the pill in the panel's SwiftUI coordinate space
         let centerX: CGFloat
 
@@ -365,40 +452,61 @@ struct IslandContentView: View {
             originY = frame.minY
             centerX = frame.midX
         } else {
-            // Fallback before first layout: place pill at panel bottom minus bottomSlack.
-            let envH = IslandGeometryProvider().panelEnvelope(for: screen).height
-            originY  = envH - bottomSlack - size.height
-            centerX  = IslandGeometryProvider().panelEnvelope(for: screen).width / 2
+            // Fallback before first layout: estimate pill position from envelope + anchorSlack.
+            let slack = anchorSlack
+            switch placement {
+            case .bottomCenter:
+                originY = envelope.height - slack - size.height
+                centerX = envelope.width / 2
+            case .topCenter:
+                originY = slack
+                centerX = envelope.width / 2
+            case .leftCenter:
+                originY = (envelope.height - size.height) / 2
+                centerX = slack + size.width / 2
+            case .rightCenter:
+                originY = (envelope.height - size.height) / 2
+                centerX = envelope.width - slack - size.width / 2
+            }
         }
 
         let pillX = centerX - size.width / 2
 
         hitBox.rect = NSRect(x: pillX, y: originY, width: size.width, height: size.height)
 
-        // Hover rect. The recording nub (10 pt tall) and the idle launcher (invisible until
-        // hovered) both need a generous catch area — you cannot aim at something you cannot
-        // see. An open recording row is visible, so the standard ±12/±3 is fine there.
+        // Hover rect — generous for invisible/tiny targets, narrow for visible rows.
         let generousCatch = isPeek || isIdleBar
-        let hPad: CGFloat = generousCatch ? 40 : 12
-        let vPadUp: CGFloat = generousCatch ? 22 : 3
-        let vPadDown: CGFloat = generousCatch ? 12 : 3
+        let hPad:    CGFloat = generousCatch ? IslandUX.hoverHPadGenerous : IslandUX.hoverPadNarrow
+        let vPadUp:  CGFloat = generousCatch ? IslandUX.hoverVPadUpGenerous : IslandUX.hoverVPadNarrowUp
+        let vPadDown:CGFloat = generousCatch ? IslandUX.hoverVPadDownGenerous : IslandUX.hoverVPadNarrowDown
+
+        // For vertical placements, extend toward the anchor edge (left or right).
+        let (leftPad, rightPad, topPad, botPad): (CGFloat, CGFloat, CGFloat, CGFloat)
+        switch placement {
+        case .bottomCenter:
+            leftPad = hPad; rightPad = hPad; topPad = vPadUp; botPad = vPadDown
+        case .topCenter:
+            leftPad = hPad; rightPad = hPad; topPad = vPadDown; botPad = vPadUp
+        case .leftCenter:
+            leftPad = vPadDown; rightPad = vPadUp; topPad = hPad; botPad = hPad
+        case .rightCenter:
+            leftPad = vPadUp; rightPad = vPadDown; topPad = hPad; botPad = hPad
+        }
+
         hitBox.hoverRect = NSRect(
-            x:      pillX  - hPad,
-            y:      originY - vPadUp,
-            width:  size.width + hPad * 2,
-            height: size.height + vPadUp + vPadDown
+            x:      pillX   - leftPad,
+            y:      originY - topPad,
+            width:  size.width  + leftPad + rightPad,
+            height: size.height + topPad  + botPad
         )
 
-        // Screen-space span, used by the bottom-edge hover-retention test.
-        let envelope = IslandGeometryProvider().panelEnvelope(for: screen)
-        // Convert from SwiftUI top-left space to AppKit bottom-left:
-        // AppKit Y = envelope.height - (swiftUI_originY + height)
+        // Screen-space span for the anchored-edge hover-retention test.
         let appKitY = envelope.origin.y + (envelope.height - (originY + size.height))
         coordinator.hoverRectOnScreen = NSRect(
-            x:      envelope.origin.x + pillX - hPad,
-            y:      appKitY - vPadDown,
-            width:  size.width + hPad * 2,
-            height: size.height + vPadUp + vPadDown
+            x:      envelope.origin.x + pillX   - leftPad,
+            y:      appKitY - botPad,
+            width:  size.width  + leftPad + rightPad,
+            height: size.height + topPad  + botPad
         )
     }
 }
