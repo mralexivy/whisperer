@@ -126,11 +126,17 @@ private final class IslandContainerView: NSView {
     override func mouseMoved(with event: NSEvent) { updateHover(with: event) }
 
     /// Re-check hover on every move — catches re-entry after spurious exits.
+    /// Also feeds the pointer location into the reveal gate so it can measure dwell+stillness.
     private func updateHover(with event: NSEvent) {
-        let loc = flip(convert(event.locationInWindow, from: nil))
+        let loc    = flip(convert(event.locationInWindow, from: nil))
         let inside = hitBox?.hoverRect.contains(loc) ?? false
+        // Global screen coordinates for the reveal gate.
+        let screenPt = event.cgEvent?.location ?? NSEvent.mouseLocation
+        let nsPoint  = NSPoint(x: screenPt.x, y: screenPt.y)
         DispatchQueue.main.async { [weak self] in
-            guard let coord = self?.coordinator, inside != coord.isHovering else { return }
+            guard let coord = self?.coordinator else { return }
+            coord.handlePointerMoved(point: nsPoint, inside: inside)
+            guard inside != coord.isHovering else { return }
             coord.handleHover(inside)
         }
     }
