@@ -4,9 +4,12 @@
 //
 //  Island UI — bottom-anchored, three-tier morph.
 //
-//  The Island is always on screen once onboarding is done. While idle it rests as a
-//  near-transparent launcher nub; hovering opens a four-action launcher row
-//  (Dictate · Meeting · File · Workspace).
+//  The Island is always on screen once onboarding is done. While idle it rests as a small
+//  glass capsule — the "handle" — with a single hairline inside it. Hovering grows the
+//  handle and fills that line across the reveal dwell window, so the wait before the
+//  launcher opens is visible instead of a mystery; completing the dwell (or clicking the
+//  handle outright) opens the four-action launcher row
+//  (Dictate · Meeting · Paste Bin · Workspace).
 //
 //  Tiers (bottom-up growth):
 //   .peek     → 104 × 24 pt idle launcher, or 208 × 30 pt recording nub.
@@ -110,7 +113,8 @@ struct IslandContentView: View {
 
     private var radii: (top: CGFloat, bottom: CGFloat) {
         IslandContentSizer.cornerRadii(
-            capture: vm.capture, presentation: vm.presentation, screen: screen
+            capture: vm.capture, presentation: vm.presentation, screen: screen,
+            revealPhase: revealPhase
         )
     }
 
@@ -128,10 +132,9 @@ struct IslandContentView: View {
 
     /// Idle launcher bar — always compact now; no nub transition.
     private var isIdleBar: Bool { vm.capture == .idle }
-    /// True when the idle bar should be fully invisible (hidden phase).
-    private var isIdleHidden: Bool { isIdleBar && revealPhase == .hidden }
-    /// True when showing only the sliver hint at the anchored edge.
-    private var isIdleSliver: Bool { isIdleBar && revealPhase == .sliver }
+    /// True while the idle Island is resting as the handle rather than the launcher row.
+    /// The handle is always on screen; only its fill and length change before reveal.
+    private var isIdleHandle: Bool { isIdleBar && revealPhase != .revealed }
 
     @ViewBuilder
     private var surface: some View {
@@ -198,8 +201,18 @@ struct IslandContentView: View {
     private var shadowOpacity: Double {
         // Wide and faint rather than tight and dark — a contact shadow under a thin sheet.
         // A dense shadow is most of what made the pill look like a solid block.
-        if isIdleBar { return isHovering ? 0.16 : 0.06 }
+        // The resting handle carries almost none: it must not cast a visible smudge on the
+        // desktop while the user is doing something else.
+        if isIdleHandle { return isHovering ? 0.12 : 0.04 }
+        if isIdleBar    { return isHovering ? 0.16 : 0.06 }
         return (isHovering || isExpanded) ? 0.55 : 0.34
+    }
+
+    /// Overall opacity of the idle surface. The resting handle sits well back so it reads
+    /// as a quiet affordance; hovering brings it fully forward.
+    private var idleSurfaceOpacity: Double {
+        guard isIdleHandle else { return 1 }
+        return isHovering ? 1 : 0.55
     }
 
     /// Padding between the island body and the anchored edge of the panel envelope.
@@ -292,9 +305,14 @@ struct IslandContentView: View {
     /// height whether or not a hint is showing, so revealing one eats into the Spacer above
     /// instead of shoving the bar down.
     private var hintLabel: some View {
-        ZStack {
+        ZStack(alignment: hintBandAlignment) {
+            // A zero-size clear anchor so the ZStack keeps its band size even when empty;
+            // without it the band collapses and the bar shifts as hints come and go.
+            Color.clear.frame(width: 0, height: 0)
+
             if let hint = coordinator.launcherHint, isIdleBar, isHovering {
                 IslandLauncherHintLabel(title: hint.title)
+                    .padding(placement.isVertical ? .horizontal : .vertical, 6)
                     .offset(hintOffset(for: hint))
                     .transition(
                         .opacity.combined(with: .offset(y: 4)).combined(with: .scale(scale: 0.94))
@@ -302,10 +320,22 @@ struct IslandContentView: View {
                     .id(hint.title)
             }
         }
-        .frame(maxWidth: placement.isVertical ? Self.hintBandHeight : .infinity,
+        // Vertical placements need a real band WIDTH — a chip reading "Workspace" is far
+        // wider than the 31 pt reserved for the horizontal band's height.
+        .frame(maxWidth:  placement.isVertical ? Self.hintBandWidth : .infinity,
                maxHeight: placement.isVertical ? .infinity : Self.hintBandHeight)
         .allowsHitTesting(false)
         .animation(.smooth(duration: 0.18), value: coordinator.launcherHint)
+    }
+
+    /// Which side of the band the chip hugs, so it always sits beside the pill rather than
+    /// drifting off toward the middle of the screen.
+    private var hintBandAlignment: Alignment {
+        switch placement {
+        case .leftCenter:  return .leading
+        case .rightCenter: return .trailing
+        default:           return .center
+        }
     }
 
     private func hintOffset(for hint: IslandLauncherHint) -> CGSize {
@@ -317,6 +347,8 @@ struct IslandContentView: View {
 
     /// Chip height (23) + the gap that keeps it clear of the pill.
     private static let hintBandHeight: CGFloat = IslandUX.hintBandHeight
+    /// Band width reserved beside a vertical pill — wide enough for the longest glyph name.
+    private static let hintBandWidth: CGFloat = IslandUX.hintBandWidth
 
     private var envelopeWidth: CGFloat {
         var g = IslandGeometryProvider(); g.placement = placement
@@ -338,11 +370,11 @@ struct IslandContentView: View {
         }
     }
 
-    /// Offset that nudges the pill toward the anchored edge when hidden,
-    /// creating a "slide in from the edge" reveal effect.
+    /// Offset that tucks the resting handle a little closer to the anchored edge, so
+    /// revealing the launcher reads as the bar rising out of the screen edge.
     private var offsetForReveal: CGSize {
-        guard isIdleHidden else { return .zero }
-        let d: CGFloat = 5
+        guard isIdleHandle, !isHovering else { return .zero }
+        let d: CGFloat = 3
         switch placement {
         case .bottomCenter: return CGSize(width: 0, height:  d)
         case .topCenter:    return CGSize(width: 0, height: -d)
@@ -358,7 +390,8 @@ struct IslandContentView: View {
             coordinator: coordinator,
             levelBridge: level,
             clock: clock,
-            metrics: rowMetrics
+            metrics: rowMetrics,
+            isIdleHandle: isIdleHandle
         )
         .frame(width: targetSize.width, height: targetSize.height, alignment: .center)
         .background(surface)
@@ -381,16 +414,20 @@ struct IslandContentView: View {
         // Springs live HERE — never on the root.
         .animation(activeSpring, value: morphKey)
         .animation(hoverAnim, value: isHovering)
+        .animation(.easeOut(duration: 0.22), value: revealPhase)
         .animation(.smooth, value: coordinator.gestureProgress)
-        // The idle launcher is invisible until the pointer arrives. NSTrackingArea hover
-        // detection runs at the NSView level and is unaffected by SwiftUI opacity, so the
-        // mouse-enter event still fires and the reveal plays. Any non-idle capture state is
-        // always fully opaque.
-        .opacity(isIdleHidden ? 0 : isIdleSliver ? 0.35 : 1)
-        .scaleEffect(isIdleHidden ? 0.94 : 1, anchor: anchorForScale)
+        // The idle Island is never fully hidden any more — at rest it is the handle, held
+        // back in opacity so it stays quiet against whatever is behind it. Hover brings it
+        // to full strength. Any non-idle capture state is always fully opaque.
+        .opacity(idleSurfaceOpacity)
         .offset(offsetForReveal)
-        .allowsHitTesting(!isIdleHidden)
-        .frame(maxWidth: .infinity, alignment: .center)
+        // Centre the pill across the panel's CROSS axis — width for a horizontal pill in a
+        // VStack, height for a vertical pill in an HStack. Growing on the wrong axis made the
+        // body greedy inside the left/right HStack and squashed the hint band to nothing,
+        // which is why hovering a glyph named nothing in those placements.
+        .frame(maxWidth:  placement.isVertical ? nil : .infinity,
+               maxHeight: placement.isVertical ? .infinity : nil,
+               alignment: .center)
         .contentShape(pillShape)
         .onTapGesture { handleTap() }
         .background(GeometryReader { proxy in
@@ -407,10 +444,12 @@ struct IslandContentView: View {
     private func handleTap() {
         switch vm.capture {
         case .idle:
-            // Tapping the nub opens the launcher row. Taps on the open row are ignored —
-            // the four action buttons own it, and a stray background click must not launch
-            // anything.
-            if vm.presentation == .peek {
+            // Clicking the resting handle opens the launcher immediately rather than making
+            // the user hold still for the dwell. Taps on the open row are ignored — the four
+            // action buttons own it, and a stray background click must not launch anything.
+            if isIdleHandle {
+                coordinator.revealLauncherNow()
+            } else if vm.presentation == .peek {
                 coordinator.send(.expand)
             }
         case .recording, .paused:

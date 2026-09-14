@@ -175,4 +175,60 @@ final class IslandRevealGateTests: XCTestCase {
         let phase = g.step(point: settledPt, inside: true, now: settleTime + IslandUX.revealDelay)
         XCTAssertEqual(phase, .revealed, "Pointer at rest must eventually reach .revealed")
     }
+
+    // MARK: - timeUntilReveal (drives the dwell timer)
+
+    func testTimeUntilReveal_isNilBeforePriming() {
+        let g = IslandRevealGate()
+        XCTAssertNil(g.timeUntilReveal(now: t0),
+                     "An unprimed gate has no dwell in flight, so nothing to schedule")
+    }
+
+    func testTimeUntilReveal_countsDownFromEntry() {
+        var g = IslandRevealGate()
+        g.entered(point: .zero, now: t0)
+        XCTAssertEqual(g.timeUntilReveal(now: t0) ?? -1,
+                       IslandUX.revealDelay, accuracy: 1e-9)
+        XCTAssertEqual(g.timeUntilReveal(now: t0 + IslandUX.revealDelay / 2) ?? -1,
+                       IslandUX.revealDelay / 2, accuracy: 1e-9)
+    }
+
+    func testTimeUntilReveal_clampsToZeroAndIsNilOnceRevealed() {
+        var g = IslandRevealGate()
+        g.entered(point: .zero, now: t0)
+        XCTAssertEqual(g.timeUntilReveal(now: t0 + 10) ?? -1, 0, accuracy: 1e-9,
+                       "An overdue dwell schedules immediately rather than in the past")
+
+        g.step(point: .zero, inside: true, now: t0 + IslandUX.revealDelay)
+        XCTAssertEqual(g.currentPhase, .revealed)
+        XCTAssertNil(g.timeUntilReveal(now: t0 + IslandUX.revealDelay),
+                     "Already revealed — no timer should be armed")
+    }
+
+    func testTimeUntilReveal_restartsAfterStillnessBreak() {
+        var g = IslandRevealGate()
+        g.entered(point: .zero, now: t0)
+        // Move far enough to re-anchor the clock partway through the dwell.
+        let breakTime = t0 + IslandUX.revealDelay / 2
+        g.step(point: NSPoint(x: IslandUX.stillnessRadius + 10, y: 0),
+               inside: true, now: breakTime)
+        XCTAssertEqual(g.timeUntilReveal(now: breakTime) ?? -1,
+                       IslandUX.revealDelay, accuracy: 1e-9,
+                       "Re-anchoring restarts the full dwell, so the timer must be re-armed for it")
+    }
+
+    /// The bug this API exists to fix: a pointer that stops moving stops producing
+    /// `mouseMoved` events, so the gate is never stepped again and stalls one phase short.
+    /// `timeUntilReveal` is what lets the caller finish the dwell on a timer instead.
+    func testStillPointerWithNoFurtherEvents_hasAScheduledCompletion() {
+        var g = IslandRevealGate()
+        g.entered(point: .zero, now: t0)
+        guard let remaining = g.timeUntilReveal(now: t0) else {
+            return XCTFail("A primed gate must report a pending dwell")
+        }
+        // Only one further step happens — the timer's — with no intervening mouse movement.
+        let phase = g.step(point: .zero, inside: true, now: t0 + remaining)
+        XCTAssertEqual(phase, .revealed,
+                       "Firing at the reported remaining time must complete the dwell")
+    }
 }

@@ -52,6 +52,39 @@ nonisolated struct IslandContentSizer {
     /// Resting launcher nub — deliberately smaller than the recording nub.
     static let idlePeekWidth:    CGFloat = 104
     static let idlePeekHeight:   CGFloat = 24
+
+    // MARK: - Idle handle (always-on resting affordance)
+    //
+    // The idle Island is never fully invisible. At rest it is a small glass capsule with a
+    // single hairline inside it — enough to say "something lives here" without competing
+    // with whatever the user is actually working on. Hovering grows it along its long axis
+    // and fills the inner line as the dwell clock runs; completing the dwell blossoms it
+    // into the full launcher row.
+
+    /// Long-axis length of the resting handle.
+    ///
+    /// Constant whether or not the pointer is near. An intermediate "swell" step used to sit
+    /// here, but it made the approach read as two separate, competing animations — a small
+    /// grow, then a jump to the full launcher — and every size change re-ran the hit-box
+    /// math mid-approach, which is what made the target feel like it needed precise aim.
+    /// Hover feedback is now purely tonal (see `IslandLayout.handleBody`), so the only
+    /// geometry change in the whole interaction is the single spring into the launcher.
+    static let idleHandleRestLength:  CGFloat = 56
+    /// Thickness of the handle capsule. Constant across rest and hover so only the
+    /// length animates — a capsule that changes thickness reads as a wobble.
+    static let idleHandleThickness:   CGFloat = 9
+    /// Thickness of the hairline / progress fill drawn inside the handle.
+    static let idleHandleLineThickness: CGFloat = 2.5
+
+    /// Size of the resting/dwelling handle for a given placement and hover state.
+    static func idleHandleSize(isHovering: Bool, placement: IslandPlacement) -> CGSize {
+        _ = isHovering   // Size is intentionally hover-invariant — see idleHandleRestLength.
+        let long  = idleHandleRestLength
+        let thick = idleHandleThickness
+        return placement.isVertical
+            ? CGSize(width: thick, height: long)
+            : CGSize(width: long,  height: thick)
+    }
     /// 4 × 28 (item) + 4 × 2 (spacing) + 11 (divider + padding) + 2 × 8 (row padding).
     static let idleCompactWidth:  CGFloat = 147
     static let idleCompactHeight: CGFloat = 32
@@ -80,19 +113,16 @@ nonisolated struct IslandContentSizer {
         placement: IslandPlacement = .bottomCenter,
         revealPhase: IslandRevealPhase = .revealed
     ) -> CGSize {
-        // Hidden phase always zero.
+        // Hidden presentation always zero. This is the Island standing down entirely
+        // (meeting window up, dictation HUD up, onboarding) — distinct from the idle
+        // handle below, which is the resting *visible* state.
         guard presentation != .hidden else { return .zero }
 
-        // Sliver phase: a real 3-pt stripe at the anchored edge.
-        // Width/height are assigned so that the sliver occupies the anchored edge correctly.
-        if revealPhase == .sliver && capture == .idle {
-            let sliver = IslandUX.sliverThickness
-            let longAxis = placement.isVertical
-                ? min(idlePeekWidth, screen.frame.height - GC.minHClearance * 2)
-                : min(idlePeekWidth, screen.frame.width  - GC.minHClearance * 2)
-            return placement.isVertical
-                ? CGSize(width: sliver, height: longAxis)
-                : CGSize(width: longAxis, height: sliver)
+        // Pre-reveal idle: the always-on handle. `.hidden` is the resting capsule and
+        // `.sliver` is the same capsule grown by hover — both are real geometry so the
+        // glass surface draws the rounded container and hit-testing stays honest.
+        if capture == .idle && revealPhase != .revealed {
+            return idleHandleSize(isHovering: isHovering, placement: placement)
         }
 
         let isIdle = capture == .idle
@@ -181,8 +211,14 @@ nonisolated struct IslandContentSizer {
     static func cornerRadii(
         capture: IslandCaptureState,
         presentation: IslandPresentation,
-        screen: ScreenDescription
+        screen: ScreenDescription,
+        revealPhase: IslandRevealPhase = .revealed
     ) -> (top: CGFloat, bottom: CGFloat) {
+        // The pre-reveal idle handle is a capsule regardless of which tier it sits in.
+        if capture == .idle && revealPhase != .revealed {
+            let r = idleHandleThickness / 2
+            return (top: r, bottom: r)
+        }
         switch presentation {
         case .peek:
             let r: CGFloat = capture == .idle ? idlePeekHeight / 2 : GC.peekHeight / 2

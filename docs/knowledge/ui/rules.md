@@ -97,3 +97,38 @@ always hits that clamp, because the island sits only `bottomInset` above it. Res
 slack as bottom padding therefore floated the Island `panelSlack - bottomInset` too high on every
 display. `IslandContentSizer.bottomSlack` recomputes the clamp, so the pill lands exactly
 `bottomInset` above `visibleFrame.minY`. `IslandContentSizerTests` pins that identity.
+
+## A dwell that rewards stillness cannot be clocked by mouse-moved events
+
+`IslandRevealGate` advanced only when `IslandPanel.updateHover` fed it a `mouseMoved` event, but
+the gate's own precondition is that the pointer stay within `stillnessRadius`. macOS stops
+delivering `mouseMoved` once the pointer is parked, so the clock stopped exactly when the user was
+signalling intent hardest and the launcher never opened — the only way through was to jiggle the
+mouse, which risks re-anchoring the gate. Any dwell whose success condition is *not moving* must be
+completed by a timer; mouse events can only start and cancel it.
+
+Arm that timer from the `mouseEntered`/`mouseExited` signal (`isHovering`), not from pointer
+geometry. Re-testing a screen-space rect when the timer fires is unreliable because the rect is
+recomputed while the reveal animates, so it gets read mid-flight against a pointer that never moved.
+
+## Do not reschedule a dwell timer on every pointer move
+
+Cancelling and re-arming the countdown on each `mouseMoved` means aim wobble keeps pushing the
+finish line back, so approaching a target carefully opens it *later* than approaching it sloppily —
+backwards from what the user expects. Arm once on entry; restart only when the gate actually
+re-anchors (a real change of target, over `stillnessRadius`), not on every sample.
+
+## Hover feedback on a dwell target must be tonal, not dimensional
+
+The idle handle swelled 48→64pt on hover and then sprang to the full launcher: two competing
+animations, and every size change re-ran `updateHitBox` mid-approach, which is what made a 9pt bar
+feel like it needed precise aim. Changing the size of the thing the pointer is currently aiming at
+fights the user. Keep the resting size constant and signal "armed" with opacity/tint, so the single
+spring into the revealed state is the only geometry change in the interaction.
+
+## Reveal has two independent gates — phase and tier
+
+`idleRevealPhase == .revealed` is necessary but not sufficient for the launcher row to render:
+`IslandLayout` also requires the presentation tier to be above `.peek`. A dwell that only sets the
+phase completes silently with no icons on screen. Whatever completes the dwell must also
+`send(.expand)` when the tier is still `.peek`.

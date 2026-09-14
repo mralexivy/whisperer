@@ -78,6 +78,9 @@ final class IslandCoordinator: ObservableObject {
 
     // Hover
     private var hoverTask:         Task<Void, Never>?
+    /// Completes the reveal dwell without needing further mouse events. See
+    /// `scheduleDwellCompletion(after:)`.
+    private var dwellTask:         Task<Void, Never>?
     private var lastHapticDate:    Date = .distantPast
     private let peekDwell:         Double = 0.12  // peek → compact dwell (120 ms)
     private let hoverExitDebounce: Duration = .milliseconds(100)
@@ -119,6 +122,7 @@ final class IslandCoordinator: ObservableObject {
     func cancelHoverTask() {
         hoverTask?.cancel()
         hoverTask = nil
+        cancelDwellTask()
     }
 
     // MARK: - Placement
@@ -134,6 +138,7 @@ final class IslandCoordinator: ObservableObject {
             self.placement = p
             self.geo.placement = p
             // Reset the reveal gate so the bar doesn't appear at the new edge instantly.
+            self.cancelDwellTask()
             self.revealGate.reset()
             self.idleRevealPhase = .hidden
             self.panelController?.applyPlacementChange(placement: p, screen: self.homeScreen)
@@ -150,12 +155,83 @@ final class IslandCoordinator: ObservableObject {
             if idleRevealPhase != .revealed { idleRevealPhase = .revealed }
             return
         }
-        let phase = revealGate.step(point: point, inside: inside,
-                                    now: Date().timeIntervalSinceReferenceDate)
-        if phase != idleRevealPhase {
-            withAnimation(.easeIn(duration: IslandUX.hintFadeDuration)) {
-                idleRevealPhase = phase
-            }
+        guard inside else {
+            cancelDwellTask()
+            applyRevealPhase(revealGate.step(point: point, inside: false,
+                                             now: Date().timeIntervalSinceReferenceDate))
+            return
+        }
+        guard idleRevealPhase != .revealed else { return }
+
+        // Deliberately does NOT re-arm the timer on every move. The timer is armed once, on
+        // hover-enter; letting each mouse-moved event cancel and reschedule it meant the
+        // slightest tremor kept pushing the finish line away, so approaching the handle
+        // "carefully" made it open later than approaching it carelessly. Only a move large
+        // enough to re-anchor the gate — a genuine change of target, not aim wobble —
+        // restarts the countdown.
+        let now = Date().timeIntervalSinceReferenceDate
+        let before = revealGate.timeUntilReveal(now: now)
+        revealGate.step(point: point, inside: true, now: now)
+        if let after = revealGate.timeUntilReveal(now: now),
+           let before, after > before + 0.001 {
+            scheduleDwellCompletion(after: after)
+        }
+    }
+
+    private func applyRevealPhase(_ phase: IslandRevealPhase) {
+        guard phase != idleRevealPhase else { return }
+        withAnimation(.easeIn(duration: IslandUX.hintFadeDuration)) {
+            idleRevealPhase = phase
+        }
+    }
+
+    /// Arm the auto-expand the moment the pointer enters the hover zone.
+    ///
+    /// This is keyed off `isHovering` rather than off pointer-moved geometry on purpose.
+    /// `isHovering` is driven by `mouseEntered`/`mouseExited`, which fire exactly once per
+    /// crossing and are unaffected by the pointer then holding perfectly still — so the
+    /// launcher opens on its own for a user who parks on the handle, which is the whole
+    /// point. Re-testing a screen-space rect at fire time (the previous approach) could not
+    /// be trusted: that rect is recomputed while the reveal is animating, so it was being
+    /// read mid-flight against a pointer that had not moved at all.
+    private func armRevealDwell() {
+        guard model.capture == .idle, idleRevealPhase != .revealed else { return }
+        revealGate.entered(point: NSEvent.mouseLocation,
+                           now: Date().timeIntervalSinceReferenceDate)
+        scheduleDwellCompletion(after: IslandUX.revealDelay)
+    }
+
+    /// Finish the dwell on a timer rather than on mouse events. Only fires while the pointer
+    /// is still hovering, so a pointer that sweeps straight back out never opens the launcher.
+    private func scheduleDwellCompletion(after delay: TimeInterval) {
+        cancelDwellTask()
+        dwellTask = Task { [weak self] in
+            try? await Task.sleep(for: .seconds(max(0, delay)))
+            guard !Task.isCancelled, let self else { return }
+            guard self.isHovering, self.model.capture == .idle else { return }
+            self.revealGate.forceReveal(point: NSEvent.mouseLocation,
+                                        now: Date().timeIntervalSinceReferenceDate)
+            // The launcher row only renders above .peek, so lift the tier too — otherwise
+            // the dwell completes and the user still sees no icons.
+            if self.currentViewModel.presentation == .peek { self.send(.expand) }
+            self.applyRevealPhase(.revealed)
+        }
+    }
+
+    private func cancelDwellTask() {
+        dwellTask?.cancel()
+        dwellTask = nil
+    }
+
+    /// Skip the dwell and open the launcher now. Called when the user clicks the resting
+    /// handle, which is a deliberate act and should not be made to wait out a timer.
+    func revealLauncherNow() {
+        guard model.capture == .idle, idleRevealPhase != .revealed else { return }
+        cancelDwellTask()
+        revealGate.forceReveal(point: NSEvent.mouseLocation,
+                               now: Date().timeIntervalSinceReferenceDate)
+        withAnimation(.easeOut(duration: IslandUX.hintFadeDuration)) {
+            idleRevealPhase = .revealed
         }
     }
 
@@ -176,6 +252,7 @@ final class IslandCoordinator: ObservableObject {
         if hovering {
             withAnimation(.bouncy.speed(1.2)) { isHovering = true }
             triggerHapticIfAllowed()
+            armRevealDwell()
 
             // Peek → compact dwell (120 ms). Only fires from .peek.
             let dwell = peekDwell
@@ -217,6 +294,7 @@ final class IslandCoordinator: ObservableObject {
 
     private func finishHoverExit() {
         launcherHint = nil
+        cancelDwellTask()
         revealGate.reset()
         withAnimation(.bouncy.speed(1.2)) {
             isHovering = false

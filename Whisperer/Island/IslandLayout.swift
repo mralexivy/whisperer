@@ -31,10 +31,14 @@ struct IslandLayout: View {
     /// Row metrics for the compact strip.
     var metrics: IslandRowMetrics
 
+    /// True while the idle Island is resting as the handle rather than the launcher row.
+    var isIdleHandle: Bool = false
+
     private var vm: IslandViewModel    { coordinator.currentViewModel }
     private var isExpanded: Bool       { vm.presentation == .expanded }
     private var isPeek: Bool           { vm.presentation == .peek }
     private var isVertical: Bool       { coordinator.placement.isVertical }
+    private var isHovering: Bool       { coordinator.isHovering }
 
     // Swap transition between capture states
     private var swapTransition: AnyTransition {
@@ -47,30 +51,111 @@ struct IslandLayout: View {
     }
 
     var body: some View {
-        if isPeek {
+        if isIdleHandle {
+            handleBody
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+        } else if isPeek {
             peekBody
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
+        } else if isVertical {
+            verticalStack
         } else {
-            VStack(spacing: 0) {
-                compactBody
-                    .frame(height: IslandContentSizer.compactHeight(for: vm.capture))
-
-                if isExpanded {
-                    secondaryRow
-                        .frame(maxWidth: .infinity)
-                        .frame(height: IslandContentSizer.expandedExtraHeight)
-                        .overlay(alignment: .top) {
-                            Rectangle()
-                                .fill(IC.secondary.opacity(0.16))
-                                .frame(height: 1)
-                                .padding(.horizontal, 18)
-                        }
-                        .transition(.opacity.combined(with: .move(edge: .bottom)))
-                }
-            }
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-            .clipped()
+            horizontalStack
         }
+    }
+
+    // MARK: - Tier stacks
+    //
+    // The compact strip must always be sized on the pill's THICK axis, and the expanded
+    // controls must grow along it. For a horizontal pill the thick axis is height, so the
+    // strip is framed by height and the secondary row stacks under it. For a vertical pill
+    // the thick axis is width — framing that one by height instead squeezed the 147 pt
+    // four-glyph launcher column into a 32 pt slot, and `.clipped()` then ate the first two
+    // glyphs. That is why left/right placement was showing only Paste Bin and Workspace.
+
+    private var horizontalStack: some View {
+        VStack(spacing: 0) {
+            compactBody
+                .frame(height: IslandContentSizer.compactHeight(for: vm.capture))
+
+            if isExpanded {
+                secondaryRow
+                    .frame(maxWidth: .infinity)
+                    .frame(height: IslandContentSizer.expandedExtraHeight)
+                    .overlay(alignment: .top) {
+                        Rectangle()
+                            .fill(IC.secondary.opacity(0.16))
+                            .frame(height: 1)
+                            .padding(.horizontal, 18)
+                    }
+                    .transition(.opacity.combined(with: .move(edge: .bottom)))
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        .clipped()
+    }
+
+    /// Vertical pill. The strip hugs the anchored edge and the controls open inward, which
+    /// is the direction `IslandContentSizer` actually grows the pill: leftCenter widens
+    /// rightward, rightCenter widens leftward.
+    private var verticalStack: some View {
+        let anchorTrailing = coordinator.placement == .rightCenter
+        return HStack(spacing: 0) {
+            if anchorTrailing, isExpanded { verticalSecondary }
+
+            compactBody
+                .frame(width: IslandContentSizer.compactHeight(for: vm.capture))
+
+            if !anchorTrailing, isExpanded { verticalSecondary }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity,
+               alignment: anchorTrailing ? .trailing : .leading)
+        .clipped()
+    }
+
+    private var verticalSecondary: some View {
+        let anchorTrailing = coordinator.placement == .rightCenter
+        return secondaryRow
+            .frame(maxHeight: .infinity)
+            .frame(width: IslandContentSizer.expandedExtraHeight)
+            .overlay(alignment: anchorTrailing ? .trailing : .leading) {
+                Rectangle()
+                    .fill(IC.secondary.opacity(0.16))
+                    .frame(width: 1)
+                    .padding(.vertical, 18)
+            }
+            .transition(.opacity.combined(
+                with: .move(edge: anchorTrailing ? .leading : .trailing)))
+    }
+
+    // MARK: - Idle handle (always-on resting affordance)
+
+    /// A single hairline inside the glass capsule — the whole of the resting state.
+    ///
+    /// There is deliberately no progress indicator here. The dwell is short enough
+    /// (`IslandUX.revealDelay`) that a bar counting it down would draw more attention to the
+    /// wait than the wait itself deserves. What acknowledges the pointer instead is the
+    /// handle's own reaction: it lengthens, brightens and comes to full opacity the instant
+    /// hover starts, which answers "did it see me?" immediately, and the launcher follows a
+    /// moment later.
+    private var handleBody: some View {
+        let line = IslandContentSizer.idleHandleLineThickness
+        let inset: CGFloat = 5
+        return GeometryReader { geo in
+            let long  = isVertical ? geo.size.height : geo.size.width
+            let track = max(0, long - inset * 2)
+
+            // Tonal only — the handle never changes size. Brightening in place reads as
+            // "armed, keep going" without moving the target the user is currently aiming at.
+            Capsule()
+                .fill(IC.primary.opacity(isHovering ? 0.85 : 0.34))
+                .frame(width:  isVertical ? line : track,
+                       height: isVertical ? track : line)
+                .frame(width: geo.size.width, height: geo.size.height, alignment: .center)
+        }
+        .animation(.easeOut(duration: 0.12), value: isHovering)
+        .allowsHitTesting(false)
+        .accessibilityHidden(true)
     }
 
     // MARK: - Peek body (recording only — idle always shows the compact launcher bar)
@@ -386,8 +471,21 @@ struct IslandLayout: View {
 
     // MARK: - Secondary (expanded) row
 
+    @ViewBuilder
     private var secondaryRow: some View {
-        HStack(spacing: 24) {
+        if isVertical {
+            VStack(spacing: 18) { secondaryItems }
+                .frame(maxHeight: .infinity)
+        } else {
+            HStack(spacing: 24) { secondaryItems }
+                .frame(maxWidth: .infinity)
+                .environment(\.layoutDirection, .leftToRight)
+        }
+    }
+
+    @ViewBuilder
+    private var secondaryItems: some View {
+        Group {
             IslandHoverButton(
                 icon: vm.isMicMuted ? "mic.slash.fill" : "mic.fill",
                 label: vm.isMicMuted ? "Unmute" : "Mic",
@@ -418,8 +516,6 @@ struct IslandLayout: View {
             }
             .help("Open the meeting window")
         }
-        .frame(maxWidth: .infinity)
-        .environment(\.layoutDirection, .leftToRight)
     }
 }
 

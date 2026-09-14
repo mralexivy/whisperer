@@ -21,6 +21,16 @@ import CoreGraphics
 
 nonisolated struct IslandRevealGate {
 
+    /// Slack on the dwell threshold comparisons.
+    ///
+    /// `elapsed` is the difference of two large absolute timestamps
+    /// (`timeIntervalSinceReferenceDate` is ~8×10⁸), so it carries rounding error: a pointer
+    /// polled at exactly `entryTime + revealDelay` can compute an `elapsed` a few ULPs
+    /// *below* the threshold and stall one phase short. One microsecond of slack is far
+    /// below anything a human or the event loop can resolve, and removes the boundary
+    /// flake entirely.
+    private static let thresholdEpsilon: TimeInterval = 1e-6
+
     // MARK: - State
 
     private var entryPoint: NSPoint      = .zero
@@ -64,9 +74,9 @@ nonisolated struct IslandRevealGate {
         }
 
         let elapsed = now - entryTime
-        if elapsed >= IslandUX.revealDelay {
+        if elapsed >= IslandUX.revealDelay - Self.thresholdEpsilon {
             phase = .revealed
-        } else if elapsed >= IslandUX.sliverDelay {
+        } else if elapsed >= IslandUX.sliverDelay - Self.thresholdEpsilon {
             phase = .sliver
         }
         return phase
@@ -80,6 +90,16 @@ nonisolated struct IslandRevealGate {
         phase      = .hidden
     }
 
+    /// Jump straight to revealed, skipping the dwell. Used when the user clicks the resting
+    /// handle — an explicit click is a stronger statement of intent than any dwell, so it
+    /// should not have to wait one out. `.revealed` is sticky while the pointer stays inside,
+    /// so subsequent `step` calls will not undo this.
+    mutating func forceReveal(point: NSPoint, now: TimeInterval) {
+        entryPoint = point
+        entryTime  = now
+        phase      = .revealed
+    }
+
     /// Reset to hidden and clear the clock. Called on zone exit or placement change.
     mutating func reset() {
         phase      = .hidden
@@ -89,4 +109,16 @@ nonisolated struct IslandRevealGate {
 
     /// Current phase without advancing (read-only snapshot).
     var currentPhase: IslandRevealPhase { phase }
+
+    /// Seconds remaining until the dwell would reach `.revealed`, or nil if it already has
+    /// (or the gate is not primed).
+    ///
+    /// The gate is stepped from `mouseMoved`, but it also *demands stillness* — and a still
+    /// pointer produces no `mouseMoved` events. Without this, parking on the handle stops
+    /// the clock exactly when it should be running and the launcher never opens. The caller
+    /// uses this to arm a timer so the final transition happens on its own.
+    func timeUntilReveal(now: TimeInterval) -> TimeInterval? {
+        guard entryTime != 0, phase != .revealed else { return nil }
+        return max(0, (entryTime + IslandUX.revealDelay) - now)
+    }
 }
