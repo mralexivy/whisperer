@@ -294,13 +294,20 @@ enum MeetingOverviewParser {
         return earliest
     }
 
+    /// `loopStart` splits on whitespace, so a character spiral — which contains none — reads as a
+    /// single word and cannot trip it. Checking both means a degenerate TOPIC or OVERVIEW line
+    /// goes through `truncatingLoop` / `cleanItem` instead of being written to CoreData.
     private static func isLooping(_ text: String) -> Bool {
-        loopStart(words(of: text)) != nil
+        loopStart(words(of: text)) != nil || TranscriptRepetition.containsCharacterLoop(in: text)
     }
 
     /// Cuts a looping tail off `text` and backs up to the last sentence terminator, so what
     /// survives reads as prose rather than stopping mid-clause. Returns "" when nothing does.
     private static func truncatingLoop(_ text: String) -> String {
+        // Character spirals are collapsed before the word scan rather than truncated by it: they
+        // are a single word, so `loopStart` returns nil for them and the text would come back
+        // untouched. Collapsing keeps the prose that precedes the wall.
+        let text = TranscriptRepetition.collapsingDegenerateRuns(in: text)
         let parts = words(of: text)
         guard let start = loopStart(parts) else { return text }
 

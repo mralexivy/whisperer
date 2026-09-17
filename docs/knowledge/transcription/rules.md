@@ -708,3 +708,45 @@ transcript was already correct". The same button on the same meeting after a rel
   new operation; the flag is its to clear regardless of who set it.
 - Count and report "decoded to nothing". An outcome that increments neither the accept nor
   the reject counter is invisible in a summary built from those two counters.
+
+## Every repetition guard must be character-level as well as word-level
+
+A whisper.cpp decoder can spiral on a *character*, not a phrase: on 2026-09-15 a 23-minute
+Hebrew meeting came back with refine windows 59-61 decoded as 72-100 consecutive `ה` with no
+spaces. Every guard in the app split on spaces, so all of them saw **one word** and returned
+false — `TranscriptRepetition.containsLoop` (needs 9 words), the refiner's distinct-word ratio
+(needs 12), `StreamingTranscriber.isHallucination`, `MeetingOverviewParser.loopStart`.
+`Transcript refine: repetition spiral detected` fired once all day and never for those windows.
+
+- `TranscriptRepetition.containsCharacterLoop(in:)` / `collapsingDegenerateRuns(in:)` are the
+  character-level pair. Threshold: a cycle of ≤4 scalars spanning ≥16 characters, and the unit
+  must contain an alphanumeric so `………`, `-----` and `!!!!!` are untouched. Measured, not
+  guessed: across five days of logs no benign run exceeded 7 characters and every real spiral
+  ran 72-100.
+- **Collapse, not reject.** The wall arrives welded to real speech (`להיות בעיני פוזיטי א` +
+  90×`ה`); dropping the string loses three real words to remove one artefact.
+- Sanitize at the **`WhisperBridge` boundary**, where C output becomes a Swift string, not at
+  each consumer. Downstream call sites are a checklist someone forgets; the boundary is an
+  invariant. The eager word accumulator is the one exception — it drops the word whole, because
+  `tokens`/`t0`/`t1` describe the whole accumulator and rewriting only `text` desynchronises them.
+
+## `temperature_inc = 0` silently disables whisper.cpp's own degeneracy recovery
+
+`entropy_thold` and `logprob_thold` look like they are protecting the decode. They are inert
+unless a temperature ladder exists. `whisper_full_with_state` builds its temperature list at
+`whisper.cpp/src/whisper.cpp:6869`; with an increment of zero the list has one entry, and the
+failure check at `whisper.cpp:7564` is guarded by `it != temperatures.size() - 1`, so it never
+runs and the `decoder.failed` flag raised at `:7542` is discarded. The spiral is emitted verbatim.
+
+Live dictation keeps `inc = 0` — a retry ladder mid-utterance is a latency cliff the user feels.
+The offline meeting refine (`performTimestampedTranscription`) sets `0.2`: the cost is paid only
+by a window that actually degenerates, and a spiral persisted from that path corrupts stored data.
+
+## Never feed an unvalidated decode forward as the next window's initial prompt
+
+`MeetingTranscriptRefiner` builds each window's `initialPrompt` from the previous window's
+accepted text. One bad window therefore poisons its successors — log lines 17714/17719 of
+2026-09-15 show `Initial prompt: 'הההה…'` ×100. The retry-without-prompt result was also accepted
+unconditionally, and a decoder that lost coherence on this audio often loses it again without the
+prompt. A window that spirals twice is now **discarded**: the card keeps its live text, `rawText`
+stays nil so a later refine retries it, and nothing degenerate enters `groupContext`.

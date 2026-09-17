@@ -126,4 +126,73 @@ final class TranscriptRepetitionTests: XCTestCase {
         // A short burst of a few words in under a second is common at a pass boundary.
         XCTAssertLessThanOrEqual(5.0 / 0.7, StreamingTranscriber.maximumPlausibleWordsPerSecond)
     }
+
+    // MARK: - Character-level spirals
+
+    /// The three payloads are verbatim from `whisperer-2026-09-15.log`: the displayed eager text,
+    /// the poisoned initial prompt fed into the next refine window, and a two-character cycle
+    /// standing in for the general case the single-character one is an instance of.
+
+    func testRealHebrewSpiralCollapsesAndKeepsThePrecedingWords() {
+        let payload = "להיות בעיני פוזיטי א" + String(repeating: "ה", count: 90)
+        XCTAssertTrue(TranscriptRepetition.containsCharacterLoop(in: payload))
+        XCTAssertEqual(TranscriptRepetition.collapsingDegenerateRuns(in: payload),
+                       "להיות בעיני פוזיטי אה")
+    }
+
+    func testPoisonedInitialPromptCollapsesToOneCharacter() {
+        let prompt = String(repeating: "ה", count: 100)
+        XCTAssertTrue(TranscriptRepetition.containsCharacterLoop(in: prompt))
+        XCTAssertEqual(TranscriptRepetition.collapsingDegenerateRuns(in: prompt), "ה")
+    }
+
+    func testTwoCharacterCycleCollapsesToItsUnit() {
+        let cycle = String(repeating: "אה", count: 20)
+        XCTAssertTrue(TranscriptRepetition.containsCharacterLoop(in: cycle))
+        XCTAssertEqual(TranscriptRepetition.collapsingDegenerateRuns(in: cycle), "אה")
+    }
+
+    /// Everything a real transcript, a real log line or this app's own prompts contain that
+    /// *looks* like a run. Each must come back byte-identical — a false positive here deletes
+    /// speech, which is worse than the bug this guards against.
+    func testBenignRepetitionIsReturnedUnchanged() {
+        let benign = [
+            "aaaah",
+            "hmmmm",
+            "ווווואו",
+            "שששש",
+            "נכון נכון נכון",
+            String(repeating: "…", count: 20),
+            String(repeating: "-", count: 20),
+            String(repeating: "!", count: 20),
+            "0000000",
+            "אני חושב שזה רעיון טוב אבל צריך לבדוק את זה קודם",
+            "I think we should ship this on Monday and revisit the numbers next week",
+        ]
+        for text in benign {
+            XCTAssertFalse(TranscriptRepetition.containsCharacterLoop(in: text),
+                           "false positive on \"\(text.prefix(30))\"")
+            XCTAssertEqual(TranscriptRepetition.collapsingDegenerateRuns(in: text), text)
+        }
+    }
+
+    /// The invariant the whole fix rests on: whatever goes in, what comes out has no spiral in
+    /// it, and running the collapse again changes nothing. Without this a caller could sanitize
+    /// and still hand a wall downstream.
+    func testCollapseIsIdempotentAndLeavesNoSpiral() {
+        let inputs = [
+            "להיות בעיני פוזיטי א" + String(repeating: "ה", count: 90),
+            String(repeating: "ה", count: 100),
+            String(repeating: "אה", count: 20),
+            // Two walls with prose between them, and a cycle that collapses into its neighbour.
+            String(repeating: "x", count: 40) + " ok " + String(repeating: "yz", count: 30),
+            String(repeating: "ab", count: 12) + String(repeating: "ba", count: 12),
+        ]
+        for input in inputs {
+            let once = TranscriptRepetition.collapsingDegenerateRuns(in: input)
+            XCTAssertFalse(TranscriptRepetition.containsCharacterLoop(in: once),
+                           "spiral survived the collapse of \"\(input.prefix(30))\"")
+            XCTAssertEqual(TranscriptRepetition.collapsingDegenerateRuns(in: once), once)
+        }
+    }
 }

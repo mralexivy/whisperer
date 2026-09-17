@@ -2680,6 +2680,20 @@ class StreamingTranscriber {
             return true
         }
 
+        // Character-level spiral. Deliberately *not* a plain `containsCharacterLoop` check: this
+        // function is all-or-nothing and has ten call sites, so firing on any text that merely
+        // contains a spiral would throw away the real words welded to it — the 2026-09-15 payload
+        // was three Hebrew words followed by ninety `ה`. Rejecting only when the collapse leaves
+        // nothing but the cycle itself means a mixed result survives (WhisperBridge has already
+        // collapsed the run out of it) while a window that is *only* spiral is dropped.
+        let collapsed = TranscriptRepetition.collapsingDegenerateRuns(in: lower)
+        if collapsed != lower,
+           collapsed.trimmingCharacters(in: .whitespacesAndNewlines).count
+             <= TranscriptRepetition.characterCycleMaxPeriod {
+            Logger.debug("Hallucination detected: character spiral is the whole result (\(lower.count) chars)", subsystem: .transcription)
+            return true
+        }
+
         return false
     }
 

@@ -816,7 +816,38 @@ class WhisperBridge: TranscriptionBackend {
             }
         }
 
-        return text.trimmingCharacters(in: .whitespacesAndNewlines)
+        return Self.sanitized(text.trimmingCharacters(in: .whitespacesAndNewlines), origin: "transcribe")
+    }
+
+    /// The one gate every decoded string passes through before it leaves this class.
+    ///
+    /// A character-level repetition spiral — one token emitted a hundred times with no spaces
+    /// between the copies — is invisible to every word-based guard downstream, because it is a
+    /// single word. Rather than teach each of those guards about it (and rely on the next one
+    /// being taught too), the run is collapsed here, at the four points where whisper's C output
+    /// first becomes a Swift string. Everything after this — the live meeting cards, the
+    /// clipboard, the tail decode, the meeting refiner, `EvidenceSelector`, the summariser — is
+    /// then clean by construction.
+    ///
+    /// See `TranscriptRepetition.collapsingDegenerateRuns(in:)` for the 2026-09-15 Hebrew
+    /// meeting this was written for.
+    /// Word-granular counterpart of `sanitized` for the eager stream. See the call site for why
+    /// the word is dropped whole instead of rewritten.
+    static func isDegenerateStreamWord(_ word: String) -> Bool {
+        guard TranscriptRepetition.containsCharacterLoop(in: word) else { return false }
+        Logger.warning("Decoder repetition spiral dropped from eager stream: \(word.count) chars",
+                       subsystem: .transcription)
+        return true
+    }
+
+    static func sanitized(_ text: String, origin: String) -> String {
+        let cleaned = TranscriptRepetition.collapsingDegenerateRuns(in: text)
+        guard cleaned != text else { return text }
+        Logger.warning(
+            "Decoder repetition spiral collapsed in \(origin): \(text.count) chars → \(cleaned.count)",
+            subsystem: .transcription
+        )
+        return cleaned
     }
 
     // MARK: - Shared decode plumbing
@@ -867,7 +898,8 @@ class WhisperBridge: TranscriptionBackend {
     /// `tokenTimestamps: true` enables per-token t0/t1 and probability from `whisper_full_get_token_data`.
     /// `audioCtx > 0` overrides the default 1500-frame (30s) context, scaling encoder cost to the window.
     private func makeFullParams(singleSegment: Bool, maxTokens: Int32, noTimestamps: Bool,
-                                tokenTimestamps: Bool = false, audioCtx: Int32 = 0) -> whisper_full_params {
+                                tokenTimestamps: Bool = false, audioCtx: Int32 = 0,
+                                temperatureFallback: Bool = false) -> whisper_full_params {
         var wparams = whisper_full_default_params(WHISPER_SAMPLING_GREEDY)
         wparams.print_progress = false
         wparams.print_special = false
@@ -879,9 +911,20 @@ class WhisperBridge: TranscriptionBackend {
         wparams.suppress_nst = true
         wparams.suppress_blank = true
 
-        // Speed: deterministic greedy decoding, no temperature fallback ladder
+        // Speed: deterministic greedy decoding, no temperature fallback ladder.
+        //
+        // `temperature_inc > 0` is what *enables* whisper's own degeneracy recovery, and the
+        // two are inseparable: `whisper_full_with_state` builds its temperature list at
+        // `whisper.cpp/src/whisper.cpp:6869` and, with an increment of zero, that list has one
+        // entry. The success check a few hundred lines down (`whisper.cpp:7564`) is guarded by
+        // `it != temperatures.size() - 1`, so on a single-temperature run it never executes and
+        // the `decoder.failed` flag that `entropy_thold` just raised is discarded. The decode is
+        // emitted verbatim, spiral and all.
+        //
+        // Live dictation keeps the fast path — a retry ladder mid-utterance is a latency cliff
+        // the user feels. The offline meeting refine turns it on, where seconds do not matter.
         wparams.temperature = 0.0
-        wparams.temperature_inc = 0.0
+        wparams.temperature_inc = temperatureFallback ? 0.2 : 0.0
 
         // With temperature=0, all decoders produce identical output — only need 1 (default is 5)
         wparams.greedy.best_of = 1
@@ -889,7 +932,9 @@ class WhisperBridge: TranscriptionBackend {
         // Limit decoder prompt context to 128 tokens (~100 words) — sufficient for dictation
         wparams.n_max_text_ctx = 128
 
-        // Explicit thresholds (match defaults, protect against future changes)
+        // Quality thresholds. These only do anything when `temperatureFallback` is on: they are
+        // the conditions the ladder retries on, and with a single temperature whisper never
+        // consults them (see the note above). Left at whisper's own defaults.
         wparams.no_speech_thold = 0.6
         wparams.logprob_thold = -1.0
         wparams.entropy_thold = 2.4
@@ -931,7 +976,8 @@ class WhisperBridge: TranscriptionBackend {
                     newText += String(cString: segText)
                 }
             }
-            let trimmed = newText.trimmingCharacters(in: .whitespacesAndNewlines)
+            let trimmed = WhisperBridge.sanitized(
+                newText.trimmingCharacters(in: .whitespacesAndNewlines), origin: "newSegment")
             if !trimmed.isEmpty {
                 onNewSegment(trimmed)
             }
@@ -1240,7 +1286,11 @@ class WhisperBridge: TranscriptionBackend {
         _ = beginOperation(named: "transcribing", estimatedMs: estimatedMs,
                            expectedSegments: max(1, Int(duration / 2.0)))
 
-        let wparams = makeFullParams(singleSegment: false, maxTokens: 0, noTimestamps: false)
+        // The meeting refine decode. Offline and already ~1.5 s per window, so the temperature
+        // ladder's cost (paid only by a window that actually degenerates) is invisible here,
+        // while a spiral persisted from this path is what corrupts a stored transcript.
+        let wparams = makeFullParams(singleSegment: false, maxTokens: 0, noTimestamps: false,
+                                     temperatureFallback: true)
         let result = runWhisperFull(ctx: ctx, samples: samples, params: wparams,
                                     initialPrompt: initialPrompt, language: language)
 
@@ -1257,7 +1307,9 @@ class WhisperBridge: TranscriptionBackend {
         for i in 0..<nSegments {
             if whisper_full_get_segment_no_speech_prob(ctx, i) > noSpeechProbThreshold { continue }
             guard let raw = whisper_full_get_segment_text(ctx, i) else { continue }
-            let text = String(cString: raw).trimmingCharacters(in: .whitespacesAndNewlines)
+            let text = Self.sanitized(
+                String(cString: raw).trimmingCharacters(in: .whitespacesAndNewlines),
+                origin: "timestamped segment \(i)")
             guard !text.isEmpty else { continue }
             // whisper timestamps are centiseconds
             segments.append(WhisperTimedSegment(
@@ -1413,7 +1465,15 @@ class WhisperBridge: TranscriptionBackend {
                     // flush the accumulated word
                     let wordText = String(decoding: wordBytes, as: UTF8.self)
                     let trimmed = wordText.trimmingCharacters(in: .whitespaces)
-                    if !trimmed.isEmpty, wordT0 >= 0 {
+                    // A character spiral has no spaces in it, so it arrives here as one
+                    // enormous word — the eager stream showed `אההההה…` ×90 on 2026-09-15.
+                    // Dropped rather than collapsed (which is what the segment-text paths do)
+                    // because a word is the unit here: `tokens`, `start` and `end` describe the
+                    // whole accumulator, and rewriting `text` alone would leave them describing
+                    // something the string no longer is. The single real letter welded to the
+                    // front of the run is the only loss.
+                    if !trimmed.isEmpty, wordT0 >= 0,
+                       !Self.isDegenerateStreamWord(trimmed) {
                         let prob = wordProbCount > 0 ? wordProbSum / Float(wordProbCount) : 0.0
                         words.append(WhisperStreamWord(
                             text: wordText,
@@ -1447,7 +1507,8 @@ class WhisperBridge: TranscriptionBackend {
             // flush last word in segment
             let wordText = String(decoding: wordBytes, as: UTF8.self)
             let trimmed = wordText.trimmingCharacters(in: .whitespaces)
-            if !trimmed.isEmpty, wordT0 >= 0 {
+            if !trimmed.isEmpty, wordT0 >= 0,
+               !Self.isDegenerateStreamWord(trimmed) {
                 let prob = wordProbCount > 0 ? wordProbSum / Float(wordProbCount) : 0.0
                 words.append(WhisperStreamWord(
                     text: wordText,

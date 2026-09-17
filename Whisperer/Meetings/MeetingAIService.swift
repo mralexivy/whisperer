@@ -376,12 +376,14 @@ actor MeetingAIService {
             }
         }
 
-        let raw: String
-        do {
-            raw = try await llm.process(
+        // Lifted into a closure so the retry below runs the identical call with two things
+        // changed: no partial-text handler (the title is already applied by then, and a second
+        // stream would re-fire the watcher) and a nudge appended to the user message.
+        let generate: @Sendable (String, (@Sendable (String) -> Void)?) async throws -> String = { message, partial in
+            try await llm.process(
                 text:                   effectiveTranscript,
                 systemPrompt:           request.systemPrompt,
-                userMessage:            userMessage,
+                userMessage:            message,
                 temperature:            0.15,
                 repetitionPenalty:      1.15,
                 maxTokensCap:           2048,
@@ -390,8 +392,13 @@ actor MeetingAIService {
                 throwOnFallback:        true,
                 // Runs once per meeting; warming this prefix only evicts the dictation cache.
                 reuseWarmCache:         false,
-                onPartialText:          onPartialText
+                onPartialText:          partial
             )
+        }
+
+        let raw: String
+        do {
+            raw = try await generate(userMessage, onPartialText)
         } catch {
             Logger.error("Meeting overview: LLM generation failed: \(error.localizedDescription)", subsystem: .transcription)
             await MainActor.run { NotificationCenter.default.post(name: .meetingOverviewDidFail, object: meetingID) }
@@ -407,8 +414,23 @@ actor MeetingAIService {
             await applyTitle(candidate, meetingID: meetingID)
         }
 
-        guard var summary = MeetingOverviewParser.parse(raw) else {
-            Logger.warning("Meeting overview: parse failed (no OVERVIEW line). Raw: \(raw.prefix(300))", subsystem: .transcription)
+        // A generation that stops after the title used to be discarded whole, and the user saw
+        // "Overview generation failed" on a meeting the model had already started summarising
+        // correctly. On 2026-09-15 the reduce step emitted `1| …` and hit EOS at 15 tokens. One
+        // retry with the requirement restated is cheap next to a blank Overview tab.
+        var summary = MeetingOverviewParser.parse(raw)
+        if summary == nil {
+            Logger.warning("Meeting overview: parse failed (no OVERVIEW line) — retrying once. Raw: \(raw.prefix(300))", subsystem: .transcription)
+            let nudge = userMessage + "\n\nThe previous answer was incomplete. Output every numbered "
+                + "line, and in particular a line beginning with `3|` holding the overview text."
+            if let retried = try? await generate(nudge, nil) {
+                Logger.info("Meeting overview: retry produced \(retried.count) chars", subsystem: .transcription)
+                summary = MeetingOverviewParser.parse(retried)
+            }
+        }
+
+        guard var summary else {
+            Logger.warning("Meeting overview: parse failed after retry — giving up", subsystem: .transcription)
             await MainActor.run { NotificationCenter.default.post(name: .meetingOverviewDidFail, object: meetingID) }
             return
         }

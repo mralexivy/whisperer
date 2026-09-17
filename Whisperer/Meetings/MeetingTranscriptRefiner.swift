@@ -439,11 +439,7 @@ final class MeetingTranscriptRefiner: ObservableObject {
                     // Check for a repetition spiral. A spiral means the decoder lost coherence,
                     // usually from poisoned context. Retry once with no prompt to break the loop.
                     var accepted = shifted
-                    let allText = shifted.map(\.text).joined(separator: " ")
-                    let words = allText.split(separator: " ")
-                    let isSpiral = TranscriptRepetition.containsLoop(words: words)
-                        || (words.count >= 12 && Double(Set(words.map { $0.lowercased() }).count) / Double(words.count) < 0.35)
-                    if isSpiral {
+                    if Self.isSpiral(accepted) {
                         Logger.info("Transcript refine: repetition spiral detected at \(window.start)s — retrying without prompt", subsystem: .transcription)
                         let retried: [WhisperTimedSegment]? = try? await ModelWorkQueue.shared.runBlocking("meeting-refine") {
                             groupBridge.transcribeTimestamped(samples: samples, initialPrompt: nil, language: fixedLanguage)
@@ -452,6 +448,24 @@ final class MeetingTranscriptRefiner: ObservableObject {
                             accepted = retried
                                 .map { WhisperTimedSegment(text: $0.text, start: bufferStart + $0.start, end: bufferStart + $0.end) }
                                 .filter { $0.end > window.start }
+                        }
+
+                        // The retry used to be trusted unconditionally, which is how a spiral
+                        // still reached CoreData: a decoder that lost coherence on this audio
+                        // often loses it again without the prompt too. A window that fails twice
+                        // is discarded — the cards keep their live text and, with `rawText` still
+                        // nil, a later refine will try them again. Discarding also keeps the
+                        // garbage out of `groupContext` below, which is built from
+                        // `working[$0].text` and would otherwise become the *next* window's
+                        // initial prompt: that is the mechanism by which one bad window on
+                        // 2026-09-15 poisoned the two that followed it.
+                        if Self.isSpiral(accepted) {
+                            Logger.warning("Transcript refine: window at \(window.start)s still spiralling after retry — discarding, keeping live text", subsystem: .transcription)
+                            markDone(window, in: working)
+                            activeSegmentIDs = []
+                            completedWindows += 1
+                            progress = Double(completedWindows) / Double(totalWindows)
+                            continue
                         }
                     }
 
@@ -635,6 +649,26 @@ final class MeetingTranscriptRefiner: ObservableObject {
             name: .meetingSegmentsDidRefine, object: meetingID, userInfo: ["segments": segments]
         )
         return segments
+    }
+
+    /// Whether a decoded window looks like a decoder that lost coherence.
+    ///
+    /// Three signals, because they catch different shapes and each one alone has a blind spot:
+    /// a repeated *phrase* (`containsLoop`), a repeated *character* with no spaces in it
+    /// (`containsCharacterLoop` — one word, so the word-based checks are structurally unable to
+    /// see it), and a low distinct-word ratio for everything else. The middle one is the
+    /// 2026-09-15 Hebrew meeting, where ninety copies of `ה` scored one word and sailed past
+    /// both of the others.
+    ///
+    /// `WhisperBridge` now collapses character spirals at the source, so this is the guard for
+    /// backends that do not go through it and for anything the collapse leaves behind.
+    private static func isSpiral(_ segments: [WhisperTimedSegment]) -> Bool {
+        let allText = segments.map(\.text).joined(separator: " ")
+        if TranscriptRepetition.containsCharacterLoop(in: allText) { return true }
+        let words = allText.split(separator: " ")
+        if TranscriptRepetition.containsLoop(words: words) { return true }
+        return words.count >= 12
+            && Double(Set(words.map { $0.lowercased() }).count) / Double(words.count) < 0.35
     }
 
     private func markDone(_ window: MeetingRefineWindow, in segments: [MeetingSegment]) {

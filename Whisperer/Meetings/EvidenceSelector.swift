@@ -88,8 +88,14 @@ enum EvidenceSelector {
     /// Deterministic: the same segments in, the same lines out, every time. Ranking ties
     /// break on timestamp and then on UUID string, so nothing depends on hash order.
     static func select(_ segments: [MeetingSegment], tokenBudget: Int = defaultTokenBudget) -> SelectedEvidence {
+        // A decoder spiral is one enormous "word", so it costs a large share of the budget and
+        // carries no evidence at all. On 2026-09-15 walls of `ה` left 34 of 129 utterances
+        // selected at ~2998 of 3000 tokens, and the artifact pass was handed mostly garbage.
+        // `WhisperBridge` collapses these at the source now; this drops any that predate the fix
+        // or arrive from another backend.
         let usable = segments
             .filter { !$0.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+            .filter { !TranscriptRepetition.containsCharacterLoop(in: $0.text) }
             .sorted { $0.timestamp < $1.timestamp }
         guard !usable.isEmpty else {
             return SelectedEvidence(lines: [], estimatedTokens: 0, droppedSegmentCount: 0)
