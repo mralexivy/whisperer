@@ -28,6 +28,9 @@ struct MeetingRecord: Identifiable, Equatable {
     var language: String
     var modelUsed: String
     var isInProgress: Bool
+    /// The recording captured no audio at all. Rendered as an explicit failure so a meeting
+    /// that never heard anything cannot be mistaken for one whose notes just weren't opened.
+    var captureFailed: Bool = false
     var sourceBundleID: String?
     var sourceAppName: String?
 
@@ -85,6 +88,7 @@ struct MeetingRecord: Identifiable, Equatable {
         self.language = entity.language
         self.modelUsed = entity.modelUsed
         self.isInProgress = entity.isInProgress
+        self.captureFailed = entity.captureFailed
         self.sourceBundleID = entity.sourceBundleID
         self.sourceAppName = entity.sourceAppName
 
@@ -129,6 +133,7 @@ struct MeetingRecord: Identifiable, Equatable {
         self.language = language
         self.modelUsed = modelUsed
         self.isInProgress = true
+        self.captureFailed = false
         self.sourceBundleID = sourceBundleID
         self.sourceAppName = sourceAppName
     }

@@ -6,7 +6,8 @@
 //
 //  Responsibilities:
 //  - Position the panel on the correct screen using IslandGeometryProvider.
-//  - Rehome on NSApplication.didChangeScreenParametersNotification without touching capture state.
+//  - Rehome on NSApplication.didChangeScreenParametersNotification and on
+//    NSWorkspace.activeSpaceDidChangeNotification, without touching capture state.
 //  - Close orphaned IslandPanel windows left by window restoration.
 //  - Show / hide the panel based on the IslandViewModel forwarded by IslandCoordinator.
 //  - Forward tap-outside / keyboard events to IslandCoordinator as IslandEvents.
@@ -34,7 +35,10 @@ final class IslandPanelController {
 
     private var panel: IslandPanel?
     private var screenObserver: NSObjectProtocol?
+    private var spaceObserver: NSObjectProtocol?
     private var currentScreen: NSScreen?
+    /// Pending settle work items for the current Space transition.
+    private var spaceSettleWork: [DispatchWorkItem] = []
 
     // MARK: - Init / Deinit
 
@@ -48,6 +52,10 @@ final class IslandPanelController {
         if let observer = screenObserver {
             NotificationCenter.default.removeObserver(observer)
         }
+        if let observer = spaceObserver {
+            NSWorkspace.shared.notificationCenter.removeObserver(observer)
+        }
+        spaceSettleWork.forEach { $0.cancel() }
     }
 
     // MARK: - Public API (called by IslandCoordinator)
@@ -171,17 +179,93 @@ final class IslandPanelController {
         ) { [weak self] _ in
             self?.handleScreenChange()
         }
+
+        // The Dock's presence — not `visibleFrame` — is what decides the anchor, and the Dock
+        // leaves the window server's on-screen list DURING the Space-switch animation. Polling
+        // it is therefore strictly earlier than `activeSpaceDidChangeNotification`, which macOS
+        // only posts once the animation has finished. Driving the anchor from the poll is what
+        // makes the Island already be in the right place when the new Space lands.
+        DockPresenceMonitor.shared.onChange = { [weak self] present in
+            guard let self else { return }
+            Logger.debug("Island: dock presence → \(present) at t=\(Self.nowMS())ms", subsystem: .ui)
+            self.reframeInPlace()
+        }
+        DockPresenceMonitor.shared.start()
+
+        // Kept only as a backstop: it catches Space switches where the Dock state does not change
+        // at all (Desktop 2 → Desktop 3), which the poll cannot see.
+        spaceObserver = NSWorkspace.shared.notificationCenter.addObserver(
+            forName: NSWorkspace.activeSpaceDidChangeNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated { self?.handleSpaceChange() }
+        }
+    }
+
+    /// Monotonic milliseconds, for comparing the poll's timing against the notification's.
+    private static func nowMS() -> Int {
+        Int(DispatchTime.now().uptimeNanoseconds / 1_000_000)
+    }
+
+    /// A Space switch changes only whether the Dock insets `visibleFrame` — the Island must
+    /// stay on the display it is already on. So this reframes in place and must NOT rehome by
+    /// pointer location.
+    ///
+    /// `NSScreen.visibleFrame` is updated by macOS asynchronously after the Space switch —
+    /// it can lag by anywhere from 200 ms to well over a second. We fire immediately (will
+    /// likely get the stale Dock inset) then at several increasing intervals so one of the
+    /// retries lands after macOS has committed the new geometry.
+    /// The panel envelope is Dock-independent, so a Space switch never resizes or moves the
+    /// window — the only thing that changes is `anchorSlack` inside it, which SwiftUI applies in
+    /// a single layout pass. There is therefore nothing to hide and nothing to fade: just
+    /// re-publish the geometry synchronously.
+    private func handleSpaceChange() {
+        Logger.debug("Island: activeSpaceDidChange at t=\(Self.nowMS())ms", subsystem: .ui)
+        cancelSpaceSettle()
+        reframeInPlace()
+    }
+
+    private func cancelSpaceSettle() {
+        spaceSettleWork.forEach { $0.cancel() }
+        spaceSettleWork.removeAll()
+    }
+
+    /// Recompute the envelope for the display the panel already lives on and apply it.
+    private func reframeInPlace() {
+        guard let panel, let screen = currentScreen else {
+            Logger.debug("Island: reframeInPlace skipped — panel=\(panel != nil) screen=\(currentScreen != nil)", subsystem: .ui)
+            return
+        }
+        let desc = ScreenDescription.from(screen)
+        let newEnvelope = geo.panelEnvelope(for: desc)
+        Logger.debug("""
+            Island: reframeInPlace — \
+            frame=\(desc.frame) visibleFrame=\(desc.visibleFrame) \
+            dockOnSpace=\(desc.isDockOnActiveSpace) \
+            anchor=\(IslandGeometryProvider.edgeAnchor(for: desc, placement: geo.placement)) \
+            hasObstruction=\(IslandGeometryProvider.hasEdgeObstruction(desc, placement: geo.placement)) \
+            envelope: \(panel.frame) → \(newEnvelope)
+            """, subsystem: .ui)
+        if panel.frame != newEnvelope {
+            panel.setFrame(newEnvelope, display: true)
+        }
+        coordinator?.refreshHomeScreenGeometry()
     }
 
     private func handleScreenChange() {
         Logger.debug("Island: screen parameters changed", subsystem: .ui)
-        // Feed a displayChanged event so the coordinator re-queries geometry.
         coordinator?.send(.displayChanged)
 
-        // The coordinator owns which display the Island lives on; a configuration change is
-        // the one moment it must re-pick unconditionally. It republishes, which lands back in
-        // `apply(viewModel:screen:)` and reframes the panel.
-        coordinator?.rehomeToActiveScreen()
+        // If the current screen still exists this is likely a Dock/menu-bar geometry change
+        // (happens when switching to a fullscreen Space). Reframe in place to avoid the
+        // pointer-chasing rehome that repositions on the wrong display.
+        // Only rehome fully when the home screen itself has disappeared.
+        if let current = currentScreen, NSScreen.screens.contains(current) {
+            reframeInPlace()
+        } else {
+            coordinator?.rehomeToActiveScreen()
+        }
     }
 
     // MARK: - Orphan cleanup

@@ -320,3 +320,24 @@ would need a run under Address Sanitizer, which has not been done.
 every record to disk as it decodes and skips ids already present, and the resume loop must be
 driven from the shell — xcodebuild relaunches the host after a crash but **never re-runs the test
 that crashed**, so an in-xcodebuild retry silently reports "Executed 0 tests" and exits 0.
+
+## Zero-filled input buffers after sleep/wake (2026-09-14)
+
+A 58-minute meeting produced 0 segments. Confirmed facts, from `stall-latest.dump` and the
+console log:
+
+- The event ring orders it plainly: four healthy dictations 08:23–08:33, then `aud sys.wake`,
+  then `dev.enum` refreshes, then the meeting's `asr.start` at `+9323.29s`. The Mac slept and
+  woke between the last working capture and the meeting.
+- After that wake, input device id=96 `MacBook Pro Microphone` reported `alive=true`, negotiated
+  48 kHz / 1 ch, installed a tap, and delivered 4096-frame buffers at ~12 Hz — **every sample
+  zero**, through four independently constructed `AVAudioEngine` instances. The engine layer has
+  no way to detect this; `AudioEngineLifecycle.configure` already carries a comment that the HAL
+  misbehaves after sleep/wake.
+- The written artefact is real but empty: `Meetings/110CAC22-….opus`, 3.8 KB / 8.0 s,
+  `mean_volume: -91.0 dB` (digital silence). CoreData `Z_PK=39`: 3468 s, 0 words. Unrecoverable.
+  `Z_PK=37` (2026-09-09, 67 s, 0 words) is very likely the same fault.
+- Six input devices were live at the time; all four rebuilds re-targeted `.systemDefault` → id=96.
+
+Not established: whether the zero-fill is the built-in mic specifically, or any device bound
+across a wake. Only one capture route has been observed failing this way.

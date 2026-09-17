@@ -132,3 +132,68 @@ spring into the revealed state is the only geometry change in the interaction.
 `IslandLayout` also requires the presentation tier to be above `.peek`. A dwell that only sets the
 phase completes silently with no icons on screen. Whatever completes the dwell must also
 `send(.expand)` when the tier is still `.peek`.
+
+## A Space switch must reframe in place — never re-pick the display
+
+`NSWorkspace.activeSpaceDidChangeNotification` does not post
+`NSApplication.didChangeScreenParametersNotification`, so the Island needs its own observer or it
+keeps the anchor it computed for the Space it was last laid out on (a fullscreen Space has no Dock;
+a normal one does). But that observer must **not** reuse the screen-parameters handler.
+
+`IslandGeometryProvider.activeScreen()` picks by **pointer location**. On a Space switch the pointer
+can sit over a different display than the one the panel lives on, so rehoming there frames the
+`NSPanel` for one screen while the SwiftUI content lays out for another. The visible symptoms are a
+handle floating in dead space well off its edge *and* a hit box that responds nowhere — the window
+and its content disagree about the origin. Reframe the existing `currentScreen` instead, and have
+the coordinator re-read the same display's `ScreenDescription` without touching `homeScreen`.
+
+## `visibleFrame` is a per-screen property, not a per-Space one
+
+It reserves the Dock's height (74pt on a 14" MBP) on **every** Space, including the Mission Control
+Spaces where the Dock is not rendered at all. It is therefore useless for deciding whether the Dock
+is in the way *right now*, and it never changes on a Space switch — no amount of waiting or retrying
+will make it report the new Space. Several hours were burned assuming otherwise; the rolling log
+showed `visibleFrame=(0,74,1728,1010)` and `anchor=80.0` identically on Desktop 1 and Desktop 2.
+
+Ask the window server what it is actually drawing instead:
+
+```swift
+let options = CGWindowListOption(arrayLiteral: .excludeDesktopElements, .optionOnScreenOnly)
+let list = CGWindowListCopyWindowInfo(options, kCGNullWindowID) as? [[String: Any]]
+let dockPresent = list?.contains { $0[kCGWindowOwnerName as String] as? String == "Dock" } ?? true
+```
+
+This is public API (no `CGSGetActiveSpace`, which is private and an App Store risk) and it responds
+within ~12ms of `activeSpaceDidChangeNotification`. The Swift constant is `kCGWindowOwnerName` —
+there is no `kCGWindowOwnerNameKey`. `ScreenDescription.isDockOnActiveSpace` carries the result and
+defaults to `true` so synthetic test values stay conservative.
+
+## Keep the panel envelope Dock-independent so `setFrame` never runs on a Space switch
+
+`NSWindow.setFrame` is an async round trip to the window server: it lands a frame or two *after* the
+new Space has been composited. That lag is visible as "the Island appears in the old position, then
+jumps" — and no amount of hiding, fading or `orderOut` around the call fixes it, because the symptom
+is the call itself.
+
+So `panelEnvelope` returns the **union** of the envelope computed with `isDockOnActiveSpace = true`
+and with `false`, and `envelopeOuterEdge` is pinned to the raw screen border rather than derived
+from `edgeAnchor`. The window frame is then identical on every Space. The entire Dock-present /
+Dock-absent delta lands in `IslandContentSizer.anchorSlack` (80 with the Dock, 5 without), a pure
+SwiftUI layout value that resolves in one pass with no window-server involvement. Mark it
+`.animation(nil, value: anchorSlack)` — an animated slack is the same flicker in a slower costume.
+
+## An auto-hidden Dock still insets `visibleFrame`
+
+By ~4pt — the reveal strip. Treating any non-zero inset as real chrome lifts the Island ~10pt off a
+screen edge with nothing visibly there. Gate the "is there chrome to clear" test on a threshold
+(`chromeThreshold = 8`), not on `> 1`. This threshold is a *second* filter, not a substitute for the
+`CGWindowListCopyWindowInfo` check above — it catches auto-hide, that one catches per-Space absence.
+
+## Position a hover chip from a live preference, not a `@State` snapshot
+
+A launcher glyph that stored its centre in `@State` from a `GeometryReader` and read it back in
+`.onHover` renders the chip at a stale — or unset, i.e. `0` — anchor when the pointer arrives before
+the geometry callback, which parks the label at the panel's far edge. Publish the centre through a
+`PreferenceKey` in a **named** coordinate space (the panel's, not `.global`) and refuse to render the
+chip until an anchor for that title exists. Measuring in `.global` while offsetting against a
+separately recomputed envelope width is the same bug in a second form.

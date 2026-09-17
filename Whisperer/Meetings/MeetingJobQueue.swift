@@ -42,7 +42,7 @@ final class MeetingJobQueue: ObservableObject {
     // MARK: - Private state
 
     private var runningTask: Task<Void, Never>?
-    private var isSuspended = false
+    private(set) var isSuspended = false
 
     // MARK: - Enqueue
 
@@ -130,6 +130,22 @@ final class MeetingJobQueue: ObservableObject {
         isSuspended = false
         Logger.info("MeetingJobQueue: resumed after recording", subsystem: .transcription)
         if runningTask == nil { startNext() }
+    }
+
+    /// Lowers the suspension if it is still up when no meeting is recording.
+    ///
+    /// `isSuspended` gates `startNext()`, so a stranded `true` means no meeting summary, title
+    /// or fine-tuning job can ever run again for the life of the process. That is exactly what
+    /// happened on 2026-09-14: the capture failure path never reached `resumeAfterRecording()`,
+    /// and the job it had cancelled sat at `.pausedForRecording` until quit. Treat the flag as
+    /// recoverable rather than as an invariant.
+    func clearStrandedSuspension(reason: String) {
+        guard isSuspended else { return }
+        Logger.warning(
+            "MeetingJobQueue: suspension was stranded with no active recording (\(reason)) — resuming",
+            subsystem: .transcription
+        )
+        resumeAfterRecording()
     }
 
     // MARK: - Launch restore

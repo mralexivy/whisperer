@@ -98,6 +98,27 @@ final class IslandGeometryTests: XCTestCase {
                        accuracy: 0.5)
     }
 
+    /// Auto-hidden Dock: macOS still insets `visibleFrame` by a ~4 pt reveal strip, but with
+    /// nothing visibly on screen the Island must hug the real edge rather than float above
+    /// a Dock that isn't there.
+    func testBottomAnchor_withAutoHiddenDock() {
+        let screen = ScreenDescription(
+            frame:        NSRect(x: 0, y: 0, width: 1920, height: 1080),
+            visibleFrame: NSRect(x: 0, y: 4, width: 1920, height: 1051),
+            backingScale: 2
+        )
+        XCTAssertFalse(IslandGeometryProvider.hasEdgeObstruction(screen, placement: .bottomCenter))
+        XCTAssertEqual(IslandGeometryProvider.edgeAnchor(for: screen, placement: .bottomCenter),
+                       screen.frame.minY + IslandGeometryProvider.C.edgeInset,
+                       accuracy: 0.5)
+    }
+
+    /// The menu bar is far deeper than `chromeThreshold`, so the top edge still clears it.
+    func testTopAnchor_clearsMenuBar() {
+        let screen = standardScreen
+        XCTAssertTrue(IslandGeometryProvider.hasEdgeObstruction(screen, placement: .topCenter))
+    }
+
     /// Without a Dock the panel envelope can reach the raw screen bottom edge.
     func testEnvelopeReachesScreenEdge_withoutDock() {
         let screen = hdScreen

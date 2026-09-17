@@ -274,14 +274,17 @@ final class IslandCoordinator: ObservableObject {
         }
     }
 
-    /// Pointer entered or left a launcher glyph. `anchor` is the glyph's centre along the
-    /// panel's SwiftUI coordinate space, which is what the label offsets itself against.
+    /// Pointer entered or left a launcher glyph.
+    ///
+    /// Only the title is stored. The chip's position is resolved from `LauncherAnchorKey` at
+    /// render time, so it cannot be stale — passing a snapshotted anchor in here is what let
+    /// a fast hover paint the chip at the panel edge before the real centre arrived.
     ///
     /// Leaving is keyed on the title so a fast slide between two glyphs cannot have the
     /// outgoing button's exit clear the incoming button's hint.
-    func setLauncherHint(_ title: String?, anchor: CGFloat) {
+    func setLauncherHint(_ title: String?) {
         if let title {
-            launcherHint = IslandLauncherHint(title: title, anchor: anchor)
+            launcherHint = IslandLauncherHint(title: title)
         } else {
             launcherHint = nil
         }
@@ -432,6 +435,29 @@ final class IslandCoordinator: ObservableObject {
         // already carries pause/stop, so the Island yields the spot for the whole session.
         let dictationHUDVisible = !inMeeting && appState.state != .idle
 
+        // A capture failure outranks every stand-down rule below, and it is checked before
+        // them on purpose. On 2026-09-14 the Island rendered a healthy 68-minute recording
+        // while the mic delivered nothing but zeros, then simply vanished when the state
+        // collapsed to `.idle`. The failure row has to survive `.idle`, an open meeting
+        // window and a dictation HUD, because those are exactly the moments it is needed.
+        //
+        // Non-terminal trouble shows too: long-form recovery retries indefinitely, so waiting
+        // for a terminal verdict could mean never telling the user at all.
+        if appState.hasCompletedOnboarding, let failure = appState.captureFailure {
+            model.captureCanRepair = failure.canSelfRepair
+            if model.capture != .failed(failure.message) {
+                send(.captureFailed(failure.message))
+            }
+            if model.presentation == .hidden { model.presentation = .compact }
+            levelBridge.stopTimer(freezeAtCurrent: false)
+            publishViewModel()
+            return
+        }
+        if case .failed = model.capture, appState.captureFailure == nil {
+            // Recovered or dismissed upstream — drop the row and fall through to normal sync.
+            send(.dismissFailure)
+        }
+
         // The meeting window owns the live UI when it is up; onboarding owns the screen
         // outright. In all these cases the Island stands down entirely.
         if windowVisible || dictationHUDVisible || !appState.hasCompletedOnboarding {
@@ -499,6 +525,12 @@ final class IslandCoordinator: ObservableObject {
             switch effect {
             case .stopCapture:
                 AppState.shared.stopActiveRecording()
+
+            case .clearCaptureFailure:
+                AppState.shared.clearCaptureFailure()
+
+            case .repairCapture:
+                AppState.shared.repairCaptureInput()
 
             case .togglePause:
                 AppState.shared.togglePause()
@@ -655,6 +687,21 @@ final class IslandCoordinator: ObservableObject {
         publishViewModel()
     }
 
+    /// Re-read the home display's geometry and re-publish, WITHOUT re-picking which display
+    /// the Island lives on.
+    ///
+    /// This is the right call for a Space switch: the only thing that changed is whether the
+    /// Dock insets `visibleFrame`, and the Island should stay where it is. Re-picking via
+    /// `activeScreen()` here is actively wrong — that follows the pointer, which on a Space
+    /// switch can be over a different display, so the panel ends up framed for one screen
+    /// while the SwiftUI content is laid out for another. That mismatch is what left the bar
+    /// floating in dead space with its hit box somewhere else entirely.
+    func refreshHomeScreenGeometry() {
+        guard let screen = homeScreen else { return }
+        currentScreen = ScreenDescription.from(screen)
+        publishViewModel()
+    }
+
     // MARK: - Auto-hide
 
     private func scheduleHide(after delay: TimeInterval) {
@@ -681,6 +728,10 @@ private struct AppStateSnapshot: Equatable {
     let isOutputAudioMuted:     Bool
     let isPaused:               Bool
     let activeMeetingID:        UUID?
+    /// Drives the `.failed` row. Included so a capture failure that arrives *after* the
+    /// recording state has already collapsed to `.idle` still wakes the sync — without it the
+    /// snapshot would compare equal and the Island would keep showing the last happy state.
+    let captureFailure:         AppState.CaptureFailure?
 
     init() {
         let a = AppState.shared
@@ -692,5 +743,6 @@ private struct AppStateSnapshot: Equatable {
         isOutputAudioMuted     = a.isOutputAudioMuted
         isPaused               = a.isPaused
         activeMeetingID        = a.activeMeetingSession?.meetingID
+        captureFailure         = a.captureFailure
     }
 }

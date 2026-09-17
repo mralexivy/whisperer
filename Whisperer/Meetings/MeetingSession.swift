@@ -393,12 +393,16 @@ class MeetingSession: ObservableObject {
 
         let currentTitle = MeetingManager.shared.meetings.first(where: { $0.id == id })?.title ?? ""
 
+        // Read now, not inside the tail Task: the recorder resets this on the next
+        // `startRecording()`, and the Task can still be waiting up to 12 s from here.
+        let capturedAnyAudio = AppState.shared.audioRecorder?.hasEverReceivedNonSilentAudio ?? true
+
         // Await the final tail chunk before handing off to the queue. The tail arrives
         // asynchronously after stopRecording() returns; MeetingJobQueue owns everything after.
         // [weak self] because awaitTailDelivery checks `activeMeetingSession === self` — if
         // this session is destroyed before the tail lands, a `.finalizing` sidecar from a
         // previous run will already be on disk and restore() will pick it up on relaunch.
-        Task { [weak self, capturedAudioURL, silenceWatcherSpeechDetected] in
+        Task { [weak self, capturedAudioURL, silenceWatcherSpeechDetected, capturedAnyAudio] in
             await self?.awaitTailDelivery()
             guard let self else { return }
 
@@ -407,6 +411,13 @@ class MeetingSession: ObservableObject {
             Logger.info("Meeting session stop: segments=\(finalSegments.count), transcript=\(transcript.count) chars", subsystem: .transcription)
 
             guard !transcript.isEmpty else {
+                // No audio ever arrived — the input was dead, not the room. Mark the row before
+                // any discard decision so even a short failed recording that survives the
+                // policy below is labelled honestly rather than filed as an empty meeting.
+                if !capturedAnyAudio {
+                    await MeetingManager.shared.markCaptureFailed(meetingID: id)
+                }
+
                 // Silent discard: short recording with no words and no confirmed speech.
                 if MeetingSilencePolicy.shouldDiscard(
                     elapsed: self.elapsedSeconds,
@@ -466,7 +477,12 @@ class MeetingSession: ObservableObject {
         let deadline = Date().addingTimeInterval(12)
         while AppState.shared.activeMeetingSession === self {
             guard Date() < deadline else {
-                Logger.warning("Meeting session stop: tail delivery timed out — proceeding without it", subsystem: .transcription)
+                // Reaching the ceiling means `stopInAppRecording()` bailed out before nilling
+                // `activeMeetingSession` — on 2026-09-14 that left the session, both queue
+                // gates and `isMeetingStopInFlight` up for the life of the process. Warning
+                // about it is not enough: force the teardown the stop path owed us.
+                Logger.warning("Meeting session stop: tail delivery timed out — forcing teardown", subsystem: .transcription)
+                AppState.shared.forceReleaseStrandedMeetingSession(self, reason: "tail delivery timeout")
                 break
             }
             try? await Task.sleep(nanoseconds: 100_000_000)

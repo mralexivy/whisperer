@@ -55,6 +55,9 @@ struct IslandContentView: View {
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
+    /// Live centre of each launcher glyph, republished on every layout pass.
+    @State private var launcherAnchors: [String: CGFloat] = [:]
+
     private var vm: IslandViewModel        { coordinator.currentViewModel }
     private var screen: ScreenDescription  { coordinator.currentScreen }
     private var level: IslandLevelBridge   { coordinator.levelBridge }
@@ -138,12 +141,14 @@ struct IslandContentView: View {
 
     @ViewBuilder
     private var surface: some View {
-        if isIdleBar {
+        if isIdleHandle {
+            handleFill
+        } else if isIdleBar {
             idleGlass
         } else {
             ZStack {
                 Rectangle().fill(.ultraThinMaterial).environment(\.colorScheme, .dark)
-                Rectangle().fill(Color.black.opacity(scrimOpacity))
+                Rectangle().fill(IC.surface.opacity(scrimOpacity))
                 LinearGradient(
                     colors: [Color.white.opacity(0.10), Color.white.opacity(0.0)],
                     startPoint: .top, endPoint: .bottom
@@ -152,68 +157,57 @@ struct IslandContentView: View {
         }
     }
 
-    /// Flat glass launcher pill — a thin sheet, not a lozenge.
-    ///
-    /// A strong top sheen paired with a bottom bounce shades the pill like a cylinder, and
-    /// a cylinder reads as bulky at this size. Flat glass wants the opposite: mostly just
-    /// the backdrop blur, the faintest tint to hold glyph contrast, and one short highlight
-    /// hugging the top edge to say "this surface is lit" without implying any thickness.
-    private var idleGlass: some View {
-        ZStack {
-            Rectangle().fill(.ultraThinMaterial).environment(\.colorScheme, .dark)
-
-            Rectangle().fill(Color.black.opacity(0.07))
-
-            LinearGradient(
-                stops: [
-                    .init(color: Color.white.opacity(0.13), location: 0.00),
-                    .init(color: Color.white.opacity(0.03), location: 0.18),
-                    .init(color: Color.clear,               location: 0.42),
-                ],
-                startPoint: .top, endPoint: .bottom
-            )
-        }
+    /// Resting handle — one solid, unbroken capsule, the way the iPhone Dynamic Island sits
+    /// when nothing is happening. No blur, no tint stack, no inner content: at 15 pt tall,
+    /// translucency only lets the desktop through and turns a crisp shape into a smudge.
+    /// Hover lifts it from near-black to a soft graphite so the reaction is purely tonal.
+    private var handleFill: some View {
+        Rectangle().fill(isHovering ? IC.elevated : Self.islandSurface)
     }
+
+    /// Open launcher — the same solid black as the handle, just a wider capsule.
+    ///
+    /// This is the whole point of the Dynamic Island morph: one continuous piece of black
+    /// that changes shape. The bar used to be `.ultraThinMaterial` with a sheen gradient,
+    /// which meant opening the handle swapped materials mid-animation — a solid capsule
+    /// visibly turning into a pane of frosted glass. Now only the silhouette changes.
+    private var idleGlass: some View {
+        Rectangle().fill(Self.islandSurface)
+    }
+
+    /// The single colour the Island is made of, at rest and open alike.
+    ///
+    /// Was a neutral `Color(white: 0.06)`. That put a grey-black object next to a navy HUD, and
+    /// the two read as parts of different apps. This is `IC.raised` (#14142B) — the same fill the
+    /// HUD capsule uses, so the two surfaces are literally the same colour.
+    static let islandSurface = IC.raised
 
     private var scrimOpacity: Double {
         isPeek ? 0.62 : 0.78
     }
 
-    /// Rim light — a hairline catch along the top edge only, fading out by the middle.
-    /// Relighting the bottom edge is what wraps the outline around a solid-looking body;
-    /// leaving it dark keeps the pill reading as a flat sheet seen face-on.
-    private var idleRim: LinearGradient {
-        LinearGradient(
-            stops: [
-                .init(color: Color.white.opacity(0.24), location: 0.00),
-                .init(color: Color.white.opacity(0.09), location: 0.35),
-                .init(color: Color.white.opacity(0.05), location: 1.00),
-            ],
-            startPoint: .top, endPoint: .bottom
-        )
-    }
-
-    private var hairlineColor: Color {
-        if isIdleBar { return Color.white.opacity(isHovering ? 0.16 : 0.06) }
-        return Color.white.opacity(0.16)
-    }
+    /// Rim for the recording tiers only — the idle Island is unstroked.
+    private var hairlineColor: Color { Color.white.opacity(0.16) }
 
     private var shadowOpacity: Double {
         // Wide and faint rather than tight and dark — a contact shadow under a thin sheet.
         // A dense shadow is most of what made the pill look like a solid block.
         // The resting handle carries almost none: it must not cast a visible smudge on the
         // desktop while the user is doing something else.
-        if isIdleHandle { return isHovering ? 0.12 : 0.04 }
+        // The solid handle gets a tight contact shadow so it reads as sitting ON the desktop
+        // rather than floating over it — a wide soft shadow around a small dark shape is
+        // indistinguishable from the shape itself being blurry.
+        if isIdleHandle { return isHovering ? 0.30 : 0.18 }
         if isIdleBar    { return isHovering ? 0.16 : 0.06 }
         return (isHovering || isExpanded) ? 0.55 : 0.34
     }
 
-    /// Overall opacity of the idle surface. The resting handle sits well back so it reads
-    /// as a quiet affordance; hovering brings it fully forward.
-    private var idleSurfaceOpacity: Double {
-        guard isIdleHandle else { return 1 }
-        return isHovering ? 1 : 0.55
-    }
+    /// Overall opacity of the idle surface.
+    ///
+    /// The handle is fully opaque. It used to rest at 0.55, which let the desktop bleed
+    /// through and made the shape read as a grey smear; a solid capsule that is *small* and
+    /// *dark* is quieter than a translucent one, and stays crisp on any wallpaper.
+    private var idleSurfaceOpacity: Double { 1 }
 
     /// Padding between the island body and the anchored edge of the panel envelope.
     private var anchorSlack: CGFloat {
@@ -252,7 +246,13 @@ struct IslandContentView: View {
             // Atoll's key trick: barrier stops any morphKey spring from propagating to the
             // outer frame, so the panel never jitters on state change.
             .animation(nil, value: morphKey)
+            // A Space switch changes only `anchorSlack` (Dock present → 80, absent → 5). That must
+            // land in the very first frame after the switch, not slide there: an animated slack is
+            // exactly the "appears in the old position, then moves" flicker.
+            .animation(nil, value: anchorSlack)
             .sensoryFeedback(.alignment, trigger: coordinator.hapticToken)
+            .coordinateSpace(name: IslandPanelSpace.name)
+            .onPreferenceChange(LauncherAnchorKey.self) { launcherAnchors = $0 }
     }
 
     @ViewBuilder
@@ -310,10 +310,14 @@ struct IslandContentView: View {
             // without it the band collapses and the bar shifts as hints come and go.
             Color.clear.frame(width: 0, height: 0)
 
-            if let hint = coordinator.launcherHint, isIdleBar, isHovering {
+            // The anchor lookup is part of the condition on purpose: until the hovered glyph
+            // has reported a centre there is no correct place to draw the chip, and drawing
+            // it at a guessed one is the bug. One layout pass later it appears, correctly.
+            if let hint = coordinator.launcherHint, isIdleBar, isHovering,
+               let anchor = launcherAnchors[hint.title] {
                 IslandLauncherHintLabel(title: hint.title)
                     .padding(placement.isVertical ? .horizontal : .vertical, 6)
-                    .offset(hintOffset(for: hint))
+                    .offset(hintOffset(anchor: anchor))
                     .transition(
                         .opacity.combined(with: .offset(y: 4)).combined(with: .scale(scale: 0.94))
                     )
@@ -338,11 +342,15 @@ struct IslandContentView: View {
         }
     }
 
-    private func hintOffset(for hint: IslandLauncherHint) -> CGSize {
+    /// `anchor` is the glyph's centre in the panel's named coordinate space, and the chip is
+    /// centred in a band that spans the same panel — so the offset is just the distance from
+    /// the panel's midpoint. Both sides now measure against one origin; the old version mixed
+    /// a `.global` glyph centre with a recomputed envelope width.
+    private func hintOffset(anchor: CGFloat) -> CGSize {
         if placement.isVertical {
-            return CGSize(width: 0, height: hint.anchor - envelopeHeight / 2)
+            return CGSize(width: 0, height: anchor - envelopeHeight / 2)
         }
-        return CGSize(width: hint.anchor - envelopeWidth / 2, height: 0)
+        return CGSize(width: anchor - envelopeWidth / 2, height: 0)
     }
 
     /// Chip height (23) + the gap that keeps it clear of the pill.
@@ -370,18 +378,13 @@ struct IslandContentView: View {
         }
     }
 
-    /// Offset that tucks the resting handle a little closer to the anchored edge, so
-    /// revealing the launcher reads as the bar rising out of the screen edge.
-    private var offsetForReveal: CGSize {
-        guard isIdleHandle, !isHovering else { return .zero }
-        let d: CGFloat = 3
-        switch placement {
-        case .bottomCenter: return CGSize(width: 0, height:  d)
-        case .topCenter:    return CGSize(width: 0, height: -d)
-        case .leftCenter:   return CGSize(width: -d, height: 0)
-        case .rightCenter:  return CGSize(width:  d, height: 0)
-        }
-    }
+    /// The resting handle sits exactly on its anchor.
+    ///
+    /// It used to be nudged 3 pt further toward the edge so the reveal read as the bar rising
+    /// out of the screen. Now that the anchor hugs the real screen edge when no Dock is up
+    /// (`IslandGeometryProvider.C.chromeThreshold`), that nudge pushes the capsule's rounded
+    /// bottom off-screen and flattens it into a slab.
+    private var offsetForReveal: CGSize { .zero }
 
     // MARK: - Island body (inner, springs)
 
@@ -397,8 +400,10 @@ struct IslandContentView: View {
         .background(surface)
         .overlay {
             if isIdleBar {
-                // Sub-pixel on Retina — a hairline edge, not a drawn border.
-                pillShape.strokeBorder(idleRim, lineWidth: 0.5)
+                // No rim anywhere on the idle Island. A stroke is how you suggest a pane of
+                // glass has an edge; solid black needs no edge, and drawing one only softens
+                // the silhouette that carries the whole look.
+                EmptyView()
             } else {
                 pillShape.strokeBorder(hairlineColor, lineWidth: 0.75)
             }
@@ -407,9 +412,9 @@ struct IslandContentView: View {
         .compositingGroup()
         .shadow(
             color: .black.opacity(shadowOpacity),
-            radius: isIdleBar ? 14 : 18,
+            radius: isIdleHandle ? 5 : (isIdleBar ? 14 : 18),
             x: 0,
-            y: isIdleBar ? 2 : 8
+            y: isIdleHandle ? 1 : (isIdleBar ? 2 : 8)
         )
         // Springs live HERE — never on the root.
         .animation(activeSpring, value: morphKey)

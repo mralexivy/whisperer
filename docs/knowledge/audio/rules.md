@@ -102,3 +102,44 @@
     `SeekableAudioPlayer` (`Whisperer/Audio/SeekableAudioPlayer.swift`) encapsulates this pattern and
     replaces both `AudioPlayer` (History) and `MeetingAudioPlayer` (Meetings). The regression guard is
     `SeekableAudioPlayerTests.testSeekIntoToneRendersCorrectAudio`.
+
+17. **RMS alone cannot tell a silent room from a dead input — always probe the device.** On
+    2026-09-14 a woken-from-sleep `MacBook Pro Microphone` (id=96) reported `alive=true`,
+    negotiated 48 kHz mono, and delivered 4096-frame **zero-filled** buffers through four
+    independently built `AVAudioEngine`s. Rebuilding cannot fix mute, zero gain or a stale TCC
+    grant, and all three produce exactly that signature. Before reacting to silence, read
+    `AVCaptureDevice.authorizationStatus(for: .audio)`, `kAudioDevicePropertyMute` and
+    `kAudioDevicePropertyVolumeScalar` **on the input scope** (`AudioMuter` only ever reads the
+    output scope), plus `DeviceIsAlive` / `Streams`. `InputHealthProbe` does this; its verdict
+    must reach the log line and the user-facing message. `reason=silence_1.5s` is not a diagnosis.
+
+18. **The retry budget belongs to the session kind, not to the recorder.** A flat
+    `maxRecoveryAttempts = 3` gave a 58-minute meeting the same ~7 seconds of patience as a
+    two-second push-to-talk dictation, then surrendered permanently — and the counter only reset
+    on a non-silent buffer, so nothing ever tried again. Long-form gets unbounded retries with
+    exponential backoff capped at 10 s (`AudioRecorder.RecoveryPolicy.longForm`); dictation keeps
+    the short leash because the user is holding a key and can just release and retry.
+
+19. **Process-wide gates must be self-healing, never single-path invariants.**
+    `ModelWorkQueue.meetingActive` and `MeetingJobQueue.isSuspended` were each raised and lowered
+    by exactly one code path. The capture-failure path skipped the lowering, so one audio fault
+    parked every background model job and every meeting summary for the remaining life of the
+    process. Every teardown path now ends in `AppState.lowerStrandedRecordingGates(reason:)`,
+    which lowers both whenever `activeMeetingSession == nil`. Guarded by
+    `StrandedGateWatchdogTests` and `AudioFlowTimeoutTests`.
+
+20. **A guard at the top of a stop path is a state leak waiting to happen.**
+    `stopInAppRecording()` opened with `guard case .recording = state else { return }`. After the
+    recorder had already collapsed to `.idle`, the user's Stop fell straight through:
+    `activeMeetingSession` was never nilled, `awaitTailDelivery()` burned its full 12 s, and
+    `isMeetingStopInFlight` stayed `true` — which is itself the guard that makes
+    `abandonMeetingMode()` a no-op, so the deadlock was permanent. A stop arriving in an
+    unexpected state must still run teardown and only skip the transcriber drain; clear
+    `isMeetingStopInFlight` **first**.
+
+21. **A failure surface has to outlive `state == .idle`.** `AppState.errorMessage` reaches only
+    the menu bar popover; the silent-meeting toast renders inside `OverlayView`, whose panel hides
+    at `.idle`. The Island is the only surface that survives, and
+    `IslandCaptureState.failed` / `IslandEvent.captureFailed` existed for months with **nothing in
+    the app emitting them**. A state the reducer handles but no producer emits is dead code, not a
+    feature — assert the emission path in a test.

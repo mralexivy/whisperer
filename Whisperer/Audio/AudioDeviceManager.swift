@@ -175,6 +175,43 @@ class AudioDeviceManager: ObservableObject {
         return inputDevices
     }
 
+    /// Live input devices worth trying when the current one has stopped producing audio,
+    /// best-first, excluding `excluding` and the current system default (attempt 1 already
+    /// covers the default).
+    ///
+    /// Devices the probe can already see are muted, gain-zeroed or streamless are filtered out
+    /// — switching to a second broken input wastes an attempt. Aggregates named
+    /// `CADefaultDeviceAggregate-*` are skipped too: CoreAudio creates those on our behalf and
+    /// binding one explicitly just re-enters the same broken default.
+    ///
+    /// `nonisolated static`: pure HAL reads, called from `AudioRecorder`'s recovery task.
+    nonisolated static func usableInputDevicesForRecovery(excluding: AudioDeviceID?) -> [AudioDevice] {
+        let defaultID = currentDefaultInputDeviceID()
+        return enumerateInputDevices().filter { device in
+            guard device.id != excluding, device.id != defaultID else { return false }
+            guard !device.uid.hasPrefix("CADefaultDeviceAggregate") else { return false }
+            let (_, verdict) = InputHealthProbe.probe(deviceID: device.id)
+            return verdict == .healthy
+        }
+    }
+
+    /// The system default input, read straight from the HAL. Duplicated from
+    /// `getDefaultInputDevice()` only because that one is main-actor bound and returns a named
+    /// device; recovery runs off the main actor and needs just the ID.
+    nonisolated static func currentDefaultInputDeviceID() -> AudioDeviceID? {
+        var deviceID = AudioDeviceID()
+        var size = UInt32(MemoryLayout<AudioDeviceID>.size)
+        var address = AudioObjectPropertyAddress(
+            mSelector: kAudioHardwarePropertyDefaultInputDevice,
+            mScope: kAudioObjectPropertyScopeGlobal,
+            mElement: kAudioObjectPropertyElementMain
+        )
+        guard AudioObjectGetPropertyData(
+            AudioObjectID(kAudioObjectSystemObject), &address, 0, nil, &size, &deviceID
+        ) == noErr else { return nil }
+        return deviceID
+    }
+
     private nonisolated static func hasInputStreams(deviceID: AudioDeviceID) -> Bool {
         var propertyAddress = AudioObjectPropertyAddress(
             mSelector: kAudioDevicePropertyStreams,

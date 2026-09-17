@@ -28,6 +28,15 @@ struct IslandHoverButton: View {
     /// Colour the glyph animates to under the pointer. Set this when `iconColor` is
     /// deliberately faint at rest, so the button still confirms it is live on hover.
     var hoverIconColor: Color? = nil
+    /// Hover capsule fill. The default translucent white reads correctly over the frosted
+    /// recording strip, but on the launcher's solid black it greys out into a haze — pass a
+    /// solid graphite there so the button still looks carved from the same black.
+    var hoverFill: Color = Color.white.opacity(0.14)
+    /// Renders the button the way `OverlayView` renders its HUD controls: a circle tinted with
+    /// the glyph's own colour (0.15 at rest, 0.25 under the pointer), plus a matching ring and
+    /// glow on hover. Without this the glyph floats bare and the colour reads as an accident
+    /// rather than as a deliberate per-control identity.
+    var tinted: Bool = false
     var action: () -> Void
 
     enum Scale { case small, large }
@@ -43,9 +52,21 @@ struct IslandHoverButton: View {
         Button(action: action) {
             VStack(spacing: 3) {
                 ZStack {
-                    Capsule()
-                        .fill(isHovering ? Color.white.opacity(0.14) : Color.clear)
-                        .frame(width: size, height: size)
+                    if tinted {
+                        // Nothing at rest — the glyph sits directly on the Island's own surface.
+                        // The tinted disc is purely a hover response.
+                        Circle()
+                            .fill(iconColor.opacity(isHovering ? 0.25 : 0))
+                            .frame(width: size, height: size)
+                        Circle()
+                            .strokeBorder(iconColor.opacity(isHovering ? 0.30 : 0),
+                                          lineWidth: 1.5)
+                            .frame(width: size, height: size)
+                    } else {
+                        Capsule()
+                            .fill(isHovering ? hoverFill : Color.clear)
+                            .frame(width: size, height: size)
+                    }
 
                     Image(systemName: icon)
                         .font(.system(size: iconSize, weight: .medium))
@@ -53,6 +74,8 @@ struct IslandHoverButton: View {
                         .contentTransition(.symbolEffect(.replace))
                 }
                 .frame(width: size, height: size)
+                .shadow(color: tinted && isHovering ? iconColor.opacity(0.20) : .clear,
+                        radius: 6, y: 2)
 
                 if let label {
                     Text(label)

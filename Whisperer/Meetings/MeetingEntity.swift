@@ -22,6 +22,10 @@ public class MeetingEntity: NSManagedObject {
     @NSManaged public var language: String
     @NSManaged public var modelUsed: String
     @NSManaged public var isInProgress: Bool
+    /// The recording produced no audio at all — the input delivered silence for its whole
+    /// length. Distinct from "a quiet meeting": nothing was ever captured, so there is no
+    /// transcript to be had and the row must never read as an ordinary empty meeting.
+    @NSManaged public var captureFailed: Bool
     @NSManaged public var sourceBundleID: String?
     @NSManaged public var sourceAppName: String?
 }

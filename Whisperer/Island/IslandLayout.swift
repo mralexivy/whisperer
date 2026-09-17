@@ -130,32 +130,16 @@ struct IslandLayout: View {
 
     // MARK: - Idle handle (always-on resting affordance)
 
-    /// A single hairline inside the glass capsule — the whole of the resting state.
+    /// The resting state is an empty solid capsule — no glyph, no line, no progress track.
     ///
-    /// There is deliberately no progress indicator here. The dwell is short enough
-    /// (`IslandUX.revealDelay`) that a bar counting it down would draw more attention to the
-    /// wait than the wait itself deserves. What acknowledges the pointer instead is the
-    /// handle's own reaction: it lengthens, brightens and comes to full opacity the instant
-    /// hover starts, which answers "did it see me?" immediately, and the launcher follows a
-    /// moment later.
+    /// The iPhone Dynamic Island at rest is a single unbroken shape; anything drawn inside it
+    /// at this size (a hairline, a dwell bar) reads as a scrollbar grabber rather than a
+    /// surface waiting to open. The surface itself carries the whole affordance, and
+    /// `IslandContentView` handles the tonal hover response.
     private var handleBody: some View {
-        let line = IslandContentSizer.idleHandleLineThickness
-        let inset: CGFloat = 5
-        return GeometryReader { geo in
-            let long  = isVertical ? geo.size.height : geo.size.width
-            let track = max(0, long - inset * 2)
-
-            // Tonal only — the handle never changes size. Brightening in place reads as
-            // "armed, keep going" without moving the target the user is currently aiming at.
-            Capsule()
-                .fill(IC.primary.opacity(isHovering ? 0.85 : 0.34))
-                .frame(width:  isVertical ? line : track,
-                       height: isVertical ? track : line)
-                .frame(width: geo.size.width, height: geo.size.height, alignment: .center)
-        }
-        .animation(.easeOut(duration: 0.12), value: isHovering)
-        .allowsHitTesting(false)
-        .accessibilityHidden(true)
+        Color.clear
+            .allowsHitTesting(false)
+            .accessibilityHidden(true)
     }
 
     // MARK: - Peek body (recording only — idle always shows the compact launcher bar)
@@ -199,7 +183,7 @@ struct IslandLayout: View {
         case .permissionRequired:
             statusRow(permissionRow).transition(swapTransition)
         case .finalizing:
-            statusRow(IslandProgressRule(tint: IC.accent, label: "Finishing…", fraction: nil))
+            statusRow(IslandProgressRule(tint: IC.processing, label: "Finishing…", fraction: nil))
                 .transition(swapTransition)
         case .failed(let msg):
             statusRow(failedRow(msg)).transition(swapTransition)
@@ -231,6 +215,7 @@ struct IslandLayout: View {
         launcherItem(
             icon: "mic.fill",
             title: "Dictate",
+            tint: IC.dictate,
             help: "Start dictation — click the stop button in the recording bar to finish"
         ) {
             coordinator.send(.dictateRequested)
@@ -239,6 +224,7 @@ struct IslandLayout: View {
         launcherItem(
             icon: "person.2.fill",
             title: "Meeting",
+            tint: IC.meeting,
             help: "Start a meeting recording"
         ) {
             coordinator.send(.startMeetingRequested)
@@ -249,6 +235,7 @@ struct IslandLayout: View {
         launcherItem(
             icon: "list.clipboard.fill",
             title: "Paste Bin",
+            tint: IC.pasteBin,
             help: "Open recent transcriptions"
         ) {
             coordinator.send(.openPasteBinRequested)
@@ -257,6 +244,7 @@ struct IslandLayout: View {
         launcherItem(
             icon: "square.grid.2x2.fill",
             title: "Workspace",
+            tint: IC.workspace,
             help: "Open the Whisperer workspace"
         ) {
             coordinator.send(.openWorkspaceRequested)
@@ -266,6 +254,7 @@ struct IslandLayout: View {
     private func launcherItem(
         icon: String,
         title: String,
+        tint: Color,
         help: String,
         action: @escaping () -> Void
     ) -> some View {
@@ -273,6 +262,7 @@ struct IslandLayout: View {
             coordinator: coordinator,
             icon: icon,
             title: title,
+            tint: tint,
             help: help,
             action: action
         )
@@ -280,7 +270,7 @@ struct IslandLayout: View {
 
     private var launcherDivider: some View {
         Rectangle()
-            .fill(IC.primary.opacity(0.12))
+            .fill(IC.primary.opacity(0.18))
             .frame(width: 1, height: 16)
             .padding(.horizontal, 5)
             .accessibilityHidden(true)
@@ -288,7 +278,7 @@ struct IslandLayout: View {
 
     private var launcherDividerV: some View {
         Rectangle()
-            .fill(IC.primary.opacity(0.12))
+            .fill(IC.primary.opacity(0.18))
             .frame(width: 16, height: 1)
             .padding(.vertical, 5)
             .accessibilityHidden(true)
@@ -384,7 +374,10 @@ struct IslandLayout: View {
             IslandHoverButton(
                 icon: isPaused ? "play.fill" : "pause.fill",
                 diameter: metrics.controlSize,
-                iconColor: IC.primary
+                // Same colour logic as the HUD's pause control: blue while running, orange
+                // once paused, so the state is legible from the colour alone.
+                iconColor: isPaused ? IC.attention : IC.accent,
+                tinted: true
             ) {
                 coordinator.send(.pauseResumeRequested(sessionID: vm.sessionID))
             }
@@ -404,9 +397,13 @@ struct IslandLayout: View {
             coordinator.send(.stopRequested(sessionID: vm.sessionID))
         } label: {
             ZStack {
+                // Red disc + red ring, the way the HUD draws its cancel control.
+                Circle()
+                    .fill(IC.error.opacity(vm.capture == .finalizing ? 0.06 : 0.12))
+
                 Circle()
                     .strokeBorder(
-                        Color.white.opacity(vm.capture == .finalizing ? 0.5 : 0.95),
+                        IC.error.opacity(vm.capture == .finalizing ? 0.45 : 0.85),
                         lineWidth: 1.6
                     )
 
@@ -461,6 +458,17 @@ struct IslandLayout: View {
 
             Spacer(minLength: 6)
 
+            // Offered only for verdicts the app can actually act on (input muted, gain at
+            // zero). A "Retry" that just rebuilds the same dead engine is what produced the
+            // four useless rebuilds on 2026-09-14 — don't put that button in front of the user.
+            if vm.captureCanRepair {
+                IslandHoverButton(icon: "mic.fill", iconColor: IC.dictate, tinted: true) {
+                    coordinator.send(.repairCaptureRequested)
+                }
+                .help("Turn the microphone back on")
+                .accessibilityLabel("Turn the microphone back on")
+            }
+
             IslandHoverButton(icon: "xmark", iconColor: IC.secondary) {
                 coordinator.send(.dismissFailure)
             }
@@ -490,7 +498,10 @@ struct IslandLayout: View {
                 icon: vm.isMicMuted ? "mic.slash.fill" : "mic.fill",
                 label: vm.isMicMuted ? "Unmute" : "Mic",
                 scale: .large,
-                iconColor: vm.isMicMuted ? IC.attention : IC.primary
+                // Green for `mic.fill`, as everywhere else; orange once muted, which is the
+                // HUD's convention for a control that is currently suppressing audio.
+                iconColor: vm.isMicMuted ? IC.attention : IC.dictate,
+                tinted: true
             ) {
                 coordinator.send(.micMuteRequested(sessionID: vm.sessionID))
             }
@@ -500,7 +511,11 @@ struct IslandLayout: View {
                 icon: vm.isOutputMuted ? "speaker.slash.fill" : "speaker.wave.2.fill",
                 label: vm.isOutputMuted ? "Muted" : "Speaker",
                 scale: .large,
-                iconColor: vm.isOutputMuted ? IC.attention : IC.primary
+                // The menu bar's "Audio" card is `speaker.wave.2.fill` in `.orange`, but orange
+                // is already this row's muted state — so the live state takes the HUD's blue and
+                // orange stays reserved for "currently muted".
+                iconColor: vm.isOutputMuted ? IC.attention : IC.accent,
+                tinted: true
             ) {
                 coordinator.send(.outputMuteRequested(sessionID: vm.sessionID))
             }
@@ -510,7 +525,9 @@ struct IslandLayout: View {
                 icon: "rectangle.on.rectangle",
                 label: "Open",
                 scale: .large,
-                iconColor: IC.primary
+                // Opens the meeting window — same cyan the sidebar gives Meeting Studio.
+                iconColor: IC.meeting,
+                tinted: true
             ) {
                 coordinator.send(.openWindowRequested)
             }
@@ -530,10 +547,9 @@ private struct LauncherItem: View {
     @ObservedObject var coordinator: IslandCoordinator
     let icon: String
     let title: String
+    let tint: Color
     let help: String
     let action: () -> Void
-
-    @State private var anchor: CGFloat = 0
 
     private var isVertical: Bool { coordinator.placement.isVertical }
 
@@ -541,26 +557,48 @@ private struct LauncherItem: View {
         IslandHoverButton(
             icon: icon,
             diameter: IslandContentSizer.launcherItemWidth,
-            iconColor: IC.glyph,
-            hoverIconColor: IC.glyphHover,
+            iconColor: tint,
+            tinted: true,
             action: action
         )
+        // Published every layout pass rather than snapshotted on hover. A snapshot taken at
+        // hover time is either unset (the bar had not laid out yet — the chip then rendered
+        // at the panel's far edge) or mid-spring stale, and neither can be corrected until
+        // the next geometry callback lands.
         .background(
             GeometryReader { geo in
-                let f = geo.frame(in: .global)
-                Color.clear
-                    .onAppear { anchor = isVertical ? f.midY : f.midX }
-                    .onChange(of: isVertical ? f.midY : f.midX) { _, v in anchor = v }
+                let f = geo.frame(in: .named(IslandPanelSpace.name))
+                Color.clear.preference(
+                    key: LauncherAnchorKey.self,
+                    value: [title: isVertical ? f.midY : f.midX]
+                )
             }
         )
         .onHover { hovering in
             if hovering {
-                coordinator.setLauncherHint(title, anchor: anchor)
+                coordinator.setLauncherHint(title)
             } else {
                 coordinator.clearLauncherHint(ifTitleIs: title)
             }
         }
         .accessibilityLabel(help)
+    }
+}
+
+// MARK: - Launcher anchor plumbing
+
+/// Named coordinate space covering the whole Island panel. The hint chip and the glyphs must
+/// measure against the same origin; the glyphs used `.global` while the chip offset itself
+/// against a *computed* envelope width, so the two only agreed by coincidence.
+enum IslandPanelSpace {
+    static let name = "islandPanel"
+}
+
+/// Live centre of every launcher glyph, keyed by title.
+struct LauncherAnchorKey: PreferenceKey {
+    static let defaultValue: [String: CGFloat] = [:]
+    static func reduce(value: inout [String: CGFloat], nextValue: () -> [String: CGFloat]) {
+        value.merge(nextValue()) { _, new in new }
     }
 }
 
@@ -583,7 +621,7 @@ struct IslandLauncherHintLabel: View {
             .background {
                 ZStack {
                     Capsule().fill(.ultraThinMaterial).environment(\.colorScheme, .dark)
-                    Capsule().fill(Color.black.opacity(0.18))
+                    Capsule().fill(IC.surface.opacity(0.42))
                 }
             }
             .overlay {
@@ -635,13 +673,30 @@ private struct IslandWaveform: View {
 
 // MARK: - Color palette
 
+/// The Island's palette, drawn from the same dark-navy system as the Overlay HUD
+/// (`DESIGN.md` §1). The Island used to be built from neutral blacks and greys, which read as a
+/// different product sitting next to the navy HUD; every surface below is now a navy token and
+/// every accent is the exact value `OverlayView` uses.
 enum IC {
-    static let surface   = Color.black
-    static let raised    = Color(red: 0.11, green: 0.11, blue: 0.118)
+    /// Deepest navy — `#0C0C1A`, the DESIGN "Background" token.
+    static let surface   = Color(red: 0.047, green: 0.047, blue: 0.102)
+    /// `#14142B` — the DESIGN "Card surface" token, and literally the HUD capsule's fill.
+    /// This is the Island's own body colour at rest and open alike.
+    static let raised    = Color(red: 0.078, green: 0.078, blue: 0.169)
+    /// `#1C1C3A` — the DESIGN "Elevated" token. Hover states lift to this.
+    static let elevated  = Color(red: 0.110, green: 0.110, blue: 0.227)
     static let primary   = Color(red: 0.961, green: 0.961, blue: 0.969)
     static let secondary = Color(red: 0.631, green: 0.631, blue: 0.671)
+    /// `#5B6CF7` — matches `OverlayView.blueAccent`.
     static let accent    = Color(red: 0.357, green: 0.424, blue: 0.969)
-    static let error     = Color(red: 1, green: 0.502, blue: 0.478)
+    /// `#8B5CF6` — matches `OverlayView.purpleAccent`. The HUD uses purple for its
+    /// "Processing" / "Loading model" capsules, so the Island's finalizing tier uses it too.
+    static let processing = Color(red: 0.545, green: 0.361, blue: 0.965)
+    /// `#49D281` — matches `OverlayView.accentGreen` (the done/checkmark state).
+    static let success   = Color(red: 0.286, green: 0.824, blue: 0.506)
+    /// The HUD's destructive affordance is plain `Color.red`; the Island used a softer salmon,
+    /// which made the same action look like two different severities across the two surfaces.
+    static let error     = Color.red
     /// The launcher bar only exists on screen while the pointer is over it, so its glyphs
     /// are legible from the moment they appear; the per-button hover state is what picks
     /// one out of the row, not a rest-vs-active brightness jump for the whole bar.
@@ -651,7 +706,34 @@ enum IC {
     /// already carries the grouping, so the row reads better as a single neutral set.
     static let glyph            = Color(red: 0.961, green: 0.961, blue: 0.969).opacity(0.72)
     static let glyphHover       = Color(red: 0.961, green: 0.961, blue: 0.969)
-    static let attention = Color(red: 0.941, green: 0.745, blue: 0.384)
+    /// The HUD marks the paused / muted state with `Color.orange`; the Island's custom amber
+    /// was close enough to look like a mistake rather than a distinction.
+    static let attention = Color.orange
+
+    // MARK: Per-element launcher colours
+    //
+    // DESIGN.md §1 "Per-Element Colorful Icons". The launcher row used to be four identical
+    // white glyphs, which made four unrelated actions read as one control group.
+    //
+    // These are NOT new colours. Each one is lifted from wherever the app already renders the
+    // same concept, so the Island agrees with the menu bar and the workspace sidebar instead of
+    // inventing a fifth palette:
+
+    /// `mic.fill` — the menu bar's Transcribe card, which is the same action this button fires,
+    /// draws its `mic.fill` in `MBColors.accent` (`WhispererApp.swift:1080-1085`). The old
+    /// `Color.green` came from the *Microphone device* settings card, a different concept.
+    static let dictate   = accent
+    /// The workspace sidebar's "Meeting Studio" section is `Color(hex: "06B6D4")`
+    /// (`HistoryWindowView.swift:123`).
+    static let meeting   = Color(hex: "06B6D4")
+    /// The Paste Bin opens recent transcriptions. The sidebar paints that section in
+    /// `accentBlue`, but Dictate already owns the accent here, so it takes the app's green
+    /// token — `Color(hex: "22C55E")` (`HistoryWindowView.swift:129`) — not SwiftUI's raw
+    /// `.green`, which is a brighter, more saturated hue that does not belong to this palette.
+    static let pasteBin  = Color(hex: "22C55E")
+    /// The menu bar's Workspace button (`square.grid.2x2.fill`) is a blue→purple gradient
+    /// (`WhispererApp.swift:775`). A single glyph takes the purple end.
+    static let workspace = processing
 }
 
 // MARK: - Stop button style

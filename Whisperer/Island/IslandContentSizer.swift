@@ -57,9 +57,9 @@ nonisolated struct IslandContentSizer {
     //
     // The idle Island is never fully invisible. At rest it is a small glass capsule with a
     // single hairline inside it — enough to say "something lives here" without competing
-    // with whatever the user is actually working on. Hovering grows it along its long axis
-    // and fills the inner line as the dwell clock runs; completing the dwell blossoms it
-    // into the full launcher row.
+    // with whatever the user is actually working on. It carries no inner content at all —
+    // like the iPhone Dynamic Island at rest, it is one solid capsule. Hover is purely
+    // tonal; completing the dwell blossoms it into the full launcher row.
 
     /// Long-axis length of the resting handle.
     ///
@@ -69,12 +69,10 @@ nonisolated struct IslandContentSizer {
     /// math mid-approach, which is what made the target feel like it needed precise aim.
     /// Hover feedback is now purely tonal (see `IslandLayout.handleBody`), so the only
     /// geometry change in the whole interaction is the single spring into the launcher.
-    static let idleHandleRestLength:  CGFloat = 56
+    static let idleHandleRestLength:  CGFloat = 76
     /// Thickness of the handle capsule. Constant across rest and hover so only the
     /// length animates — a capsule that changes thickness reads as a wobble.
-    static let idleHandleThickness:   CGFloat = 9
-    /// Thickness of the hairline / progress fill drawn inside the handle.
-    static let idleHandleLineThickness: CGFloat = 2.5
+    static let idleHandleThickness:   CGFloat = 15
 
     /// Size of the resting/dwelling handle for a given placement and hover state.
     static func idleHandleSize(isHovering: Bool, placement: IslandPlacement) -> CGSize {

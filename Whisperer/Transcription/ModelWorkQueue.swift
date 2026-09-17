@@ -109,6 +109,9 @@ actor ModelWorkQueue {
     private var slotWaiters: [Waiter] = []
 
     private var meetingActive = false
+
+    /// Read-only view of the gate, for the stranded-gate watchdog's tests and for diagnostics.
+    var isMeetingGateRaised: Bool { meetingActive }
     private var meetingWaiters: [Waiter] = []
 
     /// Jobs cancelled while waiting. Recorded by id because the cancellation handler can land
@@ -131,6 +134,23 @@ actor ModelWorkQueue {
         if !resumed.isEmpty {
             Logger.info("ModelWorkQueue: meeting ended — releasing \(resumed.count) suspended job(s)", subsystem: .model)
         }
+    }
+
+    /// Lowers the gate if it is still raised when no meeting is actually running.
+    ///
+    /// The gate is process-wide and, until 2026-09-14, depended on exactly one code path
+    /// remembering to call `setMeetingActive(false)`. The audio-failure path did not, and every
+    /// background model job — transcript polish, overview, RAG indexing — parked on
+    /// `meetingWaiters` for the remaining 68 minutes of the process with no route back.
+    /// Callers invoke this whenever they know no session is live; it is a no-op if the gate is
+    /// already down.
+    func clearStrandedMeetingGate(reason: String) {
+        guard meetingActive else { return }
+        Logger.warning(
+            "ModelWorkQueue: meeting gate was stranded up with no active meeting (\(reason)) — lowering it",
+            subsystem: .model
+        )
+        setMeetingActive(false)
     }
 
     // MARK: - Submission

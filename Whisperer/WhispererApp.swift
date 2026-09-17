@@ -269,10 +269,25 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         // Audio recovery is silent — no user-facing messages.
         // onDeviceRecovery intentionally not wired to errorMessage.
 
-        // Setup audio flow timeout callback — engine running but no data flowing
-        appState.audioRecorder?.onAudioFlowTimeout = { [weak self] in
+        // Capture has gone silent and recovery is under way. Fires ~1.5s in, while the
+        // recording is still salvageable — the whole point of the 2026-09-14 fix is that the
+        // user learns about it now, not at Stop.
+        appState.audioRecorder?.onCaptureTrouble = { [weak self] verdict in
             Task { @MainActor in
-                self?.appState.handleAudioFlowTimeout()
+                self?.appState.reportCaptureTrouble(verdict)
+            }
+        }
+
+        appState.audioRecorder?.onCaptureRecovered = { [weak self] in
+            Task { @MainActor in
+                self?.appState.clearCaptureFailure()
+            }
+        }
+
+        // Setup audio flow timeout callback — engine running but no data flowing
+        appState.audioRecorder?.onAudioFlowTimeout = { [weak self] verdict in
+            Task { @MainActor in
+                self?.appState.handleAudioFlowTimeout(diagnosis: verdict)
             }
         }
 

@@ -398,6 +398,13 @@ struct MeetingLibraryRow: View {
     @ViewBuilder
     private func pillHStack(processing: MeetingProcessingPhase?, duration: Bool, words: Bool) -> some View {
         HStack(spacing: 6) {
+            // Unconditional and first: this is the one fact about the row that must never be
+            // dropped by `ViewThatFits` probing narrower variants. A 58-minute meeting with
+            // zero words is otherwise indistinguishable from one nobody has opened.
+            if meeting.captureFailed {
+                pill("Recording failed — no audio", icon: "exclamationmark.triangle.fill",
+                     color: Color(hex: "EF4444"))
+            }
             if let processing {
                 pill(processing.shortLabel, icon: "sparkles", color: Color(hex: "8B5CF6"))
                     .transition(.opacity.combined(with: .scale(scale: 0.9)))

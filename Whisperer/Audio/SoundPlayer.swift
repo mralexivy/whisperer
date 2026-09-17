@@ -37,6 +37,7 @@ class SoundPlayer {
     private var stopSoundID: SystemSoundID = 0
     private var subtleStartSoundID: SystemSoundID = 0
     private var subtleStopSoundID: SystemSoundID = 0
+    private var errorSoundID: SystemSoundID = 0
 
     var soundOption: SoundOption = .load()
 
@@ -59,6 +60,12 @@ class SoundPlayer {
             AudioServicesCreateSystemSoundID(subtleStopURL as CFURL, &subtleStopSoundID)
         }
 
+        // Failure alert: Basso, the system's conventional "something went wrong" sound, and
+        // distinct from every chime above so it is not mistaken for a normal stop.
+        if let errorURL = URL(string: "file:///System/Library/Sounds/Basso.aiff") {
+            AudioServicesCreateSystemSoundID(errorURL as CFURL, &errorSoundID)
+        }
+
         Logger.info("SoundPlayer initialized", subsystem: .audio)
     }
 
@@ -67,6 +74,7 @@ class SoundPlayer {
         if stopSoundID != 0 { AudioServicesDisposeSystemSoundID(stopSoundID) }
         if subtleStartSoundID != 0 { AudioServicesDisposeSystemSoundID(subtleStartSoundID) }
         if subtleStopSoundID != 0 { AudioServicesDisposeSystemSoundID(subtleStopSoundID) }
+        if errorSoundID != 0 { AudioServicesDisposeSystemSoundID(errorSoundID) }
     }
 
     // MARK: - Public API
@@ -86,6 +94,21 @@ class SoundPlayer {
             }
         case .silent:
             break
+        }
+    }
+
+    /// Play an alert indicating capture has failed.
+    ///
+    /// Deliberately ignores `soundOption`, including `.silent`. The start/stop chimes are
+    /// feedback for an action the user just took and are reasonably suppressed — meetings
+    /// suppress them on purpose. This is not feedback; it is the only audible signal that the
+    /// recording they walked away from is capturing nothing. A user who silenced the chimes has
+    /// not asked to be kept in the dark about a failure.
+    func playErrorSound() {
+        if errorSoundID != 0 {
+            AudioServicesPlaySystemSound(errorSoundID)
+        } else {
+            AudioServicesPlayAlertSound(kSystemSoundID_UserPreferredAlert)
         }
     }
 

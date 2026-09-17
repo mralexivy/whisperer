@@ -80,6 +80,89 @@ class AppState: ObservableObject {
     let waveformState = WaveformState()
     @Published var errorMessage: String?
 
+    /// Non-nil while the microphone is failing to deliver audio. Drives the Island's `.failed`
+    /// row, which is the only failure surface that outlives `state == .idle` — the overlay
+    /// panel and its silent-meeting toast both disappear the moment capture resets, which is
+    /// why the 2026-09-14 failure was invisible for 68 minutes.
+    @Published var captureFailure: CaptureFailure?
+
+    /// A capture problem worth interrupting the user for.
+    struct CaptureFailure: Equatable {
+        let verdict: InputHealthVerdict
+        /// False while recovery is still running — the message is a warning, not an epitaph.
+        let isTerminal: Bool
+        let occurredAt: Date
+
+        var message: String { verdict.userMessage }
+        /// Offer in-app repair only for the two conditions Whisperer can actually fix itself.
+        var canSelfRepair: Bool { verdict.isSelfRepairable }
+    }
+
+    /// Capture went silent but recovery is still in progress. Warns without tearing anything down.
+    func reportCaptureTrouble(_ verdict: InputHealthVerdict) {
+        // Don't downgrade a terminal failure back to a warning.
+        if captureFailure?.isTerminal == true { return }
+        captureFailure = CaptureFailure(verdict: verdict, isTerminal: false, occurredAt: Date())
+        announceCaptureFailure(verdict, isTerminal: false)
+    }
+
+    /// Capture has failed for good.
+    func reportCaptureFailure(_ verdict: InputHealthVerdict) {
+        captureFailure = CaptureFailure(verdict: verdict, isTerminal: true, occurredAt: Date())
+        errorMessage = verdict.userMessage
+        announceCaptureFailure(verdict, isTerminal: true)
+    }
+
+    /// Audio came back on its own.
+    func clearCaptureFailure() {
+        guard captureFailure != nil else { return }
+        captureFailure = nil
+        Logger.info("Capture recovered — audio is flowing again", subsystem: .audio)
+    }
+
+    /// Un-mute / restore the gain on the input device behind a self-repairable failure.
+    ///
+    /// Driven by the repair button on the Island failure row. On success the failure clears
+    /// immediately; audio either resumes on the live engine or the next recording starts clean.
+    func repairCaptureInput() {
+        guard let failure = captureFailure, failure.canSelfRepair else { return }
+        guard let deviceID = audioRecorder?.engineDeviceID
+                ?? AudioDeviceManager.currentDefaultInputDeviceID() else {
+            Logger.warning("Capture repair requested but no input device resolved", subsystem: .audio)
+            return
+        }
+
+        var repaired = false
+        switch failure.verdict {
+        case .muted:
+            repaired = InputHealthProbe.unmuteInput(deviceID: deviceID)
+        case .gainZero:
+            repaired = InputHealthProbe.restoreInputLevel(deviceID: deviceID, to: 0.75)
+        default:
+            return
+        }
+
+        if repaired {
+            Logger.info("Capture repair applied for \(failure.verdict.logCode)", subsystem: .audio)
+            clearCaptureFailure()
+        } else {
+            // The device refused the write — it is almost certainly muted in hardware or by
+            // another app. Say so rather than silently doing nothing.
+            Logger.warning("Capture repair for \(failure.verdict.logCode) was rejected by the device",
+                           subsystem: .audio)
+            errorMessage = "Couldn't turn the microphone back on — check System Settings ▸ Sound ▸ Input."
+        }
+    }
+
+    /// The two channels that reach a user who is looking at Zoom full-screen, not at Whisperer.
+    private func announceCaptureFailure(_ verdict: InputHealthVerdict, isTerminal: Bool) {
+        soundPlayer?.playErrorSound()
+        UserAlertNotifier.shared.post(
+            title: isTerminal ? "Recording stopped — no audio" : "Whisperer isn't hearing anything",
+            body: verdict.userMessage
+        )
+    }
+
     /// Languages already reported as unsupported by the active ASR model, so the notice is shown
     /// once per app session instead of on every recording.
     private var reportedUnforceableLanguages: Set<TranscriptionLanguage> = []
@@ -3218,8 +3301,13 @@ class AppState: ObservableObject {
                 Logger.info("In-app recording with route: \(route)", subsystem: .audio)
 
                 HealthManager.shared.suppressForStartup(seconds: 3)
-                let audioURL = try await audioRecorder?.startRecording(route: route)
+                // `.longForm`: nobody is holding a key here. If the mic stops delivering audio
+                // the recorder must keep fighting for it with backoff and device fallback
+                // instead of surrendering after three attempts in nine seconds, which is what
+                // cost the 2026-09-14 meeting.
+                let audioURL = try await audioRecorder?.startRecording(route: route, recovery: .longForm)
                 currentAudioURL = audioURL
+                captureFailure = nil
                 cancelStateWatchdog()  // Startup succeeded, audio is flowing
                 HealthManager.shared.recordingStarted()
                 if let transcriber = streamingTranscriber { HealthManager.shared.register(transcriber) }
@@ -3258,7 +3346,27 @@ class AppState: ObservableObject {
 
     /// Stop in-app recording — stores result in lastInAppTranscription, no text entry into other apps
     func stopInAppRecording() {
-        guard case .recording = state else { return }
+        guard case .recording = state else {
+            // Capture already collapsed underneath us — `handleAudioFlowTimeout()` reset the
+            // state to `.idle` while the meeting scaffolding stayed standing. Returning here is
+            // what made the user's Stop a no-op 68 minutes after the 2026-09-14 failure:
+            // `activeMeetingSession` was never nilled (so `awaitTailDelivery()` burned its full
+            // 12 s and gave up), `isMeetingStopInFlight` stayed true (permanently blocking
+            // `abandonMeetingMode`) and both queue gates stayed raised. A stop must always
+            // finish the teardown; only the transcriber drain below depends on live capture.
+            if isMeetingMode || isInAppMode || activeMeetingSession != nil {
+                Logger.warning(
+                    "stopInAppRecording() with state=\(state) — capture already ended; forcing teardown",
+                    subsystem: .app
+                )
+                forceCaptureTeardown(
+                    wasMeeting: isMeetingMode,
+                    wasInApp: isInAppMode,
+                    reason: "stop after capture ended"
+                )
+            }
+            return
+        }
         // A live meeting must end through MeetingSession.stopRecording() — that is what flushes the
         // tail segment, moves the audio into Meetings/, finalizes the record and starts the AI pass.
         // The menu bar's in-app Stop button renders during a meeting and used to land here directly,
@@ -3633,7 +3741,11 @@ class AppState: ObservableObject {
                 Logger.info("Recording with route: \(route)", subsystem: .audio)
 
                 HealthManager.shared.suppressForStartup(seconds: 3)
-                let audioURL = try await audioRecorder?.startRecording(route: route)
+                // Dictation: `.dictation` keeps the short leash — the user is holding a key and
+                // can simply release and retry, so a long silent retry loop would be worse than
+                // a fast failure.
+                let audioURL = try await audioRecorder?.startRecording(route: route, recovery: .dictation)
+                captureFailure = nil
                 currentAudioURL = audioURL
                 cancelStateWatchdog()  // Startup succeeded, audio is flowing
                 HealthManager.shared.recordingStarted()
@@ -3684,23 +3796,102 @@ class AppState: ObservableObject {
         }
     }
 
-    /// Called when audio engine exhausts all recovery attempts.
-    /// Silently resets to idle so the next Fn press starts a clean recording.
-    func handleAudioFlowTimeout() {
+    /// Called when the audio engine exhausts all recovery attempts.
+    ///
+    /// This used to reset `state` to `.idle` and stop there. On 2026-09-14 that left a live
+    /// meeting fully intact behind an idle AppState: `activeMeetingSession` still set,
+    /// `isInAppMode` still true, the silence watcher still running, the Island still rendering
+    /// a running timer — and, worst of all, `ModelWorkQueue.meetingActive` and
+    /// `MeetingJobQueue.isSuspended` still raised. Nothing lowered them for the remaining
+    /// 68 minutes of the process, so every background model job and every meeting AI job was
+    /// blocked until quit. The user's Stop, when it finally came, hit
+    /// `stopInAppRecording()`'s state guard and did nothing at all.
+    ///
+    /// A capture failure must therefore unwind the *whole* recording, not just the HUD.
+    func handleAudioFlowTimeout(diagnosis: InputHealthVerdict = .healthy) {
         #if DEBUG
-        StuckStateDumper.dump(reason: "Audio recovery exhausted — engine rebuilt \(audioRecorder?.debugRecoveryAttemptCount ?? 0) times, all produced silent/no audio")
+        StuckStateDumper.dump(reason: "Audio recovery exhausted (\(diagnosis.logCode)) — engine rebuilt \(audioRecorder?.debugRecoveryAttemptCount ?? 0) times, all produced silent/no audio")
         #endif
-        Logger.error("Audio flow timeout — all recovery attempts exhausted, resetting to idle", subsystem: .audio)
-        guard case .recording = state else { return }
+        Logger.error("Audio flow timeout — \(diagnosis.logCode); tearing down capture", subsystem: .audio)
+
+        let wasMeeting = isMeetingMode
+        let wasInApp = isInAppMode
+
         cancelStateWatchdog()
         streamingTranscriber = nil
         liveTranscription = ""
         state = .idle
-        errorMessage = "Microphone stopped responding. If recording keeps failing, open System Settings → Sound and re-select your microphone."
+        reportCaptureFailure(diagnosis)
         if muteOtherAudioDuringRecording {
             audioMuter?.unmuteSystemAudio()
         }
         isOutputAudioMuted = false
+
+        forceCaptureTeardown(
+            wasMeeting: wasMeeting,
+            wasInApp: wasInApp,
+            reason: "capture failed: \(diagnosis.logCode)"
+        )
+    }
+
+    /// Unwinds meeting / in-app recording scaffolding that has outlived its capture.
+    ///
+    /// Shared by `handleAudioFlowTimeout()` and by `stopInAppRecording()`'s
+    /// capture-already-collapsed branch, because both have to undo exactly the same things and
+    /// the bug was one of them undoing none of them.
+    private func forceCaptureTeardown(wasMeeting: Bool, wasInApp: Bool, reason: String) {
+        if wasMeeting {
+            // Clear the in-flight flag FIRST. `abandonMeetingMode` opens with
+            // `guard !isMeetingStopInFlight` — a stop that raced this failure would otherwise
+            // leave the flag stranded true and permanently block every future teardown,
+            // which is precisely how the gates got stuck.
+            isMeetingStopInFlight = false
+            // Single source of truth for meeting teardown: closes the live window, abandons the
+            // session, lowers ModelWorkQueue's gate, resumes MeetingJobQueue, releases the
+            // diarizer and nils activeMeetingSession.
+            abandonMeetingMode(reason: reason)
+        }
+
+        if wasInApp || wasMeeting {
+            isInAppMode = false
+            meetingSilenceWatcher.stop()
+            showSilentMeetingToast = false
+        }
+
+        // Belt and braces: whatever route we took above, no session is active now, so no gate
+        // may remain raised. This is the check that would have saved the app on 2026-09-14.
+        lowerStrandedRecordingGates(reason: reason)
+    }
+
+    /// Lowers the two global recording gates if they are still up while no meeting is active.
+    ///
+    /// Both gates are process-wide and were, until this, raised and lowered by exactly one code
+    /// path each. Any path that skipped the lowering bricked all background model work and all
+    /// meeting AI jobs for the rest of the process with no way back short of quitting.
+    /// They are now treated as recoverable state, not as an invariant we hope holds.
+    func lowerStrandedRecordingGates(reason: String) {
+        guard activeMeetingSession == nil else { return }
+        Task { await ModelWorkQueue.shared.clearStrandedMeetingGate(reason: reason) }
+        MeetingJobQueue.shared.clearStrandedSuspension(reason: reason)
+    }
+
+    /// Releases a meeting session that `stopInAppRecording()` left attached.
+    ///
+    /// Called by `MeetingSession.awaitTailDelivery()` when its 12 s ceiling expires, which can
+    /// only happen if the stop path bailed out before nilling `activeMeetingSession`. Clearing
+    /// `isMeetingStopInFlight` first is essential — it is the guard that makes
+    /// `abandonMeetingMode` a no-op, so leaving it set here would reproduce exactly the deadlock
+    /// this method exists to break. Identity-checked so a session that has already been
+    /// replaced by a newer recording cannot tear the new one down.
+    func forceReleaseStrandedMeetingSession(_ session: MeetingSession, reason: String) {
+        guard activeMeetingSession === session else { return }
+        Logger.warning("Force-releasing stranded meeting session (\(reason))", subsystem: .app)
+        isMeetingStopInFlight = false
+        abandonMeetingMode(reason: reason)
+        isInAppMode = false
+        meetingSilenceWatcher.stop()
+        showSilentMeetingToast = false
+        lowerStrandedRecordingGates(reason: reason)
     }
 
     func stopRecording() {

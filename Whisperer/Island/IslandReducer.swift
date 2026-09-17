@@ -208,8 +208,16 @@ enum IslandReducer {
             guard case .failed = state.capture else { return [] }
             state.capture = .idle
             state.presentation = .compact
+            state.captureCanRepair = false
             state.revision &+= 1
-            return [.cancelHide]
+            // Clearing AppState is part of dismissing: the coordinator re-derives `.failed`
+            // from `AppState.captureFailure` on every sync, so leaving it set would make the
+            // row immortal.
+            return [.cancelHide, .clearCaptureFailure]
+
+        case .repairCaptureRequested:
+            guard case .failed = state.capture, state.captureCanRepair else { return [] }
+            return [.repairCapture]
         }
     }
 

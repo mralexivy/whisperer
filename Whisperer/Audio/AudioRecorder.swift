@@ -54,6 +54,10 @@ class AudioRecorder: NSObject {
     // Last device ID bound by the actor — used for sync diagnostics (healthState, debugSnapshot)
     private var cachedEngineDeviceID: AudioDeviceID?
 
+    /// The device the live engine is bound to, for callers that need to act on it (the Island's
+    /// un-mute repair). `nil` when no engine is up.
+    var engineDeviceID: AudioDeviceID? { cachedEngineDeviceID }
+
     // MARK: - Recording state
 
     private let isRecordingLock = NSLock()
@@ -69,7 +73,15 @@ class AudioRecorder: NSObject {
     var onAmplitudeUpdate: ((Float) -> Void)?
     var onStreamingSamples: (([Float]) -> Void)?
     var onDeviceRecovery: ((RecordingFailureReason) -> Void)?
-    var onAudioFlowTimeout: (() -> Void)?
+    /// Capture has permanently failed. Carries the diagnosis so the caller can tell the user
+    /// *why* rather than the old generic "microphone stopped responding".
+    var onAudioFlowTimeout: ((InputHealthVerdict) -> Void)?
+    /// Capture has gone silent and recovery has begun. Fired within ~1.5 s of the first silent
+    /// buffer, long before the retry budget is spent, so the user can be warned while there is
+    /// still a meeting left to save. Fires once per silence episode.
+    var onCaptureTrouble: ((InputHealthVerdict) -> Void)?
+    /// Audio came back after an episode of silence.
+    var onCaptureRecovered: (() -> Void)?
 
     // MARK: - Audio flow tracking
 
@@ -84,12 +96,51 @@ class AudioRecorder: NSObject {
     // MARK: - Recovery
 
     private var recoveryAttemptCount: Int = 0
-    private let maxRecoveryAttempts: Int = 3
+
+    /// How long the recorder keeps fighting for audio before giving up for good.
+    ///
+    /// This used to be one flat `maxRecoveryAttempts = 3` for everything, which is how a
+    /// 58-minute meeting was abandoned 9 seconds in and never retried. A two-second dictation
+    /// genuinely wants a short leash — the user is holding a key and can just release it and
+    /// try again. A meeting wants the opposite: nobody is watching, the transient may clear in
+    /// twenty seconds, and surrender costs the entire recording.
+    enum RecoveryPolicy: Equatable {
+        /// Push-to-talk. Three quick attempts, then fail so the HUD can clear.
+        case dictation
+        /// Meetings and in-app recording. Never stops trying while the session is open.
+        case longForm
+
+        var maxAttempts: Int? {
+            switch self {
+            case .dictation: return 3
+            case .longForm:  return nil   // unbounded
+            }
+        }
+
+        /// Backoff before attempt `n` (1-based). Dictation stays flat and fast; long-form backs
+        /// off so an hour-long outage costs a handful of rebuilds rather than thousands.
+        func settleDelay(attempt: Int) -> TimeInterval {
+            switch self {
+            case .dictation:
+                return 0.3
+            case .longForm:
+                return min(10.0, 0.3 * pow(2.0, Double(max(0, attempt - 1))))
+            }
+        }
+    }
+
+    private var recoveryPolicy: RecoveryPolicy = .dictation
 
     // MARK: - Silence detection
 
     private var consecutiveSilentCallbacks: Int = 0
     private let silenceRecoveryThreshold: Int = 18  // ~1.5s at 48kHz/4096 buffer
+    /// Guards `onCaptureTrouble` so one silence episode produces one warning, not one per buffer.
+    private var hasReportedSilenceEpisode = false
+    /// Set once any non-silent sample has been seen in this recording. Distinguishes "the mic
+    /// died mid-meeting" (partial audio worth keeping) from "the mic never worked at all"
+    /// (the 2026-09-14 case — 58 minutes of nothing).
+    private(set) var hasEverReceivedNonSilentAudio = false
 
     // MARK: - Recorder state machine
 
@@ -263,8 +314,15 @@ class AudioRecorder: NSObject {
     // MARK: - Recording
 
     /// Three-attempt policy: (1) requested route, (2) system default, (3) system default + 300ms settle.
-    func startRecording(route: ResolvedInputRoute) async throws -> URL {
+    ///
+    /// `recovery` governs what happens *after* a successful start, if the device later stops
+    /// producing audio: `.dictation` gives up quickly, `.longForm` never gives up while the
+    /// session is open. Pass `.longForm` for meetings and in-app recording.
+    func startRecording(route: ResolvedInputRoute, recovery: RecoveryPolicy = .dictation) async throws -> URL {
         recoveryAttemptCount = 0
+        recoveryPolicy = recovery
+        hasEverReceivedNonSilentAudio = false
+        hasReportedSilenceEpisode = false
 
         guard !isRecording else {
             throw RecordingError.alreadyRecording
@@ -480,23 +538,39 @@ class AudioRecorder: NSObject {
         let rms = calculateRMS(samples: samples)
         DispatchQueue.main.async { [weak self] in self?.onAmplitudeUpdate?(rms) }
 
-        // Silence detection — auto-recover if input device produces no audio
+        // Silence detection — diagnose first, then auto-recover if a rebuild can actually help.
         if rms < 0.001 {
             consecutiveSilentCallbacks += 1
             let inGracePeriod = recordingStartTime.map { Date().timeIntervalSince($0) < 2.0 } ?? false
             if consecutiveSilentCallbacks >= silenceRecoveryThreshold,
                case .recording = recorderState,
                !inGracePeriod {
-                Logger.event(.engRetry, .audio, ["reason": .string("silence_1.5s")], level: .warning)
+                // Ask the HAL *why* before reacting. Logging bare `reason=silence_1.5s` and
+                // blindly rebuilding is what burned four engine builds on a muted device.
+                let (facts, verdict) = InputHealthProbe.probe(deviceID: cachedEngineDeviceID)
+                var fields = InputHealthProbe.logFields(facts, verdict)
+                fields["reason"] = .string("silence_1.5s")
+                Logger.event(.engRetry, .audio, fields, level: .warning)
+
+                let shouldWarn = !hasReportedSilenceEpisode
+                hasReportedSilenceEpisode = true
+
                 DispatchQueue.main.async { [weak self] in
                     guard let self else { return }
-                    Task { await self.recoverAudioEngine() }
+                    if shouldWarn { self.onCaptureTrouble?(verdict) }
+                    Task { await self.recoverAudioEngine(diagnosis: verdict) }
                 }
             }
         } else {
+            let wasSilent = hasReportedSilenceEpisode
             consecutiveSilentCallbacks = 0
+            hasEverReceivedNonSilentAudio = true
+            hasReportedSilenceEpisode = false
             if recoveryAttemptCount > 0 {
                 recoveryAttemptCount = 0
+            }
+            if wasSilent {
+                DispatchQueue.main.async { [weak self] in self?.onCaptureRecovered?() }
             }
         }
 
@@ -707,13 +781,42 @@ class AudioRecorder: NSObject {
 
     // MARK: - Mid-Recording Recovery
 
-    private func recoverAudioEngine() async {
+    /// A recovery pass has run and is in flight; further triggers coalesce into it rather than
+    /// stacking parallel rebuilds. Silence fires this from every buffer once the threshold is
+    /// crossed, so without the guard an unrecoverable device spawns ~12 concurrent rebuilds a
+    /// second.
+    private var isRecoveryInFlight = false
+
+    private func recoverAudioEngine(diagnosis: InputHealthVerdict = .healthy) async {
         guard case .recording(let generation) = recorderState else { return }
+        guard !isRecoveryInFlight else { return }
+        isRecoveryInFlight = true
+        defer { isRecoveryInFlight = false }
+
+        // Self-repair before anything else. A muted input or a zeroed gain cannot be fixed by
+        // rebuilding a graph, but it *can* be fixed outright — and doing so beats telling the
+        // user to go and find a slider.
+        if diagnosis.isSelfRepairable, let deviceID = cachedEngineDeviceID {
+            let repaired = diagnosis == .muted
+                ? InputHealthProbe.unmuteInput(deviceID: deviceID)
+                : InputHealthProbe.restoreInputLevel(deviceID: deviceID)
+            if repaired {
+                // The device is live and the tap is installed; the next buffer will carry signal
+                // and `deliverSamples` will clear the episode. No rebuild needed.
+                consecutiveSilentCallbacks = 0
+                return
+            }
+        }
 
         recoveryAttemptCount += 1
 
-        if recoveryAttemptCount > maxRecoveryAttempts {
-            Logger.event(.recFail, .audio, ["attempts": .int(maxRecoveryAttempts), "reason": .string("recovery_exhausted")], level: .error)
+        if let maxAttempts = recoveryPolicy.maxAttempts, recoveryAttemptCount > maxAttempts {
+            var fields = InputHealthProbe.logFields(
+                InputHealthProbe.probe(deviceID: cachedEngineDeviceID).facts, diagnosis
+            )
+            fields["attempts"] = .int(maxAttempts)
+            fields["reason"] = .string("recovery_exhausted")
+            Logger.event(.recFail, .audio, fields, level: .error)
             isRecording = false
             // Finalize whatever was captured before the engine died. This path used to return
             // without closing, and `AppState`'s watchdog then called `stopRecording()`, which
@@ -722,22 +825,30 @@ class AudioRecorder: NSObject {
             closeSessionWriter()
             recorderState = .idle
             cachedEngineDeviceID = nil
-            DispatchQueue.main.async { [weak self] in self?.onAudioFlowTimeout?() }
+            DispatchQueue.main.async { [weak self] in self?.onAudioFlowTimeout?(diagnosis) }
             return
         }
 
         recorderState = .recovering(generation: generation)
-        Logger.event(.engRetry, .audio, ["attempt": .int(recoveryAttemptCount), "max": .int(maxRecoveryAttempts), "gen": .int(generation)], level: .warning)
+        Logger.event(.engRetry, .audio, [
+            "attempt": .int(recoveryAttemptCount),
+            "max": .string(recoveryPolicy.maxAttempts.map(String.init) ?? "unbounded"),
+            "verdict": .string(diagnosis.logCode),
+            "gen": .int(generation)
+        ], level: .warning)
 
         stopAudioFlowWatchdog()
         stopMonitoringDevice()
 
         // Replace dead engine — creates fresh queue, bypassing any hung old queue
         await engineLifecycle.replaceDeadEngine()
+        let failedDeviceID = cachedEngineDeviceID
         cachedEngineDeviceID = nil
 
-        // Settle delay
-        try? await Task.sleep(nanoseconds: 300_000_000)
+        // Settle delay — flat for dictation, backing off for long-form so an outage that lasts
+        // minutes costs a handful of rebuilds instead of one every 300 ms forever.
+        let settle = recoveryPolicy.settleDelay(attempt: recoveryAttemptCount)
+        try? await Task.sleep(nanoseconds: UInt64(settle * 1_000_000_000))
 
         guard isRecording, isGenerationCurrent(generation) else {
             isRecording = false
@@ -746,25 +857,64 @@ class AudioRecorder: NSObject {
             return
         }
 
-        // Rebuild on system default
+        // Escalate the route rather than re-binding the device that just failed. All four
+        // rebuilds on 2026-09-14 targeted the same built-in mic (id=96) while five other live
+        // inputs sat unused.
+        let route = recoveryRoute(attempt: recoveryAttemptCount, avoiding: diagnosis.otherDeviceCanHelp ? failedDeviceID : nil)
+
         recorderState = .starting(generation: generation)
         recordingStartTime = Date()
         do {
-            _ = try await startRecordingInternal(route: .systemDefault, generation: generation)
-            Logger.event(.recStart, .audio, ["recovery": .bool(true), "gen": .int(generation)])
+            _ = try await startRecordingInternal(route: route, generation: generation)
+            Logger.event(.recStart, .audio, ["recovery": .bool(true), "route": .string("\(route)"), "gen": .int(generation)])
             DispatchQueue.main.async { [weak self] in
                 self?.onDeviceRecovery?(.deviceLostDuringRecording)
             }
         } catch {
             Logger.event(.recFail, .audio, ["recovery": .bool(true), "err": .string(error.localizedDescription)], level: .error)
+
+            // A failed rebuild is not the end for a long-form session — the device may come back.
+            // The recorder keeps the session open and the next silent buffer (or the flow
+            // watchdog) re-enters recovery, now with a longer backoff.
+            if recoveryPolicy.maxAttempts == nil, isRecording, isGenerationCurrent(generation) {
+                recorderState = .recording(generation: generation)
+                startAudioFlowWatchdog()
+                return
+            }
+
             isRecording = false
             // Keep what was captured before the device died — the restart failed, but the
             // pre-recovery audio is still a valid recording and history will reference it.
             closeSessionWriter()
             recorderState = .idle
             cachedEngineDeviceID = nil
-            DispatchQueue.main.async { [weak self] in self?.onAudioFlowTimeout?() }
+            DispatchQueue.main.async { [weak self] in self?.onAudioFlowTimeout?(diagnosis) }
         }
+    }
+
+    /// Picks the route for recovery attempt `attempt` (1-based).
+    ///
+    /// 1 → whatever the system default currently is (covers the common "device came back" case).
+    /// 2+ → walk the other live input devices, skipping `avoiding` and skipping devices the
+    /// probe says are muted, gain-zeroed or streamless. Wraps back to the default when the list
+    /// is exhausted, so an unbounded long-form recovery keeps cycling instead of dead-ending.
+    private func recoveryRoute(attempt: Int, avoiding: AudioDeviceID?) -> ResolvedInputRoute {
+        guard attempt > 1 else { return .systemDefault }
+
+        let candidates = AudioDeviceManager.usableInputDevicesForRecovery(excluding: avoiding)
+        guard !candidates.isEmpty else { return .systemDefault }
+
+        // attempt 2 → candidates[0], attempt 3 → candidates[1], … then wrap.
+        let index = (attempt - 2) % (candidates.count + 1)
+        guard index < candidates.count else { return .systemDefault }
+
+        let device = candidates[index]
+        Logger.event(.devSelect, .audio, [
+            "id": .int(Int(device.id)),
+            "name": .string(device.name),
+            "action": .string("recovery_fallback")
+        ])
+        return .explicit(uid: device.uid, deviceID: device.id)
     }
 
     // MARK: - Device-Alive Monitoring
@@ -952,16 +1102,29 @@ class AudioRecorder: NSObject {
                 if elapsed > self.audioFlowTimeout {
                     Logger.event(.recFail, .audio, ["reason": .string("no_audio_flow"), "elapsed": .double(elapsed)], level: .error)
                     self.stopAudioFlowWatchdog()
-                    Task { await self.recoverAudioEngine() }
+                    self.recoverWithDiagnosis()
                 }
             } else {
                 Logger.event(.recFail, .audio, ["reason": .string("no_audio_startup")], level: .error)
                 self.stopAudioFlowWatchdog()
-                Task { await self.recoverAudioEngine() }
+                self.recoverWithDiagnosis()
             }
         }
         timer.resume()
         audioFlowWatchdog = timer
+    }
+
+    /// Probe the device, warn the user once per episode, then recover. Used by the callers that
+    /// detect "no buffers at all" — as opposed to `deliverSamples`, which detects "buffers full
+    /// of zeros" and already has the probe result in hand.
+    private func recoverWithDiagnosis() {
+        let (facts, verdict) = InputHealthProbe.probe(deviceID: cachedEngineDeviceID)
+        Logger.event(.engRetry, .audio, InputHealthProbe.logFields(facts, verdict), level: .warning)
+        if !hasReportedSilenceEpisode {
+            hasReportedSilenceEpisode = true
+            DispatchQueue.main.async { [weak self] in self?.onCaptureTrouble?(verdict) }
+        }
+        Task { await self.recoverAudioEngine(diagnosis: verdict) }
     }
 
     private func stopAudioFlowWatchdog() {

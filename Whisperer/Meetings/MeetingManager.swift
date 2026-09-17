@@ -357,6 +357,25 @@ class MeetingManager: ObservableObject {
         }
     }
 
+    /// Flags a meeting whose input never delivered a non-silent sample.
+    ///
+    /// Row 39 of 2026-09-14 sat in history as an ordinary 58-minute meeting with 0 words, which
+    /// is indistinguishable from a meeting nobody has opened yet. This is the difference.
+    func markCaptureFailed(meetingID: UUID) async {
+        let ctx = database.newBackgroundContext()
+        await ctx.perform {
+            let req = MeetingEntity.fetchRequest()
+            req.predicate = NSPredicate(format: "id == %@", meetingID as CVarArg)
+            req.fetchLimit = 1
+            guard let entity = try? ctx.fetch(req).first else { return }
+            entity.captureFailed = true
+            try? ctx.save()
+        }
+        updateItem(id: meetingID) { $0.captureFailed = true }
+        Logger.warning("Meeting \(meetingID) marked as capture-failed — no audio was ever received",
+                       subsystem: .app)
+    }
+
     // MARK: - Discard
 
     func discardSession(meetingID: UUID) async {

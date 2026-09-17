@@ -17,6 +17,8 @@ struct MeetingListItem: Identifiable, Equatable {
     var audioFileURL: String?
     let language: String
     var isInProgress: Bool
+    /// The recording never received a non-silent sample — see `MeetingRecord.captureFailed`.
+    var captureFailed: Bool = false
     var sourceBundleID: String?
     var sourceAppName: String?
 
@@ -72,6 +74,7 @@ struct MeetingListItem: Identifiable, Equatable {
         self.wordCount = Int(entity.wordCount)
         self.language = entity.language
         self.isInProgress = entity.isInProgress
+        self.captureFailed = entity.captureFailed
         self.sourceBundleID = entity.sourceBundleID
         self.sourceAppName = entity.sourceAppName
     }
@@ -88,6 +91,7 @@ struct MeetingListItem: Identifiable, Equatable {
         self.audioFileURL = nil
         self.language = language
         self.isInProgress = true
+        self.captureFailed = false
         self.sourceBundleID = sourceBundleID
         self.sourceAppName = sourceAppName
     }

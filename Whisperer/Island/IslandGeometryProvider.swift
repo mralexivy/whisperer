@@ -13,7 +13,8 @@
 //          → visibleFrame inset + C.dockGap.
 //        • No chrome → raw screen edge + C.edgeInset.
 //      Top always has the menu bar, so it always takes the inset branch.
-//      Auto-hidden Docks are treated as present (~4 pt reveal strip).
+//      Auto-hidden Docks are treated as absent — their ~4 pt reveal strip is below
+//      `C.chromeThreshold`, so the Island hugs the real screen edge when no Dock is showing.
 //    - Growth is away from the anchored edge only, so the anchor never moves as tiers change.
 //    - Left/right placements swap the long and thick axes: the pill becomes a vertical column.
 //
@@ -27,6 +28,7 @@
 //
 
 import AppKit
+import CoreGraphics
 
 // MARK: - Screen description (injectable)
 
@@ -39,14 +41,32 @@ struct ScreenDescription: Equatable {
     var visibleFrame: NSRect
     /// Backing scale factor (1 on non-Retina, 2 on Retina, etc.)
     var backingScale: CGFloat
+    /// Whether the Dock process has a window actually rendered on the active Space right now.
+    ///
+    /// `visibleFrame` always reserves Dock space (e.g. 74 pt at bottom) regardless of which
+    /// Space is active, because the reservation is a global screen-level property. But the Dock
+    /// only renders on one Space at a time on single-monitor setups — when you switch to another
+    /// Space the Dock is absent even though `visibleFrame` still shows the inset.
+    ///
+    /// `CGWindowListCopyWindowInfo(.optionOnScreenOnly)` returns what the window server is
+    /// actually drawing right now. If "Dock" is not in that list, no chrome clearance is needed.
+    ///
+    /// Defaults to `true` so synthetic `ScreenDescription` values used in unit tests behave
+    /// conservatively (treat obstruction as present, matching the old behaviour).
+    var isDockOnActiveSpace: Bool = true
 
     // MARK: Factory
 
+    /// Reads Dock presence from `DockPresenceMonitor`'s cached value rather than scanning the
+    /// window list here. The scan is ~780 µs and this factory runs on every `publishViewModel`;
+    /// the monitor keeps the answer hot for ~104 µs per 16 ms tick.
+    @MainActor
     static func from(_ screen: NSScreen) -> ScreenDescription {
         ScreenDescription(
             frame: screen.frame,
             visibleFrame: screen.visibleFrame,
-            backingScale: screen.backingScaleFactor
+            backingScale: screen.backingScaleFactor,
+            isDockOnActiveSpace: DockPresenceMonitor.shared.isDockOnScreen
         )
     }
 }
@@ -75,8 +95,12 @@ struct IslandGeometryProvider {
         static let expandedRadius:      CGFloat = 34
 
         // Placement
-        static let dockGap:             CGFloat = 6     // gap above/beside a Dock or auto-hide strip
-        static let edgeInset:           CGFloat = 2     // gap from the raw screen edge
+        static let dockGap:             CGFloat = 6     // gap above/beside a visible Dock
+        static let edgeInset:           CGFloat = 5     // gap from the raw screen edge when no chrome
+        /// An auto-hidden Dock still insets `visibleFrame` by a ~4 pt reveal strip. Treating
+        /// that as a real Dock lifted the Island ~10 pt off the screen edge with nothing
+        /// visibly there. Only an inset past this is real chrome worth clearing.
+        static let chromeThreshold:     CGFloat = 8
         static let minHClearance:       CGFloat = 16    // min margin from screen edge (both axes)
         static let panelSlack:          CGFloat = 24    // envelope inflation — room for the shadow
     }
@@ -160,9 +184,27 @@ struct IslandGeometryProvider {
 
     // MARK: - Panel envelope
 
-    /// The union of all Island frames plus animation slack — the single fixed window size
-    /// inside which the silhouette morphs. Kept stable per display so the NSPanel never resizes.
+    /// The single fixed window inside which the silhouette morphs.
+    ///
+    /// Deliberately **Dock-independent**: it is the union of the envelope computed with the Dock
+    /// present and with the Dock absent. Both variants are precomputed here, so switching Spaces
+    /// never changes the window frame and `NSWindow.setFrame` never runs on the switch path.
+    ///
+    /// That matters because a `setFrame` is an async round trip to the window server — it lands a
+    /// frame or two after the Space has already been composited, which is exactly the "appears in
+    /// the old position, then jumps" flicker. With a constant envelope the only thing that moves is
+    /// `IslandContentSizer.anchorSlack` inside the window, which SwiftUI resolves in one layout
+    /// pass with no window-server involvement.
     func panelEnvelope(for screen: ScreenDescription) -> NSRect {
+        var withDock = screen
+        withDock.isDockOnActiveSpace = true
+        var withoutDock = screen
+        withoutDock.isDockOnActiveSpace = false
+        return rawEnvelope(for: withDock).union(rawEnvelope(for: withoutDock))
+    }
+
+    /// The envelope for one specific Dock state. Only `panelEnvelope` should call this.
+    private func rawEnvelope(for screen: ScreenDescription) -> NSRect {
         let peek     = peekFrame(for: screen)
         let compact  = compactFrame(for: screen)
         let expanded = expandedFrame(for: screen)
@@ -268,15 +310,34 @@ struct IslandGeometryProvider {
 extension IslandGeometryProvider {
 
     /// True when the OS (Dock, Stage Manager, menu bar, etc.) insets `visibleFrame`
-    /// from `frame` by more than 1 pt on the given edge.
+    /// from `frame` by more than `C.chromeThreshold` on the given edge.
+    ///
+    /// For the Dock edge (bottom by default), `visibleFrame` always reserves the Dock's height
+    /// regardless of which Space is active — it is a global screen property, not a per-Space one.
+    /// We therefore also require that the Dock is actually rendered on the active Space
+    /// (`s.isDockOnActiveSpace`). When the Dock is absent on the current Space the Island hugs
+    /// the real screen edge even though `visibleFrame` still shows a large inset.
     nonisolated static func hasEdgeObstruction(_ s: ScreenDescription,
                                                placement: IslandPlacement) -> Bool {
-        switch placement {
-        case .bottomCenter: return s.visibleFrame.minY - s.frame.minY > 1
-        case .topCenter:    return s.frame.maxY - s.visibleFrame.maxY > 1
-        case .leftCenter:   return s.visibleFrame.minX - s.frame.minX > 1
-        case .rightCenter:  return s.frame.maxX - s.visibleFrame.maxX > 1
+        // If the Dock process isn't rendering on this Space, there is no bottom-edge chrome.
+        // (The menu bar and Stage Manager are never on the bottom edge, so this check is safe.)
+        if !s.isDockOnActiveSpace {
+            switch placement {
+            case .bottomCenter, .leftCenter, .rightCenter:
+                return false   // Dock absent → no obstruction on the Dock edge
+            case .topCenter:
+                break          // menu bar is always present at the top; fall through
+            }
         }
+
+        let inset: CGFloat
+        switch placement {
+        case .bottomCenter: inset = s.visibleFrame.minY - s.frame.minY
+        case .topCenter:    inset = s.frame.maxY - s.visibleFrame.maxY
+        case .leftCenter:   inset = s.visibleFrame.minX - s.frame.minX
+        case .rightCenter:  inset = s.frame.maxX - s.visibleFrame.maxX
+        }
+        return inset > C.chromeThreshold
     }
 
     /// Global coordinate of the pill's edge that touches the screen border.
@@ -302,18 +363,19 @@ extension IslandGeometryProvider {
         }
     }
 
-    /// Outer-edge coordinate for the panel envelope clamp (slack extended outward).
+    /// Outer-edge coordinate for the panel envelope — the physical screen edge.
+    ///
+    /// Intentionally **not** derived from `edgeAnchor`, because that moves with the Dock. Pinning
+    /// the envelope's outer edge to the raw screen border keeps the window frame constant across
+    /// Spaces, and pushes the entire Dock-present/absent difference into `anchorSlack`, which is a
+    /// pure SwiftUI layout value. The window then never has to move when the Dock comes and goes.
     nonisolated static func envelopeOuterEdge(for s: ScreenDescription,
                                               placement: IslandPlacement) -> CGFloat {
         switch placement {
-        case .bottomCenter:
-            return max(edgeAnchor(for: s, placement: .bottomCenter) - C.panelSlack, s.frame.minY)
-        case .topCenter:
-            return min(edgeAnchor(for: s, placement: .topCenter) + C.panelSlack, s.frame.maxY)
-        case .leftCenter:
-            return max(edgeAnchor(for: s, placement: .leftCenter) - C.panelSlack, s.frame.minX)
-        case .rightCenter:
-            return min(edgeAnchor(for: s, placement: .rightCenter) + C.panelSlack, s.frame.maxX)
+        case .bottomCenter: return s.frame.minY
+        case .topCenter:    return s.frame.maxY
+        case .leftCenter:   return s.frame.minX
+        case .rightCenter:  return s.frame.maxX
         }
     }
 

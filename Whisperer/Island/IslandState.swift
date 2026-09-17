@@ -79,6 +79,9 @@ enum IslandEvent {
 
     // Session corrections
     case dismissFailure
+    /// "Unmute" / "Restore level" on the failure row — only offered for verdicts the app can
+    /// actually fix itself (input muted, input gain at zero).
+    case repairCaptureRequested
 }
 
 // MARK: - Effects emitted by the reducer (executed by the coordinator)
@@ -95,6 +98,11 @@ enum IslandEffect: Equatable {
     case openWorkspace
     case scheduleHide(after: TimeInterval)   // auto-hide after dwell
     case cancelHide
+    /// Clear `AppState.captureFailure`. Without this the coordinator's sync would re-emit
+    /// `.captureFailed` on the very next pass and the row could never be dismissed.
+    case clearCaptureFailure
+    /// Un-mute the input device / restore its gain, per the stored verdict.
+    case repairCapture
 }
 
 // MARK: - Internal model (reducer-private structure)
@@ -110,6 +118,9 @@ struct IslandModel: Equatable {
     var isOutputMuted: Bool
     var isPaused: Bool
     var stopInFlight: Bool                  // idempotency guard
+    /// Whether the current failure is one the app can fix itself. Written by the coordinator
+    /// from `AppState.captureFailure`, not by the reducer — same pattern as `isMicMuted`.
+    var captureCanRepair: Bool = false
 
     static let initial = IslandModel(
         sessionID: UUID(),
@@ -125,12 +136,13 @@ struct IslandModel: Equatable {
 
 // MARK: - Launcher hint
 
-/// The name of the launcher glyph under the pointer, plus where to centre its label.
-/// `anchor` is the glyph's centre along the long axis, in the panel's SwiftUI coordinate
-/// space. For horizontal placements it's the X coordinate; for vertical it's the Y coordinate.
+/// The name of the launcher glyph under the pointer.
+///
+/// Position is deliberately NOT stored here. The chip reads the glyph's live centre from
+/// `LauncherAnchorKey` when it renders, which keeps it correct through the open spring and
+/// makes an unset/stale anchor impossible.
 nonisolated struct IslandLauncherHint: Equatable {
     var title: String
-    var anchor: CGFloat
 }
 
 // MARK: - View model (immutable snapshot sent to SwiftUI)
@@ -146,6 +158,8 @@ struct IslandViewModel: Equatable {
     var sessionID: UUID
     /// Non-nil during model preparation (engine download/compile). 0–1.
     var preparationProgress: Double?
+    /// Drives the repair button on the failure row.
+    var captureCanRepair: Bool = false
 
     static let hidden = IslandViewModel(
         capture: .idle,
@@ -199,7 +213,8 @@ extension IslandModel {
             isPaused: isPaused,
             availableActions: actions,
             sessionID: sessionID,
-            preparationProgress: nil   // filled in by coordinator when engines are preparing
+            preparationProgress: nil,  // filled in by coordinator when engines are preparing
+            captureCanRepair: captureCanRepair
         )
     }
 }
