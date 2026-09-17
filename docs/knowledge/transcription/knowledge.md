@@ -647,3 +647,26 @@ and latency was unchanged. Superseded by the two-encode discovery and agreement 
 The A1 contribution remains: single-language users skip detection entirely, which is correct
 regardless. `minFirstProbeConfidence`, `firstProbeSamples`, and `minVoicedFirstProbeSamples`
 removed along with MLX.
+
+## The stop watchdog's liveness signal has now been the wrong layer twice (2026-09-16)
+
+2026-08-20: a tail decode ran long without setting `isProcessing`, the stop watchdog saw silence and
+force-idled. Fix: set `isProcessing = true` around the tail decode — the comment is still at the top
+of `transcribeTail`.
+
+2026-09-16: the Nemotron preview feed chain blocked stop for ~29 s without setting `isProcessing`,
+the stop watchdog saw silence and force-idled — this time destroying the recording (see
+`audio/knowledge.md`). The tempting fix is identical: teach the watchdog about one more component.
+
+Two occurrences of the same failure mode mean the component-by-component liveness patch is not a
+fix, it is a list that grows every time someone adds an `await` to the stop path. The 2026-09-16
+change kept a heartbeat (`lastActivityAt`, folded into the `isProcessing` setter so *every* call site
+is covered at once rather than enumerated) but treated it as a backstop, and put the real fix one
+layer down: the stop path no longer performs an unbounded wait at all. The watchdog's absolute
+ceiling went 20 s → 90 s for the same reason — with the stall gone, the ceiling is a guard against a
+genuinely wedged decode (SafeLock held, Metal failure), not a cap on legitimate work.
+
+Diagnostic signature of this class: the log shows an ordinary `rec.stop`, then a `Stop watchdog`
+line a few seconds later, then the *real* transcription completing tens of seconds after that with
+more text than the row was saved with. Any time completion text is longer than stored text, a
+watchdog beat the pipeline.

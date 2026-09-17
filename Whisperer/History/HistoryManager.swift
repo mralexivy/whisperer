@@ -123,7 +123,24 @@ class HistoryManager: ObservableObject {
             }
             entity.duration = duration
             if let url = audioFileURL {
-                entity.audioFileURL = url
+                // `TranscriptionRecord.audioURL` resolves this against `Recordings/`, so a name
+                // that does not live there yields a row advertising audio it can never open —
+                // a dead play button and a Re-transcribe that fails with CoreAudio 2003334207.
+                // That is exactly what a `Sessions/` filename did on 2026-09-16. Refuse it here
+                // rather than letting the mismatch reach the user: no audio is recoverable, a
+                // wrong pointer is not.
+                let recordingsDir = FileManager.default
+                    .urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+                    .appendingPathComponent("Whisperer/Recordings")
+                if FileManager.default.fileExists(atPath: recordingsDir.appendingPathComponent(url).path) {
+                    entity.audioFileURL = url
+                } else {
+                    // Deliberately not an assertionFailure: this runs at the end of a real
+                    // dictation, and trapping a Debug build there would cost the user the very
+                    // recording this check exists to protect. Leaving the field untouched keeps
+                    // whatever was already there and never invents a broken pointer.
+                    Logger.error("finalizeSession: refusing audioFileURL '\(url)' — no such file under Recordings/", subsystem: .app)
+                }
             }
             entity.lastModifiedAt = Date()
         }

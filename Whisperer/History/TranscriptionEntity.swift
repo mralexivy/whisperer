@@ -52,7 +52,11 @@ public class TranscriptionEntity: NSManagedObject {
         let fileManager = FileManager.default
         let appSupport = fileManager.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
         let recordingsDir = appSupport.appendingPathComponent("Whisperer/Recordings")
-        return recordingsDir.appendingPathComponent(audioFileURL)
+        let url = recordingsDir.appendingPathComponent(audioFileURL)
+        // Mirrors `TranscriptionRecord.audioURL` — a row naming a file that is not there has no
+        // audio, and saying so is better than handing out a URL that fails to open.
+        guard fileManager.fileExists(atPath: url.path) else { return nil }
+        return url
     }
 
     var corrections: [AppliedCorrection] {

@@ -45,12 +45,26 @@ struct TranscriptionRecord: Identifiable {
         return Int(Double(wordCount) / (duration / 60.0))
     }
 
+    /// The archived audio for this record, or nil when there is none on disk.
+    ///
+    /// The existence check is the honest answer to rows damaged before 2026-09-17, which name a
+    /// file that was never written (or has since been reaped). Returning a URL for a missing file
+    /// gave the user a play button that failed with CoreAudio 2003334207 and a Re-transcribe that
+    /// did nothing. This is the single choke point for both consumers in `TranscriptionDetailView`.
     var audioURL: URL? {
         guard let audioFileURL = audioFileURL else { return nil }
         let fileManager = FileManager.default
         let appSupport = fileManager.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
         let recordingsDir = appSupport.appendingPathComponent("Whisperer/Recordings")
-        return recordingsDir.appendingPathComponent(audioFileURL)
+        let url = recordingsDir.appendingPathComponent(audioFileURL)
+        guard fileManager.fileExists(atPath: url.path) else { return nil }
+        return url
+    }
+
+    /// True when the record claims audio that is no longer on disk — the UI explains this rather
+    /// than silently showing no player at all.
+    var audioIsMissing: Bool {
+        audioFileURL != nil && audioURL == nil
     }
 
     // Initialize from Core Data entity

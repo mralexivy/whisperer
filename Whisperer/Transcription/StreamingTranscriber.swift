@@ -352,11 +352,37 @@ class StreamingTranscriber {
         }
         set {
             do {
-                try processingLock.withLock(timeout: 1.0) { _isProcessing = newValue }
+                // Every transition is progress — entering a decode and leaving one both mean the
+                // pipeline moved. Folding the heartbeat in here covers all call sites at once.
+                let now = Date()
+                try processingLock.withLock(timeout: 1.0) {
+                    _isProcessing = newValue
+                    _lastActivityAt = now
+                }
             } catch {
                 Logger.error("Failed to set isProcessing: \(error.localizedDescription)", subsystem: .transcription)
             }
         }
+    }
+
+    private var _lastActivityAt = Date()
+    /// When this transcriber last made observable progress. `isProcessing` answers "is a decode
+    /// running right now", which is false in the gaps between passes and false for work that
+    /// never enters a decode at all — so the stop watchdog cannot distinguish a busy pipeline
+    /// from a wedged one using it alone. This does: anything that advances the transcript or the
+    /// pipeline bumps it. Read by `AppState.startStopWatchdog`.
+    var lastActivityAt: Date {
+        do {
+            return try processingLock.withLock(timeout: 1.0) { _lastActivityAt }
+        } catch {
+            // Lock contention is itself evidence of life; do not report staleness.
+            return Date()
+        }
+    }
+
+    func noteActivity() {
+        let now = Date()
+        try? processingLock.withLock(timeout: 1.0) { _lastActivityAt = now }
     }
 
     /// Admission control for eager passes: exactly one may be outstanding.
@@ -551,6 +577,26 @@ class StreamingTranscriber {
     // Serializes bridge.feed() calls. Each addSamples Task chains onto this, preventing
     // concurrent process(samples:) on the same actor (Swift re-entrancy → heap corruption).
     private var nemotronFeedTask: Task<Void, Never>?
+    /// Audio queued behind the serial feed chain but not yet handed to `feed()`.
+    ///
+    /// The chain is unbounded by construction: one Task link per audio buffer, each awaiting
+    /// its predecessor. When `feed()` runs slower than real time the backlog grows without
+    /// limit — on 2026-09-16 it reached ~29 s on a two-minute recording. That both staled the
+    /// HUD and, because `stopAsync` used to `await` the whole chain, froze the stop path long
+    /// enough for the stop watchdog to force idle and destroy the recording. Bounding this is
+    /// the fix; see `enqueueNemotronFeed` and `drainNemotronFeedChain`.
+    private var nemotronPendingFeedSamples: Int = 0
+    /// Set at stop on the preview-only path. Every queued link checks it and returns without
+    /// calling `feed()`, so the whole chain collapses within one in-flight `feed()` call.
+    /// Cancelling `nemotronFeedTask` alone cannot do this — it only cancels the last link,
+    /// which still awaits its (uncancelled) predecessor.
+    private var nemotronFeedAbandoned = false
+    /// One log line per shedding episode, not one per dropped buffer.
+    private var nemotronFeedSheddingLogged = false
+    /// Maximum audio allowed to sit unprocessed in the *preview* feed chain. Preview feeds are
+    /// droppable: whisper's ring buffer holds the authoritative audio for the final decode, so
+    /// shedding costs nothing in output quality and keeps the HUD close to real time.
+    private static let nemotronMaxPendingPreviewSeconds: Double = 3.0
     /// True when Nemotron drives the live HUD but whisper.cpp eager is the final decoder.
     /// Computed from the same information the init already has — no extra parameter needed.
     private var nemotronIsPreviewOnly: Bool { nemotronBridge != nil && usesEagerStream }
@@ -981,6 +1027,9 @@ class StreamingTranscriber {
         isNemotronSessionReady = false
         #if canImport(FluidAudio)
         nemotronFeedTask = nil
+        nemotronPendingFeedSamples = 0
+        nemotronFeedAbandoned = false
+        nemotronFeedSheddingLogged = false
         #endif
         routeDecision = nil
         lastDetectionSampleCount = 0
@@ -1057,6 +1106,7 @@ class StreamingTranscriber {
                     // and nothing logged it — so a live preview that froze looked identical in the
                     // log to one that was never fed. Cadence and word count are what say which.
                     Logger.debug("[Nemotron] partial #\(partialIndex): \(accumulatedText.split(whereSeparator: { $0.isWhitespace }).count) words", subsystem: .transcription)
+                    self.noteActivity()
                     self.previewAccumulatedText = accumulatedText
                     DispatchQueue.main.async {
                         self.onTranscription?(accumulatedText)
@@ -1165,6 +1215,78 @@ class StreamingTranscriber {
         Logger.step(.asrStart, .transcription, ["preview": .string(previewName)])
     }
 
+    #if canImport(FluidAudio)
+    /// Queue `samples` behind the serial Nemotron feed chain.
+    ///
+    /// Serialisation is mandatory: independent Tasks cause concurrent `process(samples:)` on the
+    /// same actor (Swift re-entrancy via the ANE encoder await) → shared-buffer heap corruption.
+    /// What is *not* mandatory is letting the queue grow without limit, which is what the two
+    /// open-coded copies of this chain used to do. `droppable` feeds are shed once the backlog
+    /// exceeds `nemotronMaxPendingPreviewSeconds`; non-droppable ones always queue.
+    private func enqueueNemotronFeed(_ samples: [Float], droppable: Bool) {
+        guard !nemotronFeedAbandoned else { return }
+
+        if droppable {
+            let pendingSeconds = Double(nemotronPendingFeedSamples) / sampleRate
+            if pendingSeconds >= Self.nemotronMaxPendingPreviewSeconds {
+                if !nemotronFeedSheddingLogged {
+                    nemotronFeedSheddingLogged = true
+                    Logger.warning(
+                        "[Nemotron] preview feed backlog \(String(format: "%.1f", pendingSeconds))s — shedding until it drains",
+                        subsystem: .transcription
+                    )
+                }
+                return
+            }
+            nemotronFeedSheddingLogged = false
+        }
+
+        nemotronPendingFeedSamples += samples.count
+        nemotronFeedTask = Task { [weak self, prev = nemotronFeedTask] in
+            _ = await prev?.value
+            guard let self else { return }
+            defer { self.nemotronPendingFeedSamples -= samples.count }
+            guard !self.nemotronFeedAbandoned else { return }
+            await self.nemotronBridge?.feed(samples: samples)
+        }
+    }
+
+    /// Depth of the feed chain, in samples. Test hook for the backlog bound.
+    var pendingNemotronFeedSamplesForTesting: Int { nemotronPendingFeedSamples }
+
+    /// Stop feeding Nemotron and collapse the queued chain. Only valid when the transcript is
+    /// discarded (`nemotronIsPreviewOnly`) — on the final-decoder path this would lose output.
+    private func abandonNemotronFeedChain() {
+        guard !nemotronFeedAbandoned else { return }
+        nemotronFeedAbandoned = true
+        let pendingSeconds = Double(nemotronPendingFeedSamples) / sampleRate
+        if pendingSeconds >= 1.0 {
+            Logger.info(
+                "[Nemotron] abandoned \(String(format: "%.1f", pendingSeconds))s of preview backlog at stop",
+                subsystem: .transcription
+            )
+        }
+    }
+
+    /// Poll until the feed chain has drained, up to `timeout`. Returns true if it drained.
+    /// Polling the pending-sample counter rather than `await`ing the tail Task is deliberate:
+    /// `Task<Void, Never>.value` is not cancellable, so an `await` on it cannot be bounded.
+    private func drainNemotronFeedChain(timeout: Double) async -> Bool {
+        let deadline = Date().addingTimeInterval(timeout)
+        var lastPending = nemotronPendingFeedSamples
+        while nemotronPendingFeedSamples > 0 && Date() < deadline {
+            try? await Task.sleep(nanoseconds: 10_000_000)
+            // Report progress, not mere waiting: only a shrinking backlog counts as activity,
+            // so a genuinely wedged feed() still looks stalled to the watchdog.
+            if nemotronPendingFeedSamples < lastPending {
+                lastPending = nemotronPendingFeedSamples
+                noteActivity()
+            }
+        }
+        return nemotronPendingFeedSamples <= 0
+    }
+    #endif
+
     /// Add audio samples from microphone
     func addSamples(_ samples: [Float]) {
         guard !samples.isEmpty, !isStopped else { return }
@@ -1178,12 +1300,7 @@ class StreamingTranscriber {
                 // Drop Nemotron feeds until beginSession + setPreviewCallback have completed;
                 // the ring buffer still receives the samples so whisper misses nothing.
                 if isNemotronSessionReady {
-                    let capturedSamples = samples
-                    nemotronFeedTask = Task { [weak self, prev = nemotronFeedTask] in
-                        _ = await prev?.value
-                        guard let self else { return }
-                        await self.nemotronBridge?.feed(samples: capturedSamples)
-                    }
+                    enqueueNemotronFeed(samples, droppable: true)
                 }
                 // Fall through to ring buffer below.
             } else {
@@ -1192,15 +1309,9 @@ class StreamingTranscriber {
                     try allSamplesLock.withLock { totalSamplesReceived += samples.count }
                 } catch {}
                 guard isNemotronSessionReady else { return }
-                let capturedSamples = samples
-                // Serialise bridge.feed() calls — spawning independent Tasks causes concurrent
-                // process(samples:) on the same actor (Swift re-entrancy via ANE encoder await)
-                // → shared-buffer heap corruption.
-                nemotronFeedTask = Task { [weak self, prev = nemotronFeedTask] in
-                    _ = await prev?.value
-                    guard let self else { return }
-                    await self.nemotronBridge?.feed(samples: capturedSamples)
-                }
+                // Not droppable: Nemotron's transcript IS the output here, so every sample must
+                // reach it. The chain is still serialised — see `enqueueNemotronFeed`.
+                enqueueNemotronFeed(samples, droppable: false)
                 return
             }
         }
@@ -3000,6 +3111,16 @@ class StreamingTranscriber {
         // cancellation alone is insufficient because an interrupted sleep used to
         // fall through and launch one final, immediately-cancelled model pass.
         stopGateLock.withLock { _isPreparingToStop = true }
+
+        #if canImport(FluidAudio)
+        // Preview-only Nemotron exists to drive the HUD, and the HUD is going away: `stopAsync`
+        // discards its transcript. Every queued feed() is therefore dead work. Abandon the chain
+        // here, before the audio drain, so nothing downstream can block on it. This is the fix
+        // for 2026-09-16, where `await nemotronFeedTask?.value` held the stop path for 29s and
+        // the stop watchdog force-idled the app mid-stop, destroying the recording.
+        if nemotronIsPreviewOnly { abandonNemotronFeedChain() }
+        #endif
+
         #if canImport(WhisperKit)
         guard let wkBridge = whisper as? WhisperKitBridge else { return }
         vadScanTask?.cancel()
@@ -3182,18 +3303,38 @@ class StreamingTranscriber {
         // Nemotron session teardown.
         #if canImport(FluidAudio)
         if let nemotron = nemotronBridge {
-            // Drain all pending feed() calls before ending the session.
-            await nemotronFeedTask?.value
-            nemotronFeedTask = nil
+            // The whole teardown reports activity. A stop phase that reports nothing is
+            // indistinguishable from a hung app to `AppState.startStopWatchdog`, and on
+            // 2026-09-16 that cost the user a recording.
+            isProcessing = true
 
             if nemotronIsPreviewOnly {
-                // Whisper is the final decoder. Close the Nemotron session for cleanup but
-                // discard its transcript — the whisper stop path below produces the final text.
+                // Whisper is the final decoder. Nemotron's transcript is discarded, so there is
+                // nothing to wait for: `prepareForStopAsync` already abandoned the chain and this
+                // only lets the one in-flight feed() unwind. Never await the backlog here.
+                abandonNemotronFeedChain()
+                if await drainNemotronFeedChain(timeout: 0.4) == false {
+                    Logger.warning("[Nemotron] in-flight feed still running after 400ms, proceeding anyway", subsystem: .transcription)
+                }
+                nemotronFeedTask = nil
                 _ = await nemotron.endSession()
+                isProcessing = false
                 // Fall through to the whisper tail decode path below.
             } else {
-                // Nemotron is the final decoder: use its full-session result.
+                // Nemotron is the final decoder: every queued sample must reach it, so this wait
+                // is legitimate. Bound it anyway, scaled to the recording — a feed chain that has
+                // not drained in that long is wedged, not busy.
                 let durationSec = Double(totalSamplesReceived) / sampleRate
+                let feedCeiling = max(10.0, durationSec * 0.5)
+                if await drainNemotronFeedChain(timeout: feedCeiling) == false {
+                    let pending = Double(nemotronPendingFeedSamples) / sampleRate
+                    Logger.warning(
+                        "[Nemotron] feed chain did not drain in \(String(format: "%.0f", feedCeiling))s; \(String(format: "%.1f", pending))s unprocessed",
+                        subsystem: .transcription
+                    )
+                }
+                nemotronFeedTask = nil
+                defer { isProcessing = false }
                 var text = await nemotron.endSession()
                 if text.isEmpty {
                     // finish() threw or returned nothing. Keep previewAccumulatedText so AppState's

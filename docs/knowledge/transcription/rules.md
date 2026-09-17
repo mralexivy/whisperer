@@ -750,3 +750,42 @@ accepted text. One bad window therefore poisons its successors — log lines 177
 unconditionally, and a decoder that lost coherence on this audio often loses it again without the
 prompt. A window that spirals twice is now **discarded**: the card keeps its live text, `rawText`
 stays nil so a later refine retries it, and nothing degenerate enters `groupContext`.
+
+## An unbounded serial `Task` chain fed from an audio callback is a latency bomb
+
+`addSamples` appended one link per buffer to `nemotronFeedTask`, each awaiting its predecessor.
+Nothing bounded it. Once `feed()` ran slower than real time the chain grew for the whole
+recording; `stopAsync` then awaited its tail. Measured 2026-09-16: a 127 s dictation queued ~29 s
+of backlog, and the user's live HUD was ~25 s stale before they even pressed stop.
+
+Three rules follow, all now enforced in `StreamingTranscriber` and covered by
+`StopPathDataLossTests`:
+
+1. **Bound anything fed from the audio callback.** Preview feeds are droppable — whisper's ring
+   holds the authoritative audio — so past `nemotronMaxPendingPreviewSeconds` (3.0 s) they are
+   shed, logged once, and resumed when the queue drains. A preview 25 s behind has negative value.
+2. **Never `await` a backlog whose result is discarded.** On the whisper.cpp path
+   `nemotronIsPreviewOnly` is true and `endSession()`'s transcript is thrown away. Waiting for it
+   buys nothing and costs the whole stall. `prepareForStopAsync` now sets `nemotronFeedAbandoned`
+   before the recorder even stops.
+3. **Every wait on the stop path carries a timeout and reports activity.** Each of them sets
+   `isProcessing` (which also bumps `lastActivityAt`) and has a ceiling: 400 ms for the preview
+   drain, `max(10, duration * 0.5)` when Nemotron is the final decoder. An unreported wait is
+   indistinguishable from a hang, and the stop watchdog treats hangs as destroyable.
+
+**Cancelling the tail link does not collapse the chain.** Each link's `await prev?.value` is on an
+*uncancelled* predecessor, and `Task<Void, Never>.value` is not cancellation-aware, so
+`nemotronFeedTask?.cancel()` only stops the last one from starting. The abandon signal has to be a
+flag every link re-checks after its `await` — `nemotronFeedAbandoned`. For the same reason the
+drain polls a pending-sample counter instead of awaiting the tail: an `await` on a non-cancellable
+Task cannot be bounded.
+
+## A caller-side timeout must not contradict the callee's own budget
+
+`maxTailSeconds = 600` exists because 90 s silently truncated a 120 s fixture — but AppState wrapped
+the entire `stopAsync` in `withTimeoutResult(seconds: 10.0)`. The transcriber was designed to allow
+ten minutes; its only caller abandoned it after ten. The visible symptom was
+`asr.done … fallback=true`: a finished tail decode replaced by the live preview. Now
+`AppState.stopCeilingSeconds(forRecordedDuration:)` scales with the recording
+(`min(600, max(10, duration * 0.5))`), and taking the fallback logs a warning — before, `fallback=true`
+was the only trace that the real result had been thrown away.

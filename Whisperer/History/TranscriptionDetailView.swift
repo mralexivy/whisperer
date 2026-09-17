@@ -40,6 +40,8 @@ struct TranscriptionDetailView: View {
                     // Audio player
                     if let audioURL = transcription.audioURL {
                         audioSection(url: audioURL)
+                    } else if transcription.audioIsMissing {
+                        missingAudioSection
                     }
 
                     // Transcription
@@ -160,6 +162,34 @@ struct TranscriptionDetailView: View {
         .shadow(
             color: Color.black.opacity(colorScheme == .dark ? 0.06 : 0.03),
             radius: 4, y: 1
+        )
+    }
+
+    /// Shown in place of the player for rows whose archive was never written or has since been
+    /// removed. Explaining it is the honest option: the alternative is a card that silently
+    /// disappears, leaving the user to guess why a recording they made has no audio.
+    private var missingAudioSection: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            sectionLabel("Audio Recording", icon: "waveform.slash", color: WhispererColors.secondaryText(colorScheme))
+                .padding(.horizontal, 20)
+                .padding(.top, 18)
+                .padding(.bottom, 10)
+
+            Text("The audio for this recording isn't available, so it can't be played back or re-transcribed. The transcription below is unaffected.")
+                .font(.system(size: 12))
+                .foregroundColor(WhispererColors.secondaryText(colorScheme))
+                .fixedSize(horizontal: false, vertical: true)
+                .padding(.horizontal, 20)
+                .padding(.bottom, 18)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+            RoundedRectangle(cornerRadius: 14)
+                .fill(WhispererColors.cardBackground(colorScheme))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 14)
+                .stroke(WhispererColors.border(colorScheme), lineWidth: 1)
         )
     }
 

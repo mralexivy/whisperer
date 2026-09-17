@@ -341,3 +341,27 @@ console log:
 
 Not established: whether the zero-fill is the built-in mic specifically, or any device bound
 across a wake. Only one capture route has been observed failing this way.
+
+## `Sessions/` vs `Recordings/` resolve asymmetrically — and the mismatch is silent (2026-09-16)
+
+Two directories under `Application Support/Whisperer/`:
+
+- `Sessions/<UUID>.opus` — the in-progress incremental Ogg the recorder writes while capturing.
+  Transient. Swept by `AudioRetentionService` after `orphanSessionAge` (7 days) if no row claims it.
+- `Recordings/<timestamp>_<sanitized-prefix>.opus` — the permanent archive, written once at stop
+  from the in-memory samples.
+
+`TranscriptionEntity.audioFileURL` stores a **bare filename**, and every consumer appends it to
+`Recordings/`. Nothing in the type system distinguishes the two namespaces, so writing a `Sessions/`
+name into that field type-checks, saves, and displays fine. Duration comes from CoreData, not the
+file, so the row renders a full `2:07` with a live play button.
+
+The failure surfaces only on click, as CoreAudio **`2003334207`** — `AVAudioFile(forReading:)`
+failing on a path that does not exist. It appears in both `SeekableAudioPlayer` and the
+Re-transcribe path in `TranscriptionDetailView`, which is why the user saw "won't play" and
+"Re-transcribe does nothing" as two separate symptoms of one missing file. Treat `2003334207` on a
+history row as *the file is not there*, not as a codec problem.
+
+Recovery is not possible after the sweep: the `Sessions/` working file is the only copy when the
+archive write was skipped, and it is deleted as an orphan precisely because no row legitimately
+points at it. Confirmed absent on disk for the 2026-09-16 12:04 recording.

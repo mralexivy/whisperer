@@ -697,6 +697,9 @@ class AppState: ObservableObject {
     // Long-record session state
     private var currentSessionID: UUID?
     private var idleSleepAssertion: IOPMAssertionID = 0
+    /// The history row `forceIdleFromWatchdog` finalized with partial text, kept so the real
+    /// transcription can repair it when it finishes. See `repairForceIdledSession`.
+    private var forceIdledSession: (id: UUID, archivedFileName: String?, duration: Double)?
 
     // Meeting mode
     @Published private(set) var activeMeetingSession: MeetingSession?
@@ -3444,7 +3447,9 @@ class AppState: ObservableObject {
                 let stopTask = Task.detached(priority: .userInitiated) { [weak transcriber] in
                     await transcriber?.stopAsync(skipCorrections: skipCorrections) ?? ""
                 }
-                finalText = await withTimeoutResult(seconds: 10.0) {
+                finalText = await withTimeoutResult(
+                    seconds: Self.stopCeilingSeconds(forRecordedDuration: transcriber.recordedDuration)
+                ) {
                     await stopTask.value
                 } ?? ""
 
@@ -3946,9 +3951,8 @@ class AppState: ObservableObject {
                 return
             }
 
-            // Get final transcription.
-            // stopAsync() worst case: 2s abort wait + 4s tail timeout in FluidAudioBridge = 6s.
-            // 10s gives comfortable margin for all backends.
+            // Get final transcription. The ceiling scales with the recording — see
+            // `stopCeilingSeconds(forRecordedDuration:)`.
             var finalText = ""
             if let transcriber {
                 // WhisperKit's final decoder already receives Prompt Words; avoid a
@@ -3959,12 +3963,20 @@ class AppState: ObservableObject {
                 let stopTask = Task.detached(priority: .userInitiated) { [weak transcriber] in
                     await transcriber?.stopAsync(skipCorrections: skipCorrections) ?? ""
                 }
-                finalText = await withTimeoutResult(seconds: 10.0) {
+                finalText = await withTimeoutResult(
+                    seconds: Self.stopCeilingSeconds(forRecordedDuration: transcriber.recordedDuration)
+                ) {
                     await stopTask.value
                 } ?? ""
 
-                // Fallback: if final pass timed out, use the live streaming result.
+                // Fallback: if final pass timed out, use the live streaming result. Say so
+                // loudly — this means a complete decode was abandoned and the user is getting
+                // the preview instead, which `fallback=true` alone did not make obvious.
                 if finalText.isEmpty {
+                    Logger.warning(
+                        "Stop transcription produced nothing within \(String(format: "%.0f", Self.stopCeilingSeconds(forRecordedDuration: transcriber.recordedDuration)))s — falling back to the live preview",
+                        subsystem: .app
+                    )
                     let streamingResult = transcriber.currentTranscription
                     if !streamingResult.isEmpty {
                         finalText = transcriber.applyDictionary(streamingResult)
@@ -3983,8 +3995,15 @@ class AppState: ObservableObject {
             discardCurrentSession()
             streamingTranscriber = nil
 
-            // Bail out if watchdog already forced idle while we were transcribing
-            guard case .stopping = state else { return }
+            // The watchdog may have force-idled while we were transcribing. This used to simply
+            // return, discarding both this result (the complete one — 1064 chars against the
+            // watchdog's 541 on 2026-09-16) and, fatally, `saveRecordingFromTranscriber`, the
+            // only code that writes a permanent audio archive. Repair the row it left instead.
+            guard case .stopping = state else {
+                await repairForceIdledSession(finalText: finalText, transcriber: transcriber)
+                return
+            }
+            forceIdledSession = nil
 
             if !finalText.isEmpty {
                 // Archive the audio alongside the text — only when there are actual words.
@@ -4153,6 +4172,18 @@ class AppState: ObservableObject {
     /// whether transcription or LLM post-processing is still actively working.
     /// Forces idle after 5s of zero activity OR after 20s absolute (even if
     /// isProcessing stays true — e.g., whisper hung after encode failure).
+    /// Wall-clock ceiling for one `StreamingTranscriber.stopAsync`.
+    ///
+    /// This was a flat 10s, which contradicted the transcriber's own design:
+    /// `StreamingTranscriber.maxTailSeconds` is 600 precisely because a 90s cap silently
+    /// truncated a 120s fixture. A two-minute dictation could therefore have its finished tail
+    /// decode discarded here and replaced by the live preview (`asr.done fallback=true`).
+    /// Scaling with the recording makes the 600s intent reachable while short dictations keep a
+    /// short, responsive ceiling.
+    static func stopCeilingSeconds(forRecordedDuration duration: Double) -> Double {
+        min(600.0, max(10.0, duration * 0.5))
+    }
+
     private func startStopWatchdog() {
         stateWatchdog?.cancel()
         let now = Date()
@@ -4168,11 +4199,13 @@ class AppState: ObservableObject {
                 return
             }
 
-            // Absolute timeout: force idle after 20s regardless of activity.
-            // Catches cases where isProcessing stays true (e.g., whisper hung
-            // after Metal encode failure, SafeLock held indefinitely).
+            // Absolute timeout: force idle regardless of activity. Catches cases where
+            // isProcessing stays true (e.g., whisper hung after Metal encode failure, SafeLock
+            // held indefinitely). It was 20s, which on a long recording was a de-facto cap on
+            // legitimate stop work rather than a backstop — `maxTailSeconds` alone allows ten
+            // minutes. This is now purely the wedged-forever case, so it is generous.
             let elapsed = Date().timeIntervalSince(self.stopWatchdogStartTime ?? Date())
-            if elapsed > 20.0 {
+            if elapsed > 90.0 {
                 Logger.error("Stop watchdog: absolute timeout after \(String(format: "%.1f", elapsed))s, forcing idle", subsystem: .app)
                 self.forceIdleFromWatchdog()
                 return
@@ -4180,8 +4213,12 @@ class AppState: ObservableObject {
 
             let transcribing = self.streamingTranscriber?.isProcessing == true
             let llmProcessing = self.llmPostProcessor?.isProcessing == true
+            // `isProcessing` is false in the gaps between passes and false for stop work that
+            // never enters a decode at all — a Nemotron feed drain, a VAD scan that finds no
+            // speech. Treat a recently advanced heartbeat as activity too.
+            let heartbeat = self.streamingTranscriber.map { Date().timeIntervalSince($0.lastActivityAt) < 5.0 } ?? false
 
-            if transcribing || llmProcessing {
+            if transcribing || llmProcessing || heartbeat {
                 self.lastStopActivityTime = Date()
                 return
             }
@@ -4205,10 +4242,28 @@ class AppState: ObservableObject {
         // If we have a live session, finalize it so the user's words aren't lost.
         let accumulatedText = streamingTranscriber?.currentTranscription ?? ""
         let duration = streamingTranscriber?.recordedDuration ?? 0
-        if !accumulatedText.isEmpty, currentSessionID != nil {
+        if !accumulatedText.isEmpty, let sessionID = currentSessionID {
+            // Archive the audio here too. This used to pass
+            // `audioRecorder?.sessionAudioURL?.lastPathComponent` — a name under `Sessions/`
+            // written into a field every consumer resolves against `Recordings/`. The row then
+            // showed a duration and a play button for a file that could never be opened
+            // (CoreAudio 2003334207), and the real archive was never written at all because the
+            // only call site sat behind `guard case .stopping = state`.
+            let archivedFileName = streamingTranscriber.flatMap {
+                archiveRecordingAudio($0, transcription: accumulatedText, recordId: UUID())
+            }
+            if archivedFileName == nil {
+                // A row with no audio is honest and the text still survives. A row naming a file
+                // that does not exist is the corruption being removed here.
+                Logger.error("Watchdog: could not archive audio — finalizing session without it", subsystem: .app)
+            }
             Logger.info("Watchdog: finalizing session with \(accumulatedText.count) chars preserved", subsystem: .app)
-            finalizeCurrentSession(text: accumulatedText, duration: duration, audioFileURL: audioRecorder?.sessionAudioURL?.lastPathComponent)
+            // Remember the row so a late-arriving real transcription can repair it instead of
+            // being dropped on the floor — see `stopRecording`'s completion path.
+            forceIdledSession = (id: sessionID, archivedFileName: archivedFileName, duration: duration)
+            finalizeCurrentSession(text: accumulatedText, duration: duration, audioFileURL: archivedFileName)
         } else {
+            forceIdledSession = nil
             discardCurrentSession()
         }
 
@@ -4406,6 +4461,41 @@ class AppState: ObservableObject {
         }
     }
 
+    /// Update the history row the stop watchdog finalized with the real transcription that
+    /// arrived afterwards, and archive the audio if the watchdog could not.
+    ///
+    /// History repair only — deliberately does not re-run text insertion or paste. The user has
+    /// already moved on by the time this runs; silently typing into whatever they focused next
+    /// would be worse than the truncation it fixes.
+    private func repairForceIdledSession(finalText: String, transcriber: StreamingTranscriber?) async {
+        guard let pending = forceIdledSession else { return }
+        forceIdledSession = nil
+        guard !finalText.isEmpty else { return }
+
+        var fileName = pending.archivedFileName
+        if fileName == nil, let transcriber {
+            fileName = archiveRecordingAudio(transcriber, transcription: finalText, recordId: UUID())
+        }
+
+        // finalizeSession writes duration unconditionally; 0 would clobber what the watchdog
+        // already recorded.
+        let duration = transcriber?.recordedDuration ?? 0
+        do {
+            try await HistoryManager.shared.finalizeSession(
+                sessionID: pending.id,
+                finalText: finalText,
+                duration: duration > 0 ? duration : pending.duration,
+                audioFileURL: fileName
+            )
+            Logger.info(
+                "Repaired force-idled session: \(finalText.count) chars, audio=\(fileName ?? "none")",
+                subsystem: .app
+            )
+        } catch {
+            Logger.error("Failed to repair force-idled session: \(error)", subsystem: .app)
+        }
+    }
+
     private func discardCurrentSession() {
         releaseIdleSleepAssertion()
         guard let id = currentSessionID else { return }
@@ -4427,9 +4517,22 @@ class AppState: ObservableObject {
         }
     }
 
-    @discardableResult
-    private func saveRecordingFromTranscriber(_ transcriber: StreamingTranscriber, transcription: String) -> UUID {
-        let recordId = UUID()
+    /// Write the in-memory recording to a permanent archive under `Recordings/` and return its
+    /// bare filename — the exact form `TranscriptionRecord.audioURL` resolves — or nil if nothing
+    /// was written.
+    ///
+    /// Split out of `saveRecordingFromTranscriber` so that archiving no longer depends on the
+    /// transcription having completed successfully. Before this, the only call site sat behind
+    /// `guard case .stopping = state`, so any watchdog force-idle lost the audio permanently
+    /// (2026-09-16). Recorded audio is the user's data: it is persisted on every stop path.
+    ///
+    /// Sources from in-memory samples, so it does not require the session Ogg to be closed and
+    /// must not be coupled to recorder teardown.
+    private func archiveRecordingAudio(
+        _ transcriber: StreamingTranscriber,
+        transcription: String,
+        recordId: UUID
+    ) -> String? {
         let dateFormatter = DateFormatter()
         dateFormatter.dateFormat = "yyyy-MM-dd_HH-mm-ss"
         let timestamp = dateFormatter.string(from: Date())
@@ -4445,18 +4548,24 @@ class AppState: ObservableObject {
         let fileName = safeText.isEmpty ? "\(timestamp).\(ext)" : "\(timestamp)_\(safeText).\(ext)"
         let destURL = recordingsDir.appendingPathComponent(fileName)
 
-        // Save recording from in-memory samples
-        if transcriber.saveRecording(to: destURL) {
-            Logger.event(.recStop, .app, ["file": .string(recordId.uuidString)])
+        guard transcriber.saveRecording(to: destURL) else { return nil }
+        Logger.event(.recStop, .app, ["file": .string(recordId.uuidString)])
 
-            // The archive is now a self-contained copy, so the session file is dead weight.
-            // Without this it survived until a launch 7+ days later reaped it as an orphan,
-            // doubling disk cost for every dictation in the meantime. Never in meeting mode —
-            // MeetingSession.moveAudioToMeetingsDirectory consumes that same file.
-            if activeMeetingSession == nil, let sessionURL = transcriber.sessionAudioURL {
-                SessionStorage.deleteSessionFile(at: sessionURL)
-            }
+        // The archive is now a self-contained copy, so the session file is dead weight.
+        // Without this it survived until a launch 7+ days later reaped it as an orphan,
+        // doubling disk cost for every dictation in the meantime. Never in meeting mode —
+        // MeetingSession.moveAudioToMeetingsDirectory consumes that same file.
+        if activeMeetingSession == nil, let sessionURL = transcriber.sessionAudioURL {
+            SessionStorage.deleteSessionFile(at: sessionURL)
+        }
+        return fileName
+    }
 
+    @discardableResult
+    private func saveRecordingFromTranscriber(_ transcriber: StreamingTranscriber, transcription: String) -> UUID {
+        let recordId = UUID()
+
+        if let fileName = archiveRecordingAudio(transcriber, transcription: transcription, recordId: recordId) {
             // Save to history database. Retained so the post-processing update can await the
             // insert instead of racing it — see the `historySaveTask` declaration.
             historySaveTask = Task {

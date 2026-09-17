@@ -143,3 +143,34 @@
     `IslandCaptureState.failed` / `IslandEvent.captureFailed` existed for months with **nothing in
     the app emitting them**. A state the reducer handles but no producer emits is dead code, not a
     feature — assert the emission path in a test.
+
+22. **Recorded audio is persisted at stop unconditionally — never behind a transcription-state guard.**
+    The only code that wrote an archive into `Recordings/` was `saveRecordingFromTranscriber`, reachable
+    only past `guard case .stopping = state else { return }`. Any watchdog trip flipped the state to
+    `.idle` first, so the guard returned and the user's audio was never written — then the `Sessions/`
+    working file was reaped by the 7-day orphan sweep. One user lost a 2-minute recording outright on
+    2026-09-16. The archive write is now `archiveRecordingAudio(_:transcription:recordId:)`, called from
+    every stop path including `forceIdleFromWatchdog`, before `streamingTranscriber` is nilled. It
+    sources from in-memory samples, so it does not depend on the Ogg being closed — keep that
+    independence. Durability of the user's audio must never be downstream of a transcription outcome.
+
+23. **A history row must never name a file outside `Recordings/`.** `forceIdleFromWatchdog` wrote
+    `audioRecorder?.sessionAudioURL?.lastPathComponent` — a `Sessions/` name — into `audioFileURL`,
+    which every consumer resolves against `Recordings/`. The row looked healthy (duration intact, play
+    button live) and failed only on click. `HistoryManager.finalizeSession` now refuses a filename with
+    no matching file under `Recordings/` and logs an error rather than storing it; a row with `nil`
+    audio is honest and recoverable, a row pointing at nothing is corruption. Deliberately *not* an
+    `assertionFailure` — trapping a Debug build there would destroy the very recording the check
+    protects.
+
+24. **A late result repairs its row; it does not vanish.** When the completion path finds the state no
+    longer `.stopping`, it no longer returns silently. `forceIdledSession` carries the force-idled row's
+    id, archived filename and duration, and `repairForceIdledSession` updates that row through the
+    idempotent `HistoryManager.finalizeSession` — archiving the audio if the watchdog could not. It
+    deliberately does *not* re-run insertion or paste: the user has moved on, this is history repair.
+
+25. **A resolver that hands out a URL it never checked is a dead control in the UI.**
+    `TranscriptionRecord.audioURL` / `TranscriptionEntity.audioURL` now `fileExists` before returning,
+    so a row whose file is gone returns `nil` and `audioIsMissing` becomes true. That one choke point
+    gates both the player and Re-transcribe, and `TranscriptionDetailView` renders an explanation in
+    place of the player instead of offering controls that fail with `2003334207`.
