@@ -140,11 +140,24 @@ final class IslandContentSizerTests: XCTestCase {
                                     IslandContentSizer.launcherItemWidth * 4)
     }
 
-    func testIdleLauncherRowIsATrueCapsule() {
+    /// The launcher is the one tier that is a softened rounded-rect rather than a capsule, so
+    /// its leading and trailing glyphs sit in flat space instead of against a curve. Every
+    /// other tier — and the resting handle — stays a true capsule; `testPeekIsATrueCapsule`
+    /// and the handle tests guard that side.
+    func testIdleLauncherRowIsASoftenedRectNotACapsule() {
         let radii = IslandContentSizer.cornerRadii(capture: .idle, presentation: .compact,
                                                    screen: standardScreen())
-        XCTAssertEqual(radii.top, IslandContentSizer.idleCompactHeight / 2, accuracy: 0.01)
+        let expected = IslandContentSizer.idleCompactHeight * IslandContentSizer.idleCornerFraction
+        XCTAssertEqual(radii.top, expected, accuracy: 0.01)
         XCTAssertEqual(radii.top, radii.bottom)
+        XCTAssertLessThan(radii.top, IslandContentSizer.idleCompactHeight / 2)
+    }
+
+    /// The recording row is unaffected by the launcher's softened corners.
+    func testRecordingRowIsStillATrueCapsule() {
+        let radii = IslandContentSizer.cornerRadii(capture: .recording, presentation: .compact,
+                                                   screen: standardScreen())
+        XCTAssertEqual(radii.top, IslandGeometryProvider.C.compactHeight / 2, accuracy: 0.01)
     }
 
     /// Idle has no secondary control row, so .expanded must not add the extra height.

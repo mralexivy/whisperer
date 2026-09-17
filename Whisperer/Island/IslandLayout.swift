@@ -199,11 +199,11 @@ struct IslandLayout: View {
     private var idleLauncherRow: some View {
         Group {
             if isVertical {
-                VStack(spacing: 2) { launcherItems }
-                    .padding(.vertical, 8)
+                VStack(spacing: 6) { launcherItems }
+                    .padding(.vertical, 14)
             } else {
-                HStack(spacing: 2) { launcherItems }
-                    .padding(.horizontal, 8)
+                HStack(spacing: 6) { launcherItems }
+                    .padding(.horizontal, 14)
                     .environment(\.layoutDirection, .leftToRight)
             }
         }
@@ -268,19 +268,22 @@ struct IslandLayout: View {
         )
     }
 
+    /// A hairline, not a rule. It only has to say "these two belong together and those two
+    /// don't" — at 0.18 on a 16 pt run it was reading as a fifth element in the row, so it is
+    /// now fainter and taller than the glyphs it separates, which is what makes it recede.
     private var launcherDivider: some View {
         Rectangle()
-            .fill(IC.primary.opacity(0.18))
-            .frame(width: 1, height: 16)
-            .padding(.horizontal, 5)
+            .fill(IC.primary.opacity(0.14))
+            .frame(width: 1, height: 22)
+            .padding(.horizontal, 8)
             .accessibilityHidden(true)
     }
 
     private var launcherDividerV: some View {
         Rectangle()
-            .fill(IC.primary.opacity(0.18))
-            .frame(width: 16, height: 1)
-            .padding(.vertical, 5)
+            .fill(IC.primary.opacity(0.14))
+            .frame(width: 22, height: 1)
+            .padding(.vertical, 8)
             .accessibilityHidden(true)
     }
 
@@ -339,7 +342,11 @@ struct IslandLayout: View {
                 IslandHoverButton(
                     icon: isPaused ? "play.fill" : "pause.fill",
                     diameter: metrics.controlSize,
-                    iconColor: IC.primary
+                    // Same colour logic as the HUD's pause control, and the same tinted-disc
+                    // rendering: blue while running, orange once paused. It used to be a bare
+                    // white glyph, which was the one control in the row with no colour identity.
+                    iconColor: isPaused ? IC.attention : IC.accent,
+                    tinted: true
                 ) {
                     coordinator.send(.pauseResumeRequested(sessionID: vm.sessionID))
                 }
@@ -393,34 +400,10 @@ struct IslandLayout: View {
     // MARK: - Inline stop button
 
     private var inlineStopButton: some View {
-        Button {
+        IslandStopButton(diameter: metrics.controlSize,
+                         isFinalizing: vm.capture == .finalizing) {
             coordinator.send(.stopRequested(sessionID: vm.sessionID))
-        } label: {
-            ZStack {
-                // Red disc + red ring, the way the HUD draws its cancel control.
-                Circle()
-                    .fill(IC.error.opacity(vm.capture == .finalizing ? 0.06 : 0.12))
-
-                Circle()
-                    .strokeBorder(
-                        IC.error.opacity(vm.capture == .finalizing ? 0.45 : 0.85),
-                        lineWidth: 1.6
-                    )
-
-                RoundedRectangle(cornerRadius: max(3, metrics.controlSize * 0.1),
-                                 style: .continuous)
-                    .fill(IC.error)
-                    .frame(width: metrics.controlSize * 0.38,
-                           height: metrics.controlSize * 0.38)
-                    .scaleEffect(vm.capture == .finalizing ? 0.84 : 1.0)
-            }
-            .frame(width: metrics.controlSize, height: metrics.controlSize)
-            .contentShape(Circle())
         }
-        .buttonStyle(IslandInlineStopStyle())
-        .disabled(vm.capture == .finalizing)
-        .help("Stop recording")
-        .accessibilityLabel("Stop recording")
     }
 
     // MARK: - Permission row
@@ -734,6 +717,56 @@ enum IC {
     /// The menu bar's Workspace button (`square.grid.2x2.fill`) is a blue→purple gradient
     /// (`WhispererApp.swift:775`). A single glyph takes the purple end.
     static let workspace = processing
+}
+
+// MARK: - Stop button
+
+/// The recording row's stop control, drawn the way `OverlayView.CloseButton` draws the HUD's.
+///
+/// It used to carry a hard 0.85 red ring at rest and react to nothing but the press, so it sat
+/// louder than every other control in the row and gave no hover feedback. Now the rest state is
+/// a quiet tinted disc and the ring, glow and lift are the hover response — the same three-part
+/// reaction the HUD uses. The glyph stays a square: this stops a recording, it does not close
+/// a window.
+private struct IslandStopButton: View {
+    let diameter: CGFloat
+    let isFinalizing: Bool
+    let action: () -> Void
+
+    @State private var isHovering = false
+
+    var body: some View {
+        Button(action: action) {
+            ZStack {
+                Circle()
+                    .fill(IC.error.opacity(isFinalizing ? 0.06 : (isHovering ? 0.25 : 0.12)))
+
+                RoundedRectangle(cornerRadius: max(3, diameter * 0.1), style: .continuous)
+                    .fill(IC.error.opacity(isFinalizing ? 0.5 : (isHovering ? 1 : 0.8)))
+                    .frame(width: diameter * 0.38, height: diameter * 0.38)
+                    .scaleEffect(isFinalizing ? 0.84 : 1.0)
+            }
+            .frame(width: diameter, height: diameter)
+            // Glow ring in `.background` so its extra 6 pt never widens the row.
+            .background(
+                Circle()
+                    .stroke(IC.error.opacity(isHovering && !isFinalizing ? 0.30 : 0), lineWidth: 1.5)
+                    .frame(width: diameter + 6, height: diameter + 6)
+                    .blur(radius: 2)
+            )
+            .scaleEffect(isHovering && !isFinalizing ? 1.08 : 1.0)
+            .shadow(color: isHovering && !isFinalizing ? IC.error.opacity(0.20) : .clear,
+                    radius: 6, y: 2)
+            .contentShape(Circle())
+        }
+        .buttonStyle(IslandInlineStopStyle())
+        .disabled(isFinalizing)
+        .onHover { hovering in
+            withAnimation(.bouncy.speed(1.2)) { isHovering = hovering }
+        }
+        .help("Stop recording")
+        .accessibilityLabel("Stop recording")
+    }
 }
 
 // MARK: - Stop button style

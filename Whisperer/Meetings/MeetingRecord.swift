@@ -31,6 +31,9 @@ struct MeetingRecord: Identifiable, Equatable {
     /// The recording captured no audio at all. Rendered as an explicit failure so a meeting
     /// that never heard anything cannot be mistaken for one whose notes just weren't opened.
     var captureFailed: Bool = false
+    /// True when the user explicitly set the title. When true, automatic LLM title
+    /// generation never overwrites it — even if the text happens to look auto-generated.
+    var titleIsUserSet: Bool = false
     var sourceBundleID: String?
     var sourceAppName: String?
 
@@ -89,6 +92,7 @@ struct MeetingRecord: Identifiable, Equatable {
         self.modelUsed = entity.modelUsed
         self.isInProgress = entity.isInProgress
         self.captureFailed = entity.captureFailed
+        self.titleIsUserSet = entity.titleIsUserSet
         self.sourceBundleID = entity.sourceBundleID
         self.sourceAppName = entity.sourceAppName
 

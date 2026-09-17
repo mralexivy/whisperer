@@ -83,11 +83,23 @@ nonisolated struct IslandContentSizer {
             ? CGSize(width: thick, height: long)
             : CGSize(width: long,  height: thick)
     }
-    /// 4 × 28 (item) + 4 × 2 (spacing) + 11 (divider + padding) + 2 × 8 (row padding).
-    static let idleCompactWidth:  CGFloat = 147
-    static let idleCompactHeight: CGFloat = 32
+    /// 4 × 30 (item) + 4 × 6 (spacing) + 17 (divider + its padding) + 2 × 14 (row padding).
+    ///
+    /// The launcher used to be a 32 pt capsule with its glyphs 2 pt apart, which packed four
+    /// buttons into a strip barely taller than one of them — the row read as a single smear
+    /// rather than as four separate targets. It is now proportioned like a floating toolbar:
+    /// the box is tall enough that each tinted disc has air around it.
+    static let idleCompactWidth:  CGFloat = 190
+    static let idleCompactHeight: CGFloat = 42
     /// Width of one action in the launcher row.
-    static let launcherItemWidth: CGFloat = 28
+    static let launcherItemWidth: CGFloat = 30
+
+    /// Corner radius of the open launcher, as a fraction of its height.
+    ///
+    /// Deliberately NOT 0.5. A true capsule pinches the leading and trailing buttons against a
+    /// curve that starts where they do; a softened rounded-rect keeps the ends straight for long
+    /// enough that the first and last glyph sit in flat space. Every other tier stays a capsule.
+    static let idleCornerFraction: CGFloat = 0.32
 
     /// Extra height added when expanded — the secondary control row.
     static let expandedExtraHeight: CGFloat = 84
@@ -222,7 +234,8 @@ nonisolated struct IslandContentSizer {
             let r: CGFloat = capture == .idle ? idlePeekHeight / 2 : GC.peekHeight / 2
             return (top: r, bottom: r)
         case .compact:
-            let r = compactHeight(for: capture) / 2
+            let h = compactHeight(for: capture)
+            let r = capture == .idle ? h * idleCornerFraction : h / 2
             return (top: r, bottom: r)
         case .expanded:
             let r = capture == .idle ? GC.compactRadius : GC.expandedRadius

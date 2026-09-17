@@ -34,6 +34,7 @@ struct MeetingLiveWindowView: View {
 
     @State private var selectedTab: MeetingLiveTab = .transcript
     @State private var editableTitle = ""
+    @FocusState private var titleFocused: Bool
     @State private var isCollapsed = false
     @State private var showOverviewReadyToast = false
     /// The Overview tab has a summary the user has not looked at yet — drives the glowing dot.
@@ -112,6 +113,8 @@ struct MeetingLiveWindowView: View {
         .onReceive(NotificationCenter.default.publisher(for: .meetingTitleDidGenerate)) { notif in
             guard let id = notif.object as? UUID, id == session.meetingID,
                   let title = notif.userInfo?["title"] as? String else { return }
+            // Don't stomp text the user is actively typing.
+            guard !titleFocused else { return }
             editableTitle = title
             detailVM.updateTitleInMemory(title)
         }
@@ -158,7 +161,11 @@ struct MeetingLiveWindowView: View {
                 .font(.system(size: 14, weight: .semibold, design: .rounded))
                 .foregroundColor(.white)
                 .lineLimit(1)
+                .focused($titleFocused)
                 .onSubmit(commitTitle)
+                .onChange(of: titleFocused) { _, focused in
+                    if !focused { commitTitle() }
+                }
 
             Spacer(minLength: 4)
 
@@ -470,8 +477,8 @@ struct MeetingLiveWindowView: View {
     private func commitTitle() {
         let trimmed = editableTitle.trimmingCharacters(in: .whitespacesAndNewlines)
         guard let id = session.meetingID, !trimmed.isEmpty, trimmed != meeting?.title else { return }
-        detailVM.updateTitleInMemory(trimmed)
-        Task { await MeetingManager.shared.updateTitle(meetingID: id, title: trimmed) }
+        detailVM.updateTitleInMemory(trimmed, userEdited: true)
+        Task { await MeetingManager.shared.updateTitle(meetingID: id, title: trimmed, userEdited: true) }
     }
 
     private func copyTranscript() {

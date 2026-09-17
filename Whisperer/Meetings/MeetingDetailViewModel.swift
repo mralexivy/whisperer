@@ -186,9 +186,10 @@ final class MeetingDetailViewModel: ObservableObject {
         displayedSegments.renameSpeaker(index: speakerIndex, to: newName)
     }
 
-    func updateTitleInMemory(_ title: String) {
+    func updateTitleInMemory(_ title: String, userEdited: Bool = false) {
         if var m = meeting {
             m.title = title
+            if userEdited { m.titleIsUserSet = true }
             meeting = m
         }
     }

@@ -437,12 +437,11 @@ struct MeetingOverviewView: View {
         isGenerating = true
         let segments = meeting.segments
         let id = meeting.id
-        let title = meeting.title
         Task {
             // generateTitle / generateOverview each own their borrow/release via
             // MeetingEngines.borrowLLM(). If the engine is unavailable either method
             // posts .meetingOverviewDidFail, which sets generationFailed = true.
-            await MeetingAIService.shared.generateTitle(segments: segments, meetingID: id, currentTitle: title)
+            await MeetingAIService.shared.generateTitle(meetingID: id)
             await MeetingAIService.shared.generateOverview(segments: segments, meetingID: id)
             await MainActor.run { isGenerating = false }
         }

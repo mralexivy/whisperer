@@ -19,6 +19,8 @@ struct MeetingListItem: Identifiable, Equatable {
     var isInProgress: Bool
     /// The recording never received a non-silent sample — see `MeetingRecord.captureFailed`.
     var captureFailed: Bool = false
+    /// True when the user explicitly set the title; LLM auto-naming must not overwrite it.
+    var titleIsUserSet: Bool = false
     var sourceBundleID: String?
     var sourceAppName: String?
 
@@ -75,6 +77,7 @@ struct MeetingListItem: Identifiable, Equatable {
         self.language = entity.language
         self.isInProgress = entity.isInProgress
         self.captureFailed = entity.captureFailed
+        self.titleIsUserSet = entity.titleIsUserSet
         self.sourceBundleID = entity.sourceBundleID
         self.sourceAppName = entity.sourceAppName
     }

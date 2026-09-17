@@ -53,14 +53,13 @@ struct IslandHoverButton: View {
             VStack(spacing: 3) {
                 ZStack {
                     if tinted {
-                        // Nothing at rest — the glyph sits directly on the Island's own surface.
-                        // The tinted disc is purely a hover response.
+                        // HUD parity. `OverlayView`'s controls carry their tint AT REST (0.15)
+                        // and lift to 0.25 under the pointer; the Island used to draw nothing
+                        // until hover, which made the launcher read as four bare glyphs on
+                        // black rather than as four buttons. Same disc, same ring, same glow —
+                        // see `OverlayView.OutputAudioButton`.
                         Circle()
-                            .fill(iconColor.opacity(isHovering ? 0.25 : 0))
-                            .frame(width: size, height: size)
-                        Circle()
-                            .strokeBorder(iconColor.opacity(isHovering ? 0.30 : 0),
-                                          lineWidth: 1.5)
+                            .fill(iconColor.opacity(isHovering ? 0.25 : 0.15))
                             .frame(width: size, height: size)
                     } else {
                         Capsule()
@@ -74,6 +73,18 @@ struct IslandHoverButton: View {
                         .contentTransition(.symbolEffect(.replace))
                 }
                 .frame(width: size, height: size)
+                // Glow ring lives in `.background` rather than in the ZStack so the extra 6 pt
+                // of diameter never widens the button's layout footprint — the same trick
+                // `OverlayView` uses, and the reason the HUD's controls don't shove their
+                // neighbours around on hover.
+                .background(
+                    Circle()
+                        .stroke(tinted ? iconColor.opacity(isHovering ? 0.30 : 0) : .clear,
+                                lineWidth: 1.5)
+                        .frame(width: size + 6, height: size + 6)
+                        .blur(radius: 2)
+                )
+                .scaleEffect(tinted && isHovering ? 1.08 : 1.0)
                 .shadow(color: tinted && isHovering ? iconColor.opacity(0.20) : .clear,
                         radius: 6, y: 2)
 

@@ -19,6 +19,7 @@ struct MeetingDetailView: View {
     /// Only leaf views that need updates observe it directly as @ObservedObject.
     @State private var search = TranscriptSearchModel()
     @State private var editableTitle: String = ""
+    @FocusState private var titleFocused: Bool
     @State private var showOverviewReadyToast = false
     /// The Overview tab has a summary the user has not looked at yet — drives the glowing dot.
     @State private var overviewIsUnread = false
@@ -156,7 +157,7 @@ struct MeetingDetailView: View {
         }
         .animation(.spring(response: 0.4, dampingFraction: 0.85), value: processingPhase)
         .background(Color(hex: "0C0C1A"))
-        .onAppear { editableTitle = meeting?.title ?? "" }
+        .onAppear { if !titleFocused { editableTitle = meeting?.title ?? "" } }
         .onChange(of: detailVM.meeting?.id) { _, _ in
             editableTitle = meeting?.title ?? ""
             selectedTab = .transcript
@@ -176,6 +177,8 @@ struct MeetingDetailView: View {
         .onReceive(NotificationCenter.default.publisher(for: .meetingTitleDidGenerate)) { notif in
             guard let id = notif.object as? UUID, id == meeting?.id,
                   let title = notif.userInfo?["title"] as? String else { return }
+            // Don't stomp text the user is actively typing.
+            guard !titleFocused else { return }
             editableTitle = title
             detailVM.updateTitleInMemory(title)
         }
@@ -292,13 +295,10 @@ struct MeetingDetailView: View {
                     .font(.system(size: 20, weight: .bold, design: .rounded))
                     .foregroundColor(.white)
                     .textFieldStyle(.plain)
-                    .onSubmit {
-                        if let id = meeting?.id {
-                            Task {
-                                await MeetingManager.shared.updateTitle(meetingID: id, title: editableTitle)
-                                detailVM.updateTitleInMemory(editableTitle)
-                            }
-                        }
+                    .focused($titleFocused)
+                    .onSubmit(commitTitle)
+                    .onChange(of: titleFocused) { _, focused in
+                        if !focused { commitTitle() }
                     }
 
                 if session.isRecording && session.meetingID == meeting?.id {
@@ -981,6 +981,13 @@ struct MeetingDetailView: View {
     }
 
     // MARK: - Actions
+
+    private func commitTitle() {
+        let trimmed = editableTitle.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let id = meeting?.id, !trimmed.isEmpty, trimmed != meeting?.title else { return }
+        detailVM.updateTitleInMemory(trimmed, userEdited: true)
+        Task { await MeetingManager.shared.updateTitle(meetingID: id, title: trimmed, userEdited: true) }
+    }
 
     /// Full speaker roster built from all segments (not just the paged window) so conflict
     /// checks are always complete even in long meetings.

@@ -53,8 +53,7 @@ final class MeetingJobQueue: ObservableObject {
     func enqueue(
         meetingID: UUID,
         segments: [MeetingSegment],
-        audioURL: URL?,
-        currentTitle: String
+        audioURL: URL?
     ) {
         guard jobs.first(where: { $0.id == meetingID && $0.status != .done && $0.status != .failed }) == nil else {
             Logger.debug("MeetingJobQueue: \(meetingID) already queued — skipping duplicate enqueue", subsystem: .transcription)
@@ -74,7 +73,7 @@ final class MeetingJobQueue: ObservableObject {
         Logger.info("MeetingJobQueue: enqueued \(meetingID) (queued=\(jobs.count))", subsystem: .transcription)
 
         if !isSuspended && runningTask == nil {
-            startNext(capturedSegments: segments, capturedAudioURL: audioURL, capturedTitle: currentTitle)
+            startNext(capturedSegments: segments, capturedAudioURL: audioURL)
         }
     }
 
@@ -201,8 +200,7 @@ final class MeetingJobQueue: ObservableObject {
 
     private func startNext(
         capturedSegments: [MeetingSegment]? = nil,
-        capturedAudioURL: URL? = nil,
-        capturedTitle: String? = nil
+        capturedAudioURL: URL? = nil
     ) {
         guard !isSuspended, runningTask == nil else { return }
         guard let idx = jobs.firstIndex(where: { $0.status == .queued || $0.status == .pausedForRecording }) else { return }
@@ -220,8 +218,7 @@ final class MeetingJobQueue: ObservableObject {
                 jobID: job.id,
                 startingAt: job.stage,
                 capturedSegments: capturedSegments,
-                capturedAudioURL: capturedAudioURL,
-                capturedTitle: capturedTitle
+                capturedAudioURL: capturedAudioURL
             )
         }
     }
@@ -230,8 +227,7 @@ final class MeetingJobQueue: ObservableObject {
         jobID meetingID: UUID,
         startingAt stage: MeetingJobStage,
         capturedSegments: [MeetingSegment]?,
-        capturedAudioURL: URL?,
-        capturedTitle: String?
+        capturedAudioURL: URL?
     ) async {
         var segments = capturedSegments ?? []
 
@@ -285,19 +281,7 @@ final class MeetingJobQueue: ObservableObject {
                 segments = existing.segments
             }
 
-            let titleForGeneration: String
-            if let t = capturedTitle {
-                titleForGeneration = t
-            } else if let record = await MeetingManager.shared.meeting(id: meetingID) {
-                titleForGeneration = record.title ?? ""
-            } else {
-                titleForGeneration = ""
-            }
-            await MeetingAIService.shared.generateTitle(
-                segments: segments,
-                meetingID: meetingID,
-                currentTitle: titleForGeneration
-            )
+            await MeetingAIService.shared.generateTitle(meetingID: meetingID)
         }
 
         if Task.isCancelled { return await finishCancelled(meetingID: meetingID) }

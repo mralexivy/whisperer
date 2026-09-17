@@ -391,8 +391,6 @@ class MeetingSession: ObservableObject {
             audioFileURL: audioFileName
         )
 
-        let currentTitle = MeetingManager.shared.meetings.first(where: { $0.id == id })?.title ?? ""
-
         // Read now, not inside the tail Task: the recorder resets this on the next
         // `startRecording()`, and the Task can still be waiting up to 12 s from here.
         let capturedAnyAudio = AppState.shared.audioRecorder?.hasEverReceivedNonSilentAudio ?? true
@@ -445,8 +443,7 @@ class MeetingSession: ObservableObject {
             MeetingJobQueue.shared.enqueue(
                 meetingID: id,
                 segments: finalSegments,
-                audioURL: capturedAudioURL,
-                currentTitle: currentTitle
+                audioURL: capturedAudioURL
             )
         }
 

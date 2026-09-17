@@ -176,7 +176,7 @@ final class PersistenceErrorPropagationTests: XCTestCase {
         let nonExistentID = UUID()
 
         // This must not throw — the @discardableResult Bool return is the invariant.
-        let result = await manager.updateTitle(meetingID: nonExistentID, title: "Ghost")
+        let result = await manager.updateTitle(meetingID: nonExistentID, title: "Ghost", userEdited: false)
         // Entity not found → returns true (no save was attempted, no failure).
         // The exact return value for a missing entity is an implementation detail;
         // the critical property is that the call returns (not throws) and doesn't crash.

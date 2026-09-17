@@ -395,7 +395,14 @@ class MeetingManager: ObservableObject {
 
     // MARK: - Metadata updates
 
-    func updateTitle(meetingID: UUID, title: String) async {
+    /// Update the meeting title.
+    ///
+    /// - Parameters:
+    ///   - userEdited: Pass `true` when the change comes from a user action (typing in the
+    ///     title field). The entity's `titleIsUserSet` flag is then set to `true` and is
+    ///     never cleared — automatic LLM naming will not overwrite the title afterward.
+    ///     Pass `false` for AI-generated titles; `titleIsUserSet` is left unchanged.
+    func updateTitle(meetingID: UUID, title: String, userEdited: Bool) async {
         let ctx = database.newBackgroundContext()
         await ctx.perform {
             let req = MeetingEntity.fetchRequest()
@@ -403,9 +410,13 @@ class MeetingManager: ObservableObject {
             req.fetchLimit = 1
             guard let entity = try? ctx.fetch(req).first else { return }
             entity.title = title
+            if userEdited { entity.titleIsUserSet = true }
             try? ctx.save()
         }
-        updateItem(id: meetingID) { $0.title = title }
+        updateItem(id: meetingID) { item in
+            item.title = title
+            if userEdited { item.titleIsUserSet = true }
+        }
     }
 
     /// Persist the language the meeting was actually spoken in.

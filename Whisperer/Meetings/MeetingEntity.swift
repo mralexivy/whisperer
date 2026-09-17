@@ -26,6 +26,9 @@ public class MeetingEntity: NSManagedObject {
     /// length. Distinct from "a quiet meeting": nothing was ever captured, so there is no
     /// transcript to be had and the row must never read as an ordinary empty meeting.
     @NSManaged public var captureFailed: Bool
+    /// True when the user has explicitly set the title. When true, automatic LLM title
+    /// generation never overwrites it.
+    @NSManaged public var titleIsUserSet: Bool
     @NSManaged public var sourceBundleID: String?
     @NSManaged public var sourceAppName: String?
 }
