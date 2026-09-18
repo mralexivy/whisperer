@@ -2407,9 +2407,21 @@ class StreamingTranscriber {
                    let detected = TranscriptionLanguage(rawValue: code),
                    detected != .auto {
                     let windowSamples = endIdx - base
-                    let meetsQuality = windowSamples >= RoutingThresholds.minVoicedDetectionSamples
-                        && result.words.count >= 5
-                        && result.averageLogProbability >= -0.65
+                    let meetsQuality =
+                        // Standard gate: 10 s window with relaxed quality floor.
+                        (windowSamples >= RoutingThresholds.minVoicedDetectionSamples
+                            && result.words.count >= 5
+                            && result.averageLogProbability >= -0.65)
+                        // Fast-path gate: 4 s window allowed when the signal is tight.
+                        // Fixes Russian-accented English being misdetected as Russian:
+                        //   early passes (4-6 s, 12-16 words, logProb ≈ -0.20) are correct but
+                        //   the 10 s gate rejects them; by 9-12 s the encoder drifts to Russian
+                        //   and the first gate-passing detection pins the wrong language.
+                        // Historical false-pin evidence (1.5-4.9 s, 2-6 words, logProb ≈ -0.79)
+                        // does NOT satisfy the 8-word / -0.35 logProb floor — no regression risk.
+                        || (windowSamples >= RoutingThresholds.agreementFastPathSamples
+                            && result.words.count >= RoutingThresholds.agreementFastPathMinWords
+                            && result.averageLogProbability >= RoutingThresholds.agreementFastPathMinLogProb)
                     let arbiterConflict: Bool = {
                         guard let candidate = self.languageArbiter.leadingCandidate else { return false }
                         return candidate.language != detected && candidate.confidence >= 0.70

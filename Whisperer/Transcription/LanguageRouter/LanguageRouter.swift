@@ -44,6 +44,16 @@ enum RoutingThresholds {
 
     static let fastPathMargin: Float = 0.30    // Top must beat runner-up by this for early lock (empirical)
 
+    // Agreement-ratchet fast-path gate: shorter window allowed when signal quality is high.
+    // Motivation: Russian-accented English is correctly detected (en, logProb ≈ -0.20, 12-16 words)
+    // in the first 4-6 s, but the 10 s gate rejects all of it. By ~9-12 s the mel-encoder drifts
+    // toward Russian. The first gate-passing detection is then Russian → false pin.
+    // Historical false-pin evidence (1.5-4.9 s windows, 2-6 words, logProb ≈ -0.79 to -0.89)
+    // does NOT satisfy these conditions — so lowering the window floor here is safe.
+    static let agreementFastPathSamples  = 64_000  // 4 s minimum
+    static let agreementFastPathMinWords = 8
+    static let agreementFastPathMinLogProb: Float = -0.35
+
     // Scoring weights — initial routing (no transcript yet)
     static let initialProbWeight: Float = 0.875
     static let initialPriorWeight: Float = 0.125
