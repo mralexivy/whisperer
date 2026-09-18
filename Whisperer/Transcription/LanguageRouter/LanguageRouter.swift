@@ -54,6 +54,13 @@ enum RoutingThresholds {
     static let agreementFastPathMinWords = 8
     static let agreementFastPathMinLogProb: Float = -0.35
 
+    // Tally-based ratchet: needs this much accumulated quality-weight before any pin.
+    // 1.5 ≈ two crisp observations (logProb -0.20, 16 words → weight ≈ 0.80 each = 1.60).
+    // Tuned so R18-style English pins at pass 5 (~8s) and R5-style Russian pins at pass 2 (~6s).
+    static let ratchetMinWeight: Double = 1.5
+    // Winning language must hold at least this share of total tally weight.
+    static let ratchetMajorityShare: Double = 0.70
+
     // Scoring weights — initial routing (no transcript yet)
     static let initialProbWeight: Float = 0.875
     static let initialPriorWeight: Float = 0.125

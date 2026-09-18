@@ -555,10 +555,12 @@ class StreamingTranscriber {
     private var scriptMismatchCount: Int = 0
     private var chunkLangMismatchCount: Int = 0  // Weak signal from whisper_full_lang_id
 
-    // Agreement ratchet: two consecutive whisper per-pass detections that agree → pin the language.
-    // Resets when the router locks (agreement reached) or when the transcriber stops.
-    private var lastWhisperDetectedLanguage: String?
-    private var consecutiveWhisperAgreementCount: Int = 0
+    // Agreement ratchet: accumulated quality-weighted evidence across whisper per-pass detections.
+    // A language pins when it holds ≥70% of ≥1.5 total weight. Gate-rejected passes do NOT reset
+    // the tally — the destructive reset was the root cause of English being misdetected as Russian
+    // (6-8 correct gate-rejected English detections discarded; first gate-passing Russian won).
+    private var whisperLangTally: [String: Double] = [:]
+    private var whisperTallyTotal: Double = 0
     private var lastSilenceStart: Date?
     private var newUtteranceAfterSilence: Bool = false
 
@@ -1042,6 +1044,8 @@ class StreamingTranscriber {
         accurateProbeLock.lock(); accurateProbeInFlight = false; accurateProbeLock.unlock()
         scriptMismatchCount = 0
         chunkLangMismatchCount = 0
+        whisperLangTally = [:]
+        whisperTallyTotal = 0
         lastSilenceStart = nil
         newUtteranceAfterSilence = false
         pendingPromotion = nil
@@ -2428,32 +2432,43 @@ class StreamingTranscriber {
                     }()
 
                     if meetsQuality && !arbiterConflict {
-                        if self.lastWhisperDetectedLanguage == code {
-                            self.consecutiveWhisperAgreementCount += 1
-                            if self.consecutiveWhisperAgreementCount >= 2 {
-                                Logger.info("[\(langRouter.tag)] Whisper agreement: pinning "
-                                    + "\(detected.displayName) after "
-                                    + "\(self.consecutiveWhisperAgreementCount) consecutive passes",
-                                    subsystem: .transcription)
-                                if let decision = langRouter.adopt(detected, confidence: 0.9, persist: false) {
-                                    self.applyRoute(for: decision, pool: pool, mdlRouter: mdlRouter)
-                                }
-                                self.pinNemotron(to: detected)
+                        // Weight by decode quality so a crisp pass outvotes a mushy one.
+                        // lw: log-prob mapped to [0.1, 1.0] (logProb ≥ -0.20 → ~1.0; ≤ -1.10 → 0.1)
+                        // ww: word count mapped to [0.3, 1.0] (10+ words → 1.0; 0 words → 0.3)
+                        let lw = Double(max(0.1, min(1.0, (Double(result.averageLogProbability) + 1.2) / 1.2)))
+                        let ww = Double(max(0.3, min(1.0, Double(result.words.count) / 10.0)))
+                        let weight = lw * ww
+
+                        self.whisperLangTally[code, default: 0] += weight
+                        self.whisperTallyTotal += weight
+
+                        let myWeight = self.whisperLangTally[code, default: 0]
+                        let myShare  = myWeight / self.whisperTallyTotal
+
+                        if self.whisperTallyTotal >= RoutingThresholds.ratchetMinWeight
+                            && myShare >= RoutingThresholds.ratchetMajorityShare {
+                            Logger.info("[\(langRouter.tag)] Whisper agreement: pinning \(detected.displayName) "
+                                + "(tally \(Int(myShare * 100))% of \(String(format: "%.1f", self.whisperTallyTotal)) weight)",
+                                subsystem: .transcription)
+                            if let decision = langRouter.adopt(detected, confidence: Float(myShare), persist: false) {
+                                self.applyRoute(for: decision, pool: pool, mdlRouter: mdlRouter)
                             }
+                            self.pinNemotron(to: detected)
                         } else {
-                            self.lastWhisperDetectedLanguage = code
-                            self.consecutiveWhisperAgreementCount = 1
-                            Logger.debug("Whisper per-pass detection: \(code) (1/2 needed to pin)",
+                            Logger.debug("Whisper tally: \(code) \(Int(myShare * 100))% "
+                                + "(\(String(format: "%.2f", myWeight))/\(String(format: "%.1f", self.whisperTallyTotal)) "
+                                + "— need \(RoutingThresholds.ratchetMinWeight) × \(Int(RoutingThresholds.ratchetMajorityShare * 100))%)",
                                 subsystem: .transcription)
                         }
                     } else {
+                        // Gate rejected — log but do NOT touch the tally.
+                        // Destructive reset was the root cause: it discarded 6–8 correct English
+                        // detections and let the first gate-passing Russian detection win unconditionally.
                         Logger.debug("Whisper per-pass detection: \(code) — gate rejected "
                             + "(window=\(windowSamples / 16000)s, words=\(result.words.count), "
                             + "logProb=\(String(format: "%.2f", result.averageLogProbability))"
                             + (arbiterConflict ? ", arbiter≠" : "") + ")",
                             subsystem: .transcription)
-                        self.lastWhisperDetectedLanguage = nil
-                        self.consecutiveWhisperAgreementCount = 0
                     }
                 }
             } else {
