@@ -189,7 +189,7 @@ class AudioDeviceManager: ObservableObject {
         let defaultID = currentDefaultInputDeviceID()
         return enumerateInputDevices().filter { device in
             guard device.id != excluding, device.id != defaultID else { return false }
-            guard !device.uid.hasPrefix("CADefaultDeviceAggregate") else { return false }
+            guard !device.uid.hasPrefix(kCADefaultDeviceAggregatePrefix) else { return false }
             let (_, verdict) = InputHealthProbe.probe(deviceID: device.id)
             return verdict == .healthy
         }

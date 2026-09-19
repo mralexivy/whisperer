@@ -1,5 +1,36 @@
 # Audio — Rules (apply by default)
 
+12. **The system default input is a stale pointer, not a live device.** A Bluetooth device
+    that has handed its link to another host (e.g. AirPods that auto-switched to an iPhone)
+    still reads `DeviceIsAlive = 1`, has input streams, and passes every `InputHealthProbe`
+    check. The only reliable signal that it is cold is `kAudioDevicePropertyDeviceIsRunningSomewhere = 0`
+    *combined with* transport type Bluetooth or BLE. Always pre-flight before binding; never
+    trust the HAL's dead-reckoning of device state.
+
+    Evidence: 2026-09-19 log, `+1.510 / +1.690 / +2.151` assertion failures, zero
+    `dev.change` notifications in the 3.5-minute window between the AirPods handoff and the
+    recording attempts.
+
+13. **Any retry ladder over audio devices must change device, not just wait.** Three attempts
+    against the same dead Bluetooth input is one attempt. The third rung of the startup ladder
+    must call `recoveryRoute(attempt:avoiding:)` to walk to a different healthy input (e.g.
+    `MacBook Pro Microphone`). The device-walking machinery already existed in `recoverAudioEngine`
+    but was unreachable before a successful start; the fix surfaces it at startup time.
+
+14. **Never bind a `CADefaultDeviceAggregate-*` device explicitly.** CoreAudio creates these
+    transient wrappers during device handoffs on macOS 26.2. Binding one explicitly re-enters
+    the same broken default instead of using the stable underlying device. `systemDefaultInputDeviceID()`
+    in `AudioEngineLifecycle` and `usableInputDevicesForRecovery()` in `AudioDeviceManager`
+    must both skip UIDs with the `CADefaultDeviceAggregate` prefix.
+
+15. **Never capture the tap format before the HAL finishes settling.** On Bluetooth (macOS 26.2+)
+    the sample rate flips inside `engine.prepare()`. Using a format captured before `prepare()`
+    for the `installTap` call triggers an AVAudioEngine assertion:
+    `"required condition is false: format.sampleRate == inputHWFormat.sampleRate"`.
+    Always: (a) settle-wait until two consecutive reads agree + match the HAL's nominal rate,
+    (b) re-read immediately before `installTap`, (c) make the converter adaptive so a
+    post-install flip doesn't produce silence or garbage.
+
 1. **A container that `afconvert -hf` lists is not necessarily writable.** Ogg is advertised
    with `data_formats: 'opus'` and fails at `ExtAudioFileClose` (`'pck?'`) — or, through
    `AVAudioFile`, leaves a 0-byte file with no error at all. Prove a container by writing a

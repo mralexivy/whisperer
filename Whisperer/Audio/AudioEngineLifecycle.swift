@@ -82,6 +82,11 @@ actor AudioEngineLifecycle {
     // Device ID bound at configure time — cached for sync diagnostics in AudioRecorder
     private(set) var lastKnownDeviceID: AudioDeviceID?
 
+    // Input format settled during buildGraph — exposed so the config-change handler in
+    // AudioRecorder can distinguish a real format flip (must trigger recovery) from harmless
+    // configuration noise (ignore during startup grace period).
+    private(set) var lastKnownInputFormat: AVAudioFormat?
+
     // MARK: - configure
 
     /// Creates a fresh AVAudioEngine, binds device, installs tap, calls prepare().
@@ -115,11 +120,14 @@ actor AudioEngineLifecycle {
         let q = newQ
 
         var boundDeviceID: AudioDeviceID? = nil
+        var settledFormat: AVAudioFormat? = nil
 
         try await withCheckedThrowingContinuation { cont in
             q.async {
                 do {
-                    boundDeviceID = try AudioEngineLifecycle.buildGraph(engine: e, route: route, onBuffer: onBuffer)
+                    let result = try AudioEngineLifecycle.buildGraph(engine: e, route: route, onBuffer: onBuffer)
+                    boundDeviceID = result.deviceID
+                    settledFormat = result.settledFormat
                     cont.resume()
                 } catch {
                     cont.resume(throwing: error)
@@ -135,6 +143,7 @@ actor AudioEngineLifecycle {
 
         engine = e
         lastKnownDeviceID = boundDeviceID
+        lastKnownInputFormat = settledFormat
 
         // Register config change observer for THIS specific engine instance
         let callback = onConfigChange
@@ -201,6 +210,7 @@ actor AudioEngineLifecycle {
         let q = lifecycleQueue
         engine = nil
         lastKnownDeviceID = nil
+        lastKnownInputFormat = nil
         generation += 1
 
         if case .starting = phase {
@@ -239,6 +249,7 @@ actor AudioEngineLifecycle {
         let deadQueue = lifecycleQueue
         engine = nil
         lastKnownDeviceID = nil
+        lastKnownInputFormat = nil
         generation += 1
         lifecycleQueue = DispatchQueue(
             label: "audio.engine.lifecycle.\(generation)",
@@ -254,18 +265,26 @@ actor AudioEngineLifecycle {
 
     // MARK: - buildGraph (static — no actor isolation required)
 
-    /// Sets up the engine graph: device binding, format validation with retry, tap installation.
+    /// Sets up the engine graph: device binding, format validation with settle wait, tap installation.
     /// Runs synchronously on lifecycleQueue. Returns the device ID bound to the engine.
+    ///
+    /// Key correctness invariant: the format passed to `installTap` is always re-read immediately
+    /// before the call (not the object captured earlier), and the tap closure rebuilds its
+    /// `AVAudioConverter` on-the-fly whenever the buffer's format differs from the one the
+    /// converter was built for. Together, these prevent the macOS 26.2 Bluetooth assertion:
+    ///   "required condition is false: format.sampleRate == inputHWFormat.sampleRate"
     @discardableResult
     private static func buildGraph(
         engine: AVAudioEngine,
         route: ResolvedInputRoute,
         onBuffer: @escaping ([Float]) -> Void
-    ) throws -> AudioDeviceID? {
+    ) throws -> (deviceID: AudioDeviceID?, settledFormat: AVAudioFormat?) {
         let inputNode = engine.inputNode  // force AUHAL AudioUnit creation
         Logger.step(.engBuild, .audio, ["unit": .bool(inputNode.audioUnit != nil)])
 
-        // Bind device
+        // Bind device — skip CADefaultDeviceAggregate-* UIDs that CoreAudio creates during
+        // handoffs; they are transient wrappers and binding one explicitly re-enters the same
+        // broken default rather than using the stable underlying device.
         var boundDeviceID: AudioDeviceID? = nil
         switch route {
         case .explicit(let uid, let deviceID):
@@ -292,24 +311,19 @@ actor AudioEngineLifecycle {
         // Prepare BEFORE querying format (allocates resources for the bound device)
         engine.prepare()
 
-        // Query format — retry if HAL still initializing after sleep/wake
-        var inputFormat = inputNode.outputFormat(forBus: 0)
-        if inputFormat.sampleRate == 0 || inputFormat.channelCount == 0 {
-            Logger.event(.engBuild, .audio, ["sr": .double(0), "ch": .int(0), "retry": .bool(true)], level: .warning)
-            for attempt in 1...5 {
-                Thread.sleep(forTimeInterval: 0.1)  // blocks lifecycleQueue — acceptable on background queue
-                inputFormat = inputNode.outputFormat(forBus: 0)
-                if inputFormat.sampleRate > 0 && inputFormat.channelCount > 0 {
-                    Logger.step(.engBuild, .audio, ["sr": .double(inputFormat.sampleRate), "ch": .int(Int(inputFormat.channelCount)), "attempt": .int(attempt)])
-                    break
-                }
-            }
-        }
-        guard inputFormat.sampleRate > 0 && inputFormat.channelCount > 0 else {
-            Logger.event(.engBuild, .audio, ["sr": .double(inputFormat.sampleRate), "ch": .int(Int(inputFormat.channelCount)), "fail": .bool(true)], level: .error)
+        // Settle the input format. On Bluetooth (especially after a handoff on macOS 26.2), the
+        // HAL negotiates the mic sample rate inside `prepare()`. The format read immediately after
+        // `prepare()` reflects the *start* of that negotiation, not the end — and AVAudioEngine
+        // asserts the tap format matches the *live* hardware format at install time. Wait until
+        // two consecutive reads agree (or the budget expires).
+        let settledFormat = settledInputFormat(inputNode: inputNode, deviceID: boundDeviceID)
+        guard let inputFormat = settledFormat,
+              inputFormat.sampleRate > 0, inputFormat.channelCount > 0 else {
+            let badSR = inputNode.outputFormat(forBus: 0).sampleRate
+            let badCh = inputNode.outputFormat(forBus: 0).channelCount
+            Logger.event(.engBuild, .audio, ["sr": .double(badSR), "ch": .int(Int(badCh)), "fail": .bool(true)], level: .error)
             throw RecordingError.invalidFormat
         }
-        Logger.step(.engBuild, .audio, ["sr": .double(inputFormat.sampleRate), "ch": .int(Int(inputFormat.channelCount))])
 
         // Create 16kHz mono Float32 output format (whisper requirement)
         guard let outputFormat = AVAudioFormat(
@@ -319,61 +333,182 @@ actor AudioEngineLifecycle {
             interleaved: false
         ) else { throw RecordingError.invalidFormat }
 
-        guard let converter = AVAudioConverter(from: inputFormat, to: outputFormat) else {
+        // Adaptive converter holder. Captured by reference (class wrapper) so the tap closure
+        // can rebuild it when the hardware format flips mid-session (post-install BT negotiate).
+        final class ConverterHolder {
+            var converter: AVAudioConverter
+            var lastInputFormat: AVAudioFormat
+            var channelSelected: Bool = false
+            init(_ c: AVAudioConverter, _ fmt: AVAudioFormat) { converter = c; lastInputFormat = fmt }
+        }
+
+        guard let initialConverter = AVAudioConverter(from: inputFormat, to: outputFormat) else {
             Logger.event(.engBuild, .audio, ["fail": .string("converter")], level: .error)
             throw RecordingError.invalidFormat
         }
-        converter.channelMap = [0]
+        initialConverter.channelMap = [0]
+        let holder = ConverterHolder(initialConverter, inputFormat)
 
-        // Install tap — converter and outputFormat captured in closure for real-time callback
+        // Install tap — re-read the live format immediately before the call to close the
+        // remaining window between `settledInputFormat` and `installTap`.
         let bufferSize: AVAudioFrameCount = 4096
         var tapErr: NSError?
-        var channelSelected = false  // RMS channel selection fires once on first buffer
-        let tapOk = ObjCTry({
-            inputNode.installTap(onBus: 0, bufferSize: bufferSize, format: inputFormat) { buffer, _ in
-                // RMS-based channel selection on first stereo/multi-channel buffer.
-                // Picks the channel with most energy; prevents silent-channel capture on
-                // right-dominant headsets and some USB mics.
-                if !channelSelected, buffer.format.channelCount > 1, let chanData = buffer.floatChannelData {
-                    let frames = vDSP_Length(buffer.frameLength)
-                    let nCh = Int(buffer.format.channelCount)
-                    var bestCh = 0; var bestEnergy: Float = 0; var ch0Energy: Float = 0
-                    for ch in 0..<nCh {
-                        var energy: Float = 0
-                        vDSP_measqv(chanData[ch], 1, &energy, frames)
-                        if ch == 0 { ch0Energy = energy }
-                        if energy > bestEnergy { bestEnergy = energy; bestCh = ch }
-                    }
-                    if bestCh != 0 && bestEnergy > ch0Energy * 1.5 {
-                        converter.channelMap = [NSNumber(value: bestCh)]
-                        Logger.step(.engBuild, .audio, ["ch": .int(bestCh), "rms": .double(Double(bestEnergy))])
-                    } else {
-                        Logger.step(.engBuild, .audio, ["ch": .int(0), "rms": .double(Double(ch0Energy))])
-                    }
-                    channelSelected = true
-                }
+        var tapOk = false
 
-                let ratio = outputFormat.sampleRate / buffer.format.sampleRate
-                let capacity = AVAudioFrameCount(Double(buffer.frameLength) * ratio) + 1
-                guard let out = AVAudioPCMBuffer(pcmFormat: outputFormat, frameCapacity: capacity) else { return }
-                var convErr: NSError?
-                converter.convert(to: out, error: &convErr, withInputFrom: { _, status in
-                    status.pointee = .haveData
-                    return buffer
-                })
-                guard convErr == nil, let data = out.floatChannelData, out.frameLength > 0 else { return }
-                let samples = Array(UnsafeBufferPointer(start: data[0], count: Int(out.frameLength)))
-                onBuffer(samples)
+        // Three attempts at 100 ms intervals in case the format is still in flux.
+        for tapAttempt in 1...3 {
+            // Re-read the live format right before each install attempt.
+            let liveFormat = inputNode.outputFormat(forBus: 0)
+            let tapFormat = (liveFormat.sampleRate > 0 && liveFormat.channelCount > 0)
+                ? liveFormat : inputFormat
+
+            tapErr = nil
+            tapOk = ObjCTry({
+                inputNode.installTap(onBus: 0, bufferSize: bufferSize, format: tapFormat) { [holder] buffer, _ in
+                    // Adaptive converter: rebuild if the buffer's format changed (e.g. a BT
+                    // re-negotiation that completes after tap install). Only fires on format change —
+                    // the hot path is the `else` branch which is a single pointer compare.
+                    if buffer.format != holder.lastInputFormat {
+                        if let newConv = AVAudioConverter(from: buffer.format, to: outputFormat) {
+                            newConv.channelMap = [0]
+                            holder.converter = newConv
+                            holder.lastInputFormat = buffer.format
+                            holder.channelSelected = false
+                            Logger.step(.engBuild, .audio, ["adaptive_conv": .bool(true),
+                                                            "sr": .double(buffer.format.sampleRate)])
+                        }
+                    }
+
+                    // RMS-based channel selection on first stereo/multi-channel buffer.
+                    // Picks the channel with most energy; prevents silent-channel capture on
+                    // right-dominant headsets and some USB mics.
+                    if !holder.channelSelected, buffer.format.channelCount > 1,
+                       let chanData = buffer.floatChannelData {
+                        let frames = vDSP_Length(buffer.frameLength)
+                        let nCh = Int(buffer.format.channelCount)
+                        var bestCh = 0; var bestEnergy: Float = 0; var ch0Energy: Float = 0
+                        for ch in 0..<nCh {
+                            var energy: Float = 0
+                            vDSP_measqv(chanData[ch], 1, &energy, frames)
+                            if ch == 0 { ch0Energy = energy }
+                            if energy > bestEnergy { bestEnergy = energy; bestCh = ch }
+                        }
+                        if bestCh != 0 && bestEnergy > ch0Energy * 1.5 {
+                            holder.converter.channelMap = [NSNumber(value: bestCh)]
+                            Logger.step(.engBuild, .audio, ["ch": .int(bestCh), "rms": .double(Double(bestEnergy))])
+                        } else {
+                            Logger.step(.engBuild, .audio, ["ch": .int(0), "rms": .double(Double(ch0Energy))])
+                        }
+                        holder.channelSelected = true
+                    }
+
+                    let ratio = outputFormat.sampleRate / buffer.format.sampleRate
+                    let capacity = AVAudioFrameCount(Double(buffer.frameLength) * ratio) + 1
+                    guard let out = AVAudioPCMBuffer(pcmFormat: outputFormat, frameCapacity: capacity) else { return }
+                    var convErr: NSError?
+                    holder.converter.convert(to: out, error: &convErr, withInputFrom: { _, status in
+                        status.pointee = .haveData
+                        return buffer
+                    })
+                    guard convErr == nil, let data = out.floatChannelData, out.frameLength > 0 else { return }
+                    let samples = Array(UnsafeBufferPointer(start: data[0], count: Int(out.frameLength)))
+                    onBuffer(samples)
+                }
+            }, &tapErr)
+
+            if tapOk { break }
+
+            Logger.event(.engTap, .audio, [
+                "err": .string(tapErr?.localizedDescription ?? "unknown"),
+                "tap_attempt": .int(tapAttempt)
+            ], level: tapAttempt < 3 ? .warning : .error)
+
+            if tapAttempt < 3 {
+                Thread.sleep(forTimeInterval: 0.1)
             }
-        }, &tapErr)
+        }
 
         guard tapOk else {
-            Logger.event(.engTap, .audio, ["err": .string(tapErr?.localizedDescription ?? "unknown")], level: .error)
             throw RecordingError.audioUnitFailed
         }
         Logger.step(.engTap, .audio, ["buf": .int(Int(bufferSize))])
 
-        return boundDeviceID
+        return (boundDeviceID, inputFormat)
+    }
+
+    // MARK: - Format settle helper
+
+    /// Polls the input node's output format until two consecutive reads agree on the same
+    /// sample rate, or until the budget expires (~1.2 s on the BT path). Subsumes the old
+    /// zero-rate retry loop — same "HAL not ready" problem with a stricter test.
+    ///
+    /// Returns `nil` only if the format never produced a non-zero sample rate, which the caller
+    /// treats as `invalidFormat`.
+    private static func settledInputFormat(
+        inputNode: AVAudioInputNode,
+        deviceID: AudioDeviceID?,
+        budgetSeconds: TimeInterval = 1.2
+    ) -> AVAudioFormat? {
+        let pollInterval: TimeInterval = 0.05  // 50 ms
+        let maxIterations = Int(budgetSeconds / pollInterval)
+
+        var prev = inputNode.outputFormat(forBus: 0)
+        var flips = 0
+        let startMs = Date()
+
+        for _ in 0..<maxIterations {
+            let cur = inputNode.outputFormat(forBus: 0)
+
+            // Also cross-check against the HAL's nominal sample rate for the bound device.
+            // On macOS 26.2 the node format can lag the HAL by one read interval.
+            let nominalRate = deviceID.flatMap { nominalSampleRate($0) }
+            let ratesAgree = nominalRate.map { abs($0 - cur.sampleRate) < 1.0 } ?? true
+
+            if cur.sampleRate > 0 && cur.channelCount > 0 &&
+               cur.sampleRate == prev.sampleRate && ratesAgree {
+                let elapsedMs = Int(Date().timeIntervalSince(startMs) * 1000)
+                Logger.step(.engBuild, .audio, [
+                    "sr": .double(cur.sampleRate),
+                    "ch": .int(Int(cur.channelCount)),
+                    "settle_ms": .int(elapsedMs),
+                    "flips": .int(flips)
+                ])
+                return cur
+            }
+
+            if cur.sampleRate != prev.sampleRate { flips += 1 }
+            prev = cur
+            Thread.sleep(forTimeInterval: pollInterval)
+        }
+
+        // Budget exhausted — return whatever we have if it has a non-zero rate.
+        let final = inputNode.outputFormat(forBus: 0)
+        if final.sampleRate > 0 && final.channelCount > 0 {
+            Logger.event(.engBuild, .audio, [
+                "sr": .double(final.sampleRate),
+                "settle_ms": .int(Int(budgetSeconds * 1000)),
+                "flips": .int(flips),
+                "warn": .string("settle_budget_exceeded")
+            ], level: .warning)
+            return final
+        }
+        return nil
+    }
+
+    /// HAL nominal sample rate for a device. Used by `settledInputFormat` to cross-check the
+    /// node's reported format against what the HAL itself believes it has negotiated.
+    private static func nominalSampleRate(_ deviceID: AudioDeviceID) -> Double? {
+        var addr = AudioObjectPropertyAddress(
+            mSelector: kAudioDevicePropertyNominalSampleRate,
+            mScope: kAudioObjectPropertyScopeGlobal,
+            mElement: kAudioObjectPropertyElementMain
+        )
+        var rate: Float64 = 0
+        var size = UInt32(MemoryLayout<Float64>.size)
+        guard AudioObjectGetPropertyData(deviceID, &addr, 0, nil, &size, &rate) == noErr else {
+            return nil
+        }
+        return rate > 0 ? Double(rate) : nil
     }
 
     // MARK: - Device helpers (static)
@@ -386,9 +521,20 @@ actor AudioEngineLifecycle {
             mScope: kAudioObjectPropertyScopeGlobal,
             mElement: kAudioObjectPropertyElementMain
         )
-        return AudioObjectGetPropertyData(
+        guard AudioObjectGetPropertyData(
             AudioObjectID(kAudioObjectSystemObject), &addr, 0, nil, &size, &deviceID
-        ) == noErr ? deviceID : nil
+        ) == noErr, deviceID != kAudioObjectUnknown else { return nil }
+
+        // Never explicitly bind a CADefaultDeviceAggregate-* wrapper. CoreAudio creates these
+        // transiently during device handoffs; pinning one re-enters the same broken default.
+        // Return nil so the engine falls back to its own implicit default binding.
+        if let uid = InputRoutePreflight.deviceUID(deviceID),
+           uid.hasPrefix(kCADefaultDeviceAggregatePrefix) {
+            Logger.step(.devSelect, .audio, ["id": .int(Int(deviceID)), "skip": .string("aggregate_wrapper")])
+            return nil
+        }
+
+        return deviceID
     }
 
     @discardableResult

@@ -365,3 +365,60 @@ history row as *the file is not there*, not as a codec problem.
 Recovery is not possible after the sweep: the `Sessions/` working file is the only copy when the
 archive write was skipped, and it is deleted as an orphan precisely because no row legitimately
 points at it. Confirmed absent on disk for the 2026-09-16 12:04 recording.
+
+## Bluetooth handoff input-format race (measured, 2026-09-19, macOS 26.2)
+
+### The scenario
+
+AirPods Pro are shared between an iPhone and a Mac. When audio plays on the iPhone, the
+AirPods auto-switch away from the Mac. The user then moves output back to the MacBook
+speakers (in Sound settings) but does **not** touch the input setting. From the HAL's
+perspective, `kAudioHardwarePropertyDefaultInputDevice` still points at the AirPods —
+there is no `defaultInputDevice` change notification because moving *output* does not
+move the default *input*.
+
+### What the log proves
+
+From `~/Downloads/whisperer-2026-09-19.log`:
+
+- **16:20:47** — AirPods land on the Mac. CoreAudio churns three transient
+  `CADefaultDeviceAggregate-*` wrappers in 106 ms and flips the default input.
+- **16:20:47 → 16:24:37** — zero `dev.change` log lines. The user moved output back to
+  the MacBook speakers; the app was not notified.
+- **16:23:16 → 16:23:50** — six consecutive recording attempts, zero usable recordings:
+  - Four die with `eng.tap err='required condition is false: format.sampleRate == inputHWFormat.sampleRate'`
+  - Two install the tap but stream nothing (`warn=no_data_500ms`) then produce `asr.fail reason=timeout_empty`
+
+### Why binding a cold AirPods fails
+
+Binding the device ID and calling `engine.prepare()` forces the Bluetooth mic link to be
+re-established from scratch. Measured: 1200–1700 ms (`ms=1437, 1316, 1747, 1214` on
+`rec.fail` lines). The link comes up at a different sample rate than the one the HAL
+reported just after `prepare()` returned — because the Bluetooth profile negotiation is
+still in flight. AVAudioEngine asserts the tap format matches the live hardware format at
+install time, causing the crash.
+
+### Why every retry failed — no device diversity
+
+The old ladder's three attempts were all `.systemDefault` → same cold AirPods, in 700 ms,
+against a link needing 1.5 s. `recoveryRoute(attempt:avoiding:)` already had the right
+logic (walk healthy inputs, skip unhealthy and aggregate wrappers) but was only reachable
+from `recoverAudioEngine`, i.e. only after a successful start.
+
+### Why it appeared only on macOS 26.2
+
+Five earlier log files with AirPods (March–May 2026): zero occurrences. On older macOS
+the Bluetooth link format settled before `prepare()` returned. The `CADefaultDeviceAggregate-*`
+wrapper mechanism is new in macOS 26.2 and changes the timing.
+
+### Fix summary (2026-09-19)
+
+- New `InputRoutePreflight` type: pre-flight transport + running state before binding.
+  `isRunningSomewhere = false` + Bluetooth transport = `.needsWarmup`. Aggregate UIDs → `.aggregateWrapper`.
+- Startup ladder attempt 3 now calls `recoveryRoute(attempt:2, avoiding:attempt1DeviceID)` to
+  pick `MacBook Pro Microphone` when the default input is cold.
+- `buildGraph`: settle-wait before format query, live format re-read immediately before install,
+  adaptive converter that rebuilds on format changes, 3-attempt tap retry.
+- `systemDefaultInputDeviceID()` in `AudioEngineLifecycle` now skips `CADefaultDeviceAggregate-*` UIDs.
+- First-buffer gate: if no audio arrives within the preflight deadline, fail and let the ladder retry.
+- `RecordingError` gets `LocalizedError` conformance — no more "error 4" on screen.

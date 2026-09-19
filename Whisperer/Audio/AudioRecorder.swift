@@ -265,6 +265,12 @@ class AudioRecorder: NSObject {
     private var defaultInputDeviceListenerBlock: AudioObjectPropertyListenerBlock?
     private var isMonitoringDefaultInputDevice = false
 
+    /// Timestamp of the most recent default-input device change, regardless of whether
+    /// recording was active at the time. A start within ~3 s of this timestamp may be racing
+    /// a Bluetooth handoff that has not finished settling — preflight uses this to select a
+    /// more conservative first-buffer deadline.
+    private(set) var lastDefaultInputChangeAt: Date?
+
     // MARK: - Init / deinit
 
     override init() {
@@ -313,7 +319,13 @@ class AudioRecorder: NSObject {
 
     // MARK: - Recording
 
-    /// Three-attempt policy: (1) requested route, (2) system default, (3) system default + 300ms settle.
+    /// Three-attempt policy:
+    ///   1. The requested route, after a preflight readiness check.
+    ///   2. Same route (or `.systemDefault`) after a settle delay sized by the preflight verdict.
+    ///   3. A *different* device — the best healthy non-default input found by `recoveryRoute`.
+    ///      This is the critical change: if attempts 1 and 2 both fail on a cold AirPods that is
+    ///      still the default input, attempt 3 picks up `MacBook Pro Microphone` instead of
+    ///      trying the dead device a third time.
     ///
     /// `recovery` governs what happens *after* a successful start, if the device later stops
     /// producing audio: `.dictation` gives up quickly, `.longForm` never gives up while the
@@ -358,24 +370,75 @@ class AudioRecorder: NSObject {
         }
         defer { timeoutTask.cancel() }
 
-        // Attempt 1: use the provided route
-        do {
-            return try await startRecordingInternal(route: route, generation: generation)
-        } catch {
-            guard isGenerationCurrent(generation) else { throw RecordingError.engineCleanedUp }
-            let elapsed = Int(Date().timeIntervalSince(attemptStart) * 1000)
-            let reason: RecordingFailureReason = route == .systemDefault ? .audioUnitInitFailed : .explicitDeviceBindFailed
-            Logger.event(.engRetry, .audio, ["attempt": .int(1), "err": .string(error.localizedDescription)], level: .warning)
-            StartupFailure(stage: "full_startup", route: route, generation: generation, reason: reason, osStatus: nil, elapsedMs: elapsed).log()
+        // Pre-flight: check whether the resolved device is ready before we burn an attempt.
+        // A cold Bluetooth device (e.g. AirPods that handed the link to an iPhone) reads alive
+        // and has input streams but `isRunningSomewhere` is false. Binding it costs 1.5 s and
+        // then fails with a sample-rate mismatch; it is better to know this up front.
+        let preflight = InputRoutePreflight.preflight(route: route)
+        let preflightFields = InputRoutePreflight.logFields(
+            RoutePreflightFacts(uid: {
+                if case .explicit(let uid, _) = route { return uid }
+                return InputRoutePreflight.systemDefaultInputDeviceID()
+                    .flatMap { InputRoutePreflight.deviceUID($0) }
+            }(),
+            transportType: {
+                let devID: AudioDeviceID?
+                switch route {
+                case .systemDefault: devID = InputRoutePreflight.systemDefaultInputDeviceID()
+                case .explicit(_, let d): devID = d
+                }
+                return devID.map { InputRoutePreflight.transportType($0) } ?? 0
+            }(),
+            isRunningSomewhere: {
+                let devID: AudioDeviceID?
+                switch route {
+                case .systemDefault: devID = InputRoutePreflight.systemDefaultInputDeviceID()
+                case .explicit(_, let d): devID = d
+                }
+                return devID.map { InputRoutePreflight.isRunningSomewhere($0) } ?? false
+            }(),
+            healthVerdict: .healthy),
+            preflight
+        )
+        Logger.step(.engBuild, .audio, preflightFields)
+
+        // Track which device attempt 1 used so attempt 3 can avoid it.
+        var attempt1DeviceID: AudioDeviceID? = {
+            switch route {
+            case .systemDefault: return InputRoutePreflight.systemDefaultInputDeviceID()
+            case .explicit(_, let d): return d
+            }
+        }()
+
+        // Attempt 1: use the provided route (skip immediately if the preflight says not to).
+        if preflight.shouldAttempt {
+            do {
+                return try await startRecordingInternal(route: route, generation: generation,
+                                                        preflightReadiness: preflight)
+            } catch {
+                guard isGenerationCurrent(generation) else { throw RecordingError.engineCleanedUp }
+                let elapsed = Int(Date().timeIntervalSince(attemptStart) * 1000)
+                let reason: RecordingFailureReason = route == .systemDefault ? .audioUnitInitFailed : .explicitDeviceBindFailed
+                Logger.event(.engRetry, .audio, ["attempt": .int(1), "err": .string(error.localizedDescription)], level: .warning)
+                StartupFailure(stage: "full_startup", route: route, generation: generation, reason: reason, osStatus: nil, elapsedMs: elapsed).log()
+            }
+        } else {
+            Logger.event(.engRetry, .audio, ["attempt": .int(1), "skip": .string("preflight_fail")], level: .warning)
         }
 
-        // Attempt 2: system default
+        // Attempt 2: same route after a settle delay sized to the readiness verdict.
+        // For a cold BT link this is ~900 ms — the link is actually coming up by now.
+        let settleDelay = preflight.suggestedSettleDelay
+        if settleDelay > 0 {
+            try? await Task.sleep(nanoseconds: UInt64(settleDelay * 1_000_000_000))
+        }
         guard isGenerationCurrent(generation) else { throw RecordingError.engineCleanedUp }
         recorderState = .starting(generation: generation)
         recordingStartTime = Date()
 
         do {
-            return try await startRecordingInternal(route: .systemDefault, generation: generation)
+            return try await startRecordingInternal(route: .systemDefault, generation: generation,
+                                                    preflightReadiness: nil)
         } catch {
             guard isGenerationCurrent(generation) else { throw RecordingError.engineCleanedUp }
             let elapsed = Int(Date().timeIntervalSince(recordingStartTime!) * 1000)
@@ -383,18 +446,21 @@ class AudioRecorder: NSObject {
             StartupFailure(stage: "full_startup", route: .systemDefault, generation: generation, reason: .restartOnDefaultFailed, osStatus: nil, elapsedMs: elapsed).log()
         }
 
-        // Attempt 3: 300ms settle + system default
-        try? await Task.sleep(nanoseconds: 300_000_000)
+        // Attempt 3: a *different* device.
+        // This is the critical difference from the old "300ms + same default" structure.
+        // If the default input is a cold AirPods, this path finds MacBook Pro Microphone instead.
+        let fallbackRoute = recoveryRoute(attempt: 2, avoiding: attempt1DeviceID)
         guard isGenerationCurrent(generation) else { throw RecordingError.engineCleanedUp }
         recorderState = .starting(generation: generation)
         recordingStartTime = Date()
 
         do {
-            return try await startRecordingInternal(route: .systemDefault, generation: generation)
+            return try await startRecordingInternal(route: fallbackRoute, generation: generation,
+                                                    preflightReadiness: nil)
         } catch {
             let elapsed = Int(Date().timeIntervalSince(recordingStartTime!) * 1000)
             Logger.event(.recFail, .audio, ["err": .string(error.localizedDescription)], level: .error)
-            StartupFailure(stage: "full_startup", route: .systemDefault, generation: generation, reason: .restartOnDefaultFailed, osStatus: nil, elapsedMs: elapsed).log()
+            StartupFailure(stage: "full_startup", route: fallbackRoute, generation: generation, reason: .restartOnDefaultFailed, osStatus: nil, elapsedMs: elapsed).log()
             recorderState = .idle
             throw error
         }
@@ -404,7 +470,8 @@ class AudioRecorder: NSObject {
         return currentGeneration == generation
     }
 
-    private func startRecordingInternal(route: ResolvedInputRoute, generation: Int) async throws -> URL {
+    private func startRecordingInternal(route: ResolvedInputRoute, generation: Int,
+                                         preflightReadiness: RouteReadiness? = nil) async throws -> URL {
         let hasPermission = await AudioRecorder.checkMicrophonePermission()
         guard hasPermission else {
             Logger.event(.recFail, .audio, ["perm": .string("denied")], level: .error)
@@ -447,11 +514,50 @@ class AudioRecorder: NSObject {
         let gracePeriod = startupGracePeriod
         let startTime = recordingStartTime ?? Date()
 
-        // Capture weak self for config change handler (runs on main thread)
+        // Capture weak self for config change handler (runs on main thread).
+        // The 1.5 s grace period suppresses rebuilds on ordinary startup noise — but a genuine
+        // input format change (e.g. Bluetooth rate flip completing mid-start) must still trigger
+        // recovery even inside the grace period. We compare against the format `buildGraph`
+        // settled on, which is exposed as `engineLifecycle.lastKnownInputFormat`.
         let configChangeHandler: () -> Void = { [weak self] in
             guard let self else { return }
             let elapsed = Date().timeIntervalSince(self.recordingStartTime ?? Date())
-            guard elapsed >= gracePeriod else {
+            if elapsed < gracePeriod {
+                // Inside grace period: only act if the hardware format actually changed.
+                Task { [weak self] in
+                    guard let self else { return }
+                    let settledFmt = await self.engineLifecycle.lastKnownInputFormat
+                    let liveFmt = await self.engineLifecycle.phase == .running(generation: 0)
+                        ? nil : settledFmt  // can't read inputNode format off-actor safely; proxy via settled
+                    // Use a lightweight HAL probe instead: compare settled sample rate to the
+                    // device's current nominal rate. If they differ by more than 1 Hz the link
+                    // re-negotiated and we must recover.
+                    let deviceID = await self.engineLifecycle.lastKnownDeviceID
+                    var addr = AudioObjectPropertyAddress(
+                        mSelector: kAudioDevicePropertyNominalSampleRate,
+                        mScope: kAudioObjectPropertyScopeGlobal,
+                        mElement: kAudioObjectPropertyElementMain
+                    )
+                    var nowRate: Float64 = 0
+                    var sz = UInt32(MemoryLayout<Float64>.size)
+                    let readOk: Bool
+                    if let devID = deviceID {
+                        readOk = AudioObjectGetPropertyData(devID, &addr, 0, nil, &sz, &nowRate) == noErr
+                    } else {
+                        readOk = false
+                    }
+                    let settledRate = settledFmt?.sampleRate ?? 0
+                    let formatChanged = readOk && abs(Double(nowRate) - settledRate) > 1.0
+
+                    guard formatChanged else { return }
+                    Logger.event(.engConfigChange, .audio, [
+                        "action": .string("recovery"),
+                        "reason": .string("format_changed_in_grace_period"),
+                        "settled_sr": .double(settledRate),
+                        "now_sr": .double(Double(nowRate))
+                    ], level: .warning)
+                    await self.recoverAudioEngine()
+                }
                 return
             }
             guard self.isRecording, case .recording = self.recorderState else { return }
@@ -522,6 +628,37 @@ class AudioRecorder: NSObject {
         startAudioFlowWatchdog()
 
         Logger.event(.recStart, .audio, ["route": .string("\(route)"), "gen": .int(gen)])
+
+        // First-buffer gate: if the engine starts successfully but produces no audio within the
+        // deadline, treat this attempt as failed and let the startup ladder try another device.
+        // Without this, a tap that is installed but silent (e.g. a cold Bluetooth device whose
+        // link didn't fully come up) returns a URL the user speaks into for nothing.
+        let firstBufferDeadline: TimeInterval = (preflightReadiness ?? .ready).firstBufferDeadline
+        if firstBufferDeadline > 0 {
+            let deadline = firstBufferDeadline
+            // Poll at 50 ms intervals up to the deadline.
+            let pollIntervalNs: UInt64 = 50_000_000
+            let iterations = Int(deadline / 0.05)
+            for _ in 0..<iterations {
+                if lastAudioCallbackTime != nil { break }
+                guard isGenerationCurrent(generation) else { throw RecordingError.engineCleanedUp }
+                try? await Task.sleep(nanoseconds: pollIntervalNs)
+            }
+            if lastAudioCallbackTime == nil {
+                // Still no audio — probe and log the reason, then fail so the next attempt runs.
+                let (facts, verdict) = InputHealthProbe.probe(deviceID: cachedEngineDeviceID)
+                var fields = InputHealthProbe.logFields(facts, verdict)
+                fields["warn"] = .string("no_first_buffer")
+                fields["deadline_ms"] = .int(Int(deadline * 1000))
+                Logger.event(.engBuild, .audio, fields, level: .warning)
+                // Stop the engine cleanly before throwing — avoids a tap leak into the next start.
+                await engineLifecycle.stopEngine()
+                isRecording = false
+                discardSessionAudio()
+                throw RecordingError.audioUnitFailed
+            }
+        }
+
         return audioURL
     }
 
@@ -1051,6 +1188,10 @@ class AudioRecorder: NSObject {
             "engine": .string(engineDeviceID.map(String.init) ?? "nil")
         ])
 
+        // Always stamp the change time — even when idle. The startup path checks this to decide
+        // whether the route may still be settling from a Bluetooth handoff.
+        lastDefaultInputChangeAt = Date()
+
         guard isRecording, case .recording = recorderState else {
             return
         }
@@ -1151,13 +1292,30 @@ class AudioRecorder: NSObject {
 
 // MARK: - Error types
 
-enum RecordingError: Error {
+enum RecordingError: Error, LocalizedError {
     case alreadyRecording
     case invalidFormat
     case fileCreationFailed
     case microphonePermissionDenied
     case audioUnitFailed
     case engineCleanedUp
+
+    var errorDescription: String? {
+        switch self {
+        case .alreadyRecording:
+            return "A recording is already in progress."
+        case .invalidFormat:
+            return "Couldn't read the microphone format. Try unplugging and reconnecting your audio device."
+        case .fileCreationFailed:
+            return "Couldn't create the recording file. Check available disk space."
+        case .microphonePermissionDenied:
+            return "Whisperer doesn't have microphone access. Open System Settings ▸ Privacy & Security ▸ Microphone and enable Whisperer."
+        case .audioUnitFailed:
+            return "Couldn't start the microphone. If you're using a Bluetooth device, it may still be connecting — try again in a moment."
+        case .engineCleanedUp:
+            return "The audio session was cancelled before it could start."
+        }
+    }
 }
 
 // MARK: - HealthReportable
