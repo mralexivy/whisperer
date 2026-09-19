@@ -163,7 +163,7 @@ struct IslandContentView: View {
     private var handleFill: some View {
         ZStack {
             Rectangle().fill(.ultraThinMaterial).environment(\.colorScheme, .dark)
-            Rectangle().fill((isHovering ? IC.elevated : IC.raised).opacity(isHovering ? 0.70 : 0.45))
+            Rectangle().fill((isHovering ? IC.elevated : IC.raised).opacity(isHovering ? 0.90 : 0.68))
         }
     }
 
@@ -199,7 +199,7 @@ struct IslandContentView: View {
         // The solid handle gets a tight contact shadow so it reads as sitting ON the desktop
         // rather than floating over it — a wide soft shadow around a small dark shape is
         // indistinguishable from the shape itself being blurry.
-        if isIdleHandle { return isHovering ? 0.22 : 0.10 }
+        if isIdleHandle { return isHovering ? 0.32 : 0.18 }
         if isIdleBar    { return isHovering ? 0.16 : 0.06 }
         return (isHovering || isExpanded) ? 0.55 : 0.34
     }
@@ -211,7 +211,7 @@ struct IslandContentView: View {
     /// fully opaque since the user is actively engaging with it.
     private var idleSurfaceOpacity: Double {
         guard isIdleBar else { return 1 }
-        if isIdleHandle { return isHovering ? 0.92 : 0.55 }
+        if isIdleHandle { return isHovering ? 1.0 : 0.78 }
         return 1
     }
 
