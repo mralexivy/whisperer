@@ -69,10 +69,10 @@ nonisolated struct IslandContentSizer {
     /// math mid-approach, which is what made the target feel like it needed precise aim.
     /// Hover feedback is now purely tonal (see `IslandLayout.handleBody`), so the only
     /// geometry change in the whole interaction is the single spring into the launcher.
-    static let idleHandleRestLength:  CGFloat = 76
+    static let idleHandleRestLength:  CGFloat = 54
     /// Thickness of the handle capsule. Constant across rest and hover so only the
     /// length animates — a capsule that changes thickness reads as a wobble.
-    static let idleHandleThickness:   CGFloat = 15
+    static let idleHandleThickness:   CGFloat = 9
 
     /// Size of the resting/dwelling handle for a given placement and hover state.
     static func idleHandleSize(isHovering: Bool, placement: IslandPlacement) -> CGSize {

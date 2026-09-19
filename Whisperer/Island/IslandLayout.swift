@@ -43,7 +43,10 @@ struct IslandLayout: View {
     // Swap transition between capture states
     private var swapTransition: AnyTransition {
         .asymmetric(
-            insertion: .opacity.combined(with: .scale(scale: 0.965, anchor: .center))
+            insertion: AnyTransition
+                .modifier(active: BlurFadeModifier(radius: 3), identity: BlurFadeModifier(radius: 0))
+                .combined(with: .opacity)
+                .combined(with: .scale(scale: 0.965, anchor: .center))
                 .animation(.spring(response: 0.34, dampingFraction: 0.88)),
             removal:   .opacity.combined(with: .scale(scale: 0.92, anchor: .center))
                 .animation(.smooth(duration: 0.22))
@@ -216,7 +219,8 @@ struct IslandLayout: View {
             icon: "mic.fill",
             title: "Dictate",
             tint: IC.dictate,
-            help: "Start dictation — click the stop button in the recording bar to finish"
+            help: "Start dictation — click the stop button in the recording bar to finish",
+            delay: 0.00
         ) {
             coordinator.send(.dictateRequested)
         }
@@ -225,7 +229,8 @@ struct IslandLayout: View {
             icon: "person.2.fill",
             title: "Meeting",
             tint: IC.meeting,
-            help: "Start a meeting recording"
+            help: "Start a meeting recording",
+            delay: 0.04
         ) {
             coordinator.send(.startMeetingRequested)
         }
@@ -236,7 +241,8 @@ struct IslandLayout: View {
             icon: "list.clipboard.fill",
             title: "Paste Bin",
             tint: IC.pasteBin,
-            help: "Open recent transcriptions"
+            help: "Open recent transcriptions",
+            delay: 0.09
         ) {
             coordinator.send(.openPasteBinRequested)
         }
@@ -245,7 +251,8 @@ struct IslandLayout: View {
             icon: "square.grid.2x2.fill",
             title: "Workspace",
             tint: IC.workspace,
-            help: "Open the Whisperer workspace"
+            help: "Open the Whisperer workspace",
+            delay: 0.14
         ) {
             coordinator.send(.openWorkspaceRequested)
         }
@@ -256,6 +263,7 @@ struct IslandLayout: View {
         title: String,
         tint: Color,
         help: String,
+        delay: Double = 0,
         action: @escaping () -> Void
     ) -> some View {
         LauncherItem(
@@ -266,6 +274,7 @@ struct IslandLayout: View {
             help: help,
             action: action
         )
+        .transition(.materialize(delay: delay))
     }
 
     /// A hairline, not a rule. It only has to say "these two belong together and those two
@@ -565,6 +574,32 @@ private struct LauncherItem: View {
             }
         }
         .accessibilityLabel(help)
+    }
+}
+
+// MARK: - Materialize transition (blur + scale + offset, with optional stagger delay)
+
+private struct BlurFadeModifier: ViewModifier {
+    let radius: CGFloat
+    func body(content: Content) -> some View {
+        content.blur(radius: radius)
+    }
+}
+
+extension AnyTransition {
+    /// Spring-in with blur, scale, and upward offset; instant fade out.
+    /// The delay parameter staggers icons so they appear in a left-to-right wave.
+    fileprivate static func materialize(delay: Double = 0) -> AnyTransition {
+        .asymmetric(
+            insertion: AnyTransition
+                .modifier(active: BlurFadeModifier(radius: 3), identity: BlurFadeModifier(radius: 0))
+                .combined(with: .opacity)
+                .combined(with: .scale(scale: 0.80, anchor: .center))
+                .combined(with: .offset(y: 5))
+                .animation(.spring(response: 0.38, dampingFraction: 0.78).delay(delay)),
+            removal: .opacity
+                .animation(.easeOut(duration: 0.12))
+        )
     }
 }
 

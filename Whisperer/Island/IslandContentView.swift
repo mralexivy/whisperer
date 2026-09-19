@@ -74,7 +74,7 @@ struct IslandContentView: View {
 
     private var openSpring: Animation {
         reduceMotion ? .linear(duration: 0.12)
-            : .spring(response: 0.42, dampingFraction: 1.0, blendDuration: 0)
+            : .spring(response: 0.42, dampingFraction: 0.72, blendDuration: 0)
     }
     private var closeSpring: Animation {
         reduceMotion ? .linear(duration: 0.12)
@@ -157,12 +157,14 @@ struct IslandContentView: View {
         }
     }
 
-    /// Resting handle — one solid, unbroken capsule, the way the iPhone Dynamic Island sits
-    /// when nothing is happening. No blur, no tint stack, no inner content: at 15 pt tall,
-    /// translucency only lets the desktop through and turns a crisp shape into a smudge.
-    /// Hover lifts it from near-black to a soft graphite so the reaction is purely tonal.
+    /// Resting handle — semi-transparent glass capsule so it stays quiet against whatever
+    /// the user is working on. Hover adds a navy tint to signal interactivity without
+    /// disrupting the desktop.
     private var handleFill: some View {
-        Rectangle().fill(isHovering ? IC.elevated : Self.islandSurface)
+        ZStack {
+            Rectangle().fill(.ultraThinMaterial).environment(\.colorScheme, .dark)
+            Rectangle().fill((isHovering ? IC.elevated : IC.raised).opacity(isHovering ? 0.70 : 0.45))
+        }
     }
 
     /// Open launcher — the same solid black as the handle, just a wider capsule.
@@ -197,17 +199,21 @@ struct IslandContentView: View {
         // The solid handle gets a tight contact shadow so it reads as sitting ON the desktop
         // rather than floating over it — a wide soft shadow around a small dark shape is
         // indistinguishable from the shape itself being blurry.
-        if isIdleHandle { return isHovering ? 0.30 : 0.18 }
+        if isIdleHandle { return isHovering ? 0.22 : 0.10 }
         if isIdleBar    { return isHovering ? 0.16 : 0.06 }
         return (isHovering || isExpanded) ? 0.55 : 0.34
     }
 
     /// Overall opacity of the idle surface.
     ///
-    /// The handle is fully opaque. It used to rest at 0.55, which let the desktop bleed
-    /// through and made the shape read as a grey smear; a solid capsule that is *small* and
-    /// *dark* is quieter than a translucent one, and stays crisp on any wallpaper.
-    private var idleSurfaceOpacity: Double { 1 }
+    /// The handle rests at partial opacity so it blends with the desktop; hover brings it
+    /// to full strength so the interaction feels responsive. The open launcher row is always
+    /// fully opaque since the user is actively engaging with it.
+    private var idleSurfaceOpacity: Double {
+        guard isIdleBar else { return 1 }
+        if isIdleHandle { return isHovering ? 0.92 : 0.55 }
+        return 1
+    }
 
     /// Padding between the island body and the anchored edge of the panel envelope.
     private var anchorSlack: CGFloat {
