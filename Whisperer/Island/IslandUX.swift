@@ -45,11 +45,11 @@ nonisolated enum IslandUX {
     // edge, and a pointer merely crossing it leaves again long before the dwell completes.
 
     /// Extra padding around the idle/peek pill for the hover zone (horizontal case)
-    static let hoverHPadGenerous: CGFloat       = 56
+    static let hoverHPadGenerous: CGFloat       = 0
     /// Extra upward padding for the idle/peek pill
-    static let hoverVPadUpGenerous: CGFloat     = 30
+    static let hoverVPadUpGenerous: CGFloat     = 0
     /// Extra downward padding for the idle/peek pill
-    static let hoverVPadDownGenerous: CGFloat   = 20
+    static let hoverVPadDownGenerous: CGFloat   = 0
     /// Standard narrow padding for a visible non-idle row
     static let hoverPadNarrow: CGFloat          = 12
     static let hoverVPadNarrowUp: CGFloat       = 3
