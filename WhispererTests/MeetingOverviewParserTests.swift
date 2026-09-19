@@ -318,4 +318,128 @@ final class MeetingOverviewParserTests: XCTestCase {
         XCTAssertNotNil(result)
         XCTAssertTrue(result!.overview.contains("really, really, really"))
     }
+
+    // MARK: - Numbered format (rung 0/1 ladder)
+
+    func testNumberedTitleOnlyParsesToNil() {
+        // The exact map-reduce failure mode: model writes only the title line and EOS.
+        // parse() must return nil so the ladder can escalate.
+        let raw = "1| פגישת טכנולוגיה על רגרסיות ופילטרים"
+        XCTAssertNil(MeetingOverviewParser.parse(raw),
+                     "A lone 1| title line without a 3| overview must parse to nil")
+    }
+
+    func testNumberedTitleAndOverviewParsesSuccessfully() {
+        // Simulates the rung-1 assistant-prefill output: model receives "1| <title>\n3| "
+        // and continues from there. The result must parse and include both title and overview.
+        let raw = """
+        1| Technology Meeting on Regressions and Filters
+        3| The team discussed a series of regressions introduced in the last sprint \
+        and evaluated the new filter pipeline. Two root causes were identified.
+        """
+        let result = MeetingOverviewParser.parse(raw)
+        XCTAssertNotNil(result, "1| + 3| artifact should parse successfully")
+        XCTAssertFalse(result?.overview.isEmpty ?? true, "overview must not be empty")
+        let title = MeetingOverviewParser.title(in: raw)
+        XCTAssertEqual(title, "Technology Meeting on Regressions and Filters",
+                       "title(in:) must extract the 1| line")
+    }
+
+    // MARK: - sanitizedOverview
+
+    func testSanitizedOverviewTrimsLoops() {
+        // A long repetition spiral must be cut — same logic as truncatingLoop.
+        let loopy = String(repeating: "word word word word word ", count: 80)
+        let result = MeetingOverviewParser.sanitizedOverview(loopy)
+        // Either nil (fully degenerate) or significantly shorter than the input.
+        if let r = result {
+            XCTAssertLessThan(r.count, loopy.count / 2, "loop must be truncated")
+        }
+    }
+
+    func testSanitizedOverviewRejectsTimestampDense() {
+        // Prose full of [Ns] markers is raw transcript echo, not a summary.
+        let dense = "[0s] First thing. [5s] Second thing. [10s] Third thing. [15s] Fourth. " +
+                    "[20s] Fifth. [25s] Sixth. [30s] Seventh. [35s] Eighth. [40s] Ninth. " +
+                    "[45s] Tenth. [50s] Eleventh. [55s] Twelfth. [60s] Thirteenth item discussed."
+        let result = MeetingOverviewParser.sanitizedOverview(dense)
+        XCTAssertNil(result, "timestamp-dense prose must be rejected by sanitizedOverview")
+    }
+
+    func testSanitizedOverviewPassesHealthyProse() {
+        let prose = "The team reviewed the Q3 budget and agreed that extra funds go to infrastructure."
+        let result = MeetingOverviewParser.sanitizedOverview(prose)
+        XCTAssertNotNil(result)
+        XCTAssertTrue(result?.contains("infrastructure") ?? false)
+    }
+}
+
+// MARK: - Prompt variant tests
+
+final class MeetingAIServicePromptTests: XCTestCase {
+
+    func testCondensedKeyPointsPromptDoesNotMentionSpeechTranscript() {
+        let req = MeetingAIService.overviewRequest(
+            transcriptWords: 300,
+            language: .auto,
+            inputKind: .condensedKeyPoints
+        )
+        XCTAssertFalse(
+            req.systemPrompt.contains("speech-to-text transcript"),
+            "condensedKeyPoints prompt must not tell the model the input is a raw transcript"
+        )
+    }
+
+    func testTranscriptPromptMentionsSpeechTranscript() {
+        let req = MeetingAIService.overviewRequest(
+            transcriptWords: 300,
+            language: .auto,
+            inputKind: .transcript
+        )
+        XCTAssertTrue(
+            req.systemPrompt.contains("speech-to-text transcript"),
+            "transcript prompt should describe the input as a speech-to-text transcript"
+        )
+    }
+
+    func testBothVariantsContainNumberedFormat() {
+        for kind in [MeetingAIService.OverviewInputKind.transcript, .condensedKeyPoints] {
+            let req = MeetingAIService.overviewRequest(transcriptWords: 300, language: .auto, inputKind: kind)
+            XCTAssertTrue(
+                req.systemPrompt.contains("3|"),
+                "Both prompt variants must contain the 3| overview format block — kind=\(kind)"
+            )
+        }
+    }
+
+    func testTierRecomputationFromCondensedWords() {
+        // 900-word original triggers the `default` tier. After map step condenses to ~340
+        // words, the request must drop to a smaller band — NOT remain at `default` (≥700).
+        let originalReq = MeetingAIService.overviewRequest(transcriptWords: 900, language: .auto)
+        let condensedReq = MeetingAIService.overviewRequest(
+            transcriptWords: 340,
+            language: .auto,
+            inputKind: .condensedKeyPoints
+        )
+        XCTAssertGreaterThan(
+            originalReq.outputTokensHint,
+            condensedReq.outputTokensHint,
+            "condensed input should request fewer output tokens than the full-tier original"
+        )
+        XCTAssertFalse(condensedReq.isNote,
+                       "condensed request for a real meeting must never become isNote")
+    }
+
+    func testTinyMapOutputNeverBecomesNote() {
+        // If map step produces only 20 words (severely underperformed), clamping to 60
+        // should prevent isNote from being selected.
+        let clampedWords = max(60, 20)
+        let req = MeetingAIService.overviewRequest(
+            transcriptWords: clampedWords,
+            language: .auto,
+            inputKind: .condensedKeyPoints
+        )
+        XCTAssertFalse(req.isNote,
+                       "clamped condensed request must not select the isNote tier")
+    }
 }

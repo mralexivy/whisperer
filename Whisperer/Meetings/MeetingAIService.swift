@@ -306,14 +306,16 @@ actor MeetingAIService {
         }
         Logger.info("Meeting overview: starting for \(meetingID), transcript=\(transcript.count) chars", subsystem: .transcription)
 
-        guard let llm = await acquireLLM() else {
-            Logger.warning("Meeting AI: skipped — meeting intelligence engine not ready", subsystem: .transcription)
-            await MainActor.run { NotificationCenter.default.post(name: .meetingOverviewDidFail, object: meetingID) }
-            return
+        // LLM is optional: if unavailable rungs 0-2 are skipped and rung 3 (extractive
+        // floor) still produces a summary. The contract holds — only an empty transcript
+        // may post `.meetingOverviewDidFail`.
+        let llm = await acquireLLM()
+        defer { if llm != nil { releaseLLM() } }
+        if llm == nil {
+            Logger.warning("Meeting AI: LLM not ready — skipping to rung 3 extractive floor", subsystem: .transcription)
+        } else {
+            Logger.info("Meeting overview: LLM ready, starting generation", subsystem: .transcription)
         }
-        defer { releaseLLM() }
-
-        Logger.info("Meeting overview: LLM ready, starting generation", subsystem: .transcription)
 
         // Map-reduce for Full-tier transcripts (≥700 words): split → parallel summarise →
         // reduce into the final artifact. Shorter transcripts and the note tier keep the
@@ -324,7 +326,24 @@ actor MeetingAIService {
             return UserDefaults.standard.bool(forKey: key)
         }()
 
-        let effectiveTranscript: String
+        // ── Rungs 0-2 (LLM-dependent) ────────────────────────────────────────────────
+        var summary: MeetingAISummary? = nil
+
+        if let llm {
+        // ── Map step ────────────────────────────────────────────────────────────────────
+        // RC1 fix: after the map step the transcript is replaced with condensed key
+        // points (~300-600 words), so the request must be recomputed from that text or
+        // the reduce step gets a full-tier prompt (250-400 words) for half-length input —
+        // exactly the "asked for twice as many words as it was handed" degeneration the
+        // code comment at the top of `overviewRequest` already documents.
+        //
+        // Sanity guard: `processBatch` returns the original chunks on failure, so a
+        // silent map-step timeout or model refusal makes `joined` the same length as
+        // `transcript` or longer. Require the map output to be at most 80% of the input
+        // to actually commit it; otherwise fall through to single-pass.
+        var effectiveTranscript: String = transcript
+        var reduceRequest: OverviewRequest = request
+        var usedMapReduce = false
         if !isNote && wordCount >= 700 && mapReduceEnabled {
             let chunks = WholeTextSplitter.summarySplit(transcript)
             if chunks.count >= 3 {
@@ -357,16 +376,43 @@ actor MeetingAIService {
                                                       timeoutSeconds: mapTimeout)
                 let joined = partials.joined(separator: "\n\n")
                 Logger.info("Meeting overview: map done — \(joined.count) chars condensed from \(transcript.count) (chunks=\(chunks.count) timeout=\(Int(mapTimeout))s)", subsystem: .transcription)
-                effectiveTranscript = joined
+
+                // Sanity: map must have actually reduced the text.
+                // If joined >= 80% of original, the batch timed out or echoed the input.
+                let mapSucceeded = !joined.isEmpty && joined.count < transcript.count * 4 / 5
+                if mapSucceeded {
+                    effectiveTranscript = joined
+                    // RC1 fix: recompute the request from the condensed word count.
+                    // Clamp to at least the `..<250` band — never demote to isNote for
+                    // a real meeting; a tiny map output means the map step underperformed.
+                    let condensedWords = joined.split(whereSeparator: { $0 == " " || $0.isNewline }).count
+                    let clampedWords = max(60, condensedWords)
+                    // RC2 fix: pass .condensedKeyPoints so the prompt does not call the
+                    // input "a speech-to-text transcript" with filler words and [Ns] on
+                    // every line — the condensed output matches neither description.
+                    reduceRequest = Self.overviewRequest(transcriptWords: clampedWords,
+                                                        language: language,
+                                                        inputKind: .condensedKeyPoints)
+                    usedMapReduce = true
+                    Logger.info("Meeting overview: reduce tier=\(clampedWords)w hint=\(reduceRequest.outputTokensHint)", subsystem: .transcription)
+                } else {
+                    Logger.warning("Meeting overview: map output invalid (\(joined.count) chars vs \(transcript.count) input) — falling back to single-pass", subsystem: .transcription)
+                }
             } else {
                 Logger.info("Meeting overview: map skipped — only \(chunks.count) chunk(s), using single-pass", subsystem: .transcription)
-                effectiveTranscript = transcript
             }
-        } else {
-            effectiveTranscript = transcript
         }
 
-        let userMessage = "TRANSCRIPT:\n\(effectiveTranscript)"
+        // User message: label the input clearly so the model knows what it is reading.
+        // RC2 fix: for the condensed path the label says "KEY POINTS", not "TRANSCRIPT",
+        // matching the inputKind.condensedKeyPoints prompt which no longer claims the
+        // input is a raw speech transcript with filler words and [Ns] on every line.
+        let userMessage: String
+        if usedMapReduce {
+            userMessage = "KEY POINTS EXTRACTED FROM MEETING:\n\(effectiveTranscript)"
+        } else {
+            userMessage = "TRANSCRIPT:\n\(effectiveTranscript)"
+        }
 
         // Whether the row may still be renamed. `generateTitle` records this at the start of
         // the sequence; when it was never called (a caller that only wants a summary), fall
@@ -394,61 +440,118 @@ actor MeetingAIService {
             }
         }
 
-        // Lifted into a closure so the retry below runs the identical call with two things
-        // changed: no partial-text handler (the title is already applied by then, and a second
-        // stream would re-fire the watcher) and a nudge appended to the user message.
-        let generate: @Sendable (String, (@Sendable (String) -> Void)?) async throws -> String = { message, partial in
+        // Shared generate closure — called once for rung 0 and once for rung 1.
+        // The `assistantPrefill` param is only set on the rung-1 call.
+        let generate: @Sendable (String, (@Sendable (String) -> Void)?, String?) async throws -> String = { message, partial, prefill in
             try await llm.process(
                 text:                   effectiveTranscript,
-                systemPrompt:           request.systemPrompt,
+                systemPrompt:           reduceRequest.systemPrompt,
                 userMessage:            message,
                 temperature:            0.15,
                 repetitionPenalty:      1.15,
                 maxTokensCap:           2048,
-                outputTokensHint:       request.outputTokensHint,
-                timeoutSecondsOverride: request.timeoutSeconds,
+                outputTokensHint:       reduceRequest.outputTokensHint,
+                timeoutSecondsOverride: reduceRequest.timeoutSeconds,
                 throwOnFallback:        true,
                 // Runs once per meeting; warming this prefix only evicts the dictation cache.
                 reuseWarmCache:         false,
-                onPartialText:          partial
+                onPartialText:          partial,
+                assistantPrefill:       prefill
             )
         }
 
-        let raw: String
-        do {
-            raw = try await generate(userMessage, onPartialText)
-        } catch {
-            Logger.error("Meeting overview: LLM generation failed: \(error.localizedDescription)", subsystem: .transcription)
-            await MainActor.run { NotificationCenter.default.post(name: .meetingOverviewDidFail, object: meetingID) }
-            return
-        }
+        // ── Rung 0: normal generation with correct tier and prompt ───────────────────
+        var raw: String? = try? await generate(userMessage, onPartialText, nil)
+        Logger.info("Meeting overview: rung0 produced \(raw?.count ?? 0) chars", subsystem: .transcription)
 
-        Logger.info("Meeting overview: LLM produced \(raw.count) chars", subsystem: .transcription)
-
-        // Non-MTP models never drive `onPartialText`, and a streamed title can also be missed
-        // if the first line arrived malformed. Naming the recording does not depend on the
-        // rest of the artifact parsing, so it happens before the parse gate.
-        if mayTitle, !watcher.hasFired, let candidate = MeetingOverviewParser.title(in: raw) {
+        // Non-MTP models never drive `onPartialText`, and a streamed title can also be
+        // missed if the first line arrived malformed. Naming the recording does not depend
+        // on the rest of the artifact parsing, so it happens before the parse gate.
+        if let raw, mayTitle, !watcher.hasFired, let candidate = MeetingOverviewParser.title(in: raw) {
             await applyTitle(candidate, meetingID: meetingID)
         }
 
-        // A generation that stops after the title used to be discarded whole, and the user saw
-        // "Overview generation failed" on a meeting the model had already started summarising
-        // correctly. On 2026-09-15 the reduce step emitted `1| …` and hit EOS at 15 tokens. One
-        // retry with the requirement restated is cheap next to a blank Overview tab.
-        var summary = MeetingOverviewParser.parse(raw)
+        summary = raw.flatMap { MeetingOverviewParser.parse($0) }
+
+        // ── Rung 1: assistant-prefill forced continuation ────────────────────────────
+        // If rung 0 produced a title but no overview (the exact map-reduce failure mode),
+        // re-run with the assistant turn pre-seeded as "1| <title>\n3| ". The model
+        // resumes mid-artifact; it is structurally impossible to EOS before the overview.
         if summary == nil {
-            Logger.warning("Meeting overview: parse failed (no OVERVIEW line) — retrying once. Raw: \(raw.prefix(300))", subsystem: .transcription)
-            let nudge = userMessage + "\n\nThe previous answer was incomplete. Output every numbered "
-                + "line, and in particular a line beginning with `3|` holding the overview text."
-            if let retried = try? await generate(nudge, nil) {
-                Logger.info("Meeting overview: retry produced \(retried.count) chars", subsystem: .transcription)
-                summary = MeetingOverviewParser.parse(retried)
+            let existingTitle = raw.flatMap { MeetingOverviewParser.title(in: $0) }
+            if let title = existingTitle {
+                Logger.info("Meeting overview: rung1 — prefill continuation (title: \(title.prefix(40)))", subsystem: .transcription)
+                let prefill = "1| \(title)\n3| "
+                if let r1 = try? await generate(userMessage, nil, prefill) {
+                    Logger.info("Meeting overview: rung1 produced \(r1.count) chars", subsystem: .transcription)
+                    summary = MeetingOverviewParser.parse(r1)
+                }
+            } else {
+                Logger.info("Meeting overview: rung1 skipped — no title in rung0 output", subsystem: .transcription)
             }
         }
 
+        // ── Rung 2: narrow overview-only call ────────────────────────────────────────
+        // Ask for one thing only — the overview prose, no numbered format. A single-field
+        // call is far more reliable than a seven-section artifact on a 4B model.
+        if summary == nil {
+            Logger.info("Meeting overview: rung2 — narrow prose call", subsystem: .transcription)
+            let narrowPrompt = Self.narrowOverviewPrompt(language: language)
+            if let prose = try? await llm.process(
+                text:                   effectiveTranscript,
+                systemPrompt:           narrowPrompt,
+                userMessage:            userMessage,
+                temperature:            0.15,
+                repetitionPenalty:      1.15,
+                maxTokensCap:           2048,
+                outputTokensHint:       reduceRequest.outputTokensHint,
+                timeoutSecondsOverride: reduceRequest.timeoutSeconds,
+                throwOnFallback:        true,
+                reuseWarmCache:         false
+            ), let cleaned = MeetingOverviewParser.sanitizedOverview(prose) {
+                Logger.info("Meeting overview: rung2 produced \(cleaned.count) chars", subsystem: .transcription)
+                summary = MeetingAISummary(
+                    overview: cleaned, keyTopics: [], decisions: [],
+                    openQuestions: [], nextMeeting: nil, actionItems: [], generatedAt: nil)
+            }
+        }
+
+        } // end if let llm
+
+        // ── Rung 3: deterministic extractive floor ───────────────────────────────────
+        // No LLM — cannot fail. Reuses EvidenceSelector, which is deterministic and
+        // already strips decoder spirals. A summary is always persisted when there is
+        // any transcript text at all; only an empty transcript may post .didFail.
+        if summary == nil {
+            Logger.info("Meeting overview: rung3 — extractive floor", subsystem: .transcription)
+            let evidence = EvidenceSelector.select(segments)
+            let lines = evidence.isEmpty
+                ? EvidenceSelector.select(segments, tokenBudget: 6_000).lines
+                : evidence.lines
+            if !lines.isEmpty {
+                // Strip [Ns] markers and join into prose.
+                let prose = lines
+                    .map { $0.text.trimmingCharacters(in: .whitespacesAndNewlines) }
+                    .filter { !$0.isEmpty }
+                    .joined(separator: " ")
+                let cleaned = MeetingOverviewParser.sanitizedOverview(prose) ?? prose
+                let topics = lines.filter { $0.isTopicBoundary }.map {
+                    TopicItem(text: $0.text.trimmingCharacters(in: .whitespacesAndNewlines),
+                              timestampSeconds: $0.timestamp)
+                }
+                summary = MeetingAISummary(
+                    overview: cleaned, keyTopics: topics, decisions: [],
+                    openQuestions: [], nextMeeting: nil, actionItems: [], generatedAt: nil)
+                Logger.info("Meeting overview: rung3 produced \(cleaned.count) chars", subsystem: .transcription)
+            }
+        }
+
+        // ── Persist — the contract ───────────────────────────────────────────────────
+        // `.meetingOverviewDidFail` is only posted for an empty transcript (caught at the
+        // very top). Every other code path must persist something. Rung 3 always provides
+        // content when the transcript is non-empty, so a nil here is a logic error.
         guard var summary else {
-            Logger.warning("Meeting overview: parse failed after retry — giving up", subsystem: .transcription)
+            Logger.error("Meeting overview: all rungs exhausted with no summary — this is a bug", subsystem: .transcription)
             await MainActor.run { NotificationCenter.default.post(name: .meetingOverviewDidFail, object: meetingID) }
             return
         }
@@ -461,6 +564,20 @@ actor MeetingAIService {
         await MainActor.run {
             NotificationCenter.default.post(name: .meetingOverviewDidGenerate, object: meetingID)
         }
+    }
+
+    // MARK: - Rung 2 prompt
+
+    /// Single-field prose prompt for rung 2. No numbered format, no seven sections —
+    /// just the overview text. A 4B model writes this far more reliably than a full artifact.
+    private static func narrowOverviewPrompt(language: TranscriptionLanguage) -> String {
+        """
+    You summarize meetings. Write ONE paragraph describing what was discussed and decided. \
+    \(languageRule(for: language, subject: "meeting")). \
+    Do not use bullets, headings, or any other formatting. \
+    Start directly with the content. Never start with "This meeting", "In this recording", or "The speaker". \
+    No preamble, no labels. Just the prose.
+    """
     }
 
     // MARK: - Prompts
@@ -489,6 +606,14 @@ actor MeetingAIService {
     /// same 3-tokens-per-word worst case that is ~21 tokens, plus the label and newline. The
     /// allowance is added here rather than at the call site so there is still exactly one
     /// budget path: a second one would drift the moment either number was tuned.
+    /// Describes what the LLM is being handed — a raw timestamped transcript or
+    /// key points already condensed by the map step. The two paragraphs at the top of
+    /// `overviewPrompt` differ between them; everything below is shared.
+    enum OverviewInputKind {
+        case transcript
+        case condensedKeyPoints
+    }
+
     struct OverviewRequest {
         let systemPrompt: String
         let outputTokensHint: Int
@@ -502,7 +627,11 @@ actor MeetingAIService {
     /// tokens each, plus the label, the newline and slack for a compound word.
     static let titleTokenAllowance = 40
 
-    static func overviewRequest(transcriptWords: Int, language: TranscriptionLanguage = .auto) -> OverviewRequest {
+    static func overviewRequest(
+        transcriptWords: Int,
+        language: TranscriptionLanguage = .auto,
+        inputKind: OverviewInputKind = .transcript
+    ) -> OverviewRequest {
         switch transcriptWords {
         case ..<60:
             return OverviewRequest(
@@ -514,7 +643,8 @@ actor MeetingAIService {
                     language: language,
                     lengthLine: "90 to 180 words, one paragraph",
                     lengthRule: "Write 90 to 180 words, as a single paragraph. Write the label OVERVIEW: once, at the start.",
-                    topicCount: "2 to 4"),
+                    topicCount: "2 to 4",
+                    inputKind: inputKind),
                 outputTokensHint: 700 + titleTokenAllowance, timeoutSeconds: 95, isNote: false)
         case ..<700:
             return OverviewRequest(
@@ -522,7 +652,8 @@ actor MeetingAIService {
                     language: language,
                     lengthLine: "140 to 240 words, one or two paragraphs",
                     lengthRule: "Write 140 to 240 words, as one or two paragraphs separated by a blank line. Write the label OVERVIEW: once, at the start; every paragraph after it belongs to it.",
-                    topicCount: "3 to 5"),
+                    topicCount: "3 to 5",
+                    inputKind: inputKind),
                 outputTokensHint: 1100 + titleTokenAllowance, timeoutSeconds: 145, isNote: false)
         default:
             return OverviewRequest(
@@ -530,7 +661,8 @@ actor MeetingAIService {
                     language: language,
                     lengthLine: "250 to 400 words, two to four paragraphs",
                     lengthRule: "Write 250 to 400 words, as 2 to 4 paragraphs separated by a blank line. Write the label OVERVIEW: once, at the start; every paragraph after it belongs to it. A reader who never heard the recording must finish the OVERVIEW knowing what was actually said.",
-                    topicCount: "3 to 6"),
+                    topicCount: "3 to 6",
+                    inputKind: inputKind),
                 outputTokensHint: 1600 + titleTokenAllowance, timeoutSeconds: 185, isNote: false)
         }
     }
@@ -576,11 +708,30 @@ actor MeetingAIService {
     /// The worked example is contrastive rather than long: a full-length one would bias
     /// every tier toward its own length and triple the prefill. It is also entirely
     /// invented — a real recording must never be embedded in a shipped prompt.
-    static func overviewPrompt(language: TranscriptionLanguage = .auto, lengthLine: String, lengthRule: String, topicCount: String) -> String {
-        """
+    static func overviewPrompt(
+        language: TranscriptionLanguage = .auto,
+        lengthLine: String,
+        lengthRule: String,
+        topicCount: String,
+        inputKind: OverviewInputKind = .transcript
+    ) -> String {
+        // The first two paragraphs describe what the model is reading.
+        // Everything from OUTPUT FORMAT onward is shared between both variants.
+        let inputDescription: String
+        switch inputKind {
+        case .transcript:
+            inputDescription = """
     You summarize voice recordings. The input is a speech-to-text transcript, so it contains filler words, false starts and misheard words. Summarize what was meant, not the exact wording.
 
     Every transcript line begins with a marker like [95s] giving the number of seconds from the start. Copy those numbers into the seconds fields below. Never put a marker inside line 3. A line containing only … means quiet or repetitive material was left out there; say nothing about it.
+    """
+        case .condensedKeyPoints:
+            inputDescription = """
+    You summarize meetings. The input is a list of key points already extracted from the recording. Write the numbered summary below using those key points as your source. Where a key point preserves a [Ns] timestamp marker, copy that number into the seconds field of the matching line; if no marker is present, leave the seconds field empty or omit it.
+    """
+        }
+        return """
+    \(inputDescription)
 
     OUTPUT FORMAT — seven section numbers, each on its own line, in this order: line 1 (3 to 7 words), \(topicCount) lines starting with 2 (a short phrase each), line 3 (\(lengthLine)), then lines 4, 5, 6 and 7 (one line each). Emit a line only when the recording actually contains that thing; lines 1 and 3 are always required.
 
@@ -626,9 +777,9 @@ actor MeetingAIService {
     - Line 7 requires a real person named in the transcript. If nobody was named, write no line 7.
 
     ALWAYS:
-    - \(languageRule(for: language, subject: "transcript"))
+    - \(languageRule(for: language, subject: inputKind == .condensedKeyPoints ? "meeting" : "transcript"))
     - The section numbers (1, 2, 3, 4, 5, 6, 7) and the | character are not text — never translate them, never replace them with words or labels in any language.
-    - Never state anything the transcript does not say.
+    - Never state anything the \(inputKind == .condensedKeyPoints ? "key points" : "transcript") say.
     - Never use the characters < or >.
     """
     }

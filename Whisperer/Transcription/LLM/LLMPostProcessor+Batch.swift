@@ -135,6 +135,11 @@ extension LLMPostProcessor {
         timeoutSeconds: Double? = nil
     ) async -> [String] {
         guard !requests.isEmpty else { return [] }
+        #if DEBUG
+        if let hook = LLMPostProcessor._testBatchHook {
+            return await hook(instructions, requests)
+        }
+        #endif
         let timeoutSeconds = timeoutSeconds ?? Self.defaultTimeout(rowCount: requests.count)
 
         guard let container = modelContainer, !instructions.isEmpty else {

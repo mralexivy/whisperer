@@ -248,6 +248,22 @@ enum MeetingOverviewParser {
         )
     }
 
+    // MARK: - Sanitized prose entry point
+
+    /// Cleans arbitrary prose for use as an overview field — the same pipeline that
+    /// `parse` applies to the OVERVIEW section. Used by rung 2 (narrow overview-only
+    /// call) and rung 3 (extractive floor) so the cleanup bugs are fixed exactly once.
+    ///
+    /// Returns nil when the text is empty, looping, or timestamp-dense after cleanup.
+    static func sanitizedOverview(_ text: String) -> String? {
+        var s = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !s.isEmpty else { return nil }
+        s = truncatingLoop(s)
+        s = stripTimestampDensity(s)
+        guard !s.isEmpty else { return nil }
+        return s
+    }
+
     // MARK: - Degeneration
 
     // A structural gate passes a degenerate output: `TOPIC: the speaker is the is the is the…`

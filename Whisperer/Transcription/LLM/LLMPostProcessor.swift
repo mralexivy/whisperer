@@ -128,6 +128,19 @@ class LLMPostProcessor: ObservableObject {
     private(set) var modelContainer: ModelContainer?
     private(set) var loadedVariant: LLMModelVariant?
 
+    #if DEBUG
+    /// Intercepts `process(...)` in DEBUG builds so tests can return scripted responses.
+    /// Set to a closure before calling `generateOverview`; clear it in `tearDown`.
+    /// Receives: (systemPrompt, userMessage, assistantPrefill?) → output text (or throws).
+    nonisolated(unsafe) static var _testProcessHook:
+        ((_ systemPrompt: String, _ userMessage: String, _ prefill: String?) async throws -> String)?
+
+    /// Intercepts `processBatch(...)` in DEBUG builds.
+    /// Receives: (instructions, requests) → array of result strings.
+    nonisolated(unsafe) static var _testBatchHook:
+        ((_ instructions: String, _ requests: [LLMBatchRequest]) async -> [String])?
+    #endif
+
     // Per-instructions KV caches — keyed on the full instructions string (system prompt + language).
     // Capped at 4 entries with FIFO eviction. Each value is a warmed prompt prefix ready to copy().
     private var cachedPrompts: [String: [any KVCache]] = [:]
@@ -504,8 +517,19 @@ class LLMPostProcessor: ObservableObject {
         // while the summary underneath it is still decoding. Only the MTP path drives it — the
         // ChatSession path is a fallback for non-MTP models, where the caller still gets the
         // complete text from the return value.
-        onPartialText: (@Sendable (String) -> Void)? = nil
+        onPartialText: (@Sendable (String) -> Void)? = nil,
+        // Text pre-seeded as the start of the assistant reply, appended raw to the prompt
+        // tokens after applyChatTemplate. Lets rung 1 force the model past the title by
+        // pre-seeding "1| <title>\n3| " — it is structurally impossible to EOS before
+        // the overview body. MTP path only; ignored (with a warning) on the ChatSession
+        // fallback. The result always prepends the prefill so callers get a complete artifact.
+        assistantPrefill: String? = nil
     ) async throws -> String {
+        #if DEBUG
+        if let hook = LLMPostProcessor._testProcessHook {
+            return try await hook(systemPrompt, userMessage, assistantPrefill)
+        }
+        #endif
         guard let container = modelContainer else {
             Logger.warning("LLM not loaded, returning original text", subsystem: .transcription)
             if throwOnFallback { throw LLMFallbackError.noModelLoaded }
@@ -567,9 +591,13 @@ class LLMPostProcessor: ObservableObject {
                 timeoutSecondsOverride: timeoutSecondsOverride,
                 throwOnFallback: throwOnFallback,
                 reuseWarmCache: reuseWarmCache,
-                onPartialText: onPartialText
+                onPartialText: onPartialText,
+                assistantPrefill: assistantPrefill
             )
             return mtpResult
+        }
+        if let prefill = assistantPrefill, !prefill.isEmpty {
+            Logger.warning("LLM: assistantPrefill ignored — ChatSession path does not support prefill", subsystem: .transcription)
         }
 
         let genParams = GenerateParameters(
@@ -729,6 +757,17 @@ class LLMPostProcessor: ObservableObject {
         /// `String.count` is a walk of the whole output.
         private(set) var charCount = 0
         private var degeneration = DegenerationGuard<Int>()
+        /// Length of the assistant-prefill text that was pre-seeded before generation.
+        /// The degeneration guard must not see these characters; the result includes them.
+        private(set) var prefillCount = 0
+
+        /// Pre-seeds `text` with the assistant-prefill string before any tokens are generated.
+        /// Must be called before the first `append` or `onPartialText`.
+        func seedPrefill(_ prefill: String) {
+            text = prefill
+            charCount = prefill.count
+            prefillCount = prefill.count
+        }
 
         /// Appends `piece` (the decoding of `tokenId`). Returns false when the output has fallen
         /// into a loop, having first rewound `text` to before the loop began — a summary that
@@ -761,7 +800,8 @@ class LLMPostProcessor: ObservableObject {
         timeoutSecondsOverride: Double? = nil,
         throwOnFallback: Bool = false,
         reuseWarmCache: Bool = true,
-        onPartialText: (@Sendable (String) -> Void)? = nil
+        onPartialText: (@Sendable (String) -> Void)? = nil,
+        assistantPrefill: String? = nil
     ) async throws -> String {
         let timeoutSeconds: Double = timeoutSecondsOverride ?? (charCount < 30 ? 5 : charCount < 200 ? 10 : 15)
         let mtpOutput = MTPOutput()
@@ -789,17 +829,25 @@ class LLMPostProcessor: ObservableObject {
         }
 
         // Build full prompt tokens + run MTP inside the container's serial lock.
-        try await container.perform { [mtpOutput, warmBox, onPartialText] context in
+        try await container.perform { [mtpOutput, warmBox, onPartialText, assistantPrefill] context in
             let tokenizer = context.tokenizer
             let messages: [Message] = [
                 ["role": "system", "content": instructions],
                 ["role": "user",   "content": userMessage]
             ]
-            let promptTokens = try tokenizer.applyChatTemplate(
+            var promptTokens = try tokenizer.applyChatTemplate(
                 messages: messages,
                 tools: nil,
                 additionalContext: ["enable_thinking": false]
             )
+            // Append raw prefill tokens AFTER the chat template so the model resumes
+            // mid-assistant-turn. The prefill text is seeded into mtpOutput before
+            // generation so every onPartialText call hands out `prefill + generated`.
+            if let prefill = assistantPrefill, !prefill.isEmpty {
+                let prefillTokens = tokenizer.encode(text: prefill)
+                promptTokens += prefillTokens
+                mtpOutput.seedPrefill(prefill)
+            }
 
             // Build complete EOS set: generation_config eos_token_id array + tokenizer EOS
             // + extra string tokens (e.g. <|im_end|> for Qwen). Mirrors buildStopTokenIDs in Evaluate.swift.

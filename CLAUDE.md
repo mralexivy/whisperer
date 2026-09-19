@@ -30,7 +30,7 @@ xcodebuild test -project Whisperer.xcodeproj -scheme whisperer -configuration De
 ```
 
 Known slow suites (opt in deliberately): `PolishBenchmarkTests`, `PolishCorpusDumpTests`,
-`PolishChunkCorpusDumpTests`, `MeetingPolishTests`.
+`PolishChunkCorpusDumpTests`, `MeetingPolishTests`, `MeetingOverviewMapReduceTests`.
 
 Deallocating a `@MainActor` pure-Swift class inside a synchronous test method aborts the test host
 (`pointer being freed was not allocated` in `swift_task_deinitOnExecutorImpl`). The project sets
