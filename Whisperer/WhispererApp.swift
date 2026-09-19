@@ -424,6 +424,22 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         Logger.debug("Waiting for Metal operations to complete...", subsystem: .app)
         try? await Task.sleep(nanoseconds: 200_000_000)  // 200ms
 
+        // 4.5. Free Nemotron (FluidAudio) — awaited so cleanup completes before exit().
+        // Previously fire-and-forget in releaseWhisperResources(); now awaited here so
+        // FluidAudio teardown finishes before C++ static destructors run.
+        #if canImport(FluidAudio)
+        Logger.debug("Freeing Nemotron resources...", subsystem: .app)
+        await appState.releaseNemotronAsync()
+        #endif
+
+        // 4.6. Free LLM (MLX) — MUST be awaited before exit() runs __cxa_finalize_ranges.
+        // MLXLMCommon.BaseKVCache holds C++ Metal objects; if alive during static destructor
+        // teardown they call abort() (confirmed SIGABRT in crash.log 2026-09-19).
+        // unloadModel() drains in-flight inference, fences GPU (Stream.gpu.synchronize()),
+        // and flushes the MLX pool (Memory.clearCache()) — all of which must run while live.
+        Logger.debug("Freeing LLM resources...", subsystem: .app)
+        await appState.releaseLLMAsync()
+
         // 5. Free whisper context BEFORE exit() runs C++ destructors
         Logger.debug("Freeing whisper context...", subsystem: .app)
         await MainActor.run {

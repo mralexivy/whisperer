@@ -174,6 +174,17 @@ actor NemotronHebrewBridge {
         sharedModels = nil
         Task { await mgr?.cleanup() }
     }
+
+    /// Awaitable version of prepareForShutdown — used by gracefulShutdown() so
+    /// FluidAudio cleanup completes before exit() runs C++ static destructors.
+    func shutdownAsync() async {
+        _isShuttingDown = true
+        Logger.step(.modelFree, .model, ["type": .string("nemotron-he")])
+        let mgr = manager
+        manager = nil
+        sharedModels = nil
+        await mgr?.cleanup()
+    }
 }
 
 enum NemotronHebrewError: Error, LocalizedError {

@@ -4673,6 +4673,37 @@ class AppState: ObservableObject {
 
     /// Release all whisper-related resources before app termination
     /// This prevents crashes when C++ destructors run during exit()
+    // MARK: - Async Shutdown Helpers (called by gracefulShutdown before releaseWhisperResources)
+
+    /// Awaits full LLM teardown: drains in-flight inference, fences GPU, flushes MLX pool.
+    /// Must be called BEFORE releaseWhisperResources() so that MLXLMCommon.BaseKVCache objects
+    /// are destroyed while the process is still live — not during __cxa_finalize_ranges at exit().
+    func releaseLLMAsync() async {
+        guard let processor = llmPostProcessor else { return }
+        llmPostProcessor = nil
+        Logger.debug("Awaiting LLM unload (GPU fence + MLX pool flush)...", subsystem: .transcription)
+        await processor.unloadModel()
+    }
+
+    #if canImport(FluidAudio)
+    /// Awaits Nemotron + NemotronHebrew teardown so FluidAudio cleanup completes
+    /// before exit() runs C++ static destructors.
+    func releaseNemotronAsync() async {
+        nemotronLoadTask?.cancel()
+        nemotronLoadTask = nil
+        nemotronHebrewLoadTask?.cancel()
+        nemotronHebrewLoadTask = nil
+        if let nemotron = nemotronBridgeInstance {
+            nemotronBridgeInstance = nil
+            await nemotron.shutdownAsync()
+        }
+        if let hebrew = nemotronHebrewBridgeInstance {
+            nemotronHebrewBridgeInstance = nil
+            await hebrew.shutdownAsync()
+        }
+    }
+    #endif
+
     func releaseWhisperResources() {
         Logger.debug("Releasing whisper resources...", subsystem: .transcription)
 
@@ -4697,18 +4728,22 @@ class AppState: ObservableObject {
         parakeetLoadTask = nil
 
         // Shutdown Nemotron bridges
+        // Note: on the graceful shutdown path these are already nil — released by
+        // releaseNemotronAsync() before this method is called.  If still set here
+        // (e.g. a code path that calls releaseWhisperResources directly), fall back
+        // to fire-and-forget so we don't deadlock a synchronous context.
         #if canImport(FluidAudio)
         nemotronLoadTask?.cancel()
         nemotronLoadTask = nil
         nemotronHebrewLoadTask?.cancel()
         nemotronHebrewLoadTask = nil
         if let nemotron = nemotronBridgeInstance {
-            Task { await nemotron.prepareForShutdown() }
             nemotronBridgeInstance = nil
+            Task { await nemotron.shutdownAsync() }
         }
         if let nemotronHebrew = nemotronHebrewBridgeInstance {
-            Task { await nemotronHebrew.prepareForShutdown() }
             nemotronHebrewBridgeInstance = nil
+            Task { await nemotronHebrew.shutdownAsync() }
         }
         #endif
 
@@ -4746,8 +4781,11 @@ class AppState: ObservableObject {
         speechAnalyzerLoadTask = nil
 
         // Free LLM resources
+        // Note: on the graceful shutdown path llmPostProcessor is already nil — released by
+        // releaseLLMAsync() before this method is called.  If still set here (unexpected),
+        // fall back to fire-and-forget so we don't deadlock a synchronous context.
         if llmPostProcessor != nil {
-            Logger.debug("Freeing LLM resources", subsystem: .transcription)
+            Logger.warning("LLM processor not pre-released — falling back to fire-and-forget", subsystem: .transcription)
             let processorToFree = llmPostProcessor
             llmPostProcessor = nil
             Task { await processorToFree?.unloadModel() }
