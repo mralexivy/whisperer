@@ -52,7 +52,10 @@ final class MeetingLiveWindow: NSWindow {
         self.hasShadow = true
         self.level = .floating
         self.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
-        self.isMovableByWindowBackground = true
+        // Dragging is handled by WindowDragGesture in the header view and the mouseDown
+        // override below. isMovableByWindowBackground is unreliable on macOS 27+ because
+        // NSHostingView consumes mouseDown before AppKit can route it for background drag.
+        self.isMovableByWindowBackground = false
         self.isReleasedWhenClosed = false
         self.isRestorable = false
         // Width is fixed — every measurement in the compact layout assumes one column.
@@ -99,6 +102,13 @@ final class MeetingLiveWindow: NSWindow {
     // actually meeting in keeps its main-window chrome.
     override var canBecomeKey: Bool { true }
     override var canBecomeMain: Bool { false }
+
+    // Fallback drag: if a mouseDown reaches the window (i.e. no subview consumed it), start a
+    // performDrag so the body area remains grabbable even when WindowDragGesture doesn't fire.
+    override func mouseDown(with event: NSEvent) {
+        Logger.debug("MeetingLiveWindow mouseDown loc=\(event.locationInWindow) clickCount=\(event.clickCount)", subsystem: .ui)
+        performDrag(with: event)
+    }
 }
 
 // MARK: - Manager

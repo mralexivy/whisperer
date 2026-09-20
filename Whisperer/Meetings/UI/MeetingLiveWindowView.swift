@@ -184,9 +184,11 @@ struct MeetingLiveWindowView: View {
         .padding(.horizontal, 14)
         .frame(height: 56)
         .background(Color(hex: "0C0C1A"))
-        // The drag surface. `isMovableByWindowBackground` covers the rest of the body, but the
-        // header is where a titlebar-less window is expected to be grabbed.
+        // WindowDragGesture is the reliable drag path on macOS 13+. It fires even when
+        // NSHostingView intercepts mouseDown (which broke isMovableByWindowBackground on macOS 27).
+        // contentShape ensures the empty spacer area between controls is also grabbable.
         .contentShape(Rectangle())
+        .gesture(WindowDragGesture())
     }
 
     /// Copied from `MeetingDetailView.liveBadge` so the two surfaces read identically.
