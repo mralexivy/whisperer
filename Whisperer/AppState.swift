@@ -408,7 +408,7 @@ class AppState: ObservableObject {
         ) else { return nil }
 
         switch selectedBackendType {
-        case .whisperCpp, .nemotron, .nemotronHebrew, .whisperKit: return nil
+        case .whisperCpp, .nemotron, .nemotronHebrew, .qwen3asr, .whisperKit: return nil
         case .parakeet:
             return selectedParakeetModel == .v2
                 ? "Parakeet v2 supports English only — language will be ignored"
@@ -425,6 +425,7 @@ class AppState: ObservableObject {
         case .parakeet: return selectedParakeetModel.displayName
         case .nemotron: return "Nemotron Multilingual"
         case .nemotronHebrew: return "Nemotron Hebrew"
+        case .qwen3asr: return "Qwen3 ASR"
         case .speechAnalyzer: return "Apple Speech"
         case .whisperKit: return "WhisperKit Turbo"
         }
@@ -546,6 +547,15 @@ class AppState: ObservableObject {
     var nemotronHebrewBridgeInstance: NemotronHebrewBridge?
     #endif
 
+    // Qwen3-ASR-1.7B (Open ASR Leaderboard leader) model state
+    @Published var isDownloadingQwen3ASR: Bool = false
+    @Published var isLoadingQwen3ASR: Bool = false
+    @Published var qwen3asrDownloadStatus: String = ""
+    var qwen3asrLoadTask: Task<Void, Never>?
+    #if canImport(FluidAudio)
+    var qwen3asrBridgeInstance: Qwen3ASRBridge?
+    #endif
+
     // WhisperKit CoreML backend state
     @Published var isDownloadingWhisperKit: Bool = false
     @Published var isLoadingWhisperKit: Bool = false
@@ -574,6 +584,8 @@ class AppState: ObservableObject {
         isLoadingNemotron ||
         isDownloadingNemotronHebrew ||
         isLoadingNemotronHebrew ||
+        isDownloadingQwen3ASR ||
+        isLoadingQwen3ASR ||
         isDownloadingEou ||
         isLoadingSpeechAnalyzer ||
         isDownloadingWhisperKit ||
@@ -1175,8 +1187,8 @@ class AppState: ObservableObject {
         UserDefaults.standard.set(backend.rawValue, forKey: "selectedBackendType")
         Logger.info("Switched backend to \(backend.displayName)", subsystem: .model)
 
-        // Parakeet/Nemotron don't use the WhisperCpp routing pipeline
-        if (backend == .parakeet || backend == .nemotron || backend == .nemotronHebrew) && modelPool != nil {
+        // Parakeet/Nemotron/Qwen3ASR don't use the WhisperCpp routing pipeline
+        if (backend == .parakeet || backend == .nemotron || backend == .nemotronHebrew || backend == .qwen3asr) && modelPool != nil {
             modelPool?.releaseAll()
             modelPool = nil
         }
@@ -1231,6 +1243,14 @@ class AppState: ObservableObject {
             Task { await hebrew.prepareForShutdown() }
             nemotronHebrewBridgeInstance = nil
             isLoadingNemotronHebrew = false
+        }
+        qwen3asrLoadTask?.cancel()
+        qwen3asrLoadTask = nil
+        if let qwen3 = qwen3asrBridgeInstance {
+            qwen3.prepareForShutdown()
+            qwen3asrBridgeInstance = nil
+            whisperBridge = nil  // same object — prevent double-shutdown via the generic path
+            isLoadingQwen3ASR = false
         }
         #endif
 
@@ -1383,6 +1403,8 @@ class AppState: ObservableObject {
             preloadNemotronModel()
         case .nemotronHebrew:
             preloadNemotronHebrewModel()
+        case .qwen3asr:
+            preloadQwen3ASRModel()
         case .speechAnalyzer:
             preloadSpeechAnalyzer()
         case .whisperKit:
@@ -1903,6 +1925,93 @@ class AppState: ObservableObject {
             }
         }
     }
+    // MARK: - Qwen3-ASR
+
+    func isQwen3ASRModelCached() -> Bool { Qwen3ASRBridge.isModelCached() }
+
+    func downloadQwen3ASRModel() {
+        guard !isDownloadingQwen3ASR else { return }
+        isDownloadingQwen3ASR = true
+        qwen3asrDownloadStatus = "Downloading Qwen3 ASR..."
+        downloadProgress = 0
+        // Do NOT set state = .downloadingModel — recording must remain available
+        // during this long background download (~2.5 GB). Progress is shown in the popover.
+
+        Task.detached(priority: .userInitiated) { [weak self] in
+            do {
+                try await Qwen3ASRBridge.download { [weak self] fraction in
+                    Task { @MainActor [weak self] in
+                        guard let self, self.isDownloadingQwen3ASR else { return }
+                        self.downloadProgress = fraction
+                        self.qwen3asrDownloadStatus = String(format: "Downloading… %.0f%%", fraction * 100)
+                    }
+                }
+                Logger.info("Qwen3 ASR downloaded", subsystem: .model)
+                await MainActor.run { [weak self] in
+                    guard let self else { return }
+                    self.isDownloadingQwen3ASR = false
+                    self.qwen3asrDownloadStatus = ""
+                    self.downloadProgress = 0
+                    self.activateBackendAfterDownload(.qwen3asr)
+                }
+            } catch {
+                Logger.error("Failed to download Qwen3 ASR: \(error)", subsystem: .model)
+                await MainActor.run { [weak self] in
+                    guard let self else { return }
+                    self.isDownloadingQwen3ASR = false
+                    self.qwen3asrDownloadStatus = ""
+                    self.downloadProgress = 0
+                    self.errorMessage = "Failed to download Qwen3 ASR: \(error.localizedDescription)"
+                }
+            }
+        }
+    }
+
+    func preloadQwen3ASRModel() {
+        guard isQwen3ASRModelCached() else {
+            Logger.info("Qwen3 ASR not cached — download first", subsystem: .model)
+            return
+        }
+
+        isLoadingQwen3ASR = true
+        qwen3asrDownloadStatus = "Loading Qwen3 ASR..."
+
+        qwen3asrLoadTask = Task.detached(priority: .userInitiated) { [weak self] in
+            do {
+                // Blocking: safetensors load + MLX kernel warm-up.
+                let bridge = try await ModelWorkQueue.shared.runBlocking("qwen3asr-load") {
+                    try Qwen3ASRBridge.loadFromCache()
+                }
+                await MainActor.run { [weak self] in
+                    guard let self, self.selectedBackendType == .qwen3asr else { return }
+                    // Safety: release any existing bridge
+                    if let old = self.whisperBridge {
+                        old.prepareForShutdown()
+                        self.whisperBridge = nil
+                    }
+                    self.whisperBridge = bridge       // main backend — passes readiness checks
+                    self.qwen3asrBridgeInstance = bridge  // typed ref for async shutdown
+                    self.loadedModel = nil
+                    self.isModelLoaded = true
+                    self.loadedBackendType = .qwen3asr
+                    self.isLoadingQwen3ASR = false
+                    self.qwen3asrDownloadStatus = ""
+                    self.preloadVAD()
+                    self.preloadLLM()
+                    Logger.info("Qwen3 ASR ready", subsystem: .model)
+                }
+            } catch {
+                Logger.error("Failed to load Qwen3 ASR: \(error)", subsystem: .model)
+                await MainActor.run { [weak self] in
+                    guard let self else { return }
+                    self.isLoadingQwen3ASR = false
+                    self.qwen3asrDownloadStatus = ""
+                    self.errorMessage = "Failed to load Qwen3 ASR: \(error.localizedDescription)"
+                }
+            }
+        }
+    }
+
     #else
     func isNemotronModelCached() -> Bool { false }
     func downloadNemotronModel() { }
@@ -1910,6 +2019,9 @@ class AppState: ObservableObject {
     func isNemotronHebrewModelCached() -> Bool { false }
     func downloadNemotronHebrewModel() { }
     func preloadNemotronHebrewModel() { }
+    func isQwen3ASRModelCached() -> Bool { false }
+    func downloadQwen3ASRModel() { }
+    func preloadQwen3ASRModel() { }
     #endif
 
     // MARK: - WhisperKit
@@ -2890,6 +3002,9 @@ class AppState: ObservableObject {
         if bridge is WhisperKitBridge { return bridge }
         #endif
         if bridge is FluidAudioBridge { return bridge }
+        #if canImport(FluidAudio)
+        if bridge is Qwen3ASRBridge { return bridge }
+        #endif
         // WhisperBridge uses eager streaming — the main model's rolling decode IS the preview.
         // Tiny model is no longer used for live preview or detection.
         // Detection uses the resident V3 bridge; live preview on whisper.cpp is eager streaming.
@@ -4702,6 +4817,16 @@ class AppState: ObservableObject {
             await hebrew.shutdownAsync()
         }
     }
+
+    /// Awaits Qwen3ASR teardown so CoreML/MLState cleanup completes before exit().
+    func releaseQwen3ASRAsync() async {
+        qwen3asrLoadTask?.cancel()
+        qwen3asrLoadTask = nil
+        if let qwen3 = qwen3asrBridgeInstance {
+            qwen3asrBridgeInstance = nil
+            await qwen3.shutdownAsync()
+        }
+    }
     #endif
 
     func releaseWhisperResources() {
@@ -4744,6 +4869,13 @@ class AppState: ObservableObject {
         if let nemotronHebrew = nemotronHebrewBridgeInstance {
             nemotronHebrewBridgeInstance = nil
             Task { await nemotronHebrew.shutdownAsync() }
+        }
+        qwen3asrLoadTask?.cancel()
+        qwen3asrLoadTask = nil
+        if let qwen3 = qwen3asrBridgeInstance {
+            qwen3asrBridgeInstance = nil
+            whisperBridge = nil  // same object — prevent double-shutdown via the generic path
+            Task { await qwen3.shutdownAsync() }
         }
         #endif
 

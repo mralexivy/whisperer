@@ -1,0 +1,267 @@
+//
+//  Qwen3ASREngine.swift
+//  Whisperer
+//
+//  Qwen3-ASR-1.7B on MLX: batched prefill of the whole audio prompt in one forward pass,
+//  then greedy decoding with a KV cache. Not thread-safe — the bridge serialises every call.
+//
+
+import Foundation
+import Hub
+import MLX
+import MLXLMCommon
+
+nonisolated final class Qwen3ASREngine {
+
+    // MARK: - Model location
+
+    static let repoId = "mlx-community/Qwen3-ASR-1.7B-8bit"
+    static let downloadGlobs = ["*.json", "*.safetensors", "merges.txt"]
+    /// Shown on the download button.
+    static let downloadSizeLabel = "2.5 GB"
+
+    /// Snapshot directory under HubApi's default `downloadBase` (same root the LLM uses).
+    static func modelDirectory() -> URL {
+        HubApi().localRepoLocation(Hub.Repo(id: repoId))
+    }
+
+    static func isModelCached() -> Bool {
+        let dir = modelDirectory()
+        let fm = FileManager.default
+        return fm.fileExists(atPath: dir.appendingPathComponent("config.json").path)
+            && fm.fileExists(atPath: dir.appendingPathComponent("vocab.json").path)
+            && fm.fileExists(atPath: dir.appendingPathComponent("model.safetensors").path)
+    }
+
+    static func download(progress: @escaping @Sendable (Double) -> Void) async throws {
+        _ = try await HubApi().snapshot(from: repoId, matching: downloadGlobs) { p in
+            progress(p.fractionCompleted)
+        }
+    }
+
+    // MARK: - Prompt tokens (verified against the checkpoint's tokenizer)
+
+    enum Token {
+        static let asrText: Int32 = 151_704       // <asr_text>
+        static let eos: Set<Int32> = [151_643, 151_645]  // <|endoftext|>, <|im_end|>
+        static let specialFloor: Int32 = 151_643  // everything at/above is a control token
+    }
+
+    /// `<|im_start|>system\n<|im_end|>\n<|im_start|>user\n<|audio_start|>`
+    static let promptPrefix: [Int32] = [151_644, 8_948, 198, 151_645, 198, 151_644, 872, 198, 151_669]
+    /// `<|audio_end|><|im_end|>\n<|im_start|>assistant\n`
+    static let promptSuffix: [Int32] = [151_670, 151_645, 198, 151_644, 77_091, 198]
+
+    /// `language <Name>` token ids for forcing a language (the model then skips detection and
+    /// starts directly after `<asr_text>`). Keyed by Whisperer's ISO code.
+    static let forcedLanguageTokens: [String: [Int32]] = [
+        "zh": [11528, 8453], "en": [11528, 6364], "yue": [11528, 72366, 2367],
+        "ar": [11528, 34117], "de": [11528, 5938], "fr": [11528, 8585], "es": [11528, 15154],
+        "pt": [11528, 42188], "id": [11528, 58829], "it": [11528, 14811], "ko": [11528, 16134],
+        "ru": [11528, 8522], "th": [11528, 26392], "vi": [11528, 48477], "ja": [11528, 10769],
+        "tr": [11528, 23734], "hi": [11528, 43980], "ms": [11528, 79140], "nl": [11528, 23234],
+        "sv": [11528, 30109], "da": [11528, 43680], "fi": [11528, 57853], "pl": [11528, 31984],
+        "cs": [11528, 33150], "tl": [11528, 62417], "fa": [11528, 49861], "el": [11528, 17860],
+        "ro": [11528, 73597], "hu": [11528, 56769], "mk": [11528, 56452, 75491],
+    ]
+
+    /// Model language names (as it prints them after `language `) → ISO code.
+    static let languageCodes: [String: String] = [
+        "chinese": "zh", "english": "en", "cantonese": "yue", "arabic": "ar", "german": "de",
+        "french": "fr", "spanish": "es", "portuguese": "pt", "indonesian": "id", "italian": "it",
+        "korean": "ko", "russian": "ru", "thai": "th", "vietnamese": "vi", "japanese": "ja",
+        "turkish": "tr", "hindi": "hi", "malay": "ms", "dutch": "nl", "swedish": "sv",
+        "danish": "da", "finnish": "fi", "polish": "pl", "czech": "cs", "filipino": "tl",
+        "persian": "fa", "greek": "el", "romanian": "ro", "hungarian": "hu", "macedonian": "mk",
+    ]
+
+    struct Result {
+        let text: String
+        /// ISO code the model detected (auto) or was forced to; nil for silence (`language None`).
+        let languageCode: String?
+        let audioTokens: Int
+        let generatedTokens: Int
+        let encodeMs: Double
+        let prefillMs: Double
+        let decodeMs: Double
+    }
+
+    // MARK: - State
+
+    private let model: Qwen3ASRMLXModel
+    private let vocabulary: [Int32: [UInt8]]
+    private let prefixEmbeddings: MLXArray
+    private let suffixEmbeddings: MLXArray
+
+    private init(model: Qwen3ASRMLXModel, vocabulary: [Int32: [UInt8]]) {
+        self.model = model
+        self.vocabulary = vocabulary
+        // The fixed prompt halves never change — embed them once.
+        prefixEmbeddings = model.embed(Self.promptPrefix)
+        suffixEmbeddings = model.embed(Self.promptSuffix)
+        eval(prefixEmbeddings, suffixEmbeddings)
+    }
+
+    static func load(from directory: URL = modelDirectory()) throws -> Qwen3ASREngine {
+        let model = try Qwen3ASRMLXModel.load(from: directory)
+        let vocabulary = try Qwen3ASRVocabulary.load(
+            vocab: directory.appendingPathComponent("vocab.json"),
+            tokenizerConfig: directory.appendingPathComponent("tokenizer_config.json"))
+        return Qwen3ASREngine(model: model, vocabulary: vocabulary)
+    }
+
+    /// Compiles the Metal kernels for every shape class the first real dictation will hit.
+    func warmUp() {
+        _ = try? transcribe(samples: [Float](repeating: 0, count: 16_000), languageCode: "en",
+                            maxNewTokens: 4)
+    }
+
+    // MARK: - Transcription
+
+    /// - Parameters:
+    ///   - languageCode: ISO code to force, or nil to let the model detect it.
+    ///   - onPartial: called on the calling thread after each token with the transcript-so-far
+    ///     and the language code from the `language X` header (the forced code when forced).
+    ///   - shouldAbort: polled before prefill and between tokens.
+    func transcribe(
+        samples: [Float],
+        languageCode: String?,
+        maxNewTokens: Int? = nil,
+        onPartial: ((String, String?) -> Void)? = nil,
+        shouldAbort: () -> Bool = { false }
+    ) throws -> Result {
+        let seconds = Double(samples.count) / Double(Qwen3ASRFeatureExtractor.sampleRate)
+        let empty = Result(text: "", languageCode: nil, audioTokens: 0, generatedTokens: 0,
+                           encodeMs: 0, prefillMs: 0, decodeMs: 0)
+        guard seconds >= 0.1, !shouldAbort() else { return empty }
+
+        // 1. Audio → embeddings.
+        let t0 = CFAbsoluteTimeGetCurrent()
+        let (mel, frames) = Qwen3ASRFeatureExtractor.shared.extract(samples: samples)
+        let features = MLXArray(mel, [Qwen3ASRFeatureExtractor.nMels, frames])
+            .asType(prefixEmbeddings.dtype)
+        let audio = model.audioTower(features).asType(prefixEmbeddings.dtype)
+        eval(audio)
+        let t1 = CFAbsoluteTimeGetCurrent()
+        guard !shouldAbort() else { return empty }
+
+        // 2. Prompt = prefix ++ audio ++ suffix [++ "language X<asr_text>"], prefilled in one pass.
+        var pieces = [prefixEmbeddings, audio, suffixEmbeddings]
+        let forced = languageCode.flatMap { Self.forcedLanguageTokens[$0] }
+        if let forced {
+            pieces.append(model.embed(forced + [Token.asrText]))
+        }
+        let prompt = concatenated(pieces, axis: 0).expandedDimensions(axis: 0)
+        let cache = model.newCache()
+        var logits = model.lastLogits(embeddings: prompt, cache: cache)
+        var next = argMax(logits, axis: -1).reshaped(-1)
+        eval(next)
+        let t2 = CFAbsoluteTimeGetCurrent()
+
+        // 3. Greedy decode. A generous but finite budget: speech runs ~3-5 tokens/s, so 15/s
+        // plus the language header only binds on a degenerate repetition loop.
+        let budget = maxNewTokens ?? min(2_048, 24 + Int(seconds * 15))
+        var generated: [Int32] = []
+        generated.reserveCapacity(budget)
+        var inText = forced != nil
+        var textStart = 0
+        var headerLanguage: String? = forced != nil ? languageCode : nil
+        for _ in 0..<budget {
+            let token = next.item(Int32.self)
+            if Token.eos.contains(token) { break }
+            generated.append(token)
+            if !inText, token == Token.asrText {
+                inText = true
+                textStart = generated.count
+                headerLanguage = headerLanguageCode( Array(generated.dropLast()))
+            }
+            if shouldAbort() { break }
+            // Queue the next step before touching the CPU-side partial callback.
+            logits = model.lastLogits(embeddings: model.embed([token]).expandedDimensions(axis: 0),
+                                      cache: cache)
+            next = argMax(logits, axis: -1).reshaped(-1)
+            asyncEval(next)
+            if inText, let onPartial {
+                onPartial(decode(Array(generated[textStart...])), headerLanguage)
+            }
+        }
+        let t3 = CFAbsoluteTimeGetCurrent()
+
+        // 4. Split "language X<asr_text>body".
+        let text: String
+        let detected: String?
+        if forced != nil, let code = languageCode {
+            text = decode(generated)
+            detected = code
+        } else if let sep = generated.firstIndex(of: Token.asrText) {
+            detected = headerLanguageCode( Array(generated[..<sep]))
+            text = decode(Array(generated[(sep + 1)...]))
+        } else {
+            // No header (truncated by abort/budget) — treat whatever came out as text.
+            text = decode(generated)
+            detected = nil
+        }
+
+        if Memory.cacheMemory > 512 * 1024 * 1024 { Memory.clearCache() }
+
+        return Result(
+            text: text.trimmingCharacters(in: .whitespacesAndNewlines),
+            languageCode: detected,
+            audioTokens: audio.dim(0),
+            generatedTokens: generated.count,
+            encodeMs: (t1 - t0) * 1000,
+            prefillMs: (t2 - t1) * 1000,
+            decodeMs: (t3 - t2) * 1000)
+    }
+
+    /// ISO code for a `language <Name>` header; nil for `language None` (silence) or unknown names.
+    private func headerLanguageCode(_ tokens: [Int32]) -> String? {
+        let header = decode(tokens).trimmingCharacters(in: .whitespaces).lowercased()
+        let name = header.hasPrefix("language ") ? String(header.dropFirst(9)) : header
+        return Self.languageCodes[name.trimmingCharacters(in: .whitespaces)]
+    }
+
+    /// Byte-level BPE detokenisation; control tokens are dropped.
+    private func decode(_ tokens: [Int32]) -> String {
+        var bytes: [UInt8] = []
+        bytes.reserveCapacity(tokens.count * 4)
+        for t in tokens where t < Token.specialFloor {
+            if let b = vocabulary[t] { bytes.append(contentsOf: b) }
+        }
+        return String(decoding: bytes, as: UTF8.self)
+    }
+}
+
+// MARK: - Vocabulary
+
+nonisolated enum Qwen3ASRVocabulary {
+    /// Token id → raw UTF-8 bytes, decoded from GPT-2 byte-level `vocab.json`.
+    static func load(vocab: URL, tokenizerConfig: URL) throws -> [Int32: [UInt8]] {
+        let data = try Data(contentsOf: vocab)
+        guard let dict = try JSONSerialization.jsonObject(with: data) as? [String: Int] else {
+            throw Qwen3ASRError.invalidModel("vocab.json is not {token: id}")
+        }
+        let byteDecoder = gpt2ByteDecoder()
+        var out: [Int32: [UInt8]] = [:]
+        out.reserveCapacity(dict.count)
+        for (piece, id) in dict {
+            out[Int32(id)] = piece.unicodeScalars.compactMap { byteDecoder[$0.value] }
+        }
+        return out
+    }
+
+    /// Inverse of GPT-2 `bytes_to_unicode()`.
+    private static func gpt2ByteDecoder() -> [UInt32: UInt8] {
+        var printable: [Int] = Array(33...126) + Array(161...172) + Array(174...255)
+        var codepoints = printable
+        var n = 0
+        for b in 0..<256 where !printable.contains(b) {
+            printable.append(b)
+            codepoints.append(256 + n)
+            n += 1
+        }
+        var decoder: [UInt32: UInt8] = [:]
+        for (b, c) in zip(printable, codepoints) { decoder[UInt32(c)] = UInt8(b) }
+        return decoder
+    }
+}

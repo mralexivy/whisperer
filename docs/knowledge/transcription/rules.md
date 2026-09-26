@@ -789,3 +789,5 @@ ten minutes; its only caller abandoned it after ten. The visible symptom was
 `AppState.stopCeilingSeconds(forRecordedDuration:)` scales with the recording
 (`min(600, max(10, duration * 0.5))`), and taking the fallback logs a warning — before, `fallback=true`
 was the only trace that the real result had been thrown away.
+
+- Never let whisper `.auto` detection or a single probe move a session off the primary language without a forced-decode logProb comparison against the primary (`languageSwitchGate`). Probe confidence alone cannot separate this user's accented English from Russian: the ranges overlap (en 0.51–0.89, ru-on-English 0.55–0.70).

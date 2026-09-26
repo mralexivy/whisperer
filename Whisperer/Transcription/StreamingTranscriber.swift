@@ -512,6 +512,11 @@ class StreamingTranscriber {
     private var isNemotronSessionReady: Bool = false
     private var lastPreviewedSampleIndex: Int = 0
     private var previewAccumulatedText: String = ""
+    /// Qwen3-ASR preview stabilisation (LocalAgreement-2): the previous pass's words and the
+    /// committed-audio index they were decoded from. Only a word prefix two passes agree on is
+    /// shown, because the live card never retracts a word once revealed.
+    private var agreementPreviousWords: [String] = []
+    private var agreementPreviousBase: Int = -1
     private var previewPassID: Int = 0
     /// Word count of the last live string published on the eager path, within the current
     /// soft-commit epoch. Guards live text against shrinking — see `applyEagerOutcome`.
@@ -665,8 +670,112 @@ class StreamingTranscriber {
     var provisionalLanguage: TranscriptionLanguage {
         if let routed = routeDecision?.lang { return routed }
         if language != .auto { return language }
-        if let lead = languageArbiter.leadingCandidate?.language { return lead }
-        return sessionLanguageFloor ?? .auto
+        if let lead = languageArbiter.leadingCandidate?.language {
+            switch languageSwitchGate(lead) {
+            case .allowed: return lead
+            // A non-primary guess awaiting verification decodes as `.auto` — neither forcing the
+            // unverified language nor translating genuine speech into the primary one.
+            case .pending: return .auto
+            case .vetoed(let primary): return primary
+            }
+        }
+        return sessionLanguageFloor ?? vetoedInFavourOfPrimary ?? .auto
+    }
+
+    // MARK: - Non-primary language verification
+
+    enum LanguageSwitchGate: Equatable {
+        case allowed
+        case pending
+        case vetoed(primary: TranscriptionLanguage)
+    }
+
+    private enum SwitchVerdict { case confirmed, vetoed(atAudioSecond: Double) }
+    private let switchVerifyLock = NSLock()
+    private var switchVerdicts: [TranscriptionLanguage: SwitchVerdict] = [:]
+    private var switchVerifyInFlight = false
+    /// A vetoed switch is re-examined after this much more audio, so a speaker who genuinely
+    /// changes language mid-dictation is not locked out for the rest of the session.
+    private static let switchVetoTTL: Double = 10
+    /// Required average log-probability lead for the candidate over the primary language.
+    /// On this user's history the correct language led by ≥ 0.20 in 29 of 30 recordings; the one
+    /// wrong call was a 0.04 lead (`LanguageArbitrationCorpusTests`).
+    static let switchMinLogProbLead: Float = 0.10
+
+    /// Whether the session may decode or route in `lang`.
+    ///
+    /// Switching away from the primary language is where this app goes wrong: whisper's language
+    /// ID on Russian-accented English returns `ru p≈0.55–0.70`, the ratchet or arbiter adopts it,
+    /// and the decode collapses (logProb −0.6 → −2.1 once forced to Russian, R135 2026-09-21). So
+    /// a non-primary language must first win a head-to-head: the last 8 s decoded forced to it and
+    /// forced to the primary, compared on average log-probability. Forced-wrong-language decodes
+    /// either translate or transliterate, and both score markedly worse than the true language.
+    /// The primary language, `.auto`, and backends without a whisper context are never gated.
+    func languageSwitchGate(_ lang: TranscriptionLanguage, startIfNeeded: Bool = true) -> LanguageSwitchGate {
+        guard lang != .auto, language == .auto,
+              let primary = languageRouter?.primaryLanguage, primary != .auto, lang != primary,
+              let bridge = whisper as? WhisperBridge else { return .allowed }
+        switchVerifyLock.lock()
+        let verdict = switchVerdicts[lang]
+        if case .confirmed = verdict { switchVerifyLock.unlock(); return .allowed }
+        if case .vetoed(let at) = verdict, recordedDuration - at < Self.switchVetoTTL {
+            switchVerifyLock.unlock()
+            return .vetoed(primary: primary)
+        }
+        let shouldStart = startIfNeeded && !switchVerifyInFlight && !isStopped
+        if shouldStart { switchVerifyInFlight = true }
+        switchVerifyLock.unlock()
+        if shouldStart { verifyLanguageSwitch(to: lang, primary: primary, bridge: bridge) }
+        if case .vetoed = verdict { return .vetoed(primary: primary) }  // expired, re-checking
+        return .pending
+    }
+
+    /// The primary language when a non-primary switch was vetoed this session and none confirmed.
+    private var vetoedInFavourOfPrimary: TranscriptionLanguage? {
+        guard language == .auto, let primary = languageRouter?.primaryLanguage, primary != .auto
+        else { return nil }
+        switchVerifyLock.lock(); defer { switchVerifyLock.unlock() }
+        let anyConfirmed = switchVerdicts.values.contains { if case .confirmed = $0 { return true }; return false }
+        let anyVetoed = switchVerdicts.values.contains { if case .vetoed = $0 { return true }; return false }
+        return anyVetoed && !anyConfirmed ? primary : nil
+    }
+
+    private func verifyLanguageSwitch(to candidate: TranscriptionLanguage,
+                                      primary: TranscriptionLanguage, bridge: WhisperBridge) {
+        var window: [Float] = []
+        try? allSamplesLock.withLock {
+            let end = ring.endAbsoluteIndex
+            window = ring.slice(fromAbsolute: max(ring.baseSampleIndex, end - Int(8 * sampleRate)),
+                                toAbsolute: end)
+        }
+        guard window.count >= Int(2 * sampleRate) else {
+            switchVerifyLock.lock(); switchVerifyInFlight = false; switchVerifyLock.unlock()
+            return
+        }
+        let samples = normalizeSamples(window)
+        let audioSecond = recordedDuration
+        let started = CACurrentMediaTime()
+        // Both decodes queue on the bridge behind at most one eager pass; the eager stream keeps
+        // running as `.auto` meanwhile, so nothing waits on this.
+        bridge.transcribeStreamingAsync(samples: samples, language: primary, initialPrompt: nil) { [weak self] p in
+            bridge.transcribeStreamingAsync(samples: samples, language: candidate, initialPrompt: nil) { [weak self] c in
+                guard let self else { return }
+                let lpPrimary = p?.averageLogProbability ?? -9
+                let lpCandidate = c?.averageLogProbability ?? -9
+                let confirmed = p != nil && c != nil && lpCandidate - lpPrimary >= Self.switchMinLogProbLead
+                self.switchVerifyLock.lock()
+                self.switchVerdicts[candidate] = confirmed ? .confirmed : .vetoed(atAudioSecond: audioSecond)
+                self.switchVerifyInFlight = false
+                self.switchVerifyLock.unlock()
+                Logger.info("Language switch \(primary.rawValue)→\(candidate.rawValue) "
+                    + (confirmed ? "CONFIRMED" : "VETOED")
+                    + String(format: " (logProb %@=%.2f %@=%.2f, %.1fs window, %.0fms)",
+                             primary.rawValue, lpPrimary, candidate.rawValue, lpCandidate,
+                             Double(samples.count) / self.sampleRate,
+                             (CACurrentMediaTime() - started) * 1000),
+                    subsystem: .transcription)
+            }
+        }
     }
 
     /// Records a resolved provisional language as the session floor. Called from the eager passes
@@ -787,11 +896,38 @@ class StreamingTranscriber {
     /// not to. `routeDecision?.lang ?? language` ignores the arbiter entirely: a session that
     /// probed and accumulated real evidence, but never crossed the lock threshold, threw all of it
     /// away at the moment it mattered most and let whisper re-detect the tail from scratch.
-    /// `provisionalLanguage` applies the same three-level fallback the eager stream uses, so both
-    /// decoders now answer to one definition.
+    ///
+    /// Unlike `provisionalLanguage` (used for eager passes where stability matters more than
+    /// correctness), this path requires `leadingCandidate` to meet a confidence floor before
+    /// using it. A weak probe (p=0.552 on English speech from a Russian-accented speaker) must
+    /// not force a 12s tail decode into Russian — below the floor the tail runs as `.auto`,
+    /// leaving the full-audio decode unbiased by a weak per-window probe.
     var effectiveLanguage: TranscriptionLanguage {
-        provisionalLanguage
+        if let routed = routeDecision?.lang { return routed }
+        if language != .auto { return language }
+        if let lead = languageArbiter.leadingCandidate,
+           lead.confidence >= RoutingThresholds.minLeadingCandidateConfidence {
+            switch languageSwitchGate(lead.language, startIfNeeded: false) {
+            case .allowed: return lead.language
+            case .pending: return .auto
+            case .vetoed(let primary): return primary
+            }
+        }
+        // A veto is positive evidence for the primary language: whisper's own `.auto` detection is
+        // what produced the Russian guess, so re-detecting the tail from scratch would repeat it.
+        if let primary = vetoedInFavourOfPrimary { return primary }
+        // Do NOT fall through to sessionLanguageFloor: it was set by `noteProvisionalLanguage`
+        // which reads `provisionalLanguage`, which uses leadingCandidate without a threshold.
+        // sessionLanguageFloor inherits the same low-confidence signal we just rejected above,
+        // so using it would silently undo the guard. The tail runs as .auto and whisper re-detects
+        // on the full audio, which is more reliable than any short eager-pass window.
+        return .auto
     }
+
+    /// Whether the live language arbiter has received at least one accurate V3 probe.
+    /// Exposed for integration tests that synchronize on probe arrival without accessing
+    /// the private `languageArbiter` directly.
+    var hasReceivedLanguageProbe: Bool { languageArbiter.accurateProbeCount > 0 }
 
     /// Dictionary corrections applied to *this* session's final text, for the history record.
     ///
@@ -1037,6 +1173,7 @@ class StreamingTranscriber {
         lastDetectionSampleCount = 0
         sessionLanguageFloor = nil
         languageArbiter.reset()
+        switchVerifyLock.lock(); switchVerdicts = [:]; switchVerifyInFlight = false; switchVerifyLock.unlock()
         languageArbiter.configure(allowedLanguages: languageRouter?.allowedLanguages ?? [])
         lastProvisionalLanguage = nil
         unroutedSince = nil
@@ -1061,6 +1198,8 @@ class StreamingTranscriber {
         lastPreviewedSampleIndex = feedbackSoundSamples  // Skip feedback sound window
         lastPreviewVADCheckEndIndex = feedbackSoundSamples
         previewAccumulatedText = ""
+        agreementPreviousWords = []
+        agreementPreviousBase = -1
         previewPassID = 0
         lastPublishedEagerWordCount = 0
         consecutiveShrinkDrops = 0
@@ -1772,6 +1911,10 @@ class StreamingTranscriber {
         // Whisper shares the same queue as chunk transcription — block preview during chunks to avoid contention.
         // FluidAudio has a dedicated preview queue and triple-manager, so it can run concurrently.
         if !isFluidAudio, isTranscribingChunk { return }
+        // Qwen3-ASR runs every inference on one serial MLX queue. Starting a pass while another
+        // is queued or running only guarantees it completes after a newer pass ID was issued,
+        // i.e. stale — which is how the CoreML build discarded every single preview result.
+        if let qwen = preview as? Qwen3ASRBridge, !qwen.isIdle { return }
 
         // Skip preview if main pipeline has a large backlog (>10s) — drop preview before dropping chunks
         let chunkBacklogSamples = lastClaimedSampleIndex - lastTranscribedSampleIndex
@@ -1796,10 +1939,10 @@ class StreamingTranscriber {
         let tailStartAbs: Int
         let endAbsIndex: Int
         if isFluidAudio {
-            // Growing window from last committed chunk to now, capped at 8s.
+            // Growing window from last committed chunk to now, capped by policy (8s by default).
             // Replace semantics: each pass retranscribes the full tail so the model gets growing context
             // and text accumulates naturally without append/dedup heuristics.
-            let maxGrowingSamples = Int(8.0 * sampleRate)
+            let maxGrowingSamples = Int(preview.streamingPolicy.previewWindowCap * sampleRate)
             tailStartAbs = max(lastTranscribedSampleIndex, ringEnd - maxGrowingSamples)
             guard ringEnd > tailStartAbs + Int(0.3 * sampleRate) else { return }
             endAbsIndex = ringEnd
@@ -1896,6 +2039,18 @@ class StreamingTranscriber {
             doPreviewTranscribe = { cb in fluidBridge.transcribePreviewAsync(samples: normalizedSamples, completion: cb) }
         }
         #endif
+        let usesAgreement = preview is Qwen3ASRBridge
+        let passBase = lastTranscribedSampleIndex
+        if let qwenBridge = preview as? Qwen3ASRBridge {
+            doPreviewTranscribe = { [weak self] cb in
+                qwenBridge.transcribePreviewAsync(
+                    samples: normalizedSamples, language: lang,
+                    onPartial: { partial in
+                        self?.publishStreamingPreviewPartial(partial, passID: currentPassID, base: passBase)
+                    },
+                    completion: cb)
+            }
+        }
         #if canImport(WhisperKit)
         if let wkBridge = preview as? WhisperKitBridge {
             // Raw token callbacks are intentionally not shown: they are mutable beam
@@ -2004,7 +2159,11 @@ class StreamingTranscriber {
                 return
             }
 
-            if isFluidAudio {
+            if usesAgreement {
+                guard let agreed = self.agreedPreview(trimmed, base: passBase, isCompletePass: true),
+                      agreed.count > self.previewAccumulatedText.count else { return }
+                self.previewAccumulatedText = agreed
+            } else if isFluidAudio {
                 // Replace semantics: the latest pass owns the whole provisional tail.
                 // This allows normal decoder revisions without overlap/dedup drift.
                 self.previewAccumulatedText = trimmed
@@ -2043,6 +2202,62 @@ class StreamingTranscriber {
                 metadata: ["words": .int(trimmed.split(separator: " ").count), "totalChars": .int(display.count)]
             )
             transcriptionProgressCounter &+= 1
+        }
+    }
+
+    /// LocalAgreement-2 over consecutive preview passes of the same uncommitted window.
+    ///
+    /// Returns the word prefix of `text` that the previous complete pass also produced, or nil
+    /// when there is no previous pass for this window yet. A complete pass then becomes the
+    /// reference for the next one. Words compare case- and punctuation-insensitively, so a pass
+    /// that only moves a comma still confirms the words around it.
+    ///
+    /// Why: early passes see a second of audio and guess ("They are going." → "The algorithm
+    /// proposed."), and the live card is append-only, so an unconfirmed guess stayed on screen
+    /// for the whole dictation. Agreement delays a word by one pass (~0.3 s) and costs nothing.
+    private func agreedPreview(_ text: String, base: Int, isCompletePass: Bool) -> String? {
+        let words = text.split(whereSeparator: { $0.isWhitespace }).map(String.init)
+        defer {
+            if isCompletePass {
+                agreementPreviousWords = words
+                agreementPreviousBase = base
+            }
+        }
+        guard base == agreementPreviousBase, base == lastTranscribedSampleIndex else { return nil }
+        func key(_ w: String) -> String {
+            w.lowercased().filter { $0.isLetter || $0.isNumber }
+        }
+        var n = 0
+        while n < words.count, n < agreementPreviousWords.count,
+              key(words[n]) == key(agreementPreviousWords[n]) {
+            n += 1
+        }
+        guard n > 0 else { return nil }
+        return words[..<n].joined(separator: " ")
+    }
+
+    /// Streams a replace-semantics preview while its tokens are still being generated.
+    ///
+    /// A new pass re-decodes the whole uncommitted tail, so its early partials are shorter than
+    /// the text the previous pass already showed. Publishing only partials that *extend* what is
+    /// on screen makes words appear as they are decoded without the tail flickering back to a
+    /// prefix at the start of every pass; the completed pass still replaces the text outright.
+    private func publishStreamingPreviewPartial(_ partial: String, passID: Int, base: Int) {
+        guard !isStopped, !isPreparingToStop, passID == previewPassID else { return }
+        // The live card never retracts a shown word, so a partial cut mid-token ("produ") would
+        // stay on screen after the pass completes it. Publish only through the last whole word.
+        guard let lastSpace = partial.lastIndex(where: { $0.isWhitespace }) else { return }
+        let whole = partial[..<lastSpace].trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let trimmed = agreedPreview(whole, base: base, isCompletePass: false),
+              trimmed.count > previewAccumulatedText.count, !isHallucination(trimmed) else { return }
+        previewAccumulatedText = trimmed
+        var display = completedChunkTexts.joined(separator: " ")
+        if !display.isEmpty { display += " " }
+        display += trimmed
+        fullTranscription = display
+        DispatchQueue.main.async { [weak self] in
+            self?.onTranscription?(display)
+            self?.onPreviewTail?(trimmed)
         }
     }
 
@@ -2383,10 +2598,25 @@ class StreamingTranscriber {
             guard !self.isStopped else { return }
             if let result {
                 Logger.debug("Eager pass: \(result.words.count) words, logProb=\(String(format: "%.2f", result.averageLogProbability))", subsystem: .transcription)
-                self.applyEagerOutcome(result: result,
-                                       audioBaseIndex: base,
-                                       candidateEndIndex: endIdx,
-                                       decodedLanguage: lang)
+                // An `.auto` pass is whisper choosing the language for itself on a few seconds of
+                // audio — exactly the decision that turned R5 (2026-09-20, English) into 28 words
+                // of Russian before any probe had spoken. A pass it decoded in a non-primary
+                // language is held back until that language wins the switch gate; a veto makes
+                // the next pass decode as the primary language instead.
+                var heldForVerification = false
+                if lang == .auto, let code = result.languageCode,
+                   let detected = TranscriptionLanguage(rawValue: code),
+                   self.languageSwitchGate(detected) != .allowed {
+                    heldForVerification = true
+                    Logger.debug("Eager pass held: auto-detected \(code) awaiting switch verification",
+                                 subsystem: .transcription)
+                }
+                if !heldForVerification {
+                    self.applyEagerOutcome(result: result,
+                                           audioBaseIndex: base,
+                                           candidateEndIndex: endIdx,
+                                           decodedLanguage: lang)
+                }
 
                 // Agreement ratchet: harvest whisper's own per-pass language detection.
                 // `lastDetectedLanguage` on the bridge holds the lang_id from the last
@@ -2446,7 +2676,8 @@ class StreamingTranscriber {
                         let myShare  = myWeight / self.whisperTallyTotal
 
                         if self.whisperTallyTotal >= RoutingThresholds.ratchetMinWeight
-                            && myShare >= RoutingThresholds.ratchetMajorityShare {
+                            && myShare >= RoutingThresholds.ratchetMajorityShare,
+                           case .allowed = self.languageSwitchGate(detected) {
                             Logger.info("[\(langRouter.tag)] Whisper agreement: pinning \(detected.displayName) "
                                 + "(tally \(Int(myShare * 100))% of \(String(format: "%.1f", self.whisperTallyTotal)) weight)",
                                 subsystem: .transcription)
@@ -4378,6 +4609,7 @@ class StreamingTranscriber {
         guard let verdict = languageArbiter.fuse(transcript: transcript,
                                                  allowedLanguages: langRouter.allowedLanguages,
                                                  duration: recordedDuration) else { return false }
+        guard case .allowed = languageSwitchGate(verdict.language) else { return true }
 
         pinNemotron(to: verdict.language)
 

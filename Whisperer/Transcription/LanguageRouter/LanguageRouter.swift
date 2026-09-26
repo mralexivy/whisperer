@@ -54,6 +54,13 @@ enum RoutingThresholds {
     static let agreementFastPathMinWords = 8
     static let agreementFastPathMinLogProb: Float = -0.35
 
+    // Tail-decode leading-candidate floor: a probe at this confidence or better may drive the
+    // tail decode language; below it the tail falls back to sessionLanguageFloor or .auto.
+    // Calibrated on 2026-09-21: ru p=0.552 on English speech from a Russian-accented speaker
+    // must be rejected (0.552 < 0.65), while ru p=0.792 on genuine Russian must pass.
+    // Distinct from minVerdictConfidence (0.85) which gates a full router lock.
+    static let minLeadingCandidateConfidence: Float = 0.65
+
     // Tally-based ratchet: needs this much accumulated quality-weight before any pin.
     // 1.5 ≈ two crisp observations (logProb -0.20, 16 words → weight ≈ 0.80 each = 1.60).
     // Tuned so R18-style English pins at pass 5 (~8s) and R5-style Russian pins at pass 2 (~6s).

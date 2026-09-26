@@ -42,4 +42,8 @@ struct BackendStreamingPolicy {
     /// True if preview and committed-chunk decodes must be serialised through a shared
     /// inference lock (e.g., WhisperKit's single Core ML runtime).
     let serializesInferenceWithPreview: Bool
+
+    /// Longest uncommitted tail (seconds) a replace-semantics preview pass re-decodes. Beyond it
+    /// the window slides and the preview drops its oldest words until the next chunk commits.
+    var previewWindowCap: TimeInterval = 8.0
 }

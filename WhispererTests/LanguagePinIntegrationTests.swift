@@ -103,6 +103,73 @@ final class LanguagePinIntegrationTests: XCTestCase {
         )
     }
 
+    // MARK: - Arbiter confidence floor: weak probe must not force tail to wrong language
+
+    /// Sep 21 (2026): User gave an English instruction ("instruct the fucking skill, do not abort
+    /// in the middle, full execution without excuses"). V3 probe returned ru p=0.552.
+    ///
+    /// Bug: old effectiveLanguage = provisionalLanguage = leadingCandidate.language = .russian
+    ///      → tail forced to Russian → 100% Cyrillic hallucination.
+    ///
+    /// Fix: effectiveLanguage gates on leadingCandidate.confidence >= 0.65; 0.552 < 0.65
+    ///      → tail falls back to .auto without being biased by the weak probe.
+    ///
+    /// Note: whisper in .auto mode ALSO returns Russian on this audio (Russian-accented speaker),
+    /// so we cannot assert on transcript language. The correct assertion is that the *routing
+    /// layer* rejected the weak probe — i.e. effectiveLanguage is .auto, not .russian.
+    func testWeakProbeDoesNotForceEffectiveLanguageToRussian_R21a() async throws {
+        let filename = "2026-09-21_16-25-10_instruct_the_fucking_skill_do.opus"
+        guard let url = Self.resolveRecording(filename) else {
+            throw XCTSkip("R21a: recording not found at \(filename)")
+        }
+        let samples = try loadAudioSamples(from: url)
+
+        let b = try requireBridge()
+        b.resetAbort()
+        let vad = loadVAD()
+        let (pool, langRouter, mdlRouter) = Self.makeRouting(bridge: b)
+        let transcriber = StreamingTranscriber(
+            backend: b,
+            vad: vad,
+            language: .auto,
+            initialPrompt: nil,
+            fillerWordRemovalEnabled: false,
+            modelPool: pool,
+            languageRouter: langRouter,
+            modelRouter: mdlRouter
+        )
+        transcriber.start { _ in }
+
+        await Task.detached(priority: .userInitiated) {
+            feedAudioToTranscriber(transcriber, samples: samples)
+        }.value
+
+        // Wait for the V3 probe to land in the arbiter (takes ~2-3s for a 12s recording).
+        // Without a probe, effectiveLanguage trivially returns .auto and the test is vacuous.
+        var waited = 0
+        while waited < 80, !transcriber.hasReceivedLanguageProbe {
+            try? await Task.sleep(nanoseconds: 100_000_000)  // 100ms × 80 = 8s max
+            waited += 1
+        }
+        guard transcriber.hasReceivedLanguageProbe else {
+            _ = await transcriber.stopAsync()
+            throw XCTSkip("R21a: V3 probe did not arrive within 8s — Metal GPU too slow for this run")
+        }
+
+        // The fix: a V3 probe at ru p=0.552 is BELOW the 0.65 threshold, so effectiveLanguage
+        // must NOT be .russian. Before the fix it would be .russian because leadingCandidate
+        // was used without any confidence floor.
+        let effective = transcriber.effectiveLanguage
+        _ = await transcriber.stopAsync()
+
+        XCTAssertNotEqual(
+            effective, .russian,
+            "R21a — V3 probe at ru p=0.552 must not force effectiveLanguage to Russian "
+            + "(threshold=\(RoutingThresholds.minLeadingCandidateConfidence)). "
+            + "Got: \(effective)"
+        )
+    }
+
     // MARK: - Non-regression: legitimate Russian must still pin Russian
 
     /// Pull a real Russian recording from the history DB (any >15s one that isn't a known

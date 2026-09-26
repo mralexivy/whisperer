@@ -670,3 +670,19 @@ Diagnostic signature of this class: the log shows an ordinary `rec.stop`, then a
 line a few seconds later, then the *real* transcription completing tens of seconds after that with
 more text than the row was saved with. Any time completion text is longer than stored text, a
 watchdog beat the pipeline.
+
+## Qwen3-ASR backend (2026-09-26)
+
+- The UniMocha CoreML export (`Qwen3-ASR-1.7B-CoreML-INT8`) is unusable for dictation: its decoder takes exactly one token per call (`input_embeds [1,1,2048]`), ~70 ms/step on M2 Pro on GPU (ANE refuses it with error -14), so the 12.5 audio tokens per second of speech each cost a separate call. That caps it at ~1× realtime. Its embedding model also cost 9–16 ms per token lookup.
+- The MLX port (`Whisperer/Transcription/Qwen3ASR/`, weights `mlx-community/Qwen3-ASR-1.7B-8bit`) prefills the whole prompt in one pass: in Debug on M2 Pro, 9.7 s of audio → 1.19 s total (encode 70 ms, prefill 200 ms, ~23 ms/token).
+- The correct prompt is `<|im_start|>system\n<|im_end|>\n<|im_start|>user\n<|audio_start|>{pad×N}<|audio_end|><|im_end|>\n<|im_start|>assistant\n`; the model answers `language X<asr_text>text`. Appending `language X<asr_text>` forces the language. The CoreML build used a chat prompt ("You are a helpful assistant…") and stripped the header by token id, which leaked "language None" / "language English" into history titles.
+- The audio tower chunks mel into 100-frame pieces (13 tokens each, positional embedding restarts per chunk) and attends in windows of 104 tokens. A full-length conv (400 frames → 50 tokens instead of 52) is not the trained model.
+- Live preview with a slow serial backend: if a pass starts while the previous one is still in flight, every result arrives stale and is discarded. Gate preview passes on backend idleness.
+
+## English decoded as Russian (2026-09-26)
+
+- Config: allowed [en, ru], primary en. Qwen3-ASR as ground truth: 7 of the 10 history recordings stored as `ru` are English speech.
+- The 10 s V3 language probe is **not** the cause: on those same recordings it answered `en` in 30/30 cases (`LanguageArbitrationCorpusTests`, opt-in).
+- Actual paths that produced Russian: (1) eager passes decode as `.auto` before any evidence, and whisper's per-pass detection picks `ru` on a few seconds of accented English and emits Russian words (R5 `2026-09-20_11-55-41`: 28 Cyrillic words at logProb −0.57, while the probe later said en 0.765); (2) a weak probe (ru 0.55–0.70) becoming the arbiter's leading candidate and driving provisional or tail decoding.
+- Signature of the wrong language: logProb gets worse once forced (R135 −0.6 → −2.1). Genuine Russian decodes at about −0.1.
+- Fix: the non-primary switch gate (`StreamingTranscriber.languageSwitchGate`). The last 8 s are decoded forced to the primary and forced to the candidate; the candidate is allowed only if its avg logProb leads by ≥ 0.10. Measured leads: correct language ahead by 0.20–1.05 in 29/30 corpus rows plus all 5 gate-test recordings. `.auto` eager passes that detect a non-primary language are held until verified.

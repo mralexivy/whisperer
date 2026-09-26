@@ -14,6 +14,7 @@ enum BackendType: String, CaseIterable, Identifiable {
     case parakeet = "Parakeet"
     case nemotron = "Nemotron"
     case nemotronHebrew = "NemotronHebrew"
+    case qwen3asr = "Qwen3ASR"
     case speechAnalyzer = "Apple Speech"
     case whisperKit = "WhisperKit"
 
@@ -25,6 +26,7 @@ enum BackendType: String, CaseIterable, Identifiable {
         case .parakeet: return "Parakeet"
         case .nemotron: return "Nemotron"
         case .nemotronHebrew: return "Nemotron Hebrew"
+        case .qwen3asr: return "Qwen3 ASR"
         case .speechAnalyzer: return "Apple Speech"
         case .whisperKit: return "WhisperKit"
         }
@@ -36,6 +38,7 @@ enum BackendType: String, CaseIterable, Identifiable {
         case .parakeet: return "bird.fill"
         case .nemotron: return "waveform.badge.mic"
         case .nemotronHebrew: return "waveform.badge.mic"
+        case .qwen3asr: return "waveform.badge.sparkles"
         case .speechAnalyzer: return "apple.logo"
         case .whisperKit: return "bolt.fill"
         }
@@ -48,6 +51,7 @@ enum BackendType: String, CaseIterable, Identifiable {
         case .parakeet: return "Fast"
         case .nemotron: return "Streaming"
         case .nemotronHebrew: return "Hebrew"
+        case .qwen3asr: return "Leading"
         case .speechAnalyzer: return "System"
         case .whisperKit: return "Core ML"
         }
@@ -60,6 +64,7 @@ enum BackendType: String, CaseIterable, Identifiable {
         case .parakeet: return "ANE-accelerated"
         case .nemotron: return "True streaming, 37ms/chunk"
         case .nemotronHebrew: return "Hebrew fine-tune, 37ms/chunk"
+        case .qwen3asr: return "Top of Open ASR Leaderboard · 30 languages"
         case .speechAnalyzer: return "macOS 26+"
         case .whisperKit: return "Core ML optimized · 100 languages"
         }
@@ -68,7 +73,7 @@ enum BackendType: String, CaseIterable, Identifiable {
     var isAvailable: Bool {
         switch self {
         case .whisperCpp: return true
-        case .parakeet, .nemotron, .nemotronHebrew:
+        case .parakeet, .nemotron, .nemotronHebrew, .qwen3asr:
             // Requires Apple Silicon (CoreML/ANE)
             var sysinfo = utsname()
             uname(&sysinfo)
@@ -199,7 +204,7 @@ extension BackendType {
     ) -> Bool {
         guard language != .auto else { return true }
         switch self {
-        case .whisperCpp, .nemotron, .nemotronHebrew, .whisperKit: return true
+        case .whisperCpp, .nemotron, .nemotronHebrew, .qwen3asr, .whisperKit: return true
         case .parakeet:
             let supported = (parakeetVariant == .v2) ? Self.parakeetV2Languages : Self.parakeetV3Languages
             return supported.contains(language.rawValue)

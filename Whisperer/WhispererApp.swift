@@ -424,12 +424,14 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         Logger.debug("Waiting for Metal operations to complete...", subsystem: .app)
         try? await Task.sleep(nanoseconds: 200_000_000)  // 200ms
 
-        // 4.5. Free Nemotron (FluidAudio) — awaited so cleanup completes before exit().
+        // 4.5. Free Nemotron + Qwen3ASR (FluidAudio) — awaited so cleanup completes before exit().
         // Previously fire-and-forget in releaseWhisperResources(); now awaited here so
         // FluidAudio teardown finishes before C++ static destructors run.
         #if canImport(FluidAudio)
         Logger.debug("Freeing Nemotron resources...", subsystem: .app)
         await appState.releaseNemotronAsync()
+        Logger.debug("Freeing Qwen3 ASR resources...", subsystem: .app)
+        await appState.releaseQwen3ASRAsync()
         #endif
 
         // 4.6. Free LLM (MLX) — MUST be awaited before exit() runs __cxa_finalize_ranges.
@@ -1003,6 +1005,7 @@ struct StatusTabView: View {
         case .parakeet: return appState.selectedParakeetModel.displayName
         case .nemotron: return "Nemotron Multilingual"
         case .nemotronHebrew: return "Nemotron Hebrew"
+        case .qwen3asr: return "Qwen3 ASR"
         case .speechAnalyzer: return "On-Device"
         case .whisperKit: return "WhisperKit Turbo"
         }
@@ -1011,7 +1014,7 @@ struct StatusTabView: View {
     private var activeModelDetail: String? {
         switch appState.selectedBackendType {
         case .whisperCpp: return appState.selectedModel.sizeDescription
-        case .parakeet, .nemotron, .nemotronHebrew, .speechAnalyzer, .whisperKit: return nil
+        case .parakeet, .nemotron, .nemotronHebrew, .qwen3asr, .speechAnalyzer, .whisperKit: return nil
         }
     }
 
@@ -1021,6 +1024,7 @@ struct StatusTabView: View {
         case .parakeet: return .green
         case .nemotron: return .purple
         case .nemotronHebrew: return .orange
+        case .qwen3asr: return .purple
         case .speechAnalyzer: return .cyan
         case .whisperKit: return .blue
         }
@@ -1452,6 +1456,18 @@ struct StatusTabView: View {
 
 struct ModelsTabView: View {
     @ObservedObject var appState = AppState.shared
+    /// Which section is currently shown — independent of the loaded backend.
+    /// Tabs update this; model rows call selectBackend/download separately.
+    @State private var displayedEngine: BackendType = .whisperCpp
+
+    /// Normalise any hidden sub-backend (nemotron, nemotronHebrew, qwen3asr)
+    /// to the tab that contains it.
+    private func normalise(_ b: BackendType) -> BackendType {
+        switch b {
+        case .nemotron, .nemotronHebrew, .qwen3asr: return .parakeet
+        default: return b
+        }
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -1460,6 +1476,13 @@ struct ModelsTabView: View {
 
             // Engine picker + models
             engineSection
+        }
+        .onAppear {
+            displayedEngine = normalise(appState.selectedBackendType)
+        }
+        .onChange(of: appState.selectedBackendType) { newVal in
+            // Keep display in sync when the backend changes via means other than the tab
+            displayedEngine = normalise(newVal)
         }
     }
 
@@ -1502,13 +1525,13 @@ struct ModelsTabView: View {
             }
 
             HStack(spacing: 0) {
-                ForEach(Array(BackendType.allCases.filter { $0 != .nemotron && $0 != .nemotronHebrew }.enumerated()), id: \.element.id) { index, backend in
-                    let isSelected = appState.selectedBackendType == backend || (backend == .parakeet && (appState.selectedBackendType == .nemotron || appState.selectedBackendType == .nemotronHebrew))
+                ForEach(Array(BackendType.allCases.filter { $0 != .nemotron && $0 != .nemotronHebrew && $0 != .qwen3asr }.enumerated()), id: \.element.id) { index, backend in
+                    let isSelected = displayedEngine == backend
                     let isUnavailable = !backend.isAvailable
                     let isRecommended = backend == recommendedBackend && !isUnavailable
 
                     Button(action: {
-                        appState.selectBackend(backend)
+                        displayedEngine = backend
                     }) {
                         VStack(spacing: 1) {
                             HStack(spacing: 4) {
@@ -1557,7 +1580,7 @@ struct ModelsTabView: View {
 
             // Models for selected engine
             Group {
-                if appState.selectedBackendType == .whisperCpp {
+                if displayedEngine == .whisperCpp {
                     HStack(spacing: 10) {
                         ZStack {
                             RoundedRectangle(cornerRadius: 6)
@@ -1580,13 +1603,13 @@ struct ModelsTabView: View {
                             ModelMenuItem(model: model)
                         }
                     }
-                } else if appState.selectedBackendType == .whisperKit {
+                } else if displayedEngine == .whisperKit {
                     #if canImport(WhisperKit)
                     whisperKitModelSection
                     #endif
-                } else if appState.selectedBackendType == .parakeet || appState.selectedBackendType == .nemotron || appState.selectedBackendType == .nemotronHebrew {
+                } else if displayedEngine == .parakeet {
                     parakeetModelSection
-                } else if appState.selectedBackendType == .speechAnalyzer {
+                } else if displayedEngine == .speechAnalyzer {
                     speechAnalyzerSection
                 }
             }
@@ -1741,6 +1764,7 @@ struct ModelsTabView: View {
                 #if canImport(FluidAudio)
                 NemotronModelRow()
                 NemotronHebrewModelRow()
+                Qwen3ASRModelRow()
                 #endif
             }
 
@@ -1814,6 +1838,25 @@ struct ModelsTabView: View {
 
                     if appState.isDownloadingNemotronHebrew {
                         ProgressView()
+                            .progressViewStyle(.linear)
+                            .tint(MBColors.accent)
+                    }
+                }
+                .padding(.leading, 20)
+            }
+            if appState.isDownloadingQwen3ASR || appState.isLoadingQwen3ASR {
+                VStack(alignment: .leading, spacing: 6) {
+                    HStack(spacing: 6) {
+                        ProgressView()
+                            .scaleEffect(0.5)
+                            .frame(width: 12, height: 12)
+                        Text(appState.qwen3asrDownloadStatus)
+                            .font(.system(size: 11, weight: .medium))
+                            .foregroundColor(MBColors.textSecondary)
+                    }
+
+                    if appState.isDownloadingQwen3ASR {
+                        ProgressView(value: appState.downloadProgress)
                             .progressViewStyle(.linear)
                             .tint(MBColors.accent)
                     }
@@ -2962,6 +3005,89 @@ struct NemotronHebrewModelRow: View {
                         Image(systemName: "arrow.down.circle")
                             .font(.system(size: 14))
                         Text("~1.5 GB")
+                            .font(.caption2)
+                    }
+                    .foregroundColor(MBColors.accent)
+                }
+            }
+            .padding(.vertical, 6)
+            .padding(.horizontal, 8)
+            .background(
+                RoundedRectangle(cornerRadius: 6)
+                    .fill(isHighlighted ? MBColors.accent.opacity(0.12) : Color.clear)
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 6)
+                    .stroke(isHighlighted ? MBColors.accent.opacity(0.3) : Color.clear, lineWidth: 1)
+            )
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain).pointerOnHover()
+        .disabled(appState.isModelBusy)
+    }
+}
+
+// MARK: - Qwen3-ASR Model Row
+
+struct Qwen3ASRModelRow: View {
+    @ObservedObject var appState = AppState.shared
+
+    var isActive: Bool { appState.isModelLoaded && appState.loadedBackendType == .qwen3asr }
+    var isLoading: Bool { appState.isDownloadingQwen3ASR || appState.isLoadingQwen3ASR }
+    var isHighlighted: Bool { isActive || isLoading }
+    var isCached: Bool { appState.isQwen3ASRModelCached() }
+
+    var body: some View {
+        Button(action: {
+            if isCached {
+                appState.selectBackend(.qwen3asr)
+            } else {
+                appState.downloadQwen3ASRModel()
+            }
+        }) {
+            HStack(spacing: 10) {
+                Image(systemName: "waveform.badge.sparkles")
+                    .foregroundColor(.purple)
+                    .font(.system(size: 10, weight: .medium))
+                    .frame(width: 16)
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Qwen3 ASR")
+                        .font(.system(size: 12, weight: isHighlighted ? .semibold : .regular))
+                        .foregroundColor(isHighlighted ? MBColors.textPrimary : MBColors.textSecondary)
+
+                    Text("Top of Open ASR Leaderboard · 30 languages")
+                        .font(.caption2)
+                        .foregroundColor(MBColors.textTertiary)
+                }
+
+                Spacer()
+
+                if isLoading {
+                    HStack(spacing: 4) {
+                        ProgressView()
+                            .scaleEffect(0.5)
+                            .frame(width: 12, height: 12)
+                        Text(isActive ? "Loading" : "Downloading")
+                            .font(.caption2)
+                            .foregroundColor(MBColors.accent)
+                    }
+                } else if isActive {
+                    Text("Active")
+                        .font(.system(size: 10, weight: .semibold))
+                        .foregroundColor(MBColors.accent)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 3)
+                        .background(Capsule().fill(MBColors.accent.opacity(0.15)))
+                } else if isCached {
+                    Image(systemName: "checkmark.circle.fill")
+                        .foregroundColor(MBColors.accent.opacity(0.5))
+                        .font(.system(size: 14))
+                } else {
+                    HStack(spacing: 4) {
+                        Image(systemName: "arrow.down.circle")
+                            .font(.system(size: 14))
+                        Text(Qwen3ASREngine.downloadSizeLabel)
                             .font(.caption2)
                     }
                     .foregroundColor(MBColors.accent)
