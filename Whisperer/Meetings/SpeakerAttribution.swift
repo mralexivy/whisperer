@@ -34,7 +34,7 @@ enum SpeakerAttribution {
     /// The speaker holding the window, or `nil` when the timeline has no real opinion.
     ///
     /// Overlapping speech resolves to whoever dominates rather than whoever started first, but
-    /// "dominates" is not the same as "won". Sortformer runs its speaker slots independently
+    /// "dominates" is not the same as "won". The diarizer runs its speaker slots independently
     /// and finalizes a turn only when that slot's activity *falls*, so a slot talking
     /// continuously finalizes nothing at all: through an unbroken turn the finalized timeline
     /// holds almost nothing but the other slots' short blips. A blip that covers 0.4s of a 1.1s

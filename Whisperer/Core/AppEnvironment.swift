@@ -17,7 +17,7 @@ enum AppEnvironment {
     /// `com.ivy.whisperer`. Two consequences, both of which have already bitten:
     ///
     /// 1. **Heavy startup work corrupts measurements.** An unguarded
-    ///    `MeetingDiarizerService.warm()` spent 4416 ms loading a Sortformer ANE bundle
+    ///    `MeetingDiarizerService.warm()` spent 4416 ms loading a diarizer ANE bundle
     ///    concurrently with a latency test and failed it at 4156 ms against a 3000 ms budget —
     ///    a timing test failing for a reason entirely outside the code under test, which reads
     ///    as a real regression and sends debugging the wrong way.

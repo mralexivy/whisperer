@@ -2,7 +2,7 @@
 //  MeetingSpeakerCoordinator.swift
 //  Whisperer
 //
-//  Attributes Nemotron's growing transcript to Sortformer speaker slots on a
+//  Attributes Nemotron's growing transcript to Nemotron-3 Diarization speaker slots on a
 //  shared audio-sample clock.
 //
 
@@ -12,18 +12,18 @@ import FluidAudio
 
 /// Runs the streaming diarizer alongside the ASR and hands back speaker-labelled text.
 ///
-/// `SortformerDiarizer` is a `public final class` documented as not thread-safe. This actor
-/// is the containment boundary — the instance is created here and never escapes (same
-/// precedent as `MeetingRAGEngine` owning Wax `Memory` handles).
+/// `Nemotron3Diarizer` is not thread-safe. This actor is the containment boundary —
+/// the instance is created here and never escapes (same precedent as `MeetingRAGEngine`
+/// owning Wax `Memory` handles).
 ///
 /// ### Why an audio-sample clock
 /// The coordinator is fed the same buffers as the ASR, so `samplesFed / 16000` is the exact
-/// audio position. Nemotron partials *arrive* later than the audio they describe, while
-/// Sortformer timestamps are audio time — counting samples puts both on one axis with no
+/// audio position. Nemotron ASR partials *arrive* later than the audio they describe, while
+/// diarizer timestamps are audio time — counting samples puts both on one axis with no
 /// fudge factor.
 ///
 /// ### Why deltas are held back
-/// Sortformer finalizes its timeline ~1s behind the audio. Text is queued until the finalized
+/// The diarizer finalizes its timeline ~1s behind the audio. Text is queued until the finalized
 /// timeline covers its span, so labels are right the first time. The delay is invisible: the
 /// not-yet-attributed remainder is exactly what the UI already draws as the grey live tail.
 actor MeetingSpeakerCoordinator {
@@ -34,7 +34,7 @@ actor MeetingSpeakerCoordinator {
     private var onAttributed: (@Sendable (String, Int, TimeInterval, TimeInterval) -> Void)?
     /// Everything still waiting on the diarizer — rendered as the grey live tail.
     private var onPendingTail: (@Sendable (String) -> Void)?
-    /// Speaker the diarizer *thinks* is talking right now, from tentative segments.
+    /// Speaker the diarizer *thinks* is talking right now, from the latest finalized segment.
     private var onLiveSpeaker: (@Sendable (Int) -> Void)?
 
     func setCallbacks(
@@ -49,7 +49,12 @@ actor MeetingSpeakerCoordinator {
 
     // MARK: - State
 
-    private var diarizer: SortformerDiarizer?
+    private var diarizer: Nemotron3Diarizer?
+
+    /// Owned timeline converts raw Nemotron3ChunkResult probabilities into DiarizerTimelineUpdate.
+    private var diarizerTimeline: DiarizerTimeline?
+    /// Running count of finalized frames fed into the timeline — used as startFrame for each chunk.
+    private var diarizerFrameCount: Int = 0
 
     private let sampleRate: Double = 16000
     private var samplesFed: Int = 0
@@ -58,7 +63,6 @@ actor MeetingSpeakerCoordinator {
     /// Speaker turns the diarizer has committed to, and how far that timeline reaches.
     private var finalized: [SpeakerAttribution.Turn] = []
     private var finalizedUntil: TimeInterval = 0
-    private var tentativeSpeaker: Int?
     private var lastEmittedSpeaker: Int?
 
     /// Text waiting for the finalized timeline to catch up, in transcript order.
@@ -71,9 +75,6 @@ actor MeetingSpeakerCoordinator {
     /// Word count already handed to `onAttributed` — the floor below which a Nemotron
     /// revision cannot rewrite history.
     private var emittedWordCount: Int = 0
-
-    /// `process()` drains one chunk per call. Bounded so a misbehaving model can't spin here.
-    private let maxDrainIterations = 64
 
     /// Last tail string published. `drainPending()` runs on every audio buffer, but the tail
     /// only actually changes when a partial lands (~1/s) — without this the grey live text is
@@ -97,41 +98,48 @@ actor MeetingSpeakerCoordinator {
         reset()
 
         guard MeetingDiarizerService.isModelCached() else {
-            Logger.info("Diarization: Sortformer model not on disk — meeting records without speaker labels", subsystem: .model)
+            Logger.info("Diarization: model not on disk — meeting records without speaker labels", subsystem: .model)
             return
         }
 
         let config = MeetingDiarizerService.config
         do {
-            let models: SortformerModels
+            let models: Nemotron3Models
             if let warm = await MeetingDiarizerService.shared.models {
                 models = warm
             } else {
                 let started = Date()
-                models = try await SortformerModels.loadFromHuggingFace(
+                models = try await Nemotron3Models.loadFromHuggingFace(
                     config: config,
                     cacheDirectory: MeetingDiarizerService.modelsRoot()
                 )
                 let ms = Int(Date().timeIntervalSince(started) * 1000)
-                Logger.warning("Diarization: Sortformer was not warm — loaded on the recording path in \(ms)ms", subsystem: .model)
+                Logger.warning("Diarization: model was not warm — loaded on the recording path in \(ms)ms", subsystem: .model)
                 await MeetingDiarizerService.shared.adopt(models)
             }
-            let instance = SortformerDiarizer(config: config)
-            instance.initialize(models: models)
+            let instance = Nemotron3Diarizer(config: config, models: models)
             diarizer = instance
-            Logger.info("Diarization: Sortformer ready (\(config.numSpeakers) speaker slots)", subsystem: .model)
+            let timelineConfig = DiarizerTimelineConfig(
+                numSpeakers: config.numSpeakers,
+                frameDurationSeconds: config.outputFrameSeconds
+            )
+            diarizerTimeline = DiarizerTimeline(config: timelineConfig)
+            Logger.info("Diarization: ready (\(config.numSpeakers) speaker slots)", subsystem: .model)
         } catch {
-            Logger.error("Diarization: Sortformer load failed — \(error.localizedDescription)", subsystem: .model)
+            Logger.error("Diarization: load failed — \(error.localizedDescription)", subsystem: .model)
             diarizer = nil
+            diarizerTimeline = nil
         }
     }
 
     private func reset() {
         diarizer?.reset()
+        diarizer = nil
+        diarizerTimeline = nil
+        diarizerFrameCount = 0
         samplesFed = 0
         finalized = []
         finalizedUntil = 0
-        tentativeSpeaker = nil
         lastEmittedSpeaker = nil
         pending = []
         lastWords = []
@@ -146,20 +154,15 @@ actor MeetingSpeakerCoordinator {
     /// the diarizer is absent, so timestamps stay right in the degraded path.
     ///
     /// `drainPending()` is called unconditionally so the age-based deadline fires even when
-    /// Sortformer is not loaded — without this, a meeting recorded without a diarizer model
-    /// would keep the entire transcript in pending forever (finalizedUntil stays 0, and the
-    /// only drain path was through the diarizer's process() loop).
+    /// the diarizer is not loaded — without this, a meeting recorded without a model would keep
+    /// the entire transcript in pending forever (finalizedUntil stays 0).
     func feed(_ samples: [Float]) {
         samplesFed += samples.count
-        if let diarizer {
-            diarizer.addAudio(samples)
-            // addAudio buffers internally; process() returns nil until a chunk's worth of mel
-            // features exists, and may have several chunks queued after a burst.
-            var iterations = 0
-            while iterations < maxDrainIterations,
-                  let update = ((try? diarizer.process()) ?? nil) {
-                integrate(update)
-                iterations += 1
+        if let diarizer, let timeline = diarizerTimeline {
+            diarizer.appendAudio(samples)
+            let chunks = (try? diarizer.processBufferedAudio()) ?? []
+            for chunk in chunks {
+                ingest(chunk, into: timeline)
             }
         }
         drainPending()
@@ -190,11 +193,34 @@ actor MeetingSpeakerCoordinator {
     /// Closes the stream: drain the diarizer, then commit whatever text is left with the
     /// best speaker guess available.
     func finish() {
-        if let diarizer, let update = ((try? diarizer.finalizeSession()) ?? nil) {
-            integrate(update)
+        if let diarizer, let timeline = diarizerTimeline {
+            let chunks = (try? diarizer.finishStream()) ?? []
+            for chunk in chunks {
+                ingest(chunk, into: timeline)
+            }
         }
         drainPending()
         flushRemaining()
+    }
+
+    // MARK: - Chunk ingestion
+
+    /// Converts a `Nemotron3ChunkResult` (raw probabilities) into a `DiarizerTimelineUpdate`
+    /// via the owned `DiarizerTimeline`, then integrates the update into the speaker-turn state.
+    ///
+    /// Nemotron3 emits no tentative predictions — the right-context window finalizes every
+    /// core frame before it is returned. The live-speaker dot therefore reads from the newest
+    /// finalized segment instead of a tentative one; the lag is at most one chunk (~1.04 s),
+    /// comparable to the prior ~1 s finalization lag.
+    private func ingest(_ chunk: Nemotron3ChunkResult, into timeline: DiarizerTimeline) {
+        let diarizerChunk = DiarizerChunkResult(
+            startFrame: diarizerFrameCount,
+            finalizedPredictions: chunk.probabilities,
+            finalizedFrameCount: chunk.frameCount
+        )
+        diarizerFrameCount += chunk.frameCount
+        guard let update = try? timeline.addChunk(diarizerChunk) else { return }
+        integrate(update)
     }
 
     // MARK: - Diffing
@@ -280,10 +306,9 @@ actor MeetingSpeakerCoordinator {
             finalizedUntil = max(finalizedUntil, end)
         }
 
-        // The latest tentative segment is who the model currently believes is talking.
-        if let latest = update.tentativeSegments.max(by: { $0.endTime < $1.endTime }),
-           latest.speakerIndex != tentativeSpeaker {
-            tentativeSpeaker = latest.speakerIndex
+        // The latest finalized segment is who the model most recently confirmed as talking.
+        // Nemotron3 emits no tentative predictions, so we read the live speaker from finalized.
+        if let latest = update.finalizedSegments.max(by: { $0.endTime < $1.endTime }) {
             onLiveSpeaker?(latest.speakerIndex)
         }
     }
@@ -295,9 +320,9 @@ actor MeetingSpeakerCoordinator {
     ///
     /// Additionally enforces a 3 s audio-age deadline: an item older than `drainDeadlineSeconds`
     /// behind the current audio clock is emitted with the best available speaker guess rather
-    /// than waiting for Sortformer to finalize. This prevents unbounded tail growth during long
-    /// monologues (Sortformer finalizes only when a turn *closes*) and bounds the main-actor
-    /// work done by `MeetingSession.livePreviewText`'s synchronous polish setter.
+    /// than waiting for the diarizer to finalize. This prevents unbounded tail growth during long
+    /// monologues and bounds the main-actor work done by `MeetingSession.livePreviewText`'s
+    /// synchronous polish setter.
     private static let drainDeadlineSeconds: TimeInterval = 3.0
 
     private func drainPending() {
@@ -396,14 +421,9 @@ actor MeetingSpeakerCoordinator {
     ///
     /// Carrying the current speaker is the right prior: speech continues far more often than it
     /// changes hands, and a real handover shows up as finalized coverage on the next window.
-    ///
-    /// The tentative track deliberately gets no say. It flips on every inference, and waiting it
-    /// out is this coordinator's entire reason to exist — letting it decide a *committed* label
-    /// defeats the queue that holds text back for exactly that reason. It seeds the very first
-    /// emit only, when there is no current speaker to carry.
     private func dominantSpeaker(from start: TimeInterval, to end: TimeInterval) -> Int {
         SpeakerAttribution.dominantSpeaker(in: finalized, from: start, to: end)
-            ?? lastEmittedSpeaker ?? tentativeSpeaker ?? 0
+            ?? lastEmittedSpeaker ?? 0
     }
 }
 #endif

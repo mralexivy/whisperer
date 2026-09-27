@@ -37,6 +37,7 @@ public enum Repo: String, CaseIterable, Sendable {
     case nemotronMultilingual = "FluidInference/Nemotron-3.5-ASR-Streaming-Multilingual-0.6b-CoreML"
     case nemotronHebrew = "mralexivy/nemotron-3.5-asr-streaming-0.6b-hebrew"
     case diarizer = "FluidInference/speaker-diarization-coreml"
+    case nemotron3Diarization = "FluidInference/nemotron-3-diarization-coreml"
     /// Root of the kokoro HF repo. The mono Kokoro TTS backend was removed in
     /// favor of `kokoroAne`/`kokoroAneZh`, but this case is kept because the
     /// shared G2P CoreML assets (`G2PEncoder.mlmodelc`, `G2PDecoder.mlmodelc`,
@@ -116,6 +117,8 @@ public enum Repo: String, CaseIterable, Sendable {
             return "kokoro-82m-coreml/ANE-ja"
         case .sortformer:
             return "diar-streaming-sortformer-coreml"
+        case .nemotron3Diarization:
+            return "nemotron-3-diarization-coreml"
         case .lseendAmi:
             return "ls-eend-coreml/optimized/ami"
         case .lseendCallHome:
@@ -642,6 +645,22 @@ public enum ModelNames {
         public static let jointPackage = joint + ".mlpackage"
     }
 
+    /// Nemotron-3 streaming diarization model names
+    public enum Nemotron3 {
+        /// Root-level assets every preset needs (split-graph presets also need
+        /// `pre_encode_proj_t.bin`).
+        public static let silenceEmbeddingFile = "learnable_sil_emb.bin"
+        public static let preEncodeProjectionFile = "pre_encode_proj_t.bin"
+        public static let requiredAssets: Set<String> = [silenceEmbeddingFile, preEncodeProjectionFile]
+
+        /// Identifies which upstream checkpoint the published CoreML bundles were
+        /// converted from. Bump this whenever the published weights change.
+        public static let weightsVersion = "ga-2026-09-23"
+
+        /// Marker file recording `weightsVersion` for the cached bundles.
+        public static let weightsVersionFile = ".fluidaudio-nemotron3-weights"
+    }
+
     /// Sortformer streaming diarization model names
     public enum Sortformer {
         /// Selects which weight-precision build of the model set to download.
@@ -694,25 +713,6 @@ public enum ModelNames {
                 }
             }
 
-            public var defaultConfiguration: SortformerConfig {
-                switch self {
-                case .fastV2:
-                    return .fastV2
-                case .fastV2_1:
-                    return .fastV2_1
-                case .balancedV2:
-                    return .balancedV2
-                case .balancedV2_1:
-                    return .balancedV2_1
-                case .highContextV2:
-                    return .highContextV2
-                case .highContextV2_1:
-                    return .highContextV2_1
-                case .efficientV2_1:
-                    return .efficientV2_1
-                }
-            }
-
             /// Compiled-model path for this variant at the default (`.fp16`) precision.
             public var fileName: String {
                 return fileName(precision: .fp16)
@@ -723,9 +723,6 @@ public enum ModelNames {
                 return "\(precision.subdirectory)/\(name).mlmodelc"
             }
 
-            public func isCompatible(with config: SortformerConfig) -> Bool {
-                defaultConfiguration.isCompatible(with: config)
-            }
         }
 
         /// Repo subdirectory holding the default (`.fp16`) model set. Both v3 sets are the
@@ -746,15 +743,6 @@ public enum ModelNames {
         /// Bundle name for a specific variant at the given precision
         public static func bundle(for variant: Variant, precision: ModelPrecision) -> String {
             return variant.fileName(precision: precision)
-        }
-
-        /// Bundle name for a given configuration (honors `config.precision`)
-        public static func bundle(for config: SortformerConfig) -> String? {
-            guard let variant = config.modelVariant else {
-                return nil
-            }
-            assert(variant.isCompatible(with: config), "ERROR: Model variant and configuration are not compatible.")
-            return variant.fileName(precision: config.precision)
         }
 
         /// Default bundle name
@@ -1349,6 +1337,14 @@ public enum ModelNames {
                 return [variant]
             }
             return ModelNames.Sortformer.requiredModels
+        case .nemotron3Diarization:
+            // Downloads are driven by `Nemotron3Models.loadFromHuggingFace` via
+            // `download(subdirectory:)` (one preset bundle + the root .bin assets);
+            // provided for exhaustiveness.
+            if let variant = variant {
+                return [variant]
+            }
+            return ModelNames.Nemotron3.requiredAssets
         case .lseendAmi, .lseendCallHome, .lseendDihard2, .lseendDihard3:
             if let variant = variant {
                 return [variant + ".mlmodelc"]

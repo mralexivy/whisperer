@@ -7,10 +7,10 @@
 
 import Foundation
 
-/// Serializes the expensive, deferrable model jobs — ASR loads, LLM loads, Sortformer warm-up,
+/// Serializes the expensive, deferrable model jobs — ASR loads, LLM loads, diarizer warm-up,
 /// RAG indexing — so they never contend for the ANE/GPU with each other or with a live meeting.
 ///
-/// Four model families are resident in this app (Nemotron ASR, Sortformer diarization and the
+/// Four model families are resident in this app (Nemotron ASR, Nemotron-3 diarization and the
 /// MiniLM RAG embedder on the ANE; Qwen MTP on Metal). Before this queue the only coordination
 /// between them was a blind 15s `Task.sleep` in `MeetingDiarizerService`, and meeting stop fired
 /// RAG indexing, title generation, overview generation and an ASR backend reload within the same
@@ -160,7 +160,7 @@ actor ModelWorkQueue {
     /// `label` appears in the timing log alongside the queue wait and the run duration — that log
     /// is the standing evidence for whether model loads still overlap.
     /// `T` is deliberately unconstrained: callers hand back model handles (`NemotronBridge`,
-    /// `SortformerModels`) that predate `Sendable` and are already passed across isolation
+    /// `Nemotron3Models`) that predate `Sendable` and are already passed across isolation
     /// domains by their existing load paths.
     ///
     /// Throws `CancellationError` if the calling task is cancelled before `body` starts. It is

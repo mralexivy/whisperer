@@ -631,7 +631,7 @@ class MeetingSession: ObservableObject {
         accumulate(text: text, start: start, end: end, idleFlushTracksSpeech: true)
     }
 
-    /// Nemotron + Sortformer path: `text` is already attributed to a speaker.
+    /// Nemotron ASR + Nemotron-3 Diarization path: `text` is already attributed to a speaker.
     ///
     /// A speaker change closes the current paragraph at the boundary — that is what turns
     /// the transcript into per-turn cards instead of one wall of text.
@@ -676,8 +676,8 @@ class MeetingSession: ObservableObject {
     ///
     /// - Parameter idleFlushTracksSpeech: whether a gap in *arrival* is evidence that the
     ///   speaker stopped. True for whisper VAD chunks. **False for the attributed path**:
-    ///   `MeetingSpeakerCoordinator` withholds text until Sortformer's finalized timeline
-    ///   covers it, and Sortformer only finalizes a turn when it *closes* — so during an
+    ///   `MeetingSpeakerCoordinator` withholds text until the diarizer's finalized timeline
+    ///   covers it, and the diarizer only finalizes a turn when it *closes* — so during an
     ///   unbroken monologue text arrives in bursts at every micro-breath. Treating those
     ///   arrival gaps as pauses chopped a 48s continuous recording into seven cards.
     private func accumulate(text: String, start: Double, end: Double, idleFlushTracksSpeech: Bool) {
@@ -794,7 +794,7 @@ class MeetingSession: ObservableObject {
     /// close tries to land it on a sentence end.
     ///
     /// A break derived from *arrival* timing is a hypothesis, not a fact: the gap rule cannot
-    /// tell real silence from a hole in Sortformer's finalized timeline, which
+    /// tell real silence from a hole in the diarizer's finalized timeline, which
     /// `MeetingSpeakerCoordinator.voicedRuns` reports verbatim and `emit()` then apportions
     /// words across. That is how a single sentence got cut into a 7-word orphan card and a
     /// continuation. The text is the only signal that survives both backends, so a soft break

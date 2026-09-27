@@ -3,7 +3,7 @@
 //  Whisperer
 //
 //  Dedicated engine lifecycle for meeting features: download + warm the four model
-//  engines (speech/Nemotron, cleanup/WhisperBridge, intelligence/LLM, speakers/Sortformer)
+//  engines (speech/Nemotron, cleanup/WhisperBridge, intelligence/LLM, speakers/Nemotron3Diarizer)
 //  so meeting AI works even when the user's dictation LLM toggle is off.
 //
 
@@ -54,7 +54,7 @@ enum MeetingEngine: CaseIterable {
             let totalMB = Int(totalBytes / 1_000_000)
             return totalMB > 0 ? "~\(totalMB) MB" : "~547 MB"
         case .intelligence: return "~3.2 GB"
-        case .speakers:     return "~330 MB"
+        case .speakers:     return "~110 MB"
         }
     }
 
@@ -67,7 +67,7 @@ enum MeetingEngine: CaseIterable {
                 .map { $0.approximateDownloadBytes }
                 .reduce(0.0, +)
         case .intelligence: return 3_200_000_000
-        case .speakers:     return 330_000_000
+        case .speakers:     return 110_000_000
         }
     }
 }
@@ -116,7 +116,7 @@ final class MeetingEngines: ObservableObject {
     /// In-flight prefetch/warm task per engine — guard against double-submission.
     private var engineTasks: [MeetingEngine: Task<Void, Never>] = [:]
 
-    /// Combine subscriptions that mirror Sortformer readiness into the .speakers slot.
+    /// Combine subscriptions that mirror diarizer readiness into the .speakers slot.
     private var cancellables = Set<AnyCancellable>()
 
     // MARK: - LLM borrow/release
@@ -133,7 +133,7 @@ final class MeetingEngines: ObservableObject {
     private init() {
         refreshReadiness()
 
-        // Mirror Sortformer readiness into .speakers
+        // Mirror diarizer readiness into .speakers
         MeetingDiarizerService.shared.$isReady
             .sink { [weak self] isReady in
                 Task { @MainActor [weak self] in
@@ -149,7 +149,7 @@ final class MeetingEngines: ObservableObject {
             }
             .store(in: &cancellables)
 
-        // Throttle to 100 ms — Sortformer fires progress on every URLSession delegate
+        // Throttle to 100 ms — the diarizer fires progress on every URLSession delegate
         // callback, which can be several hundred times per second on a fast link.
         // With DispatchQueue.main as the scheduler, the sink fires on the main queue
         // so we can touch @MainActor state directly without an extra Task hop.
@@ -302,7 +302,7 @@ final class MeetingEngines: ObservableObject {
         // followed by a blocking Core ML compile the cleanup path itself measures at ~40s, and
         // an MLX LLM load/unload. It is reachable at launch *and* from meeting detection — and
         // recording tests turn the microphone on, which is exactly what the detector watches, so
-        // a test suite can trigger it at an arbitrary moment. Same failure mode as the Sortformer
+        // a test suite can trigger it at an arbitrary moment. Same failure mode as the diarizer
         // warm-up that broke `testAbortCancelsTranscription`, three times over.
         if AppEnvironment.isRunningTests {
             Logger.info("Meeting engine prefetch skipped — test environment", subsystem: .model)

@@ -725,7 +725,7 @@ class AppState: ObservableObject {
     private var isMeetingStopInFlight = false
     #if canImport(FluidAudio)
     /// Live speaker diarization for the current meeting. Nil on non-Nemotron backends
-    /// or when the Sortformer model isn't on disk — the meeting then records exactly as
+    /// or when the diarizer model isn't on disk — the meeting then records exactly as
     /// it did before, everything under "Speaker 1".
     private var meetingSpeakerCoordinator: MeetingSpeakerCoordinator?
     /// Serializes `coordinator.feed()` calls. Feeding an actor from the audio callback
@@ -3383,8 +3383,8 @@ class AppState: ObservableObject {
                 }
 
                 #if canImport(FluidAudio)
-                // Sortformer consumes 0.48s of audio per ANE inference, so handing it every
-                // ~85ms capture buffer spawns ~12 Tasks/s that mostly no-op inside the diarizer.
+                // The diarizer buffers internally per chunk (~1.04s for the .fast preset),
+                // so handing it every ~85ms capture buffer spawns ~12 Tasks/s that mostly no-op.
                 // Batching to 0.25s cuts that churn ~3x, and the added clock skew is an order of
                 // magnitude inside the diarizer's own ~1s finalization lag.
                 var diarizerBatch: [Float] = []
@@ -3398,7 +3398,7 @@ class AppState: ObservableObject {
                     self.meetingSilenceWatcher.feed(samples)
                     #if canImport(FluidAudio)
                     // Same buffers the ASR sees, so the coordinator's sample counter is an exact
-                    // audio clock. Chained rather than fire-and-forget: SortformerDiarizer is not
+                    // audio clock. Chained rather than fire-and-forget: Nemotron3Diarizer is not
                     // thread-safe and actor re-entrancy across its ANE await would interleave.
                     if let coordinator = self.meetingSpeakerCoordinator {
                         diarizerBatch.append(contentsOf: samples)
