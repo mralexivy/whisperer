@@ -1728,6 +1728,15 @@ class StreamingTranscriber {
                 // Post-chunk script stabilizer — check for language mismatches
                 self.checkScriptStability(chunkText: trimmed)
 
+                // Qwen3 names the language in a header ahead of every transcript, so each
+                // committed chunk carries a free detection. Folding it into the arbiter's tally
+                // is what lets the offline refine pass build a language timeline without loading
+                // a Whisper model purely to scan — the same role Nemotron's per-chunk guesses
+                // play on that path, which is why they share the tally.
+                if let qwen = self.whisper as? Qwen3ASRBridge {
+                    self.languageArbiter.recordNemotron(code: qwen.lastDetectedLanguage)
+                }
+
                 // Track whisper_full_lang_id against the locked language for script-mismatch signals.
                 // On the fixed-language path lang_id reflects the configured language, not a detect;
                 // on the .auto path it is a real mel-based detect. Both are useful for mismatch counting.
@@ -1751,7 +1760,7 @@ class StreamingTranscriber {
                     deduped = trimmed
                 }
 
-                if !deduped.isEmpty {
+                if !deduped.isEmpty, !self.createsSeamLoop(appending: deduped) {
                     self.completedChunkTexts.append(deduped)
                     // VAD chunk boundaries are the exact voiced span, so the gap to the
                     // next chunk's start is genuine silence.
@@ -3017,6 +3026,31 @@ class StreamingTranscriber {
         "bye bye",
         "goodbye",
     ]
+
+    /// True when appending `chunk` would make the joined transcript contain a phrase repeated
+    /// back to back three times, where neither side contains one alone.
+    ///
+    /// `isHallucination` inspects one chunk in isolation, which is the right granularity for a
+    /// decoder that spirals inside a single window. It is blind to a decoder that emits **one
+    /// copy per chunk**: each chunk is unremarkable and the loop only exists at the seam. A
+    /// 20-minute Qwen3 session produced exactly that — `в глубь,` three times across three
+    /// commits, a phrase present in none of the source audio.
+    ///
+    /// Only the tail of the accumulated text is examined, so cost does not grow with session
+    /// length. The window is the longest loop `TranscriptRepetition` can detect plus the chunk
+    /// itself, which is all a seam loop can span.
+    private func createsSeamLoop(appending chunk: String) -> Bool {
+        guard let previous = completedChunkTexts.last, !previous.isEmpty else { return false }
+        let tailWordCount = TranscriptRepetition.maximumPhraseLength
+            * TranscriptRepetition.maximumConsecutiveCopies
+        let tail = previous.lowercased().split(separator: " ").suffix(tailWordCount)
+        let joined = Array(tail) + chunk.lowercased().split(separator: " ")
+        guard TranscriptRepetition.containsLoop(words: joined) else { return false }
+        Logger.warning(
+            "Chunk dropped — appending it would repeat a phrase across the seam: '\(chunk.prefix(60))'",
+            subsystem: .transcription)
+        return true
+    }
 
     private func isHallucination(_ text: String) -> Bool {
         let lower = text.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()

@@ -9,16 +9,41 @@ import Foundation
 
 // MARK: - Backend Type
 
+/// Declaration order is picker order — `allCases` is the source for the engine segmented
+/// control in `ModelsTabView`. Qwen3 leads because it is the default.
 enum BackendType: String, CaseIterable, Identifiable {
+    case qwen3asr = "Qwen3ASR"
     case whisperCpp = "whisper.cpp"
     case parakeet = "Parakeet"
     case nemotron = "Nemotron"
     case nemotronHebrew = "NemotronHebrew"
-    case qwen3asr = "Qwen3ASR"
     case speechAnalyzer = "Apple Speech"
     case whisperKit = "WhisperKit"
 
     var id: String { rawValue }
+
+    /// The backend a user with no stored preference gets.
+    ///
+    /// Qwen3 only when its weights are already on disk. It is a 2.5 GB download, so resolving to
+    /// it before the model exists would hand a new user a backend that cannot transcribe
+    /// anything. `Qwen3UpgradeOffer` makes the download discoverable instead; until it completes,
+    /// whisper.cpp dictates. whisper.cpp is the fallback rather than Parakeet because it is the
+    /// only backend with no Apple Silicon requirement and the widest language coverage.
+    static var defaultBackend: BackendType { defaultBackend(for: .auto) }
+
+    /// The backend a user with no stored preference gets, given the language they transcribe in.
+    ///
+    /// `language` matters because Qwen3's lead is not uniform. Measured on the user's own
+    /// corpus (`Qwen3GateBenchmarkTests`, 2026-10-07): it leads English 0.039 to whisper's
+    /// 0.072, but on 56 genuinely Hebrew clips it scores 0.341 against the ivrit-v3-turbo
+    /// fine-tune's 0.183, and its output there is visibly garbled rather than merely imperfect.
+    /// Handing a Hebrew user the globally better engine would make their dictation worse.
+    static func defaultBackend(for language: TranscriptionLanguage) -> BackendType {
+        guard BackendType.qwen3asr.isAvailable, Qwen3ASRBridge.isModelCached() else {
+            return .whisperCpp
+        }
+        return BackendType.qwen3asr.weakLanguages.contains(language) ? .whisperCpp : .qwen3asr
+    }
 
     var displayName: String {
         switch self {
@@ -64,9 +89,40 @@ enum BackendType: String, CaseIterable, Identifiable {
         case .parakeet: return "ANE-accelerated"
         case .nemotron: return "True streaming, 37ms/chunk"
         case .nemotronHebrew: return "Hebrew fine-tune, 37ms/chunk"
-        case .qwen3asr: return "Top of Open ASR Leaderboard · 30 languages"
+        case .qwen3asr: return "Top of Open ASR Leaderboard · 31 languages"
         case .speechAnalyzer: return "macOS 26+"
         case .whisperKit: return "Core ML optimized · 100 languages"
+        }
+    }
+
+    /// Languages this backend is **measured** to be materially worse at than an alternative the
+    /// app already ships, despite nominally supporting them.
+    ///
+    /// Distinct from `supportsLanguage`, which answers "can it produce output at all". Qwen3
+    /// produces Hebrew output; it is just bad Hebrew. On 56 Hebrew clips from the user's own
+    /// history it scored WER 0.341 against `ivrit-v3-turbo`'s 0.183, and the transcripts show
+    /// invented words and Cyrillic bleeding into Hebrew sentences — not a near miss.
+    ///
+    /// Only add a language here with a benchmark run behind it. The cost of a wrong entry is a
+    /// user silently kept off the better engine. See `Qwen3GateBenchmarkTests` and
+    /// `docs/knowledge/transcription/knowledge.md`.
+    var weakLanguages: Set<TranscriptionLanguage> {
+        switch self {
+        case .qwen3asr: return [.hebrew]
+        default: return []
+        }
+    }
+
+    /// True when the backend reports the spoken language from its own decode, so the
+    /// `LanguageRouter` + `ModelPool` detection pipeline must not run for it.
+    ///
+    /// Qwen3 emits a `language <Name>` header ahead of the transcript, which
+    /// `Qwen3ASRBridge` parses into `lastDetectedLanguage` and ratchets on. Running whisper's
+    /// detection alongside it would load a second model to answer a question already answered.
+    var detectsLanguageNatively: Bool {
+        switch self {
+        case .parakeet, .nemotron, .nemotronHebrew, .qwen3asr: return true
+        case .whisperCpp, .speechAnalyzer, .whisperKit: return false
         }
     }
 

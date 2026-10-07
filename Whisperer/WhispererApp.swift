@@ -511,7 +511,10 @@ enum MenuTab: String, CaseIterable {
 
 // MARK: - Menu Bar Colors (dark navy palette — matches workspace & onboarding)
 
-private enum MBColors {
+/// Internal, not fileprivate: menu bar cards now live in their own files
+/// (`Whisperer/UI/Qwen3UpgradeCard.swift`) so this file does not keep growing, and they must
+/// draw from the same palette. See `DESIGN.md` — one palette, no per-view colour constants.
+enum MBColors {
     static let background       = Color(red: 0.047, green: 0.047, blue: 0.102)  // #0C0C1A
     static let cardSurface      = Color(red: 0.078, green: 0.078, blue: 0.169)  // #14142B
     static let elevated         = Color(red: 0.110, green: 0.110, blue: 0.227)  // #1C1C3A
@@ -1041,6 +1044,10 @@ struct StatusTabView: View {
                 // Self-hides once the model is installed; see PolishModelCard.
                 PolishModelCard()
 
+                // Offers the default engine's 2.5 GB download. Self-hides once Qwen3 is cached
+                // or the user declines; see Qwen3UpgradeCard.
+                Qwen3UpgradeCard()
+
                 // In-App Transcription — core feature, no Accessibility required.
                 // Hidden during a meeting: the card reads AppState's live recording state, which a
                 // meeting drives, so it rendered the meeting's own waveform and transcript here and
@@ -1460,11 +1467,11 @@ struct ModelsTabView: View {
     /// Tabs update this; model rows call selectBackend/download separately.
     @State private var displayedEngine: BackendType = .whisperCpp
 
-    /// Normalise any hidden sub-backend (nemotron, nemotronHebrew, qwen3asr)
-    /// to the tab that contains it.
+    /// Normalise any hidden sub-backend (nemotron, nemotronHebrew) to the tab that contains it.
+    /// Qwen3 is no longer hidden — it is the default and has its own tab.
     private func normalise(_ b: BackendType) -> BackendType {
         switch b {
-        case .nemotron, .nemotronHebrew, .qwen3asr: return .parakeet
+        case .nemotron, .nemotronHebrew: return .parakeet
         default: return b
         }
     }
@@ -1490,6 +1497,17 @@ struct ModelsTabView: View {
     /// Parakeet if all routing languages (or the selected single language) are in its 25-language set.
     /// Whisper otherwise (broader coverage).
     private var recommendedBackend: BackendType {
+        // Qwen3 leads the Open ASR Leaderboard and covers 31 languages, so it is the
+        // recommendation on any machine that can run it — except for the languages it is
+        // measured to be weak at (see `BackendType.weakLanguages`), where recommending it
+        // would point the user at a worse transcript than the one they have.
+        if BackendType.qwen3asr.isAvailable {
+            let configured: [TranscriptionLanguage] = appState.routingConfig.isRoutingEnabled
+                ? appState.routingConfig.allowedLanguages
+                : [appState.selectedLanguage]
+            let weak = BackendType.qwen3asr.weakLanguages
+            if !configured.contains(where: { weak.contains($0) }) { return .qwen3asr }
+        }
         guard BackendType.parakeet.isAvailable else { return .whisperCpp }
         let languages: [TranscriptionLanguage]
         if appState.routingConfig.isRoutingEnabled {
@@ -1525,7 +1543,7 @@ struct ModelsTabView: View {
             }
 
             HStack(spacing: 0) {
-                ForEach(Array(BackendType.allCases.filter { $0 != .nemotron && $0 != .nemotronHebrew && $0 != .qwen3asr }.enumerated()), id: \.element.id) { index, backend in
+                ForEach(Array(BackendType.allCases.filter { $0 != .nemotron && $0 != .nemotronHebrew }.enumerated()), id: \.element.id) { index, backend in
                     let isSelected = displayedEngine == backend
                     let isUnavailable = !backend.isAvailable
                     let isRecommended = backend == recommendedBackend && !isUnavailable
@@ -1609,6 +1627,10 @@ struct ModelsTabView: View {
                     #endif
                 } else if displayedEngine == .parakeet {
                     parakeetModelSection
+                } else if displayedEngine == .qwen3asr {
+                    #if canImport(FluidAudio)
+                    qwen3ModelSection
+                    #endif
                 } else if displayedEngine == .speechAnalyzer {
                     speechAnalyzerSection
                 }
@@ -1764,7 +1786,6 @@ struct ModelsTabView: View {
                 #if canImport(FluidAudio)
                 NemotronModelRow()
                 NemotronHebrewModelRow()
-                Qwen3ASRModelRow()
                 #endif
             }
 
@@ -1844,6 +1865,36 @@ struct ModelsTabView: View {
                 }
                 .padding(.leading, 20)
             }
+            #endif
+        }
+    }
+
+    #if canImport(FluidAudio)
+    /// The default engine's own tab. Separate from "Fast Models" because Qwen3 is neither a
+    /// Parakeet variant nor a fallback for one — it is what a new install transcribes with.
+    private var qwen3ModelSection: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 10) {
+                ZStack {
+                    RoundedRectangle(cornerRadius: 6)
+                        .fill(Color.purple.opacity(0.15))
+                        .frame(width: 26, height: 26)
+                    Image(systemName: "waveform.badge.sparkles")
+                        .foregroundColor(.purple)
+                        .font(.system(size: 12, weight: .medium))
+                }
+
+                Text("Leading Model")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundColor(MBColors.textPrimary)
+
+                Spacer()
+            }
+
+            VStack(spacing: 4) {
+                Qwen3ASRModelRow()
+            }
+
             if appState.isDownloadingQwen3ASR || appState.isLoadingQwen3ASR {
                 VStack(alignment: .leading, spacing: 6) {
                     HStack(spacing: 6) {
@@ -1863,9 +1914,9 @@ struct ModelsTabView: View {
                 }
                 .padding(.leading, 20)
             }
-            #endif
         }
     }
+    #endif
 
     private var speechAnalyzerAvailable: Bool {
         if #available(macOS 26.0, *) { return true }

@@ -76,6 +76,11 @@ actor MeetingSpeakerCoordinator {
     /// revision cannot rewrite history.
     private var emittedWordCount: Int = 0
 
+    /// Attribution watermark, for tests. The delta guard is only observable through this —
+    /// a rejected input leaves it unchanged, which is what `MeetingQwen3CoordinatorTests`
+    /// asserts to prove the accumulator in front of the coordinator is load-bearing.
+    var emittedWordCountForTesting: Int { emittedWordCount }
+
     /// Last tail string published. `drainPending()` runs on every audio buffer, but the tail
     /// only actually changes when a partial lands (~1/s) — without this the grey live text is
     /// republished ~12x/s, and each republish is a `@Published` write that re-renders the

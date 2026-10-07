@@ -94,3 +94,6 @@ __pycache__/
 Whisperer/Transcription/Editing/PolishModelKey.generated.swift
 Tools/mmbert/lzfse_tool
 docs/competitive/
+
+# ASR engine comparison dumps — contain verbatim transcripts of real recordings.
+Tools/llm-eval/asr-engine-comparison/

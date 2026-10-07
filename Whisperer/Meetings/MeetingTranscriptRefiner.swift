@@ -60,7 +60,7 @@ final class MeetingTranscriptRefiner: ObservableObject {
     /// Context carried into the next window's `initial_prompt`, matching FileTranscriptionManager.
     private static let contextMaxLength = 100
     /// Below this, loading a second multi-GB model on top of the meeting backend risks a swap
-    /// storm. Same threshold `AppState.prepareMeetingBackend()` uses.
+    /// storm. Same threshold `AppState.prepareMeetingASRBridge()` uses.
     private static let minAvailableGB = 2.0
     /// A decode shorter than this is silence or a read error, not speech.
     private static let minWindowSamples = Int(0.2 * 16000.0)
@@ -88,15 +88,52 @@ final class MeetingTranscriptRefiner: ObservableObject {
     /// without the recording there is nothing to decode. Meetings recorded before audio
     /// retention, or whose file the user deleted, skip the pass entirely.
     func shouldRun(for segments: [MeetingSegment], audioURL: URL?) -> Bool {
+        shouldRun(for: segments, audioURL: audioURL, meetingID: nil)
+    }
+
+    /// - Parameter meetingID: when given, the live engine is looked up for that specific meeting
+    ///   rather than inferred from the current configuration.
+    func shouldRun(for segments: [MeetingSegment], audioURL: URL?, meetingID: UUID?) -> Bool {
         guard Self.isEnabled else { return false }
         guard let audioURL, FileManager.default.fileExists(atPath: audioURL.path) else { return false }
+        // After a Qwen3 meeting, a second decode is only an upgrade for languages with a
+        // measured specialist. When none of the configured languages has one there is nothing
+        // a cleanup pass could improve, so it must not load a model or show a progress stage.
+        guard !Self.candidateModels(meetingID: meetingID).isEmpty else { return false }
         return segments.contains { !$0.isPolished && $0.text.contains(where: { $0.isLetter }) }
+    }
+
+    /// The backend that produced the live transcript for this meeting.
+    ///
+    /// Falls back to what a meeting *would* use now when the recording predates the recorded
+    /// value or belongs to an earlier launch. The fallback errs toward the old behaviour: an
+    /// unknown engine is treated as not-Qwen3, so the cleanup pass still runs.
+    static func liveEngine(for meetingID: UUID?) -> BackendType {
+        if let meetingID, let recorded = AppState.shared.lastMeetingASREngine,
+           recorded.meetingID == meetingID {
+            return recorded.engine
+        }
+        #if canImport(FluidAudio)
+        return MeetingEngines.speechEngineIsQwen3 ? .qwen3asr : .whisperCpp
+        #else
+        return .whisperCpp
+        #endif
+    }
+
+    /// Models the cleanup pass could possibly need for this meeting. Empty means no pass.
+    static func candidateModels(meetingID: UUID?) -> [WhisperModel] {
+        RefineModelTable.modelsForCurrentConfig(liveEngine: liveEngine(for: meetingID))
     }
 
     /// Returns a human-readable reason string if no model at all can be obtained, or nil if the
     /// run should proceed. A missing specialist model is not a blocker — it downloads during the
     /// run. Only block when the baseline is also absent and the device appears to be offline.
     func blockingReason(for meetingID: UUID, audioURL: URL?) -> String? {
+        // Nothing to run → nothing to block on. A model you will never load is not a blocker,
+        // and reporting one here would put a false "not downloaded" warning in front of a user
+        // whose meeting needs no cleanup at all.
+        let candidates = Self.candidateModels(meetingID: meetingID)
+        guard !candidates.isEmpty else { return nil }
         // Resident baseline bridge → ready immediately.
         if AppState.shared.whisperBridge is WhisperBridge,
            AppState.shared.loadedModelForDebug == Self.baselineModel {
@@ -104,6 +141,8 @@ final class MeetingTranscriptRefiner: ObservableObject {
         }
         // Baseline on disk → run can load it.
         if ModelDownloader.shared.isModelDownloaded(Self.baselineModel) { return nil }
+        // A specialist on disk is enough when the baseline is not itself a candidate.
+        if candidates.contains(where: { ModelDownloader.shared.isModelDownloaded($0) }) { return nil }
         #if canImport(FluidAudio)
         // Let MeetingEngines drive the "not ready" reason for the prep flow.
         switch MeetingEngines.shared.readiness[.cleanup] {
@@ -179,6 +218,15 @@ final class MeetingTranscriptRefiner: ObservableObject {
 
         if let reason = blockingReason(for: meetingID, audioURL: record?.resolvedAudioURL) {
             Logger.warning("Transcript refine: \(reason) — skipped", subsystem: .transcription)
+            return finish(source, meetingID: meetingID)
+        }
+
+        // Decided before anything is loaded. When the live engine already leads every language
+        // in scope, the cheapest correct pass is no pass: no 547 MB baseline download, no
+        // language scan, no GPU. This is the common case after a Qwen3 meeting.
+        let liveEngine = Self.liveEngine(for: meetingID)
+        guard !Self.candidateModels(meetingID: meetingID).isEmpty else {
+            Logger.info("Transcript refine: \(liveEngine.displayName) already leads every configured language — no second decode for \(meetingID)", subsystem: .transcription)
             return finish(source, meetingID: meetingID)
         }
 
@@ -259,7 +307,8 @@ final class MeetingTranscriptRefiner: ObservableObject {
             timeline: timeline,
             baseLanguage: forcedLanguage ?? AppState.shared.selectedLanguage,
             downloaded: downloaded,
-            availableGB: available
+            availableGB: available,
+            liveEngine: liveEngine
         )
 
         // Download any missing specialist models before decode begins.
@@ -294,8 +343,18 @@ final class MeetingTranscriptRefiner: ObservableObject {
                 timeline: timeline,
                 baseLanguage: forcedLanguage ?? AppState.shared.selectedLanguage,
                 downloaded: downloaded.union(Set(plan.modelsToFetch).subtracting(downloadFailed)),
-                availableGB: available
+                availableGB: available,
+                liveEngine: liveEngine
             )
+        }
+
+        // The timeline can rule out every group even when a specialist was in scope: a
+        // Hebrew-configured user whose meeting turned out to be entirely English. Stop here
+        // rather than walking an empty group list and reporting a completed pass.
+        guard !plan.groups.isEmpty else {
+            Logger.info("Transcript refine: no window needs a second decode for \(meetingID)", subsystem: .transcription)
+            if ownsDetectBridge { detectBridge.prepareForShutdown() }
+            return finish(working, meetingID: meetingID)
         }
 
         // ─── Phase 2: Decode per group ───────────────────────────────────────────

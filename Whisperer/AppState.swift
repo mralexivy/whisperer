@@ -697,6 +697,13 @@ class AppState: ObservableObject {
     /// a re-run on some *other* meeting cannot pick up a stranger's evidence.
     private(set) var lastMeetingNemotronTally: (meetingID: UUID, tally: [String: Int])?
 
+    /// Which ASR backend produced the live transcript of the meeting that just ended.
+    ///
+    /// Read by `MeetingTranscriptRefiner` to decide whether a second decode is an upgrade or a
+    /// downgrade: after Qwen3 it is a downgrade for every language without a measured
+    /// specialist. Captured at stop because the borrowed bridge is released moments later.
+    private(set) var lastMeetingASREngine: (meetingID: UUID, engine: BackendType)?
+
     // Per-chunk LLM correction coordinator
     private let chunkLLMCoordinator = ChunkLLMCoordinator()
 
@@ -731,16 +738,38 @@ class AppState: ObservableObject {
     /// Serializes `coordinator.feed()` calls. Feeding an actor from the audio callback
     /// without chaining lets re-entrancy across the ANE `await` interleave buffers.
     private var diarizerFeedTask: Task<Void, Never>?
-    /// True while a meeting holds its own Nemotron bridge.
+    /// Enforces the monotonic accumulated-transcript contract on the `.transcriberAccumulated`
+    /// feed (Qwen3). Reset at the start of every in-app recording — a snapshot carried over
+    /// from the previous meeting would make the next meeting's first update look like a shrink.
+    private var meetingTranscriptAccumulator = MeetingTranscriptAccumulator()
+    /// The ASR backend a meeting borrowed and must hand back, or nil when no meeting holds one.
     ///
-    /// Meetings need Nemotron (it is the only backend whose partial callback delivers the
-    /// growing accumulated transcript that speaker attribution diffs against), but they no
-    /// longer take it by switching `selectedBackendType`. That switch cost a teardown plus a
-    /// reload on the way in and again on the way out — ~62s per meeting for anyone whose
-    /// dictation backend isn't Nemotron, with the return leg landing on top of the
-    /// post-meeting AI work. The bridge is now loaded alongside the user's backend and
-    /// released through `ModelWorkQueue` once the AI tail has drained.
-    private var meetingOwnsNemotron = false
+    /// Meetings need a backend whose live output is the **growing accumulated transcript** that
+    /// speaker attribution diffs against. Qwen3 and Nemotron both qualify — Nemotron natively,
+    /// Qwen3 through `StreamingTranscriber.onTranscription` filtered by
+    /// `MeetingTranscriptAccumulator`. Qwen3 is preferred because it is usually the backend the
+    /// user already dictates with, so the meeting loads nothing at all.
+    ///
+    /// Meetings do not take a backend by switching `selectedBackendType`. That switch cost a
+    /// teardown plus a reload on the way in and again on the way out — ~62s per meeting for
+    /// anyone whose dictation backend didn't match, with the return leg landing on top of the
+    /// post-meeting AI work. The bridge is loaded alongside the user's backend and released
+    /// through `ModelWorkQueue` once the AI tail has drained.
+    private var meetingBorrowedBackend: BackendType?
+
+    /// True while a meeting holds its own Nemotron bridge. Nemotron's teardown protection is
+    /// specific to it (`previewOwnsNemotron` can also claim the same bridge), so the checks
+    /// scattered through `releaseCurrentBridge` keep asking this rather than the enum.
+    private var meetingOwnsNemotron: Bool { meetingBorrowedBackend == .nemotron }
+
+    /// True while a meeting holds the Qwen3 bridge and must release it when the meeting ends.
+    /// False when the meeting merely *reuses* the user's own resident Qwen3 — in that case the
+    /// bridge belongs to dictation and the meeting must not tear it down.
+    private var meetingOwnsQwen3 = false
+
+    /// Read-only view for `StuckStateDumper`. A meeting that borrowed a bridge and never gave it
+    /// back is one of the states a stall dump has to be able to distinguish.
+    var meetingBorrowedBackendForDebug: BackendType? { meetingBorrowedBackend }
     /// True when Nemotron was preloaded to serve as the live-preview source alongside
     /// whisper.cpp dictation. Protects the bridge from being torn down by a backend switch
     /// that should only affect the user's selected backend, not the preview engine.
@@ -758,9 +787,27 @@ class AppState: ObservableObject {
     /// user's dictation backend stays exactly as they left it.
     var effectiveInAppBackend: BackendType {
         #if canImport(FluidAudio)
-        if meetingOwnsNemotron, nemotronBridgeInstance != nil { return .nemotron }
+        if meetingBorrowedBackend == .nemotron, nemotronBridgeInstance != nil { return .nemotron }
+        if meetingBorrowedBackend == .qwen3asr, qwen3asrBridgeInstance != nil { return .qwen3asr }
         #endif
         return selectedBackendType
+    }
+
+    /// The `TranscriptionBackend` the in-app recording path should decode through.
+    ///
+    /// Usually `whisperBridge`, which holds whatever the user dictates with. It differs when a
+    /// meeting borrowed Qwen3 while the user dictates with something else: `whisperBridge` still
+    /// points at the user's backend, and decoding the meeting through it would contradict
+    /// `effectiveInAppBackend` — the coordinator would be wired for Qwen3's accumulated feed
+    /// while a different engine produced the text.
+    ///
+    /// Nemotron is absent here on purpose: it is not a `TranscriptionBackend` and reaches
+    /// `StreamingTranscriber` as a separate `nemotronBridge` argument.
+    var inAppTranscriptionBridge: TranscriptionBackend? {
+        #if canImport(FluidAudio)
+        if meetingBorrowedBackend == .qwen3asr, let qwen3 = qwen3asrBridgeInstance { return qwen3 }
+        #endif
+        return whisperBridge
     }
 
     @Published var meetingWindowIsVisible: Bool = false {
@@ -949,11 +996,11 @@ class AppState: ObservableObject {
         } else if UserDefaults.standard.string(forKey: "selectedBackendType") == "MLX" {
             selectedBackendType = .parakeet
             UserDefaults.standard.set(BackendType.parakeet.rawValue, forKey: "selectedBackendType")
-        } else if UserDefaults.standard.object(forKey: "selectedBackendType") == nil,
-                  BackendType.parakeet.isAvailable,
-                  BackendType.parakeet.supportsLanguage(selectedLanguage, parakeetVariant: .v3) {
-            // First launch on Apple Silicon with a Parakeet-supported language → default to Parakeet TDT
-            selectedBackendType = .parakeet
+        } else if UserDefaults.standard.object(forKey: "selectedBackendType") == nil {
+            // First launch — Qwen3 when its weights are on disk and the user's language is one
+            // it leads. See `BackendType.defaultBackend(for:)`: the download is never assumed,
+            // and Hebrew is routed to whisper.cpp because Qwen3 is measurably worse at it.
+            selectedBackendType = BackendType.defaultBackend(for: selectedLanguage)
         }
         if let savedParakeet = UserDefaults.standard.string(forKey: "selectedParakeetModel"),
            let parakeetModel = ParakeetModelVariant(rawValue: savedParakeet) {
@@ -1244,13 +1291,17 @@ class AppState: ObservableObject {
             nemotronHebrewBridgeInstance = nil
             isLoadingNemotronHebrew = false
         }
-        qwen3asrLoadTask?.cancel()
-        qwen3asrLoadTask = nil
-        if let qwen3 = qwen3asrBridgeInstance {
-            qwen3.prepareForShutdown()
-            qwen3asrBridgeInstance = nil
-            whisperBridge = nil  // same object — prevent double-shutdown via the generic path
-            isLoadingQwen3ASR = false
+        // A meeting-owned Qwen3 bridge survives a backend switch for the same reason the
+        // Nemotron one does: an active recording is decoding through it right now.
+        if !meetingOwnsQwen3 {
+            qwen3asrLoadTask?.cancel()
+            qwen3asrLoadTask = nil
+            if let qwen3 = qwen3asrBridgeInstance {
+                qwen3.prepareForShutdown()
+                qwen3asrBridgeInstance = nil
+                whisperBridge = nil  // same object — prevent double-shutdown via the generic path
+                isLoadingQwen3ASR = false
+            }
         }
         #endif
 
@@ -2839,8 +2890,10 @@ class AppState: ObservableObject {
             return
         }
 
-        // Parakeet/Nemotron detect language natively — skip WhisperBridge detection + ModelPool.
-        guard selectedBackendType != .parakeet && selectedBackendType != .nemotron && selectedBackendType != .nemotronHebrew else {
+        // Parakeet/Nemotron/Qwen3 detect language natively — skip WhisperBridge detection +
+        // ModelPool. Qwen3 prints a `language <Name>` header before the transcript and the bridge
+        // ratchets on it, so a second detection pass would cost a model load for nothing.
+        guard !selectedBackendType.detectsLanguageNatively else {
             Logger.info("Language routing skipped — \(selectedBackendType.displayName) detects language natively", subsystem: .model)
             // Release any stale pool left over from a previous WhisperCpp routing session
             modelPool?.releaseAll()
@@ -3140,7 +3193,7 @@ class AppState: ObservableObject {
         #else
         let nemotronReadyInApp = false
         #endif
-        guard whisperBridge != nil || nemotronReadyInApp else {
+        guard inAppTranscriptionBridge != nil || nemotronReadyInApp else {
             showModelLoadingToast = true
             // Safety timeout — dismiss if model never loads (e.g., no model downloaded)
             DispatchQueue.main.asyncAfter(deadline: .now() + 10.0) { [weak self] in
@@ -3162,7 +3215,7 @@ class AppState: ObservableObject {
 
         guard state == .idle else { return }
 
-        let bridge: TranscriptionBackend = whisperBridge ?? NullTranscriptionBackend()
+        let bridge: TranscriptionBackend = inAppTranscriptionBridge ?? NullTranscriptionBackend()
 
         isInAppMode = true
         lastInAppTranscription = ""
@@ -3238,17 +3291,22 @@ class AppState: ObservableObject {
                 let capturedGeneration = activeMeetingSession?.chunkGeneration ?? 0
 
                 #if canImport(FluidAudio)
-                // The coordinator is created whenever Nemotron is resident — that includes the
-                // whisper.cpp + Nemotron preview-only path, where `previewOwnsNemotron == true`
-                // causes `anyNemotronInApp != nil`. On that path Nemotron partials carry the
-                // growing accumulated transcript; whisper.cpp commits carry per-chunk deltas.
-                // The coordinator's diff expects accumulated text only — see `onFinalText` doc.
-                // `coordinatorUsesNemotronPartials` is captured here so `onChunkCompleted` can
-                // gate the `onFinalText` call without reading `inAppBackend` off `self`.
-                let coordinatorUsesNemotronPartials = (inAppBackend == .whisperCpp)
-                if let meetingSession = capturedMeetingSession, anyNemotronInApp != nil {
+                // Which callback carries the **full accumulated transcript** this recording.
+                // `MeetingSpeakerCoordinator` diffs accumulated text and rejects anything
+                // shorter than it has already emitted, so picking the wrong source does not
+                // degrade attribution — it stops it dead. Naming the three shapes beats
+                // re-deriving them from `inAppBackend` at each callback.
+                let coordinatorFeed = MeetingCoordinatorFeed(inAppBackend: inAppBackend,
+                                                             previewOwnsNemotron: previewOwnsNemotron)
+                let hasAccumulatedSource = coordinatorFeed != nil
+                    && (anyNemotronInApp != nil || inAppBackend == .qwen3asr)
+                if let meetingSession = capturedMeetingSession, hasAccumulatedSource {
                     let coordinator = MeetingSpeakerCoordinator()
                     meetingSpeakerCoordinator = coordinator
+                    // Fresh session, empty transcript. Carrying the previous meeting's last
+                    // snapshot would make this meeting's first update read as a shrink and be
+                    // dropped for the whole recording.
+                    meetingTranscriptAccumulator.reset()
                     // Signal to MeetingSession that livePreviewText is now owned by the
                     // coordinator's onPendingTail callback — accumulate() must not clear it.
                     meetingSession.coordinatorOwnsTail = true
@@ -3300,20 +3358,18 @@ class AppState: ObservableObject {
                         if let meetingSession = meetingSession {
                             #if canImport(FluidAudio)
                             if let coordinator = self.meetingSpeakerCoordinator {
-                                // On the Nemotron-final-decoder path (`inAppBackend == .nemotron`
-                                // or `.nemotronHebrew`), `chunk.text` is the full accumulated
-                                // transcript — route it through the coordinator's diff so the
-                                // tail benefits from the higher-quality final decode.
+                                // Only `.accumulatedFinal` puts the full transcript in
+                                // `chunk.text` — that is the Nemotron-final-decoder path, where
+                                // one chunk arrives at `finish()` carrying the whole session.
                                 //
-                                // On the whisper.cpp + Nemotron preview-only path
-                                // (`coordinatorUsesNemotronPartials == true`), `chunk.text` is a
-                                // per-commit DELTA (~1.8 s fragment). Feeding a delta into the
-                                // coordinator's accumulated-transcript diff triggers the "Nemotron
-                                // rewrote its tail" branch and destroys the pending queue — which
-                                // blanked the live meeting tail ~148× in a 4.5-min Hebrew session
-                                // (2026-09-07). On this path Nemotron partials via `onPreviewTail`
-                                // already drive the coordinator; the whisper delta has no role.
-                                if !coordinatorUsesNemotronPartials {
+                                // On every other feed `chunk.text` is a per-commit DELTA
+                                // (~1.8 s). Feeding a delta into the coordinator's
+                                // accumulated-transcript diff triggers its "the decoder rewrote
+                                // its tail" branch and destroys the pending queue — which blanked
+                                // the live meeting tail ~148× in a 4.5-min Hebrew session
+                                // (2026-09-07). Those feeds are driven from `onPreviewTail` or
+                                // `onTranscription` instead; the delta has no role here.
+                                if coordinatorFeed == .accumulatedFinal {
                                     let finalText = chunk.text
                                     self.diarizerFeedTask = Task { [previous = self.diarizerFeedTask] in
                                         await previous?.value
@@ -3355,9 +3411,25 @@ class AppState: ObservableObject {
                 // StreamingTranscriber provides live preview via onNewSegment + onTranscription
                 streamingTranscriber?.start { [weak self] text in
                     Task { @MainActor in
-                        if self?.liveTranscriptionEnabled == true {
-                            self?.liveTranscription = self?.normalizeLivePreviewCase(text) ?? text
+                        guard let self else { return }
+                        if self.liveTranscriptionEnabled {
+                            self.liveTranscription = self.normalizeLivePreviewCase(text)
                         }
+                        #if canImport(FluidAudio)
+                        // `.transcriberAccumulated` (Qwen3): this string is committed chunks plus
+                        // the live preview tail, which is the accumulated transcript the
+                        // coordinator needs. It is not guaranteed monotonic — the tail shrinks
+                        // when a chunk commits before the next preview pass lands — so every
+                        // snapshot goes through the accumulator, which drops the shrinks.
+                        guard coordinatorFeed == .transcriberAccumulated,
+                              let coordinator = self.meetingSpeakerCoordinator,
+                              let accumulated = self.meetingTranscriptAccumulator.accept(text)
+                        else { return }
+                        self.diarizerFeedTask = Task { [previous = self.diarizerFeedTask] in
+                            await previous?.value
+                            await coordinator.onPartial(accumulated)
+                        }
+                        #endif
                     }
                 }
 
@@ -3367,16 +3439,23 @@ class AppState: ObservableObject {
                     Task { @MainActor in
                         guard let self else { return }
                         #if canImport(FluidAudio)
-                        // On the Nemotron path this "tail" is the FULL accumulated transcript.
-                        // The coordinator diffs it, attributes the new words to a speaker, and
-                        // feeds back only the not-yet-attributed remainder as livePreviewText.
-                        if let coordinator = self.meetingSpeakerCoordinator {
+                        // Only on `.accumulatedPartials` is this "tail" the FULL accumulated
+                        // transcript — that is Nemotron, whose partial callback grows rather
+                        // than slides. The coordinator diffs it, attributes the new words to a
+                        // speaker, and feeds back the not-yet-attributed remainder as
+                        // livePreviewText.
+                        //
+                        // Qwen3's tail is window-local, so it is NOT accumulated and must not
+                        // come here. That feed is `.transcriberAccumulated`, wired below.
+                        if coordinatorFeed == .accumulatedPartials,
+                           let coordinator = self.meetingSpeakerCoordinator {
                             self.diarizerFeedTask = Task { [previous = self.diarizerFeedTask] in
                                 await previous?.value
                                 await coordinator.onPartial(tail)
                             }
                             return
                         }
+                        if self.meetingSpeakerCoordinator != nil { return }
                         #endif
                         self.activeMeetingSession?.livePreviewText = tail
                     }
@@ -3534,7 +3613,7 @@ class AppState: ObservableObject {
                         await ModelWorkQueue.shared.setMeetingActive(false)
                         MeetingJobQueue.shared.resumeAfterRecording()
                         #if canImport(FluidAudio)
-                        self.releaseMeetingNemotron()
+                        self.releaseMeetingASRBridge()
                         #endif
                     }
                 }
@@ -3711,7 +3790,7 @@ class AppState: ObservableObject {
             TranscriptionPickerState.shared.dismiss()
         }
 
-        let bridge: TranscriptionBackend = whisperBridge ?? NullTranscriptionBackend()
+        let bridge: TranscriptionBackend = inAppTranscriptionBridge ?? NullTranscriptionBackend()
 
         // Capture the frontmost app BEFORE our overlay steals focus
         textInjector?.captureTargetApp()
@@ -4433,7 +4512,7 @@ class AppState: ObservableObject {
             await ModelWorkQueue.shared.setMeetingActive(false)
             MeetingJobQueue.shared.resumeAfterRecording()
             #if canImport(FluidAudio)
-            self.releaseMeetingNemotron()
+            self.releaseMeetingASRBridge()
             if let coordinator = self.meetingSpeakerCoordinator {
                 await self.diarizerFeedTask?.value
                 self.diarizerFeedTask = nil
@@ -4938,38 +5017,59 @@ class AppState: ObservableObject {
     /// Below this the user's bridge is evicted for the meeting and reloaded afterwards.
     private static let meetingDualBackendHeadroomGB: Double = 2.0
 
-    /// Gets a Nemotron bridge ready for a meeting, without disturbing the user's backend.
+    /// Gets an ASR bridge ready for a meeting, without disturbing the user's backend.
     ///
-    /// Nemotron is the only backend whose partial callback delivers a growing accumulated
-    /// transcript, and that stream is what speaker attribution diffs against. Called before
-    /// the meeting record is created so a failure leaves nothing half-started.
+    /// A meeting needs a backend whose live output is the **growing accumulated transcript**
+    /// that speaker attribution diffs against. Two qualify, and they are tried in this order:
     ///
-    /// The bridge is loaded *alongside* whatever the user dictates with rather than swapped in:
-    /// `selectBackend()` tore the previous backend down and rebuilt it on the way out, ~62s of
-    /// pure loading per meeting, with the return leg landing on top of the post-meeting AI work.
+    /// 1. **The resident Qwen3 bridge.** When the user already dictates with Qwen3 — the
+    ///    default — the meeting borrows it and loads nothing at all. No second model, no load
+    ///    wait, no extra memory. This is the whole point of making Qwen3 the one engine.
+    /// 2. **A fresh Qwen3 load**, when the weights are cached but no bridge is up.
+    /// 3. **Nemotron**, for users who have it but not Qwen3. Unchanged from before.
     ///
-    /// Returns `false` when Nemotron cannot be made ready — the caller must not record.
-    func prepareMeetingBackend() async -> Bool {
+    /// Called before the meeting record is created so a failure leaves nothing half-started.
+    ///
+    /// A borrowed bridge is loaded *alongside* whatever the user dictates with rather than
+    /// swapped in: `selectBackend()` tore the previous backend down and rebuilt it on the way
+    /// out, ~62s of pure loading per meeting, with the return leg landing on top of the
+    /// post-meeting AI work.
+    ///
+    /// Returns `false` when no suitable bridge can be made ready — the caller must not record.
+    func prepareMeetingASRBridge() async -> Bool {
+        // 1. Reuse what dictation already has up.
+        if qwen3asrBridgeInstance != nil {
+            meetingBorrowedBackend = .qwen3asr
+            // Not "owned": the bridge belongs to dictation and must outlive the meeting.
+            meetingOwnsQwen3 = selectedBackendType != .qwen3asr
+            Logger.info("Meeting: reusing the resident Qwen3 bridge — no model load", subsystem: .model)
+            return true
+        }
         if nemotronBridgeInstance != nil {
-            meetingOwnsNemotron = selectedBackendType != .nemotron
+            meetingBorrowedBackend = .nemotron
             return true
         }
 
+        // 2. Load Qwen3 when its weights are on disk.
+        if isQwen3ASRModelCached() {
+            meetingBorrowedBackend = .qwen3asr
+            meetingOwnsQwen3 = selectedBackendType != .qwen3asr
+            evictUserBackendIfMemoryTight(borrowing: .qwen3asr)
+            if qwen3asrLoadTask == nil { preloadQwen3ASRModel() }
+            await qwen3asrLoadTask?.value
+            if qwen3asrBridgeInstance != nil { return true }
+            Logger.warning("Meeting: Qwen3 did not finish loading — falling back to Nemotron", subsystem: .model)
+            meetingBorrowedBackend = nil
+            meetingOwnsQwen3 = false
+        }
+
+        // 3. Nemotron fallback.
         guard isNemotronModelCached() else {
-            errorMessage = "Meeting Notes needs the Nemotron model. Download it from the Models tab, then start the meeting."
+            errorMessage = "Meeting Notes needs a speech model. Download Qwen3 ASR from the Models tab, then start the meeting."
             return false
         }
-
-        meetingOwnsNemotron = selectedBackendType != .nemotron
-
-        // Two ASR models resident at once is the trade that buys back the swap time, but only
-        // when there is room for it. When there isn't, evict the user's bridge for the duration
-        // and reload it at the end — the old behaviour, minus the write to selectedBackendType.
-        if meetingOwnsNemotron, SystemMemory.availableGB() < Self.meetingDualBackendHeadroomGB {
-            Logger.info("Meeting: low memory — evicting \(selectedBackendType.displayName) for the meeting", subsystem: .model)
-            meetingEvictedUserBackend = true
-            releaseCurrentBridge()
-        }
+        meetingBorrowedBackend = .nemotron
+        evictUserBackendIfMemoryTight(borrowing: .nemotron)
 
         if nemotronLoadTask == nil {
             preloadNemotronModel()
@@ -4979,35 +5079,73 @@ class AppState: ObservableObject {
         await nemotronLoadTask?.value
 
         guard nemotronBridgeInstance != nil else {
-            errorMessage = "Nemotron did not finish loading — try starting the meeting again."
-            releaseMeetingNemotron()
+            errorMessage = "The speech model did not finish loading — try starting the meeting again."
+            releaseMeetingASRBridge()
             return false
         }
         return true
     }
 
-    /// Hands back the Nemotron bridge a meeting borrowed.
+    /// Two ASR models resident at once is the trade that buys back the swap time, but only when
+    /// there is room for it. When there isn't, evict the user's bridge for the duration and
+    /// reload it at the end — the old behaviour, minus the write to `selectedBackendType`.
+    ///
+    /// A no-op when the meeting borrows the backend the user already dictates with, which is
+    /// the common case now that Qwen3 is the default: there is no second model to make room for.
+    private func evictUserBackendIfMemoryTight(borrowing backend: BackendType) {
+        guard backend != selectedBackendType else { return }
+        guard SystemMemory.availableGB() < Self.meetingDualBackendHeadroomGB else { return }
+        Logger.info("Meeting: low memory — evicting \(selectedBackendType.displayName) for the meeting", subsystem: .model)
+        meetingEvictedUserBackend = true
+        releaseCurrentBridge()
+    }
+
+    /// Hands back the ASR bridge a meeting borrowed.
     ///
     /// Submitted to `ModelWorkQueue` rather than torn down inline so the teardown cannot overlap
     /// another model load. It is the *first* job in line, not the last: title generation, the
     /// overview and the initial RAG index do not go through the queue at all, and transcript
     /// polish is submitted a second or two later. Callers must therefore lower the meeting gate
     /// before calling this — see the ordered Task in `stopInAppRecording()`.
-    private func releaseMeetingNemotron() {
-        guard meetingOwnsNemotron else { return }
-        meetingOwnsNemotron = false
+    ///
+    /// Releasing before the intelligence LLM loads also matters for memory: Qwen3 ASR and the
+    /// Qwen3.5-4B overview model are both MLX consumers, and the post-meeting AI tail starts
+    /// within a second or two of this call.
+    private func releaseMeetingASRBridge() {
+        guard let borrowed = meetingBorrowedBackend else { return }
+        meetingBorrowedBackend = nil
 
-        if let bridge = nemotronBridgeInstance, selectedBackendType != .nemotron {
-            nemotronBridgeInstance = nil
-            nemotronLoadTask = nil
-            isLoadingNemotron = false
-            Task {
-                // try? — run() now throws only on cancellation of this Task, in which case the
-                // bridge is being torn down by app shutdown anyway.
-                try? await ModelWorkQueue.shared.run("nemotron-meeting-release") {
-                    await bridge.prepareForShutdown()
+        switch borrowed {
+        case .nemotron:
+            if let bridge = nemotronBridgeInstance, selectedBackendType != .nemotron {
+                nemotronBridgeInstance = nil
+                nemotronLoadTask = nil
+                isLoadingNemotron = false
+                Task {
+                    // try? — run() now throws only on cancellation of this Task, in which case
+                    // the bridge is being torn down by app shutdown anyway.
+                    try? await ModelWorkQueue.shared.run("nemotron-meeting-release") {
+                        await bridge.prepareForShutdown()
+                    }
                 }
             }
+        case .qwen3asr:
+            // Only tear it down if the meeting loaded it. When the user dictates with Qwen3 the
+            // bridge is theirs, and releasing it would leave dictation with no backend.
+            if meetingOwnsQwen3, let bridge = qwen3asrBridgeInstance {
+                qwen3asrBridgeInstance = nil
+                qwen3asrLoadTask = nil
+                isLoadingQwen3ASR = false
+                if whisperBridge === bridge { whisperBridge = nil }
+                Task {
+                    try? await ModelWorkQueue.shared.run("qwen3asr-meeting-release") {
+                        await bridge.shutdownAsync()
+                    }
+                }
+            }
+            meetingOwnsQwen3 = false
+        default:
+            break
         }
 
         guard meetingEvictedUserBackend else { return }
@@ -5083,6 +5221,7 @@ class AppState: ObservableObject {
         // the refiner asks. An empty tally is fine — the timeline treats it as no prior.
         if let id = activeMeetingSession?.meetingID {
             lastMeetingNemotronTally = (id, streamingTranscriber?.nemotronLanguageTally ?? [:])
+            lastMeetingASREngine = (id, effectiveInAppBackend)
         }
 
         // NOTE: activeMeetingSession is NOT cleared here. The tail transcription fires

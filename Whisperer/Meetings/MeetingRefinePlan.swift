@@ -64,7 +64,8 @@ extension MeetingRefinePlan {
         availableGB: Double,
         freeDiskBytes: Int64 = Int64.max,
         rules: DominanceRules = .default,
-        config: LanguageRoutingConfig = .load()
+        config: LanguageRoutingConfig = .load(),
+        liveEngine: BackendType = .whisperCpp
     ) -> MeetingRefinePlan {
         guard !windows.isEmpty else {
             return MeetingRefinePlan(groups: [], modelsToFetch: [])
@@ -77,7 +78,8 @@ extension MeetingRefinePlan {
             windows: windows,
             rules: rules,
             availableGB: availableGB,
-            config: config
+            config: config,
+            liveEngine: liveEngine
         )
 
         // --- 2. Decide which models to fetch ---
@@ -91,19 +93,37 @@ extension MeetingRefinePlan {
 
     // MARK: - Grouping
 
+    /// The model that should decode this language, already memory-gated, or `nil` when no
+    /// second decode is warranted at all.
+    ///
+    /// `nil` is returned when the live engine was Qwen3 and the language has no measured
+    /// specialist — re-decoding leaderboard-leading output with a general Whisper model trades
+    /// a better transcript for a worse one. See `RefineModelTable.specialistsBeatingQwen3`.
+    private static func resolveModel(
+        for language: TranscriptionLanguage,
+        liveEngine: BackendType,
+        availableGB: Double,
+        config: LanguageRoutingConfig
+    ) -> WhisperModel? {
+        guard let model = RefineModelTable.refineModel(for: language, liveEngine: liveEngine,
+                                                       config: config) else { return nil }
+        return memoryGated(model: model, availableGB: availableGB, config: config)
+    }
+
     private static func languageGroups(
         timeline: MeetingLanguageTimeline,
         baseLanguage: TranscriptionLanguage,
         windows: [MeetingRefineWindow],
         rules: DominanceRules,
         availableGB: Double,
-        config: LanguageRoutingConfig
+        config: LanguageRoutingConfig,
+        liveEngine: BackendType
     ) -> [RefineGroup] {
         // If the timeline is empty (forced-language run or routing disabled), one group.
         guard !timeline.isEmpty, timeline.dominant != .auto else {
             let lang = baseLanguage == .auto ? .auto : baseLanguage
-            let model = RefineModelTable.model(for: lang, config: config)
-            let gated = memoryGated(model: model, availableGB: availableGB, config: config)
+            guard let gated = resolveModel(for: lang, liveEngine: liveEngine,
+                                           availableGB: availableGB, config: config) else { return [] }
             return [RefineGroup(model: gated, language: lang, windows: windows)]
         }
 
@@ -117,8 +137,8 @@ extension MeetingRefinePlan {
         }
         let totalWeighted = weightedDuration.values.reduce(0, +)
         guard totalWeighted > 0 else {
-            let model = RefineModelTable.model(for: timeline.dominant, config: config)
-            let gated = memoryGated(model: model, availableGB: availableGB, config: config)
+            guard let gated = resolveModel(for: timeline.dominant, liveEngine: liveEngine,
+                                           availableGB: availableGB, config: config) else { return [] }
             return [RefineGroup(model: gated, language: timeline.dominant, windows: windows)]
         }
 
@@ -131,8 +151,8 @@ extension MeetingRefinePlan {
                 "Refine plan: monolingual collapse (\(dominant.displayName) \(String(format: "%.0f", dominantShare * 100))% ≥ \(Int(rules.monolingualShare * 100))% threshold) — all windows decoded as \(dominant.displayName)",
                 subsystem: .transcription
             )
-            let model = RefineModelTable.model(for: dominant, config: config)
-            let gated = memoryGated(model: model, availableGB: availableGB, config: config)
+            guard let gated = resolveModel(for: dominant, liveEngine: liveEngine,
+                                           availableGB: availableGB, config: config) else { return [] }
             // Force every window to dominant — overrides minority spans.
             return [RefineGroup(model: gated, language: dominant, windows: windows)]
         }
@@ -140,9 +160,11 @@ extension MeetingRefinePlan {
         // --- Multilingual: dominant group + qualified minorities ---
         var groups: [RefineGroup] = []
 
-        // Dominant group.
-        let dominantModel = RefineModelTable.model(for: dominant, config: config)
-        let dominantGated = memoryGated(model: dominantModel, availableGB: availableGB, config: config)
+        // Dominant group. `nil` means the dominant language needs no second decode — its
+        // windows are then simply never assigned, which is the per-window skip: a bilingual
+        // English/Hebrew meeting re-decodes its Hebrew windows and leaves the English ones.
+        let dominantGated = resolveModel(for: dominant, liveEngine: liveEngine,
+                                         availableGB: availableGB, config: config)
         var dominantWindows: [MeetingRefineWindow] = []
 
         // Per-minority evaluation.
@@ -176,8 +198,11 @@ extension MeetingRefinePlan {
                 continue
             }
 
-            let minModel = RefineModelTable.model(for: language, config: config)
-            let minGated = memoryGated(model: minModel, availableGB: availableGB, config: config)
+            guard let minGated = resolveModel(for: language, liveEngine: liveEngine,
+                                              availableGB: availableGB, config: config) else {
+                Logger.info("Refine plan: \(language.displayName) needs no second decode — \(liveEngine.displayName) already leads it", subsystem: .transcription)
+                continue
+            }
             Logger.info("Refine plan: \(language.displayName) qualifies (\(String(format: "%.1f", share * 100))%, \(String(format: "%.0f", seconds))s) → \(minGated.displayName)", subsystem: .transcription)
             minorityGroups.append(RefineGroup(model: minGated, language: language, windows: []))
         }
@@ -195,7 +220,11 @@ extension MeetingRefinePlan {
             }
         }
 
-        groups.append(RefineGroup(model: dominantGated, language: dominant, windows: dominantWindows))
+        // No dominant group when the dominant language needs no second decode — its windows
+        // keep the live transcript, which is the better text.
+        if let dominantGated, !dominantWindows.isEmpty {
+            groups.append(RefineGroup(model: dominantGated, language: dominant, windows: dominantWindows))
+        }
 
         // Only include minority groups that actually got windows.
         for group in minorityGroups where !group.windows.isEmpty {

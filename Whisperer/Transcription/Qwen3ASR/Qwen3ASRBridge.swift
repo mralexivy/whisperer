@@ -46,6 +46,19 @@ nonisolated final class Qwen3ASRBridge: TranscriptionBackend, @unchecked Sendabl
 
     private var abortEpoch: Int { (try? stateLock.withLock { _abortEpoch }) ?? -1 }
 
+    /// One-line snapshot for `StuckStateDumper`. Reads every field under one lock acquisition,
+    /// so the fields are mutually consistent rather than sampled across a wedge.
+    var debugStateDescription: String {
+        guard let state = try? stateLock.withLock({
+            (_pendingJobs, _abortEpoch, _shouldAbort, _isShuttingDown,
+             _pinnedPreviewLanguage, _lastPreviewLanguage)
+        }) else {
+            return "pending=? (stateLock timed out — the lock itself is the stall)"
+        }
+        return "pending=\(state.0) abortEpoch=\(state.1) aborting=\(state.2) "
+            + "shuttingDown=\(state.3) pinnedLang=\(state.4 ?? "-") lastLang=\(state.5 ?? "-")"
+    }
+
     private init(engine: Qwen3ASREngine) {
         self.engine = engine
     }
@@ -117,12 +130,30 @@ nonisolated final class Qwen3ASRBridge: TranscriptionBackend, @unchecked Sendabl
             defer { done.signal() }
             text = self?.run(samples: samples, language: language, label: "final") ?? ""
         }
-        if done.wait(timeout: .now() + 120) == .timedOut {
-            Logger.error("Qwen3ASRBridge.transcribe timed out after 120s", subsystem: .transcription)
-            return ""
+        // Polled rather than one 120 s wait. This is the stop-path tail decode and it blocks the
+        // caller's thread; on a long meeting the audio is minutes rather than seconds, so the
+        // ceiling is genuinely reachable. `run` already polls `shouldAbort` between tokens and
+        // returns early, so once an abort lands the work finishes in tens of milliseconds —
+        // waiting the full remaining window for a result that is already "" holds the stop path
+        // open for no reason.
+        let deadline = Date().addingTimeInterval(Self.transcribeTimeout)
+        while done.wait(timeout: .now() + 0.1) == .timedOut {
+            if isShuttingDown { return "" }
+            if Date() >= deadline {
+                Logger.error(
+                    "Qwen3ASRBridge.transcribe timed out after \(Int(Self.transcribeTimeout))s "
+                    + "(\(String(format: "%.1f", Double(samples.count) / 16_000))s of audio)",
+                    subsystem: .transcription)
+                return ""
+            }
         }
         return text
     }
+
+    /// Ceiling on a blocking final decode. Generous: at the ~4x realtime this model sustains it
+    /// only binds on an hour of audio or a degenerate repetition loop, both of which are bugs
+    /// worth surfacing rather than waiting out.
+    private static let transcribeTimeout: TimeInterval = 120
 
     func transcribeAsync(
         samples: [Float],
@@ -161,6 +192,14 @@ nonisolated final class Qwen3ASRBridge: TranscriptionBackend, @unchecked Sendabl
         (try? stateLock.withLock { !_isShuttingDown && _hasEngine }) ?? false
     }
 
+    /// Tears the engine down.
+    ///
+    /// **Must not be called from `queue`.** The `queue.sync` below would deadlock on itself.
+    /// Every call site is off-queue today: `AppState.releaseCurrentBridge`,
+    /// `releaseQwen3ASRAsync`, `releaseMeetingASRBridge` and `gracefulShutdown` all run on the
+    /// main actor or a detached task, and `shutdownAsync` hops to a global queue first. Keep it
+    /// that way — a future caller inside a `transcribe` completion would hang the app on quit
+    /// with no log line to explain it.
     func prepareForShutdown() {
         try? stateLock.withLock {
             _isShuttingDown = true

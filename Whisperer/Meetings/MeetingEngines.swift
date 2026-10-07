@@ -44,7 +44,7 @@ enum MeetingEngine: CaseIterable {
     /// Approximate download size string shown in the UI.
     var downloadSizeLabel: String {
         switch self {
-        case .speech:       return "~1.5 GB"
+        case .speech:       return MeetingEngines.speechEngineIsQwen3 ? Qwen3ASREngine.downloadSizeLabel : "~1.5 GB"
         case .cleanup:
             // Computed from the actual model set so the UI stays honest as specialists change.
             let totalBytes = MeetingEngines.cleanupModelSet()
@@ -52,7 +52,8 @@ enum MeetingEngine: CaseIterable {
                 .map { $0.approximateDownloadBytes }
                 .reduce(0.0, +)
             let totalMB = Int(totalBytes / 1_000_000)
-            return totalMB > 0 ? "~\(totalMB) MB" : "~547 MB"
+            if totalMB > 0 { return "~\(totalMB) MB" }
+            return MeetingEngines.cleanupModelSet().isEmpty ? "none needed" : "~547 MB"
         case .intelligence: return "~3.2 GB"
         case .speakers:     return "~110 MB"
         }
@@ -61,7 +62,7 @@ enum MeetingEngine: CaseIterable {
     /// Byte size used for weighted progress calculation.
     var downloadBytes: Double {
         switch self {
-        case .speech:       return 1_500_000_000
+        case .speech:       return MeetingEngines.speechEngineIsQwen3 ? 2_500_000_000 : 1_500_000_000
         case .cleanup:
             return MeetingEngines.cleanupModelSet()
                 .map { $0.approximateDownloadBytes }
@@ -99,6 +100,14 @@ final class MeetingEngines: ObservableObject {
     /// regression is a one-line change here. Keep `downloadSizeLabel` / `downloadBytes` in sync
     /// — `MeetingPrepView`'s progress rail is weighted by those.
     static let intelligenceVariant: LLMModelVariant = .qwen3_5_4B_mtp
+
+    /// True when the `.speech` engine resolves to Qwen3 rather than Nemotron. Drives the
+    /// download size shown in `MeetingPrepView`'s weighted progress rail, so it must answer the
+    /// same question `AppState.prepareMeetingASRBridge()` does: Qwen3 first, Nemotron only as a
+    /// fallback for users who have it and not Qwen3.
+    static var speechEngineIsQwen3: Bool {
+        Qwen3ASRBridge.isModelCached() || !NemotronBridge.isModelCached()
+    }
 
     // MARK: - Published state
 
@@ -211,9 +220,13 @@ final class MeetingEngines: ObservableObject {
         UserDefaults.standard.set(value, forKey: key)
     }
 
-    /// All models the cleanup pass needs — baseline plus a specialist per allowed language.
+    /// All models the cleanup pass needs.
+    ///
+    /// Empty after a Qwen3 meeting whose languages all have Qwen3 as the best available decoder
+    /// — there is no cleanup to prepare, so `.cleanup` reports ready with nothing downloaded.
     static func cleanupModelSet() -> [WhisperModel] {
-        RefineModelTable.modelsForCurrentConfig()
+        RefineModelTable.modelsForCurrentConfig(
+            liveEngine: speechEngineIsQwen3 ? .qwen3asr : .whisperCpp)
     }
 
     // MARK: - Readiness checks
@@ -221,13 +234,14 @@ final class MeetingEngines: ObservableObject {
     /// Snapshot the current on-disk readiness state for each engine.
     /// Never downgrades an in-progress download or warm pass.
     private func refreshReadiness() {
-        // .speech — Nemotron on disk
+        // .speech — Qwen3 (preferred) or Nemotron (fallback) on disk. Qwen3 is usually the
+        // backend the user already dictates with, in which case a meeting loads nothing at all.
         switch readiness[.speech] {
         case .downloading, .preparing: break
         default:
-            readiness[.speech] = NemotronBridge.isModelCached()
+            readiness[.speech] = (Qwen3ASRBridge.isModelCached() || NemotronBridge.isModelCached())
                 ? .ready
-                : .needsDownload("Download the Nemotron model from the Models tab.")
+                : .needsDownload("Download Qwen3 ASR from the Models tab.")
         }
 
         // .cleanup — baseline (Whisperer V3) plus any language specialists, all on disk AND
@@ -237,6 +251,12 @@ final class MeetingEngines: ObservableObject {
         case .downloading, .preparing: break
         default:
             let models = Self.cleanupModelSet()
+            // No models means no cleanup pass at all — ready, with nothing to download. Showing
+            // a stage here would put a phantom step in MeetingPrepView's progress rail.
+            guard !models.isEmpty else {
+                readiness[.cleanup] = .ready
+                break
+            }
             let missingDownload = models.first { !ModelDownloader.shared.isModelDownloaded($0) }
             if let missing = missingDownload {
                 readiness[.cleanup] = .needsDownload("Download \(missing.displayName) from the Models tab.")
@@ -348,26 +368,31 @@ final class MeetingEngines: ObservableObject {
     // wrappers needed. After each `await`, execution resumes on the main actor.
 
     private func runSpeech() async {
-        guard NemotronBridge.isModelCached() else {
+        guard Qwen3ASRBridge.isModelCached() || NemotronBridge.isModelCached() else {
             Logger.info("MeetingEngines: speech model not on disk, skipping warm", subsystem: .model)
             return
         }
         readiness[.speech] = .preparing
         statusText = "Preparing \(MeetingEngine.speech.roleLabel)…"
-        // prepareMeetingBackend manages its own ModelWorkQueue slot ("nemotron-load").
-        // Do NOT wrap in an outer MWQ job — that would deadlock (outer slot held, inner
-        // "nemotron-load" queued behind it and never dequeued).
-        let success = await AppState.shared.prepareMeetingBackend()
+        // prepareMeetingASRBridge manages its own ModelWorkQueue slot ("qwen3asr-load" or
+        // "nemotron-load"), and both use `runBlocking`. Do NOT wrap this in an outer MWQ job —
+        // that would deadlock: the outer slot is held while the inner job queues behind it and
+        // is never dequeued.
+        let success = await AppState.shared.prepareMeetingASRBridge()
         Logger.info("MeetingEngines: speech warm \(success ? "succeeded" : "failed")", subsystem: .model)
         if success {
             readiness[.speech] = .ready
         } else {
-            readiness[.speech] = .unavailable("Nemotron could not be loaded.")
+            readiness[.speech] = .unavailable("The speech model could not be loaded.")
         }
     }
 
     private func runCleanup() async {
         let models = Self.cleanupModelSet()
+        guard !models.isEmpty else {
+            readiness[.cleanup] = .ready
+            return
+        }
         // Capture weak reference before closures that cross actor boundaries.
         weak var weakSelf: MeetingEngines? = self
 

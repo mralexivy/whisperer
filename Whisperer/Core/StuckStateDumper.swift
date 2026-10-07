@@ -453,6 +453,19 @@ enum StuckStateDumper {
             lines.append("- modelPool: nil")
         }
 
+        #if canImport(FluidAudio)
+        // Qwen3 is the default engine, so a stall on it is the most likely stall to diagnose.
+        // `isIdle` false with no progress is the signature of a wedged MLX inference queue, and
+        // the abort epoch tells whether a stop was even requested — neither is recoverable from
+        // the log tail alone.
+        if let qwen3 = s.qwen3asrBridgeInstance {
+            lines.append("- qwen3asr: loaded idle=\(qwen3.isIdle) healthy=\(qwen3.isContextHealthy()) \(qwen3.debugStateDescription)")
+        } else {
+            lines.append("- qwen3asr: not loaded (cached=\(s.isQwen3ASRModelCached()))")
+        }
+        lines.append("- meeting.borrowedBackend: \(s.meetingBorrowedBackendForDebug?.rawValue ?? "none")")
+        #endif
+
         lines.append("- sileroVAD: \(s.sileroVADIsNilForDebug ? "nil" : "loaded")")
         lines.append("- llmEnabled: \(s.llmEnabledForDebug)")
         if s.llmEnabledForDebug {

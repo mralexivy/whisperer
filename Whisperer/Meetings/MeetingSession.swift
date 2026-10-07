@@ -125,7 +125,7 @@ class MeetingSession: ObservableObject {
 
     /// True from the first line of `startRecording` until it has either bailed out or
     /// set `isRecording`. `isRecording` alone cannot guard the entry: it is only set
-    /// after `prepareMeetingBackend()` and `beginSession()`, and the former polls for
+    /// after `prepareMeetingASRBridge()` and `beginSession()`, and the former polls for
     /// up to 90s while Nemotron loads. Every tap on Start during that window used to
     /// pass the guard and create its own CoreData row — the extra rows were then left
     /// with `isInProgress = true` and showed up as "crash recovery: finalizing N
@@ -288,7 +288,7 @@ class MeetingSession: ObservableObject {
         #if canImport(FluidAudio)
         // Force Nemotron before anything is created — a failure here must leave no
         // half-started meeting behind. AppState surfaces the reason via errorMessage.
-        guard await AppState.shared.prepareMeetingBackend() else { return }
+        guard await AppState.shared.prepareMeetingASRBridge() else { return }
         guard !isRecording else { return }   // re-check: the await above yielded
         #endif
 

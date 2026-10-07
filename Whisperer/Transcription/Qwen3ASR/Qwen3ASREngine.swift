@@ -63,6 +63,7 @@ nonisolated final class Qwen3ASREngine {
         "sv": [11528, 30109], "da": [11528, 43680], "fi": [11528, 57853], "pl": [11528, 31984],
         "cs": [11528, 33150], "tl": [11528, 62417], "fa": [11528, 49861], "el": [11528, 17860],
         "ro": [11528, 73597], "hu": [11528, 56769], "mk": [11528, 56452, 75491],
+        "he": [11528, 36266],
     ]
 
     /// Model language names (as it prints them after `language `) → ISO code.
@@ -73,6 +74,7 @@ nonisolated final class Qwen3ASREngine {
         "turkish": "tr", "hindi": "hi", "malay": "ms", "dutch": "nl", "swedish": "sv",
         "danish": "da", "finnish": "fi", "polish": "pl", "czech": "cs", "filipino": "tl",
         "persian": "fa", "greek": "el", "romanian": "ro", "hungarian": "hu", "macedonian": "mk",
+        "hebrew": "he",
     ]
 
     struct Result {
@@ -166,6 +168,7 @@ nonisolated final class Qwen3ASREngine {
         var inText = forced != nil
         var textStart = 0
         var headerLanguage: String? = forced != nil ? languageCode : nil
+        var tokensSinceLoopCheck = 0
         for _ in 0..<budget {
             let token = next.item(Int32.self)
             if Token.eos.contains(token) { break }
@@ -183,6 +186,37 @@ nonisolated final class Qwen3ASREngine {
             asyncEval(next)
             if inText, let onPartial {
                 onPartial(decode(Array(generated[textStart...])), headerLanguage)
+            }
+
+            // Stop a greedy decode that has started looping, rather than letting it spend the
+            // whole budget on copies of the same phrase.
+            //
+            // Greedy decoding with no sampling has no escape from a repetition attractor: once
+            // the model's argmax cycles, it cycles until the budget runs out. A 20-minute
+            // session produced `в глубь, в глубь, в глубь,` — a phrase that appears in none of
+            // the source recordings, so it is invented, not heard.
+            //
+            // `isHallucination` in `StreamingTranscriber` already rejects a looping *chunk*,
+            // but a loop that emits one copy per chunk clears that guard three times over and
+            // only looks degenerate once the chunks are joined. Catching it here, inside the
+            // decode that creates it, is the only place it is still one object.
+            //
+            // Checked every `loopCheckInterval` tokens: `containsLoop` is linear in the word
+            // count, and a real loop needs at least nine words to exist, so nothing is missed
+            // by not checking per token.
+            if inText {
+                tokensSinceLoopCheck += 1
+                if tokensSinceLoopCheck >= Self.loopCheckInterval,
+                   generated.count - textStart >= Self.loopCheckMinimumTokens {
+                    tokensSinceLoopCheck = 0
+                    let soFar = decode(Array(generated[textStart...]))
+                    if TranscriptRepetition.containsLoop(words: soFar.split(separator: " ")) {
+                        Logger.warning(
+                            "Qwen3ASR decode stopped on a repetition loop after \(generated.count) tokens",
+                            subsystem: .transcription)
+                        break
+                    }
+                }
             }
         }
         let t3 = CFAbsoluteTimeGetCurrent()
@@ -202,7 +236,7 @@ nonisolated final class Qwen3ASREngine {
             detected = nil
         }
 
-        if Memory.cacheMemory > 512 * 1024 * 1024 { Memory.clearCache() }
+        trimCacheIfNeeded()
 
         return Result(
             text: text.trimmingCharacters(in: .whitespacesAndNewlines),
@@ -213,6 +247,39 @@ nonisolated final class Qwen3ASREngine {
             prefillMs: (t2 - t1) * 1000,
             decodeMs: (t3 - t2) * 1000)
     }
+
+    /// Releases MLX's buffer cache when it has grown large, or sooner when the machine is short
+    /// of memory.
+    ///
+    /// A flat 512 MB ceiling was fine when Qwen3 was one backend among several and ran only
+    /// during dictation. It is too lax now: a meeting keeps this engine resident for the whole
+    /// recording and the post-meeting tail loads the 3.2 GB Qwen3.5 overview model on the same
+    /// MLX allocator, so half a gigabyte of cached buffers is half a gigabyte the LLM cannot
+    /// have. Clearing early costs a re-allocation on the next pass, which is microseconds;
+    /// clearing late costs a swap storm.
+    ///
+    /// Keyed on free memory rather than on a meeting flag so there is nothing to keep in sync —
+    /// `ModelWorkQueue`'s gate is actor-isolated and cannot be read from this synchronous path
+    /// anyway.
+    private func trimCacheIfNeeded() {
+        let cached = Memory.cacheMemory
+        guard cached > 64 * 1024 * 1024 else { return }
+        if cached > Self.cacheCeilingBytes || SystemMemory.availableGB() < Self.cacheTrimHeadroomGB {
+            Memory.clearCache()
+        }
+    }
+
+    /// Tokens between repetition checks during decoding. A loop needs at least three copies of
+    /// a three-word phrase to register, so checking this often cannot miss one it would catch.
+    private static let loopCheckInterval = 16
+    /// Do not look for a loop before this many text tokens — `containsLoop` cannot fire below
+    /// nine words and the decode is at its most expensive per token early on.
+    private static let loopCheckMinimumTokens = 32
+
+    /// Cached MLX buffers above this are released regardless of free memory.
+    private static let cacheCeilingBytes = 512 * 1024 * 1024
+    /// Below this much free RAM, trim the cache at the first opportunity.
+    private static let cacheTrimHeadroomGB: Double = 3.0
 
     /// ISO code for a `language <Name>` header; nil for `language None` (silence) or unknown names.
     private func headerLanguageCode(_ tokens: [Int32]) -> String? {

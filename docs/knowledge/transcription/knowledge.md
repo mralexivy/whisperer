@@ -686,3 +686,174 @@ watchdog beat the pipeline.
 - Actual paths that produced Russian: (1) eager passes decode as `.auto` before any evidence, and whisper's per-pass detection picks `ru` on a few seconds of accented English and emits Russian words (R5 `2026-09-20_11-55-41`: 28 Cyrillic words at logProb −0.57, while the probe later said en 0.765); (2) a weak probe (ru 0.55–0.70) becoming the arbiter's leading candidate and driving provisional or tail decoding.
 - Signature of the wrong language: logProb gets worse once forced (R135 −0.6 → −2.1). Genuine Russian decodes at about −0.1.
 - Fix: the non-primary switch gate (`StreamingTranscriber.languageSwitchGate`). The last 8 s are decoded forced to the primary and forced to the candidate; the candidate is allowed only if its avg logProb leads by ≥ 0.10. Measured leads: correct language ahead by 0.20–1.05 in 29/30 corpus rows plus all 5 gate-test recordings. `.auto` eager passes that detect a non-primary language are held until verified.
+
+## Merging a monolingual fine-tune into Qwen3-ASR (Caspi/Hebrew, 2026-10-04)
+
+`OzLabs/Caspi-1.7B` is a Hebrew fine-tune of Qwen3-ASR-1.7B and a drop-in weight swap: 707/707
+tensors match the mlx-community layout after stripping the `thinker.` prefix and transposing the
+three `audio_tower.conv2d*.weight` from NCHW to NHWC. It is CC-BY-NC-4.0, so nothing derived from
+it is shippable; the base is Apache-2.0.
+
+Used alone it is catastrophic for every other language — it emits Hebrew for English audio *even
+when the language is force-prompted to English*, so the damage is in the weights, not in detection.
+
+Task-vector interpolation `W = W_base + λ(W_caspi − W_base)` was measured across λ. The per-tensor
+delta map explains the behaviour:
+
+- Overall delta is small — median 6.4%, mean 8.1% — i.e. the fine-tune stayed in the base's loss
+  basin, which is why interpolation works at all.
+- The entire top-25 by relative delta is `audio_tower.*`, peaking at **52% on `audio_tower.proj2`**
+  (the projection from the audio encoder into the decoder hidden space). The text decoder barely
+  moved.
+- `model.embed_tokens` changed only 16.6% (rank 140 of 707). An "embeddings are the culprit" fix
+  was built and failed — still all-Hebrew.
+
+Language tolerance to λ is wildly uneven, and **English is a dangerously misleading probe**:
+
+| λ | Russian | English | Hebrew |
+|---|---|---|---|
+| 0.2 | ok | ok | slight gain (`אובד נחון` → `עובד נכון`) |
+| 0.25 | mixed-script corruption | ok | ok |
+| 0.3 | destroyed | ok | ok |
+| 0.5–0.9 | destroyed | ok on long audio, flips to Hebrew on <3.5 s windows | ok |
+| 1.0 | destroyed | destroyed | perfect |
+
+- English survives to λ=0.9 on a full sentence because it dominates pretraining. Russian breaks at
+  0.25. **Validating a merge on English alone overstates the usable λ by ~4×.**
+- Evaluate on the window sizes the preview loop actually uses (0.35–3.5 s), not on a clean
+  full-length clip. At λ=0.9 a 6 s English clip decoded perfectly while 0.55 s and 1.05 s prefixes
+  both detected `he`, which trips the two-pass ratchet in `Qwen3ASRBridge` and pins Hebrew for the
+  rest of the dictation.
+- At λ=0.9 the English content was transcribed *correctly and then written in Hebrew*
+  (`אני רוצה לנסות את זה עוד פעם` = "I want to try this again"), which looks like a decoder
+  language-prior bug and is not one.
+
+Layer-split merges were tried and none separate the abilities:
+
+- Base decoder + full Caspi audio tower: English clean, but Hebrew **romanises**
+  (`Ani rotsce l'ibdokk...`) and Russian still breaks — proving the loss is in the encoder, since
+  the decoder was untouched.
+- Full Caspi audio tower + decoder at λ=0.3: English clean on every window, Hebrew in correct
+  script — but Russian comes out as Hebrew-letter transliteration (`יהיה חתשיו פרבירית` for
+  "Я хочу проверить").
+- Keeping base `audio_tower.proj1/proj2` while taking Caspi elsewhere: no effect, still all-Hebrew.
+  The Hebrew bias is distributed across the whole tower, not concentrated at the interface.
+
+Conclusion: a monolingual ASR fine-tune's gains and its multilingual damage live in the *same*
+audio-tower parameters, so no λ and no layer split recovers both. λ=0.2 is the ceiling for a single
+merged checkpoint that keeps Russian. Caspi-grade Hebrew requires loading Caspi as a separate
+checkpoint under an explicit language selection (load is ~1.4 s, so swapping outside recording is
+imperceptible).
+
+Tooling: `~/Documents/huggingface/_merge/` holds `build_merge.py` (streaming merge — `mx.load`
+mmaps and MLX arrays are lazy, so peak RSS tracks output size; an eager dequantise-everything
+version needed ~21 GB and froze the machine), plus the base and Caspi sources. Quantise to match
+the base layout exactly: scales/biases are keyed `foo.scales`, **not** `foo.weight.scales`, the
+text decoder is 8-bit group-64, and the audio tower stays bf16.
+
+## Qwen3-ASR as the default engine — measured baseline (2026-10-07)
+
+Measured by `WhispererTests/Qwen3GateBenchmarkTests`, 60 clips from the user's own history,
+Apple M2 Pro. There is no human ground truth for this corpus, so the metric is **medoid
+consensus**: every engine decodes the clip, the hypothesis with the lowest mean WER to the others
+becomes that clip's reference, and each engine scores against it. `medoid%` is how often an
+engine *was* that reference. This identifies the odd one out; it cannot prove correctness.
+
+`GoldenSet` is deliberately **not** used for cross-engine comparison. It is a whisper.cpp
+full-file decode, so whisper.cpp scores ~0 against it by construction — a rigged comparison. It
+remains correct for its own purpose: measuring what windowing costs one engine.
+
+| engine | clips | meanWER | medoid% | RTF |
+|---|---|---|---|---|
+| qwen3 | 60 | **0.037** | **41.7** | 10.7x |
+| whisper-v3 (`.largeTurboQ5`) | 60 | 0.055 | 35.0 | 12.5x |
+| parakeet-v3 | 60 | 0.085 | 23.3 | 83x |
+
+Per language: English 0.039 / 0.072 / 0.090 (Qwen3 clearly ahead). Hebrew 0.017 / 0.013 / 0.068
+(whisper-v3 marginally ahead, inside the 0.02 noise band). No engine returned an empty decode.
+
+Streaming, same machine: 21 preview updates on a 9.7 s clip, first word under 1 s, stop-to-final
+1.57 s, batch RTF ~5x on short clips and ~13x on 20 s clips.
+
+### The history language column is not a label
+
+The first Hebrew specialist run scored `ivrit-v3-turbo` at WER 0.749 against Qwen3's 0.000. That
+number measured the corpus, not the model: of 12 clips tagged `he` in `ZTRANSCRIPTIONENTITY`,
+most were English or Russian speech. Both engines were force-decoded to Hebrew; the specialist
+obediently transliterated English and Russian into Hebrew letters
+(`תקסט שאת פרופאה בגרית` for `Я хочу проверить`), while Qwen3 ignored the forcing and emitted the
+right language.
+
+**Rule: never select a per-language benchmark corpus by `RecordingFixture.language`.** Run an
+auto-detect pass and select on the script of the output. `Qwen3GateBenchmarkTests
+.testHebrewSpecialistVersusQwen3` now does this via `ScriptAnalyzer.dominantScript`.
+
+Second: a forced language is obeyed differently by the two engines. Whisper transliterates
+mismatched audio into the forced script; Qwen3 overrides the forcing and reports what it heard.
+That makes Qwen3 safer under a wrong language pin and makes any forced-language comparison
+between them invalid unless the audio really is that language.
+
+### Hebrew: Qwen3 loses, decisively
+
+On **56 clips confirmed Hebrew by script** (not by the history language column), same harness:
+
+| engine | clips | meanWER | medoid% | RTF |
+|---|---|---|---|---|
+| ivrit-v3-turbo | 56 | **0.183** | **64.3** | 14.9x |
+| qwen3 | 56 | 0.341 | 35.7 | 7.3x |
+
+The gap is visible in the text, not just the number. Qwen3 invents words and bleeds Cyrillic into
+Hebrew sentences (`הם נסע לא видл אתו צה"ל od מודי חותית`) where the specialist reads cleanly
+(`אני מנסה להעביר לתוצאה מאוד מאוד איכותית`). Qwen3 is also *slower* on Hebrew — 7.3x against
+14.9x — because garbled output generates more tokens.
+
+Two consequences, both implemented:
+
+1. `RefineModelTable.specialistsBeatingQwen3[.hebrew] = .ivritLargeTurbo`. Hebrew meetings still
+   get the post-recording second decode; every other language skips it.
+2. `BackendType.weakLanguages` and `defaultBackend(for:)`. A Hebrew user is defaulted to
+   whisper.cpp even on a machine where Qwen3 is cached, the Models tab does not recommend Qwen3
+   to them, and the 2.5 GB upgrade card is not shown. Qwen3 remains selectable — weak is not
+   unsupported.
+
+The general rule this is an instance of: **a leaderboard-leading multilingual model can still
+lose badly to a monolingual fine-tune, and "supports the language" is not "is good at it".**
+`supportsLanguage` answers the first question; `weakLanguages` answers the second, and only ever
+from a benchmark run.
+
+### Latency and long-session behaviour (same harness)
+
+Time to first preview word, measured from when *speech* is fed rather than from `start()`:
+2.07–3.43 s across repeat runs on the same clip, tracking an RTF that moved 9.5x → 8.3x with
+background load. About 1.4 s of that is the language-agreement ratchet in `Qwen3ASRBridge`,
+which withholds an unpinned auto-detect preview until two consecutive passes name the same
+language — a deliberate trade against the stray misdetected first character. Timing assertions
+on this are bounds against collapse, not targets; the variance under load is larger than any
+regression worth catching that way.
+
+20.4 minutes of concatenated audio, fed at 4x: 1642 preview updates, 0 retractions, 2791 final
+words, stop-to-final 1.12 s, no production-threshold repetition loop.
+
+**Feed rate must stay inside the engine's throughput.** An earlier version of this test fed at
+20x, above Qwen3's ~9x. Committed chunks could not keep up, the uncommitted tail grew for the
+whole session, and the stop-path decode of that tail took **19.3 s**. Dropping to 4x took the
+same measurement to 1.12 s. The 19.3 s was the harness outrunning the engine, not a defect — but
+it does describe a real overload mode, and it is the reason the live preview sheds work when the
+chunk backlog exceeds 10 s.
+
+### Two repetition guards added, neither of which fired on this corpus
+
+The long session produced `в глубь,` three times back to back — a phrase in none of the source
+recordings. Investigating it added two guards that are correct on their own merits:
+
+- `Qwen3ASREngine` stops a greedy decode once `TranscriptRepetition.containsLoop` fires on the
+  text so far. Greedy decoding has no escape from a repetition attractor; without this the loop
+  runs to the token budget.
+- `StreamingTranscriber.createsSeamLoop` drops a chunk whose arrival would repeat a phrase
+  across the seam. `isHallucination` inspects one chunk in isolation and is blind to a decoder
+  emitting one copy per chunk.
+
+Neither explains the observed case: `в глубь,` is a **two-word** phrase, and
+`TranscriptRepetition.minimumPhraseLength` is 3 by deliberate choice ("that's it, that's it" is
+ordinary speech). The observation is printed by the test and not asserted on — one occurrence on
+60 unrelated clips welded into one stream does not justify lowering a tuned threshold.
