@@ -3831,6 +3831,8 @@ class AppState: ObservableObject {
         lastNonSilentAmplitudeTime = nil
         hasTriggeredSilentAudioDump = false
         startStartupWatchdog()  // cancelled when audio starts; waits on the recorder, not the clock
+        // Hold back background model work for the whole dictation, decode and paste included.
+        raiseDictationModelGate()
 
         // Play feedback sound first (user hears it)
         soundPlayer?.playStartSound()
@@ -3987,6 +3989,9 @@ class AppState: ObservableObject {
                 streamingTranscriber = nil
                 liveTranscription = ""
                 state = .idle
+                // This dictation never produced audio, so no stop path will run and nothing else
+                // will release the gate raised above.
+                lowerDictationModelGate(reason: "audio start failed")
                 // Silent reset — no error message. Next Fn press starts fresh.
                 if muteOtherAudioDuringRecording {
                     audioMuter?.unmuteSystemAudio()
@@ -4072,6 +4077,37 @@ class AppState: ObservableObject {
         guard activeMeetingSession == nil else { return }
         Task { await ModelWorkQueue.shared.clearStrandedMeetingGate(reason: reason) }
         MeetingJobQueue.shared.clearStrandedSuspension(reason: reason)
+        // The dictation gate is the third process-wide gate and fails the same way. Only clear it
+        // when no dictation is genuinely in flight: `.recording` and `.stopping` are the two
+        // states that legitimately hold it, and a meeting teardown can land while an unrelated
+        // dictation is mid-decode.
+        switch state {
+        case .recording, .stopping:
+            break
+        default:
+            Task { await ModelWorkQueue.shared.clearStrandedDictationGate(reason: reason) }
+        }
+    }
+
+    // MARK: - Dictation model-work gate
+
+    /// Raises `ModelWorkQueue`'s dictation gate for the duration of one dictation.
+    ///
+    /// Background model work — meeting transcript polish, overview generation, RAG indexing —
+    /// shares the Metal allocator with the dictation decode and nothing used to keep them apart.
+    /// On 2026-10-01 a 33 s meeting overview map-reduce overlapped a tail decode and stretched it
+    /// from ~800 ms to 10,933 ms, past the stop ceiling, so the user was pasted the live preview
+    /// instead of the final text. See the `ModelWorkQueue` header for the full measurement.
+    private func raiseDictationModelGate() {
+        Task { await ModelWorkQueue.shared.setDictationActive(true) }
+    }
+
+    /// Lowers the dictation gate. Must run on every exit from a dictation — the normal stop, the
+    /// cancel, the stop watchdog's force-idle and a failed audio start — because a gate left up
+    /// suspends all background model work for the rest of the process.
+    private func lowerDictationModelGate(reason: String) {
+        Logger.debug("Lowering the dictation model-work gate (\(reason))", subsystem: .app)
+        Task { await ModelWorkQueue.shared.setDictationActive(false) }
     }
 
     /// Releases a meeting session that `stopInAppRecording()` left attached.
@@ -4122,6 +4158,15 @@ class AppState: ObservableObject {
         startStopWatchdog()
 
         Task {
+            // The dictation gate stays up until the text is in the user's app, not merely until
+            // the decode returns: dictionary correction, LLM post-processing and the paste all
+            // run below and all lose if a background job takes the GPU underneath them. A `defer`
+            // rather than a call per exit, because this Task has six of them — the watchdog
+            // bail-out, the force-idle repair, the empty-text branch and the normal path — and
+            // the gate being process-wide makes one missed exit a session-long outage of all
+            // background model work.
+            defer { lowerDictationModelGate(reason: "dictation stop path finished") }
+
             let transcriber = streamingTranscriber
             let stopPreparation = Task.detached(priority: .userInitiated) { [weak transcriber] in
                 await transcriber?.prepareForStopAsync()
@@ -4167,13 +4212,28 @@ class AppState: ObservableObject {
                 // loudly — this means a complete decode was abandoned and the user is getting
                 // the preview instead, which `fallback=true` alone did not make obvious.
                 if finalText.isEmpty {
+                    // Cancel the decode we just gave up on. `withTimeoutResult` is a
+                    // `withTaskGroup` race, and `group.cancelAll()` cancels the group's own
+                    // children — `stopTask` is created out here, so the group never touched it.
+                    // The abandoned decode therefore kept running and kept holding the GPU, which
+                    // is what turned the 2026-10-01 contention case from slow into 10.9s slow:
+                    // the fallback's own dictionary pass and the following LLM post-processing
+                    // were competing with a decode whose result nobody would ever read.
+                    stopTask.cancel()
                     Logger.warning(
-                        "Stop transcription produced nothing within \(String(format: "%.0f", Self.stopCeilingSeconds(forRecordedDuration: transcriber.recordedDuration)))s — falling back to the live preview",
+                        "Stop transcription produced nothing within \(String(format: "%.0f", Self.stopCeilingSeconds(forRecordedDuration: transcriber.recordedDuration)))s — cancelling the abandoned decode and falling back to the live preview",
                         subsystem: .app
                     )
                     let streamingResult = transcriber.currentTranscription
                     if !streamingResult.isEmpty {
-                        finalText = transcriber.applyDictionary(streamingResult)
+                        // Off the main thread. `applyDictionary` is a synchronous method on a
+                        // `@MainActor` class, so calling it from this `@MainActor` Task ran the
+                        // whole fuzzy correction pass on thread 0 — measured at 2177 ms for a 15k
+                        // character transcript, freezing the UI immediately before the paste. The
+                        // normal path never had this problem because `stopAsync` hops to
+                        // `DispatchQueue.global` first (StreamingTranscriber.swift:~3692); this
+                        // branch simply never got the same treatment.
+                        finalText = await Self.applyDictionaryOffMainThread(transcriber, to: streamingResult)
                         if fillerWordRemovalEnabled {
                             finalText = FillerWordFilter.removeFillers(from: finalText)
                         }
@@ -4264,6 +4324,33 @@ class AppState: ObservableObject {
                 Logger.debug("No speech detected in recording", subsystem: .app)
                 cancelStateWatchdog()
                 state = .idle
+            }
+        }
+    }
+
+    /// Carries a non-`Sendable` transcriber across the hop to the global queue. The same
+    /// unchecked hand-off `StreamingTranscriber.stopAsync` already performs with `self`, made
+    /// explicit here rather than left to a capture.
+    private struct UncheckedTransfer<T>: @unchecked Sendable {
+        let value: T
+        init(_ value: T) { self.value = value }
+    }
+
+    /// Runs the dictionary pass on a global queue instead of the main thread.
+    ///
+    /// `Task.detached` would not do it. Under `SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor` plus
+    /// `SWIFT_APPROACHABLE_CONCURRENCY = YES`, `applyDictionary` is a `@MainActor` method and the
+    /// detached task hops straight back to the main actor to call it — the same trap documented
+    /// at length in ModelWorkQueue.swift:40-75 and at StreamingTranscriber.swift:~3685. An
+    /// explicit `DispatchQueue` is the only construct here that the compiler cannot move back.
+    private nonisolated static func applyDictionaryOffMainThread(
+        _ transcriber: StreamingTranscriber,
+        to text: String
+    ) async -> String {
+        let box = UncheckedTransfer(transcriber)
+        return await withCheckedContinuation { (continuation: CheckedContinuation<String, Never>) in
+            DispatchQueue.global(qos: .userInitiated).async {
+                continuation.resume(returning: box.value.applyDictionary(text))
             }
         }
     }
@@ -4466,6 +4553,11 @@ class AppState: ObservableObject {
         llmBatchScheduler?.cancelAll()  // …and release anyone waiting on a queued batch row
         liveTranscription = ""
         state = .idle
+        // The force-idle is a third way out of a dictation and the gate has to come down on it
+        // too. `stopRecording()`'s Task may still be running behind this and will lower the gate
+        // again in its own `defer`; `setDictationActive` is idempotent, so the second call is a
+        // no-op rather than a double release.
+        lowerDictationModelGate(reason: "recording watchdog force-idle")
         HealthManager.shared.recordingStopped()
         if muteOtherAudioDuringRecording {
             audioMuter?.unmuteSystemAudio()
@@ -4605,6 +4697,10 @@ class AppState: ObservableObject {
         cancelStateWatchdog()
 
         Task {
+            // This dictation ends here with no stop path to run, so this is the only place that
+            // can release the gate `startRecording()` raised.
+            defer { lowerDictationModelGate(reason: "dictation cancelled") }
+
             // Cancel inference first so no stale progress callback can mutate the UI
             // while the recorder is shutting down.
             let transcriber = streamingTranscriber

@@ -19,9 +19,35 @@
 
 import Foundation
 
-// nonisolated: SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor would otherwise place every async
-// method on the main actor. This type is pure — no UI, no AppState — and must run off-main.
-// Same pattern as EditingModel.swift:78, MMBERTCoreMLRuntime.swift:65.
+// `nonisolated` is necessary here and it is **not sufficient**, which is the correction to the
+// comment this one replaces.
+//
+// Necessary: `SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor` would otherwise make every method of this
+// type `@MainActor`, and an `await` from `AppState` would then be a hop *onto* the main actor.
+//
+// Not sufficient: the project also sets `SWIFT_APPROACHABLE_CONCURRENCY = YES`, so under SE-0461 an
+// unannotated `nonisolated async` function is `nonisolated(nonsending)` — it does not get an
+// executor of its own, it **runs on the caller's**. Every caller of the async polish entry points
+// is a method on `@MainActor AppState`, so `nonisolated` alone bought nothing: the deterministic
+// stages, `MMBERTEditingModel.propose`, `MMBERTCoreMLRuntime.encode` and the synchronous
+// `predict` inside its loop all executed on thread 0. A dictation on 2026-10-07 20:48:34 froze the
+// UI for 4.6 s with `semaphore_wait_trap → MpsGraphInferenceOperation::ExecuteSync →
+// MLE5ExecutionStream executeForInputFeatures:` on the main thread, and nothing in the log said so,
+// because this pass had no timing of its own.
+//
+// What actually achieves the hop is `@concurrent` on the async entry points below. `@concurrent`
+// requires the function to run on the global concurrent executor, and a `nonisolated(nonsending)`
+// callee invoked from inside it inherits *that* isolation rather than the original caller's. This
+// is the same technique, and the same reasoning, as `ModelWorkQueue.offCallerExecutor` — read its
+// class note for the stack dumps that established it. This path replicates the technique locally
+// instead of submitting to `ModelWorkQueue.run`, because that actor serializes against meeting
+// model loads and dictation polish is the interactive latency path, not background work.
+//
+// The tripwire in `polish(_:pauses:context:)` exists because the whole cost of this bug was its
+// silence. If a future refactor drops `@concurrent`, the log says so on the first dictation.
+//
+// Same `nonisolated` pattern as EditingModel.swift and MMBERTCoreMLRuntime.swift:65, both of which
+// carry the same caveat.
 nonisolated struct DeterministicPolisher: Sendable {
 
     // MARK: - Result
@@ -128,14 +154,37 @@ nonisolated struct DeterministicPolisher: Sendable {
     /// the graph that does not go through the gate; that is what `EditingModel`'s contract of
     /// "propose, never mutate" buys, and it is why a mis-calibrated model costs rejected edits
     /// rather than corrupted text.
+    ///
+    /// `@concurrent` is load-bearing and must stay. See the type note above: without it this
+    /// function is `nonisolated(nonsending)` under `SWIFT_APPROACHABLE_CONCURRENCY = YES` and runs
+    /// the eight deterministic stages *and* the Core ML encoder pass on `AppState`'s main actor.
+    @concurrent
     func polish(_ graph: TokenGraph,
                 pauses: ParagraphSplitter.Pauses = [:],
                 context: EditContext) async -> Result {
+        // The tripwire. `@concurrent` guarantees the global concurrent executor, so reaching this
+        // line on thread 0 means the attribute was removed or the compiler stopped honouring it —
+        // either way the UI is about to freeze for as long as the encoder takes, and the previous
+        // time that happened it took 4.6 s and left no trace in the log.
+        if Thread.isMainThread {
+            Logger.error(
+                "DeterministicPolisher: the async polish pass entered on the main thread — "
+                + "@concurrent is no longer forcing the hop and the Core ML editor stage will "
+                + "freeze the UI for the duration of this pass",
+                subsystem: .transcription
+            )
+        }
+
+        let startedAt = CFAbsoluteTimeGetCurrent()
         var working = graph
         var applied = deterministicStages(&working, pauses: pauses)
+        let afterDeterministic = CFAbsoluteTimeGetCurrent()
+        var editorMs: Double = 0
 
         if let editor {
+            let editorStartedAt = CFAbsoluteTimeGetCurrent()
             let proposals = await editor.propose(working.tokens, context: context)
+            editorMs = (CFAbsoluteTimeGetCurrent() - editorStartedAt) * 1000
             if !proposals.isEmpty {
                 // Use a language-aware gate for the editor stage so the calibrated per-language
                 // confidence floors apply. The stored `gate` keeps its nil language (correct for
@@ -148,7 +197,20 @@ nonisolated struct DeterministicPolisher: Sendable {
             }
         }
 
-        return render(working, applied: applied)
+        let result = render(working, applied: applied)
+
+        // The timing line this pass never had. Keep the three numbers separate: a slow
+        // deterministic stage and a slow encoder pass have completely different fixes, and the
+        // total is what a future stall report is compared against.
+        let deterministicMs = (afterDeterministic - startedAt) * 1000
+        let totalMs = (CFAbsoluteTimeGetCurrent() - startedAt) * 1000
+        Logger.debug(
+            String(format: "Polish: %d tokens | deterministic %.0fms editor %.0fms total %.0fms | %d edits",
+                   graph.tokens.count, deterministicMs, editorMs, totalMs, applied.count),
+            subsystem: .transcription
+        )
+
+        return result
     }
 
     /// Stages 1–7: everything that does not need the model and cannot suspend.
@@ -219,6 +281,10 @@ nonisolated struct DeterministicPolisher: Sendable {
         polish(TokenGraph.from(text: text))
     }
 
+    /// `@concurrent` here as well as on the funnel, so that the tokenization in
+    /// `TokenGraph.from(text:)` also leaves the caller's executor. Without it that scan runs on the
+    /// main actor and only the funnel hops.
+    @concurrent
     func polish(text: String, context: EditContext) async -> Result {
         await polish(TokenGraph.from(text: text), context: context)
     }
@@ -272,6 +338,11 @@ nonisolated struct DeterministicPolisher: Sendable {
     }
 
     /// The chunked form with the model stage, for the authoritative dictation pass.
+    ///
+    /// `@concurrent` for the same reason as the other two async entry points, and with one extra:
+    /// `Self.join` walks the joined text character by character to place the interior pauses, which
+    /// is linear in the length of the whole utterance. That belongs off the main thread too.
+    @concurrent
     func polish(chunks: [Chunk], context: EditContext) async -> Result {
         guard let input = Self.join(chunks) else {
             return await polish(text: Self.soleText(chunks), context: context)

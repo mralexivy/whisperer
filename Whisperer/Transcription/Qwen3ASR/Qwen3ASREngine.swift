@@ -112,10 +112,107 @@ nonisolated final class Qwen3ASREngine {
         return Qwen3ASREngine(model: model, vocabulary: vocabulary)
     }
 
-    /// Compiles the Metal kernels for every shape class the first real dictation will hit.
-    func warmUp() {
-        _ = try? transcribe(samples: [Float](repeating: 0, count: 16_000), languageCode: "en",
-                            maxNewTokens: 4)
+    /// Compiles the Metal kernels and specialises the MLX graphs for the shape classes the first
+    /// real dictation will hit.
+    ///
+    /// The old warm-up ran exactly one pass: 1.0 s of zeros, forced `en`, 4 tokens. That is a
+    /// single point in a shape space the live preview sweeps continuously, and MLX re-specialises
+    /// per input shape, so almost every pass of the first session was still cold. Measured: the
+    /// first pass of a session cost `enc ~350ms prefill ~650ms` against `enc 30ms prefill 62ms`
+    /// hot, and one first pass at a large window cost `enc 3446ms prefill 11511ms`. That is
+    /// 15.5 s in which an 18-second recording displayed no text at all.
+    ///
+    /// Three things were uncovered, not one:
+    ///
+    /// - **Window length.** The preview starts at ~0.3 s and grows to `previewWindowCap`, and
+    ///   every distinct length is a new sequence length for the audio tower and for the prefill
+    ///   attention. The sweep below spans that range instead of sampling one point in it.
+    /// - **Prompt layout.** A preview pass calls `transcribe` with `languageCode: nil`, which
+    ///   skips the `language X<asr_text>` tokens appended for a forced language and therefore
+    ///   prefills a differently shaped prompt. The old warm-up only ever warmed the forced
+    ///   layout, so the layout the preview actually uses was never touched.
+    /// - **The decode step.** Warming prefill does not warm the single-token decode graph. A few
+    ///   generated tokens per window are enough to build it, and they are cheap.
+    ///
+    /// Audio is low-amplitude noise rather than zeros. Silence drives every mel bin to the log
+    /// floor, so the audio tower sees a constant input, the model emits `language None`, and it
+    /// can pick EOS on its very first token — which returns before the decode graph is ever
+    /// built. Noise at about -60 dBFS is still nowhere near speech, but it produces a
+    /// non-degenerate mel, a real language header, and a decode that runs the whole token
+    /// budget. The compiled shapes are identical either way; what differs is which code paths
+    /// execute. The generator is a fixed-seed LCG so two launches warm identically.
+    ///
+    /// Cost: five passes over 22.5 s of synthetic audio with a 6-token budget each. The per-pass
+    /// cost is dominated by the cold encode and prefill this is paying off in advance, so expect
+    /// a few seconds in total; `loadFromCache` logs the exact figure as `warm-up <n>ms` and the
+    /// `Logger.debug` lines below break it down per window. Nothing waits on this — it runs on
+    /// the model-load path at launch — but it stays a bounded, fixed set of passes so it cannot
+    /// grow into tens of seconds.
+    ///
+    /// - Parameter previewWindowCap: longest window to warm, in seconds. Defaults to
+    ///   ``previewWindowCapSeconds``.
+    func warmUp(previewWindowCap: Double = Qwen3ASREngine.previewWindowCapSeconds) {
+        // Fractions of the cap rather than absolute lengths, so raising the cap moves the whole
+        // sweep instead of leaving a cold gap at the top.
+        let windows = [0.0625, 0.25, 0.5, 1.0].map { $0 * previewWindowCap }
+
+        for seconds in windows {
+            let t0 = CFAbsoluteTimeGetCurrent()
+            // languageCode: nil — the auto-detect layout the live preview uses.
+            _ = try? transcribe(samples: Self.warmUpSamples(seconds: seconds),
+                                languageCode: nil, maxNewTokens: 6)
+            Logger.debug(
+                String(format: "Qwen3ASR warm-up auto %.1fs: %.0fms", seconds,
+                       (CFAbsoluteTimeGetCurrent() - t0) * 1000),
+                subsystem: .model)
+        }
+
+        // One forced-language pass at the top of the range. Committed chunks and the stop-path
+        // tail run forced once the language is pinned, and the forced prompt is three tokens
+        // longer, so it is its own prefill shape.
+        let t0 = CFAbsoluteTimeGetCurrent()
+        _ = try? transcribe(samples: Self.warmUpSamples(seconds: previewWindowCap),
+                            languageCode: "en", maxNewTokens: 6)
+        Logger.debug(
+            String(format: "Qwen3ASR warm-up forced %.1fs: %.0fms", previewWindowCap,
+                   (CFAbsoluteTimeGetCurrent() - t0) * 1000),
+            subsystem: .model)
+    }
+
+    /// Longest window the live preview will ever ask for.
+    ///
+    /// This mirrors `Qwen3ASRBridge.streamingPolicy.previewWindowCap`, which cannot be read from
+    /// here: `streamingPolicy` is an instance property and `Qwen3ASRBridge.loadFromCache` warms
+    /// the engine up *before* it constructs the bridge that owns the policy. `warmUp` therefore
+    /// takes the cap as a parameter, so a caller holding a policy can pass the real value, and
+    /// this constant only serves the current no-argument call. Keep the two in step: a cap above
+    /// this leaves the largest preview shape cold on the first pass of the first session, which
+    /// is the single most expensive pass there is.
+    /// Longest preview window the warm-up sweeps to, when the caller does not say.
+    ///
+    /// The authority is `Qwen3ASRBridge.streamingPolicy.previewWindowCap`; this is the fallback
+    /// for callers that have no bridge yet. `loadFromCache` warms the engine *before* it builds
+    /// the bridge, so it passes the policy value in explicitly — see the call there. Keep the two
+    /// in step: a stale value here only costs a cold shape at the top of the range, but that is
+    /// exactly the 15.5 s first pass this warm-up exists to prevent.
+    static let previewWindowCapSeconds: Double = 8.0
+
+    /// Deterministic low-amplitude noise for the warm-up, in place of silence.
+    ///
+    /// A plain LCG rather than `SystemRandomNumberGenerator`: the sequence must not vary between
+    /// launches, or a warm-up regression cannot be told apart from a different random draw.
+    private static func warmUpSamples(seconds: Double) -> [Float] {
+        let count = Int(seconds * Double(Qwen3ASRFeatureExtractor.sampleRate))
+        var state: UInt32 = 0x2545_F491
+        var samples = [Float]()
+        samples.reserveCapacity(count)
+        for _ in 0..<count {
+            state = state &* 1_664_525 &+ 1_013_904_223
+            // 24 high bits → [0, 1), recentred to [-1, 1), then scaled to about -60 dBFS.
+            let unit = Float(state >> 8) / Float(1 << 24)
+            samples.append((unit - 0.5) * 2e-3)
+        }
+        return samples
     }
 
     // MARK: - Transcription
@@ -248,30 +345,89 @@ nonisolated final class Qwen3ASREngine {
             decodeMs: (t3 - t2) * 1000)
     }
 
-    /// Releases MLX's buffer cache when it has grown large, or sooner when the machine is short
-    /// of memory.
+    /// Releases MLX's buffer cache when it has grown past the ceiling. Runs after every pass, so
+    /// it must stay on the ceiling only — see `releaseCachedBuffers()` for the memory-pressure arm.
     ///
-    /// A flat 512 MB ceiling was fine when Qwen3 was one backend among several and ran only
-    /// during dictation. It is too lax now: a meeting keeps this engine resident for the whole
-    /// recording and the post-meeting tail loads the 3.2 GB Qwen3.5 overview model on the same
-    /// MLX allocator, so half a gigabyte of cached buffers is half a gigabyte the LLM cannot
-    /// have. Clearing early costs a re-allocation on the next pass, which is microseconds;
-    /// clearing late costs a swap storm.
+    /// The free-RAM arm used to live here too, and it was the single largest source of per-pass
+    /// latency variance. `cacheTrimHeadroomGB` is 3.0, and with the 2.5 GB ASR model plus an LLM
+    /// resident the machine is routinely under that, so the OR-branch fired on *every* pass and
+    /// the next pass re-allocated every buffer from scratch. That is the recurring
+    /// `enc ~350ms prefill ~650ms` against `enc 30ms prefill 62ms` hot, repeating once per
+    /// dictation — it reads like a cold model but it is a cold allocator.
     ///
-    /// Keyed on free memory rather than on a meeting flag so there is nothing to keep in sync —
-    /// `ModelWorkQueue`'s gate is actor-isolated and cannot be read from this synchronous path
-    /// anyway.
+    /// "Clearing early costs a re-allocation on the next pass, which is microseconds" was the
+    /// original justification. Measured on the live preview it is ~900 ms, not microseconds,
+    /// because the re-allocation drags Metal heap setup and graph specialisation with it.
     private func trimCacheIfNeeded() {
         let cached = Memory.cacheMemory
         guard cached > 64 * 1024 * 1024 else { return }
-        if cached > Self.cacheCeilingBytes || SystemMemory.availableGB() < Self.cacheTrimHeadroomGB {
+        if cached > Self.cacheCeilingBytes {
             Memory.clearCache()
         }
     }
 
+    /// The memory-pressure arm of the cache trim, called once a recording has produced its final
+    /// text rather than after every pass.
+    ///
+    /// The pressure this guards against is real but it is not per-pass: a meeting keeps this
+    /// engine resident for the whole recording and the post-meeting tail loads the 3.2 GB
+    /// Qwen3.5 overview model on the same MLX allocator, so half a gigabyte of cached buffers is
+    /// half a gigabyte the LLM cannot have. That hand-off happens at the end of a recording,
+    /// which is exactly when this runs — and nothing the user is waiting on follows it.
+    ///
+    /// Keyed on free memory rather than on a meeting flag so there is nothing to keep in sync —
+    /// `ModelWorkQueue`'s gate is actor-isolated and cannot be read from this synchronous path
+    /// anyway.
+    /// - Returns: true if the cache was actually cleared, so the caller can re-warm.
+    @discardableResult
+    func releaseCachedBuffers() -> Bool {
+        let cached = Memory.cacheMemory
+        guard cached > 64 * 1024 * 1024 else { return false }
+        guard cached > Self.cacheCeilingBytes
+                || SystemMemory.availableGB() < Self.cacheTrimHeadroomGB else { return false }
+        Memory.clearCache()
+        Logger.debug(String(format: "Qwen3ASR released %.0f MB of MLX buffer cache",
+                            Double(cached) / 1_048_576),
+                     subsystem: .model)
+        return true
+    }
+
+    /// Rebuilds the allocator state a `releaseCachedBuffers()` just threw away.
+    ///
+    /// Clearing the cache at the end of a dictation moved the whole re-allocation onto the
+    /// *next* dictation's first preview pass, which is the worst possible place for it: measured
+    /// `enc 411ms prefill 771ms` against `enc 90ms prefill 102ms` on the pass immediately after,
+    /// and it reads to the user as "the first one was slow, the second was fine". The trim before
+    /// this change ran after every pass and so kept the cache permanently small — less total
+    /// latency per pass, but the same cost smeared across all of them.
+    ///
+    /// Re-warming here gets both: the cache is genuinely released for whatever needs the memory,
+    /// and the allocator is hot again before the user presses the key. Nothing waits on it — it
+    /// runs after the final decode, while the polished text is already being pasted.
+    ///
+    /// Only the two smallest windows, because re-allocation is what is being paid for here, not
+    /// graph compilation — the compiled graphs survive `clearCache()`.
+    func rewarmAfterCacheRelease() {
+        let t0 = CFAbsoluteTimeGetCurrent()
+        for seconds in [0.5, 2.0] {
+            _ = try? transcribe(samples: Self.warmUpSamples(seconds: seconds),
+                                languageCode: nil, maxNewTokens: 4)
+        }
+        Logger.debug(String(format: "Qwen3ASR re-warmed after cache release in %.0fms",
+                            (CFAbsoluteTimeGetCurrent() - t0) * 1000),
+                     subsystem: .model)
+    }
+
     /// Tokens between repetition checks during decoding. A loop needs at least three copies of
     /// a three-word phrase to register, so checking this often cannot miss one it would catch.
-    private static let loopCheckInterval = 16
+    ///
+    /// Halved from 16 because the check is cheap relative to what it saves. A degenerate greedy
+    /// decode has no escape from its attractor, so every token after the loop starts is pure
+    /// waste: measured `13.1s audio → 220 gen tok | decode 4556ms` and
+    /// `5.3s audio → 103 gen tok | decode 1983ms`, both discarded as hallucinations afterwards.
+    /// 59 passes in one day exceeded 80 generated tokens. `containsLoop` is linear in word count
+    /// over a sub-250-token buffer; catching the loop 8 tokens sooner is worth that.
+    private static let loopCheckInterval = 8
     /// Do not look for a loop before this many text tokens — `containsLoop` cannot fire below
     /// nine words and the decode is at its most expensive per token early on.
     private static let loopCheckMinimumTokens = 32

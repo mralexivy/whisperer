@@ -31,6 +31,19 @@ class CorrectionEngine {
     // Spell validator to prevent fuzzy matching of valid English words
     private let spellValidator = SpellValidator.shared
 
+    // Compiled patterns for `correctCompoundWords`, keyed by pattern string.
+    //
+    // The compilation used to sit inside the word-pair scan, so a transcript that repeats a
+    // phrase re-parsed and re-compiled the same pattern once per occurrence. `NSRegularExpression`
+    // compilation is the expensive half of a regex: matching a compiled instance is thread-safe
+    // and cheap, parsing the pattern is neither. On the 15,309-character transcript that took
+    // 2177 ms this was the second-largest term after the index walks in `replaceAllOccurrences`.
+    //
+    // Bounded by the dictionary, not by the input: a pattern is only built when a word pair or
+    // triple already matched `phraseLookup` or a SymSpell entry, so the key space is the phrase
+    // set. `rebuild(with:)` clears it, because an entry can change its `incorrectForm`.
+    private var compiledPhrasePatterns: [String: NSRegularExpression] = [:]
+
     init(entries: [DictionaryEntry]) {
         self.symSpell = SymSpell(maxEditDistance: 2, prefixLength: 7)
         self.phoneticMatcher = PhoneticMatcher()
@@ -41,6 +54,7 @@ class CorrectionEngine {
         exactLookup.removeAll()
         phraseLookup.removeAll()
         phraseKeysByFirstToken.removeAll()
+        compiledPhrasePatterns.removeAll()
 
         for entry in entries where entry.isEnabled {
             let incorrect = entry.incorrectForm.lowercased()
@@ -184,6 +198,23 @@ class CorrectionEngine {
             .map { $0.lowercased() }
     }
 
+    /// Returns the compiled form of `pattern`, compiling it on first use.
+    ///
+    /// The two callers build different patterns for the same words (`\s+` for an exact phrase
+    /// hit, `\s*` for a segmentation hit), so the pattern string is the right key: it is what
+    /// the compiler actually consumes, and two spellings of one phrase must not share an entry.
+    /// A malformed pattern returns nil and is not cached, which keeps the caller's old
+    /// `try?`-and-skip behaviour.
+    private func compiledPattern(_ pattern: String) -> NSRegularExpression? {
+        if let cached = compiledPhrasePatterns[pattern] { return cached }
+        guard let regex = try? NSRegularExpression(pattern: pattern, options: .caseInsensitive) else {
+            Logger.error("CorrectionEngine could not compile phrase pattern: \(pattern)", subsystem: .app)
+            return nil
+        }
+        compiledPhrasePatterns[pattern] = regex
+        return regex
+    }
+
     private func correctCompoundWords(_ text: String, maxEditDistance: Int, corrections: inout [(range: Range<String.Index>, original: String, replacement: String, category: String?, notes: String?, entryId: UUID)]) -> String {
         // This function handles segmentation errors where multi-word phrases
         // are in the dictionary (e.g., "post gres" → "PostgreSQL")
@@ -211,7 +242,7 @@ class CorrectionEngine {
                 if let entry = phraseLookup[phrase] {
                     // Found an exact phrase match - replace it
                     let pattern = phraseWords.map { NSRegularExpression.escapedPattern(for: $0) }.joined(separator: "\\s+")
-                    if let regex = try? NSRegularExpression(pattern: pattern, options: .caseInsensitive) {
+                    if let regex = compiledPattern(pattern) {
                         let nsRange = NSRange(result.startIndex..<result.endIndex, in: result)
                         if let match = regex.firstMatch(in: result, range: nsRange),
                            let range = Range(match.range, in: result) {
@@ -241,7 +272,7 @@ class CorrectionEngine {
                         // Only accept if the match is very close (distance <= 1 for compound)
                         if best.distance <= 1 {
                             let pattern = phraseWords.map { NSRegularExpression.escapedPattern(for: $0) }.joined(separator: "\\s*")
-                            if let regex = try? NSRegularExpression(pattern: pattern, options: .caseInsensitive) {
+                            if let regex = compiledPattern(pattern) {
                                 let nsRange = NSRange(result.startIndex..<result.endIndex, in: result)
                                 if let match = regex.firstMatch(in: result, range: nsRange),
                                    let range = Range(match.range, in: result) {
@@ -275,12 +306,34 @@ class CorrectionEngine {
 
     /// Replaces every word-boundary-respecting, case-insensitive occurrence of `needle`.
     ///
-    /// Searches the live `result` rather than a `lowercased()` snapshot: a snapshot's
-    /// `String.Index` values are not valid in the original string (`lowercased()` can change the
-    /// character count), and they go stale the moment `replaceSubrange` resizes `result` — which
-    /// crashed with "String index range is out of bounds" on the second occurrence of a term whose
-    /// replacement had a different length. Positions are carried across mutations as integer
-    /// offsets, which stay meaningful after a resize.
+    /// Builds the output left to right instead of mutating a copy in place. The previous version
+    /// searched and edited one live string and carried positions as integer offsets, because
+    /// `replaceSubrange` invalidates every `String.Index` it touches and a `lowercased()` snapshot
+    /// cannot supply valid indices either (`lowercased()` can change the character count). Integer
+    /// offsets survive a resize, but `String.Index` is not random access, so converting them back
+    /// cost a full O(n) walk — three to five of them per loop iteration, plus an O(n)
+    /// `result.count` in the loop condition itself and an O(n) memmove per replacement. On a
+    /// 15,309-character transcript the whole correction pass measured 2177 ms, against a 58 ms
+    /// mean. That time is spent between the ASR result and the paste, so the user feels all of it.
+    ///
+    /// The scan here never edits the string it searches, so no index is ever invalidated and no
+    /// offset ever has to be resolved: the cursor is a `String.Index` into the immutable `text`,
+    /// and each iteration advances it past the match it just handled. The pass is O(n) in total.
+    ///
+    /// The output is identical to the old in-place edit, including the two subtleties that matter:
+    ///
+    /// - Searching the *live* string let a replacement match itself. It never did in practice,
+    ///   because the resume position was the end of the inserted replacement, so the inserted text
+    ///   was skipped. Resuming at `range.upperBound` in `text` skips exactly the same region, so
+    ///   `gpt → GPT model` still expands once per occurrence rather than feeding on its own output.
+    /// - The left word-boundary test looked at the character *before* the match in the partly
+    ///   rewritten string, which is the last character already emitted. `output.last` is that same
+    ///   character, so an adjacent earlier replacement still shapes the boundary decision.
+    ///
+    /// Recorded correction ranges are character offsets resolved against the finished string in
+    /// one forward walk. Every later replacement sits at a higher offset than an earlier one, so
+    /// resolving late gives the same offsets the old code produced eagerly, and the indices are
+    /// valid in the string this function actually returns.
     private func replaceAllOccurrences(
         in text: String,
         of needle: String,
@@ -290,58 +343,64 @@ class CorrectionEngine {
     ) -> String {
         guard !needle.isEmpty else { return text }
 
-        var result = text
-        var searchOffset = 0
+        var output = ""
+        output.reserveCapacity(text.count)
+        var cursor = text.startIndex
+        // Character offset of each accepted replacement within `output`, with the text it replaced.
+        var pending: [(offset: Int, original: String)] = []
+        var emitted = 0
 
-        while searchOffset < result.count {
-            let searchStart = result.index(result.startIndex, offsetBy: searchOffset)
-            guard let range = result.range(of: needle, options: .caseInsensitive, range: searchStart..<result.endIndex) else {
-                break
-            }
+        while let range = text.range(of: needle, options: .caseInsensitive,
+                                     range: cursor..<text.endIndex) {
+            // A zero-width or non-advancing match would spin forever.
+            guard range.upperBound > cursor else { break }
 
-            guard isAtWordBoundary(in: result, range: range) else {
-                let upperOffset = result.distance(from: result.startIndex, to: range.upperBound)
-                // A zero-width or non-advancing match would spin forever.
-                guard upperOffset > searchOffset else { break }
-                searchOffset = upperOffset
+            output.append(contentsOf: text[cursor..<range.lowerBound])
+            emitted += text.distance(from: cursor, to: range.lowerBound)
+
+            let after = range.upperBound == text.endIndex ? nil : text[range.upperBound]
+            guard isWordBoundary(before: output.last, after: after) else {
+                // Not a whole word. Emit the match untouched and look past it.
+                output.append(contentsOf: text[range])
+                emitted += text.distance(from: range.lowerBound, to: range.upperBound)
+                cursor = range.upperBound
                 continue
             }
 
-            let originalText = String(result[range])
-            let lowerOffset = result.distance(from: result.startIndex, to: range.lowerBound)
-            result.replaceSubrange(range, with: replacement)
-
+            let originalText = String(text[range])
             if originalText != replacement {
-                let newLower = result.index(result.startIndex, offsetBy: lowerOffset)
-                let newUpper = result.index(newLower, offsetBy: replacement.count)
-                corrections.append((range: newLower..<newUpper, original: originalText, replacement: replacement, category: entry.category, notes: entry.notes, entryId: entry.id))
+                pending.append((offset: emitted, original: originalText))
             }
-
-            // An empty replacement leaves the cursor put, but `result` shrank by a non-empty
-            // `needle`, so the loop still terminates against `result.count`.
-            searchOffset = lowerOffset + replacement.count
+            output.append(replacement)
+            emitted += replacement.count
+            cursor = range.upperBound
         }
 
-        return result
+        output.append(contentsOf: text[cursor...])
+
+        // Resolve the recorded offsets in one forward walk rather than one walk each.
+        var indexCursor = output.startIndex
+        var walked = 0
+        let replacementLength = replacement.count
+        for item in pending {
+            indexCursor = output.index(indexCursor, offsetBy: item.offset - walked)
+            walked = item.offset
+            let upper = output.index(indexCursor, offsetBy: replacementLength)
+            corrections.append((range: indexCursor..<upper, original: item.original, replacement: replacement, category: entry.category, notes: entry.notes, entryId: entry.id))
+        }
+
+        return output
     }
 
-    private func isAtWordBoundary(in text: String, range: Range<String.Index>) -> Bool {
-        let beforeBoundary: Bool
-        if range.lowerBound == text.startIndex {
-            beforeBoundary = true
-        } else {
-            let charBefore = text[text.index(before: range.lowerBound)]
-            beforeBoundary = !charBefore.isLetter && !charBefore.isNumber
-        }
-
-        let afterBoundary: Bool
-        if range.upperBound == text.endIndex {
-            afterBoundary = true
-        } else {
-            let charAfter = text[range.upperBound]
-            afterBoundary = !charAfter.isLetter && !charAfter.isNumber
-        }
-
+    /// Word-boundary test for a match, expressed over the two neighbouring characters.
+    ///
+    /// `nil` means the match touches an end of the string, which counts as a boundary. Taking the
+    /// characters rather than a range keeps the caller free to compare the preceding character of
+    /// the *output* against the following character of the *input*, which is what the old in-place
+    /// edit effectively did.
+    private func isWordBoundary(before: Character?, after: Character?) -> Bool {
+        let beforeBoundary = before.map { !$0.isLetter && !$0.isNumber } ?? true
+        let afterBoundary = after.map { !$0.isLetter && !$0.isNumber } ?? true
         return beforeBoundary && afterBoundary
     }
 }

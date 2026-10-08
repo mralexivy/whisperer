@@ -18,9 +18,25 @@ import Foundation
 ///
 /// Two rules:
 /// 1. **One at a time, FIFO.** A job runs only when the previous one has returned.
-/// 2. **Nothing during a meeting.** A job submitted while a meeting is recording waits for it to
-///    stop. Ordinary dictation does *not* block — it is short and bursty, and its own
-///    post-processing runs on this same LLM.
+/// 2. **Nothing during a meeting, and nothing during a dictation.** A job submitted while a
+///    meeting is recording, or while a dictation is in flight, waits for that capture to finish.
+///
+/// ### Why dictation gates too (2026-10-01)
+/// The gate used to be one-directional: a meeting blocked background work, a dictation blocked
+/// nothing. The argument was that dictation is short and bursty. It is, but the model work it
+/// collides with is not. On 2026-10-01 at 16:24 a meeting overview map-reduce
+/// (`batch gen: rows=13 tokens=1294 … wall=33272ms`) overlapped a dictation tail decode. That
+/// decode took **10,933 ms** against its usual ~800 ms, the stop ceiling fired, and the user was
+/// pasted the 131-char live preview instead of the 212-char final text. Fn-release to paste was
+/// 11.69 s, the worst measured that week.
+///
+/// Neither side goes through this queue — only their *loads* do — so the only thing that kept the
+/// Qwen3 decode and the Qwen MTP generation off each other's Metal allocations was luck. The gate
+/// is now symmetric: `setDictationActive(true)` holds back every background job for the few
+/// seconds a dictation owns the GPU.
+///
+/// Dictation itself still must NOT be submitted here. The queue serializes, and serializing the
+/// latency path would add queue-wait to exactly the number this gate exists to protect.
 ///
 /// ### The gate is waited on BEFORE the slot, never while holding it
 /// The original ordering was `acquireSlot()` then `while meetingActive { … }`, which parks a gated
@@ -114,6 +130,13 @@ actor ModelWorkQueue {
     var isMeetingGateRaised: Bool { meetingActive }
     private var meetingWaiters: [Waiter] = []
 
+    private var dictationActive = false
+
+    /// Read-only view of the dictation gate, for the stranded-gate watchdog's tests and for
+    /// diagnostics. Mirrors `isMeetingGateRaised` exactly.
+    var isDictationGateRaised: Bool { dictationActive }
+    private var dictationWaiters: [Waiter] = []
+
     /// Jobs cancelled while waiting. Recorded by id because the cancellation handler can land
     /// before the continuation has been appended.
     private var cancelledJobIDs: Set<Int> = []
@@ -151,6 +174,93 @@ actor ModelWorkQueue {
             subsystem: .model
         )
         setMeetingActive(false)
+    }
+
+    // MARK: - Dictation gate
+
+    /// Called by `AppState` when a dictation starts and when its stop path has finished inserting
+    /// text. Symmetric with `setMeetingActive(_:)` in every respect — same waiter list shape, same
+    /// direct hand-off on release — so there is one mechanism to reason about rather than two.
+    ///
+    /// The window this covers is the whole of `stopRecording()`, not just the decode: dictionary
+    /// correction, LLM post-processing and the paste all run after the tail decode returns, and a
+    /// background job admitted in between would still be holding the GPU when the next pass needs
+    /// it. `AppState` lowers the gate in a `defer` so every early return, thrown error and timeout
+    /// fallback releases it.
+    func setDictationActive(_ active: Bool) {
+        guard dictationActive != active else { return }
+        dictationActive = active
+        guard !active else {
+            Logger.debug("ModelWorkQueue: dictation started — background model work suspended", subsystem: .model)
+            return
+        }
+        let resumed = dictationWaiters
+        dictationWaiters.removeAll()
+        for waiter in resumed { waiter.continuation.resume() }
+        if !resumed.isEmpty {
+            Logger.info("ModelWorkQueue: dictation ended — releasing \(resumed.count) suspended job(s)", subsystem: .model)
+        }
+    }
+
+    /// Lowers the dictation gate if it is still raised when no dictation is actually running.
+    ///
+    /// The same failure mode the meeting gate already learned about on 2026-09-14 applies here,
+    /// and applies harder: a dictation can end through `stopRecording()`, `cancelRecording()`, the
+    /// stop watchdog's force-idle, or a thrown audio-start error. Any one of those forgetting to
+    /// lower the gate would park transcript polish, overview generation and RAG indexing for the
+    /// rest of the process. Callers invoke this whenever they know no capture is live; it is a
+    /// no-op if the gate is already down.
+    func clearStrandedDictationGate(reason: String) {
+        guard dictationActive else { return }
+        Logger.warning(
+            "ModelWorkQueue: dictation gate was stranded up with no active dictation (\(reason)) — lowering it",
+            subsystem: .model
+        )
+        setDictationActive(false)
+    }
+
+    // MARK: - Cooperative pause for in-flight jobs
+
+    /// Suspends the **caller** — an already-running background job — until no dictation is active.
+    ///
+    /// Gating at submission cannot help a job that is already in flight, and the 2026-10-01 case
+    /// was exactly that: the 33 s meeting overview map-reduce started long before the user pressed
+    /// Fn, so no admission check could have stopped it. A multi-step job has to volunteer, by
+    /// calling this at a step boundary where yielding is cheap and safe.
+    ///
+    /// Where this should be called (out of scope for the file this doc lives in, named here so the
+    /// wiring is not guesswork):
+    /// - `MeetingOverviewMapReduce` — between map rows, before each `batch gen` row is generated.
+    /// - `MeetingEngines.runCleanup` / the transcript-polish batch loop — between polish batches.
+    /// - `MeetingTranscriptRefiner` — between refine windows.
+    ///
+    /// Each of those is a loop over independent units, so a pause between units costs only wall
+    /// time on work the user is not waiting for, and it hands the GPU back to the one thing the
+    /// user *is* waiting for.
+    ///
+    /// Unlike admission, this does **not** release the execution slot. The caller holds it for the
+    /// duration of the pause on purpose: the job is half-finished, its model is warm, and giving
+    /// the slot away would let a second model load in behind it. A dictation is seconds long, well
+    /// inside `stallCeiling`, so the slot is never held long enough for the stall watchdog to
+    /// reclaim it over a pause alone.
+    ///
+    /// Returns immediately when no dictation is active, and when the calling task is cancelled.
+    func waitWhileDictationActive(_ label: String) async {
+        guard dictationActive else { return }
+        let id = nextJobID
+        nextJobID += 1
+        let pausedAt = Date()
+        Logger.debug("ModelWorkQueue: \(label) pausing mid-job — a dictation is active", subsystem: .model)
+        defer { cancelledJobIDs.remove(id) }
+        while dictationActive {
+            if Task.isCancelled { break }
+            await suspend(id: id, label: label, in: .dictationGate)
+            if cancelledJobIDs.contains(id) || Task.isCancelled { break }
+        }
+        Logger.debug(
+            "ModelWorkQueue: \(label) resuming after \(Int(Date().timeIntervalSince(pausedAt) * 1000))ms paused",
+            subsystem: .model
+        )
     }
 
     // MARK: - Submission
@@ -258,7 +368,7 @@ actor ModelWorkQueue {
         nextJobID += 1
 
         Logger.debug(
-            "ModelWorkQueue: \(label) submitted (running=\(isRunning), queued=\(slotWaiters.count + meetingWaiters.count), meeting=\(meetingActive))",
+            "ModelWorkQueue: \(label) submitted (running=\(isRunning), queued=\(slotWaiters.count + meetingWaiters.count + dictationWaiters.count), meeting=\(meetingActive), dictation=\(dictationActive))",
             subsystem: .model
         )
         armLongWaitWarning(id: id, label: label)
@@ -267,12 +377,15 @@ actor ModelWorkQueue {
         // waiting, and every throwing path below leaves the queues via `cancelWait`.
         defer { cancelledJobIDs.remove(id) }
 
-        // Gate first, slot second. Re-check after acquiring: a meeting can start while the slot
-        // is being handed over, and holding it through that wait is what wedged the queue.
+        // Gates first, slot second. Re-check after acquiring: a meeting or a dictation can start
+        // while the slot is being handed over, and holding it through that wait is what wedged
+        // the queue. Both gates are checked in the same loop, so a job released by one gate and
+        // immediately caught by the other goes back to waiting instead of taking the slot.
         while true {
-            try await waitForMeetingGate(id: id, label: label)
+            try await waitForGate(id: id, label: label, gate: .meetingGate)
+            try await waitForGate(id: id, label: label, gate: .dictationGate)
             try await waitForSlot(id: id, label: label)
-            if !meetingActive { break }
+            if !meetingActive, !dictationActive { break }
             releaseSlot(owner: id)
         }
 
@@ -296,12 +409,24 @@ actor ModelWorkQueue {
 
     // MARK: - Waiting
 
-    private enum WaitQueue { case slot, meetingGate }
+    private enum WaitQueue { case slot, meetingGate, dictationGate }
 
-    private func waitForMeetingGate(id: Int, label: String) async throws {
-        while meetingActive {
+    /// Whether the gate backing `queue` is currently up. `.slot` is not a gate and is never
+    /// raised; it is in the same enum only because both kinds of wait park in the same way.
+    private func isGateRaised(_ queue: WaitQueue) -> Bool {
+        switch queue {
+        case .slot: return false
+        case .meetingGate: return meetingActive
+        case .dictationGate: return dictationActive
+        }
+    }
+
+    /// Parks the job until `gate` comes down. Shared by both gates rather than duplicated, so a
+    /// future fix to the cancellation handling lands on both and cannot drift between them.
+    private func waitForGate(id: Int, label: String, gate: WaitQueue) async throws {
+        while isGateRaised(gate) {
             try Task.checkCancellation()
-            await suspend(id: id, label: label, in: .meetingGate)
+            await suspend(id: id, label: label, in: gate)
             if cancelledJobIDs.contains(id) { throw CancellationError() }
             try Task.checkCancellation()
         }
@@ -338,6 +463,7 @@ actor ModelWorkQueue {
                 switch queue {
                 case .slot: slotWaiters.append(waiter)
                 case .meetingGate: meetingWaiters.append(waiter)
+                case .dictationGate: dictationWaiters.append(waiter)
                 }
             }
         } onCancel: {
@@ -353,6 +479,9 @@ actor ModelWorkQueue {
         }
         if let index = meetingWaiters.firstIndex(where: { $0.id == id }) {
             meetingWaiters.remove(at: index).continuation.resume()
+        }
+        if let index = dictationWaiters.firstIndex(where: { $0.id == id }) {
+            dictationWaiters.remove(at: index).continuation.resume()
         }
     }
 
@@ -398,11 +527,22 @@ actor ModelWorkQueue {
     }
 
     private func warnIfStillWaiting(id: Int, label: String) {
-        let waitingOnGate = meetingWaiters.contains { $0.id == id }
+        let waitingOnMeetingGate = meetingWaiters.contains { $0.id == id }
+        let waitingOnDictationGate = dictationWaiters.contains { $0.id == id }
         let waitingOnSlot = slotWaiters.contains { $0.id == id }
-        guard waitingOnGate || waitingOnSlot else { return }
+        guard waitingOnMeetingGate || waitingOnDictationGate || waitingOnSlot else { return }
+        // A dictation gate held for 30s is not normal the way a long meeting is: it means a stop
+        // path never reached its `defer`. Name the gate so the log says which one to look at.
+        let waitedOn: String
+        if waitingOnMeetingGate {
+            waitedOn = "the meeting gate"
+        } else if waitingOnDictationGate {
+            waitedOn = "the dictation gate"
+        } else {
+            waitedOn = "the queue"
+        }
         Logger.warning(
-            "ModelWorkQueue: \(label) has waited \(Int(Self.longWaitWarning))s on \(waitingOnGate ? "the meeting gate" : "the queue") (meeting=\(meetingActive), running=\(isRunning))",
+            "ModelWorkQueue: \(label) has waited \(Int(Self.longWaitWarning))s on \(waitedOn) (meeting=\(meetingActive), dictation=\(dictationActive), running=\(isRunning))",
             subsystem: .model
         )
     }

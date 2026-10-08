@@ -306,7 +306,23 @@ nonisolated final class MMBERTCoreMLRuntime: TextEditingModelRuntime, @unchecked
 
     // MARK: - Encoding
 
+    /// This function is `nonisolated(nonsending)` under `SWIFT_APPROACHABLE_CONCURRENCY = YES`, so
+    /// it runs wherever its caller runs, and `Self.predict` below is synchronous and runs wherever
+    /// *this* runs. Nothing in this file can move the work off the main thread. The hop is the
+    /// caller's job, and `DeterministicPolisher`'s `@concurrent` polish entry points are what do
+    /// it. The check below is the second of the two tripwires on that guarantee: it sits at the
+    /// Core ML boundary itself, so it fires even if a future caller reaches the runtime without
+    /// going through the polisher.
     func encode(_ pieces: [String]) async throws -> EditingRuntimeOutput {
+        if Thread.isMainThread {
+            Logger.error(
+                "MMBERTCoreMLRuntime: encode entered on the main thread — the MPSGraph forward "
+                + "pass will block the UI. The caller must be @concurrent; see "
+                + "DeterministicPolisher's type note.",
+                subsystem: .transcription
+            )
+        }
+
         lock.lock()
         let state = loaded
         lock.unlock()

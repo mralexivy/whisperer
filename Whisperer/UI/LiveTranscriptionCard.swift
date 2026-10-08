@@ -512,9 +512,26 @@ class SmoothTextUpdater: ObservableObject {
     private let pourDutyCycle: Double = 0.8
     /// Floor. Below this the reveal stops reading as words arriving and starts reading as a flush.
     private let minWordInterval: TimeInterval = 0.035
-    /// Ceiling, ≈175 wpm. A lone word must not hang around for most of a second waiting out a
-    /// period it does not need.
-    private let maxWordInterval: TimeInterval = 0.34
+    /// Ceiling, ≈500 wpm. A lone word must not hang around waiting out a period it does not need.
+    ///
+    /// Was 0.34 s (≈175 wpm), which made the animation itself a measurable part of the latency
+    /// the user was reporting. On the seeded 1.12 s period a 4-word batch paced at 0.224 s/word,
+    /// so its last word reached the screen 0.67 s *after* the model had already produced it, and
+    /// a 3-word batch hit the old ceiling and landed its last word 0.68 s late. That cost stacked
+    /// on top of the inference latency rather than hiding inside it.
+    ///
+    /// The pour still exists — words appear in sequence, not as a block — but at a cadence that
+    /// trails the model by a frame or two instead of by most of a second.
+    private let maxWordInterval: TimeInterval = 0.12
+
+    /// Beyond this many queued words, stop pouring and flush the rest in one step.
+    ///
+    /// A backlog this size means the pacer's estimate is already wrong — the usual cause is a
+    /// committed chunk decode having starved the preview for seconds, after which one pass
+    /// delivers everything at once. `noteArrival` deliberately ignores gaps above 2.5 s, so the
+    /// period never learns about those stalls and the pour would trickle out a long phrase the
+    /// user has been waiting on. Flushing is the honest response: the words are all equally old.
+    private let flushBacklogThreshold = 12
 
     func setTarget(_ text: String, rtl: Bool = false) {
         let newText = text.trimmingCharacters(in: .whitespaces)
@@ -591,7 +608,21 @@ class SmoothTextUpdater: ObservableObject {
         currentWordInterval = min(maxWordInterval, max(minWordInterval, spread))
     }
 
+    /// Drains the whole queue at once when the backlog says the pacer has lost the thread.
+    /// Returns true if it flushed, in which case there is nothing left to schedule.
+    @discardableResult
+    private func flushIfBacklogged() -> Bool {
+        guard pendingWords.count >= flushBacklogThreshold else { return false }
+        animationTimer?.invalidate()
+        animationTimer = nil
+        while !pendingWords.isEmpty { showNextWord() }
+        return true
+    }
+
     private func startAnimation() {
+        // A queue this long is a stall being paid off, not a cadence to honour.
+        if flushIfBacklogged() { return }
+
         // Already draining — the running timer picks up whatever was just appended, at the
         // interval `repaceCurrentBatch()` just recomputed for the combined queue.
         guard animationTimer == nil else { return }

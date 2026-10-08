@@ -75,13 +75,36 @@ struct EditContext: Sendable {
 
 // MARK: - Protocol
 
-/// `nonisolated` is load-bearing, not tidiness. The project sets
-/// `SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor`, so without it this protocol — and therefore every
-/// witness, however the conformer is declared — is `@MainActor`, and `await editor.propose(...)`
-/// from `AppState` runs the whole Core ML forward pass on the thread that draws the HUD. That is
-/// not a theoretical cost: the first inference specializes the MPSGraph, which measured as a 2.0 s
-/// main-thread stall between `rec.stop` and the paste, caught by `HealthManager`'s watchdog with
-/// `MPSGraphExecutable specializedModuleWithDevice` on top of the stack.
+/// `nonisolated` is load-bearing, not tidiness — but it is only half of what this pass needs, and
+/// the earlier version of this comment was wrong to stop here.
+///
+/// **Why it is necessary.** The project sets `SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor`, so
+/// without `nonisolated` this protocol — and therefore every witness, however the conformer is
+/// declared — is `@MainActor`, and `await editor.propose(...)` is an explicit hop *onto* the thread
+/// that draws the HUD. That is not a theoretical cost: the first inference specializes the
+/// MPSGraph, which measured as a 2.0 s main-thread stall between `rec.stop` and the paste, caught
+/// by `HealthManager`'s watchdog with `MPSGraphExecutable specializedModuleWithDevice` on top of
+/// the stack.
+///
+/// **Why it is not sufficient.** The project also sets `SWIFT_APPROACHABLE_CONCURRENCY = YES`.
+/// Under SE-0461 an unannotated `nonisolated async` requirement is `nonisolated(nonsending)`: it
+/// has no executor of its own and runs on the **caller's**. Removing the `@MainActor` annotation
+/// therefore removed the hop onto the main actor without adding a hop off it. Every caller of the
+/// polish pipeline is a method on `@MainActor AppState`, so `propose`, `MMBERTCoreMLRuntime.encode`
+/// and the synchronous `predict` inside its batching loop all still ran on thread 0. A dictation on
+/// 2026-10-07 20:48:34 froze the UI for 4.6 s, with `semaphore_wait_trap →
+/// MpsGraphInferenceOperation::ExecuteSync → MLE5ExecutionStream executeForInputFeatures:` captured
+/// on the main thread.
+///
+/// **What actually achieves the hop.** `@concurrent` on the caller, not an annotation here. A
+/// `@concurrent` function is required to run on the global concurrent executor, and a
+/// `nonisolated(nonsending)` callee invoked from inside it inherits *that* isolation instead of the
+/// original caller's. `DeterministicPolisher`'s three async `polish` entry points carry the
+/// attribute and a `Thread.isMainThread` tripwire; `ModelWorkQueue.offCallerExecutor` does the same
+/// for background model work and documents the stack dumps that established the technique.
+///
+/// A conformer must therefore **not** assume it is off the main thread by virtue of this protocol
+/// being `nonisolated`. It is off the main thread because its caller forced it there.
 nonisolated protocol EditingModel: Sendable {
     /// Propose edits against the tokens as given.
     ///

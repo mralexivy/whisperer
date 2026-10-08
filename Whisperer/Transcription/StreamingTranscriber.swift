@@ -967,6 +967,44 @@ class StreamingTranscriber {
     /// `let` of a `Sendable` type is not.
     private let usesEagerStream: Bool
 
+    /// Waits for an in-flight *preview* pass to finish before the tail decode resets the abort flag.
+    ///
+    /// Only meaningful for a backend that shares one serial queue across previews, chunks and the
+    /// tail — today that is `Qwen3ASRBridge`. The 400 ms wait above watches `isTranscribingChunk`,
+    /// which tracks committed chunks and is blind to previews, so a preview started just before
+    /// key-up was still running when `transcribeTail` called `resetAbort()`. The engine reads its
+    /// abort flag live between tokens, so that reset revived the preview: it ran out its full
+    /// token budget while the tail sat behind it in the queue. Unlogged, and bounded only by the
+    /// 120 s transcribe timeout.
+    ///
+    /// `requestAbort()` has already fired by the time this runs, so the pass being waited on is
+    /// aborting, not running to completion. The ceiling is generous because the abort check is
+    /// per *token* and the encoder and prefill are not interruptible at all — a pass that has
+    /// just entered its encode has to finish it before it can notice.
+    private func drainPreviewInflightBeforeTail() async {
+        guard let qwen = previewBridge as? Qwen3ASRBridge else { return }
+        let start = CACurrentMediaTime()
+        var waited = 0
+        while !qwen.isIdle && waited < 200 {  // Max 2s
+            try? await Task.sleep(nanoseconds: 10_000_000)
+            waited += 1
+        }
+        let ms = (CACurrentMediaTime() - start) * 1000
+        if !qwen.isIdle {
+            Logger.warning(
+                String(format: "Preview still in flight after %.0fms — tail will queue behind it", ms),
+                subsystem: .transcription)
+        } else if waited > 0 {
+            Logger.debug(String(format: "Drained in-flight preview in %.0fms before tail", ms),
+                         subsystem: .transcription)
+        }
+    }
+
+    /// The backend's `maxVADChunkDuration`, cached at init so the preview's backlog guard can be
+    /// sized against it. Resolved once rather than read per poll: the policy is derived from
+    /// immutable bridge config, and the preview path runs every 250 ms.
+    private let previewPolicyChunkCap: TimeInterval
+
     /// Longest audio window a single eager pass will decode.
     ///
     /// Set from measurement, not intuition — `EagerStreamProfileTests`, 536 passes over 12 real
@@ -1134,6 +1172,7 @@ class StreamingTranscriber {
         self.previewBridge = previewBridge
         self.modelRouter = modelRouter
         let maxChunkDuration = backend.streamingPolicy.maxVADChunkDuration
+        self.previewPolicyChunkCap = maxChunkDuration
         self.vadSegmenter = VADSegmenter(
             vad: vad,
             targetChunkDuration: 6.0,
@@ -1321,7 +1360,16 @@ class StreamingTranscriber {
             // attempts leave routeDecision nil, and the gate then never opens), which reads as a
             // dead live preview for the first five seconds of every recording. The gate exists
             // for the tiny preview model, which must be told a language up front.
-            if self?.usesEagerStream != true {
+            //
+            // Qwen3-ASR is in the same position as the eager stream and skips the gate for the
+            // same reason: it decodes `.auto` and reads the language off its own output on every
+            // pass, then pins it through the bridge's ratchet. It is never *told* a language up
+            // front, so a route decision gives it nothing. Waiting for one cost up to the full
+            // 5 s — and at minimum one 100 ms sleep, since the loop sleeps before its first
+            // check — of dead live preview at the start of every dictation.
+            let needsRouteDecision = self?.usesEagerStream != true
+                && !(self?.previewBridge is Qwen3ASRBridge)
+            if needsRouteDecision {
                 // Wait for language detection or 5s timeout
                 for _ in 0..<50 {
                     try? await Task.sleep(nanoseconds: 100_000_000)  // 100ms poll
@@ -1343,11 +1391,19 @@ class StreamingTranscriber {
                 if self?.usesEagerStream == true { return 150_000_000 }
                 return UInt64(pb.streamingPolicy.previewPollInterval * 1_000_000_000)
             }()
+            // Shorter sleep used while a pass is being skipped for a reason that clears on its
+            // own — today that is a committed chunk occupying the shared serial queue. Sleeping
+            // the full interval there wastes most of a poll: a chunk decode and the preview
+            // cannot overlap, so the moment the queue frees is the moment a pass should start,
+            // and at 250 ms the preview could sit idle for nearly that long after it does.
+            // Re-checking at 50 ms costs nothing — a skipped pass does no inference and does not
+            // even copy the ring buffer, it returns at a guard.
+            let reArmInterval: UInt64 = min(previewInterval, 50_000_000)
             while !Task.isCancelled {
                 guard let self, !self.isStopped, !self.isPreparingToStop else { break }
-                self.runLivePreviewPass()
+                let ran = self.runLivePreviewPass()
                 do {
-                    try await Task.sleep(nanoseconds: previewInterval)
+                    try await Task.sleep(nanoseconds: ran ? previewInterval : reArmInterval)
                 } catch {
                     break
                 }
@@ -1779,6 +1835,8 @@ class StreamingTranscriber {
             // abort fires with isStopped=true (tail covers it); Parakeet timeouts during
             // recording previously advanced the index incorrectly, losing audio.
             if !trimmed.isEmpty {
+                self.rebaseAgreementAcrossCommit(committedText: trimmed,
+                                                 newBase: chunk.endSample)
                 self.lastTranscribedSampleIndex = chunk.endSample
                 // Clear preview accumulated text — chunk covers this audio now
                 self.previewAccumulatedText = ""
@@ -1901,13 +1959,23 @@ class StreamingTranscriber {
     /// - FluidAudio: growing tail with replace semantics (runs even during chunk transcription — separate queue).
     /// - WhisperKit: growing tail from the last committed chunk with replace semantics.
     /// - whisper.cpp: append-only from last previewed position with 0.5s overlap.
-    private func runLivePreviewPass() {
-        guard !isStopped, !isPreparingToStop else { return }
+    /// Returns true if this call actually dispatched inference, false if it returned at a guard.
+    ///
+    /// The poll loop uses this to decide how long to sleep. A skipped pass is cheap — most of the
+    /// guards fire before the ring buffer is even copied — and the commonest reason to skip is a
+    /// committed chunk holding the shared serial queue, which clears on its own. Sleeping the
+    /// full 250 ms interval after such a skip left the preview idle for most of a poll after the
+    /// queue freed; re-checking sooner costs nothing and removes that dead time.
+    @discardableResult
+    private func runLivePreviewPass() -> Bool {
+        guard !isStopped, !isPreparingToStop else { return false }
         if usesEagerStream {
             runEagerStreamPass()
-            return
+            // Eager keeps its own 150 ms cadence; report dispatched so the loop does not
+            // re-arm it faster than that path was tuned for.
+            return true
         }
-        guard let preview = previewBridge else { return }
+        guard let preview = previewBridge else { return false }
         // Policy-based: serializesInferenceWithPreview is true for WhisperKitBridge (single Core ML runtime).
         // previewSharesDecodeQueue is true for FluidAudioBridge (dedicated triple-manager queue).
         let isWhisperKitPreview = preview.streamingPolicy.serializesInferenceWithPreview
@@ -1915,19 +1983,28 @@ class StreamingTranscriber {
         #if canImport(WhisperKit)
         // Avoid repeatedly copying, VAD-checking, and normalizing the same window while
         // the previous Core ML pass is still running.
-        if isWhisperKitPreview, !isWhisperKitInferenceIdle() { return }
+        if isWhisperKitPreview, !isWhisperKitInferenceIdle() { return false }
         #endif
         // Whisper shares the same queue as chunk transcription — block preview during chunks to avoid contention.
         // FluidAudio has a dedicated preview queue and triple-manager, so it can run concurrently.
-        if !isFluidAudio, isTranscribingChunk { return }
+        if !isFluidAudio, isTranscribingChunk { return false }
         // Qwen3-ASR runs every inference on one serial MLX queue. Starting a pass while another
         // is queued or running only guarantees it completes after a newer pass ID was issued,
         // i.e. stale — which is how the CoreML build discarded every single preview result.
-        if let qwen = preview as? Qwen3ASRBridge, !qwen.isIdle { return }
+        if let qwen = preview as? Qwen3ASRBridge, !qwen.isIdle { return false }
 
-        // Skip preview if main pipeline has a large backlog (>10s) — drop preview before dropping chunks
+        // Skip preview if the main pipeline has a large backlog — drop preview before dropping
+        // chunks. Sized off the backend's own chunk cap rather than a flat 10 s: the moment VAD
+        // emits a chunk, `lastClaimedSampleIndex` jumps by the full chunk length while
+        // `lastTranscribedSampleIndex` waits for the decode, so a backend whose chunks are
+        // longer than the threshold trips this on *every* poll for the whole decode. At the old
+        // 15 s Qwen3 chunk against a flat 10 s that was ~4 s of dead preview per commit, and the
+        // guard read as a backlog check while actually behaving as an unconditional block.
+        //
+        // One chunk in flight is normal and must not block; two queued is a real backlog.
+        let backlogCeiling = max(10.0, previewPolicyChunkCap * 1.5)
         let chunkBacklogSamples = lastClaimedSampleIndex - lastTranscribedSampleIndex
-        guard chunkBacklogSamples <= Int(10.0 * sampleRate) else { return }
+        guard chunkBacklogSamples <= Int(backlogCeiling * sampleRate) else { return false }
 
         var ringContent: [Float] = []
         var ringBase: Int = 0
@@ -1936,7 +2013,7 @@ class StreamingTranscriber {
                 ringContent = ring.toArray()
                 ringBase = ring.baseSampleIndex
             }
-        } catch { return }
+        } catch { return false }
 
         let ringEnd = ringBase + ringContent.count
 
@@ -1953,7 +2030,7 @@ class StreamingTranscriber {
             // and text accumulates naturally without append/dedup heuristics.
             let maxGrowingSamples = Int(preview.streamingPolicy.previewWindowCap * sampleRate)
             tailStartAbs = max(lastTranscribedSampleIndex, ringEnd - maxGrowingSamples)
-            guard ringEnd > tailStartAbs + Int(0.3 * sampleRate) else { return }
+            guard ringEnd > tailStartAbs + Int(0.3 * sampleRate) else { return false }
             endAbsIndex = ringEnd
         } else if isWhisperKitPreview {
             // Pass the complete uncommitted recording, but ask WhisperKit to seek to
@@ -1963,18 +2040,18 @@ class StreamingTranscriber {
             // WhisperKit does not produce a usable timestamped result below roughly
             // one second. Starting sooner created a 40ms retry storm without improving
             // actual time-to-first-text.
-            guard ringEnd > tailStartAbs + Int(1.0 * sampleRate) else { return }
+            guard ringEnd > tailStartAbs + Int(1.0 * sampleRate) else { return false }
             endAbsIndex = ringEnd
         } else {
             let overlapSamples = Int(0.5 * sampleRate)
             tailStartAbs = max(lastTranscribedSampleIndex,
                                lastPreviewedSampleIndex > overlapSamples ? lastPreviewedSampleIndex - overlapSamples : 0)
-            guard ringEnd > tailStartAbs + Int(1.0 * sampleRate) else { return }
+            guard ringEnd > tailStartAbs + Int(1.0 * sampleRate) else { return false }
             let maxWindowSamples = Int(2.0 * sampleRate)
             endAbsIndex = min(ringEnd, tailStartAbs + maxWindowSamples)
         }
         let windowSamples = ring.slice(fromAbsolute: tailStartAbs, toAbsolute: endAbsIndex)
-        guard !windowSamples.isEmpty else { return }
+        guard !windowSamples.isEmpty else { return false }
         let candidateEndIndex = endAbsIndex
 
         // Incremental VAD: only check new audio since the last pass (max 3 s).
@@ -1985,7 +2062,7 @@ class StreamingTranscriber {
                 let vadSamples = ring.slice(fromAbsolute: vadStart, toAbsolute: ringEnd)
                 if !vadSamples.isEmpty {
                     lastPreviewVADCheckEndIndex = ringEnd
-                    if !vad.hasSpeech(samples: vadSamples) { return }
+                    if !vad.hasSpeech(samples: vadSamples) { return false }
                 }
             }
         }
@@ -2021,10 +2098,10 @@ class StreamingTranscriber {
         }
 
         #if canImport(WhisperKit)
-        if isWhisperKitPreview, !pendingChunks.isEmpty { return }
+        if isWhisperKitPreview, !pendingChunks.isEmpty { return false }
         // Admission is atomic with the release gate: either this pass owns the
         // runtime before stop preparation starts, or it cannot start at all.
-        if isWhisperKitPreview, !claimWhisperKitPreviewInferenceUnlessStopping() { return }
+        if isWhisperKitPreview, !claimWhisperKitPreviewInferenceUnlessStopping() { return false }
         if isWhisperKitPreview {
             activeWhisperKitPreviewStartIndex = tailStartAbs
             activeWhisperKitPreviewEndIndex = candidateEndIndex
@@ -2104,7 +2181,9 @@ class StreamingTranscriber {
                 )
                 self.publishWhisperKitStreamingPreview(text, through: candidateEndIndex)
             }
-            return
+            // Inference was dispatched on the WhisperKit path; the loop should keep its normal
+            // cadence rather than re-arming early.
+            return true
         }
         #endif
 
@@ -2212,6 +2291,41 @@ class StreamingTranscriber {
             )
             transcriptionProgressCounter &+= 1
         }
+        return true
+    }
+
+    /// Carries the LocalAgreement-2 reference across a chunk commit instead of discarding it.
+    ///
+    /// Without this, the first preview pass after every commit finds `base != agreementPreviousBase`,
+    /// returns nil, and shows nothing — it exists only to become the next pass's reference. One
+    /// wasted pass per commit, and with commits every few seconds that is most of what separates
+    /// the p90 update gap from the p50: measured ~500 ms blocked by the chunk decode, ~300 ms for
+    /// the pass itself, and ~300 ms more for this blank pass.
+    ///
+    /// The words are not actually stale. Before the commit the preview had decoded
+    /// `[oldBase, ringEnd]`; the commit only moves the base to `newBase`, so the part of that
+    /// pass covering `[newBase, ringEnd]` is still a valid prediction of exactly the window the
+    /// next pass will decode. Keeping it means the next pass can confirm against it immediately.
+    ///
+    /// There is no per-word sample alignment to split on, so the committed text's word count is
+    /// used as the cut: the preview pass began with the same audio the chunk just committed, so
+    /// its first `n` words correspond to that span. This is an approximation, and it is allowed
+    /// to be — a wrong cut makes the next pass's words fail to match and costs exactly the blank
+    /// pass that happened unconditionally before. Agreement still has to hold before anything
+    /// reaches the screen, so this can never show an unconfirmed word.
+    private func rebaseAgreementAcrossCommit(committedText: String, newBase: Int) {
+        guard !agreementPreviousWords.isEmpty else { return }
+        let committedWordCount = committedText
+            .split(whereSeparator: { $0.isWhitespace }).count
+        guard committedWordCount < agreementPreviousWords.count else {
+            // The commit consumed everything the preview had predicted. Nothing survives as a
+            // reference, which is the honest answer — fall back to the old behaviour.
+            agreementPreviousWords = []
+            agreementPreviousBase = newBase
+            return
+        }
+        agreementPreviousWords = Array(agreementPreviousWords.dropFirst(committedWordCount))
+        agreementPreviousBase = newBase
     }
 
     /// LocalAgreement-2 over consecutive preview passes of the same uncommitted window.
@@ -3255,7 +3369,20 @@ class StreamingTranscriber {
             prompt = initialPrompt
         }
 
-        // Reset abort for tail transcription (unconditional — works for WhisperBridge and FluidAudioBridge)
+        // Reset abort for tail transcription (unconditional — works for WhisperBridge and FluidAudioBridge).
+        //
+        // Ordering matters here and it used to be wrong. On a serial-queue backend (Qwen3-ASR,
+        // one `qwen3asr.inference` queue for previews, chunks and the tail) a preview can still
+        // be mid-decode at this point: `stopAsync` waits up to 400 ms on `isTranscribingChunk`,
+        // which tracks committed chunks only and never the preview. The engine polls its abort
+        // flag live between tokens, so clearing it here *un-aborted* that running preview — it
+        // then spent its full token budget, and the tail decode, queued behind it on the same
+        // serial queue, could not start until it finished. Unlogged, and bounded only by the
+        // 120 s transcribe timeout.
+        //
+        // `stopAsync` drains any in-flight preview before calling this (see
+        // `drainPreviewInflightBeforeTail`), so by the time the flag clears the only work left
+        // on the queue is the tail. This function is synchronous and cannot do that itself.
         whisper.resetAbort()
 
         // Synchronous transcription for the tail
@@ -3591,6 +3718,8 @@ class StreamingTranscriber {
         } else if waitCount > 0 {
             Logger.debug("In-flight chunk completed after \(waitCount * 10)ms", subsystem: .transcription)
         }
+
+        await drainPreviewInflightBeforeTail()
 
         // Nemotron session teardown.
         #if canImport(FluidAudio)
