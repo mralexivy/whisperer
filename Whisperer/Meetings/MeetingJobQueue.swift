@@ -42,7 +42,18 @@ final class MeetingJobQueue: ObservableObject {
     // MARK: - Private state
 
     private var runningTask: Task<Void, Never>?
-    private(set) var isSuspended = false
+
+    /// True while the queue is suspended for a **meeting recording**. Jobs paused for a recording
+    /// are cancelled and re-queued; their attempt counter is incremented for crash-recovery purposes.
+    private var isRecordingSuspended = false
+
+    /// True while the queue is suspended for a **dictation**. Unlike a recording suspension, the
+    /// running pipeline task is NOT cancelled — it parks itself via `waitWhileDictationActive`
+    /// between decode windows. The attempt counter is never incremented on a dictation pause.
+    private var isDictationSuspended = false
+
+    /// Combined gate: the queue does not start new jobs when either flag is set.
+    var isSuspended: Bool { isRecordingSuspended || isDictationSuspended }
 
     // MARK: - Enqueue
 
@@ -59,7 +70,7 @@ final class MeetingJobQueue: ObservableObject {
             Logger.debug("MeetingJobQueue: \(meetingID) already queued — skipping duplicate enqueue", subsystem: .transcription)
             return
         }
-        var job = MeetingJob(
+        let job = MeetingJob(
             id: meetingID,
             stage: .fineTuning,
             status: .queued,
@@ -104,8 +115,8 @@ final class MeetingJobQueue: ObservableObject {
     /// Must be called BEFORE `ModelWorkQueue.setMeetingActive(true)` so the job stops
     /// enqueueing inner work units before the gate rises.
     func suspendForRecording() {
-        guard !isSuspended else { return }
-        isSuspended = true
+        guard !isRecordingSuspended else { return }
+        isRecordingSuspended = true
         Logger.info("MeetingJobQueue: suspended for recording", subsystem: .transcription)
 
         guard let idx = jobs.firstIndex(where: { $0.status == .running }) else { return }
@@ -125,13 +136,13 @@ final class MeetingJobQueue: ObservableObject {
 
     /// Called after a meeting recording stops.
     func resumeAfterRecording() {
-        guard isSuspended else { return }
-        isSuspended = false
+        guard isRecordingSuspended else { return }
+        isRecordingSuspended = false
         Logger.info("MeetingJobQueue: resumed after recording", subsystem: .transcription)
         if runningTask == nil { startNext() }
     }
 
-    /// Lowers the suspension if it is still up when no meeting is recording.
+    /// Lowers the recording suspension if it is still up when no meeting is recording.
     ///
     /// `isSuspended` gates `startNext()`, so a stranded `true` means no meeting summary, title
     /// or fine-tuning job can ever run again for the life of the process. That is exactly what
@@ -139,12 +150,53 @@ final class MeetingJobQueue: ObservableObject {
     /// and the job it had cancelled sat at `.pausedForRecording` until quit. Treat the flag as
     /// recoverable rather than as an invariant.
     func clearStrandedSuspension(reason: String) {
-        guard isSuspended else { return }
+        guard isRecordingSuspended else { return }
         Logger.warning(
-            "MeetingJobQueue: suspension was stranded with no active recording (\(reason)) — resuming",
+            "MeetingJobQueue: recording suspension was stranded with no active recording (\(reason)) — resuming",
             subsystem: .transcription
         )
         resumeAfterRecording()
+    }
+
+    // MARK: - Dictation preemption
+
+    /// Called when dictation starts. Sets the dictation-suspension flag so `startNext()` will
+    /// not dequeue a new pipeline job. The pipeline that is already running is NOT cancelled —
+    /// it parks itself via `ModelWorkQueue.waitWhileDictationActive` between decode windows, and
+    /// the active window is aborted via `ModelWorkQueue.registerInFlightAbort`.
+    ///
+    /// Unlike the recording preemption, the attempt counter is never incremented here: a dictation
+    /// pause is a normal operational event, not evidence of a crash or stall, and counting it would
+    /// exhaust `maxAttempts` (3) after three dictations during one finalization.
+    func suspendForDictation() {
+        guard !isDictationSuspended else { return }
+        isDictationSuspended = true
+        Logger.info("MeetingJobQueue: suspended for dictation", subsystem: .transcription)
+        // The running pipeline parks itself; no task cancel needed.
+    }
+
+    /// Called when dictation ends. Starts the next queued job if the pipeline is not already
+    /// running (it may still be running if the dictation was short and the pipeline did not
+    /// finish between its `waitWhileDictationActive` calls).
+    func resumeAfterDictation() {
+        guard isDictationSuspended else { return }
+        isDictationSuspended = false
+        Logger.info("MeetingJobQueue: resumed after dictation", subsystem: .transcription)
+        if runningTask == nil { startNext() }
+    }
+
+    /// Lowers the dictation suspension if it is stranded up while no dictation is active.
+    ///
+    /// The dictation gate in `ModelWorkQueue` has an identical recovery path; this one covers
+    /// `MeetingJobQueue` so the pipeline can restart if `lowerDictationModelGate` was never
+    /// called after a failed or cancelled dictation.
+    func clearStrandedDictationSuspension(reason: String) {
+        guard isDictationSuspended else { return }
+        Logger.warning(
+            "MeetingJobQueue: dictation suspension was stranded (\(reason)) — resuming",
+            subsystem: .transcription
+        )
+        resumeAfterDictation()
     }
 
     // MARK: - Launch restore

@@ -410,6 +410,11 @@ final class MeetingTranscriptRefiner: ObservableObject {
             for window in group.windows {
                 if Task.isCancelled || cancelledMeetingID == meetingID { break }
 
+                // Pause before starting this window if a dictation is active. The slot is not
+                // held between `runBlocking` calls, so a queued interactive load (the dictation's
+                // own `qwen3asr-load`) will be admitted the moment we park here.
+                await ModelWorkQueue.shared.waitWhileDictationActive("meeting-refine-\(Int(window.start))s")
+
                 // Per-group pending filter: cards in this group that still need polishing.
                 // A `redoEverything` run treats every card as pending — its cards have NOT been
                 // unwound yet, so `isPolished` is still true for them and filtering here would
@@ -469,6 +474,15 @@ final class MeetingTranscriptRefiner: ObservableObject {
                 // above had reduced it to. Those are now errors and end the group instead.
                 let timed: [WhisperTimedSegment]
                 do {
+                    // Register the abort handler so a dictation that starts mid-decode aborts this
+                    // window immediately rather than waiting up to 7s for it to complete naturally.
+                    // The abort is harmless if dictation never starts: `shouldAbort` stays false
+                    // and the window runs to completion. The handler is cleared in `defer` so a
+                    // dictation that arrives after this window finishes does not fire into the next.
+                    await ModelWorkQueue.shared.registerInFlightAbort { [weak groupBridge] in
+                        groupBridge?.requestAbort()
+                    }
+                    defer { Task { await ModelWorkQueue.shared.clearInFlightAbort() } }
                     timed = try await ModelWorkQueue.shared.runBlocking("meeting-refine") {
                         try groupBridge.transcribeTimestampedChecked(samples: samples, initialPrompt: prompt, language: fixedLanguage)
                     }
@@ -482,7 +496,8 @@ final class MeetingTranscriptRefiner: ObservableObject {
                 // window, not a refinement of it — persisting them (with `rawText` stamped, which
                 // marks the card permanently polished) replaces good live text with half a
                 // sentence. The usual source is a dictation `stopAsync()` on the borrowed
-                // resident bridge. Drop the window and leave the group for a later pass.
+                // resident bridge, or the `registerInFlightAbort` handler above. Drop the window
+                // and leave the group for a later pass.
                 if groupBridge.shouldAbort {
                     Logger.warning("Transcript refine: window at \(window.start)s aborted mid-decode — discarding partial output", subsystem: .transcription)
                     break
@@ -681,8 +696,10 @@ final class MeetingTranscriptRefiner: ObservableObject {
 
         let detector: MeetingLanguageScanner.Detector = { samples in
             // Same queue and job name family as the window decodes, so a detection can never
-            // re-enter the borrowed bridge mid-decode.
-            try? await ModelWorkQueue.shared.runBlocking("meeting-refine-detect") {
+            // re-enter the borrowed bridge mid-decode. Pause between probes if a dictation is
+            // active — each probe is ~800ms, so this yields the GPU at every safe boundary.
+            await ModelWorkQueue.shared.waitWhileDictationActive("meeting-refine-detect")
+            return try? await ModelWorkQueue.shared.runBlocking("meeting-refine-detect") {
                 confirmBridge.detectLanguage(samples: samples)
             }
         }

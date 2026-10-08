@@ -2030,7 +2030,9 @@ class AppState: ObservableObject {
         qwen3asrLoadTask = Task.detached(priority: .userInitiated) { [weak self] in
             do {
                 // Blocking: safetensors load + MLX kernel warm-up.
-                let bridge = try await ModelWorkQueue.shared.runBlocking("qwen3asr-load") {
+                // Interactive lane: jumps ahead of any queued meeting-refine jobs so the user
+                // can dictate as soon as the meeting session ends.
+                let bridge = try await ModelWorkQueue.shared.runInteractiveBlocking("qwen3asr-load") {
                     try Qwen3ASRBridge.loadFromCache()
                 }
                 await MainActor.run { [weak self] in
@@ -3765,6 +3767,13 @@ class AppState: ObservableObject {
                 self?.showModelLoadingToast = false
             }
             Logger.warning("Cannot start recording - model not pre-loaded", subsystem: .app)
+            // Kick a reload when the model is cached but the bridge was torn down (e.g., by
+            // `releaseMeetingASRBridge`). Without this the user gets the toast on every Fn press
+            // until the meeting finalization completes and a reload happens to be triggered.
+            // `preloadModel()` is idempotent — it no-ops when a load task is already in flight.
+            if isModelLoaded == false && !isModelBusy {
+                preloadModel()
+            }
             return
         }
 
@@ -4086,6 +4095,7 @@ class AppState: ObservableObject {
             break
         default:
             Task { await ModelWorkQueue.shared.clearStrandedDictationGate(reason: reason) }
+            MeetingJobQueue.shared.clearStrandedDictationSuspension(reason: reason)
         }
     }
 
@@ -4100,6 +4110,9 @@ class AppState: ObservableObject {
     /// instead of the final text. See the `ModelWorkQueue` header for the full measurement.
     private func raiseDictationModelGate() {
         Task { await ModelWorkQueue.shared.setDictationActive(true) }
+        // Pause the meeting post-processing pipeline too. The running pipeline parks itself at
+        // `waitWhileDictationActive` calls; no task cancel is needed.
+        MeetingJobQueue.shared.suspendForDictation()
     }
 
     /// Lowers the dictation gate. Must run on every exit from a dictation — the normal stop, the
@@ -4108,6 +4121,7 @@ class AppState: ObservableObject {
     private func lowerDictationModelGate(reason: String) {
         Logger.debug("Lowering the dictation model-work gate (\(reason))", subsystem: .app)
         Task { await ModelWorkQueue.shared.setDictationActive(false) }
+        MeetingJobQueue.shared.resumeAfterDictation()
     }
 
     /// Releases a meeting session that `stopInAppRecording()` left attached.
@@ -5232,11 +5246,22 @@ class AppState: ObservableObject {
                 qwen3asrBridgeInstance = nil
                 qwen3asrLoadTask = nil
                 isLoadingQwen3ASR = false
-                if whisperBridge === bridge { whisperBridge = nil }
+                let needsReload = (whisperBridge === bridge)
+                if needsReload { whisperBridge = nil }
                 Task {
                     try? await ModelWorkQueue.shared.run("qwen3asr-meeting-release") {
                         await bridge.shutdownAsync()
                     }
+                }
+                // Always reload the user's backend when the meeting's Qwen3 instance is torn
+                // down and the dictation bridge was the same object. Previously the reload was
+                // gated on `meetingEvictedUserBackend`, which is only set when a backend switch
+                // was forced by low memory — so on the common path (meeting and dictation both
+                // use Qwen3) the user had no Qwen3 bridge after the meeting, and every Fn press
+                // until the refine finished hit "Cannot start recording - model not pre-loaded".
+                if needsReload {
+                    meetingEvictedUserBackend = false   // clear so the guard below does not double-reload
+                    preloadModel()
                 }
             }
             meetingOwnsQwen3 = false

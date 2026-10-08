@@ -137,6 +137,12 @@ actor ModelWorkQueue {
     var isDictationGateRaised: Bool { dictationActive }
     private var dictationWaiters: [Waiter] = []
 
+    /// Registered abort handler for the whisper decode currently in flight inside a
+    /// `runBlocking("meeting-refine*")` job. Called immediately when dictation becomes active
+    /// so the GPU is yielded faster than waiting for the window to complete naturally.
+    /// The refiner registers this before each decode window and clears it after.
+    private var inFlightAbort: (() -> Void)?
+
     /// Jobs cancelled while waiting. Recorded by id because the cancellation handler can land
     /// before the continuation has been appended.
     private var cancelledJobIDs: Set<Int> = []
@@ -192,6 +198,9 @@ actor ModelWorkQueue {
         dictationActive = active
         guard !active else {
             Logger.debug("ModelWorkQueue: dictation started — background model work suspended", subsystem: .model)
+            // Signal any in-flight background decode to abort so the GPU is freed immediately,
+            // without waiting for the current window to complete naturally (up to 7s).
+            inFlightAbort?()
             return
         }
         let resumed = dictationWaiters
@@ -200,6 +209,24 @@ actor ModelWorkQueue {
         if !resumed.isEmpty {
             Logger.info("ModelWorkQueue: dictation ended — releasing \(resumed.count) suspended job(s)", subsystem: .model)
         }
+    }
+
+    /// Registers a closure to call when dictation becomes active, replacing any previous one.
+    ///
+    /// `MeetingTranscriptRefiner` calls this before each `runBlocking("meeting-refine")` window,
+    /// passing `groupBridge.requestAbort`. The abort causes whisper.cpp to truncate the decode at
+    /// the next token boundary and return, after which the refiner checks `shouldAbort` and drops
+    /// the partial output (the existing guard at the line after each `runBlocking` call).
+    /// `clearInFlightAbort()` is called after the window regardless of outcome, so a dictation
+    /// that starts after a window completes never fires a stale abort into the next one.
+    func registerInFlightAbort(_ handler: @escaping () -> Void) {
+        inFlightAbort = handler
+    }
+
+    /// Clears the in-flight abort handler. Call after each decode window, whether it succeeded,
+    /// failed, or was aborted.
+    func clearInFlightAbort() {
+        inFlightAbort = nil
     }
 
     /// Lowers the dictation gate if it is still raised when no dictation is actually running.
@@ -261,6 +288,36 @@ actor ModelWorkQueue {
             "ModelWorkQueue: \(label) resuming after \(Int(Date().timeIntervalSince(pausedAt) * 1000))ms paused",
             subsystem: .model
         )
+    }
+
+    // MARK: - Interactive submission (dictation preloads)
+
+    /// Same as `run` but runs at the **head** of the queue and skips the dictation gate.
+    ///
+    /// Use this for loads that ARE the dictation path — `qwen3asr-load`, `nemotron-load`,
+    /// `llm-load` — so they never wait behind a long sequence of `meeting-refine` jobs.
+    /// The meeting gate still applies: a live meeting capture outranks everything.
+    func runInteractive<T>(_ label: String, _ body: @escaping @Sendable () async throws -> T) async throws -> T {
+        let ticket = try await acquireInteractive(label)
+        defer { finish(ticket) }
+        let job = Task.detached(priority: Task.currentPriority) {
+            try await Self.offCallerExecutor(label, body)
+        }
+        return try await withTaskCancellationHandler {
+            try await job.value.value
+        } onCancel: {
+            job.cancel()
+        }
+    }
+
+    /// Same as `runBlocking` but runs at the **head** of the queue and skips the dictation gate.
+    ///
+    /// Use for blocking loads that are on the dictation latency path. See `runInteractive` for
+    /// the full rationale.
+    func runInteractiveBlocking<T>(_ label: String, _ body: @escaping @Sendable () throws -> T) async throws -> T {
+        let ticket = try await acquireInteractive(label)
+        defer { finish(ticket) }
+        return try await Self.onBlockingQueue(body).value
     }
 
     // MARK: - Submission
@@ -361,6 +418,40 @@ actor ModelWorkQueue {
         let startedAt: Date
     }
 
+    /// Like `acquire` but skips the dictation gate and goes to the **head** of `slotWaiters`.
+    ///
+    /// Used by `runInteractive` / `runInteractiveBlocking` for dictation-path loads. The meeting
+    /// gate still applies: a live capture must not be interrupted by a backend reload.
+    private func acquireInteractive(_ label: String) async throws -> Ticket {
+        let submittedAt = Date()
+        let id = nextJobID
+        nextJobID += 1
+
+        Logger.debug(
+            "ModelWorkQueue: \(label) [interactive] submitted (running=\(isRunning), queued=\(slotWaiters.count + meetingWaiters.count), meeting=\(meetingActive))",
+            subsystem: .model
+        )
+        armLongWaitWarning(id: id, label: label)
+        defer { cancelledJobIDs.remove(id) }
+
+        // Interactive jobs skip the dictation gate (they ARE the dictation) but still respect
+        // the meeting gate — a live capture takes priority over backend reloads.
+        while meetingActive {
+            try await waitForGate(id: id, label: label, gate: .meetingGate)
+            if !meetingActive { break }
+        }
+        try Task.checkCancellation()
+        try await waitForSlotInteractive(id: id, label: label)
+
+        armStallWatchdog(id: id, label: label)
+        return Ticket(
+            id: id,
+            label: label,
+            waitedMs: Int(Date().timeIntervalSince(submittedAt) * 1000),
+            startedAt: Date()
+        )
+    }
+
     /// Waits out the meeting gate and the slot, then arms the stall watchdog.
     private func acquire(_ label: String) async throws -> Ticket {
         let submittedAt = Date()
@@ -446,6 +537,38 @@ actor ModelWorkQueue {
         if cancelledJobIDs.contains(id) || Task.isCancelled {
             releaseSlot(owner: id)
             throw CancellationError()
+        }
+    }
+
+    /// Same as `waitForSlot` but prepends to `slotWaiters` so this job runs before normal ones.
+    private func waitForSlotInteractive(id: Int, label: String) async throws {
+        if !isRunning {
+            try Task.checkCancellation()
+            isRunning = true
+            slotOwner = id
+            return
+        }
+        await suspendInteractive(id: id, label: label)
+        if cancelledJobIDs.contains(id) || Task.isCancelled {
+            releaseSlot(owner: id)
+            throw CancellationError()
+        }
+    }
+
+    /// Like `suspend(id:label:in:)` but prepends to `slotWaiters` (head-of-queue).
+    private func suspendInteractive(id: Int, label: String) async {
+        await withTaskCancellationHandler {
+            await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
+                guard !cancelledJobIDs.contains(id), !Task.isCancelled else {
+                    continuation.resume()
+                    return
+                }
+                let waiter = Waiter(id: id, label: label, continuation: continuation)
+                // Prepend: this job runs before any normal (FIFO) waiter.
+                slotWaiters.insert(waiter, at: 0)
+            }
+        } onCancel: {
+            Task { await self.cancelWait(id: id) }
         }
     }
 
