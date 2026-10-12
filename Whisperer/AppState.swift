@@ -484,7 +484,6 @@ class AppState: ObservableObject {
     }
 
     // Meeting detection notification — shown when a conference app is detected while idle.
-    #if !APP_STORE
     @Published var showMeetingDetectedToast: Bool = false {
         didSet {
             NotificationCenter.default.post(name: NSNotification.Name("AppStateChanged"), object: nil)
@@ -511,10 +510,6 @@ class AppState: ObservableObject {
         showMeetingDetectedToast = false
         detectedMeetingApp = nil
     }
-    #else
-    // Stubs so OverlayPanel can reference this property unconditionally.
-    var showMeetingDetectedToast: Bool { false }
-    #endif
 
     /// Which backend type is currently loaded (may differ from selectedBackendType while browsing tabs)
     @Published var loadedBackendType: BackendType? = nil
@@ -836,7 +831,7 @@ class AppState: ObservableObject {
     @Published var isLiveTranscriptionRTL: Bool = false
 
     // MCP server
-    @Published var mcpEnabled: Bool = true {
+    @Published var mcpEnabled: Bool = UserDefaults.standard.object(forKey: "mcpEnabled") as? Bool ?? false {
         didSet { UserDefaults.standard.set(mcpEnabled, forKey: "mcpEnabled") }
     }
     @Published var mcpPort: Int = 8080 {
@@ -853,6 +848,21 @@ class AppState: ObservableObject {
     }
     @Published var mcpBonjourReady: Bool = false
     @Published var mcpBonjourHostname: String? = nil  // machine's .local hostname, set at launch
+
+    // MCP bearer token — generated once and persisted for authentication
+    @Published var mcpBearerToken: String = {
+        if let existing = UserDefaults.standard.string(forKey: "mcpBearerToken") {
+            return existing
+        }
+        let token = UUID().uuidString
+        UserDefaults.standard.set(token, forKey: "mcpBearerToken")
+        return token
+    }()
+
+    // Meeting detection camera opt-in
+    @Published var cameraDetectionEnabled: Bool = UserDefaults.standard.bool(forKey: "cameraDetectionEnabled") {
+        didSet { UserDefaults.standard.set(cameraDetectionEnabled, forKey: "cameraDetectionEnabled") }
+    }
 
     /// Returns true when mcpCustomURL contains a parseable http/https URL.
     var mcpCustomURLIsValid: Bool {

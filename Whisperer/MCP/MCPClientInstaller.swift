@@ -125,15 +125,20 @@ enum MCPClientInstaller {
 
     /// Returns the JSON object to place under `mcpServers.whisperer`.
     private static func jsonEntry(for client: MCPClient, url: String) -> [String: Any] {
+        let token = AppState.shared.mcpBearerToken
         switch client {
         case .claudeCode:
             // Claude Code supports streamable-http natively.
-            return ["type": "streamable-http", "url": url]
+            return [
+                "type": "streamable-http",
+                "url": url,
+                "headers": ["Authorization": "Bearer \(token)"]
+            ]
         case .claudeDesktop:
             // Claude Desktop routes http MCP via mcp-remote (stdio bridge).
             return [
                 "command": "npx",
-                "args": ["-y", "mcp-remote@latest", url],
+                "args": ["-y", "mcp-remote@latest", url, "--header", "Authorization: Bearer \(token)"],
                 "env": [String: String](),
             ]
         default:
@@ -216,10 +221,12 @@ enum MCPClientInstaller {
             return .failed("No config path for Codex")
         }
 
+        let token = AppState.shared.mcpBearerToken
         let block = """
 
 [mcp_servers.whisperer]
 url = "\(url)"
+headers = { Authorization = "Bearer \(token)" }
 
 """
 

@@ -27,7 +27,7 @@
 	<key>NSMicrophoneUsageDescription</key>
 	<string>Whisperer needs microphone access to transcribe your voice.</string>
 	<key>NSCameraUsageDescription</key>
-	<string>Whisperer detects when your camera is active to identify video calls for meeting notes.</string>
+	<string>Whisperer checks whether your camera is in use so it can tell a video call apart from an app that is only using the microphone. Whisperer never records or views camera video.</string>
 	<key>NSSupportsAutomaticGraphicsSwitching</key>
 	<true/>
 	<key>ITSAppUsesNonExemptEncryption</key>

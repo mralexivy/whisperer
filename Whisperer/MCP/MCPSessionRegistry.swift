@@ -95,6 +95,21 @@ actor MCPSessionRegistry {
                lanEnabled: Bool,
                port: Int) async -> HTTPResponse {
 
+        // Bearer token authentication
+        let expectedToken = await MainActor.run { AppState.shared.mcpBearerToken }
+        let authHeader = request.header("Authorization") ?? ""
+        let providedToken = authHeader.hasPrefix("Bearer ")
+            ? String(authHeader.dropFirst(7)).trimmingCharacters(in: .whitespaces)
+            : ""
+
+        if providedToken != expectedToken {
+            return HTTPResponse.textBody(
+                status: 401,
+                headers: ["WWW-Authenticate": "Bearer realm=\"Whisperer MCP\""],
+                body: "Unauthorized: Invalid or missing bearer token"
+            )
+        }
+
         let sessionID = request.header(HTTPHeaderName.sessionID)
 
         if let sid = sessionID {

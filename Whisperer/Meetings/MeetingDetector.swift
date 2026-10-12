@@ -529,8 +529,10 @@ final class MeetingDetector {
     // MARK: - Lifecycle
 
     func start() {
-        cameraMonitor.onChange = { [weak self] active in
-            Task { @MainActor [weak self] in self?.cameraChanged(active) }
+        if AppState.shared.cameraDetectionEnabled {
+            cameraMonitor.onChange = { [weak self] active in
+                Task { @MainActor [weak self] in self?.cameraChanged(active) }
+            }
         }
         micMonitor.onChange = { [weak self] active in
             Task { @MainActor [weak self] in self?.microphoneChanged(active) }
@@ -562,11 +564,13 @@ final class MeetingDetector {
             Task { @MainActor [weak self] in self?.syncWithAppState() }
         }
 
-        cameraMonitor.start()
+        if AppState.shared.cameraDetectionEnabled {
+            cameraMonitor.start()
+        }
         micMonitor.start()
         startFallbackPoll()
 
-        Logger.info("MeetingDetector started (event-driven, camera=\(cameraMonitor.isAvailable))", subsystem: .app)
+        Logger.info("MeetingDetector started (event-driven, camera=\(AppState.shared.cameraDetectionEnabled ? cameraMonitor.isAvailable.description : "disabled"))", subsystem: .app)
     }
 
     func stop() {
@@ -645,9 +649,7 @@ final class MeetingDetector {
         case .debouncing(let task):
             task.cancel()
         case .prompted:
-            #if !APP_STORE
             AppState.shared.dismissMeetingNotification()
-            #endif
         case .suppressedUntilHardwareIdle, .idle:
             break
         }
@@ -729,14 +731,12 @@ final class MeetingDetector {
         updateCaptureSampler()
         lastFiredName = candidate.displayName
         detectorState = .prompted
-        #if !APP_STORE
         AppState.shared.showMeetingNotification(app: DetectedMeetingApp(
             name: candidate.displayName,
             iconSystemName: candidate.iconSystemName,
             iconColor: candidate.iconColor,
             bundleID: candidate.bundleID
         ))
-        #endif
         Logger.info("MeetingDetector: \(candidate.displayName) (confidence \(String(format: "%.2f", candidate.confidence)))", subsystem: .app)
     }
 
@@ -1158,14 +1158,12 @@ final class MeetingDetector {
         updateCaptureSampler()
         lastFiredName = name
         detectorState = .prompted
-        #if !APP_STORE
         AppState.shared.showMeetingNotification(app: DetectedMeetingApp(
             name: name,
             iconSystemName: iconSystemName,
             iconColor: iconColor,
             bundleID: bundleID
         ))
-        #endif
         Logger.info("MeetingDetector: fallback detected \(name)", subsystem: .app)
     }
 
