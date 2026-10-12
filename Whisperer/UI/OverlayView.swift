@@ -189,11 +189,9 @@ struct OverlayView: View {
             // of a meeting.
             if !appState.isMeetingMode {
 
-            #if !APP_STORE
             if appState.showMeetingDetectedToast, let meetingApp = appState.detectedMeetingApp {
                 MeetingNotificationCard(app: meetingApp)
             }
-            #endif
 
             if let learned = appState.learnedEntryToast {
                 LearnedWordCard(entry: learned)
@@ -299,6 +297,25 @@ struct OverlayView: View {
         .padding(.bottom, 20 * scale) // Breathing room so card rounded corners aren't flush with panel edge
         .environment(\.overlayScale, scale)
         .background(Color.clear)
+        .overlay(
+            Group {
+                if appState.showMeetingConsentModal {
+                    ZStack {
+                        Color.black.opacity(0.4)
+                            .ignoresSafeArea()
+                        MeetingConsentView(
+                            onAccept: {
+                                appState.hasConsentedToMeetingRecording = true
+                                appState.showMeetingConsentModal = false
+                            },
+                            onDecline: {
+                                appState.showMeetingConsentModal = false
+                            }
+                        )
+                    }
+                }
+            }
+        )
     }
 }
 

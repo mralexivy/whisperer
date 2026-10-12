@@ -864,6 +864,12 @@ class AppState: ObservableObject {
         didSet { UserDefaults.standard.set(cameraDetectionEnabled, forKey: "cameraDetectionEnabled") }
     }
 
+    // Meeting recording consent (Guideline 2.5.14)
+    @Published var hasConsentedToMeetingRecording: Bool = UserDefaults.standard.bool(forKey: "hasConsentedToMeetingRecording") {
+        didSet { UserDefaults.standard.set(hasConsentedToMeetingRecording, forKey: "hasConsentedToMeetingRecording") }
+    }
+    @Published var showMeetingConsentModal: Bool = false
+
     /// Returns true when mcpCustomURL contains a parseable http/https URL.
     var mcpCustomURLIsValid: Bool {
         let trimmed = mcpCustomURL.trimmingCharacters(in: .whitespaces)

@@ -7,8 +7,6 @@
 
 import SwiftUI
 
-#if !APP_STORE
-
 struct MeetingNotificationCard: View {
     let app: MeetingDetector.DetectedMeetingApp
 
@@ -135,6 +133,12 @@ struct MeetingNotificationCard: View {
     /// Recording starts on the click, not after the exit animation — the toast is
     /// already gone visually while capture is coming up, so nothing is missed.
     private func handleStartNotes() {
+        // Check for recording consent (Guideline 2.5.14)
+        guard AppState.shared.hasConsentedToMeetingRecording else {
+            AppState.shared.showMeetingConsentModal = true
+            return
+        }
+
         let capturedApp = app
         Task { @MainActor in
             let session = MeetingSession()
@@ -170,5 +174,3 @@ struct MeetingNotificationCard: View {
         .padding(40)
     }
 }
-
-#endif
