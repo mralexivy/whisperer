@@ -2503,7 +2503,6 @@ struct SettingsTabView: View {
                     }
                 }
 
-                #if !APP_STORE
                 // Meeting Detection
                 settingsCard(title: "Meeting Detection", icon: "video.fill", color: .blue) {
                     HStack {
@@ -2517,6 +2516,27 @@ struct SettingsTabView: View {
                         }
                         Spacer()
                         Toggle("", isOn: $meetingDetectionEnabled)
+                            .toggleStyle(.switch)
+                            .tint(MBColors.accent)
+                            .labelsHidden()
+                    }
+
+                    Divider()
+                        .background(MBColors.border)
+                        .padding(.vertical, 2)
+
+                    HStack {
+                        VStack(alignment: .leading, spacing: 3) {
+                            Text("Also use camera activity to detect meetings")
+                                .font(.system(size: 13, weight: .medium))
+                                .foregroundColor(MBColors.textPrimary)
+                            Text("Whisperer only checks whether the camera is on. It never records or views camera video.")
+                                .font(.system(size: 11))
+                                .foregroundColor(MBColors.textSecondary)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+                        Spacer()
+                        Toggle("", isOn: $appState.cameraDetectionEnabled)
                             .toggleStyle(.switch)
                             .tint(MBColors.accent)
                             .labelsHidden()
@@ -2577,6 +2597,7 @@ struct SettingsTabView: View {
                     #endif
                 }
 
+                #if !APP_STORE
                 // AI Post-Processing
                 settingsCard(title: "AI Post-Processing", icon: "sparkles", color: .purple) {
                     LLMSettingsView()
@@ -4566,6 +4587,16 @@ struct AboutPopoverContent: View {
                 if let url = URL(string: "https://whispererapp.com/privacy") {
                     NSWorkspace.shared.open(url)
                 }
+            }
+
+            linkButton(icon: "doc.text", color: .teal, title: "Terms of Use") {
+                if let url = URL(string: "https://whispererapp.com/terms") {
+                    NSWorkspace.shared.open(url)
+                }
+            }
+
+            linkButton(icon: "heart.text.square", color: .pink, title: "Acknowledgements") {
+                AcknowledgementsWindowManager.shared.show()
             }
 
             linkButton(icon: "globe", color: .blue, title: "Website") {

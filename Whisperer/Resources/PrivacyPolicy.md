@@ -1,119 +1,154 @@
 # Whisperer Privacy Policy
 
-**Last Updated:** February 1, 2026
+**Last Updated:** October 13, 2026
 
 ## Overview
 
-Whisperer is a voice-to-text transcription app for macOS that processes audio entirely on your device. We are committed to protecting your privacy.
+Whisperer is a voice-to-text transcription app for macOS. It processes audio entirely on your
+device. This policy explains what the app does with your data. The short version: everything stays
+on your Mac.
 
 ## Data Collection
 
-**We do not collect any personal data.**
+**Whisperer does not collect any personal data.**
 
-### Audio Data
+There are no accounts, no sign-in, no telemetry, no analytics, and no advertising. Whisperer does
+not use Google Analytics, Mixpanel, Segment, or any comparable platform. No crash reporter
+transmits data off the device.
 
-- All audio recording and transcription happens **100% locally** on your Mac
-- Audio is **never uploaded** to any server or cloud service
-- Audio recordings are **always saved** to your local disk (in `~/Library/Application Support/Whisperer/Recordings/`)
-- You can auto-delete old recordings: set retention to Never / 7 / 30 / 90 / 365 days in Settings
-- You have full control and can manually delete recordings at any time
+## Audio and Transcripts
 
-### Network Usage
+- All recording and transcription happen on your Mac. Audio is never uploaded.
+- Dictation audio and meeting audio are saved locally in
+  `~/Library/Application Support/Whisperer/Sessions/`.
+- You control retention. Choose Never, 7, 30, 90, or 365 days in Settings.
+- You can delete any recording or transcript at any time.
 
-The app uses network connectivity for:
+## Meeting Notes
 
-- **Model Downloads & Updates**: On launch, the app checks Hugging Face for model updates. Downloads contain no personal information.
-- **No Telemetry**: We do not use analytics, tracking, or crash reporting services that transmit data.
+Whisperer can detect a video or audio call and offer to take notes.
 
-Once models are downloaded, **transcription works completely offline**. No internet connection is required to record and transcribe audio.
+- **Whisperer records your microphone only.** It never records system audio, and it never records
+  the audio streams of other participants.
+- Before the first meeting recording, Whisperer shows a consent screen explaining what is recorded
+  and where it is stored.
+- A recording indicator stays visible for the whole recording.
+- **You are responsible for obtaining consent from other participants where the law requires it.**
+  Recording laws differ by country and by state. Whisperer does not provide legal advice.
+- Meeting transcripts and audio stay on your Mac under the same retention rules as dictation.
 
-### Third-Party Services
+## Network Usage
 
-- **Hugging Face**: Used to download open-source AI models including whisper.cpp (speech-to-text engine) and whisper-polish (fine-tuned model for improved transcription). No personal data is transmitted during these downloads.
-- **MCP Server**: Whisperer runs a local HTTP server on localhost:8080 that serves your transcript history. This allows AI tools like Claude Desktop and Cursor to access your transcripts for context. The server is local-only and disabled by default—you can turn it off in Settings.
-- **No Analytics**: We do not use Google Analytics, Mixpanel, Segment, or any other analytics platform.
-- **No Ads**: The app contains no advertising or ad networks.
+Whisperer uses the network for one purpose: downloading AI model weights.
 
-## Permissions Explained
+- Model weights are **data files**, not executable code. The transcription and language engines are
+  compiled into the app itself.
+- Models are downloaded from Hugging Face. The speech model is about 2.5 GB. The language model
+  used for meeting overviews is about 3.2 GB.
+- No personal information is transmitted during a download.
 
-Whisperer requires the following macOS permissions to function:
+Once the models are on disk, **transcription works completely offline**.
 
-### Microphone Access
-**Purpose**: Record your voice for transcription
+## Permissions
 
-The microphone permission allows the app to capture audio when you hold the recording shortcut. This audio is processed entirely on your device and is never transmitted over the network.
+### Microphone
 
-### Accessibility Permission (Optional)
-**Purpose**: Auto-paste transcribed text into applications
+**Purpose:** record your voice for transcription.
 
-If you enable the optional Auto-Paste feature, the Accessibility permission allows Whisperer to automatically paste transcribed text into the text field you're focused on. Without this permission, transcribed text is copied to your clipboard for manual pasting. This is a macOS system permission required for cross-application text pasting via simulated Cmd+V.
+Whisperer captures audio when you hold the recording shortcut, and during a meeting recording you
+start. That audio is processed on your device and is never transmitted.
 
-**Learn From My Corrections** is on by default and can be turned off at any time in Dictionary
-settings. When a word you fix qualifies, Whisperer adds it to your dictionary, tells you it did
-so, and offers Undo; undone words are never learned again.
+### Camera (optional, off by default)
 
-In every build, including the App Store build, this learns from two things, neither of which needs
-an additional permission: edits you make to a transcript in Whisperer's own History window, and
-words you fix yourself on the card Whisperer shows for a few seconds after a dictation. That card
-only teaches the dictionary — it does not change text that has already been inserted.
+**Purpose:** tell a video call apart from an app that is only using the microphone.
 
-Outside the App Store build, and only if you have also granted Accessibility for Auto-Paste, it
-additionally re-reads the same focused text field for up to about 30 seconds after a paste to
-notice isolated words you correct there. It stops as soon as focus leaves that app or the field
-changes identity. It does not monitor keys, inspect other windows, or send text over the network.
-Learned words and pending suggestions stay on device and can be deleted from Dictionary settings.
+Whisperer checks **whether** the camera is in use. It never captures, records, or views camera
+video. This signal improves meeting detection. It is off until you turn it on in Meeting settings,
+and the app works without it.
+
+## MCP Server
+
+Whisperer can run a local server that exposes your own transcript history to AI tools you already
+use, such as Claude, Cursor, and ChatGPT.
+
+- It is **off by default**. You turn it on in Settings.
+- It listens on **loopback only** by default, so only your own Mac can reach it.
+- It requires a **bearer token**. Requests without the token are rejected.
+- LAN access is a separate, explicit opt-in.
+- It serves your transcripts to the client you configure. Nothing is sent to us.
+
+## Open at Login
+
+The "Open at Login" setting uses the macOS `SMAppService` API. Whisperer installs no helper app and
+no background daemon. You can turn it off in Whisperer's settings or in System Settings → General →
+Login Items.
+
+## Learn From My Corrections
+
+This feature is on by default and can be turned off in Dictionary settings. When you fix a word,
+Whisperer may add it to your dictionary, tell you it did so, and offer Undo. An undone word is never
+learned again.
+
+Whisperer learns from two things: edits you make to a transcript in Whisperer's own History window,
+and words you fix on the card shown for a few seconds after a dictation. Learned words stay on your
+device and can be deleted from Dictionary settings. Nothing is sent over the network.
 
 ## Data Storage
 
-All data remains on your device:
+Everything stays on your device:
 
-- **AI Models**: Stored in `~/Library/Application Support/Whisperer/` (~500MB to 3GB depending on model)
-- **Audio Recordings**: Stored in `~/Library/Application Support/Whisperer/Recordings/` (always saved; auto-delete rules available in Settings)
-- **Dictionary**: Your learned words are stored in `~/Library/Application Support/Whisperer/` for offline use
-- **Settings**: Stored in macOS UserDefaults (locally)
-- **Optional Correction Candidates**: Stored in `~/Library/Application Support/Whisperer/correction-candidates.json` when you explicitly enable collection
-- **Logs**: Debug logs stored in `~/Library/Logs/Whisperer/` for troubleshooting
+| What | Where |
+|---|---|
+| AI models | `~/Library/Application Support/Whisperer/` |
+| Audio and transcripts | `~/Library/Application Support/Whisperer/Sessions/` |
+| Dictionary | `~/Library/Application Support/Whisperer/` |
+| Settings | macOS UserDefaults |
+| Logs | `~/Library/Logs/Whisperer/` |
 
-**No data is stored in iCloud or any cloud service.**
+**No data is stored in iCloud or any other cloud service.**
 
 ## In-App Purchases
 
-If you purchase the Pro Pack upgrade:
+The Pro Pack is a one-time purchase, not a subscription.
 
-- The purchase is processed through Apple's App Store
-- Apple handles all payment information according to their privacy policy
-- We receive only a notification that the purchase was completed
-- No payment information is accessible to us
+- Apple processes the purchase and handles all payment information under Apple's privacy policy.
+- Whisperer receives only a confirmation that the purchase completed.
+- No payment information is accessible to us.
+- Refunds are handled by Apple.
+
+## Open-Source Models
+
+Whisperer is built on open-source AI models released under permissive licenses that allow
+commercial use. The full list, with authors and licenses, is in the Acknowledgements screen in the
+app's settings.
 
 ## Children's Privacy
 
-Whisperer does not knowingly collect any information from children under 13. The app does not collect any personal information from users of any age.
-
-## Changes to This Policy
-
-We may update this privacy policy from time to time. Any changes will be posted at this URL with an updated "Last Updated" date. Continued use of the app after changes indicates acceptance of the updated policy.
+Whisperer does not knowingly collect information from children under 13. The app collects no
+personal information from users of any age.
 
 ## Your Rights
 
-Since we don't collect or store any personal data:
+Whisperer collects and stores no personal data on any server, so there is no personal data for us
+to access, modify, or delete. All app data is on your device. Deleting the app and the folders
+listed above removes all of it.
 
-- There is no personal data to access, modify, or delete
-- All app data is stored locally on your device
-- You can delete all app data by uninstalling the app or manually deleting the folders listed above
+## Changes to This Policy
+
+This policy may be updated. Changes are posted at this URL with a new "Last Updated" date.
 
 ## Contact
 
-For privacy questions or concerns:
-- **Email**: [Your Contact Email]
-- **Website**: [Your Website]
+For privacy questions: **support@whispererapp.com**
+Website: **https://whispererapp.com**
 
 ## Compliance
 
-Whisperer complies with:
 - Apple's App Store Review Guidelines
-- California Consumer Privacy Act (CCPA) - N/A as we collect no personal data
-- General Data Protection Regulation (GDPR) - N/A as we collect no personal data
+- CCPA — not applicable, as no personal data is collected
+- GDPR — not applicable, as no personal data is collected
 
 ---
 
-**Summary**: Whisperer is a privacy-first app. Everything happens on your device, nothing is sent to the cloud, and we don't collect any personal information.
+**Summary:** Whisperer is a privacy-first productivity app. Everything happens on your device,
+nothing goes to the cloud, and no personal information is collected.

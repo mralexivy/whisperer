@@ -91,12 +91,18 @@ final class MCPServerTests: XCTestCase {
         URL(string: "http://localhost:\(Self.testPort)/mcp")!
     }
 
+    /// The bearer token the server expects. Every MCP request must carry it.
+    private func authToken() async -> String {
+        await MainActor.run { AppState.shared.mcpBearerToken }
+    }
+
     /// POSTs a JSON-RPC request and returns the raw data + session ID.
     private func postRPC(_ body: [String: Any]) async throws -> (Data, String?) {
         var req = URLRequest(url: mcpURL())
         req.httpMethod = "POST"
         req.setValue("application/json, text/event-stream", forHTTPHeaderField: "Accept")
         req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        req.setValue("Bearer \(await authToken())", forHTTPHeaderField: "Authorization")
         req.httpBody = try JSONSerialization.data(withJSONObject: body)
         let (data, response) = try await URLSession.shared.data(for: req)
         let sessionID = (response as? HTTPURLResponse)?.value(forHTTPHeaderField: "MCP-Session-Id")
@@ -125,6 +131,63 @@ final class MCPServerTests: XCTestCase {
     }
 
     // MARK: - Tests
+
+    /// The server must refuse a request that carries no bearer token. Without this the
+    /// MCP endpoint would serve the user's whole transcript history to any local process.
+    func testRequestWithoutTokenIsRejected() async throws {
+        var req = URLRequest(url: mcpURL())
+        req.httpMethod = "POST"
+        req.setValue("application/json, text/event-stream", forHTTPHeaderField: "Accept")
+        req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        // Deliberately no Authorization header.
+        req.httpBody = try JSONSerialization.data(withJSONObject: [
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "initialize",
+            "params": [
+                "protocolVersion": "2025-03-26",
+                "capabilities": [:] as [String: Any],
+                "clientInfo": ["name": "MCPServerTests", "version": "1"],
+            ],
+        ])
+
+        let (data, _) = try await URLSession.shared.data(for: req)
+        let text = String(data: data, encoding: .utf8) ?? ""
+        XCTAssertTrue(
+            text.contains("Unauthorized"),
+            "Unauthenticated request must be rejected. Got: \(text.prefix(500))"
+        )
+        XCTAssertFalse(
+            text.contains("serverInfo"),
+            "Unauthenticated request must not receive a handshake. Got: \(text.prefix(500))"
+        )
+    }
+
+    /// A wrong token must be refused just as a missing one is.
+    func testRequestWithWrongTokenIsRejected() async throws {
+        var req = URLRequest(url: mcpURL())
+        req.httpMethod = "POST"
+        req.setValue("application/json, text/event-stream", forHTTPHeaderField: "Accept")
+        req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        req.setValue("Bearer not-the-real-token", forHTTPHeaderField: "Authorization")
+        req.httpBody = try JSONSerialization.data(withJSONObject: [
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "initialize",
+            "params": [
+                "protocolVersion": "2025-03-26",
+                "capabilities": [:] as [String: Any],
+                "clientInfo": ["name": "MCPServerTests", "version": "1"],
+            ],
+        ])
+
+        let (data, _) = try await URLSession.shared.data(for: req)
+        let text = String(data: data, encoding: .utf8) ?? ""
+        XCTAssertTrue(
+            text.contains("Unauthorized"),
+            "Request with a wrong token must be rejected. Got: \(text.prefix(500))"
+        )
+    }
 
     func testInitializeReturnsCapabilities() async throws {
         let (data, _) = try await postRPC([
@@ -166,6 +229,7 @@ final class MCPServerTests: XCTestCase {
         req.httpMethod = "POST"
         req.setValue("application/json, text/event-stream", forHTTPHeaderField: "Accept")
         req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        req.setValue("Bearer \(await authToken())", forHTTPHeaderField: "Authorization")
         req.setValue(sid, forHTTPHeaderField: "MCP-Session-Id")
         req.httpBody = try JSONSerialization.data(withJSONObject: [
             "jsonrpc": "2.0", "id": 2, "method": "tools/list", "params": [:] as [String: Any],
@@ -200,6 +264,7 @@ final class MCPServerTests: XCTestCase {
         req.httpMethod = "POST"
         req.setValue("application/json, text/event-stream", forHTTPHeaderField: "Accept")
         req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        req.setValue("Bearer \(await authToken())", forHTTPHeaderField: "Authorization")
         req.setValue(sid, forHTTPHeaderField: "MCP-Session-Id")
         req.httpBody = try JSONSerialization.data(withJSONObject: [
             "jsonrpc": "2.0", "id": 3,
@@ -233,6 +298,7 @@ final class MCPServerTests: XCTestCase {
         req.httpMethod = "POST"
         req.setValue("application/json, text/event-stream", forHTTPHeaderField: "Accept")
         req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        req.setValue("Bearer \(await authToken())", forHTTPHeaderField: "Authorization")
         req.setValue(sid, forHTTPHeaderField: "MCP-Session-Id")
         req.httpBody = try JSONSerialization.data(withJSONObject: [
             "jsonrpc": "2.0", "id": 4,
@@ -265,6 +331,7 @@ final class MCPServerTests: XCTestCase {
         req.httpMethod = "POST"
         req.setValue("application/json, text/event-stream", forHTTPHeaderField: "Accept")
         req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        req.setValue("Bearer \(await authToken())", forHTTPHeaderField: "Authorization")
         req.setValue(sid, forHTTPHeaderField: "MCP-Session-Id")
         req.httpBody = try JSONSerialization.data(withJSONObject: [
             "jsonrpc": "2.0", "id": 5,
