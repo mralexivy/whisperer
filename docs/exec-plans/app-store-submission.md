@@ -118,6 +118,12 @@ Every entitlement maps to a call site and a user-facing feature.
 | `com.apple.security.files.user-selected.read-write` | `NSOpenPanel` file picker | File transcription |
 | `com.apple.security.device.audio-input` | Microphone capture | Dictation and Meeting Notes |
 | `com.apple.security.device.camera` | `CameraUsageMonitor` presence check | Opt-in meeting detection booster |
+| `com.apple.security.files.user-selected.read-only` | Added by Xcode's `ENABLE_USER_SELECTED_FILES`, not by the entitlements file | File picker |
+
+The signed binary carries one entitlement that is **not** in `whisperer.entitlements`:
+`files.user-selected.read-only`. Xcode injects it from the `ENABLE_USER_SELECTED_FILES` build
+setting. It is legitimate and covered by the same file-picker justification, but expect it when
+diffing `codesign -d --entitlements` output against the file.
 
 **Note:** earlier revisions of this guide said `network.server` was "intentionally removed". That is
 stale. It is present, required by the MCP server, and justified above.
@@ -166,7 +172,7 @@ Acknowledgements screen provides.
 
 ```bash
 xcodebuild clean archive -project Whisperer.xcodeproj -scheme whisperer \
-  -configuration Release -destination "platform=macOS" \
+  -configuration AppStore -destination "platform=macOS" \
   -archivePath build/whisperer.xcarchive \
   ARCHS=arm64 \
   CODE_SIGN_ENTITLEMENTS=Whisperer/whisperer.entitlements \
@@ -176,7 +182,20 @@ xcodebuild -exportArchive -archivePath build/whisperer.xcarchive \
   -exportOptionsPlist build/ExportOptions.plist -exportPath build/export
 ```
 
-CRITICAL: Always `ARCHS=arm64` (FluidAudio fails on x86_64),
+**CRITICAL — use `-configuration AppStore`, not `Release`.** There are three configurations and
+only **AppStore** sets the `APP_STORE` flag
+(`SWIFT_ACTIVE_COMPILATION_CONDITIONS = "APP_STORE $(inherited)"`). Revisions of this guide before
+2.0 said `Release`, which is wrong: a Release archive still contains `autoPaste`,
+`Enable Auto-Paste`, and `AXUIElement` in the binary. That is precisely what got v1.1 (3) and
+v1.1 (5) rejected. Verified on 2026-10-13 by archiving both ways and running `strings`.
+
+| Configuration | `APP_STORE` | Use for |
+|---|---|---|
+| Debug | no | Development |
+| Release | no | Direct distribution outside the App Store |
+| **AppStore** | **yes** | **App Store submission** |
+
+Also always `ARCHS=arm64` (FluidAudio fails on x86_64),
 `CODE_SIGN_ENTITLEMENTS=Whisperer/whisperer.entitlements`, `ENABLE_APP_SANDBOX=YES`.
 
 ## Binary Verification
