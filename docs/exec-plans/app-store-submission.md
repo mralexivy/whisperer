@@ -64,6 +64,14 @@ feature that never captures a frame and produced no visible result. Now gated be
 responsible for obtaining consent from other participants where the law requires it. Persisted as
 `hasConsentedToMeetingRecording`. No recording path runs without it.
 
+**Recording indicator — verified.** 2.5.14 also requires a clear indication for the duration of
+the recording. The Island satisfies this: while recording it sits at `.peek`, which renders a
+208×30 pt nub with a dot, a level glow, and an elapsed clock (`IslandState.swift:31`,
+`IslandContentView.swift:15`). The reducer only allows `.peek` or larger for `.recording` and
+`.paused` (`IslandReducer.peekOrCompact`), and `.hidden` is reachable only when another surface —
+the MeetingLiveWindow — owns the meeting UI and shows the recording itself
+(`IslandReducer.swift:14`). There is no path where a recording runs with nothing on screen.
+
 ### MCP server hardened
 
 - `mcpEnabled` now defaults to **false**. A fresh install serves nothing.
