@@ -1,17 +1,28 @@
 import XCTest
+import CoreAudio
 @testable import whisperer
 
 final class PrivacyShieldControllerTests: XCTestCase {
+    func testAutomaticSelectionRejectsFeedbackRoutesAndInvalidRates() {
+        XCTAssertTrue(PrivacyShieldController.isPhysicalInput(transport: kAudioDeviceTransportTypeBuiltIn, rate: 48000))
+        XCTAssertTrue(PrivacyShieldController.isPhysicalInput(transport: kAudioDeviceTransportTypeUSB, rate: 44100))
+        XCTAssertFalse(PrivacyShieldController.isPhysicalInput(transport: kAudioDeviceTransportTypeVirtual, rate: 48000))
+        XCTAssertFalse(PrivacyShieldController.isPhysicalInput(transport: kAudioDeviceTransportTypeAggregate, rate: 48000))
+        XCTAssertFalse(PrivacyShieldController.isPhysicalInput(transport: kAudioDeviceTransportTypeBuiltIn, rate: .nan))
+    }
+
     @MainActor
-    func testHeadphonesRequiredBeforeOpeningAudio() {
+    func testImmediateCancellationDoesNotBeginSetup() async {
         let app = AppState.shared
-        let old = (app.privacyShield, app.privacyShieldHeadphones, app.state, app.pendingMeetingStarts)
-        defer { (app.privacyShield, app.privacyShieldHeadphones, app.state, app.pendingMeetingStarts) = old }
-        app.privacyShield = PrivacyShieldSnapshot()
-        app.privacyShieldHeadphones = false; app.state = .idle; app.pendingMeetingStarts = 0
+        let old = (app.privacyShield, app.state, app.pendingMeetingStarts)
+        defer { (app.privacyShield, app.state, app.pendingMeetingStarts) = old }
+        app.privacyShield = PrivacyShieldSnapshot(); app.state = .idle; app.pendingMeetingStarts = 0
         PrivacyShieldController.shared.start()
+        XCTAssertEqual(app.privacyShield.phase, .starting)
+        await PrivacyShieldController.shared.stop()
+        await Task.yield()
         XCTAssertEqual(app.privacyShield.phase, .off)
-        XCTAssertTrue(app.privacyShield.message.contains("headphones"))
+        XCTAssertFalse(app.privacyShieldInstallerBusy)
         XCTAssertFalse(shield_capture_blocked())
     }
 

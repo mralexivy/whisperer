@@ -120,7 +120,7 @@ class AudioDeviceManager: ObservableObject {
 
     // nonisolated static: pure CoreAudio C API calls, no instance state access.
     // Must be callable from background threads for deadlock-free HAL queries.
-    private nonisolated static func enumerateInputDevices() -> [AudioDevice] {
+    nonisolated static func enumerateInputDevices() -> [AudioDevice] {
         var propertyAddress = AudioObjectPropertyAddress(
             mSelector: kAudioHardwarePropertyDevices,
             mScope: kAudioObjectPropertyScopeGlobal,

@@ -8,32 +8,37 @@ import Foundation
 
 @MainActor
 extension PrivacyShieldController {
-    func installDriver(remove: Bool = false) {
-        #if !APP_STORE
-        guard AppState.shared.privacyShield.phase == .off, !AppState.shared.privacyShieldInstallerBusy else { return }
-        guard AppState.shared.state == .idle, AppState.shared.activeMeetingSession == nil,
-              AppState.shared.pendingMeetingStarts == 0 else {
-            AppState.shared.privacyShield.message = "Stop recording before changing the audio driver."
-            return
-        }
-        guard let root = Bundle.main.resourceURL?.appendingPathComponent("PrivacyShield"),
+    func prepareAudioSupport() async -> Bool {
+        #if APP_STORE
+        return false
+        #else
+        refreshDriver()
+        if AppState.shared.privacyShield.driverInstalled { return true }
+        guard !AppState.shared.privacyShieldInstallerBusy,
+              let root = Bundle.main.resourceURL?.appendingPathComponent("PrivacyShield"),
               FileManager.default.fileExists(atPath: root.appendingPathComponent("install-driver.sh").path) else {
-            AppState.shared.privacyShield.message = "Driver resources are missing. Rebuild the direct-download app."
-            return
+            AppState.shared.privacyShield.message = "Audio support is unavailable in this build."
+            return false
         }
         AppState.shared.privacyShieldInstallerBusy = true
-        AppState.shared.privacyShield.message = "Administrator authorization will appear. This restarts system audio; finish calls first."
-        let script = root.appendingPathComponent("install-driver.sh").path
-        let source = remove ? "--uninstall" : root.appendingPathComponent("WhispererAudio.driver").path
-        Task { [weak self] in
-            let success = await Self.runInstaller(script: script, source: source)
-            guard let self else { return }
-            AppState.shared.privacyShieldInstallerBusy = false
-            AppState.shared.privacyShield.message = success
-                ? (remove ? "Driver removed." : "Driver installed. Refresh devices, then select a microphone.")
-                : "Installation was cancelled or failed. Refresh devices to check the installed driver before retrying."
-            refreshDriver()
+        defer { AppState.shared.privacyShieldInstallerBusy = false }
+        AppState.shared.privacyShield.message = "Setting up audio support. Approve the macOS prompt to continue; this briefly restarts sound."
+        let success = await Self.runInstaller(script: root.appendingPathComponent("install-driver.sh").path,
+                                             source: root.appendingPathComponent("WhispererAudio.driver").path)
+        guard !Task.isCancelled else { return false }
+        guard success else {
+            AppState.shared.privacyShield.message = "Setup was cancelled or failed. Turn on again to retry."
+            return false
         }
+        // coreaudiod registers a new driver asynchronously after restarting.
+        for _ in 0..<40 {
+            refreshDriver()
+            if AppState.shared.privacyShield.driverInstalled { return true }
+            if Task.isCancelled { return false }
+            try? await Task.sleep(for: .milliseconds(250))
+        }
+        AppState.shared.privacyShield.message = "Audio support is taking longer to start. Turn on again to retry."
+        return false
         #endif
     }
 

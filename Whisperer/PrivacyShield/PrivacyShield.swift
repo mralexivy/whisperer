@@ -67,14 +67,13 @@ final class PrivacyShieldController {
     private var session: PrivacyAudioSession?
     private var monitor: Task<Void, Never>?
     private var generation = 0
-    private var modelURL: URL?
 
     private var snapshot: PrivacyShieldSnapshot {
         get { AppState.shared.privacyShield }
         set { AppState.shared.privacyShield = newValue }
     }
 
-    private static func inputFormat(_ device: AudioDeviceID) -> (rate: Double, transport: UInt32)? {
+    private nonisolated static func inputFormat(_ device: AudioDeviceID) -> (rate: Double, transport: UInt32)? {
         var address = AudioObjectPropertyAddress(mSelector: kAudioDevicePropertyNominalSampleRate,
             mScope: kAudioObjectPropertyScopeGlobal, mElement: kAudioObjectPropertyElementMain)
         var rate = 0.0
@@ -92,17 +91,24 @@ final class PrivacyShieldController {
         AudioDeviceManager.shared.refreshDevices()
     }
 
-    func chooseModel() {
-        guard (snapshot.phase == .off || snapshot.phase == .muted), session == nil else { return }
-        let panel = NSOpenPanel()
-        panel.title = "Choose an experimental compiled Core ML processor"
-        panel.canChooseDirectories = true; panel.canChooseFiles = true
-        panel.treatsFilePackagesAsDirectories = false
-        guard panel.runModal() == .OK, let url = panel.url, url.pathExtension == "mlmodelc" else { return }
-        modelURL = url; snapshot.modelName = url.deletingPathExtension().lastPathComponent
+    // Query HAL away from the UI thread; never feed a virtual route back into itself.
+    nonisolated static func physicalMicrophone() async -> AudioDeviceManager.AudioDevice? {
+        await withCheckedContinuation { continuation in
+            DispatchQueue.global(qos: .userInitiated).async {
+                let devices = AudioDeviceManager.enumerateInputDevices().filter {
+                    guard let format = inputFormat($0.id) else { return false }
+                    return isPhysicalInput(transport: format.transport, rate: format.rate)
+                }
+                let preferred = AudioDeviceManager.currentDefaultInputDeviceID()
+                continuation.resume(returning: devices.first { $0.id == preferred } ?? devices.first)
+            }
+        }
     }
 
-    func useBaseline() { guard (snapshot.phase == .off || snapshot.phase == .muted), session == nil else { return }; modelURL = nil; snapshot.modelName = nil }
+    nonisolated static func isPhysicalInput(transport: UInt32, rate: Double) -> Bool {
+        transport != kAudioDeviceTransportTypeVirtual && transport != kAudioDeviceTransportTypeAggregate
+            && rate.isFinite && (8000...192000).contains(rate)
+    }
 
     func start() {
         #if APP_STORE
@@ -115,44 +121,42 @@ final class PrivacyShieldController {
             snapshot.message = "Stop the current recording before enabling Privacy Shield."
             return
         }
-        guard app.privacyShieldHeadphones else {
-            snapshot.message = "Use headphones and confirm below. Speaker echo cancellation is not available in this version."
-            return
-        }
-        refreshDriver()
-        guard let output = AudioDeviceManager.resolveDeviceIDByUID(Self.deviceUID) else {
-            snapshot.message = "Install the Whisperer audio driver, then refresh devices."
-            return
-        }
-        guard let input = AudioDeviceManager.resolveDeviceIDByUID(app.privacyShieldInputUID), input != output else {
-            snapshot.message = "Choose a connected physical microphone."
-            return
-        }
-        guard let format = Self.inputFormat(input), format.transport != kAudioDeviceTransportTypeVirtual else {
-            snapshot.message = "Choose a physical microphone rather than another virtual audio route."
-            return
-        }
         generation += 1; let token = generation
         snapshot.phase = .starting
-        snapshot.message = "Starting. The virtual microphone stays silent until processed audio is ready."
+        snapshot.message = "Finding your microphone…"
         snapshot.resetMetrics()
+        snapshot.microphoneName = nil
         let runner = PrivacyAudioSession(); session = runner
-        let selectedModel = modelURL
-        let strength = Float(app.privacyShieldStrength)
-        let uid = app.privacyShieldInputUID
         monitor = Task { [weak self] in
             guard let self else { return }
-            let allowed = await AVCaptureDevice.requestAccess(for: .audio)
-            guard token == generation else { await runner.stop(); return }
             do {
-                guard allowed else { throw PrivacyShieldError.unavailable("Microphone permission is required. Enable it in System Settings.") }
-                try await runner.start(input: input, output: output, model: selectedModel, strength: strength)
+                try Task.checkCancellation()
+                let allowed = await AVCaptureDevice.requestAccess(for: .audio)
                 guard token == generation else { await runner.stop(); return }
+                guard allowed else { throw PrivacyShieldError.unavailable("Microphone permission is required. Enable it in System Settings.") }
+                guard await prepareAudioSupport() else {
+                    throw PrivacyShieldError.unavailable(snapshot.message)
+                }
+                guard token == generation else { await runner.stop(); return }
+                try Task.checkCancellation()
+                guard let microphone = await Self.physicalMicrophone(),
+                      let format = Self.inputFormat(microphone.id),
+                      let output = AudioDeviceManager.resolveDeviceIDByUID(Self.deviceUID) else {
+                    throw PrivacyShieldError.unavailable("No microphone is available. Connect one, then turn this off and on to retry.")
+                }
+                guard token == generation else { await runner.stop(); return }
+                let input = microphone.id, uid = microphone.uid
+                snapshot.microphoneName = microphone.name
+                snapshot.message = "Checking audio from your microphone…"
+                try await runner.start(input: input, output: output, model: nil, strength: 0.35)
+                guard token == generation else { await runner.stop(); return }
+                var lastReceived: UInt64 = 0
+                var stalledPolls = 0
                 while !Task.isCancelled, token == generation {
                     guard AudioDeviceManager.resolveDeviceIDByUID(uid) == input,
                           AudioDeviceManager.resolveDeviceIDByUID(Self.deviceUID) == output,
                           Self.inputFormat(input)?.rate == format.rate else {
-                        throw PrivacyShieldError.unavailable("An audio device disconnected or changed. The virtual microphone is muted; choose a microphone and retry.")
+                        throw PrivacyShieldError.unavailable("An audio device disconnected or changed. The virtual microphone is muted; turn this off and on to reconnect automatically.")
                     }
                     if let metrics = await runner.metrics() {
                         guard token == generation, !Task.isCancelled else { break }
@@ -163,9 +167,17 @@ final class PrivacyShieldController {
                         snapshot.maximumProcessingMS = metrics.maximumProcessingMilliseconds
                         snapshot.overBudgetBlocks = metrics.overBudgetBlocks
                         snapshot.underruns = metrics.underruns
-                        if metrics.processedBlocks >= 3 {
+                        snapshot.receivedFrames = metrics.receivedFrames
+                        stalledPolls = metrics.receivedFrames == lastReceived ? stalledPolls + 1 : 0
+                        lastReceived = metrics.receivedFrames
+                        guard stalledPolls < 12 else {
+                            throw PrivacyShieldError.unavailable("The virtual microphone stopped receiving audio. Turn this off and on to retry.")
+                        }
+                        if metrics.processedBlocks >= 3 && metrics.receivedSignalFrames > 0 {
                             snapshot.phase = .active
-                            snapshot.message = "Experimental processing active. Select Whisperer Virtual Mic in your call. Resistance to transcription is unverified."
+                            snapshot.message = "Audio verified at Whisperer Virtual Mic. Choose it in your call to use the effect. Transcription protection is not verified."
+                        } else {
+                            snapshot.message = "Listening… Speak to verify audio reaches the virtual microphone."
                         }
                     }
                     try await Task.sleep(for: .milliseconds(250))

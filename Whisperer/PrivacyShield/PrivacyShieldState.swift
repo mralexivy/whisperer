@@ -4,7 +4,7 @@ import Foundation
 struct PrivacyShieldSnapshot: Equatable {
     enum Phase: String { case off, starting, active, muted, stopping }
     var phase: Phase = .off
-    var message = "Experimental. Transcription resistance has not been validated."
+    var message = "Off. Your microphone is selected automatically when you turn this on."
     var blocks: UInt64 = 0
     var processingMS: Double = 0
     var maximumProcessingMS: Double = 0
@@ -13,8 +13,10 @@ struct PrivacyShieldSnapshot: Equatable {
     var queuedMS: Double = 0
     var driverInstalled = false
     var modelName: String?
+    var microphoneName: String?
+    var receivedFrames: UInt64 = 0
     mutating func resetMetrics() {
-        blocks = 0; processingMS = 0; queuedMS = 0
+        receivedFrames = 0; blocks = 0; processingMS = 0; queuedMS = 0
         maximumProcessingMS = 0; overBudgetBlocks = 0; underruns = 0
     }
     var menuActionTitle: String {

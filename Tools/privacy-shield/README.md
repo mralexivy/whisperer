@@ -3,7 +3,7 @@
 This branch implements local microphone processing and a virtual microphone. It
 **does not contain a trained anti-transcription model or establish efficacy**.
 The bundled DSP is a reproducible amplitude-modulation/noise baseline, deliberately
-labelled unvalidated. A compatible compiled Core ML model can be loaded explicitly.
+labelled unvalidated. The developer processor supports compatible compiled Core ML models; normal Settings require no model management.
 No competitor binary, code or model is reused. libASPL is MIT-licensed upstream code.
 
 ## Build and use
@@ -14,23 +14,24 @@ project's normal dependencies. The AppStore configuration excludes the driver an
 installation controls. The external CMake build runs in its own aggregate target;
 the app target retains its existing script-sandbox settings. The project currently targets macOS 26.2, inherited unchanged.
 
-1. Build and launch the direct-download app.
-2. Open the **Privacy Shield** app menu → **Privacy Shield Settings…**, or the menu-bar popover settings. Finish active calls before clicking **Install
-   driver (restarts audio)…**. macOS requests administrator authorization. The
-   driver installs under `/Library/Audio/Plug-Ins/HAL/WhispererAudio.driver`.
-3. Refresh devices, select a physical microphone and confirm headphones are in use.
-4. Choose the baseline strength or load a compatible `.mlmodelc` package.
-5. Enable processing, then select **Whisperer Virtual Mic** as the microphone in the
-   calling application. Keep normal headphones selected as the speaker output.
-6. Enable/disable in Settings, the right-click menu, or the app menu. Privacy Shield
-   does not appear on the Status tab or above the popover tabs.
-   When finished, turn processing off. The virtual mic becomes silent. Select your
-   physical microphone in the call to resume unprocessed audio. Removal is available
-   while off and also restarts system audio.
+1. Build and launch the normally signed direct-download app.
+2. Open **Settings → Privacy Shield** and turn on its single toggle. On first use,
+   audio support is installed automatically if missing. Finish calls first: macOS
+   may request administrator authentication and audio briefly restarts.
+3. The system-default physical microphone is selected automatically, with a connected
+   physical input as fallback. Virtual and aggregate inputs are excluded to avoid feedback.
+   No microphone picker, refresh button, model loader, strength slider or headphone checkbox is needed.
+4. Speak. A separate HAL reader checks the virtual input for live nonzero samples before
+   showing “Audio verified.” A stalled reader or processing error mutes the route.
+5. Calling apps still need **Whisperer Virtual Mic** selected as their input. Their
+   independent microphone settings cannot be inferred from our route check.
+6. Turn the toggle off to stop processing. The virtual microphone becomes silent;
+   select your physical input in the calling app to resume unprocessed audio.
 
-The first implementation intentionally requires headphones. System playback tap /
-WebRTC speaker echo cancellation is **not implemented**. This is a visible unsupported
-configuration, not a silent fallback. Do not use speaker mode to evaluate efficacy.
+Privacy Shield appears in Settings, with shortcuts in the app and right-click menus.
+It does not appear on Status. Use headphones: speaker echo cancellation is not implemented.
+The built-in effect **failed transcription resistance tests**. A successful audio check
+verifies the route, not anti-transcription protection.
 
 Do not interpret “active” as verification that a meeting app selected the virtual
 mic. Apps can independently switch their input, and all claims are confined to our
@@ -246,3 +247,16 @@ regenerates the embedded model fixture if coremltools is installed; normal test 
 need no Python ML package. An unexpected test-host crash was isolated to destruction
 of temporary MainActor controller instances in synchronous XCTest methods; tests now
 use the actual singleton, and its initializer is private to enforce that lifecycle.
+
+### Single-toggle follow-up validation
+
+The simplified Settings flow passed 12 signed app-host tests (including immediate
+cancellation and rejection of virtual/aggregate input routes). Offline native,
+driver, seven standalone Swift, and six Python tests passed. The 30-second worker
+run processed 3,004 blocks with zero underruns and a 1.004 ms worst block under
+sanitizers; optimized 48 kHz processing measured 0.0242 ms p99 per 10 ms block.
+Opening the standalone settings window exposed an AppKit constraint loop; giving
+the hosting controller a fixed window-owned size fixed the reproduced crash.
+The rebuilt UI was opened successfully and its single toggle reached automatic
+setup. Live HAL verification is pending macOS administrator authentication because
+the existing driver bundle is present on disk but is not registered as a device.

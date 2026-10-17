@@ -87,9 +87,6 @@ class AppState: ObservableObject {
     @Published var privacyShieldInstallerBusy = false {
         didSet { shield_set_capture_blocked(privacyShield.blocksTranscription || privacyShieldInstallerBusy) }
     }
-    @Published var privacyShieldInputUID = ""
-    @Published var privacyShieldStrength = 0.35
-    @Published var privacyShieldHeadphones = false
 
     func allowCaptureOutsidePrivacyShield() -> Bool {
         guard !privacyShieldInstallerBusy else {

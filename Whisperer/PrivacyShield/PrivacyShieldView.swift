@@ -1,78 +1,45 @@
-//
-//  PrivacyShieldView.swift
-//  Whisperer
-//
-//  Explicit experimental routing controls, using the existing navy palette.
-//
+// Privacy Shield's everyday controls. Setup is owned by the controller.
 import SwiftUI
 
 struct PrivacyShieldView: View {
     @ObservedObject private var app = AppState.shared
-    @ObservedObject private var devices = AudioDeviceManager.shared
-    private var busy: Bool { app.privacyShield.phase != .off && app.privacyShield.phase != .muted }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack {
-                Text("EXPERIMENTAL").font(.caption2.bold()).foregroundStyle(MBColors.accentPurple)
-                Spacer()
-                Text(app.privacyShield.phase.rawValue.capitalized).font(.caption.bold()).foregroundStyle(MBColors.textPrimary)
-            }
-            Text(app.privacyShield.message).font(.caption).foregroundStyle(MBColors.textSecondary).fixedSize(horizontal: false, vertical: true)
+        VStack(alignment: .leading, spacing: 10) {
             #if !APP_STORE
-            Picker("Microphone", selection: $app.privacyShieldInputUID) {
-                Text("Choose a microphone").tag("")
-                ForEach(devices.availableInputDevices.filter { $0.uid != PrivacyShieldController.deviceUID }, id: \.uid) { device in
-                    Text(device.name).tag(device.uid)
+            Toggle("Privacy Shield", isOn: Binding(
+                get: { app.privacyShield.blocksTranscription },
+                set: { enabled in
+                    if enabled { PrivacyShieldController.shared.start() }
+                    else { Task { await PrivacyShieldController.shared.stop() } }
+                }))
+                .toggleStyle(.switch)
+                .tint(MBColors.accent)
+                .disabled(app.privacyShield.phase == .stopping || (app.privacyShieldInstallerBusy && app.privacyShield.phase == .off))
+            HStack(spacing: 8) {
+                if app.privacyShield.phase == .starting || app.privacyShield.phase == .stopping {
+                    ProgressView().controlSize(.small)
+                } else {
+                    Image(systemName: app.privacyShield.phase == .active ? "waveform" : "shield.lefthalf.filled")
+                        .foregroundStyle(MBColors.accentPurple)
                 }
-            }.disabled(busy)
-            Toggle("I am using headphones", isOn: $app.privacyShieldHeadphones).tint(MBColors.accent).disabled(busy)
-            HStack {
-                Text(app.privacyShield.modelName ?? "DSP baseline (unvalidated)").font(.caption)
-                Spacer()
-                Button("Load model…") { PrivacyShieldController.shared.chooseModel() }.disabled(busy)
+                Text(app.privacyShield.message).font(.caption)
+                    .foregroundStyle(MBColors.textSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
             }
-            if app.privacyShield.modelName == nil {
-                HStack {
-                    Text("Effect strength").font(.caption)
-                    Slider(value: $app.privacyShieldStrength, in: 0.1...1).tint(MBColors.accent).disabled(busy)
-                }
-            } else {
-                Button("Use DSP baseline") { PrivacyShieldController.shared.useBaseline() }.disabled(busy)
+            if let name = app.privacyShield.microphoneName, app.privacyShield.blocksTranscription {
+                Text("Microphone: \(name) · automatic")
+                    .font(.caption2).foregroundStyle(MBColors.textSecondary)
             }
-            HStack {
-                Button(app.privacyShield.phase == .muted ? "Retry" : "Enable processing") { PrivacyShieldController.shared.start() }
-                    .disabled(busy || !app.privacyShield.driverInstalled)
-                if app.privacyShield.blocksTranscription {
-                    Button("Turn off") { Task { await PrivacyShieldController.shared.stop() } }
-                        .disabled(app.privacyShield.phase == .stopping)
-                }
-                Spacer()
-                Button("Refresh devices") { PrivacyShieldController.shared.refreshDriver() }.disabled(busy)
+            if !app.privacyShield.driverInstalled && app.privacyShield.phase == .off {
+                Text("First use sets up audio support and briefly restarts sound. macOS may ask for your password. Finish calls before turning it on.")
+                    .font(.caption2).foregroundStyle(MBColors.textSecondary)
             }
-            if !app.privacyShield.driverInstalled {
-                Button(app.privacyShieldInstallerBusy ? "Installing…" : "Install driver (restarts audio)…") {
-                    PrivacyShieldController.shared.installDriver()
-                }.disabled(app.privacyShieldInstallerBusy || app.privacyShield.phase != .off)
-                Text("Installation needs administrator access. Finish calls first.")
-                    .font(.caption).foregroundStyle(MBColors.textSecondary)
-            }
-            if app.privacyShield.driverInstalled && app.privacyShield.phase == .off {
-                Button("Remove driver (restarts audio)…") { PrivacyShieldController.shared.installDriver(remove: true) }
-                    .disabled(app.privacyShieldInstallerBusy)
-            }
-            if app.privacyShield.blocks > 0 {
-                Text(String(format: "Last block: %.1f ms · queued audio: %.1f ms", app.privacyShield.processingMS, app.privacyShield.queuedMS))
-                    .font(.caption.monospacedDigit()).foregroundStyle(MBColors.textSecondary)
-            }
-            if app.privacyShield.blocks > 0 {
-                Text(String(format: "Peak block: %.2f ms · over 10 ms: %llu · underruns: %llu", app.privacyShield.maximumProcessingMS, app.privacyShield.overBudgetBlocks, app.privacyShield.underruns))
-                    .font(.caption.monospacedDigit()).foregroundStyle(MBColors.textSecondary)
-            }
-            Text("While enabled, Whisperer blocks new dictation and meeting recordings. Failures mute this virtual mic. A call may switch to another mic independently. This does not prevent recording.")
-                .font(.caption2).foregroundStyle(MBColors.textSecondary).fixedSize(horizontal: false, vertical: true)
+            Text("Experimental audio effect. It did not prevent transcription in our tests. Use headphones; speaker echo cancellation is not available.")
+                .font(.caption2).foregroundStyle(MBColors.textSecondary)
+                .fixedSize(horizontal: false, vertical: true)
             #else
-            Text("Available only in the direct-download build.").font(.caption)
+            Text("Available in the direct-download version.").font(.caption)
             #endif
         }
         .foregroundStyle(MBColors.textPrimary)

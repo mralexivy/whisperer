@@ -522,14 +522,17 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     @objc func showPrivacyShieldSettings() {
         if privacySettingsWindow == nil {
-            let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 460, height: 500),
+            let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 460, height: 300),
                                   styleMask: [.titled, .closable], backing: .buffered, defer: false)
             window.title = "Privacy Shield — Experimental"
             window.appearance = NSAppearance(named: .darkAqua)
             window.isReleasedWhenClosed = false
-            window.contentViewController = NSHostingController(rootView:
-                PrivacyShieldView().padding(24).frame(width: 460)
+            let controller = NSHostingController(rootView:
+                PrivacyShieldView().padding(24).frame(width: 460, height: 300, alignment: .topLeading)
                     .background(MBColors.background).environment(\.colorScheme, .dark))
+            // The window owns its size; avoid SwiftUI intrinsic-size feedback during status updates.
+            controller.sizingOptions = []
+            window.contentViewController = controller
             window.center()
             privacySettingsWindow = window
         }
