@@ -307,3 +307,14 @@ restart failure and general setup failure have different messages. The password
 prompt identifies Whisperer's microphone setup. Seven controller tests and three
 mocked restart-script tests passed; the AppleScript prompt compiled successfully.
 Live verification of this correction is waiting for administrator authentication.
+
+
+### Live installer verification (2026-10-17, 11:16 Asia/Jerusalem)
+
+Following the repository's xcode-debug-logs skill separated the terminated 11:11
+Xcode session (PID 56675) from the current app (PID 58068). Live rolling and system
+logs confirmed coreaudiod restarted from PID 479 to 58316, the driver registered,
+virtual input/output streams started and device 245 became the system default.
+The UI reached Ready with the toggle on. Switching off restored the MacBook
+microphone; enabling again reached Ready without a password or reinstall prompt.
+This closes the installer/startup failure, not receiver-side call or efficacy tests.
