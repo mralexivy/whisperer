@@ -396,6 +396,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func gracefulShutdown() async {
+        await PrivacyShieldController.shared.stop()
         // 0. Stop the retention sweep before anything else — it must not start deleting
         // records while the rest of this sequence is tearing the pipeline down.
         await MainActor.run {
@@ -563,6 +564,7 @@ enum SettingsScrollTarget: String {
     case dictation
     case microphone
     case livePreview
+    case privacyShield
 }
 
 struct MenuBarView: View {
@@ -1036,6 +1038,12 @@ struct StatusTabView: View {
     var body: some View {
         ScrollView(showsIndicators: false) {
             VStack(alignment: .leading, spacing: 16) {
+                if appState.privacyShield.blocksTranscription {
+                    infoCard(icon: "waveform.badge.mic", title: "Privacy Shield",
+                             value: appState.privacyShield.phase.rawValue.capitalized,
+                             detail: "Experimental · new recordings blocked", color: MBColors.accentPurple,
+                             navigateTo: .settings, scrollTo: .privacyShield)
+                }
                 // Permission warning banner (mode-aware)
                 if showPermissionWarning {
                     permissionWarningBanner
@@ -2445,6 +2453,11 @@ struct SettingsTabView: View {
                     MicrophonePickerView()
                 }
                 .id(SettingsScrollTarget.microphone)
+
+                settingsCard(title: "Privacy Shield", icon: "waveform.badge.mic", color: MBColors.accentPurple) {
+                    PrivacyShieldView()
+                }
+                .id(SettingsScrollTarget.privacyShield)
 
                 // Permissions
                 settingsCard(title: "Permissions", icon: "lock.shield.fill", color: .red) {

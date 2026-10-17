@@ -331,6 +331,7 @@ class AudioRecorder: NSObject {
     /// producing audio: `.dictation` gives up quickly, `.longForm` never gives up while the
     /// session is open. Pass `.longForm` for meetings and in-app recording.
     func startRecording(route: ResolvedInputRoute, recovery: RecoveryPolicy = .dictation) async throws -> URL {
+        guard !shield_capture_blocked() else { throw PrivacyShieldError.unavailable("Privacy Shield blocks recording.") }
         recoveryAttemptCount = 0
         recoveryPolicy = recovery
         hasEverReceivedNonSilentAudio = false
@@ -479,6 +480,8 @@ class AudioRecorder: NSObject {
         }
 
         guard isGenerationCurrent(generation) else { throw RecordingError.engineCleanedUp }
+
+        guard !shield_capture_blocked() else { throw PrivacyShieldError.unavailable("Privacy Shield blocks recording.") }
 
         // Prepare output URL
         let tempDir = FileManager.default.temporaryDirectory
@@ -665,6 +668,7 @@ class AudioRecorder: NSObject {
     // MARK: - Sample delivery (called from CoreAudio real-time thread via actor tap)
 
     private func deliverSamples(_ samples: [Float]) {
+        guard !shield_capture_blocked() else { return }
         guard isRecording else { return }  // skip callbacks after stop
 
         let isFirst = lastAudioCallbackTime == nil
@@ -724,7 +728,7 @@ class AudioRecorder: NSObject {
             }
             let captured = buf
             sessionWriteQueue.async { [weak self] in
-                guard let self, let writer = self.sessionAudioWriter else { return }
+                guard !shield_capture_blocked(), let self, let writer = self.sessionAudioWriter else { return }
                 do {
                     try writer.write(captured)
                 } catch {

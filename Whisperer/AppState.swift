@@ -80,6 +80,24 @@ class AppState: ObservableObject {
     let waveformState = WaveformState()
     @Published var errorMessage: String?
 
+    @Published var privacyShield = PrivacyShieldSnapshot() {
+        didSet { shield_set_capture_blocked(privacyShield.blocksTranscription) }
+    }
+    var pendingMeetingStarts = 0
+    @Published var privacyShieldInstallerBusy = false
+    @Published var privacyShieldInputUID = ""
+    @Published var privacyShieldStrength = 0.35
+    @Published var privacyShieldHeadphones = false
+
+    func allowCaptureOutsidePrivacyShield() -> Bool {
+        guard !privacyShield.blocksTranscription else {
+            errorMessage = "Turn off Privacy Shield before starting dictation or a meeting recording."
+            return false
+        }
+        return true
+    }
+
+
     /// Non-nil while the microphone is failing to deliver audio. Drives the Island's `.failed`
     /// row, which is the only failure surface that outlives `state == .idle` — the overlay
     /// panel and its silent-meeting toast both disappear the moment capture resets, which is
@@ -3203,6 +3221,7 @@ class AppState: ObservableObject {
 
     /// Start recording in in-app mode (no text entry into other apps, no Accessibility required)
     func startInAppRecording() {
+        guard allowCaptureOutsidePrivacyShield() else { return }
         // Show loading indicator if model isn't ready (works even during download)
         #if canImport(FluidAudio)
         let inAppBackend = effectiveInAppBackend
@@ -3761,6 +3780,7 @@ class AppState: ObservableObject {
     // MARK: - State Transitions
 
     func startRecording() {
+        guard allowCaptureOutsidePrivacyShield() else { return }
         // No dictation on top of a meeting. `state == .idle` below already swallows this while a
         // meeting is capturing, but not while one is stopping or between its internal state hops,
         // and a dictation started there would seize the recorder out from under the meeting.
@@ -5293,6 +5313,7 @@ class AppState: ObservableObject {
     #endif
 
     func startMeetingRecording(session: MeetingSession, surface: MeetingLiveSurface) {
+        guard allowCaptureOutsidePrivacyShield() else { return }
         guard state == .idle else {
             Logger.warning("Cannot start meeting recording — AppState not idle", subsystem: .app)
             return

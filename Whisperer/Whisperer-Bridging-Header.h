@@ -15,5 +15,6 @@
 
 #import "Core/ObjCExceptionCatcher.h"
 #include <dns_sd.h>
+#include "PrivacyShield/Native/ShieldAudio.h"
 
 #endif /* Whisperer_Bridging_Header_h */
