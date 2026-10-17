@@ -25,7 +25,7 @@ final class PrivacyAudioProcessor {
             }
             self.model = model
             let array = try MLMultiArray(shape: [1, 480], dataType: .float32)
-            for i in 0..<480 { array[i] = 0 }
+            array.dataPointer.assumingMemoryBound(to: Float.self).initialize(repeating: 0, count: 480)
             input = array
             features = try MLDictionaryFeatureProvider(dictionary: ["audio": MLFeatureValue(multiArray: array)])
             baseline = nil
@@ -49,11 +49,22 @@ final class PrivacyAudioProcessor {
         return autoreleasepool {
             if let model, let input, let features {
                 do {
-                    for i in 0..<480 { input[i] = NSNumber(value: source[i]) }
+                    // The input is our own contiguous float32 allocation. Avoid
+                    // 480 NSNumber allocations per 10 ms inference block.
+                    let values = input.dataPointer.assumingMemoryBound(to: Float.self)
+                    for i in 0..<480 { values[i] = source[i].isFinite ? min(1, max(-1, source[i])) : 0 }
                     let result = try model.prediction(from: features)
                     guard let audio = result.featureValue(for: "processed")?.multiArrayValue,
-                          audio.count == 480 else { return false }
-                    for i in 0..<480 { destination[i] = audio[i].floatValue }
+                          audio.dataType == .float32,
+                          audio.shape.map(\.intValue) == [1, 480] else { return false }
+                    let samples = audio.dataPointer.assumingMemoryBound(to: Float.self)
+                    let stride = audio.strides[1].intValue
+                    guard stride > 0 else { return false }
+                    for i in 0..<480 {
+                        let sample = samples[i * stride]
+                        guard sample.isFinite else { return false }
+                        destination[i] = sample
+                    }
                     return true
                 } catch { return false }
             }

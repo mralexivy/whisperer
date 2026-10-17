@@ -5,6 +5,7 @@
 #include <chrono>
 #include <thread>
 #include <memory>
+#include <pthread.h>
 using Clock=std::chrono::steady_clock;
 static std::atomic<bool> captureBlocked{false};
 extern "C" void shield_set_capture_blocked(bool blocked) { captureBlocked.store(blocked); }
@@ -17,9 +18,11 @@ struct ShieldAudio {
     std::atomic<bool> running{false}, primed{false};
     std::atomic<int32_t> error{0};
     std::atomic<uint64_t> processed{0}, underruns{0};
-    std::atomic<double> processingMs{0};
+    std::atomic<double> processingMs{0}, maximumMs{0};
+    std::atomic<uint64_t> overBudget{0};
     std::thread worker;
     double inputRate=48000;
+    uint32_t targetFrames=1440;
     ShieldProcess processor=nullptr; void* context=nullptr;
     void fail(int32_t code) { int32_t expected=0; error.compare_exchange_strong(expected,code); }
 };
@@ -71,32 +74,24 @@ static OSStatus setupUnit(AudioUnit& unit,AudioDeviceID device,bool capture,doub
     if(!status) status=AudioUnitInitialize(unit);
     return status;
 }
-extern "C" ShieldAudio* shield_audio_create() { return new ShieldAudio; }
-extern "C" int32_t shield_audio_start(ShieldAudio* s,uint32_t input,uint32_t output,ShieldProcess process,void* ctx) {
-    if(!s || s->input || s->output || !process || input==output) return -7006;
-    AudioObjectPropertyAddress address{kAudioDevicePropertyNominalSampleRate,kAudioObjectPropertyScopeGlobal,kAudioObjectPropertyElementMain};
-    UInt32 n=sizeof(double);
-    OSStatus status=AudioObjectGetPropertyData(input,&address,0,nullptr,&n,&s->inputRate);
-    if(status || !std::isfinite(s->inputRate) || s->inputRate<8000 || s->inputRate>192000) return status?status:-7007;
-    s->processor=process; s->context=ctx;
-    status=setupUnit(s->input,input,true,s->inputRate,s);
-    if(!status) status=setupUnit(s->output,output,false,shield::rate,s);
-    if(status) { shield_audio_stop(s); return status; }
-    s->running=true;
-    s->worker=std::thread([s] {
+static void runWorker(ShieldAudio* s) {
+        pthread_set_qos_class_self_np(QOS_CLASS_USER_INITIATED,0);
         std::array<float,shield::block> in{},out{};
         auto last=Clock::now();
         while(s->running.load() && !s->error.load()) {
             // Compensate independent input/output clocks with a bounded rate correction.
-            double drift=s->primed.load()?std::clamp((double(s->playback.size())-1440)/1440000.,-.001,.001):0;
+            double drift=s->primed.load()?std::clamp((double(s->playback.size())-s->targetFrames)/1440000.,-.001,.001):0;
+            auto blockStart=Clock::now();
             if(!s->resampler.render(s->capture,s->inputRate*(1+drift),in.data(),in.size())) {
                 if(Clock::now()-last>std::chrono::seconds(2)) s->fail(-7008);
                 std::this_thread::sleep_for(std::chrono::milliseconds(1)); continue;
             }
             last=Clock::now();
             if(!s->processor(s->context,in.data(),out.data(),uint32_t(out.size()))) {s->fail(-7009);break;}
-            double elapsed=std::chrono::duration<double,std::milli>(Clock::now()-last).count();
+            double elapsed=std::chrono::duration<double,std::milli>(Clock::now()-blockStart).count();
             s->processingMs=elapsed;
+            s->maximumMs=std::max(s->maximumMs.load(),elapsed);
+            if(elapsed>10) s->overBudget.fetch_add(1);
             if(elapsed>100) {s->fail(-7010);break;}
             bool valid=true;
             for(float& x:out) {if(!std::isfinite(x)) {valid=false;break;} x=std::clamp(x,-.98f,.98f);}
@@ -104,9 +99,33 @@ extern "C" int32_t shield_audio_start(ShieldAudio* s,uint32_t input,uint32_t out
             if(s->capture.size()/s->inputRate>.1 || s->playback.size()>4800) {s->fail(-7012);break;}
             if(!s->playback.push(out.data(),out.size())) {s->fail(-7013);break;}
             s->processed.fetch_add(1);
-            if(s->playback.size()>=1440) s->primed=true;
+            if(s->playback.size()>=s->targetFrames) s->primed=true;
         }
-    });
+}
+extern "C" ShieldAudio* shield_audio_create() { return new ShieldAudio; }
+extern "C" int32_t shield_audio_start(ShieldAudio* s,uint32_t input,uint32_t output,ShieldProcess process,void* ctx) {
+    if(!s || s->input || s->output || !process || input==output) return -7006;
+    AudioObjectPropertyAddress address{kAudioDevicePropertyNominalSampleRate,kAudioObjectPropertyScopeGlobal,kAudioObjectPropertyElementMain};
+    UInt32 n=sizeof(double);
+    OSStatus status=AudioObjectGetPropertyData(input,&address,0,nullptr,&n,&s->inputRate);
+    if(status || !std::isfinite(s->inputRate) || s->inputRate<8000 || s->inputRate>192000) return status?status:-7007;
+    // Hardware input can arrive in larger bursts than the output callback.
+    // Prime enough for both periods; reject configurations outside our latency cap.
+    address.mSelector=kAudioDevicePropertyBufferFrameSize;
+    UInt32 inputFrames=0,outputFrames=0; n=sizeof(UInt32);
+    status=AudioObjectGetPropertyData(input,&address,0,nullptr,&n,&inputFrames);
+    if(!status) status=AudioObjectGetPropertyData(output,&address,0,nullptr,&n,&outputFrames);
+    if(status) return status;
+    double target=std::ceil(inputFrames/s->inputRate*shield::rate)+outputFrames+shield::block;
+    if(!inputFrames || !outputFrames || inputFrames>8192 || target>3840) return -7014;
+    s->targetFrames=std::max(1440u,uint32_t(target));
+    s->resampler.prepare(s->inputRate);
+    s->processor=process; s->context=ctx;
+    status=setupUnit(s->input,input,true,s->inputRate,s);
+    if(!status) status=setupUnit(s->output,output,false,shield::rate,s);
+    if(status) { shield_audio_stop(s); return status; }
+    s->running=true;
+    s->worker=std::thread(runWorker,s);
     status=AudioOutputUnitStart(s->output);
     if(!status) status=AudioOutputUnitStart(s->input);
     if(status) shield_audio_stop(s);
@@ -124,7 +143,7 @@ extern "C" void shield_audio_stop(ShieldAudio* s) {
 extern "C" void shield_audio_destroy(ShieldAudio* s) { shield_audio_stop(s); delete s; }
 extern "C" ShieldMetrics shield_audio_metrics(ShieldAudio* s) {
     return {s->error.load(),s->processed.load(),s->underruns.load(),s->processingMs.load(),
-        1000*(s->capture.size()/s->inputRate+s->playback.size()/double(shield::rate))};
+        1000*(s->capture.size()/s->inputRate+s->playback.size()/double(shield::rate)),s->maximumMs.load(),s->overBudget.load()};
 }
 extern "C" void* shield_baseline_create() { return new shield::Baseline; }
 extern "C" void shield_baseline_process(void* p,const float* in,float* out,uint32_t n,float strength) { static_cast<shield::Baseline*>(p)->process(in,out,n,strength); }

@@ -81,15 +81,21 @@ class AppState: ObservableObject {
     @Published var errorMessage: String?
 
     @Published var privacyShield = PrivacyShieldSnapshot() {
-        didSet { shield_set_capture_blocked(privacyShield.blocksTranscription) }
+        didSet { shield_set_capture_blocked(privacyShield.blocksTranscription || privacyShieldInstallerBusy) }
     }
     var pendingMeetingStarts = 0
-    @Published var privacyShieldInstallerBusy = false
+    @Published var privacyShieldInstallerBusy = false {
+        didSet { shield_set_capture_blocked(privacyShield.blocksTranscription || privacyShieldInstallerBusy) }
+    }
     @Published var privacyShieldInputUID = ""
     @Published var privacyShieldStrength = 0.35
     @Published var privacyShieldHeadphones = false
 
     func allowCaptureOutsidePrivacyShield() -> Bool {
+        guard !privacyShieldInstallerBusy else {
+            errorMessage = "Wait for the audio driver installation to finish before recording."
+            return false
+        }
         guard !privacyShield.blocksTranscription else {
             errorMessage = "Turn off Privacy Shield before starting dictation or a meeting recording."
             return false

@@ -61,8 +61,12 @@ struct PrivacyShieldView: View {
                 Button("Remove driver (restarts audio)…") { PrivacyShieldController.shared.installDriver(remove: true) }
                     .disabled(app.privacyShieldInstallerBusy)
             }
-            if app.privacyShield.phase == .active {
+            if app.privacyShield.blocks > 0 {
                 Text(String(format: "Last block: %.1f ms · queued audio: %.1f ms", app.privacyShield.processingMS, app.privacyShield.queuedMS))
+                    .font(.caption.monospacedDigit()).foregroundStyle(MBColors.textSecondary)
+            }
+            if app.privacyShield.blocks > 0 {
+                Text(String(format: "Peak block: %.2f ms · over 10 ms: %llu · underruns: %llu", app.privacyShield.maximumProcessingMS, app.privacyShield.overBudgetBlocks, app.privacyShield.underruns))
                     .font(.caption.monospacedDigit()).foregroundStyle(MBColors.textSecondary)
             }
             Text("While enabled, Whisperer blocks new dictation and meeting recordings. Failures mute this virtual mic. A call may switch to another mic independently. This does not prevent recording.")

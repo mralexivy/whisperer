@@ -11,26 +11,27 @@ struct Client final: aspl::Client {
 };
 class Handler final: public aspl::ControlRequestHandler,public aspl::IORequestHandler {
     shield::Timeline timeline;
-    std::atomic<uint32_t> writer{0};
+    // Encode client ID + 1: HAL may legitimately assign client ID zero.
+    std::atomic<uint64_t> writer{0};
 public:
     OSStatus OnStartIO() override { timeline.clear(); writer=0; return noErr; }
     std::shared_ptr<aspl::Client> OnAddClient(const aspl::ClientInfo& info) override { return std::make_shared<Client>(info); }
     void OnRemoveClient(std::shared_ptr<aspl::Client> client) override {
-        auto id=client->GetClientID();
+        uint64_t id=uint64_t(client->GetClientID())+1;
         if(writer.compare_exchange_strong(id,0)) timeline.clear();
     }
     void OnWriteClientOutput(const std::shared_ptr<aspl::Client>& client,const std::shared_ptr<aspl::Stream>&,
                             Float64,Float64 timestamp,const Float32* frames,UInt32 count,UInt32 channels) override {
-        if(!static_cast<Client*>(client.get())->producer || channels!=1 || !std::isfinite(timestamp) || timestamp<0) return;
-        uint32_t none=0; writer.compare_exchange_strong(none,client->GetClientID());
-        if(writer.load()!=client->GetClientID()) return;
+        if(!static_cast<Client*>(client.get())->producer || channels!=1 || !std::isfinite(timestamp) || timestamp<0 || timestamp>double(INT64_MAX)-count) return;
+        uint64_t key=uint64_t(client->GetClientID())+1, none=0; writer.compare_exchange_strong(none,key);
+        if(writer.load()!=key) return;
         auto start=uint64_t(timestamp);
         for(UInt32 i=0;i<count;i++) timeline.write(start+i,frames[i]);
     }
     void OnReadClientInput(const std::shared_ptr<aspl::Client>&,const std::shared_ptr<aspl::Stream>&,
                           Float64,Float64 timestamp,void* bytes,UInt32 byteCount) override {
         std::memset(bytes,0,byteCount);
-        if(!writer.load() || !std::isfinite(timestamp) || timestamp<double(delayFrames)) return;
+        if(!writer.load() || !std::isfinite(timestamp) || timestamp<double(delayFrames) || timestamp>double(INT64_MAX)-byteCount/sizeof(float)) return;
         auto out=static_cast<float*>(bytes); auto start=uint64_t(timestamp)-delayFrames;
         for(UInt32 i=0;i<byteCount/sizeof(float);i++) out[i]=timeline.read(start+i);
     }

@@ -1,4 +1,5 @@
 import XCTest
+import CoreML
 @testable import whisperer
 
 final class PrivacyShieldTests: XCTestCase {
@@ -9,6 +10,16 @@ final class PrivacyShieldTests: XCTestCase {
             XCTAssertTrue(snapshot.blocksTranscription, "\(phase) must not allow raw capture")
         }
         XCTAssertFalse(PrivacyShieldSnapshot().blocksTranscription)
+    }
+
+    func testMenuAlwaysOffersEscapeFromMutedAndStarting() {
+        var snapshot = PrivacyShieldSnapshot()
+        snapshot.phase = .muted
+        XCTAssertEqual(snapshot.menuActionTitle, "Turn Off Privacy Shield (Muted)")
+        snapshot.phase = .starting
+        XCTAssertEqual(snapshot.menuActionTitle, "Cancel Privacy Shield")
+        snapshot.phase = .off
+        XCTAssertEqual(snapshot.menuActionTitle, "Enable Privacy Shield")
     }
 
     func testBaselineSilenceDoesNotGenerateAudio() throws {
@@ -27,7 +38,7 @@ final class PrivacyShieldTests: XCTestCase {
     func testBaselineBoundsNonFiniteAndClippedInput() throws {
         let processor = try PrivacyAudioProcessor(modelURL: nil, strength: 0.5)
         var input = [Float](repeating: 3, count: 480)
-        input[0] = .nan; input[1] = .infinity
+        input[0] = .nan; input[1] = .infinity; input[2] = .greatestFiniteMagnitude
         var output = [Float](repeating: 0, count: 480)
         let valid = input.withUnsafeBufferPointer { source in
             output.withUnsafeMutableBufferPointer { destination in
@@ -36,6 +47,29 @@ final class PrivacyShieldTests: XCTestCase {
         }
         XCTAssertTrue(valid)
         XCTAssertTrue(output.allSatisfy { $0.isFinite && abs($0) <= 0.98 })
+    }
+
+    func testCompiledCoreMLProcessorCopiesFreshFloat32Blocks() throws {
+        // Deterministic x * 0.5 fixture; regenerate with make-model-fixture.py.
+        let encoded = "CAQSMAoUCgVhdWRpbxoLKgkKAwHgAxCggARSGAoJcHJvY2Vzc2VkGgsqCQoDAeADEKCABKIfKAoiCgRoYWxmEgVhdWRpbxoJcHJvY2Vzc2VkkggHKgUNAAAAPygBMAE="
+        let sourceURL = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString + ".mlmodel")
+        try XCTUnwrap(Data(base64Encoded: encoded)).write(to: sourceURL)
+        defer { try? FileManager.default.removeItem(at: sourceURL) }
+        let compiledURL = try MLModel.compileModel(at: sourceURL)
+        defer { try? FileManager.default.removeItem(at: compiledURL) }
+        let processor = try PrivacyAudioProcessor(modelURL: compiledURL, strength: 0.5)
+        for block in 0..<100 {
+            let level: Float = block.isMultiple(of: 2) ? 0.5 : -0.8
+            let input = [Float](repeating: level, count: 480)
+            var output = [Float](repeating: 99, count: 480)
+            let valid = input.withUnsafeBufferPointer { source in
+                output.withUnsafeMutableBufferPointer { destination in
+                    processor.process(source.baseAddress!, destination.baseAddress!, count: 480)
+                }
+            }
+            XCTAssertTrue(valid)
+            XCTAssertTrue(output.allSatisfy { abs($0 - level * 0.5) < 0.001 }, "Fresh input must reach the Core ML output")
+        }
     }
 
     func testMissingModelCannotSilentlyFallBackToBaseline() {

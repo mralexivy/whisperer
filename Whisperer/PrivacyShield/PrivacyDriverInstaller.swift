@@ -11,6 +11,11 @@ extension PrivacyShieldController {
     func installDriver(remove: Bool = false) {
         #if !APP_STORE
         guard AppState.shared.privacyShield.phase == .off, !AppState.shared.privacyShieldInstallerBusy else { return }
+        guard AppState.shared.state == .idle, AppState.shared.activeMeetingSession == nil,
+              AppState.shared.pendingMeetingStarts == 0 else {
+            AppState.shared.privacyShield.message = "Stop recording before changing the audio driver."
+            return
+        }
         guard let root = Bundle.main.resourceURL?.appendingPathComponent("PrivacyShield"),
               FileManager.default.fileExists(atPath: root.appendingPathComponent("install-driver.sh").path) else {
             AppState.shared.privacyShield.message = "Driver resources are missing. Rebuild the direct-download app."

@@ -62,6 +62,7 @@ final class PrivacyAudioSession: @unchecked Sendable {
 @MainActor
 final class PrivacyShieldController {
     static let shared = PrivacyShieldController()
+    private init() {}
     static let deviceUID = "com.ivy.whisperer.privacy-mic.v1"
     private var session: PrivacyAudioSession?
     private var monitor: Task<Void, Never>?
@@ -134,7 +135,7 @@ final class PrivacyShieldController {
         generation += 1; let token = generation
         snapshot.phase = .starting
         snapshot.message = "Starting. The virtual microphone stays silent until processed audio is ready."
-        snapshot.blocks = 0
+        snapshot.resetMetrics()
         let runner = PrivacyAudioSession(); session = runner
         let selectedModel = modelURL
         let strength = Float(app.privacyShieldStrength)
@@ -159,6 +160,9 @@ final class PrivacyShieldController {
                         snapshot.blocks = metrics.processedBlocks
                         snapshot.processingMS = metrics.processingMilliseconds
                         snapshot.queuedMS = metrics.queuedMilliseconds
+                        snapshot.maximumProcessingMS = metrics.maximumProcessingMilliseconds
+                        snapshot.overBudgetBlocks = metrics.overBudgetBlocks
+                        snapshot.underruns = metrics.underruns
                         if metrics.processedBlocks >= 3 {
                             snapshot.phase = .active
                             snapshot.message = "Experimental processing active. Select Whisperer Virtual Mic in your call. Resistance to transcription is unverified."
@@ -188,7 +192,7 @@ final class PrivacyShieldController {
         guard token == generation else { return }
         session = nil
         snapshot.phase = .off
-        snapshot.blocks = 0; snapshot.processingMS = 0; snapshot.queuedMS = 0
+        snapshot.resetMetrics()
         snapshot.message = "Off. The virtual microphone is silent. Select your physical microphone in the call to resume unprocessed audio."
     }
 }

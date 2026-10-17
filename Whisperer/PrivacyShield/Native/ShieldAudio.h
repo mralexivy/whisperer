@@ -15,6 +15,8 @@ typedef struct {
     uint64_t underruns;
     double processingMilliseconds;
     double queuedMilliseconds;
+    double maximumProcessingMilliseconds;
+    uint64_t overBudgetBlocks;
 } ShieldMetrics;
 void shield_set_capture_blocked(bool);
 bool shield_capture_blocked(void);

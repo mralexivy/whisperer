@@ -20,6 +20,7 @@ extension View {
 @main
 struct WhispererApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
+    @ObservedObject private var appState = AppState.shared
 
     var body: some Scene {
         // Menu bar app - no main window
@@ -27,15 +28,25 @@ struct WhispererApp: App {
             MenuBarView()
         }
         .menuBarExtraStyle(.window)
+        .commands {
+            #if !APP_STORE
+            CommandMenu("Privacy Shield") {
+                Button(appState.privacyShield.menuActionTitle) { appDelegate.togglePrivacyShield() }
+                    .disabled(appState.privacyShield.phase == .stopping || appState.privacyShieldInstallerBusy)
+                Button("Privacy Shield Settings…") { appDelegate.showPrivacyShieldSettings() }
+            }
+            #endif
+        }
     }
 }
 
-class AppDelegate: NSObject, NSApplicationDelegate {
+class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     var overlayPanel: OverlayPanel?
     var pickerPanel: TranscriptionPickerPanel?
     var islandCoordinator: IslandCoordinator?
     let appState = AppState.shared
     private var isShuttingDown = false
+    private var privacySettingsWindow: NSWindow?
     private var rightClickMenu: NSMenu?
     private var rightClickMonitor: Any?
     private var mcpCancellables = Set<AnyCancellable>()
@@ -466,7 +477,17 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func setupStatusItemRightClickMenu() {
         let menu = NSMenu()
-        menu.addItem(withTitle: "Quit Whisperer", action: #selector(quitApp), keyEquivalent: "q")
+        menu.delegate = self
+        menu.autoenablesItems = false
+        #if !APP_STORE
+        let toggle = menu.addItem(withTitle: "Enable Privacy Shield", action: #selector(togglePrivacyShield), keyEquivalent: "")
+        toggle.target = self
+        toggle.tag = 100
+        let settings = menu.addItem(withTitle: "Privacy Shield Settings…", action: #selector(showPrivacyShieldSettings), keyEquivalent: "")
+        settings.target = self
+        menu.addItem(.separator())
+        #endif
+        menu.addItem(withTitle: "Quit Whisperer", action: #selector(quitApp), keyEquivalent: "q").target = self
         self.rightClickMenu = menu
 
         // Monitor right-click on the status bar area
@@ -479,6 +500,41 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             self.rightClickMenu?.popUp(positioning: nil, at: NSPoint(x: 0, y: button.bounds.height), in: button)
             return nil
         }
+    }
+
+    func menuNeedsUpdate(_ menu: NSMenu) {
+        let snapshot = appState.privacyShield
+        if let item = menu.item(withTag: 100) {
+            item.title = snapshot.menuActionTitle
+            item.state = snapshot.blocksTranscription ? .on : .off
+            item.isEnabled = snapshot.phase != .stopping && !appState.privacyShieldInstallerBusy
+        }
+    }
+
+    @objc func togglePrivacyShield() {
+        if appState.privacyShield.blocksTranscription {
+            Task { await PrivacyShieldController.shared.stop() }
+        } else {
+            PrivacyShieldController.shared.start()
+            if appState.privacyShield.phase == .off { showPrivacyShieldSettings() }
+        }
+    }
+
+    @objc func showPrivacyShieldSettings() {
+        if privacySettingsWindow == nil {
+            let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 460, height: 500),
+                                  styleMask: [.titled, .closable], backing: .buffered, defer: false)
+            window.title = "Privacy Shield — Experimental"
+            window.appearance = NSAppearance(named: .darkAqua)
+            window.isReleasedWhenClosed = false
+            window.contentViewController = NSHostingController(rootView:
+                PrivacyShieldView().padding(24).frame(width: 460)
+                    .background(MBColors.background).environment(\.colorScheme, .dark))
+            window.center()
+            privacySettingsWindow = window
+        }
+        privacySettingsWindow?.makeKeyAndOrderFront(nil)
+        NSApp.activate(ignoringOtherApps: true)
     }
 
     @objc private func quitApp() {
@@ -579,6 +635,10 @@ struct MenuBarView: View {
             // Header with gradient
             headerView
 
+            #if !APP_STORE
+            privacyShieldMenuControls
+            #endif
+
             // Tab bar
             tabBar
 
@@ -602,6 +662,38 @@ struct MenuBarView: View {
             PermissionManager.shared.recheckAccessibilityIfNeeded()
             #endif
         }
+    }
+
+    private var privacyShieldMenuControls: some View {
+        HStack(spacing: 8) {
+            Image(systemName: "shield.lefthalf.filled").foregroundStyle(MBColors.accentPurple)
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Privacy Shield · \(appState.privacyShield.phase.rawValue.capitalized)")
+                    .font(.caption.bold()).foregroundStyle(MBColors.textPrimary)
+                Text("Experimental · protection unverified")
+                    .font(.caption2).foregroundStyle(MBColors.textSecondary)
+            }
+            Spacer(minLength: 0)
+            Button(appState.privacyShield.blocksTranscription ? "Turn off" : "Enable") {
+                if appState.privacyShield.blocksTranscription {
+                    Task { await PrivacyShieldController.shared.stop() }
+                } else {
+                    PrivacyShieldController.shared.start()
+                    if appState.privacyShield.phase == .off {
+                        selectedTab = .settings; settingsScrollTarget = .privacyShield
+                    }
+                }
+            }
+            .disabled(appState.privacyShield.phase == .stopping || appState.privacyShieldInstallerBusy)
+            Button {
+                selectedTab = .settings; settingsScrollTarget = .privacyShield
+            } label: { Image(systemName: "gearshape") }
+            .help("Privacy Shield settings")
+            .accessibilityLabel("Privacy Shield settings")
+        }
+        .buttonStyle(.borderless)
+        .padding(.horizontal, 16).padding(.vertical, 10)
+        .background(MBColors.cardSurface)
     }
 
     // MARK: - Header

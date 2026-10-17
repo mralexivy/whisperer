@@ -63,9 +63,9 @@ class Baseline {
     double phase=0; uint32_t random=0x573912ab; float envelope=0;
 public:
     void process(const float* in,float* out,size_t n,float strength) {
-        strength=std::clamp(strength,0.f,1.f);
+        strength=std::isfinite(strength)?std::clamp(strength,0.f,1.f):0.f;
         for(size_t i=0;i<n;i++) {
-            float x=std::isfinite(in[i])?in[i]:0;
+            float x=std::isfinite(in[i])?std::clamp(in[i],-1.f,1.f):0;
             envelope += .005f*(std::abs(x)-envelope);
             random ^= random<<13; random ^= random>>17; random ^= random<<5;
             float noise=(float(random)/float(UINT32_MAX)*2-1)*envelope*.12f*strength;
@@ -81,23 +81,44 @@ public:
 class Resampler {
     double position=0;
     std::array<float,32> past{};
+    static constexpr size_t phases=1024;
+    std::array<std::array<float,32>,phases+1> weights{};
+    double preparedRate=0;
 public:
+    // Build once per nominal device rate. Clock correction changes the sampling
+    // positions, not the filter; leave transition-band headroom for +/-0.1% drift.
+    void prepare(double sourceRate) {
+        preparedRate=sourceRate;
+        double cutoff=std::min(1.,double(rate)/sourceRate)*.94;
+        for(size_t phase=0;phase<=phases;++phase) {
+            double fraction=double(phase)/phases, norm=0;
+            for(int k=-15;k<=16;++k) {
+                double delta=fraction-k, z=delta*cutoff;
+                double sinc=std::abs(z)<1e-9?1:std::sin(M_PI*z)/(M_PI*z);
+                double weight=sinc*(.5+.5*std::cos(M_PI*delta/17))*cutoff;
+                weights[phase][k+15]=float(weight); norm+=weight;
+            }
+            for(auto& weight:weights[phase]) weight/=float(norm);
+        }
+    }
     template<size_t N> bool render(Ring<N>& input,double sourceRate,float* out,size_t count) {
-        double ratio=sourceRate/rate, cutoff=std::min(1.,1/ratio)*.94;
+        if(!std::isfinite(sourceRate) || sourceRate<8000 || sourceRate>192192) return false;
+        if(preparedRate==0) prepare(sourceRate);
+        double ratio=sourceRate/rate;
         size_t needed=size_t(std::ceil(position+count*ratio))+17;
         if(input.size()<needed) return false;
         for(size_t i=0;i<count;i++) {
-            int center=int(position); double sum=0, norm=0;
+            int center=int(position);
+            double phase=(position-center)*phases;
+            size_t lower=std::min(size_t(phase),phases-1);
+            float blend=float(phase-lower), sum=0;
             for(int k=-15;k<=16;k++) {
-                int index=center+k; double delta=position-index;
-                double z=delta*cutoff;
-                double sinc=std::abs(z)<1e-9?1:std::sin(M_PI*z)/(M_PI*z);
-                double window=.5+.5*std::cos(M_PI*delta/17);
-                double weight=sinc*window*cutoff;
+                int index=center+k;
+                float weight=weights[lower][k+15]+blend*(weights[lower+1][k+15]-weights[lower][k+15]);
                 float sample=index<0?past[32+index]:input.peek(size_t(index));
-                sum+=sample*weight; norm+=weight;
+                sum+=sample*weight;
             }
-            out[i]=float(sum/norm); position+=ratio;
+            out[i]=sum; position+=ratio;
         }
         size_t consumed=size_t(position);
         std::array<float,32> next{};

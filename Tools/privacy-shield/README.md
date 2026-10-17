@@ -15,14 +15,15 @@ installation controls. The external CMake build runs in its own aggregate target
 the app target retains its existing script-sandbox settings. The project currently targets macOS 26.2, inherited unchanged.
 
 1. Build and launch the direct-download app.
-2. Open Settings → Privacy Shield. Finish active calls before clicking **Install
+2. Open the **Privacy Shield** app menu → **Privacy Shield Settings…**, or the menu-bar popover settings. Finish active calls before clicking **Install
    driver (restarts audio)…**. macOS requests administrator authorization. The
    driver installs under `/Library/Audio/Plug-Ins/HAL/WhispererAudio.driver`.
 3. Refresh devices, select a physical microphone and confirm headphones are in use.
 4. Choose the baseline strength or load a compatible `.mlmodelc` package.
 5. Enable processing, then select **Whisperer Virtual Mic** as the microphone in the
    calling application. Keep normal headphones selected as the speaker output.
-6. When finished, turn processing off. The virtual mic becomes silent. Select your
+6. Enable/disable from the popover strip, right-click menu, app menu, or settings.
+   When finished, turn processing off. The virtual mic becomes silent. Select your
    physical microphone in the call to resume unprocessed audio. Removal is available
    while off and also restarts system audio.
 
@@ -54,7 +55,7 @@ are verified before embedding. This avoids rebuilding the external CMake target.
 
 A dedicated AUHAL captures mono float32 at the physical device's native rate. Its
 callback only renders into preallocated memory and a bounded SPSC queue. A separate
-worker performs a 32-tap windowed-sinc resample, 480-frame/48 kHz processing and an
+worker performs a 32-tap windowed-sinc resample using precomputed/interpolated phase filters, 480-frame/48 kHz processing and an
 output limiter. A separate AUHAL output feeds the virtual device. A small bounded
 rate correction follows queue depth to accommodate clock drift. No file writer,
 transcriber or history service participates in this path.
@@ -70,12 +71,14 @@ Whisperer bundle, and only one producer client at a time. Bundle-ID filtering is
 accidental-routing prevention, **not a security boundary against malicious local
 software**. Timestamp-tagged atomic frames let multiple microphone clients read
 without consuming each other's audio. Missing frames are silence. Driver loopback
-delay is 1,024 frames (~21.3 ms); initial producer buffering is 1,440 frames (30 ms).
+delay is 1,024 frames (~21.3 ms). Initial producer buffering is at least 1,440 frames
+(30 ms), increased to cover hardware input/output buffer periods. Configurations
+requiring more than 80 ms of initial buffering are rejected.
 These are design parameters, not a measured end-to-end latency result.
 
 Starting, muted/faulted, and stopping states all block new Whisperer recording.
 Enabling is refused during active recording, transcription, or pending meeting
-startup. The user must stop those first. A lock-free guard also blocks the existing
+startup. The user must stop those first. Driver installation also blocks recording until it finishes. A lock-free guard blocks the existing
 recorder's sample delivery and disk-write path. Existing historical file processing
 is not automatically cancelled. Input loss, overflow, underrun, NaN output or a
 worker block exceeding 100 ms latch a fault; no raw passthrough fallback exists.
@@ -106,13 +109,18 @@ of robustness, human intelligibility or actual call latency.
 ## Native and app tests
 
 ```sh
+SHIELD_ARCHS=$(uname -m) Tools/privacy-shield/build-driver.sh
+Tools/privacy-shield/validate.sh
+
+# Individual checks:
 clang++ -std=c++17 -fsanitize=address,undefined -g \
   Tools/privacy-shield/native-tests.cpp -o /tmp/shield-native-tests
 /tmp/shield-native-tests
 python3 -m unittest discover -s Tools/privacy-shield -p 'test_*.py'
 Tools/privacy-shield/test-standalone.sh
 xcodebuild -project Whisperer.xcodeproj -scheme whisperer -configuration Debug \
-  -destination 'platform=macOS' -only-testing:WhispererTests/PrivacyShieldTests test
+  -destination 'platform=macOS' -only-testing:WhispererTests/PrivacyShieldTests \
+  -only-testing:WhispererTests/PrivacyShieldControllerTests test
 ```
 
 The native tests exercise queue bounds, concurrent producer/consumer order,
@@ -192,17 +200,40 @@ runs, real Zoom/Teams/Meet round trips, minimum-device latency/thermal measureme
 and release signing/notarization are not produced by this implementation. No benchmark
 numbers are fabricated. The research gate in the revised plan remains open.
 
-## Validation performed on this branch
+## Validation performed on this branch (2026-10-17)
 
-- Full Debug app build succeeded with the freshly built driver embedded.
-- Driver build and signature verification succeeded (arm64 development build).
-- Native queue/DSP tests passed under AddressSanitizer and UndefinedBehaviorSanitizer.
-- Six Python benchmark tests passed, including an actual subprocess adapter roundtrip.
-- Five processor/state XCTest cases passed through `test-standalone.sh`, using the
-  same Swift test and production sources as the app test target.
-- A synthetic 48 kHz WAV was processed through the shared DSP implementation;
-  format/duration were preserved and output differed as expected. This is not a speech
-  efficacy measurement.
-- The full Xcode-hosted test run compiled but stalled during host library loading;
-  it is not counted as a passing integration test. No driver was installed, no live
-  microphone was captured, and no audio service was restarted during validation.
+- Full Debug app build and launch succeeded. The app-menu Enable action was exercised:
+  missing setup opened the settings window with a clear explanation.
+- Xcode-hosted tests now run successfully; the earlier library-loading stall did not
+  recur. Feature tests include a real, locally compiled Core ML model processing 100
+  alternating float32 blocks, capture gating and setup/stop behavior. The deterministic
+  test model halves samples; it is not a protection model.
+- Audio recovery, stall policy and session-file regression suites are included in the
+  validation run: 48 app-hosted tests passed, with zero failures.
+- Native queue/DSP, production-worker, and production-driver callback tests run with
+  AddressSanitizer and UndefinedBehaviorSanitizer. Driver callbacks include client ID
+  zero, multiple readers, producer filtering/removal/replacement and invalid timestamps.
+- The 120-second synthetic worker run completed 12,004 blocks with zero underruns,
+  3.32 ms maximum block time under sanitizers, and 42.67 ms final queued audio.
+  Timed synthetic worker runs verify priming and delivery; fault
+  injection covers invalid output, processor failure, excessive processing time,
+  missing input and latched underruns. These runs do **not** go through installed HAL.
+- Offline 10,000-block benchmarks at each of 16/44.1/48/96/192 kHz measured median
+  resampling plus baseline time around 0.016 ms (previously 0.13 ms), roughly 8× faster.
+  These optimized-build numbers exclude HAL scheduling, conferencing and Core ML.
+- Seven standalone Swift tests and six Python evaluation-harness tests pass.
+- **Negative efficacy smoke test:** whisper.cpp large-v3-turbo-q5_0 transcribed both
+  the bundled JFK sample and a newly generated English speech sample identically
+  before/after baseline processing at strength 0.35. The generated sample's name,
+  time, budget and deadline remained recoverable. Two local English clips with one
+  recognizer are not a multilingual or receiver-side evaluation, but they directly
+  fail to demonstrate the proposed protection. No anti-transcription claim is justified.
+- Driver installation, live microphone routing, actual call reception, device changes,
+  sleep/wake, Bluetooth and end-to-end latency still require system-level validation.
+  No administrator authorization or headphone confirmation has been supplied for it.
+
+The test harness does not use existing private recordings. `make-model-fixture.py`
+regenerates the embedded model fixture if coremltools is installed; normal test runs
+need no Python ML package. An unexpected test-host crash was isolated to destruction
+of temporary MainActor controller instances in synchronous XCTest methods; tests now
+use the actual singleton, and its initializer is private to enforce that lifecycle.
