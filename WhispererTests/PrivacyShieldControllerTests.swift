@@ -14,6 +14,14 @@ final class PrivacyShieldControllerTests: XCTestCase {
         super.tearDown()
     }
 
+    func testInstallerDiagnosticsDistinguishCancellationFromFailure() {
+        XCTAssertTrue(PrivacyShieldController.installerFailureMessage(details: "User canceled. (-128)").contains("cancelled"))
+        XCTAssertTrue(PrivacyShieldController.installerFailureMessage(details: "system audio did not restart").contains("Restart your Mac"))
+        let failure = PrivacyShieldController.installerFailureMessage(details: "Operation not permitted (1)")
+        XCTAssertTrue(failure.contains("log"))
+        XCTAssertFalse(failure.contains("cancelled"))
+    }
+
     func testAutomaticSelectionRejectsFeedbackRoutesAndInvalidRates() {
         XCTAssertTrue(PrivacyShieldController.isPhysicalInput(transport: kAudioDeviceTransportTypeBuiltIn, rate: 48000))
         XCTAssertTrue(PrivacyShieldController.isPhysicalInput(transport: kAudioDeviceTransportTypeUSB, rate: 44100))

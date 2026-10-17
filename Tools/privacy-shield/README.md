@@ -292,3 +292,18 @@ The latest native 30-second run delivered 3,004 blocks with zero underruns and a
 0.0195 ms p99 per 10 ms block. Nine standalone Swift and six Python tests passed.
 The updated one-toggle window was opened and startup reached the macOS
 authentication prompt. Live installation/routing is pending that handoff.
+
+### Installer restart correction
+
+A live setup failure was traced to using `launchctl kickstart -k` for coreaudiod.
+Apple's macOS 14.4 release notes explicitly disallow that operation for critical
+services. The installed signed driver was present while coreaudiod still had its
+original PID and a launch count of one. The installer now terminates only
+coreaudiod and verifies that launchd starts a replacement PID, without changing
+launchd configuration or system security protections.
+
+Installer stdout/stderr and the exit status now reach Whisperer's log; cancellation,
+restart failure and general setup failure have different messages. The password
+prompt identifies Whisperer's microphone setup. Seven controller tests and three
+mocked restart-script tests passed; the AppleScript prompt compiled successfully.
+Live verification of this correction is waiting for administrator authentication.
