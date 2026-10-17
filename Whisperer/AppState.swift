@@ -80,21 +80,15 @@ class AppState: ObservableObject {
     let waveformState = WaveformState()
     @Published var errorMessage: String?
 
-    @Published var privacyShield = PrivacyShieldSnapshot() {
-        didSet { shield_set_capture_blocked(privacyShield.blocksTranscription || privacyShieldInstallerBusy) }
-    }
+    @Published var privacyShield = PrivacyShieldSnapshot()
     var pendingMeetingStarts = 0
     @Published var privacyShieldInstallerBusy = false {
-        didSet { shield_set_capture_blocked(privacyShield.blocksTranscription || privacyShieldInstallerBusy) }
+        didSet { shield_set_capture_blocked(privacyShieldInstallerBusy) }
     }
 
-    func allowCaptureOutsidePrivacyShield() -> Bool {
+    func allowCaptureDuringAudioSetup() -> Bool {
         guard !privacyShieldInstallerBusy else {
             errorMessage = "Wait for the audio driver installation to finish before recording."
-            return false
-        }
-        guard !privacyShield.blocksTranscription else {
-            errorMessage = "Turn off Privacy Shield before starting dictation or a meeting recording."
             return false
         }
         return true
@@ -3224,7 +3218,7 @@ class AppState: ObservableObject {
 
     /// Start recording in in-app mode (no text entry into other apps, no Accessibility required)
     func startInAppRecording() {
-        guard allowCaptureOutsidePrivacyShield() else { return }
+        guard allowCaptureDuringAudioSetup() else { return }
         // Show loading indicator if model isn't ready (works even during download)
         #if canImport(FluidAudio)
         let inAppBackend = effectiveInAppBackend
@@ -3783,7 +3777,7 @@ class AppState: ObservableObject {
     // MARK: - State Transitions
 
     func startRecording() {
-        guard allowCaptureOutsidePrivacyShield() else { return }
+        guard allowCaptureDuringAudioSetup() else { return }
         // No dictation on top of a meeting. `state == .idle` below already swallows this while a
         // meeting is capturing, but not while one is stopping or between its internal state hops,
         // and a dictation started there would seize the recorder out from under the meeting.
@@ -5316,7 +5310,7 @@ class AppState: ObservableObject {
     #endif
 
     func startMeetingRecording(session: MeetingSession, surface: MeetingLiveSurface) {
-        guard allowCaptureOutsidePrivacyShield() else { return }
+        guard allowCaptureDuringAudioSetup() else { return }
         guard state == .idle else {
             Logger.warning("Cannot start meeting recording — AppState not idle", subsystem: .app)
             return

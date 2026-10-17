@@ -3,20 +3,10 @@ import CoreML
 @testable import whisperer
 
 final class PrivacyShieldTests: XCTestCase {
-    func testNonOffPhasesBlockTranscriptionIncludingFailureAndStop() {
-        for phase in [PrivacyShieldSnapshot.Phase.starting, .armed, .active, .muted, .stopping] {
-            var snapshot = PrivacyShieldSnapshot()
-            snapshot.phase = phase
-            XCTAssertTrue(snapshot.blocksTranscription, "\(phase) must not allow raw capture")
-        }
-        XCTAssertFalse(PrivacyShieldSnapshot().blocksTranscription)
-    }
-
     func testExplicitPassthroughIsOffAndReleasesCapture() {
         var snapshot = PrivacyShieldSnapshot()
         snapshot.phase = .passthrough
         XCTAssertFalse(snapshot.isEnabled)
-        XCTAssertFalse(snapshot.blocksTranscription)
         XCTAssertEqual(snapshot.menuActionTitle, "Enable Privacy Shield")
     }
 

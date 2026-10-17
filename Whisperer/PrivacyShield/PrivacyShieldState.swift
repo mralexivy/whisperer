@@ -29,7 +29,6 @@ struct PrivacyShieldSnapshot: Equatable {
         }
     }
     var isEnabled: Bool { phase != .off && phase != .passthrough }
-    var blocksTranscription: Bool { isEnabled }
 }
 
 enum PrivacyShieldError: LocalizedError {

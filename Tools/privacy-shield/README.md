@@ -41,7 +41,9 @@ the app target retains its existing script-sandbox settings. The project current
 
 The enabled route stays primed to avoid exposing unprocessed first words. This
 keeps microphone capture active while automatic mode is on; it does not run ASR or
-load a transcription model. Whisperer's own recording is blocked while enabled.
+load a transcription model. Whisperer's dictation and meeting recording remain available while enabled.
+To test the processed signal, use System Default (while the shield owns the default)
+or Whisperer Virtual Mic as the recording input. An explicit physical input bypasses processing.
 Off-mode reopening of a pinned virtual input may lose initial audio during polling
 and priming; exact call behavior needs receiver-side tests.
 
@@ -93,11 +95,12 @@ delay is 1,024 frames (~21.3 ms). Initial producer buffering is at least 1,440 f
 requiring more than 80 ms of initial buffering are rejected.
 These are design parameters, not a measured end-to-end latency result.
 
-All enabled states (including armed/ready), muted/faulted, and stopping states block
-new Whisperer recording. Explicit off/passthrough releases that gate.
+Shield state does not block Whisperer recording. This permits direct transcription
+tests of the processed virtual microphone, including observation of silence on faults.
 Enabling is refused during active recording, transcription, or pending meeting
-startup. The user must stop those first. Driver installation also blocks recording until it finishes. A lock-free guard blocks the existing
-recorder's sample delivery and disk-write path. Existing historical file processing
+startup. The user must stop those first. Driver installation alone blocks recording until it finishes because it restarts
+system audio. During installation a lock-free guard blocks the existing recorder's
+sample delivery and disk-write path. Existing historical file processing
 is not automatically cancelled. Input loss, overflow, underrun, NaN output or a
 worker block exceeding 100 ms latch a fault; no raw passthrough fallback exists.
 Retry creates fresh buffers/model state. An app crash leaves no new driver frames.

@@ -75,17 +75,33 @@ final class PrivacyShieldControllerTests: XCTestCase {
     }
 
     @MainActor
-    func testExplicitStopReleasesMutedCaptureGate() async {
+    func testExplicitStopKeepsCaptureAvailable() async {
         let app = AppState.shared
         let old = (app.privacyShield, app.errorMessage)
         defer { (app.privacyShield, app.errorMessage) = old }
         app.privacyShield.phase = .muted
-        XCTAssertTrue(shield_capture_blocked())
-        XCTAssertFalse(app.allowCaptureOutsidePrivacyShield())
+        XCTAssertFalse(shield_capture_blocked())
+        XCTAssertTrue(app.allowCaptureDuringAudioSetup())
         await PrivacyShieldController.shared.stop()
         XCTAssertEqual(app.privacyShield.phase, .off)
         XCTAssertFalse(shield_capture_blocked())
         XCTAssertTrue(app.privacyShield.message.contains("microphone"))
+    }
+
+    @MainActor
+    func testRecordingRemainsAvailableInEveryShieldPhase() {
+        let app = AppState.shared
+        let old = (app.privacyShield, app.privacyShieldInstallerBusy, app.errorMessage)
+        defer { (app.privacyShield, app.privacyShieldInstallerBusy, app.errorMessage) = old }
+        for phase in [PrivacyShieldSnapshot.Phase.off, .starting, .armed, .active, .muted, .stopping, .passthrough] {
+            app.privacyShield.phase = phase
+            app.privacyShieldInstallerBusy = false
+            XCTAssertTrue(app.allowCaptureDuringAudioSetup(), "\(phase)")
+            XCTAssertFalse(shield_capture_blocked(), "\(phase)")
+            app.privacyShieldInstallerBusy = true
+            XCTAssertFalse(app.allowCaptureDuringAudioSetup(), "\(phase)")
+            XCTAssertTrue(shield_capture_blocked(), "\(phase)")
+        }
     }
 
     @MainActor
@@ -95,7 +111,7 @@ final class PrivacyShieldControllerTests: XCTestCase {
         defer { (app.privacyShield, app.privacyShieldInstallerBusy, app.errorMessage) = old }
         app.privacyShield = PrivacyShieldSnapshot(); app.privacyShieldInstallerBusy = true
         XCTAssertTrue(shield_capture_blocked())
-        XCTAssertFalse(app.allowCaptureOutsidePrivacyShield())
+        XCTAssertFalse(app.allowCaptureDuringAudioSetup())
         app.privacyShield.message = "Refresh"
         XCTAssertTrue(shield_capture_blocked())
         app.privacyShieldInstallerBusy = false

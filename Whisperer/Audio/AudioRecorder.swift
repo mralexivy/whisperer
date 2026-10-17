@@ -331,7 +331,7 @@ class AudioRecorder: NSObject {
     /// producing audio: `.dictation` gives up quickly, `.longForm` never gives up while the
     /// session is open. Pass `.longForm` for meetings and in-app recording.
     func startRecording(route: ResolvedInputRoute, recovery: RecoveryPolicy = .dictation) async throws -> URL {
-        guard !shield_capture_blocked() else { throw PrivacyShieldError.unavailable("Privacy Shield blocks recording.") }
+        guard !shield_capture_blocked() else { throw PrivacyShieldError.unavailable("Wait for the audio driver installation to finish before recording.") }
         recoveryAttemptCount = 0
         recoveryPolicy = recovery
         hasEverReceivedNonSilentAudio = false
@@ -481,7 +481,7 @@ class AudioRecorder: NSObject {
 
         guard isGenerationCurrent(generation) else { throw RecordingError.engineCleanedUp }
 
-        guard !shield_capture_blocked() else { throw PrivacyShieldError.unavailable("Privacy Shield blocks recording.") }
+        guard !shield_capture_blocked() else { throw PrivacyShieldError.unavailable("Wait for the audio driver installation to finish before recording.") }
 
         // Prepare output URL
         let tempDir = FileManager.default.temporaryDirectory
