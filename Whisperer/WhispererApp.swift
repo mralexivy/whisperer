@@ -185,6 +185,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         // microphone on, so the suite would trip its own meeting detection.
         if !AppEnvironment.isRunningTests {
             MeetingDetector.shared.start()
+            PrivacyShieldController.shared.resumeAtLaunch()
         }
         // Warm the speaker-diarization model on disk while the user is doing something
         // else. Gated on the same toggle MeetingDetector gates itself with, so users who
@@ -407,7 +408,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
 
     private func gracefulShutdown() async {
-        await PrivacyShieldController.shared.stop()
+        await PrivacyShieldController.shared.shutdown()
         // 0. Stop the retention sweep before anything else — it must not start deleting
         // records while the rest of this sequence is tearing the pipeline down.
         await MainActor.run {
@@ -506,13 +507,13 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         let snapshot = appState.privacyShield
         if let item = menu.item(withTag: 100) {
             item.title = snapshot.menuActionTitle
-            item.state = snapshot.blocksTranscription ? .on : .off
+            item.state = snapshot.isEnabled ? .on : .off
             item.isEnabled = snapshot.phase != .stopping && !appState.privacyShieldInstallerBusy
         }
     }
 
     @objc func togglePrivacyShield() {
-        if appState.privacyShield.blocksTranscription {
+        if appState.privacyShield.isEnabled {
             Task { await PrivacyShieldController.shared.stop() }
         } else {
             PrivacyShieldController.shared.start()

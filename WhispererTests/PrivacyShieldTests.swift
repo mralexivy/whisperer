@@ -4,12 +4,29 @@ import CoreML
 
 final class PrivacyShieldTests: XCTestCase {
     func testNonOffPhasesBlockTranscriptionIncludingFailureAndStop() {
-        for phase in [PrivacyShieldSnapshot.Phase.starting, .active, .muted, .stopping] {
+        for phase in [PrivacyShieldSnapshot.Phase.starting, .armed, .active, .muted, .stopping] {
             var snapshot = PrivacyShieldSnapshot()
             snapshot.phase = phase
             XCTAssertTrue(snapshot.blocksTranscription, "\(phase) must not allow raw capture")
         }
         XCTAssertFalse(PrivacyShieldSnapshot().blocksTranscription)
+    }
+
+    func testExplicitPassthroughIsOffAndReleasesCapture() {
+        var snapshot = PrivacyShieldSnapshot()
+        snapshot.phase = .passthrough
+        XCTAssertFalse(snapshot.isEnabled)
+        XCTAssertFalse(snapshot.blocksTranscription)
+        XCTAssertEqual(snapshot.menuActionTitle, "Enable Privacy Shield")
+    }
+
+    func testRouteVerificationRejectsUnknownMixedAndBypassingConsumers() {
+        XCTAssertEqual(PrivacyRouteStatus.evaluate(devices: [], virtual: 42, hasSignal: true), .waiting)
+        XCTAssertEqual(PrivacyRouteStatus.evaluate(devices: [[42]], virtual: 42, hasSignal: false), .waiting)
+        XCTAssertEqual(PrivacyRouteStatus.evaluate(devices: [[42], [42]], virtual: 42, hasSignal: true), .verified)
+        XCTAssertEqual(PrivacyRouteStatus.evaluate(devices: [[]], virtual: 42, hasSignal: true), .needsSelection)
+        XCTAssertEqual(PrivacyRouteStatus.evaluate(devices: [[42, 7]], virtual: 42, hasSignal: true), .needsSelection)
+        XCTAssertEqual(PrivacyRouteStatus.evaluate(devices: [[42], [7]], virtual: 42, hasSignal: true), .needsSelection)
     }
 
     func testMenuAlwaysOffersEscapeFromMutedAndStarting() {

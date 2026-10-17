@@ -3,6 +3,17 @@ import CoreAudio
 @testable import whisperer
 
 final class PrivacyShieldControllerTests: XCTestCase {
+    private var savedEnabled: Any?
+    override func setUp() {
+        super.setUp()
+        savedEnabled = UserDefaults.standard.object(forKey: "privacyShieldAutomaticEnabled")
+    }
+    override func tearDown() {
+        if let savedEnabled { UserDefaults.standard.set(savedEnabled, forKey: "privacyShieldAutomaticEnabled") }
+        else { UserDefaults.standard.removeObject(forKey: "privacyShieldAutomaticEnabled") }
+        super.tearDown()
+    }
+
     func testAutomaticSelectionRejectsFeedbackRoutesAndInvalidRates() {
         XCTAssertTrue(PrivacyShieldController.isPhysicalInput(transport: kAudioDeviceTransportTypeBuiltIn, rate: 48000))
         XCTAssertTrue(PrivacyShieldController.isPhysicalInput(transport: kAudioDeviceTransportTypeUSB, rate: 44100))
@@ -23,6 +34,24 @@ final class PrivacyShieldControllerTests: XCTestCase {
         await Task.yield()
         XCTAssertEqual(app.privacyShield.phase, .off)
         XCTAssertFalse(app.privacyShieldInstallerBusy)
+        XCTAssertFalse(shield_capture_blocked())
+    }
+
+    @MainActor
+    func testRepeatedImmediateTogglesCannotResurrectCancelledStartup() async {
+        let app = AppState.shared
+        let old = (app.privacyShield, app.state, app.pendingMeetingStarts)
+        defer { (app.privacyShield, app.state, app.pendingMeetingStarts) = old }
+        app.privacyShield = PrivacyShieldSnapshot(); app.state = .idle; app.pendingMeetingStarts = 0
+        for _ in 0..<10 {
+            PrivacyShieldController.shared.start()
+            XCTAssertEqual(app.privacyShield.phase, .starting)
+            await PrivacyShieldController.shared.stop()
+        }
+        await Task.yield()
+        XCTAssertEqual(app.privacyShield.phase, .off)
+        XCTAssertFalse(app.privacyShieldInstallerBusy)
+        XCTAssertFalse(UserDefaults.standard.bool(forKey: "privacyShieldAutomaticEnabled"))
         XCTAssertFalse(shield_capture_blocked())
     }
 
@@ -48,7 +77,7 @@ final class PrivacyShieldControllerTests: XCTestCase {
         await PrivacyShieldController.shared.stop()
         XCTAssertEqual(app.privacyShield.phase, .off)
         XCTAssertFalse(shield_capture_blocked())
-        XCTAssertTrue(app.privacyShield.message.contains("silent"))
+        XCTAssertTrue(app.privacyShield.message.contains("microphone"))
     }
 
     @MainActor

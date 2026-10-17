@@ -5,8 +5,8 @@
 <key>CFBundleIdentifier</key><string>com.ivy.whisperer.audio</string>
 <key>CFBundleName</key><string>WhispererAudio</string>
 <key>CFBundlePackageType</key><string>BNDL</string>
-<key>CFBundleVersion</key><string>1</string>
-<key>CFBundleShortVersionString</key><string>0.1.0</string>
+<key>CFBundleVersion</key><string>2</string>
+<key>CFBundleShortVersionString</key><string>0.2.0</string>
 <key>CFPlugInFactories</key><dict><key>1263DE90-B025-4A42-8881-06B3F962F3D0</key><string>WhispererAudioEntry</string></dict>
 <key>CFPlugInTypes</key><dict><key>443ABAB8-E7B3-491A-B985-BEB9187030DB</key><array><string>1263DE90-B025-4A42-8881-06B3F962F3D0</string></array></dict>
 <key>sandboxSafe</key><true/>

@@ -16,7 +16,7 @@ struct ShieldAudio {
     shield::Resampler resampler;
     std::array<float,8192> scratch{}, probeScratch{};
     std::atomic<uint64_t> received{0}, receivedSignal{0};
-    std::atomic<bool> running{false}, primed{false};
+    std::atomic<bool> running{false}, primed{false}, processing{true};
     std::atomic<int32_t> error{0};
     std::atomic<uint64_t> processed{0}, underruns{0};
     std::atomic<double> processingMs{0}, maximumMs{0};
@@ -107,7 +107,12 @@ static void runWorker(ShieldAudio* s) {
                 std::this_thread::sleep_for(std::chrono::milliseconds(1)); continue;
             }
             last=Clock::now();
-            if(!s->processor(s->context,in.data(),out.data(),uint32_t(out.size()))) {s->fail(-7009);break;}
+            if(s->processing.load()) {
+                if(!s->processor(s->context,in.data(),out.data(),uint32_t(out.size()))) {s->fail(-7009);break;}
+            } else {
+                // Explicit user opt-out: normal voice, without reopening the call's device.
+                std::copy(in.begin(),in.end(),out.begin());
+            }
             double elapsed=std::chrono::duration<double,std::milli>(Clock::now()-blockStart).count();
             s->processingMs=elapsed;
             s->maximumMs=std::max(s->maximumMs.load(),elapsed);
@@ -153,6 +158,7 @@ extern "C" int32_t shield_audio_start(ShieldAudio* s,uint32_t input,uint32_t out
     if(status) shield_audio_stop(s);
     return status;
 }
+extern "C" void shield_audio_set_processing(ShieldAudio* s,bool enabled) { if(s) s->processing=enabled; }
 extern "C" void shield_audio_stop(ShieldAudio* s) {
     if(!s) return;
     s->running=false; s->primed=false;

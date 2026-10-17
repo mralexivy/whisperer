@@ -16,7 +16,9 @@ fi
 export PATH="/opt/homebrew/bin:/usr/local/bin:$PATH"
 export SHIELD_BUILD_DIR="$DERIVED_FILE_DIR/PrivacyShieldDriver"
 export SHIELD_ARCHS="${ARCHS// /;}"
-export SHIELD_SIGN_ID="${SHIELD_SIGN_ID:-${EXPANDED_CODE_SIGN_IDENTITY:--}}"
+# Aggregate targets do not receive the app's expanded signing identity. Never
+# silently embed an ad-hoc driver in an otherwise normally signed app.
+export SHIELD_SIGN_ID="${SHIELD_SIGN_ID:-${EXPANDED_CODE_SIGN_IDENTITY:-Apple Development}}"
 if [[ -n ${SHIELD_PREBUILT_DRIVER:-} ]]; then
   DRIVER="$SHIELD_PREBUILT_DRIVER"
   [[ $(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$DRIVER/Contents/Info.plist") == com.ivy.whisperer.audio ]]

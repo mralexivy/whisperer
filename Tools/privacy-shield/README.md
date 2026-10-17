@@ -15,27 +15,40 @@ installation controls. The external CMake build runs in its own aggregate target
 the app target retains its existing script-sandbox settings. The project currently targets macOS 26.2, inherited unchanged.
 
 1. Build and launch the normally signed direct-download app.
-2. Open **Settings → Privacy Shield** and turn on its single toggle. On first use,
-   audio support is installed automatically if missing. Finish calls first: macOS
-   may request administrator authentication and audio briefly restarts.
-3. The system-default physical microphone is selected automatically, with a connected
-   physical input as fallback. Virtual and aggregate inputs are excluded to avoid feedback.
-   No microphone picker, refresh button, model loader, strength slider or headphone checkbox is needed.
-4. Speak. A separate HAL reader checks the virtual input for live nonzero samples before
-   showing “Audio verified.” A stalled reader or processing error mutes the route.
-5. Calling apps still need **Whisperer Virtual Mic** selected as their input. Their
-   independent microphone settings cannot be inferred from our route check.
-6. Turn the toggle off to stop processing. The virtual microphone becomes silent;
-   select your physical input in the calling app to resume unprocessed audio.
+2. Enable **Settings → Automatic Privacy Shield** once. The preference survives app
+   restarts. Missing or older audio support is upgraded on this user action; macOS
+   may ask for administrator authentication and audio briefly restarts. Relaunch
+   never silently invokes privileged setup.
+3. Whisperer selects the physical system microphone, saves its UID, primes the
+   processed route, then makes **Whisperer Virtual Mic** the system input. Audio
+   stays processed while enabled, including the first frames of a newly opened call.
+4. Process input-device attribution detects external consumers, including browser
+   helpers. Only exclusively virtual input routes with observed virtual audio show
+   verified routing. Empty, mixed, and different routes show a selection exception.
+   This detects audio capture, not whether a browser tab is semantically a meeting.
+5. Apps following the system input work automatically. An app pinned to another
+   input needs **Whisperer Virtual Mic** selected once; we cannot override arbitrary
+   third-party per-app settings through the process-inspection API.
+6. Disable the toggle to restore the saved physical default and send normal voice
+   through any call still using the virtual input. After consumers leave, capture
+   closes; a lightweight watcher can restart passthrough if a pinned call unmutes.
+7. Disconnects, sample-rate changes and engine failures mute the processed route
+   and trigger automatic retries with bounded backoff (no repeated installation
+   prompts). A new physical default is followed automatically while enabled.
+   Quitting restores the physical default. Relaunch restores a stale virtual default
+   only when disabled; when enabled it keeps that route silent until processing is ready. A crash can leave the route silent until
+   relaunch; no independent recovery helper is shipped.
+
+The enabled route stays primed to avoid exposing unprocessed first words. This
+keeps microphone capture active while automatic mode is on; it does not run ASR or
+load a transcription model. Whisperer's own recording is blocked while enabled.
+Off-mode reopening of a pinned virtual input may lose initial audio during polling
+and priming; exact call behavior needs receiver-side tests.
 
 Privacy Shield appears in Settings, with shortcuts in the app and right-click menus.
 It does not appear on Status. Use headphones: speaker echo cancellation is not implemented.
-The built-in effect **failed transcription resistance tests**. A successful audio check
-verifies the route, not anti-transcription protection.
-
-Do not interpret “active” as verification that a meeting app selected the virtual
-mic. Apps can independently switch their input, and all claims are confined to our
-virtual route. Processing does not prevent recording or later transcription.
+The built-in effect **failed transcription resistance tests**. Successful routing
+checks do not establish anti-transcription protection or prevent recording.
 
 Manual driver build and removal:
 
@@ -46,8 +59,9 @@ sudo Tools/privacy-shield/install-driver.sh --uninstall
 ```
 
 `SHIELD_ARCHS` defaults to `arm64;x86_64`; Xcode uses its target architectures.
-`SHIELD_SIGN_ID` defaults to ad-hoc for local development. Distribution must use the
-release signing identity and the application's existing notarization workflow.
+`SHIELD_SIGN_ID` defaults to ad-hoc only in the standalone driver build script.
+App embedding uses the expanded signing identity or Apple Development; it no longer
+silently embeds an ad-hoc driver. Distribution must explicitly use the release signing identity and the application's existing notarization workflow.
 No driver installation or system-audio restart is performed by a build.
 For CI or an already-built driver, set `SHIELD_PREBUILT_DRIVER` to the full signed
 `.driver` bundle path in the Xcode build settings/command. Its identifier and signature
@@ -65,8 +79,9 @@ transcriber or history service participates in this path.
 The virtual device has input and output streams on **one shared device clock**;
 this intentionally implements the planned feed endpoint as the output side of a
 single duplex device. It is not a second independently clocked device. Choose its
-input in the meeting app, not its output as your speakers. It cannot become the
-system default through the driver's default-device eligibility flag.
+input in the meeting app, not its output as your speakers. Version 0.2 enables
+default-device eligibility so the controller can manage the system input. It does
+not select the virtual device as the speaker output.
 
 The libASPL driver accepts output only from a client identifying itself as the
 Whisperer bundle, and only one producer client at a time. Bundle-ID filtering is
@@ -78,7 +93,8 @@ delay is 1,024 frames (~21.3 ms). Initial producer buffering is at least 1,440 f
 requiring more than 80 ms of initial buffering are rejected.
 These are design parameters, not a measured end-to-end latency result.
 
-Starting, muted/faulted, and stopping states all block new Whisperer recording.
+All enabled states (including armed/ready), muted/faulted, and stopping states block
+new Whisperer recording. Explicit off/passthrough releases that gate.
 Enabling is refused during active recording, transcription, or pending meeting
 startup. The user must stop those first. Driver installation also blocks recording until it finishes. A lock-free guard blocks the existing
 recorder's sample delivery and disk-write path. Existing historical file processing
@@ -240,7 +256,7 @@ numbers are fabricated. The research gate in the revised plan remains open.
   fail to demonstrate the proposed protection. No anti-transcription claim is justified.
 - Driver installation, live microphone routing, actual call reception, device changes,
   sleep/wake, Bluetooth and end-to-end latency still require system-level validation.
-  No administrator authorization or headphone confirmation has been supplied for it.
+  The current live setup is waiting for macOS administrator authentication.
 
 The test harness does not use existing private recordings. `make-model-fixture.py`
 regenerates the embedded model fixture if coremltools is installed; normal test runs
@@ -260,3 +276,19 @@ the hosting controller a fixed window-owned size fixed the reproduced crash.
 The rebuilt UI was opened successfully and its single toggle reached automatic
 setup. Live HAL verification is pending macOS administrator authentication because
 the existing driver bundle is present on disk but is not registered as a device.
+
+### Automatic routing validation
+
+Fifteen signed app-host tests passed, covering cancellation, ten rapid on/off cycles, passthrough
+state, physical-device filtering, and rejection of unknown/mixed/bypassing routes.
+Native tests exercise switching the live worker to normal voice and back to the
+processor, including fail-closed processor rejection. Driver tests also instantiate
+the actual factory and check duplex streams and default-input eligibility.
+Live installation, call receiver tests, Bluetooth and sleep/wake remain separate
+acceptance checks; these automated tests do not establish those outcomes.
+
+The latest native 30-second run delivered 3,004 blocks with zero underruns and a
+0.947 ms maximum worker block under sanitizers. Optimized 48 kHz processing measured
+0.0195 ms p99 per 10 ms block. Nine standalone Swift and six Python tests passed.
+The updated one-toggle window was opened and startup reached the macOS
+authentication prompt. Live installation/routing is pending that handoff.

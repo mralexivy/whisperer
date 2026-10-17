@@ -47,6 +47,24 @@ int main(int argc,char** argv) {
         shield_audio_stop(&session); assert(silent(render(session)));
         shield_audio_stop(&session); // idempotent cleanup
     }
+    {
+        // Switching off keeps delivery alive but must bypass the processor entirely.
+        ShieldAudio session;
+        ShieldProcess reject=+[](void*,const float*,float*,uint32_t){return false;};
+        shield_audio_set_processing(&session,false);
+        start(session,reject);
+        assert(session.capture.push(input.data(),input.size()));
+        waitFor([&]{return session.primed.load();});
+        auto voice=render(session);
+        assert(session.error.load()==0 && !silent(voice));
+        assert(std::abs(voice.back()-.3f)<.001f);
+        // Re-enabling must restore the processor, including its fail-closed behavior.
+        shield_audio_set_processing(&session,true);
+        assert(session.capture.push(input.data(),480));
+        waitFor([&]{return session.error.load()!=0;});
+        assert(session.error.load()==-7009 && silent(render(session)));
+        shield_audio_stop(&session);
+    }
     for(int scenario=0;scenario<4;++scenario) {
         ShieldAudio session;
         ShieldProcess fn=scenario==0? +[](void*,const float*,float*,uint32_t){return false;}:

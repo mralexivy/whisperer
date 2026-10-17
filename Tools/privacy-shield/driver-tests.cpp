@@ -3,6 +3,20 @@
 #include <cassert>
 #include <iostream>
 int main() {
+    {
+        auto driver=makeDriver();
+        auto ref=driver->GetReference();
+        AudioServerPlugInHostInterface host{};
+        assert((*ref)->Initialize(ref,&host)==noErr);
+        auto plugin=driver->GetPlugin();
+        assert(plugin->GetDeviceCount()==1 && plugin->GetDeviceIDs().size()==1);
+        auto device=plugin->GetDeviceByIndex(0);
+        assert(device->GetDeviceUID()=="com.ivy.whisperer.privacy-mic.v1");
+        assert(device->GetCanBeDefaultDevice() && !device->GetCanBeDefaultSystemDevice());
+        assert(device->GetStreamCount(aspl::Direction::Input)==1);
+        assert(device->GetStreamCount(aspl::Direction::Output)==1);
+        assert(WhispererAudioEntry(nullptr,kAudioServerPlugInTypeUUID)!=nullptr);
+    }
     Handler handler;
     auto writer=handler.OnAddClient({0,0,true,"com.ivy.whisperer"});
     auto secondWriter=handler.OnAddClient({2,0,true,"com.ivy.whisperer"});

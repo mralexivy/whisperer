@@ -64,6 +64,31 @@ final class AudioProcessMonitor {
         return result
     }
 
+    struct InputRoute: Equatable {
+        let bundleID: String
+        let devices: Set<AudioDeviceID>
+    }
+
+    /// Attribute active input devices to their owning app, including browser helpers.
+    /// Unknown/empty routes must never count as verified routing.
+    func inputRoutes() -> [InputRoute] {
+        processObjectIDs().compactMap { object in
+            guard isRunningInput(object), let owner = owningBundleID(of: object),
+                  owner != "com.ivy.whisperer" else { return nil }
+            var address = AudioObjectPropertyAddress(mSelector: kAudioProcessPropertyDevices,
+                mScope: kAudioDevicePropertyScopeInput, mElement: kAudioObjectPropertyElementMain)
+            var size: UInt32 = 0
+            guard AudioObjectGetPropertyDataSize(object, &address, 0, nil, &size) == noErr else {
+                return InputRoute(bundleID: owner, devices: [])
+            }
+            var ids = [AudioDeviceID](repeating: 0, count: Int(size) / MemoryLayout<AudioDeviceID>.size)
+            guard size > 0, AudioObjectGetPropertyData(object, &address, 0, nil, &size, &ids) == noErr else {
+                return InputRoute(bundleID: owner, devices: [])
+            }
+            return InputRoute(bundleID: owner, devices: Set(ids))
+        }
+    }
+
     /// How long `bundleID` has been capturing without interruption, or nil if it is not capturing.
     /// Used to hold off on browser meetings until the capture is sustained — a two-second voice
     /// search must not raise a meeting prompt.

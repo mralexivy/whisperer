@@ -24,6 +24,7 @@ void shield_set_capture_blocked(bool);
 bool shield_capture_blocked(void);
 ShieldAudio* shield_audio_create(void);
 int32_t shield_audio_start(ShieldAudio*, uint32_t input, uint32_t output, ShieldProcess, void*);
+void shield_audio_set_processing(ShieldAudio*, bool);
 void shield_audio_stop(ShieldAudio*);
 void shield_audio_destroy(ShieldAudio*);
 ShieldMetrics shield_audio_metrics(ShieldAudio*);

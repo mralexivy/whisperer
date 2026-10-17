@@ -12,6 +12,7 @@ extension PrivacyShieldController {
         #if APP_STORE
         return false
         #else
+        guard !Task.isCancelled else { return false }
         refreshDriver()
         if AppState.shared.privacyShield.driverInstalled { return true }
         guard !AppState.shared.privacyShieldInstallerBusy,
@@ -37,6 +38,7 @@ extension PrivacyShieldController {
             if Task.isCancelled { return false }
             try? await Task.sleep(for: .milliseconds(250))
         }
+        guard !Task.isCancelled else { return false }
         AppState.shared.privacyShield.message = "Audio support is taking longer to start. Turn on again to retry."
         return false
         #endif

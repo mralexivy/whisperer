@@ -42,7 +42,7 @@ std::shared_ptr<aspl::Driver> makeDriver() {
     params.Name="Whisperer Virtual Mic"; params.Manufacturer="Whisperer";
     params.DeviceUID="com.ivy.whisperer.privacy-mic.v1"; params.ModelUID=params.DeviceUID;
     params.SampleRate=shield::rate; params.ChannelCount=1; params.EnableMixing=false;
-    params.CanBeDefault=false; params.CanBeDefaultForSystemSounds=false;
+    params.CanBeDefault=true; params.CanBeDefaultForSystemSounds=false;
     params.ZeroTimeStampPeriod=512; params.Latency=delayFrames;
     auto device=std::make_shared<aspl::Device>(context,params);
     aspl::StreamParameters stream;

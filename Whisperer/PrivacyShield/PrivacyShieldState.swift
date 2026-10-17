@@ -2,7 +2,7 @@
 import Foundation
 
 struct PrivacyShieldSnapshot: Equatable {
-    enum Phase: String { case off, starting, active, muted, stopping }
+    enum Phase: String { case off, starting, armed, active, muted, stopping, passthrough }
     var phase: Phase = .off
     var message = "Off. Your microphone is selected automatically when you turn this on."
     var blocks: UInt64 = 0
@@ -21,14 +21,15 @@ struct PrivacyShieldSnapshot: Equatable {
     }
     var menuActionTitle: String {
         switch phase {
-        case .off: return "Enable Privacy Shield"
+        case .off, .passthrough: return "Enable Privacy Shield"
         case .starting: return "Cancel Privacy Shield"
-        case .active: return "Disable Privacy Shield"
+        case .active, .armed: return "Disable Privacy Shield"
         case .muted: return "Turn Off Privacy Shield (Muted)"
         case .stopping: return "Stopping Privacy Shield…"
         }
     }
-    var blocksTranscription: Bool { phase != .off }
+    var isEnabled: Bool { phase != .off && phase != .passthrough }
+    var blocksTranscription: Bool { isEnabled }
 }
 
 enum PrivacyShieldError: LocalizedError {
@@ -50,3 +51,12 @@ enum PrivacyShieldError: LocalizedError {
     }
 }
 
+
+// Shared by presentation and tests: mixed/unknown inputs are not verified routes.
+enum PrivacyRouteStatus: Equatable {
+    case waiting, verified, needsSelection
+    static func evaluate(devices: [Set<UInt32>], virtual: UInt32, hasSignal: Bool) -> Self {
+        if devices.contains(where: { $0 != Set([virtual]) }) { return .needsSelection }
+        return !devices.isEmpty && hasSignal ? .verified : .waiting
+    }
+}

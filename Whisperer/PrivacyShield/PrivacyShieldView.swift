@@ -7,8 +7,8 @@ struct PrivacyShieldView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             #if !APP_STORE
-            Toggle("Privacy Shield", isOn: Binding(
-                get: { app.privacyShield.blocksTranscription },
+            Toggle("Automatic Privacy Shield", isOn: Binding(
+                get: { app.privacyShield.isEnabled },
                 set: { enabled in
                     if enabled { PrivacyShieldController.shared.start() }
                     else { Task { await PrivacyShieldController.shared.stop() } }
@@ -27,7 +27,7 @@ struct PrivacyShieldView: View {
                     .foregroundStyle(MBColors.textSecondary)
                     .fixedSize(horizontal: false, vertical: true)
             }
-            if let name = app.privacyShield.microphoneName, app.privacyShield.blocksTranscription {
+            if let name = app.privacyShield.microphoneName, app.privacyShield.isEnabled {
                 Text("Microphone: \(name) · automatic")
                     .font(.caption2).foregroundStyle(MBColors.textSecondary)
             }
