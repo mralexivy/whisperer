@@ -635,10 +635,6 @@ struct MenuBarView: View {
             // Header with gradient
             headerView
 
-            #if !APP_STORE
-            privacyShieldMenuControls
-            #endif
-
             // Tab bar
             tabBar
 
@@ -662,38 +658,6 @@ struct MenuBarView: View {
             PermissionManager.shared.recheckAccessibilityIfNeeded()
             #endif
         }
-    }
-
-    private var privacyShieldMenuControls: some View {
-        HStack(spacing: 8) {
-            Image(systemName: "shield.lefthalf.filled").foregroundStyle(MBColors.accentPurple)
-            VStack(alignment: .leading, spacing: 2) {
-                Text("Privacy Shield · \(appState.privacyShield.phase.rawValue.capitalized)")
-                    .font(.caption.bold()).foregroundStyle(MBColors.textPrimary)
-                Text("Experimental · protection unverified")
-                    .font(.caption2).foregroundStyle(MBColors.textSecondary)
-            }
-            Spacer(minLength: 0)
-            Button(appState.privacyShield.blocksTranscription ? "Turn off" : "Enable") {
-                if appState.privacyShield.blocksTranscription {
-                    Task { await PrivacyShieldController.shared.stop() }
-                } else {
-                    PrivacyShieldController.shared.start()
-                    if appState.privacyShield.phase == .off {
-                        selectedTab = .settings; settingsScrollTarget = .privacyShield
-                    }
-                }
-            }
-            .disabled(appState.privacyShield.phase == .stopping || appState.privacyShieldInstallerBusy)
-            Button {
-                selectedTab = .settings; settingsScrollTarget = .privacyShield
-            } label: { Image(systemName: "gearshape") }
-            .help("Privacy Shield settings")
-            .accessibilityLabel("Privacy Shield settings")
-        }
-        .buttonStyle(.borderless)
-        .padding(.horizontal, 16).padding(.vertical, 10)
-        .background(MBColors.cardSurface)
     }
 
     // MARK: - Header
@@ -1130,12 +1094,6 @@ struct StatusTabView: View {
     var body: some View {
         ScrollView(showsIndicators: false) {
             VStack(alignment: .leading, spacing: 16) {
-                if appState.privacyShield.blocksTranscription {
-                    infoCard(icon: "waveform.badge.mic", title: "Privacy Shield",
-                             value: appState.privacyShield.phase.rawValue.capitalized,
-                             detail: "Experimental · new recordings blocked", color: MBColors.accentPurple,
-                             navigateTo: .settings, scrollTo: .privacyShield)
-                }
                 // Permission warning banner (mode-aware)
                 if showPermissionWarning {
                     permissionWarningBanner

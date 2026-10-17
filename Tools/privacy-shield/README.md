@@ -22,7 +22,8 @@ the app target retains its existing script-sandbox settings. The project current
 4. Choose the baseline strength or load a compatible `.mlmodelc` package.
 5. Enable processing, then select **Whisperer Virtual Mic** as the microphone in the
    calling application. Keep normal headphones selected as the speaker output.
-6. Enable/disable from the popover strip, right-click menu, app menu, or settings.
+6. Enable/disable in Settings, the right-click menu, or the app menu. Privacy Shield
+   does not appear on the Status tab or above the popover tabs.
    When finished, turn processing off. The virtual mic becomes silent. Select your
    physical microphone in the call to resume unprocessed audio. Removal is available
    while off and also restarts system audio.
@@ -107,6 +108,14 @@ is local and never runs in the Core Audio callback. Loading a model is not evide
 of robustness, human intelligibility or actual call latency.
 
 ## Native and app tests
+
+Keep normal Apple Development signing enabled when launching the app or app-hosted
+XCTest on a Mac with an existing Whisperer permission grant. Do not launch an ad-hoc
+build under `com.ivy.whisperer` (`CODE_SIGNING_ALLOWED=NO` or `CODE_SIGN_IDENTITY=-`):
+macOS can associate Accessibility authorization with that build's exact code hash,
+leaving subsequent normally signed builds untrusted despite an enabled Settings
+switch. Use the standalone tests for unsigned validation, or the normally signed
+Xcode test host. Do not reset or change the user's permission grants as part of tests.
 
 ```sh
 SHIELD_ARCHS=$(uname -m) Tools/privacy-shield/build-driver.sh
