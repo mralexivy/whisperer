@@ -281,14 +281,17 @@ class MeetingSession: ObservableObject {
 
     func startRecording(title: String, surface: MeetingLiveSurface,
                         sourceBundleID: String? = nil, sourceAppName: String? = nil) async {
+        guard AppState.shared.allowCaptureDuringAudioSetup() else { return }
         guard !isRecording, !isStarting else { return }
         isStarting = true
-        defer { isStarting = false }
+        AppState.shared.pendingMeetingStarts += 1
+        defer { isStarting = false; AppState.shared.pendingMeetingStarts -= 1 }
 
         #if canImport(FluidAudio)
         // Force Nemotron before anything is created — a failure here must leave no
         // half-started meeting behind. AppState surfaces the reason via errorMessage.
         guard await AppState.shared.prepareMeetingASRBridge() else { return }
+        guard AppState.shared.allowCaptureDuringAudioSetup() else { return }
         guard !isRecording else { return }   // re-check: the await above yielded
         #endif
 

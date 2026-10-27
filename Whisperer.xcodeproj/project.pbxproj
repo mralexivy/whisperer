@@ -6,6 +6,20 @@
 	objectVersion = 77;
 	objects = {
 
+/* Begin PBXAggregateTarget section */
+		AA5510013030000100000003 /* Privacy driver build */ = {
+			isa = PBXAggregateTarget;
+			buildConfigurationList = AA5510013030000100000004 /* Build configuration list for PBXAggregateTarget "Privacy driver build" */;
+			buildPhases = (
+				AA5510013030000100000001 /* Embed Privacy Shield driver */,
+			);
+			dependencies = (
+			);
+			name = "Privacy driver build";
+			productName = PrivacyDriverBuild;
+		};
+/* End PBXAggregateTarget section */
+
 /* Begin PBXBuildFile section */
 		1038D4DE2F26429800490030 /* AVFoundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 1038D4DD2F26429800490030 /* AVFoundation.framework */; };
 		1038D4E02F2642A100490030 /* IOKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 1038D4DF2F2642A100490030 /* IOKit.framework */; };
@@ -30,6 +44,13 @@
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
+		10D7E12A3083411D000B65EA /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 1038D4772F26382700490030 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = AA5510013030000100000003;
+			remoteInfo = "Privacy driver build";
+		};
 		BBTT00092F50000100000009 /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
 			containerPortal = 1038D4772F26382700490030 /* Project object */;
@@ -2014,6 +2035,7 @@
 			buildRules = (
 			);
 			dependencies = (
+				AA5510013030000100000002 /* PBXTargetDependency */,
 			);
 			fileSystemSynchronizedGroups = (
 				1038D4812F26382700490030 /* Whisperer */,
@@ -2129,6 +2151,7 @@
 			);
 			projectRoot = "";
 			targets = (
+				AA5510013030000100000003 /* Privacy driver build */,
 				1038D47E2F26382700490030 /* whisperer */,
 				BBTT00012F50000100000001 /* WhispererTests */,
 			);
@@ -2175,6 +2198,27 @@
 			shellPath = /bin/sh;
 			shellScript = "\"$SRCROOT/Tools/mmbert/gen_key_source.sh\"\n";
 		};
+		AA5510013030000100000001 /* Embed Privacy Shield driver */ = {
+			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputPaths = (
+				"$(SRCROOT)/Tools/privacy-shield/",
+				"$(SRCROOT)/Platform/macOS/VirtualMicrophone/",
+				"$(SRCROOT)/Vendor/libASPL/",
+				"$(SRCROOT)/Whisperer/PrivacyShield/Native/",
+			);
+			name = "Embed Privacy Shield driver";
+			outputPaths = (
+				"$(DERIVED_FILE_DIR)/PrivacyShieldDriver/",
+				"$(SHIELD_EMBED_DESTINATION)",
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/bash;
+			shellScript = "\"$SRCROOT/Tools/privacy-shield/embed-driver.sh\"\n";
+		};
 /* End PBXShellScriptBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
@@ -2195,6 +2239,11 @@
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
+		AA5510013030000100000002 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = AA5510013030000100000003 /* Privacy driver build */;
+			targetProxy = 10D7E12A3083411D000B65EA /* PBXContainerItemProxy */;
+		};
 		BBTT000A2F5000010000000A /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
 			target = 1038D47E2F26382700490030 /* whisperer */;
@@ -2479,6 +2528,30 @@
 			};
 			name = Release;
 		};
+		AA5510013030000100000005 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ENABLE_USER_SCRIPT_SANDBOXING = NO;
+				SHIELD_EMBED_DESTINATION = "$(BUILT_PRODUCTS_DIR)/whisperer.app/Contents/Resources/PrivacyShield";
+			};
+			name = Debug;
+		};
+		AA5510013030000100000006 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ENABLE_USER_SCRIPT_SANDBOXING = NO;
+				SHIELD_EMBED_DESTINATION = "$(BUILT_PRODUCTS_DIR)/whisperer.app/Contents/Resources/PrivacyShield";
+			};
+			name = Release;
+		};
+		AA5510013030000100000007 /* AppStore */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ENABLE_USER_SCRIPT_SANDBOXING = NO;
+				SHIELD_EMBED_DESTINATION = "$(BUILT_PRODUCTS_DIR)/whisperer.app/Contents/Resources/PrivacyShield";
+			};
+			name = AppStore;
+		};
 		AABB00012F60000100000001 /* AppStore */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
@@ -2717,6 +2790,16 @@
 				1038D48B2F26382900490030 /* Debug */,
 				1038D48C2F26382900490030 /* Release */,
 				AABB00022F60000100000002 /* AppStore */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		AA5510013030000100000004 /* Build configuration list for PBXAggregateTarget "Privacy driver build" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				AA5510013030000100000005 /* Debug */,
+				AA5510013030000100000006 /* Release */,
+				AA5510013030000100000007 /* AppStore */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;

@@ -20,6 +20,7 @@ extension View {
 @main
 struct WhispererApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
+    @ObservedObject private var appState = AppState.shared
 
     var body: some Scene {
         // Menu bar app - no main window
@@ -27,15 +28,25 @@ struct WhispererApp: App {
             MenuBarView()
         }
         .menuBarExtraStyle(.window)
+        .commands {
+            #if !APP_STORE
+            CommandMenu("Privacy Shield") {
+                Button(appState.privacyShield.menuActionTitle) { appDelegate.togglePrivacyShield() }
+                    .disabled(appState.privacyShield.phase == .stopping || appState.privacyShieldInstallerBusy)
+                Button("Privacy Shield Settings…") { appDelegate.showPrivacyShieldSettings() }
+            }
+            #endif
+        }
     }
 }
 
-class AppDelegate: NSObject, NSApplicationDelegate {
+class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     var overlayPanel: OverlayPanel?
     var pickerPanel: TranscriptionPickerPanel?
     var islandCoordinator: IslandCoordinator?
     let appState = AppState.shared
     private var isShuttingDown = false
+    private var privacySettingsWindow: NSWindow?
     private var rightClickMenu: NSMenu?
     private var rightClickMonitor: Any?
     private var mcpCancellables = Set<AnyCancellable>()
@@ -174,6 +185,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         // microphone on, so the suite would trip its own meeting detection.
         if !AppEnvironment.isRunningTests {
             MeetingDetector.shared.start()
+            PrivacyShieldController.shared.resumeAtLaunch()
         }
         // Warm the speaker-diarization model on disk while the user is doing something
         // else. Gated on the same toggle MeetingDetector gates itself with, so users who
@@ -396,6 +408,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func gracefulShutdown() async {
+        await PrivacyShieldController.shared.shutdown()
         // 0. Stop the retention sweep before anything else — it must not start deleting
         // records while the rest of this sequence is tearing the pipeline down.
         await MainActor.run {
@@ -465,7 +478,17 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func setupStatusItemRightClickMenu() {
         let menu = NSMenu()
-        menu.addItem(withTitle: "Quit Whisperer", action: #selector(quitApp), keyEquivalent: "q")
+        menu.delegate = self
+        menu.autoenablesItems = false
+        #if !APP_STORE
+        let toggle = menu.addItem(withTitle: "Enable Privacy Shield", action: #selector(togglePrivacyShield), keyEquivalent: "")
+        toggle.target = self
+        toggle.tag = 100
+        let settings = menu.addItem(withTitle: "Privacy Shield Settings…", action: #selector(showPrivacyShieldSettings), keyEquivalent: "")
+        settings.target = self
+        menu.addItem(.separator())
+        #endif
+        menu.addItem(withTitle: "Quit Whisperer", action: #selector(quitApp), keyEquivalent: "q").target = self
         self.rightClickMenu = menu
 
         // Monitor right-click on the status bar area
@@ -478,6 +501,44 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             self.rightClickMenu?.popUp(positioning: nil, at: NSPoint(x: 0, y: button.bounds.height), in: button)
             return nil
         }
+    }
+
+    func menuNeedsUpdate(_ menu: NSMenu) {
+        let snapshot = appState.privacyShield
+        if let item = menu.item(withTag: 100) {
+            item.title = snapshot.menuActionTitle
+            item.state = snapshot.isEnabled ? .on : .off
+            item.isEnabled = snapshot.phase != .stopping && !appState.privacyShieldInstallerBusy
+        }
+    }
+
+    @objc func togglePrivacyShield() {
+        if appState.privacyShield.isEnabled {
+            Task { await PrivacyShieldController.shared.stop() }
+        } else {
+            PrivacyShieldController.shared.start()
+            if appState.privacyShield.phase == .off { showPrivacyShieldSettings() }
+        }
+    }
+
+    @objc func showPrivacyShieldSettings() {
+        if privacySettingsWindow == nil {
+            let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 460, height: 300),
+                                  styleMask: [.titled, .closable], backing: .buffered, defer: false)
+            window.title = "Privacy Shield — Experimental"
+            window.appearance = NSAppearance(named: .darkAqua)
+            window.isReleasedWhenClosed = false
+            let controller = NSHostingController(rootView:
+                PrivacyShieldView().padding(24).frame(width: 460, height: 300, alignment: .topLeading)
+                    .background(MBColors.background).environment(\.colorScheme, .dark))
+            // The window owns its size; avoid SwiftUI intrinsic-size feedback during status updates.
+            controller.sizingOptions = []
+            window.contentViewController = controller
+            window.center()
+            privacySettingsWindow = window
+        }
+        privacySettingsWindow?.makeKeyAndOrderFront(nil)
+        NSApp.activate(ignoringOtherApps: true)
     }
 
     @objc private func quitApp() {
@@ -563,6 +624,7 @@ enum SettingsScrollTarget: String {
     case dictation
     case microphone
     case livePreview
+    case privacyShield
 }
 
 struct MenuBarView: View {
@@ -2445,6 +2507,11 @@ struct SettingsTabView: View {
                     MicrophonePickerView()
                 }
                 .id(SettingsScrollTarget.microphone)
+
+                settingsCard(title: "Privacy Shield", icon: "waveform.badge.mic", color: MBColors.accentPurple) {
+                    PrivacyShieldView()
+                }
+                .id(SettingsScrollTarget.privacyShield)
 
                 // Permissions
                 settingsCard(title: "Permissions", icon: "lock.shield.fill", color: .red) {
