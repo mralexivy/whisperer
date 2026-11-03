@@ -27,16 +27,17 @@ final class MeetingQwen3CoordinatorTests: XCTestCase {
 
     // MARK: - Feed selection
 
-    /// Qwen3 must take the transcriber's accumulated string. Picking `.accumulatedPartials`
-    /// would hand the coordinator a window-local tail that shrinks on every chunk commit.
-    func testQwen3UsesTheTranscriberAccumulatedFeed() {
+    /// Without the built-in engine, Qwen3 must take the transcriber's accumulated string.
+    /// Picking `.accumulatedPartials` there would hand the coordinator a window-local tail that
+    /// shrinks on every chunk commit. With it, Qwen3 only produces chunk deltas and the live text
+    /// is Nemotron's accumulated partials, so that is the source instead.
+    func testQwen3FeedFollowsWhoOwnsTheDisplay() {
         XCTAssertEqual(
             MeetingCoordinatorFeed(inAppBackend: .qwen3asr, previewOwnsNemotron: false),
             .transcriberAccumulated)
-        // Independent of Nemotron's presence — Qwen3 never reads Nemotron's callbacks.
         XCTAssertEqual(
             MeetingCoordinatorFeed(inAppBackend: .qwen3asr, previewOwnsNemotron: true),
-            .transcriberAccumulated)
+            .accumulatedPartials)
     }
 
     /// The pre-existing paths must be byte-for-byte the same decision as before the change.

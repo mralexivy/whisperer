@@ -545,8 +545,13 @@ class AppState: ObservableObject {
     @Published var nemotronDownloadStatus: String = ""
     var nemotronLoadTask: Task<Void, Never>?
     #if canImport(FluidAudio)
-    var nemotronBridgeInstance: NemotronBridge?
+    var nemotronBridgeInstance: NemotronBridge? {
+        didSet { builtinEngineLoaded = nemotronBridgeInstance != nil }
+    }
     #endif
+    /// Whether the built-in engine (Nemotron) is resident. Published because the bridge itself is
+    /// not, and the Models tab shows this as the engine's loaded / not loaded state.
+    @Published private(set) var builtinEngineLoaded: Bool = false
 
     // Nemotron Hebrew streaming model state
     @Published var isDownloadingNemotronHebrew: Bool = false
@@ -1276,9 +1281,8 @@ class AppState: ObservableObject {
 
     /// Release the active transcription bridge and all satellite resources (EOU, VAD, CTC)
     func releaseCurrentBridge() {
-        // Surrendering the preview-owned Nemotron so it is released below (unless a meeting
-        // also owns it). Backend switch is an explicit user action, so preview ownership ends.
-        if !meetingOwnsNemotron { previewOwnsNemotron = false }
+        // The built-in engine (Nemotron) is permanent: a backend switch never releases it, because
+        // it drives live text for every other engine and covers them when they are busy.
 
         let memBefore = BenchmarkUtilities.currentMemoryMB()
 
@@ -1290,7 +1294,7 @@ class AppState: ObservableObject {
         speechAnalyzerLoadTask?.cancel()
         speechAnalyzerLoadTask = nil
         #if canImport(FluidAudio)
-        // A meeting-initiated or preview-initiated Nemotron load must survive a backend switch.
+        // The built-in engine's load must survive a backend switch.
         if !meetingOwnsNemotron && !previewOwnsNemotron {
             nemotronLoadTask?.cancel()
             nemotronLoadTask = nil
@@ -1310,8 +1314,8 @@ class AppState: ObservableObject {
 
         // Release Nemotron bridge if loaded
         #if canImport(FluidAudio)
-        // A meeting-owned or preview-owned bridge survives backend switches — it is being used
-        // by an active recording or was loaded to serve live preview alongside whisper.cpp.
+        // The built-in engine survives backend switches — it serves live text for whichever
+        // engine is selected.
         if let nemotron = nemotronBridgeInstance, !meetingOwnsNemotron && !previewOwnsNemotron {
             Task { await nemotron.prepareForShutdown() }
             nemotronBridgeInstance = nil
@@ -1469,6 +1473,38 @@ class AppState: ObservableObject {
 
     /// Pre-load the Whisper model into memory for instant recording start
     /// Call this once after model download completes
+    /// Whether the selected engine's files are on disk.
+    ///
+    /// `ModelDownloader` only knows the whisper.cpp file. Nemotron, the default engine, is
+    /// fetched by `downloadNemotronModel()`, so first-run code has to ask this instead of
+    /// `ModelDownloader.shared.isModelDownloaded(selectedModel)` or it would download the wrong thing.
+    var isSelectedEngineDownloaded: Bool {
+        selectedBackendType == .nemotron
+            ? isNemotronModelCached()
+            : ModelDownloader.shared.isModelDownloaded(selectedModel)
+    }
+
+    /// True while the selected engine's files are downloading.
+    var isSelectedEngineDownloading: Bool {
+        selectedBackendType == .nemotron ? isDownloadingNemotron : downloadingModel != nil
+    }
+
+    /// First-run and launch: load the selected engine, or download it first when it is missing.
+    /// Never downloads inside the test host.
+    func startSelectedEngine() {
+        defer { startBuiltinEngine() }
+        if isSelectedEngineDownloaded {
+            preloadModel()
+        } else if !AppEnvironment.isRunningTests {
+            if selectedBackendType == .nemotron {
+                downloadNemotronModel()
+            } else {
+                let model = selectedModel
+                Task { await downloadModel(model) }
+            }
+        }
+    }
+
     func preloadModel() {
         // Skip heavy model loading during unit tests
         if ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil {
@@ -1580,7 +1616,7 @@ class AppState: ObservableObject {
                     self.preloadVAD()
                     self.preloadLanguageRouting()
                     self.preloadLLM()
-                    self.preloadNemotronForPreview()
+                    self.startBuiltinEngine()
 
                     Logger.info("Whisper model loaded. Process memory: \(String(format: "%.0f", BenchmarkUtilities.currentMemoryMB()))MB", subsystem: .model)
                 }
@@ -1826,7 +1862,9 @@ class AppState: ObservableObject {
         isDownloadingNemotron = true
         nemotronDownloadStatus = "Downloading Nemotron Multilingual..."
         downloadProgress = 0
-        state = .downloadingModel(progress: 0)
+        // Recording stays available while the built-in engine downloads in the background behind
+        // another engine; only when Nemotron is the engine itself is there nothing to record with.
+        if selectedBackendType == .nemotron { state = .downloadingModel(progress: 0) }
 
         Task.detached(priority: .userInitiated) { [weak self] in
             do {
@@ -1835,7 +1873,7 @@ class AppState: ObservableObject {
                     Task { @MainActor [weak self] in
                         guard let self, self.isDownloadingNemotron else { return }
                         self.downloadProgress = fraction
-                        self.state = .downloadingModel(progress: fraction)
+                        if self.selectedBackendType == .nemotron { self.state = .downloadingModel(progress: fraction) }
                     }
                 }
                 Logger.info("Nemotron multilingual downloaded", subsystem: .model)
@@ -1844,8 +1882,14 @@ class AppState: ObservableObject {
                     self.isDownloadingNemotron = false
                     self.nemotronDownloadStatus = ""
                     self.downloadProgress = 0
-                    self.state = .idle
-                    self.activateBackendAfterDownload(.nemotron)
+                    if case .downloadingModel = self.state { self.state = .idle }
+                    // Never switch the user's engine: the download is of the built-in engine, which
+                    // loads alongside whichever one they chose. It *is* their engine only when selected.
+                    if self.selectedBackendType == .nemotron {
+                        self.activateBackendAfterDownload(.nemotron)
+                    } else {
+                        self.startBuiltinEngine()
+                    }
                 }
             } catch {
                 Logger.error("Failed to download Nemotron: \(error)", subsystem: .model)
@@ -1854,34 +1898,57 @@ class AppState: ObservableObject {
                     self.isDownloadingNemotron = false
                     self.nemotronDownloadStatus = ""
                     self.downloadProgress = 0
-                    self.state = .idle
-                    self.errorMessage = "Failed to download Nemotron: \(error.localizedDescription)"
+                    if case .downloadingModel = self.state { self.state = .idle }
+                    self.errorMessage = "Failed to download the built-in engine: \(error.localizedDescription)"
                 }
             }
         }
     }
 
-    /// Preload Nemotron alongside whisper.cpp so it can drive the live-preview HUD.
-    /// No-ops when: opted out, already loaded, not cached, or memory is tight.
-    /// Default on (mirrors Fast Polish's `fastPolishDefault = true` precedent).
-    func preloadNemotronForPreview() {
-        let key = "nemotronPreviewEnabled"
-        let enabled: Bool
-        if UserDefaults.standard.object(forKey: key) != nil {
-            enabled = UserDefaults.standard.bool(forKey: key)
-        } else {
-            enabled = true  // default on
-        }
-        guard enabled else { return }
-        guard selectedBackendType == .whisperCpp else { return }
-        guard isNemotronModelCached() else { return }
-        guard nemotronBridgeInstance == nil, !isLoadingNemotron else { return }
-        guard SystemMemory.availableGB() >= Self.meetingDualBackendHeadroomGB else {
-            Logger.info("Nemotron preview: skipping — only \(String(format: "%.1f", SystemMemory.availableGB()))GB free", subsystem: .model)
+    /// Start the built-in engine: Nemotron, downloaded at startup and kept resident.
+    ///
+    /// It is not something the user picks. It drives live text (dictation HUD and meeting live
+    /// transcript) for every other engine, and it transcribes on its own when no other engine is
+    /// loaded or they are busy. Always downloads when missing; loads when cached. When another
+    /// engine is selected it only loads if there is memory headroom, so it never evicts the
+    /// user's engine.
+    /// Whether the resident built-in engine should supply live text for `backend`.
+    ///
+    /// whisper.cpp and Qwen3 only: they decode committed chunks, so the transcriber can hand the
+    /// display to Nemotron and keep their output for the final text. Other engines keep their own
+    /// live text until that routing is verified for them.
+    ///
+    /// Not for Hebrew. The built-in engine's Hebrew is "adaptation-ready", not supported: 100 FLEURS
+    /// clips scored WER 0.436 against ivrit-v3-turbo's 0.148, so a Hebrew user's live text
+    /// stays with their own engine. Same measured-weakness rule as `BackendType.weakLanguages`.
+    func builtinEngineDrivesLiveText(for backend: BackendType) -> Bool {
+        guard previewOwnsNemotron, nemotronBridgeInstance != nil else { return false }
+        guard backend == .whisperCpp || backend == .qwen3asr else { return false }
+        let configured: [TranscriptionLanguage] = routingConfig.isRoutingEnabled
+            ? routingConfig.allowedLanguages
+            : [selectedLanguage]
+        let weak = BackendType.nemotron.weakLanguages
+        return !configured.contains(where: { weak.contains($0) })
+    }
+
+    func startBuiltinEngine() {
+        guard !AppEnvironment.isRunningTests else { return }
+        // Permanent from here on: backend switches never release it.
+        previewOwnsNemotron = true
+        guard isNemotronModelCached() else {
+            guard !isDownloadingNemotron else { return }
+            Logger.info("Built-in engine: downloading Nemotron", subsystem: .model)
+            downloadNemotronModel()
             return
         }
-        previewOwnsNemotron = true
-        Logger.info("Nemotron preview: preloading alongside whisper.cpp", subsystem: .model)
+        guard nemotronBridgeInstance == nil, !isLoadingNemotron else { return }
+        if selectedBackendType != .nemotron {
+            guard SystemMemory.availableGB() >= Self.meetingDualBackendHeadroomGB else {
+                Logger.info("Built-in engine: not loading — only \(String(format: "%.1f", SystemMemory.availableGB()))GB free", subsystem: .model)
+                return
+            }
+        }
+        Logger.info("Built-in engine: loading Nemotron", subsystem: .model)
         preloadNemotronModel()
     }
 
@@ -1891,6 +1958,17 @@ class AppState: ObservableObject {
             return
         }
 
+        if nemotronBridgeInstance != nil {
+            // Already resident as the built-in engine: selecting it as the engine must not load a
+            // second copy, only adopt the one that is there.
+            if selectedBackendType == .nemotron {
+                isModelLoaded = true
+                loadedBackendType = .nemotron
+                preloadLLM()
+            }
+            return
+        }
+        guard !isLoadingNemotron else { return }
         isLoadingNemotron = true
         nemotronDownloadStatus = "Loading Nemotron..."
 
@@ -2099,6 +2177,7 @@ class AppState: ObservableObject {
     #else
     func isNemotronModelCached() -> Bool { false }
     func downloadNemotronModel() { }
+    func startBuiltinEngine() { }
     func preloadNemotronModel() { }
     func isNemotronHebrewModelCached() -> Bool { false }
     func downloadNemotronHebrewModel() { }
@@ -3287,13 +3366,13 @@ class AppState: ObservableObject {
                 #if canImport(FluidAudio)
                 let nemotronInApp: NemotronBridge? = {
                     if inAppBackend == .nemotron { return nemotronBridgeInstance }
-                    // Preview-only: pass alongside whisper.cpp when resident and preview is armed.
-                    // StreamingTranscriber.nemotronIsPreviewOnly = true when both nemotronBridge
-                    // and usesEagerStream are set — it routes Nemotron to HUD, whisper to final text.
-                    if inAppBackend == .whisperCpp, previewOwnsNemotron,
+                    // Preview-only: the built-in engine drives live text and the selected engine
+                    // produces the final transcript. See `builtinEngineDrivesLiveText`.
+                    if builtinEngineDrivesLiveText(for: inAppBackend),
                        let bridge = nemotronBridgeInstance { return bridge }
                     return nil
                 }()
+                let nemotronPreviewOnlyInApp = nemotronInApp != nil && inAppBackend != .nemotron
                 let nemotronHebrewInApp: NemotronHebrewBridge? = inAppBackend == .nemotronHebrew ? nemotronHebrewBridgeInstance : nil
                 let anyNemotronInApp: (any AnyObject)? = (nemotronInApp as AnyObject?) ?? (nemotronHebrewInApp as AnyObject?)
                 #else
@@ -3304,7 +3383,7 @@ class AppState: ObservableObject {
                 // .auto, whisper re-detects on every eager pass, and languageIsLocked is false for the
                 // full 30 s unroutedCommitGrace — blocking all LocalAgreement-2 confirmation.
                 let startLanguage = routingConfig.singleLanguageStartLanguage ?? selectedLanguage
-                streamingTranscriber = StreamingTranscriber(backend: bridge, vad: sileroVAD, language: startLanguage, initialPrompt: promptWordsString, fillerWordRemovalEnabled: fillerWordRemovalEnabled, modelPool: modelPool, languageRouter: routingConfig.isRoutingEnabled ? LanguageRouter(allowed: routingConfig.allowedLanguages, primary: routingConfig.primaryLanguage) : nil, modelRouter: routingConfig.isRoutingEnabled ? ModelRouter(languageModelMap: buildLanguageModelMap(), fallbackProfile: buildFallbackProfile()) : nil, previewBridge: livePreviewBridge(for: bridge), nemotronBridge: anyNemotronInApp)
+                streamingTranscriber = StreamingTranscriber(backend: bridge, vad: sileroVAD, language: startLanguage, initialPrompt: promptWordsString, fillerWordRemovalEnabled: fillerWordRemovalEnabled, modelPool: modelPool, languageRouter: routingConfig.isRoutingEnabled ? LanguageRouter(allowed: routingConfig.allowedLanguages, primary: routingConfig.primaryLanguage) : nil, modelRouter: routingConfig.isRoutingEnabled ? ModelRouter(languageModelMap: buildLanguageModelMap(), fallbackProfile: buildFallbackProfile()) : nil, previewBridge: livePreviewBridge(for: bridge), nemotronBridge: anyNemotronInApp, nemotronPreviewOnly: nemotronPreviewOnlyInApp)
 
                 // Wire language detection → UI update
                 streamingTranscriber?.onLanguageDetected = { [weak self] lang in
@@ -3331,7 +3410,7 @@ class AppState: ObservableObject {
                 // degrade attribution — it stops it dead. Naming the three shapes beats
                 // re-deriving them from `inAppBackend` at each callback.
                 let coordinatorFeed = MeetingCoordinatorFeed(inAppBackend: inAppBackend,
-                                                             previewOwnsNemotron: previewOwnsNemotron)
+                                                             previewOwnsNemotron: nemotronPreviewOnlyInApp)
                 let hasAccumulatedSource = coordinatorFeed != nil
                     && (anyNemotronInApp != nil || inAppBackend == .qwen3asr)
                 if let meetingSession = capturedMeetingSession, hasAccumulatedSource {
@@ -3895,16 +3974,17 @@ class AppState: ObservableObject {
                 let nemotron: (any AnyObject)? = {
                     if selectedBackendType == .nemotron { return nemotronBridgeInstance as AnyObject? }
                     if selectedBackendType == .nemotronHebrew { return nemotronHebrewBridgeInstance as AnyObject? }
-                    if selectedBackendType == .whisperCpp, previewOwnsNemotron,
+                    if builtinEngineDrivesLiveText(for: selectedBackendType),
                        let bridge = nemotronBridgeInstance { return bridge as AnyObject? }
                     return nil
                 }()
+                let nemotronPreviewOnlyDictation = selectedBackendType != .nemotron && selectedBackendType != .nemotronHebrew && nemotron != nil
                 #else
                 let nemotron: AnyObject? = nil
                 #endif
                 // See the matching comment at the in-app transcriber creation above.
                 let startLanguage = routingConfig.singleLanguageStartLanguage ?? selectedLanguage
-                streamingTranscriber = StreamingTranscriber(backend: bridge, vad: sileroVAD, language: startLanguage, initialPrompt: promptWordsString, fillerWordRemovalEnabled: fillerWordRemovalEnabled, modelPool: modelPool, languageRouter: routingConfig.isRoutingEnabled ? LanguageRouter(allowed: routingConfig.allowedLanguages, primary: routingConfig.primaryLanguage) : nil, modelRouter: routingConfig.isRoutingEnabled ? ModelRouter(languageModelMap: buildLanguageModelMap(), fallbackProfile: buildFallbackProfile()) : nil, previewBridge: livePreviewBridge(for: bridge), nemotronBridge: nemotron)
+                streamingTranscriber = StreamingTranscriber(backend: bridge, vad: sileroVAD, language: startLanguage, initialPrompt: promptWordsString, fillerWordRemovalEnabled: fillerWordRemovalEnabled, modelPool: modelPool, languageRouter: routingConfig.isRoutingEnabled ? LanguageRouter(allowed: routingConfig.allowedLanguages, primary: routingConfig.primaryLanguage) : nil, modelRouter: routingConfig.isRoutingEnabled ? ModelRouter(languageModelMap: buildLanguageModelMap(), fallbackProfile: buildFallbackProfile()) : nil, previewBridge: livePreviewBridge(for: bridge), nemotronBridge: nemotron, nemotronPreviewOnly: nemotronPreviewOnlyDictation)
 
                 // Wire language detection → UI update
                 streamingTranscriber?.onLanguageDetected = { [weak self] lang in

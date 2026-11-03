@@ -30,6 +30,14 @@ never calls them.
 4. `Whisperer/UI/AcknowledgementsView.swift` credits `nvidia/parakeet-tdt-1.1b`. The app ships
    the 0.6b v2 and v3 CoreML conversions, not the 1.1b model. Correct the link.
 
+## Bundled in the app
+
+Not downloaded: these ship inside the app bundle, so attribution is owed with every install.
+
+| Repo ID | What uses it | License | Commercial OK? | Source | Checked |
+|---|---|---|---|---|---|
+| `ggml-org/whisper-vad` (`ggml-silero-v6.2.0.bin`) | Silero VAD, bundled so a first run has speech detection offline | MIT | Yes | https://huggingface.co/ggml-org/whisper-vad | 2026-10-31 |
+
 ## Shipped by default
 
 These download automatically, or on the first use of a default feature.

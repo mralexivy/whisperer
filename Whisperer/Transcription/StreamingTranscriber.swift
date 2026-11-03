@@ -606,8 +606,13 @@ class StreamingTranscriber {
     private static let nemotronMaxPendingPreviewSeconds: Double = 3.0
     /// True when Nemotron drives the live HUD but whisper.cpp eager is the final decoder.
     /// Computed from the same information the init already has — no extra parameter needed.
-    private var nemotronIsPreviewOnly: Bool { nemotronBridge != nil && usesEagerStream }
+    /// True when Nemotron is the live-text source and another engine produces the final
+    /// transcript. whisper.cpp's eager stream implies it; any other chunk-decoding engine (Qwen3)
+    /// opts in explicitly through `nemotronPreviewOnly`.
+    private var nemotronIsPreviewOnly: Bool { nemotronBridge != nil && (usesEagerStream || nemotronForcedPreviewOnly) }
     #endif
+    /// Declared unconditionally so the initializer can assign it in any build.
+    private let nemotronForcedPreviewOnly: Bool
 
     /// Accumulates Nemotron's own per-chunk language guesses and decides when to pin the session
     /// to one. Declared unconditionally so `nemotronLanguageTally` is readable in any build.
@@ -1147,9 +1152,11 @@ class StreamingTranscriber {
         modelRouter: ModelRouter? = nil,
         previewBridge: TranscriptionBackend? = nil,
         nemotronBridge: (any AnyObject)? = nil,  // NemotronBridge — typed as AnyObject to avoid #if at call sites
+        nemotronPreviewOnly: Bool = false,  // Nemotron owns the display; `backend` produces the final text
         eagerStreamOverride: Bool? = nil
     ) {
         self.whisper = backend
+        self.nemotronForcedPreviewOnly = nemotronPreviewOnly
         self.usesEagerStream = {
             guard backend.streamingPolicy.supportsEagerWordStream else { return false }
             // Tests pass the arm explicitly. They must NOT write the rollback flag to
@@ -1354,6 +1361,13 @@ class StreamingTranscriber {
 
         // Start preview after language detection resolves (state-machine gate)
         previewTask = Task.detached(priority: .userInitiated) { [weak self] in
+            // Nemotron owns the display, and this engine only produces the final transcript from
+            // committed chunks. Its own preview passes would decode the same audio a second time
+            // on the GPU for text that is swallowed. (whisper.cpp's eager stream is the final
+            // decoder, so it keeps running.)
+            #if canImport(FluidAudio)
+            if self?.nemotronIsPreviewOnly == true && self?.usesEagerStream != true { return }
+            #endif
             // The eager stream decodes with `auto-detect` on every pass — whisper.cpp re-detects
             // per window, so it needs no route decision to start. Waiting here would cost up to
             // the full 5s timeout whenever detection stays undecided (three sub-threshold
@@ -1838,8 +1852,13 @@ class StreamingTranscriber {
                 self.rebaseAgreementAcrossCommit(committedText: trimmed,
                                                  newBase: chunk.endSample)
                 self.lastTranscribedSampleIndex = chunk.endSample
-                // Clear preview accumulated text — chunk covers this audio now
+                // Clear preview accumulated text — chunk covers this audio now. Not when Nemotron
+                // owns it: its partials accumulate the whole session and are never replaced.
+                #if canImport(FluidAudio)
+                if !self.nemotronIsPreviewOnly { self.previewAccumulatedText = "" }
+                #else
                 self.previewAccumulatedText = ""
+                #endif
                 self.lastPreviewedSampleIndex = chunk.endSample
                 self.latestWhisperKitPreviewText = ""
                 self.latestWhisperKitPreviewStartIndex = chunk.endSample
@@ -1892,6 +1911,22 @@ class StreamingTranscriber {
         }
     }
 
+    /// Publish display text from the engine that produces the final transcript.
+    ///
+    /// Swallowed while Nemotron owns the display (`nemotronIsPreviewOnly`): its partial callback is
+    /// then the only writer allowed to move the HUD or the meeting live text, because a second
+    /// writer would make the text jump between two engines' hypotheses. Callers still maintain
+    /// the transcript itself (`fullTranscription`, committed chunks).
+    private func emitDisplay(_ display: String, tail: String? = nil) {
+        #if canImport(FluidAudio)
+        if nemotronIsPreviewOnly { return }
+        #endif
+        DispatchQueue.main.async { [weak self] in
+            self?.onTranscription?(display)
+            if let tail { self?.onPreviewTail?(tail) }
+        }
+    }
+
     /// Compose live preview from completed chunks + current chunk text
     private func updateLivePreview() {
         var preview = completedChunkTexts.joined(separator: " ")
@@ -1903,9 +1938,7 @@ class StreamingTranscriber {
         fullTranscription = preview
 
         let text = preview
-        DispatchQueue.main.async { [weak self] in
-            self?.onTranscription?(text)
-        }
+        emitDisplay(text)
     }
 
     // WhisperKit snapshot path: provisional text completely replaces (never appended)
@@ -1917,9 +1950,7 @@ class StreamingTranscriber {
         }
         fullTranscription = display
         let text = display
-        DispatchQueue.main.async { [weak self] in
-            self?.onTranscription?(text)
-        }
+        emitDisplay(text)
     }
 
     /// WhisperKit's newest words are frequently revised while the decoder is still
@@ -1946,10 +1977,7 @@ class StreamingTranscriber {
         display += guarded
         fullTranscription = display
 
-        DispatchQueue.main.async { [weak self] in
-            self?.onTranscription?(display)
-            self?.onPreviewTail?(guarded)
-        }
+        emitDisplay(display, tail: guarded)
         transcriptionProgressCounter &+= 1
     }
 
@@ -2278,10 +2306,7 @@ class StreamingTranscriber {
             self.fullTranscription = display
             let tail = self.previewAccumulatedText
 
-            DispatchQueue.main.async { [weak self] in
-                self?.onTranscription?(display)
-                self?.onPreviewTail?(tail)
-            }
+            self.emitDisplay(display, tail: tail)
 
             EventRingBuffer.shared.record(
                 component: "StreamingTranscriber",
@@ -2378,10 +2403,7 @@ class StreamingTranscriber {
         if !display.isEmpty { display += " " }
         display += trimmed
         fullTranscription = display
-        DispatchQueue.main.async { [weak self] in
-            self?.onTranscription?(display)
-            self?.onPreviewTail?(trimmed)
-        }
+        emitDisplay(display, tail: trimmed)
     }
 
     #if canImport(WhisperKit)
@@ -2446,10 +2468,7 @@ class StreamingTranscriber {
         if !display.isEmpty { display += " " }
         display += text
         fullTranscription = display
-        DispatchQueue.main.async { [weak self] in
-            self?.onTranscription?(display)
-            self?.onPreviewTail?(text)
-        }
+        emitDisplay(display, tail: text)
         transcriptionProgressCounter &+= 1
     }
 

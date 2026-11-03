@@ -1112,7 +1112,7 @@ struct OnboardingView: View {
                     .font(.system(size: 34, weight: .bold))
                     .foregroundColor(OnboardingColors.textPrimary)
 
-                Text("Downloading the recommended model\nfor transcription. This may take a minute.")
+                Text("Downloading the built-in engine for live\ntext. This may take a minute.")
                     .font(.system(size: 14))
                     .foregroundColor(OnboardingColors.textSecondary)
                     .lineSpacing(3)
@@ -1132,10 +1132,10 @@ struct OnboardingView: View {
                 }
 
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(appState.selectedModel.displayName)
+                    Text(onboardingEngineName)
                         .font(.system(size: 13, weight: .semibold))
                         .foregroundColor(OnboardingColors.textPrimary)
-                    Text(appState.selectedModel.sizeDescription)
+                    Text(onboardingEngineSize)
                         .font(.system(size: 11))
                         .foregroundColor(OnboardingColors.textTertiary)
                 }
@@ -1174,7 +1174,7 @@ struct OnboardingView: View {
                             completeOnboarding()
                         }
                     }
-                } else if appState.downloadingModel != nil {
+                } else if appState.isSelectedEngineDownloading {
                     // Downloading
                     VStack(alignment: .leading, spacing: 8) {
                         ProgressView(value: appState.downloadProgress)
@@ -1184,7 +1184,7 @@ struct OnboardingView: View {
                             .font(.system(size: 12, weight: .medium))
                             .foregroundColor(OnboardingColors.textSecondary)
                     }
-                } else if ModelDownloader.shared.isModelDownloaded(appState.selectedModel) {
+                } else if appState.isSelectedEngineDownloaded {
                     // Downloaded but not yet loaded
                     HStack(spacing: 10) {
                         ProgressView()
@@ -1273,15 +1273,18 @@ struct OnboardingView: View {
         }
     }
 
+    /// Nemotron is the default engine and is not a whisper file, so the card names whichever
+    /// engine the app will actually load.
+    private var onboardingEngineName: String {
+        appState.selectedBackendType == .nemotron ? "Built-in engine" : appState.selectedModel.displayName
+    }
+
+    private var onboardingEngineSize: String {
+        appState.selectedBackendType == .nemotron ? "About 650 MB" : appState.selectedModel.sizeDescription
+    }
+
     private func startModelDownloadIfNeeded() {
-        let model = appState.selectedModel
-        if ModelDownloader.shared.isModelDownloaded(model) {
-            appState.preloadModel()
-        } else {
-            Task {
-                await appState.downloadModel(model)
-            }
-        }
+        appState.startSelectedEngine()
     }
 
     // MARK: - Reusable Components

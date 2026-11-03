@@ -238,7 +238,10 @@ class ModelDownloader {
 
     /// Get the local path for a VAD model
     func vadModelPath(for model: VADModel = .default) -> URL {
-        appSupportDir.appendingPathComponent(model.rawValue)
+        // Bundled so a first launch with no network still has speech detection.
+        let name = (model.rawValue as NSString).deletingPathExtension
+        return Bundle.main.url(forResource: name, withExtension: "bin")
+            ?? appSupportDir.appendingPathComponent(model.rawValue)
     }
 
     /// Check if a VAD model is downloaded and valid (not corrupted)

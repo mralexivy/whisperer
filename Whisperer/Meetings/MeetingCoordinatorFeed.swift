@@ -54,7 +54,9 @@ enum MeetingCoordinatorFeed: Equatable {
         case .nemotron, .nemotronHebrew:
             self = .accumulatedFinal
         case .qwen3asr:
-            self = .transcriberAccumulated
+            // With the built-in engine driving live text, Qwen3 only produces chunk deltas, so the
+            // accumulated source is Nemotron's partials. Without it, Qwen3's own joined display.
+            self = previewOwnsNemotron ? .accumulatedPartials : .transcriberAccumulated
         case .whisperCpp:
             guard previewOwnsNemotron else { return nil }
             self = .accumulatedPartials

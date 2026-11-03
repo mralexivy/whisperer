@@ -346,21 +346,11 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         // During onboarding, the model download page (page 5) handles this.
         let onboardingDone = await MainActor.run { appState.hasCompletedOnboarding }
         if onboardingDone {
-            let selectedModel = await MainActor.run { appState.selectedModel }
-            if !ModelDownloader.shared.isModelDownloaded(selectedModel) {
-                // `preloadModel()` on the other branch is guarded against the test host; this
-                // branch was not, so a machine without the model on disk pulled a multi-GB
-                // download inside `xcodebuild test`.
-                if !AppEnvironment.isRunningTests {
-                    await appState.downloadModel(selectedModel)
-                }
-            } else {
-                await MainActor.run {
-                    self.appState.preloadModel()
-                    // LLM loads after the transcription model completes — sequential to
-                    // avoid ANE/Metal resource contention during CoreML compilation.
-                }
-            }
+            // Backend-aware: Nemotron (the default engine) is not the whisper file, so asking
+            // `ModelDownloader` would fetch the wrong model. The helper also never downloads in
+            // the test host. The LLM loads after the transcription model completes, sequentially,
+            // to avoid ANE/Metal resource contention during CoreML compilation.
+            await MainActor.run { self.appState.startSelectedEngine() }
         }
     }
 
@@ -1527,13 +1517,14 @@ struct ModelsTabView: View {
     @ObservedObject var appState = AppState.shared
     /// Which section is currently shown — independent of the loaded backend.
     /// Tabs update this; model rows call selectBackend/download separately.
-    @State private var displayedEngine: BackendType = .whisperCpp
+    @State private var displayedEngine: BackendType = .qwen3asr
 
-    /// Normalise any hidden sub-backend (nemotron, nemotronHebrew) to the tab that contains it.
-    /// Qwen3 is no longer hidden — it is the default and has its own tab.
+    /// Normalise the hidden backends to a tab that exists. nemotronHebrew lives under Parakeet. The
+    /// built-in engine has no tab, so while it is the engine the Models tab browses Qwen3's.
     private func normalise(_ b: BackendType) -> BackendType {
         switch b {
-        case .nemotron, .nemotronHebrew: return .parakeet
+        case .nemotron: return .qwen3asr
+        case .nemotronHebrew: return .parakeet
         default: return b
         }
     }
@@ -1584,6 +1575,75 @@ struct ModelsTabView: View {
         return allSupported ? .parakeet : .whisperCpp
     }
 
+    #if canImport(FluidAudio)
+    /// The built-in engine (Nemotron). Not a choice: it is downloaded at startup and kept loaded,
+    /// drives live text for every engine, and covers them when none is loaded or they are busy.
+    /// This row only reports whether it is ready.
+    private var builtinEngineRow: some View {
+        let downloading = appState.isDownloadingNemotron
+        let loading = appState.isLoadingNemotron
+        let loaded = appState.builtinEngineLoaded
+        let status: String = downloading
+            ? "Downloading \(Int(appState.downloadProgress * 100))%"
+            : loading ? "Loading" : loaded ? "Loaded" : "Not loaded"
+        let dot: Color = loaded ? .green : (downloading || loading) ? .orange : MBColors.textTertiary
+
+        return HStack(spacing: 10) {
+            ZStack {
+                RoundedRectangle(cornerRadius: 6)
+                    .fill(Color.green.opacity(0.15))
+                    .frame(width: 26, height: 26)
+                Image(systemName: "waveform.badge.mic")
+                    .foregroundColor(.green)
+                    .font(.system(size: 12, weight: .medium))
+            }
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Built-in engine")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundColor(MBColors.textPrimary)
+                Text("Live text and fallback \u{2022} runs on Core ML")
+                    .font(.caption2)
+                    .foregroundColor(MBColors.textTertiary)
+            }
+
+            Spacer()
+
+            if downloading || loading {
+                ProgressView()
+                    .scaleEffect(0.5)
+                    .frame(width: 12, height: 12)
+            }
+            Circle().fill(dot).frame(width: 7, height: 7)
+            Text(status)
+                .font(.caption)
+                .foregroundColor(MBColors.textSecondary)
+
+            if !loaded && !downloading && !loading {
+                Button("Load") { appState.startBuiltinEngine() }
+                    .buttonStyle(.plain)
+                    .font(.caption.weight(.medium))
+                    .foregroundColor(MBColors.accent)
+                    .pointerOnHover()
+            } else if loaded && appState.selectedBackendType != .nemotron {
+                Button("Use alone") { appState.selectBackend(.nemotron) }
+                    .buttonStyle(.plain)
+                    .font(.caption)
+                    .foregroundColor(MBColors.textTertiary)
+                    .help("Transcribe with the built-in engine only")
+                    .pointerOnHover()
+            }
+        }
+        .padding(10)
+        .background(MBColors.cardSurface)
+        .overlay(
+            RoundedRectangle(cornerRadius: 8)
+                .stroke(MBColors.border, lineWidth: 1)
+        )
+        .cornerRadius(8)
+    }
+    #endif
+
     private var engineSection: some View {
         VStack(alignment: .leading, spacing: 12) {
             // Engine header + segmented control
@@ -1604,8 +1664,12 @@ struct ModelsTabView: View {
                 Spacer()
             }
 
+            #if canImport(FluidAudio)
+            builtinEngineRow
+            #endif
+
             HStack(spacing: 0) {
-                ForEach(Array(BackendType.allCases.filter { $0 != .nemotron && $0 != .nemotronHebrew }.enumerated()), id: \.element.id) { index, backend in
+                ForEach(Array(BackendType.selectable.enumerated()), id: \.element.id) { index, backend in
                     let isSelected = displayedEngine == backend
                     let isUnavailable = !backend.isAvailable
                     let isRecommended = backend == recommendedBackend && !isUnavailable
@@ -1846,7 +1910,6 @@ struct ModelsTabView: View {
                     ParakeetModelRow(model: model)
                 }
                 #if canImport(FluidAudio)
-                NemotronModelRow()
                 NemotronHebrewModelRow()
                 #endif
             }
