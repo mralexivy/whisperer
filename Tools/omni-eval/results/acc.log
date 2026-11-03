@@ -1,0 +1,37 @@
+Traceback (most recent call last):
+  File "/Users/alexivy/ai/whisperer/Tools/omni-eval/run_whisper.py", line 27, in <module>
+    p = subprocess.run(["/usr/bin/time", "-l", cli, "-m", os.path.join(WM, model), "-f", c["audio"], "-l", l,
+  File "/Library/Developer/CommandLineTools/Library/Frameworks/Python3.framework/Versions/3.9/lib/python3.9/subprocess.py", line 507, in run
+    stdout, stderr = process.communicate(input, timeout=timeout)
+  File "/Library/Developer/CommandLineTools/Library/Frameworks/Python3.framework/Versions/3.9/lib/python3.9/subprocess.py", line 1134, in communicate
+    stdout, stderr = self._communicate(input, endtime, timeout)
+  File "/Library/Developer/CommandLineTools/Library/Frameworks/Python3.framework/Versions/3.9/lib/python3.9/subprocess.py", line 2017, in _communicate
+    stdout = self._translate_newlines(stdout,
+  File "/Library/Developer/CommandLineTools/Library/Frameworks/Python3.framework/Versions/3.9/lib/python3.9/subprocess.py", line 1011, in _translate_newlines
+    data = data.decode(encoding, errors)
+UnicodeDecodeError: 'utf-8' codec can't decode byte 0xd7 in position 8: invalid continuation byte
+Traceback (most recent call last):
+  File "/Users/alexivy/ai/whisperer/Tools/omni-eval/run_whisper.py", line 27, in <module>
+    p = subprocess.run(["/usr/bin/time", "-l", cli, "-m", os.path.join(WM, model), "-f", c["audio"], "-l", l,
+  File "/Library/Developer/CommandLineTools/Library/Frameworks/Python3.framework/Versions/3.9/lib/python3.9/subprocess.py", line 507, in run
+    stdout, stderr = process.communicate(input, timeout=timeout)
+  File "/Library/Developer/CommandLineTools/Library/Frameworks/Python3.framework/Versions/3.9/lib/python3.9/subprocess.py", line 1134, in communicate
+    stdout, stderr = self._communicate(input, endtime, timeout)
+  File "/Library/Developer/CommandLineTools/Library/Frameworks/Python3.framework/Versions/3.9/lib/python3.9/subprocess.py", line 2017, in _communicate
+    stdout = self._translate_newlines(stdout,
+  File "/Library/Developer/CommandLineTools/Library/Frameworks/Python3.framework/Versions/3.9/lib/python3.9/subprocess.py", line 1011, in _translate_newlines
+    data = data.decode(encoding, errors)
+UnicodeDecodeError: 'utf-8' codec can't decode byte 0xd7 in position 8: invalid continuation byte
+Traceback (most recent call last):
+  File "/Users/alexivy/ai/whisperer/Tools/omni-eval/run_whisper.py", line 27, in <module>
+    p = subprocess.run(["/usr/bin/time", "-l", cli, "-m", os.path.join(WM, model), "-f", c["audio"], "-l", l,
+  File "/Library/Developer/CommandLineTools/Library/Frameworks/Python3.framework/Versions/3.9/lib/python3.9/subprocess.py", line 507, in run
+    stdout, stderr = process.communicate(input, timeout=timeout)
+  File "/Library/Developer/CommandLineTools/Library/Frameworks/Python3.framework/Versions/3.9/lib/python3.9/subprocess.py", line 1134, in communicate
+    stdout, stderr = self._communicate(input, endtime, timeout)
+  File "/Library/Developer/CommandLineTools/Library/Frameworks/Python3.framework/Versions/3.9/lib/python3.9/subprocess.py", line 2017, in _communicate
+    stdout = self._translate_newlines(stdout,
+  File "/Library/Developer/CommandLineTools/Library/Frameworks/Python3.framework/Versions/3.9/lib/python3.9/subprocess.py", line 1011, in _translate_newlines
+    data = data.decode(encoding, errors)
+UnicodeDecodeError: 'utf-8' codec can't decode byte 0xd7 in position 8: invalid continuation byte
+done wbase-q5-metal

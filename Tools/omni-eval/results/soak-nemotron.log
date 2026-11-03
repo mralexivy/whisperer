@@ -1,0 +1,18 @@
+### nemotron ONE long session, 900 s of audio
+soak nemotron pool=127s start=114MB
+audio=30s footprint=154MB
+audio=60s footprint=186MB
+audio=150s footprint=278MB
+audio=330s footprint=470MB
+### nemotron 60 short sessions (5 s each)
+soak nemotron pool=127s start=114MB
+sessions=5 audioSoFar=25s footprint=175MB
+sessions=10 audioSoFar=50s footprint=235MB
+sessions=25 audioSoFar=125s footprint=415MB
+sessions=40 audioSoFar=200s footprint=595MB
+sessions=55 audioSoFar=275s footprint=784MB
+soak done footprint=844MB
+### omni10 150 passes of a 10 s window
+soak omni10 pool=127s start=218MB passes=10 footprint=224MB passes=40 footprint=243MB passes=90 footprint=274MB passes=140 footprint=306MB soak done footprint=312MB 
+### qwen3 150 passes of a 10 s window
+soak qwen3 pool=127s start=2627MB passes=10 footprint=3753MB passes=40 footprint=3768MB passes=90 footprint=3767MB passes=140 footprint=3763MB soak done footprint=3786MB 

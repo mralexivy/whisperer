@@ -857,3 +857,66 @@ Neither explains the observed case: `в глубь,` is a **two-word** phrase, a
 `TranscriptRepetition.minimumPhraseLength` is 3 by deliberate choice ("that's it, that's it" is
 ordinary speech). The observation is printed by the test and not asserted on — one occurrence on
 60 unrelated clips welded into one stream does not justify lowering a tuned threshold.
+
+
+## Bundled instant model (2026-11-02) — DROPPED 2026-11-03, kept for the measurements
+
+- Shipped model: whisper **base q5_1** (59.7 MB; 52.9 MB as a lossless pack). It replaced tiny-q4_0 after the user found tiny "highly not accurate": on the one real-voice clip with a full reference, tiny-q4_0 made 4 word errors in 24, base-q4_0 2, **base-q5_1 0**, small-q5_1 2. Clean TTS did not separate the models (0-1 errors each), so synthetic audio is not evidence here. Beam 5 did not help tiny. Evidence is one real clip: re-measure on more real recordings when they are available.
+- Smaller quantizations don't load: k-quants use 256-element blocks and whisper's tensors are 384 (tiny) or 512 (base) wide, so q3_k and q2_k fail with `tensor ... has wrong size`. Base q4_0 would be 46.5 MB raw, 38.2 MB xz.
+- Pack: quantized blocks split into scale header and payload (Q5_1: 4 + 20 bytes), `encoder.positional_embedding` regenerated from its sinusoid with a patch list, LZMA2 lc/lp/pb=0. Lossless; the unpacked SHA equals the pinned source SHA. xz alone saves ~8% on q5_1 data, the pack ~11%.
+- Measured on an M2 Pro, 17 s clip, greedy: tiny-q4_0 ~135 ms, base-q4_0 ~170 ms (150 MB peak), base-q5_1 ~210 ms (Metal).
+- Whistle (Cactus, 16.9 MB, CPU-only closed `libneedle.a`, 7 languages, no Hebrew) was evaluated and not adopted: new backend with 20+ touchpoints, and no unload API.
+
+
+## Omnilingual ASR (Meta CTC via speech-swift) evaluated, not adopted (2026-11-03)
+
+Harness: `Tools/omni-eval/` (`build_manifest.py`, `build_cs.py`, `run_engine.py`, `run_ivrit.py`, `score.py`, `stream_sim.py`). FLEURS test, 100 distinct sentences per language, seed 42; hypotheses in gitignored `hyp/`. Runtime is the `speech` CLI (`brew install speech`, v0.0.29), MLX backend, M2 Pro. Corpus-level WER/CER after case, punctuation and diacritic folding.
+
+| engine | he WER/CER | ru WER/CER | en WER/CER | code-switch WER | RTF | punct / case |
+|---|---|---|---|---|---|---|
+| Omni CTC 1B 4-bit | 71.6 / 24.1 | – | – | – | 0.03 | none |
+| Omni CTC 3B 4-bit | 28.6 / 9.6 | 11.7 / 2.6 | 10.3 / 3.5 | 70.7 | 0.08 | none |
+| Omni CTC 7B 4-bit | 26.3 / 9.1 | 10.1 / 2.5 | 9.4 / 3.2 | 78.0 | 0.17 | none |
+| **ivrit-v3-turbo** (app's whisper.cpp, `-l he`) | **14.8 / 6.7** | – | – | 69.7 | 0.20 | yes |
+| whisper-turbo (CLI, no language hint) | 28.6 / 12.4 | 9.8 / 5.9 | 8.0 / 5.0 | 68.7 | 0.2 | yes |
+| Qwen3-ASR 1.7B | 77.2 / 43.1 | 6.4 / 2.3 | 4.1 / 1.8 | **55.4** | 0.07 | yes |
+| Parakeet v3 | – | 5.1 / 1.6 | 5.2 / 2.4 | – | 0.014 | yes |
+
+- **Verdict: fails the gate.** It loses to ivrit-v3-turbo on Hebrew (26.3 vs 14.8 WER) and to Qwen3 / Parakeet on Russian and English. It is not better on code-switching either.
+- **Size matters a lot below 3B.** 1B is unusable for Hebrew: it merges words and bleeds Latin letters into Hebrew output. 3B → 7B gains only ~2 WER points at 2× the latency and 2× the memory, so 3B-4bit (1.7 GB) is the sweet spot if this is ever revisited.
+- **Code-switch (40 synthetic 3-clip mixes, he+en and he+ru, sentence-level switches): every engine fails.** CTC commits to one script per window and renders the other-language sentence as phonetic gibberish in that script, or drops it. The "language-neutral, handles code-switching" claim does not hold. The test is harsh (hard cuts between sentences).
+- **Output is lowercase with no punctuation** (0-10% of outputs have any). It would need the polish LLM as a final stage.
+- **Streaming is re-decode only** (non-causal CTC, 40 s hard cap, no stream API upstream). Simulated eager passes at 2 s steps: 3B ~0.5 s per pass (max 0.9), 7B ~1.1 s per pass (max 1.9 s on a 14 s window). Hebrew partials are unstable: 16% (3B) / 23% (7B) of words outside the last two change on the next pass, against 1% for English.
+- **Fragility:** both 3B variants emitted garbage on `jfk.wav` (exactly 11.000 s), while 1B and 300M Core ML were fine. Lengths 10.9-11.05 s failed and 10.5/11.5 s worked, but the 100 FLEURS clips of 10.5-11.5 s showed no failures, so it is clip-specific. A garbage-output check with a padded retry would be mandatory in any bridge.
+- **Not evaluated:** Omni LLM variants (best paper numbers, Hebrew CER 6.7) because speech-swift ports only CTC v2, and Omni v2 / Unlimited.
+- The XCTest target did not compile at HEAD when this ran (`StopPathDataLossTests.swift:49`, actor `SlowNemotronBridge` vs global-actor-isolated `NemotronBridging`); the ivrit run therefore used the vendored `whisper-cli`.
+
+
+## Omnilingual LLM variants (CrispASR GGUF) evaluated, not adopted (2026-11-03)
+
+Full report: `docs/knowledge/transcription/omnilingual-llm-benchmark-2026-11-03.md`. LLM-300M, LLM-Unlimited-300M and LLM-1B (q4_k, `cstr` GGUFs, CrispASR `3181f0f`, Metal) lose to Qwen3-8bit on en/ru and to Omni CTC 7B everywhere; Hebrew/Russian output has no word spaces. Their only advantage is a flat ~1.3-1.75 GB peak footprint (Qwen3-8bit 3.1 -> 6.8 GB from 5 s to 60 s; CTC 7B 5.6-6.8 GB). RTF 0.34-1.06, so no streaming or meeting use. The GGUFs ship placeholder `lang_codes`, so CrispASR silently conditions on English unless `-l lang_<parquet index>` is used. Gated at a 6-20 clip pilot; the full 340-clip run was not done.
+
+
+## Live preview: Whisper Base vs Omni CTC 300M Core ML (2026-11-03)
+
+Full report: `docs/knowledge/transcription/live-preview-whisper-base-vs-omni300m-2026-11-03.md`. The historical preview/detector model was Whisper **Tiny** (CPU-only `WhisperBridge`), never Base. FLEURS full 100 clips: Whisper Base (Core ML encoder, greedy) he 62.8 / ru 23.7 / en 9.9 WER; Omni 300M Core ML 10 s window he 50.5 / ru 30.6 / en 17.5, mixed set 49.1 vs 80-93. Per-pass compute 0.13 s vs 1.15 s (fixed-shape Core ML window). With Qwen3 final running, Qwen3 slowed +4% (Base, CPU decoder) vs +15% (Omni). The Base encoder plans 100% onto the ANE; Omni plans ~94-99% with ~20% of cost weight on GPU under default units. Verdict: no winner; neither is usable for Hebrew preview. ANE/GPU utilisation and energy were not measured (no sudo for powermetrics).
+
+
+## Decision: Nemotron is the built-in engine; the bundled stand-in is dropped (2026-11-03)
+
+Evidence: `live-preview-whisper-base-vs-omni300m-2026-11-03.md` and its addenda. Nemotron 3.5 0.6B is the only candidate that genuinely streams: text lags the speaker by 0.04 s, never revises what it showed, and the final text is ready 0.03 s after the audio ends (Qwen3's repeated decode: 0.49 s and 1.07 s). Full-set FLEURS WER with a language hint: he 43.6, ru 13.1, en 10.9; mixed 53.0.
+
+**The design.** Nemotron is a *built-in engine*, not a choice:
+- Always downloaded at startup (`AppState.startBuiltinEngine()`, called from launch, onboarding and every engine start) and kept resident. A backend switch never releases it (`previewOwnsNemotron` is permanent once started).
+- It drives **live text** for the dictation HUD and the meeting live transcript whenever the selected engine is whisper.cpp or Qwen3 (`builtinEngineDrivesLiveText(for:)`). The selected engine still produces the **final** transcript from committed chunks. When no other engine is loaded, or the user has not picked one (`selectedBackendType == .nemotron`, the first-launch default), Nemotron transcribes on its own.
+- It is in no picker. `BackendType.selectable` excludes it (and the Hebrew sub-backend); the Models tab shows a "Built-in engine" row: Downloading n% / Loading / Loaded / Not loaded, plus "Use alone" to make it the sole engine.
+
+How it is wired: `StreamingTranscriber(nemotronPreviewOnly:)` generalises the existing whisper-eager preview-only mode to chunk engines. Every display write from the final engine goes through `emitDisplay`, which is swallowed while Nemotron owns the display; the engine's own preview loop is not started (it would burn GPU on swallowed text); a chunk commit no longer clears Nemotron's accumulated text. `MeetingCoordinatorFeed` selects `.accumulatedPartials` for Qwen3 when Nemotron is the live source. The download no longer calls `activateBackendAfterDownload`, so fetching the built-in engine never switches the user's engine, and it does not put the app in `.downloadingModel` unless Nemotron is the engine.
+
+**Exception that contradicts "always": Hebrew.** The built-in engine's Hebrew is "adaptation-ready" in NVIDIA's card; on 100 FLEURS clips it scores WER 0.436 against ivrit-v3-turbo's 0.148. So for Hebrew (selected, or among routed languages) live text stays with the user's own engine, and the first-launch default is whisper.cpp. Remove `BackendType.nemotron.weakLanguages` to change that.
+
+Not routed yet: Parakeet, WhisperKit and Apple Speech keep their own live text; whisper.cpp and Qwen3 are the two engines the transcriber swap was built and reasoned for.
+
+Removed: the bundled base-q5_1 stand-in (`BuiltinModelStore`, `PrimaryInstallGate`, `WhisperModel.builtin`, the pack, its size script and tests). The bundled Silero VAD stays. Everything is backed up in `~/ai/whisperer-builtin-backup-2026-11-03/`. Consequence: a fresh install has no engine until the ~650 MB download finishes.
+
+Stability: the speech-swift Core ML runtime leaked ~1 MB per audio-second and aborted at ~400 s, but Whisperer's FluidAudio `StreamingNemotronMultilingualAsrManager` (1120 ms chunks) held a flat **886 MB** across a 20-minute session and finished cleanly. The resident cost of the built-in engine is therefore ~0.9 GB. Not covered: a 180-minute session, and the live app; the Debug build compiles, but the XCTest target does not at HEAD, so the changed tests have not run.

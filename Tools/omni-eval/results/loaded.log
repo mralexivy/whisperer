@@ -1,0 +1,16 @@
+done wbase-cml-cpu loaded
+== therm after wbase-cml-cpu
+Note: No thermal warning level has been recorded
+Note: No performance warning level has been recorded
+Note: No CPU power status has been recorded
+done wbase-cml-gpu loaded
+== therm after wbase-cml-gpu
+Note: No thermal warning level has been recorded
+Note: No performance warning level has been recorded
+Note: No CPU power status has been recorded
+done omni300-cml-10 loaded
+== therm after omni300-cml-10
+Note: No thermal warning level has been recorded
+Note: No performance warning level has been recorded
+Note: No CPU power status has been recorded
+LOADED_DONE

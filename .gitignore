@@ -97,3 +97,7 @@ docs/competitive/
 
 # ASR engine comparison dumps — contain verbatim transcripts of real recordings.
 Tools/llm-eval/asr-engine-comparison/
+
+# omni-eval corpora and hypotheses (large / regenerable)
+Tools/omni-eval/corpus/
+Tools/omni-eval/hyp/

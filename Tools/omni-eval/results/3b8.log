@@ -1,0 +1,10 @@
+done omni-3b-8
+{'engine': 'omni-ctc-3b-8', 'dur': 5, 'run': 'cold', 'ok': True, 'decode_s': 0.43, 'rtf': 0.086, 'wall_s': 1.16, 'peak_footprint_mb': 4938, 'max_rss_mb': 3084}
+{'engine': 'omni-ctc-3b-8', 'dur': 5, 'run': 'warm', 'ok': True, 'decode_s': 0.43, 'rtf': 0.086, 'wall_s': 1.16, 'peak_footprint_mb': 4939, 'max_rss_mb': 3084}
+{'engine': 'omni-ctc-3b-8', 'dur': 15, 'run': 'cold', 'ok': True, 'decode_s': 1.28, 'rtf': 0.08533333333333333, 'wall_s': 2.01, 'peak_footprint_mb': 5565, 'max_rss_mb': 3083}
+{'engine': 'omni-ctc-3b-8', 'dur': 15, 'run': 'warm', 'ok': True, 'decode_s': 1.28, 'rtf': 0.08533333333333333, 'wall_s': 2.03, 'peak_footprint_mb': 5567, 'max_rss_mb': 3086}
+{'engine': 'omni-ctc-3b-8', 'dur': 30, 'run': 'cold', 'ok': True, 'decode_s': 2.65, 'rtf': 0.08833333333333333, 'wall_s': 3.4, 'peak_footprint_mb': 6145, 'max_rss_mb': 3089}
+{'engine': 'omni-ctc-3b-8', 'dur': 30, 'run': 'warm', 'ok': True, 'decode_s': 2.65, 'rtf': 0.08833333333333333, 'wall_s': 3.43, 'peak_footprint_mb': 6147, 'max_rss_mb': 3092}
+{'engine': 'omni-ctc-3b-8', 'dur': 60, 'run': 'cold', 'ok': False, 'decode_s': None, 'rtf': None, 'wall_s': 0.74, 'peak_footprint_mb': 4170, 'max_rss_mb': 3087, 'err': '      0  signals received\n                   7  voluntary context switches\n                1436  involuntary context switches\n          4971873269  instructions retired\n          2983023420  cycles elapsed\n          4373073376  peak memory footprint\n'}
+{'engine': 'omni-ctc-3b-8', 'dur': 60, 'run': 'warm', 'ok': False, 'decode_s': None, 'rtf': None, 'wall_s': 0.73, 'peak_footprint_mb': 4165, 'max_rss_mb': 3083, 'err': '      0  signals received\n                   4  voluntary context switches\n                1411  involuntary context switches\n          4958879308  instructions retired\n          2961096085  cycles elapsed\n          4366863864  peak memory footprint\n'}
+FIN

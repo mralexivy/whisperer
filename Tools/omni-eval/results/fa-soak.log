@@ -1,0 +1,43 @@
+loaded in 17.3s footprint=830MB
+soak pool=155s start=839MB
+audio=30s footprint=885MB
+audio=60s footprint=885MB
+audio=90s footprint=885MB
+audio=120s footprint=885MB
+audio=150s footprint=885MB
+audio=180s footprint=885MB
+audio=210s footprint=886MB
+audio=240s footprint=885MB
+audio=270s footprint=886MB
+audio=300s footprint=886MB
+audio=330s footprint=885MB
+audio=360s footprint=886MB
+audio=390s footprint=885MB
+audio=420s footprint=886MB
+audio=450s footprint=886MB
+audio=480s footprint=885MB
+audio=510s footprint=886MB
+audio=540s footprint=885MB
+audio=570s footprint=885MB
+audio=600s footprint=886MB
+audio=630s footprint=885MB
+audio=660s footprint=886MB
+audio=690s footprint=885MB
+audio=720s footprint=885MB
+audio=750s footprint=886MB
+audio=780s footprint=885MB
+audio=810s footprint=886MB
+audio=840s footprint=885MB
+audio=870s footprint=885MB
+audio=900s footprint=886MB
+audio=930s footprint=885MB
+audio=960s footprint=886MB
+audio=990s footprint=886MB
+audio=1020s footprint=885MB
+audio=1050s footprint=886MB
+audio=1080s footprint=885MB
+audio=1110s footprint=886MB
+audio=1140s footprint=886MB
+audio=1170s footprint=885MB
+audio=1200s footprint=886MB
+soak done footprint=875MB
