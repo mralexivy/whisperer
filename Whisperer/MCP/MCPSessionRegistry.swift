@@ -16,7 +16,7 @@
 //  - Idle sessions (no open SSE streams, lastActivity older than idleTimeout) are
 //    reaped by a periodic background task.
 //  - At most maxSessions sessions coexist; the oldest idle session is evicted to
-//    make room, else 503 is returned.
+//    make room (falling back to the least-recently-active one).
 //
 
 import Foundation
@@ -56,13 +56,26 @@ actor MCPSessionRegistry {
 
     // MARK: Configuration
 
-    private let maxSessions: Int = 8
-    private let idleTimeout: TimeInterval = 3600  // 60 minutes
+    let maxSessions: Int = 8
+    /// Reconnects from the same client reuse its own slots: past this many, the client's
+    /// least-recently-active session is replaced rather than a new slot being taken.
+    let maxSessionsPerClient: Int = 2
+    private let idleTimeout: TimeInterval = 1800  // 30 minutes
 
     // MARK: State
 
     private var sessions: [String: MCPSession] = [:]
     private var reaperTask: Task<Void, Never>?
+
+    var sessionCount: Int { sessions.count }
+
+    func sessionCount(forClient name: String) -> Int {
+        sessions.values.filter { $0.clientName == name }.count
+    }
+
+    func sessionIDs(forClient name: String) -> Set<String> {
+        Set(sessions.filter { $0.value.clientName == name }.keys)
+    }
 
     /// Called once when the server listener starts.
     func startReaper() {
@@ -159,16 +172,27 @@ actor MCPSessionRegistry {
     private func makeSession(request: HTTPRequest,
                              lanEnabled: Bool,
                              port: Int) async -> HTTPResponse {
-        // Enforce cap: try to evict the oldest idle session.
+        // Reuse: a client that reconnects replaces its own stale session instead of
+        // growing the pool.
+        let name = clientName(in: request)
+        if let name {
+            let mine = sessions.filter { $0.value.clientName == name }
+                               .sorted { $0.value.lastActivity < $1.value.lastActivity }
+            if mine.count >= maxSessionsPerClient, let stale = mine.first {
+                Logger.info("MCP: client \(name) at per-client cap (\(maxSessionsPerClient)), replacing \(stale.key)", subsystem: .app)
+                await evict(id: stale.key)
+            }
+        }
+
+        // Enforce cap: evict the least-recently-active session, preferring ones with no
+        // open streams.  Streams on dead client connections can stay "open" indefinitely
+        // (the socket never errors), so refusing when every slot has a stream locks real
+        // clients out.  An evicted live client just gets 404 and re-initializes.
         if sessions.count >= maxSessions {
-            if let oldest = sessions.sorted(by: { $0.value.lastActivity < $1.value.lastActivity })
-                                    .first(where: { $0.value.openStreams == 0 }) {
-                await evict(id: oldest.key)
-            } else {
-                Logger.warning("MCP: session cap reached (\(maxSessions)), no idle slot — 503", subsystem: .app)
-                return HTTPResponse.textBody(status: 503,
-                    headers: ["Retry-After": "5"],
-                    body: "Too many active MCP sessions")
+            let byAge = sessions.sorted { $0.value.lastActivity < $1.value.lastActivity }
+            if let victim = byAge.first(where: { $0.value.openStreams == 0 }) ?? byAge.first {
+                Logger.info("MCP: session cap reached (\(maxSessions)), evicting LRU \(victim.key) streams=\(victim.value.openStreams)", subsystem: .app)
+                await evict(id: victim.key)
             }
         }
 
@@ -206,18 +230,20 @@ actor MCPSessionRegistry {
         let session = MCPSession(transport: transport, server: server, supervisor: supervisor)
 
         // Capture client name from initialize body for logging.
-        if let body = request.body,
-           let json = try? JSONSerialization.jsonObject(with: body) as? [String: Any],
-           let params = json["params"] as? [String: Any],
-           let info = params["clientInfo"] as? [String: Any],
-           let name = info["name"] as? String {
-            session.clientName = name
-        }
+        session.clientName = name
 
         sessions[id] = session
         Logger.info("MCP session created: \(id) client=\(session.clientName ?? "unknown") total=\(sessions.count)", subsystem: .app)
 
         return await transport.handleRequest(request)
+    }
+
+    private func clientName(in request: HTTPRequest) -> String? {
+        guard let body = request.body,
+              let json = try? JSONSerialization.jsonObject(with: body) as? [String: Any],
+              let params = json["params"] as? [String: Any],
+              let info = params["clientInfo"] as? [String: Any] else { return nil }
+        return info["name"] as? String
     }
 
     // MARK: - Eviction
