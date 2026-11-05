@@ -17,16 +17,23 @@ def load(p):
                          capture_output=True, check=True).stdout
     return np.frombuffer(raw, dtype=np.float32).astype(np.float64)
 def save(p, x):
-    x = x / max(1.0, np.max(np.abs(x)) / 0.95)
+    x = np.clip(x * (0.08 / rms(x)), -0.99, 0.99)   # fixed -22 dBFS rms; hard clip, never peak-scale
     w = wave.open(p, "wb"); w.setnchannels(1); w.setsampwidth(2); w.setframerate(SR)
     w.writeframes((x * 32767).astype("<i2").tobytes()); w.close()
 def rms(x): return float(np.sqrt(np.mean(x ** 2) + 1e-12))
 def rng_for(s): return np.random.default_rng(zlib.crc32(s.encode()))
+def band(x, lo=100, hi=4000):
+    F = np.fft.rfft(x); f = np.fft.rfftfreq(len(x), 1 / SR); F[(f < lo) | (f > hi)] = 0
+    return np.fft.irfft(F, len(x))
 def add_at_snr(sig, noise, snr_db):
-    return sig + noise * (rms(sig) / (rms(noise) * 10 ** (snr_db / 20)))
+    """SNR over 100 Hz-4 kHz, where speech lives."""
+    return sig + noise * (rms(band(sig)) / (rms(band(noise)) * 10 ** (snr_db / 20)))
 def pink(n, rng):
-    F = np.fft.rfft(rng.standard_normal(n)); f = np.arange(len(F), dtype=float); f[0] = 1
-    return np.fft.irfft(F / np.sqrt(f), n)
+    """1/f noise limited to 50 Hz-8 kHz. Unbounded pink is dominated by sub-audio rumble, whose
+    peaks (not its audibility) then drive peak normalisation and bury the speech."""
+    F = np.fft.rfft(rng.standard_normal(n)); f = np.fft.rfftfreq(n, 1 / SR)
+    F = F / np.sqrt(np.maximum(f, 50.0)); F[(f < 50) | (f > 8000)] = 0
+    return np.fft.irfft(F, n)
 def reverb(x, rt60, rng):
     n = int(SR * rt60 * 1.2); t = np.arange(n) / SR
     ir = 0.25 * rng.standard_normal(n) * np.exp(-6.9 * t / rt60); ir[0] += 1.0
