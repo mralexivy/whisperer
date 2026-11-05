@@ -144,29 +144,20 @@ actor SystemLivePreviewBridge: LivePreviewEngine {
         return await DictationTranscriber.supportedLocale(equivalentTo: base)
     }
 
+    /// Whether live text can stream `language`, from `DictationAssets` — the same answer a session
+    /// gets when it opens. Waits up to `statusBudget` for an install Apple hands out, which covers
+    /// the allocation-only case; a real download is reported as `.downloading` and finishes in the
+    /// background. Once ready, Apple is not asked again in this process.
     nonisolated static func status(for language: TranscriptionLanguage) async -> SystemLanguageStatus {
         guard let locale = await locale(for: language) else { return .unsupported }
-        // Installed means macOS lists the locale's assets, or Apple has nothing to install for it.
-        //
-        // A non-nil installation request is NOT "missing assets". On a second Mac (system
-        // Dictation off) Apple returned a request for en, ru and he every time, even right after
-        // a real download had finished; completing it took 0.4 s — an allocation step, not a
-        // download. Reading the request as "not installed" re-ran the install at every session
-        // start and kept the installing banner up (2026-11-05). `startAnalyzer` completes the
-        // request when it opens a session, which is what Apple's flow expects.
-        // `.installed` is not reported for locales installed by System Settings (en and he read
-        // `.supported` on a Mac that dictates in both), so only `.downloading` is trusted there.
-        let id = locale.identifier(.bcp47)
-        if await DictationTranscriber.installedLocales.contains(where: { $0.identifier(.bcp47) == id }) { return .ready }
-        let module = DictationTranscriber(locale: locale, preset: preset)
-        if case .downloading = await AssetInventory.status(forModules: [module]) { return .downloading(0) }
-        do {
-            return try await AssetInventory.assetInstallationRequest(supporting: [module]) == nil ? .ready : .notInstalled
-        } catch {
-            Logger.warning("System dictation: asset check for \(id) failed: \(error.localizedDescription)", subsystem: .model)
-            return .notInstalled
+        switch await DictationAssets.shared.prepare(locale, within: statusBudget) {
+        case .ready: return .ready
+        case .installing(let fraction): return .downloading(fraction)
+        case .failed: return .notInstalled
         }
     }
+
+    nonisolated static let statusBudget: Double = 1.5
 
     /// Languages Apple dictation is already installed for on this Mac — the ones the user turned
     /// on in System Settings › Keyboard › Dictation.
@@ -185,44 +176,12 @@ actor SystemLivePreviewBridge: LivePreviewEngine {
         guard let locale = await locale(for: language) else {
             throw SystemLivePreviewError.unsupported(language.displayName)
         }
-        let module = DictationTranscriber(locale: locale, preset: preset)
-        guard let request = try await AssetInventory.assetInstallationRequest(supporting: [module]) else {
-            progress(1)
-            return
-        }
-        Logger.info("System dictation: installing \(locale.identifier(.bcp47))", subsystem: .model)
-        let downloadProgress = request.progress
-        let poll = Task {
-            while !downloadProgress.isFinished, !downloadProgress.isCancelled, !Task.isCancelled {
-                progress(downloadProgress.fractionCompleted)
-                try? await Task.sleep(for: .milliseconds(200))
-            }
-        }
-        defer { poll.cancel() }
-        try await request.downloadAndInstall()
-        progress(1)
-        Logger.info("System dictation: installed \(locale.identifier(.bcp47))", subsystem: .model)
+        try await DictationAssets.shared.install(locale, progress: progress)
     }
 
-    /// How long a session start waits for Apple to finish an installation request: enough for the
+    /// How long a session start waits for Apple to finish an install it hands out: enough for the
     /// allocation-only case (0.4 s measured), far short of a real download (~25 s measured).
     nonisolated static let sessionInstallBudget: Double = 3
-
-    /// Whether `request` finishes within `seconds`. The install itself is never cancelled: when the
-    /// budget runs out it carries on in the background and the next session finds it done.
-    nonisolated private static func completes(_ request: AssetInstallationRequest, within seconds: Double) async -> Bool {
-        let install = Task { try await request.downloadAndInstall() }
-        return await withTaskGroup(of: Bool.self) { group in
-            group.addTask { (try? await install.value) != nil }
-            group.addTask {
-                try? await Task.sleep(for: .seconds(seconds))
-                return false
-            }
-            let first = await group.next() ?? false
-            group.cancelAll()
-            return first
-        }
-    }
 
     // MARK: - LivePreviewEngine
 
@@ -494,14 +453,9 @@ actor SystemLivePreviewBridge: LivePreviewEngine {
             guard let locale = await Self.locale(for: language) else { continue }
             let id = locale.identifier(.bcp47)
             guard !allocatedLocales.contains(id) else { continue }
-            let module = DictationTranscriber(locale: locale, preset: Self.preset)
-            // Non-nil means not installed; that language is skipped by the switch anyway.
-            do {
-                if try await AssetInventory.assetInstallationRequest(supporting: [module]) == nil {
-                    allocatedLocales.insert(id)
-                }
-            } catch {
-                Logger.debug("System dictation: could not allocate \(id): \(error.localizedDescription)", subsystem: .transcription)
+            // Starts whatever install is needed without waiting for it.
+            if await DictationAssets.shared.prepare(locale, within: Self.sessionInstallBudget) == .ready {
+                allocatedLocales.insert(id)
             }
         }
     }
@@ -528,20 +482,19 @@ actor SystemLivePreviewBridge: LivePreviewEngine {
         let id = locale.identifier(.bcp47)
         do {
             if !allocatedLocales.contains(id) {
-                // A request is how Apple allocates the locale to this process, and it comes back
-                // even when the assets are on disk — then completing it takes well under a second.
-                // Refusing to start whenever one came back meant a Mac that always gets a request
-                // never streamed at all. Complete it here, bounded: a real download that takes
-                // longer keeps going in the background, and this session uses the engine's preview.
-                if let request = try await AssetInventory.assetInstallationRequest(supporting: [module]) {
-                    guard await Self.completes(request, within: Self.sessionInstallBudget) else {
-                        Logger.warning("System dictation: \(id) still installing — the engine's own preview shows live text this session", subsystem: .transcription)
-                        missingLanguage = sessionLanguage
-                        return
-                    }
-                    Logger.info("System dictation: \(id) allocated", subsystem: .transcription)
+                // A request from Apple is completed, not refused: it comes back even for installed
+                // assets on some Macs, and refusing meant live text never streamed there.
+                switch await DictationAssets.shared.prepare(locale, within: Self.sessionInstallBudget) {
+                case .ready:
+                    allocatedLocales.insert(id)
+                case .installing:
+                    Logger.warning("System dictation: \(id) still installing — the engine's own preview shows live text this session", subsystem: .transcription)
+                    missingLanguage = sessionLanguage
+                    return
+                case .failed:
+                    missingLanguage = sessionLanguage
+                    return
                 }
-                allocatedLocales.insert(id)
             }
             guard let format = await SpeechAnalyzer.bestAvailableAudioFormat(compatibleWith: [module]) else {
                 Logger.warning("System dictation: no audio format for \(id)", subsystem: .transcription)

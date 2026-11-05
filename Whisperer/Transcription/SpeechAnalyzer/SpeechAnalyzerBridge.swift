@@ -142,8 +142,9 @@ nonisolated final class SpeechAnalyzerBridge: TranscriptionBackend {
 
     /// Release reserved locales and reset state
     func clearCache() async {
+        // Not the live-text languages: releasing every reservation took Apple dictation's away too.
         let reserved = await AssetInventory.reservedLocales
-        for locale in reserved {
+        for locale in reserved where await !DictationAssets.shared.isInUse(locale.identifier(.bcp47)) {
             await AssetInventory.release(reservedLocale: locale)
         }
         _cacheQueue.sync { _modelsInstalledCache = false }
