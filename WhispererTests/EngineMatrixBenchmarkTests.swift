@@ -99,6 +99,19 @@ final class EngineMatrixBenchmarkTests: XCTestCase {
         }
     }
 
+    /// Not a shipped model: large-v3-turbo at Q8_0, run through the same `WhisperBridge` as the
+    /// Q5 default to isolate what the extra quantization bits buy. The file is not in the app's
+    /// model list, so it is read from `~/ai/omni-bench-models/whisper`.
+    func testWhisperQ8() async throws {
+        let path = URL(fileURLWithPath: NSHomeDirectory() + "/ai/omni-bench-models/whisper/ggml-large-v3-turbo-q8_0.bin")
+        guard FileManager.default.fileExists(atPath: path.path) else { throw XCTSkip("q8_0 model not downloaded") }
+        let b = try WhisperBridge(modelPath: path, useGPU: true)
+        try await run(key: "app-whisper-q8", langs: ["he", "ru", "en"]) { s in
+            let t = b.transcribe(samples: s, initialPrompt: nil, language: .auto, singleSegment: false, maxTokens: 0)
+            return (t, b.lastDetectedLanguage)
+        }
+    }
+
     func testIvrit() async throws {
         let path = ModelDownloader.shared.modelPath(for: .ivritLargeTurbo)
         guard FileManager.default.fileExists(atPath: path.path) else { throw XCTSkip("ivrit model not downloaded") }

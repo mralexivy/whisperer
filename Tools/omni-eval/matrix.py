@@ -26,10 +26,11 @@ refs = {}
 for f in glob.glob(os.path.join(here, "manifests", "*.jsonl")):
     for l in open(f, encoding="utf-8"):
         c = json.loads(l); refs[c["id"]] = c
-LABEL = {"app-whisper-q5": "Whisper V3 Turbo Q5 (app)", "app-ivrit": "ivrit-v3-turbo (app)",
+LABEL = {"app-whisper-q5": "Whisper V3 Turbo Q5 (app)", "app-whisper-q8": "Whisper V3 Turbo Q8_0 (same bridge, not shipped)", "app-ivrit": "ivrit-v3-turbo (app)",
          "app-qwen3": "Qwen3-ASR 1.7B 8-bit (app)", "app-parakeet-v3": "Parakeet v3 (app)",
          "omni-7b-4": "Omni CTC 7B 4-bit (not in app)", "omni-3b-4": "Omni CTC 3B 4-bit (not in app)",
          "nemotron-auto": "Nemotron 0.6B, no hint (app, streaming)", "nemotron-hint": "Nemotron 0.6B, lang hint (app, streaming)"}
+EXCLUDE = set(filter(None, os.environ.get("EXCLUDE", "").split(",")))  # e.g. EXCLUDE=ru-1795 to drop a clip from every row
 keys = sys.argv[1:] or [k for k in LABEL if os.path.exists(os.path.join(here, "hyp", k + ".jsonl"))]
 print(f"{'engine':<42}" + "".join(f"{l:>26}" for l in ("Hebrew", "Russian", "English")) + f"{'RTF':>8}{'punct%':>8}")
 print(f"{'':<42}" + "".join(f"{'WER / med / wrongscr':>26}" for _ in range(3)))
@@ -37,7 +38,7 @@ for k in keys:
     rows = [json.loads(l) for l in open(os.path.join(here, "hyp", k + ".jsonl"), encoding="utf-8")]
     cells, rtfs, punct, n = [], [], 0, 0
     for lang in ("he", "ru", "en"):
-        rs = [r for r in rows if r["lang"] == lang and r.get("ok", True)]
+        rs = [r for r in rows if r["lang"] == lang and r.get("ok", True) and r["id"] not in EXCLUDE]
         if not rs: cells.append(f"{'n/a':>26}"); continue
         we = wn = 0; per = []; ws = 0
         for r in rs:
