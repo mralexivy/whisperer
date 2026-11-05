@@ -50,9 +50,12 @@ def read_manifest(lang):
     return [json.loads(l) for l in open(os.path.join(here, "manifests", f"{lang}.jsonl"), encoding="utf-8")]
 M = {l: read_manifest(l) for l in ("he", "ru", "en")}
 
+import sys
+MEETINGS_ONLY = "--meetings-only" in sys.argv
+
 # ---------------- noisy ----------------
 noisy = []
-for lang, clips in M.items():
+for lang, clips in ({} if MEETINGS_ONLY else M).items():
     pool = clips[30:]
     for c in clips[:30]:
         x = load(c["audio"])
@@ -71,9 +74,10 @@ for lang, clips in M.items():
                 y = add_at_snr(bandpass(x, 150, 5500), n, 5)
             p = os.path.join(OUT, "noisy", rid + ".wav"); save(p, y)
             noisy.append({"id": rid, "base": c["id"], "lang": lang, "cond": cond, "audio": p, "ref": c["ref"], "seconds": round(len(y) / SR, 2)})
-with open(os.path.join(MAN, "noisy.jsonl"), "w", encoding="utf-8") as f:
-    for r in noisy: f.write(json.dumps(r, ensure_ascii=False) + "\n")
-print("noisy clips:", len(noisy))
+if not MEETINGS_ONLY:
+    with open(os.path.join(MAN, "noisy.jsonl"), "w", encoding="utf-8") as f:
+        for r in noisy: f.write(json.dumps(r, ensure_ascii=False) + "\n")
+    print("noisy clips:", len(noisy))
 
 # ---------------- meetings ----------------
 def build_meeting(name, lang, clips):
@@ -84,7 +88,10 @@ def build_meeting(name, lang, clips):
         if end > len(out): out = np.concatenate([out, np.zeros(end - len(out) + SR * 5)])
         out[start:end] += a
     for i, c in enumerate(clips):
-        a = load(c["audio"]) * 10 ** (rng.uniform(-4, 4) / 20)
+        # Level every utterance first: FLEURS recordings differ by tens of dB, and a meeting-wide
+        # SNR set by a few loud clips buried the quiet ones (a 21 s chunk decoded to 0 words).
+        a = load(c["audio"])
+        a = a * (0.05 / rms(band(a))) * 10 ** (rng.uniform(-4, 4) / 20)
         if i and rng.random() < 0.12: start = max(0, pos - int(0.7 * SR)); a = a * 0.8
         else: start = pos + int(rng.uniform(0.4, 2.5) * SR) if i else int(0.5 * SR)
         put(a, start); pos = start + len(a)
