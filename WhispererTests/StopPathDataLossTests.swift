@@ -72,6 +72,19 @@ private actor SlowNemotronBridge: LivePreviewEngine {
     func detectedLanguageCode() async -> String? { nil }
     func pinLanguage(_ code: String?) async {}
 }
+
+/// Apple dictation with no assets for the session's language: opens, never streams.
+private actor NotStreamingLiveEngine: LivePreviewEngine {
+    func forcedLanguageSupport(for language: TranscriptionLanguage) async -> (code: String, isSupported: Bool)? { nil }
+    func beginSession(language: TranscriptionLanguage) async {}
+    func setPreviewCallback(_ callback: @escaping @Sendable (String) -> Void) async {}
+    func feed(samples: [Float]) async {}
+    func endSession() async -> String { "" }
+    func detectedLanguageCode() async -> String? { nil }
+    func pinLanguage(_ code: String?) async {}
+    func isStreaming() async -> Bool { false }
+    func unavailableLanguage() async -> TranscriptionLanguage? { .hebrew }
+}
 #endif
 
 // MARK: - Feed chain
@@ -120,6 +133,27 @@ final class NemotronFeedChainTests: XCTestCase {
 
         // Whisper still sees every sample — shedding must not touch the authoritative audio.
         XCTAssertEqual(transcriber.recordedDuration, 30.0, accuracy: 0.01)
+    }
+
+    /// A live engine that opens but never streams must hand the display back to the main engine
+    /// and report the missing language — the HUD used to sit on "Listening…" for the session.
+    func testLiveEngineThatNeverStreamsFallsBackAndReportsLanguage() async throws {
+        let transcriber = makeTranscriber(nemotron: NotStreamingLiveEngine())
+        let reported = expectation(description: "missing language reported")
+        var language: TranscriptionLanguage?
+        transcriber.onLivePreviewUnavailable = { language = $0; reported.fulfill() }
+        transcriber.start(onTranscription: { _ in })
+        await fulfillment(of: [reported], timeout: 2)
+        XCTAssertTrue(transcriber.livePreviewFellBack)
+        XCTAssertEqual(language, .hebrew)
+    }
+
+    func testStreamingLiveEngineKeepsTheDisplay() async throws {
+        let transcriber = makeTranscriber(nemotron: SlowNemotronBridge(feedDelayNanos: 0))
+        transcriber.onLivePreviewUnavailable = { _ in XCTFail("a streaming engine reported unavailable") }
+        transcriber.start(onTranscription: { _ in })
+        try await Task.sleep(nanoseconds: 300_000_000)
+        XCTAssertFalse(transcriber.livePreviewFellBack)
     }
 
     /// The fix. Preview-only Nemotron output is discarded at stop, so the stop path must abandon

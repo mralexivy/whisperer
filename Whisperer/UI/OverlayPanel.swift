@@ -264,7 +264,7 @@ class OverlayPanel: NSPanel {
         // Suppress the HUD entirely during meeting mode — the Island handles the recording UI
         // when no window is visible, and MeetingLiveWindow handles it when a window is open.
         // Exception: let the silent-meeting toast through even during meeting mode.
-        let shouldShow = (appState.state != .idle || appState.showModelLoadingToast || appState.showClipboardToast || appState.showFileTranscribingToast || appState.showMeetingDetectedToast || appState.learnedEntryToast != nil)
+        let shouldShow = (appState.state != .idle || appState.showModelLoadingToast || appState.showClipboardToast || appState.showFileTranscribingToast || appState.showMeetingDetectedToast || appState.learnedEntryToast != nil || appState.liveLanguageOffer != nil || appState.livePreviewNoticeLanguage != nil)
             && !appState.isMeetingMode
             || appState.showSilentMeetingToast
 

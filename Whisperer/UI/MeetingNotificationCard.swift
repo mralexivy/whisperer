@@ -133,22 +133,20 @@ struct MeetingNotificationCard: View {
     /// Recording starts on the click, not after the exit animation — the toast is
     /// already gone visually while capture is coming up, so nothing is missed.
     private func handleStartNotes() {
-        // Check for recording consent (Guideline 2.5.14)
-        guard AppState.shared.hasConsentedToMeetingRecording else {
-            AppState.shared.showMeetingConsentModal = true
-            return
-        }
-
         let capturedApp = app
         Task { @MainActor in
-            let session = MeetingSession()
-            await session.startRecording(title: capturedApp.name, surface: .floatingWindow,
-                                         sourceBundleID: capturedApp.bundleID,
-                                         sourceAppName: capturedApp.name)
-            // activeMeetingSession is now set in AppState (strong @Published reference).
-        }
-        animateOut {
-            AppState.shared.dismissMeetingNotification()
+            // Recording consent (Guideline 2.5.14). Declining leaves the card up.
+            guard await MeetingConsentPrompt.ensureConsent() else { return }
+            Task { @MainActor in
+                let session = MeetingSession()
+                await session.startRecording(title: capturedApp.name, surface: .floatingWindow,
+                                             sourceBundleID: capturedApp.bundleID,
+                                             sourceAppName: capturedApp.name)
+                // activeMeetingSession is now set in AppState (strong @Published reference).
+            }
+            animateOut {
+                AppState.shared.dismissMeetingNotification()
+            }
         }
     }
 

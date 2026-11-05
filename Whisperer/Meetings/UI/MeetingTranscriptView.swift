@@ -91,6 +91,10 @@ struct MeetingTranscriptView: View {
         ScrollViewReader { proxy in
             ScrollView {
                 LazyVStack(spacing: 0) {
+                    if isLive {
+                        LivePreviewNoticeBanner()
+                            .padding(.vertical, 8)
+                    }
                     if isLoadingSegments && segments.isEmpty {
                         ForEach(0..<5, id: \.self) { MeetingSegmentSkeleton(seed: $0) }
                             .transition(.opacity)

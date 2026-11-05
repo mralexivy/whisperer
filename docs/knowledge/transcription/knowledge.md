@@ -1018,3 +1018,10 @@ Supersedes the 2026-11-03 Nemotron decision above. Every streaming candidate (Ne
   - Nothing is committed until the probe has decided.
 - The volatile remainder is shown after the coordinator's pending tail.
 - `prepareMeetingASRBridge` no longer falls back to Nemotron. It uses resident Qwen3, else the user's resident engine with Apple live text, else a fresh Qwen3 load, else loads the user's engine.
+
+## Apple dictation live text: "installed" lies, and a missing language was a silent blank (2026-11-05)
+
+- `DictationTranscriber.installedLocales` is not ground truth. On a second Mac with system Dictation off it listed en-US while `AssetInventory.assetInstallationRequest(supporting:)` still returned a request ("assets not installed" at session start). The Settings card said Installed and the launch-time auto-install skipped it. `SystemLivePreviewBridge.status(for:)` now asks the installation request — the same check `startAnalyzer` makes.
+- Handing the display to Apple used to require only that *any* configured language be ready. A session in an uninstalled language then swallowed the main engine's preview (`nemotronIsPreviewOnly`) and showed "Listening…" for the whole session. In meetings it was worse: the `.accumulatedPartials` feed takes committed words only from Apple's stable-text callback, so the meeting saved `segments=0`. Now: the decision is per session (`builtinEngineCanStreamSession`), the transcriber falls back to its own preview when the live engine reports `isStreaming() == false`, and the meeting commits the engine's chunks unattributed after a fallback.
+- With routing on, the transcriber's start language is `selectedLanguage` (default `.english`), and it was passed to Apple as an explicit language: Apple transcribed every session in English, the probe never ran, and the fused-verdict pin was blocked. Preview-only live engines now open in `.auto` whenever the language router decides.
+- A mid-session switch to an uninstalled language keeps the old analyzer (a meeting must not lose its live text) but is reported, so the language gets installed and the user sees `LivePreviewNoticeBanner`.

@@ -193,6 +193,16 @@ struct OverlayView: View {
                 MeetingNotificationCard(app: meetingApp)
             }
 
+            // Install progress outlives the dictation that started it.
+            if appState.state == .idle {
+                LivePreviewNoticeBanner()
+            }
+
+            if let language = appState.liveLanguageOffer {
+                LiveLanguageOfferCard(language: language)
+                    .id(language)
+            }
+
             if let learned = appState.learnedEntryToast {
                 LearnedWordCard(entry: learned)
                     .id(learned.id)
@@ -205,6 +215,7 @@ struct OverlayView: View {
             } else if appState.showModelLoadingToast {
                 ModelLoadingIndicator(scale: scale)
             } else if appState.state != .idle {
+                LivePreviewNoticeBanner()
                 // Live transcription card (shown during recording)
                 if appState.liveTranscriptionEnabled && appState.state.isRecording {
                     LiveTranscriptionCard(appState: appState)
@@ -297,25 +308,6 @@ struct OverlayView: View {
         .padding(.bottom, 20 * scale) // Breathing room so card rounded corners aren't flush with panel edge
         .environment(\.overlayScale, scale)
         .background(Color.clear)
-        .overlay(
-            Group {
-                if appState.showMeetingConsentModal {
-                    ZStack {
-                        Color.black.opacity(0.4)
-                            .ignoresSafeArea()
-                        MeetingConsentView(
-                            onAccept: {
-                                appState.hasConsentedToMeetingRecording = true
-                                appState.showMeetingConsentModal = false
-                            },
-                            onDecline: {
-                                appState.showMeetingConsentModal = false
-                            }
-                        )
-                    }
-                }
-            }
-        )
     }
 }
 

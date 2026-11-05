@@ -61,7 +61,10 @@ struct MeetingListPanel: View {
                 .foregroundColor(.white)
             Spacer()
             Button {
-                Task { await session.startRecording(title: defaultTitle(), surface: .workspace) }
+                Task {
+                    guard await MeetingConsentPrompt.ensureConsent() else { return }
+                    await session.startRecording(title: defaultTitle(), surface: .workspace)
+                }
             } label: {
                 Image(systemName: "plus")
                     .font(.system(size: 13, weight: .semibold))

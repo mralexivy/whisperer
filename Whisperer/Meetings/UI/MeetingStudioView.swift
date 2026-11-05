@@ -282,7 +282,10 @@ struct MeetingStudioView: View {
             }
 
             Button {
-                Task { await session.startRecording(title: defaultNoteTitle(), surface: .workspace) }
+                Task {
+                    guard await MeetingConsentPrompt.ensureConsent() else { return }
+                    await session.startRecording(title: defaultNoteTitle(), surface: .workspace)
+                }
             } label: {
                 HStack(spacing: 8) {
                     Image(systemName: "plus")

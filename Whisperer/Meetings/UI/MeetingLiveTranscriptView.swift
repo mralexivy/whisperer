@@ -54,6 +54,10 @@ struct MeetingLiveTranscriptView: View {
         ScrollViewReader { proxy in
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 10) {
+                    if isLive {
+                        LivePreviewNoticeBanner()
+                            .frame(maxWidth: .infinity)
+                    }
                     if segments.isEmpty && !hasLiveTail {
                         emptyState
                     } else {

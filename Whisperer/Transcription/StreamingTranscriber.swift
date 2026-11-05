@@ -469,6 +469,10 @@ class StreamingTranscriber {
     // Fires when the active model has no prompt for the selected language, so transcription runs
     // unforced. Reported by closure rather than read from AppState — services never reach back.
     var onLanguageForcingUnavailable: ((TranscriptionLanguage) -> Void)?
+    /// The live-preview engine cannot stream `language` (nil: unknown which). Fired once per
+    /// session. When it happens at session start, this transcriber's own preview has taken over
+    /// the display (`livePreviewFellBack`).
+    var onLivePreviewUnavailable: ((TranscriptionLanguage?) -> Void)?
 
     // Thread-safe transcription state
     private let transcriptionLock = SafeLock()
@@ -510,6 +514,12 @@ class StreamingTranscriber {
     // Samples arriving before the session is open are dropped rather than sent to
     // an uninitialised RNNT state machine.
     private var isNemotronSessionReady: Bool = false
+    /// True once the preview-only live engine was found not streaming at session start: this
+    /// engine's own preview then drives the display, so the HUD never sits on "Listening…".
+    private(set) var livePreviewFellBack: Bool = false
+    /// Set when the live engine's session has opened or failed — the preview loop waits on it.
+    private var livePreviewResolved: Bool = false
+    private var livePreviewUnavailableReported = false
     private var lastPreviewedSampleIndex: Int = 0
     private var previewAccumulatedText: String = ""
     /// Qwen3-ASR preview stabilisation (LocalAgreement-2): the previous pass's words and the
@@ -611,6 +621,8 @@ class StreamingTranscriber {
     /// transcript. whisper.cpp's eager stream implies it; any other chunk-decoding engine (Qwen3)
     /// opts in explicitly through `nemotronPreviewOnly`.
     private var nemotronIsPreviewOnly: Bool { nemotronBridge != nil && (usesEagerStream || nemotronForcedPreviewOnly) }
+    /// Whether the live engine's partials are the only display writer. False after a fallback.
+    private var livePreviewOwnsDisplay: Bool { nemotronIsPreviewOnly && !livePreviewFellBack }
     #endif
     /// Declared unconditionally so the initializer can assign it in any build.
     private let nemotronForcedPreviewOnly: Bool
@@ -1210,6 +1222,9 @@ class StreamingTranscriber {
         isStopped = false
         stopGateLock.withLock { _isPreparingToStop = false }
         isNemotronSessionReady = false
+        livePreviewFellBack = false
+        livePreviewResolved = false
+        livePreviewUnavailableReported = false
         #if canImport(FluidAudio)
         nemotronFeedTask = nil
         nemotronPendingFeedSamples = 0
@@ -1282,7 +1297,7 @@ class StreamingTranscriber {
         if let nemotron = nemotronBridge {
             Task { [weak self] in
                 guard let self else { return }
-                let lang = self.language
+                let lang = self.liveEngineLanguage
                 let partialCounter = NemotronPartialCounter()
                 let pinner = self.nemotronLanguagePinner
                 pinner.reset()
@@ -1336,6 +1351,13 @@ class StreamingTranscriber {
                 await nemotron.beginSession(language: lang)
                 await nemotron.setPreviewCallback(callback)
                 self.isNemotronSessionReady = true
+                if self.nemotronIsPreviewOnly, await !nemotron.isStreaming() {
+                    // Never an empty HUD: this engine's own preview takes over the display.
+                    self.livePreviewFellBack = true
+                    Logger.warning("[LivePreview] live engine not streaming — the main engine's own preview drives the display this session", subsystem: .transcription)
+                }
+                self.livePreviewResolved = true
+                await self.reportLivePreviewUnavailableIfNeeded(nemotron)
             }
             // Preview-only: Nemotron drives the HUD while whisper.cpp runs the eager decode
             // for the final text — both paths must start. Only return early when Nemotron
@@ -1367,7 +1389,14 @@ class StreamingTranscriber {
             // on the GPU for text that is swallowed. (whisper.cpp's eager stream is the final
             // decoder, so it keeps running.)
             #if canImport(FluidAudio)
-            if self?.nemotronIsPreviewOnly == true && self?.usesEagerStream != true { return }
+            if self?.nemotronIsPreviewOnly == true && self?.usesEagerStream != true {
+                // Wait for the live engine to open (bounded); run only if it fell back.
+                for _ in 0..<50 {
+                    guard let self, !self.isStopped, !self.livePreviewResolved else { break }
+                    try? await Task.sleep(nanoseconds: 100_000_000)
+                }
+                guard let self, self.livePreviewFellBack else { return }
+            }
             #endif
             // The eager stream decodes with `auto-detect` on every pass — whisper.cpp re-detects
             // per window, so it needs no route decision to start. Waiting here would cost up to
@@ -1856,7 +1885,7 @@ class StreamingTranscriber {
                 // Clear preview accumulated text — chunk covers this audio now. Not when Nemotron
                 // owns it: its partials accumulate the whole session and are never replaced.
                 #if canImport(FluidAudio)
-                if !self.nemotronIsPreviewOnly { self.previewAccumulatedText = "" }
+                if !self.livePreviewOwnsDisplay { self.previewAccumulatedText = "" }
                 #else
                 self.previewAccumulatedText = ""
                 #endif
@@ -1920,7 +1949,7 @@ class StreamingTranscriber {
     /// the transcript itself (`fullTranscription`, committed chunks).
     private func emitDisplay(_ display: String, tail: String? = nil) {
         #if canImport(FluidAudio)
-        if nemotronIsPreviewOnly { return }
+        if livePreviewOwnsDisplay { return }
         #endif
         DispatchQueue.main.async { [weak self] in
             self?.onTranscription?(display)
@@ -3107,7 +3136,7 @@ class StreamingTranscriber {
         #if canImport(FluidAudio)
         // When Nemotron drives the HUD, eager commits text but does not publish to the display.
         // previewAccumulatedText is owned by the Nemotron partial callback — do not overwrite it.
-        if nemotronIsPreviewOnly {
+        if livePreviewOwnsDisplay {
             lastPreviewedSampleIndex = candidateEndIndex
             return
         }
@@ -4807,13 +4836,37 @@ class StreamingTranscriber {
         return true
     }
 
+    /// The language the live engine is opened in. `.auto` whenever the language router decides
+    /// (more than one language): handing it the start language instead would pin Apple dictation
+    /// to that one language for the whole session, so a user who switched to their other language
+    /// saw live text transcribed in the wrong one, and its own language probe never ran.
+    /// Preview-only engines only: Nemotron as the user's own final decoder keeps the start language.
+    private var liveEngineLanguage: TranscriptionLanguage {
+        #if canImport(FluidAudio)
+        if languageRouter != nil && nemotronIsPreviewOnly { return .auto }
+        #endif
+        return language
+    }
+
+    #if canImport(FluidAudio)
+    private func reportLivePreviewUnavailableIfNeeded(_ engine: any LivePreviewEngine) async {
+        guard !livePreviewUnavailableReported else { return }
+        let missing = await engine.unavailableLanguage()
+        guard missing != nil || livePreviewFellBack else { return }
+        livePreviewUnavailableReported = true
+        DispatchQueue.main.async { [weak self] in
+            self?.onLivePreviewUnavailable?(missing)
+        }
+    }
+    #endif
+
     /// Push the fused verdict to Nemotron, so the live cards are decoded in the language the whole
     /// process agrees on rather than the one Nemotron guessed for itself.
     private func pinNemotron(to language: TranscriptionLanguage) {
         #if canImport(FluidAudio)
         // An explicitly selected language is already forced at `beginSession`; overriding it here
         // would second-guess the user.
-        guard self.language == .auto, let nemotron = nemotronBridge else { return }
+        guard self.liveEngineLanguage == .auto, let nemotron = nemotronBridge else { return }
         // `adopt` is false when the pin already names this language, which is the common case once
         // the session settles — this must not fire an actor hop on every fusion.
         guard nemotronLanguagePinner.adopt(code: language.rawValue) else { return }
@@ -4821,6 +4874,7 @@ class StreamingTranscriber {
             guard let self, !self.isStopped else { return }
             await nemotron.pinLanguage(language.rawValue)
             Logger.info("[LivePreview] Language pinned to \(language.rawValue) by fused verdict", subsystem: .transcription)
+            await self.reportLivePreviewUnavailableIfNeeded(nemotron)
             DispatchQueue.main.async { [weak self] in
                 self?.onLanguageDetected?(language)
             }

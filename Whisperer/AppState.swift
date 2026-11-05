@@ -317,6 +317,12 @@ class AppState: ObservableObject {
         didSet {
             UserDefaults.standard.set(selectedLanguage.rawValue, forKey: "selectedLanguage")
 
+            // The built-in engine streams in the user's languages; install a newly chosen one.
+            if systemLivePreviewInstance != nil, builtinEngineLanguages != Self.builtinLanguages(
+                config: routingConfig, selected: oldValue, extras: extraLivePreviewLanguages) {
+                startBuiltinEngine()
+            }
+
             // SpeechAnalyzer needs re-prepare for new locale (model download may be required)
             if selectedBackendType == .speechAnalyzer && isModelLoaded && oldValue != selectedLanguage {
                 Logger.info("Language changed to \(selectedLanguage.displayName), re-preparing SpeechAnalyzer", subsystem: .model)
@@ -877,10 +883,10 @@ class AppState: ObservableObject {
                     modelPool = nil
                 }
             }
-            // The built-in engine streams in the user's languages; install any new one.
-            if systemLivePreviewInstance != nil
-                && (routingConfig.allowedLanguages != oldValue.allowedLanguages
-                    || routingConfig.primaryLanguage != oldValue.primaryLanguage) {
+            // The built-in engine streams in the user's languages; install any new one. Compared on
+            // the derived list, so switching routing on or changing the start language counts too.
+            if systemLivePreviewInstance != nil, builtinEngineLanguages != Self.builtinLanguages(
+                config: oldValue, selected: selectedLanguage, extras: extraLivePreviewLanguages) {
                 startBuiltinEngine()
             }
         }
@@ -926,7 +932,6 @@ class AppState: ObservableObject {
     @Published var hasConsentedToMeetingRecording: Bool = UserDefaults.standard.bool(forKey: "hasConsentedToMeetingRecording") {
         didSet { UserDefaults.standard.set(hasConsentedToMeetingRecording, forKey: "hasConsentedToMeetingRecording") }
     }
-    @Published var showMeetingConsentModal: Bool = false
 
     /// Returns true when mcpCustomURL contains a parseable http/https URL.
     var mcpCustomURLIsValid: Bool {
@@ -1017,43 +1022,13 @@ class AppState: ObservableObject {
         // Enable accessibility tracking if auto-paste was previously enabled
         if autoPasteEnabled {
             PermissionManager.shared.enableAccessibilityTracking()
-            if !AXIsProcessTrusted() {
-                let recoveryKey = "accessibilityAutoRecoveryAttempted"
-                if !UserDefaults.standard.bool(forKey: recoveryKey) {
-                    // First time we detect a lost/stale permission: do a one-shot
-                    // auto-recovery. Mark immediately so repeated crashes don't loop.
-                    UserDefaults.standard.set(true, forKey: recoveryKey)
-                    let bundleID = Bundle.main.bundleIdentifier ?? "com.ivy.whisperer"
-                    DispatchQueue.global(qos: .userInitiated).async {
-                        // Best-effort: remove our own stale TCC entry before re-requesting.
-                        // tccutil can reset an app's own accessibility entry without sudo.
-                        // If it fails (permission denied or unavailable), we proceed anyway —
-                        // the onboarding requestAccessibilityPermission call still works.
-                        let task = Process()
-                        task.launchPath = "/usr/bin/tccutil"
-                        task.arguments = ["reset", "Accessibility", bundleID]
-                        do {
-                            try task.run()
-                            task.waitUntilExit()
-                            Logger.debug("tccutil reset Accessibility exited \(task.terminationStatus)", subsystem: .permissions)
-                        } catch {
-                            Logger.debug("tccutil reset skipped: \(error.localizedDescription)", subsystem: .permissions)
-                        }
-                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
-                            // Only re-open onboarding if user hasn't completed it.
-                            // For completed users, the menu bar permission badge handles recovery UX.
-                            guard !UserDefaults.standard.bool(forKey: "hasCompletedOnboarding") else { return }
-                            OnboardingWindowManager.shared.show(startingAtPage: 4)
-                        }
-                    }
-                }
-                // If recovery was already attempted, the main UI warning is shown;
-                // don't re-open onboarding on every launch.
-            } else {
-                // Permission valid — clear recovery flag so future permission-loss
-                // events (e.g. next macOS upgrade) get the same seamless auto-recovery.
-                UserDefaults.standard.removeObject(forKey: "accessibilityAutoRecoveryAttempted")
-            }
+        }
+        // A grant a differently-signed build left behind shows ON in System Settings but is not
+        // trusted; reset it and ask again. Covers Accessibility (meeting detection needs it even
+        // with auto-paste off) and Microphone. Replaces a one-shot reset that only ran with
+        // auto-paste on and re-prompted only users who had not finished onboarding.
+        if !AppEnvironment.isRunningTests {
+            StalePermissionRepair.check()
         }
         #endif
 
@@ -1902,14 +1877,102 @@ class AppState: ObservableObject {
     /// Languages the built-in engine streams in, primary first: the routing shortlist, else the
     /// selected language, else (auto with no shortlist) the Mac's preferred languages.
     var builtinEngineLanguages: [TranscriptionLanguage] {
-        var languages: [TranscriptionLanguage] = routingConfig.isRoutingEnabled
-            ? [routingConfig.primaryLanguage].compactMap { $0 } + routingConfig.allowedLanguages
-            : [routingConfig.singleLanguageStartLanguage ?? selectedLanguage]
+        Self.builtinLanguages(config: routingConfig, selected: selectedLanguage, extras: extraLivePreviewLanguages)
+    }
+
+    /// `extras` are languages the user turned on from the live-language offer: spoken, but not in
+    /// their language settings.
+    static func builtinLanguages(config: LanguageRoutingConfig, selected: TranscriptionLanguage,
+                                 extras: [TranscriptionLanguage]) -> [TranscriptionLanguage] {
+        var languages: [TranscriptionLanguage] = config.isRoutingEnabled
+            ? [config.primaryLanguage].compactMap { $0 } + config.allowedLanguages
+            : [config.singleLanguageStartLanguage ?? selected]
         if languages.allSatisfy({ $0 == .auto }) {
             languages = Locale.preferredLanguages.compactMap { TranscriptionLanguage.from(languageTag: $0) }
         }
         var seen = Set<TranscriptionLanguage>()
-        return languages.filter { $0 != .auto && seen.insert($0).inserted }
+        return (languages + extras).filter { $0 != .auto && seen.insert($0).inserted }
+    }
+
+    // MARK: - Live-language offer
+
+    /// Languages added from the live-language offer. Persisted; they join live preview's list.
+    @Published private(set) var extraLivePreviewLanguages: [TranscriptionLanguage] =
+        (UserDefaults.standard.stringArray(forKey: "extraLivePreviewLanguages") ?? [])
+            .compactMap(TranscriptionLanguage.init(rawValue:)) {
+        didSet { UserDefaults.standard.set(extraLivePreviewLanguages.map(\.rawValue), forKey: "extraLivePreviewLanguages") }
+    }
+
+    /// The language the offer card is showing, nil when hidden.
+    @Published private(set) var liveLanguageOffer: TranscriptionLanguage? {
+        didSet { NotificationCenter.default.post(name: NSNotification.Name("AppStateChanged"), object: nil) }
+    }
+    private var liveLanguageOfferPolicy = LiveLanguageOfferPolicy()
+    private var liveLanguageOfferHideTask: Task<Void, Never>?
+
+    private var silencedLiveLanguages: Set<TranscriptionLanguage> {
+        let counts = UserDefaults.standard.dictionary(forKey: "liveLanguageOfferDismissals") as? [String: Int] ?? [:]
+        return Set(counts.filter { $0.value >= LiveLanguageOfferPolicy.dismissalsBeforeSilence }.keys
+            .compactMap(TranscriptionLanguage.init(rawValue:)))
+    }
+
+    /// Called once per finished dictation with its text and the language the engine reported.
+    func considerLiveLanguageOffer(text: String, detected: TranscriptionLanguage?) {
+        guard systemLivePreviewInstance != nil, liveLanguageOffer == nil, !isMeetingMode else { return }
+        guard let language = liveLanguageOfferPolicy.observe(
+            text: text, detected: detected, configured: builtinEngineLanguages, silenced: silencedLiveLanguages) else { return }
+        Task { [weak self] in
+            // Only languages Apple dictation can stream in.
+            guard await SystemLivePreviewBridge.locale(for: language) != nil else { return }
+            // The dictation is still finishing when this runs; appear once the HUD is idle.
+            for _ in 0..<25 {
+                guard let self, self.state != .idle else { break }
+                try? await Task.sleep(for: .milliseconds(200))
+            }
+            guard let self, self.state == .idle, self.liveLanguageOffer == nil else { return }
+            Logger.info("Live-language offer: \(language.rawValue)", subsystem: .ui)
+            self.liveLanguageOffer = language
+            self.scheduleLiveLanguageOfferHide(after: 14)
+        }
+    }
+
+    /// Adds the language to live preview and installs it; the card stays up to show the download.
+    func acceptLiveLanguageOffer(_ language: TranscriptionLanguage) {
+        liveLanguageOfferHideTask?.cancel()
+        if !extraLivePreviewLanguages.contains(language) { extraLivePreviewLanguages.append(language) }
+        startBuiltinEngine()
+        Logger.info("Live-language offer accepted: \(language.rawValue)", subsystem: .ui)
+        liveLanguageOfferHideTask = Task { [weak self] in
+            // Hide once installed (or after 3 minutes, whatever happened — the Settings row has it).
+            for _ in 0..<900 {
+                try? await Task.sleep(for: .milliseconds(200))
+                guard let self, !Task.isCancelled else { return }
+                if self.systemLanguageStatuses[language] == .ready {
+                    try? await Task.sleep(for: .seconds(2.5))
+                    break
+                }
+            }
+            guard let self, !Task.isCancelled, self.liveLanguageOffer == language else { return }
+            self.liveLanguageOffer = nil
+        }
+    }
+
+    /// "Not now". The second dismissal of the same language stops the offer for it.
+    func dismissLiveLanguageOffer(_ language: TranscriptionLanguage) {
+        liveLanguageOfferHideTask?.cancel()
+        var counts = UserDefaults.standard.dictionary(forKey: "liveLanguageOfferDismissals") as? [String: Int] ?? [:]
+        counts[language.rawValue, default: 0] += 1
+        UserDefaults.standard.set(counts, forKey: "liveLanguageOfferDismissals")
+        liveLanguageOffer = nil
+    }
+
+    private func scheduleLiveLanguageOfferHide(after seconds: Double) {
+        liveLanguageOfferHideTask?.cancel()
+        liveLanguageOfferHideTask = Task { [weak self] in
+            try? await Task.sleep(for: .seconds(seconds))
+            guard let self, !Task.isCancelled else { return }
+            self.liveLanguageOffer = nil
+        }
     }
 
     /// Whether the built-in engine should supply live text for `backend`.
@@ -1922,9 +1985,71 @@ class AppState: ObservableObject {
     /// engine's own preview, so a language Apple has no assets for must keep that preview rather
     /// than show a blank HUD.
     func builtinEngineDrivesLiveText(for backend: BackendType) -> Bool {
-        guard systemLivePreviewInstance != nil else { return false }
         guard backend == .whisperCpp || backend == .qwen3asr else { return false }
+        return builtinEngineCanStreamSession
+    }
+
+    /// Whether Apple dictation can stream the session about to start — decided per session, not
+    /// "any of the user's languages is installed". A single-language session needs that language;
+    /// a routed one opens Apple in auto and needs at least one (its probe picks among installed
+    /// ones). The transcriber still falls back to its own preview if Apple then fails to start.
+    var builtinEngineCanStreamSession: Bool {
+        guard systemLivePreviewInstance != nil else { return false }
+        if !routingConfig.isRoutingEnabled {
+            let language = routingConfig.singleLanguageStartLanguage ?? selectedLanguage
+            if language != .auto { return systemLanguageStatuses[language] == .ready }
+        }
         return builtinEngineLanguages.contains { systemLanguageStatuses[$0] == .ready }
+    }
+
+    // MARK: - Live-preview notice
+
+    /// Known to need Apple assets: not installed, or installing. Nil (not yet checked) and
+    /// `.unsupported` are not "missing".
+    static func isMissing(_ status: SystemLanguageStatus?) -> Bool {
+        switch status {
+        case .notInstalled, .downloading: return true
+        default: return false
+        }
+    }
+
+    /// Shown in the HUD and the meeting live window while live text for a language the user is
+    /// speaking is unavailable — so a missing language is never a silent, unexplained gap.
+    @Published private(set) var livePreviewNoticeLanguage: TranscriptionLanguage? {
+        didSet { NotificationCenter.default.post(name: NSNotification.Name("AppStateChanged"), object: nil) }
+    }
+    private var livePreviewNoticeTask: Task<Void, Never>?
+
+    /// The transcriber found Apple dictation could not stream `language`. Install it (adding it to
+    /// live preview's languages if the user never configured it) and tell the user.
+    func handleLivePreviewUnavailable(_ language: TranscriptionLanguage?) {
+        guard let language else { return }
+        Task { [weak self] in
+            guard await SystemLivePreviewBridge.locale(for: language) != nil, let self else {
+                Logger.info("Live preview: \(language.rawValue) has no Apple dictation — engine preview only", subsystem: .model)
+                return
+            }
+            if !self.builtinEngineLanguages.contains(language), !self.extraLivePreviewLanguages.contains(language) {
+                self.extraLivePreviewLanguages.append(language)
+                self.startBuiltinEngine()
+            }
+            if self.systemLanguageStatuses[language] != .ready { self.installSystemLanguage(language) }
+            self.livePreviewNoticeLanguage = language
+            self.livePreviewNoticeTask?.cancel()
+            self.livePreviewNoticeTask = Task { [weak self] in
+                // Up while it installs, then a moment of "ready", bounded at 3 minutes.
+                for _ in 0..<900 {
+                    try? await Task.sleep(for: .milliseconds(200))
+                    guard let self, !Task.isCancelled else { return }
+                    if self.systemLanguageStatuses[language] == .ready {
+                        try? await Task.sleep(for: .seconds(3))
+                        break
+                    }
+                }
+                guard let self, !Task.isCancelled else { return }
+                self.livePreviewNoticeLanguage = nil
+            }
+        }
     }
 
     /// Start the built-in engine: Apple's on-device dictation.
@@ -3510,6 +3635,16 @@ class AppState: ObservableObject {
                 streamingTranscriber?.onLanguageForcingUnavailable = { [weak self] lang in
                     self?.reportLanguageForcingUnavailable(lang)
                 }
+                streamingTranscriber?.onLivePreviewUnavailable = { [weak self] lang in
+                    self?.handleLivePreviewUnavailable(lang)
+                }
+                // Re-verify Apple's install state every session: a language removed in System
+                // Settings since launch is then reinstalled rather than silently missing.
+                refreshSystemLanguages(installMissing: true)
+                // A language of the user's that Apple has no assets for yet: say so and install it.
+                if let missing = builtinEngineLanguages.first(where: { Self.isMissing(systemLanguageStatuses[$0]) }) {
+                    handleLivePreviewUnavailable(missing)
+                }
 
                 // Wire incremental CoreData persistence for crash recovery
                 // and per-chunk LLM correction (runs during audio collection windows).
@@ -3619,6 +3754,15 @@ class AppState: ObservableObject {
                                 // the live meeting tail ~148× in a 4.5-min Hebrew session
                                 // (2026-09-07). Those feeds are driven from `onPreviewTail` or
                                 // `onTranscription` instead; the delta has no role here.
+                                if coordinatorFeed == .accumulatedPartials,
+                                   self.streamingTranscriber?.livePreviewFellBack == true {
+                                    // Apple dictation never started, so its stable text — this
+                                    // feed's only source — is empty. Without this the meeting
+                                    // recorded `segments=0` (2026-11-05). Unattributed, but kept.
+                                    guard meetingSession.chunkGeneration == capturedGeneration else { return }
+                                    meetingSession.onNewChunk(text: chunk.text, start: chunk.start, end: chunk.end)
+                                    return
+                                }
                                 if coordinatorFeed == .accumulatedFinal {
                                     let finalText = chunk.text
                                     self.diarizerFeedTask = Task { [previous = self.diarizerFeedTask] in
@@ -3707,6 +3851,10 @@ class AppState: ObservableObject {
                         // committed words reach the coordinator through the stable-text callback
                         // wired at session start. Here only the words after them — the ones Apple
                         // may still revise — are shown, after the coordinator's pending tail.
+                        if coordinatorFeed == .accumulatedPartials, self.streamingTranscriber?.livePreviewFellBack == true {
+                            self.activeMeetingSession?.livePreviewText = tail
+                            return
+                        }
                         if coordinatorFeed == .accumulatedPartials, self.meetingSpeakerCoordinator != nil {
                             let committedCount = SystemLivePreviewBridge.words(self.meetingTranscriptAccumulator.published).count
                             self.meetingVolatileTail = SystemLivePreviewBridge.words(tail).dropFirst(committedCount).joined(separator: " ")
@@ -4027,9 +4175,7 @@ class AppState: ObservableObject {
         #endif
         // The built-in engine covers dictation while the user's engine is still downloading or
         // loading: Apple's text becomes the final text, so the app works from the first launch.
-        let builtinCovers = whisperBridge == nil && !nemotronReady
-            && builtinEngineLanguages.contains { systemLanguageStatuses[$0] == .ready }
-            && systemLivePreviewInstance != nil
+        let builtinCovers = whisperBridge == nil && !nemotronReady && builtinEngineCanStreamSession
         guard whisperBridge != nil || nemotronReady || builtinCovers else {
             showModelLoadingToast = true
             // Safety timeout — dismiss if model never loads (e.g., no model downloaded)
@@ -4157,6 +4303,16 @@ class AppState: ObservableObject {
                 }
                 streamingTranscriber?.onLanguageForcingUnavailable = { [weak self] lang in
                     self?.reportLanguageForcingUnavailable(lang)
+                }
+                streamingTranscriber?.onLivePreviewUnavailable = { [weak self] lang in
+                    self?.handleLivePreviewUnavailable(lang)
+                }
+                // Re-verify Apple's install state every session: a language removed in System
+                // Settings since launch is then reinstalled rather than silently missing.
+                refreshSystemLanguages(installMissing: true)
+                // A language of the user's that Apple has no assets for yet: say so and install it.
+                if let missing = builtinEngineLanguages.first(where: { Self.isMissing(systemLanguageStatuses[$0]) }) {
+                    handleLivePreviewUnavailable(missing)
                 }
 
                 // Wire incremental CoreData persistence for crash recovery
@@ -5160,6 +5316,8 @@ class AppState: ObservableObject {
                     } else {
                         recordedLanguage = effectiveLang.rawValue
                     }
+                    self.considerLiveLanguageOffer(text: transcription,
+                                                   detected: TranscriptionLanguage(rawValue: recordedLanguage))
 
                     let record = TranscriptionRecord(
                         id: recordId,

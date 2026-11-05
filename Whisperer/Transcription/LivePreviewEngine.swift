@@ -39,4 +39,19 @@ nonisolated protocol LivePreviewEngine: AnyObject {
     /// (`LiveLanguageArbiter`) and pushes it here. Mid-session and reversible: the caller unpins
     /// by passing nil.
     func pinLanguage(_ code: String?) async
+
+    /// Whether the session `beginSession` opened is actually producing text. False when the engine
+    /// could not start — e.g. Apple dictation with no assets for the session's language — and the
+    /// caller must then show its own engine's preview instead of an empty "Listening…".
+    func isStreaming() async -> Bool
+
+    /// The language this session needed but could not stream in, for telling the user and
+    /// installing it. Nil when nothing is missing.
+    func unavailableLanguage() async -> TranscriptionLanguage?
+}
+
+extension LivePreviewEngine {
+    /// Model-backed engines (Nemotron) stream whenever they are loaded, in every language.
+    func isStreaming() async -> Bool { true }
+    func unavailableLanguage() async -> TranscriptionLanguage? { nil }
 }

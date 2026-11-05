@@ -63,6 +63,8 @@ actor SystemLivePreviewBridge: LivePreviewEngine {
 
     private var sessionID = 0
     private var sessionLanguage: TranscriptionLanguage?
+    /// The language this session could not stream in (see `unavailableLanguage()`).
+    private var missingLanguage: TranscriptionLanguage?
     /// Installed languages the probe may choose among; empty when there is nothing to choose.
     private var probeCandidates: [TranscriptionLanguage] = []
     private var sessionAudio: [Float] = []
@@ -144,14 +146,20 @@ actor SystemLivePreviewBridge: LivePreviewEngine {
 
     nonisolated static func status(for language: TranscriptionLanguage) async -> SystemLanguageStatus {
         guard let locale = await locale(for: language) else { return .unsupported }
-        let id = locale.identifier(.bcp47)
-        let installed = await DictationTranscriber.installedLocales.map { $0.identifier(.bcp47) }
-        if installed.contains(id) { return .ready }
+        // `installedLocales` is not the truth. On a Mac with system Dictation switched off it
+        // listed en-US while the module still needed assets, so this said Ready, the launch-time
+        // auto-install skipped it, and every session logged "assets not installed" with no live
+        // text. The installation request is the check `startAnalyzer` itself makes, so ask it.
         // `.installed` is not reported for locales installed by System Settings (en and he read
-        // `.supported` on a Mac that dictates in both), so only `.downloading` is trusted here.
+        // `.supported` on a Mac that dictates in both), so only `.downloading` is trusted there.
         let module = DictationTranscriber(locale: locale, preset: preset)
         if case .downloading = await AssetInventory.status(forModules: [module]) { return .downloading(0) }
-        return .notInstalled
+        do {
+            return try await AssetInventory.assetInstallationRequest(supporting: [module]) == nil ? .ready : .notInstalled
+        } catch {
+            Logger.warning("System dictation: asset check for \(locale.identifier(.bcp47)) failed: \(error.localizedDescription)", subsystem: .model)
+            return .notInstalled
+        }
     }
 
     /// Languages Apple dictation is already installed for on this Mac — the ones the user turned
@@ -204,6 +212,7 @@ actor SystemLivePreviewBridge: LivePreviewEngine {
         sessionID &+= 1
         probeCandidates = []
         probeStage = .decided
+        missingLanguage = nil
 
         let start: TranscriptionLanguage?
         if language == .auto {
@@ -227,7 +236,8 @@ actor SystemLivePreviewBridge: LivePreviewEngine {
             start = await Self.status(for: language) == .ready ? language : nil
         }
         guard let start, let locale = await Self.locale(for: start) else {
-            Logger.info("System dictation: no installed locale for \(language.rawValue) — no live preview this session", subsystem: .transcription)
+            missingLanguage = language != .auto ? language : preferredLanguages.first { $0 != .auto }
+            Logger.warning("System dictation: no installed locale for \(language.rawValue) — the engine's own preview shows live text this session", subsystem: .transcription)
             return
         }
         sessionLanguage = start
@@ -288,6 +298,10 @@ actor SystemLivePreviewBridge: LivePreviewEngine {
     /// Restart the analyzer in `code`'s locale. A nil code (unpin) keeps the current locale —
     /// there is no "auto" to fall back to. Once the probe has decided, its answer stands for the
     /// first `replayLimitSamples`; later pins (a meeting changing language) still apply.
+    func isStreaming() async -> Bool { input != nil }
+
+    func unavailableLanguage() async -> TranscriptionLanguage? { missingLanguage }
+
     func pinLanguage(_ code: String?) async {
         guard let code, let language = TranscriptionLanguage.from(languageTag: code) else { return }
         if probeStage != .decided { return }  // the probe is about to answer, sooner and better
@@ -416,7 +430,13 @@ actor SystemLivePreviewBridge: LivePreviewEngine {
         let session = sessionID
         guard await Self.status(for: language) == .ready,
               let locale = await Self.locale(for: language) else {
-            if session == sessionID { sessionLanguage = previous }
+            if session == sessionID {
+                sessionLanguage = previous
+                // Keeps streaming in the old language (a meeting must not lose its live text);
+                // reported so the caller can tell the user and install it for next time.
+                missingLanguage = language
+                Logger.warning("System dictation: cannot switch to \(language.rawValue) (\(reason)) — not installed", subsystem: .transcription)
+            }
             return
         }
         guard session == sessionID else { return }
@@ -486,6 +506,7 @@ actor SystemLivePreviewBridge: LivePreviewEngine {
                 // through `install(_:progress:)`, which the UI drives.
                 if try await AssetInventory.assetInstallationRequest(supporting: [module]) != nil {
                     Logger.warning("System dictation: \(id) assets not installed", subsystem: .transcription)
+                    missingLanguage = sessionLanguage
                     return
                 }
                 allocatedLocales.insert(id)
