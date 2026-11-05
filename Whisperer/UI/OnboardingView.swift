@@ -748,7 +748,7 @@ struct OnboardingView: View {
                     .font(.system(size: 24, weight: .bold, design: .rounded))
                     .foregroundColor(OnboardingColors.textPrimary)
 
-                Text("Select the languages you speak. Whisperer will automatically detect which one you're using and route to the best model.")
+                Text("Select the languages you speak. Whisperer will automatically detect which one you're using and route to the best model. Apple's on-device dictation is installed for each, so your words appear as you speak.")
                     .font(.system(size: 14, weight: .regular))
                     .foregroundColor(OnboardingColors.textSecondary)
                     .lineSpacing(4)
@@ -788,6 +788,8 @@ struct OnboardingView: View {
                     }
                     .padding(.top, 4)
                 }
+
+                livePreviewInstallStatus
             }
             .padding(.horizontal, 28)
 
@@ -809,6 +811,16 @@ struct OnboardingView: View {
                 selectedLanguages = Set(config.allowedLanguages)
                 selectedPrimary = config.primaryLanguage ?? .english
             }
+            // Languages the Mac already dictates in are languages the user speaks.
+            Task {
+                let dictated = await SystemLivePreviewBridge.installedLanguages()
+                    .filter { Self.commonLanguages.contains($0) }
+                guard !dictated.isEmpty else { return }
+                selectedLanguages.formUnion(dictated)
+            }
+            // Live preview is Apple dictation: create it now so every selection below installs
+            // the languages it is missing, in the background.
+            appState.startBuiltinEngine()
         }
         .onChange(of: selectedLanguages) { newValue in
             saveLanguageConfig()
@@ -853,6 +865,67 @@ struct OnboardingView: View {
             )
         }
         .buttonStyle(.plain)
+    }
+
+    /// One line per selected language saying whether live preview works in it yet. Installs run
+    /// in the background (`AppState.installSystemLanguage`) and never block Continue.
+    private var livePreviewInstallStatus: some View {
+        let ordered = [selectedPrimary] + selectedLanguages.filter { $0 != selectedPrimary }
+            .sorted { $0.displayName < $1.displayName }
+        return VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 6) {
+                Image(systemName: "waveform.badge.mic")
+                    .font(.system(size: 11))
+                    .foregroundColor(.green)
+                Text("Live preview")
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundColor(OnboardingColors.textSecondary)
+            }
+            ForEach(ordered, id: \.self) { language in
+                HStack(spacing: 8) {
+                    Text(language.displayName)
+                        .font(.system(size: 12))
+                        .foregroundColor(OnboardingColors.textPrimary)
+                    Spacer()
+                    livePreviewStatusLabel(language)
+                }
+            }
+        }
+        .padding(10)
+        .background(RoundedRectangle(cornerRadius: 8).fill(OnboardingColors.cardSurface))
+        .overlay(RoundedRectangle(cornerRadius: 8).stroke(OnboardingColors.cardBorder, lineWidth: 1))
+    }
+
+    @ViewBuilder
+    private func livePreviewStatusLabel(_ language: TranscriptionLanguage) -> some View {
+        switch appState.systemLanguageStatuses[language] {
+        case .ready:
+            Label("Ready", systemImage: "checkmark.circle.fill")
+                .font(.system(size: 11, weight: .medium))
+                .foregroundColor(.green)
+        case .downloading(let fraction):
+            HStack(spacing: 6) {
+                ProgressView(value: fraction)
+                    .progressViewStyle(.linear)
+                    .tint(OnboardingColors.accentBlue)
+                    .frame(width: 70)
+                Text("\(Int(fraction * 100))%")
+                    .font(.system(size: 11))
+                    .foregroundColor(OnboardingColors.accentBlue)
+                    .monospacedDigit()
+            }
+        case .notInstalled:
+            Button("Install") { appState.installSystemLanguage(language) }
+                .buttonStyle(.plain)
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundColor(OnboardingColors.accentBlue)
+        case .unsupported:
+            Text("Not in Apple dictation")
+                .font(.system(size: 11))
+                .foregroundColor(OnboardingColors.textTertiary)
+        case nil:
+            ProgressView().controlSize(.mini)
+        }
     }
 
     private func saveLanguageConfig() {

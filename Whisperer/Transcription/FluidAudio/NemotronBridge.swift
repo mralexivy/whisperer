@@ -130,7 +130,7 @@ actor NemotronBridge {
         await manager?.detectedLanguage()
     }
 
-    /// See `NemotronBridging.pinLanguage`. No `reset()` — the session's decoded audio must
+    /// See `LivePreviewEngine.pinLanguage`. No `reset()` — the session's decoded audio must
     /// survive; only the language choice changes from here on.
     func pinLanguage(_ code: String?) async {
         guard !_isShuttingDown, let manager else { return }
@@ -177,5 +177,5 @@ enum NemotronError: Error, LocalizedError {
     }
 }
 
-extension NemotronBridge: NemotronBridging {}
+extension NemotronBridge: LivePreviewEngine {}
 #endif

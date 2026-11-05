@@ -578,9 +578,10 @@ class StreamingTranscriber {
 
     // Nemotron bridge — when set, bypasses VAD chunking, ring buffer, and preview polling.
     // Audio is fed directly; preview fires via push callback; final text via endSession().
-    // Holds either NemotronBridge (multilingual) or NemotronHebrewBridge via NemotronBridging protocol.
+    // Holds the built-in engine (SystemLivePreviewBridge, Apple dictation) as a preview-only source,
+    // or NemotronBridge / NemotronHebrewBridge as the final decoder, via the LivePreviewEngine protocol.
     #if canImport(FluidAudio)
-    private var nemotronBridge: (any NemotronBridging)?
+    private var nemotronBridge: (any LivePreviewEngine)?
     // Serializes bridge.feed() calls. Each addSamples Task chains onto this, preventing
     // concurrent process(samples:) on the same actor (Swift re-entrancy → heap corruption).
     private var nemotronFeedTask: Task<Void, Never>?
@@ -1187,7 +1188,7 @@ class StreamingTranscriber {
             maxChunkDuration: maxChunkDuration
         )
         #if canImport(FluidAudio)
-        self.nemotronBridge = nemotronBridge as? any NemotronBridging
+        self.nemotronBridge = nemotronBridge as? any LivePreviewEngine
         #endif
     }
 
@@ -1294,7 +1295,7 @@ class StreamingTranscriber {
                     // The HUD is driven from here on the whisper.cpp path (`nemotronIsPreviewOnly`),
                     // and nothing logged it — so a live preview that froze looked identical in the
                     // log to one that was never fed. Cadence and word count are what say which.
-                    Logger.debug("[Nemotron] partial #\(partialIndex): \(accumulatedText.split(whereSeparator: { $0.isWhitespace }).count) words", subsystem: .transcription)
+                    Logger.debug("[LivePreview] partial #\(partialIndex): \(accumulatedText.split(whereSeparator: { $0.isWhitespace }).count) words", subsystem: .transcription)
                     self.noteActivity()
                     self.previewAccumulatedText = accumulatedText
                     DispatchQueue.main.async {
@@ -1445,7 +1446,7 @@ class StreamingTranscriber {
                 if !nemotronFeedSheddingLogged {
                     nemotronFeedSheddingLogged = true
                     Logger.warning(
-                        "[Nemotron] preview feed backlog \(String(format: "%.1f", pendingSeconds))s — shedding until it drains",
+                        "[LivePreview] preview feed backlog \(String(format: "%.1f", pendingSeconds))s — shedding until it drains",
                         subsystem: .transcription
                     )
                 }
@@ -1475,7 +1476,7 @@ class StreamingTranscriber {
         let pendingSeconds = Double(nemotronPendingFeedSamples) / sampleRate
         if pendingSeconds >= 1.0 {
             Logger.info(
-                "[Nemotron] abandoned \(String(format: "%.1f", pendingSeconds))s of preview backlog at stop",
+                "[LivePreview] abandoned \(String(format: "%.1f", pendingSeconds))s of preview backlog at stop",
                 subsystem: .transcription
             )
         }
@@ -3754,7 +3755,7 @@ class StreamingTranscriber {
                 // only lets the one in-flight feed() unwind. Never await the backlog here.
                 abandonNemotronFeedChain()
                 if await drainNemotronFeedChain(timeout: 0.4) == false {
-                    Logger.warning("[Nemotron] in-flight feed still running after 400ms, proceeding anyway", subsystem: .transcription)
+                    Logger.warning("[LivePreview] in-flight feed still running after 400ms, proceeding anyway", subsystem: .transcription)
                 }
                 nemotronFeedTask = nil
                 _ = await nemotron.endSession()
@@ -4819,7 +4820,7 @@ class StreamingTranscriber {
         Task { [weak self] in
             guard let self, !self.isStopped else { return }
             await nemotron.pinLanguage(language.rawValue)
-            Logger.info("[Nemotron] Language pinned to \(language.rawValue) by fused verdict", subsystem: .transcription)
+            Logger.info("[LivePreview] Language pinned to \(language.rawValue) by fused verdict", subsystem: .transcription)
             DispatchQueue.main.async { [weak self] in
                 self?.onLanguageDetected?(language)
             }

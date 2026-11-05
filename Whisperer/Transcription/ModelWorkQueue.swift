@@ -102,8 +102,18 @@ actor ModelWorkQueue {
     }
 
     /// A job that overruns this is presumed wedged: the slot is reclaimed so the queue survives.
-    /// Sized well above the slowest legitimate job ever measured (a cold `llm-load` at ~5s).
+    /// Sized well above the slowest legitimate non-Core-ML job ever measured (a cold `llm-load`
+    /// at ~5s).
     private static let stallCeiling: TimeInterval = 120
+    /// `*-load` jobs get longer: loading the built-in Nemotron specializes a ~1.5 GB Core ML
+    /// encoder for the Neural Engine, which took 47s on a warm launch and was still running after
+    /// 120s on the first launch after a rebuild. Reclaiming that slot reports a false "stuck" error
+    /// and lets a second heavy load start beside the first one.
+    private static let loadStallCeiling: TimeInterval = 600
+
+    private static func stallCeiling(for label: String) -> TimeInterval {
+        label.hasSuffix("-load") ? loadStallCeiling : stallCeiling
+    }
     /// Queue waits longer than this are reported — a meeting can legitimately exceed it, so this
     /// is a warning and not a reclaim.
     private static let longWaitWarning: TimeInterval = 30
@@ -628,7 +638,7 @@ actor ModelWorkQueue {
 
     private func armStallWatchdog(id: Int, label: String) {
         Task {
-            try? await Task.sleep(nanoseconds: UInt64(Self.stallCeiling * 1_000_000_000))
+            try? await Task.sleep(nanoseconds: UInt64(Self.stallCeiling(for: label) * 1_000_000_000))
             await self.reclaimIfStalled(id: id, label: label)
         }
     }
@@ -636,7 +646,7 @@ actor ModelWorkQueue {
     private func reclaimIfStalled(id: Int, label: String) {
         guard slotOwner == id else { return }
         Logger.error(
-            "ModelWorkQueue: \(label) still running after \(Int(Self.stallCeiling))s — presumed stuck, reclaiming the slot for \(slotWaiters.count) queued job(s)",
+            "ModelWorkQueue: \(label) still running after \(Int(Self.stallCeiling(for: label)))s — presumed stuck, reclaiming the slot for \(slotWaiters.count) queued job(s)",
             subsystem: .model
         )
         releaseSlot(owner: id)

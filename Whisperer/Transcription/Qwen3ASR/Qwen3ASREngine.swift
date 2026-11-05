@@ -345,6 +345,36 @@ nonisolated final class Qwen3ASREngine {
             decodeMs: (t3 - t2) * 1000)
     }
 
+    /// Language identification restricted to `codes`: one prefill of the audio prompt followed
+    /// by the `language` token, then the logits of each candidate's name token at the next
+    /// position — what the model would print after `language `, without decoding any text.
+    ///
+    /// Restricting matters: unrestricted, short windows are where this model's own header flaps
+    /// (en → nl → en, zh on 0.5 s). Returns raw logits per code; nil for audio under 0.1 s or a
+    /// code with no name token.
+    func languageLogits(samples: [Float], codes: [String]) -> [String: Float]? {
+        guard Double(samples.count) / Double(Qwen3ASRFeatureExtractor.sampleRate) >= 0.1 else { return nil }
+        let ids = codes.compactMap { Self.forcedLanguageTokens[$0].flatMap { $0.count > 1 ? $0[1] : nil } }
+        guard ids.count == codes.count, let languageToken = Self.forcedLanguageTokens["en"]?.first else { return nil }
+
+        let (mel, frames) = Qwen3ASRFeatureExtractor.shared.extract(samples: samples)
+        let features = MLXArray(mel, [Qwen3ASRFeatureExtractor.nMels, frames])
+            .asType(prefixEmbeddings.dtype)
+        let audio = model.audioTower(features).asType(prefixEmbeddings.dtype)
+        let prompt = concatenated(
+            [prefixEmbeddings, audio, suffixEmbeddings, model.embed([languageToken])], axis: 0
+        ).expandedDimensions(axis: 0)
+        let logits = model.lastLogits(embeddings: prompt, cache: model.newCache())
+            .reshaped(-1).asType(.float32)
+        let picked = logits[MLXArray(ids)]
+        eval(picked)
+        let values = picked.asArray(Float.self)
+        trimCacheIfNeeded()
+        var result: [String: Float] = [:]
+        for (code, value) in zip(codes, values) { result[code] = value }
+        return result
+    }
+
     /// Releases MLX's buffer cache when it has grown past the ceiling. Runs after every pass, so
     /// it must stay on the ceiling only — see `releaseCachedBuffers()` for the memory-pressure arm.
     ///

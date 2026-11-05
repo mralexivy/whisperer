@@ -33,37 +33,37 @@ final class MeetingQwen3CoordinatorTests: XCTestCase {
     /// is Nemotron's accumulated partials, so that is the source instead.
     func testQwen3FeedFollowsWhoOwnsTheDisplay() {
         XCTAssertEqual(
-            MeetingCoordinatorFeed(inAppBackend: .qwen3asr, previewOwnsNemotron: false),
+            MeetingCoordinatorFeed(inAppBackend: .qwen3asr, builtinDrivesPreview: false),
             .transcriberAccumulated)
         XCTAssertEqual(
-            MeetingCoordinatorFeed(inAppBackend: .qwen3asr, previewOwnsNemotron: true),
+            MeetingCoordinatorFeed(inAppBackend: .qwen3asr, builtinDrivesPreview: true),
             .accumulatedPartials)
     }
 
     /// The pre-existing paths must be byte-for-byte the same decision as before the change.
     func testNemotronPathsAreUnchanged() {
         XCTAssertEqual(
-            MeetingCoordinatorFeed(inAppBackend: .nemotron, previewOwnsNemotron: false),
+            MeetingCoordinatorFeed(inAppBackend: .nemotron, builtinDrivesPreview: false),
             .accumulatedFinal)
         XCTAssertEqual(
-            MeetingCoordinatorFeed(inAppBackend: .nemotronHebrew, previewOwnsNemotron: false),
+            MeetingCoordinatorFeed(inAppBackend: .nemotronHebrew, builtinDrivesPreview: false),
             .accumulatedFinal)
         XCTAssertEqual(
-            MeetingCoordinatorFeed(inAppBackend: .whisperCpp, previewOwnsNemotron: true),
+            MeetingCoordinatorFeed(inAppBackend: .whisperCpp, builtinDrivesPreview: true),
             .accumulatedPartials)
     }
 
     /// whisper.cpp alone has no accumulated source at all. Returning a feed here is what would
     /// send its deltas to the coordinator — the original bug.
     func testWhisperWithoutNemotronHasNoFeed() {
-        XCTAssertNil(MeetingCoordinatorFeed(inAppBackend: .whisperCpp, previewOwnsNemotron: false))
+        XCTAssertNil(MeetingCoordinatorFeed(inAppBackend: .whisperCpp, builtinDrivesPreview: false))
     }
 
     func testBackendsThatCannotDriveAttributionGetNoFeed() {
         for backend in [BackendType.parakeet, .whisperKit, .speechAnalyzer] {
-            XCTAssertNil(MeetingCoordinatorFeed(inAppBackend: backend, previewOwnsNemotron: false),
+            XCTAssertNil(MeetingCoordinatorFeed(inAppBackend: backend, builtinDrivesPreview: false),
                          "\(backend.rawValue) has no accumulated source")
-            XCTAssertNil(MeetingCoordinatorFeed(inAppBackend: backend, previewOwnsNemotron: true),
+            XCTAssertNil(MeetingCoordinatorFeed(inAppBackend: backend, builtinDrivesPreview: true),
                          "a resident Nemotron preview does not change \(backend.rawValue)'s own output")
         }
     }

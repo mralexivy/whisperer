@@ -147,7 +147,7 @@ actor NemotronHebrewBridge {
         await manager?.detectedLanguage()
     }
 
-    /// See `NemotronBridging.pinLanguage`. No `reset()` — the session's decoded audio must
+    /// See `LivePreviewEngine.pinLanguage`. No `reset()` — the session's decoded audio must
     /// survive; only the language choice changes from here on. The forced prefix is enabled
     /// alongside it, matching what `beginSession` does for an explicitly chosen language.
     func pinLanguage(_ code: String?) async {

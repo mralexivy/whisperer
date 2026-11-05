@@ -16,16 +16,17 @@ final class Qwen3DefaultBackendTests: XCTestCase {
 
     // MARK: - Default resolution
 
-    /// First launch resolves to Nemotron wherever it runs (Apple Silicon), and the model is
-    /// fetched by onboarding. Without Apple Silicon the only backend that runs is whisper.cpp.
-    func testDefaultIsNemotronWhereItRuns() {
+    /// First launch resolves to Qwen3 once its weights are on disk, else whisper.cpp. Never
+    /// Nemotron: live text belongs to the built-in engine (Apple dictation) now.
+    func testDefaultIsQwen3WhenCachedElseWhisper() {
         let resolved = BackendType.defaultBackend
-        if BackendType.nemotron.isAvailable {
-            XCTAssertEqual(resolved, .nemotron)
+        if BackendType.qwen3asr.isAvailable && Qwen3ASRBridge.isModelCached() {
+            XCTAssertEqual(resolved, .qwen3asr)
         } else {
             XCTAssertEqual(resolved, .whisperCpp,
-                           "Without Apple Silicon the default must fall back to whisper.cpp")
+                           "Without Qwen3's weights the default must fall back to whisper.cpp")
         }
+        XCTAssertNotEqual(resolved, .nemotron)
     }
 
     /// whisper.cpp specifically, not Parakeet: it is the only backend with no Apple Silicon
@@ -43,7 +44,6 @@ final class Qwen3DefaultBackendTests: XCTestCase {
         XCTAssertEqual(BackendType.selectable.first, .qwen3asr)
         XCTAssertFalse(BackendType.selectable.contains(.nemotron), "the built-in engine is not a choice")
         XCTAssertFalse(BackendType.selectable.contains(.nemotronHebrew))
-        XCTAssertTrue(BackendType.nemotron.isBuiltin)
         XCTAssertTrue(BackendType.selectable.contains(.whisperCpp), "the fallback must stay selectable")
         XCTAssertTrue(BackendType.selectable.contains(.parakeet))
         XCTAssertTrue(BackendType.selectable.contains(.speechAnalyzer))
@@ -135,15 +135,15 @@ final class Qwen3DefaultBackendTests: XCTestCase {
         }
     }
 
-    /// A Hebrew user must not be defaulted onto the streaming engine whose Hebrew is only
-    /// "adaptation-ready", even on a machine where Nemotron is available.
+    /// A Hebrew user must not be defaulted onto Qwen3, whose Hebrew is measurably garbled, even
+    /// on a machine where its weights are cached.
     func testHebrewUsersDefaultToWhisper() {
         XCTAssertEqual(BackendType.defaultBackend(for: .hebrew), .whisperCpp)
     }
 
-    /// Nemotron is the first-launch engine wherever it runs and the language is not a weak one.
-    func testNonHebrewDefaultsToNemotronWhereItRuns() {
-        let expected: BackendType = BackendType.nemotron.isAvailable ? .nemotron : .whisperCpp
+    /// Qwen3 is the first-launch engine once cached, for every language it does not lose.
+    func testNonHebrewDefaultsToQwen3WhenCached() {
+        let expected: BackendType = BackendType.qwen3asr.isAvailable && Qwen3ASRBridge.isModelCached() ? .qwen3asr : .whisperCpp
         for language in [TranscriptionLanguage.english, .auto, .russian] {
             XCTAssertEqual(BackendType.defaultBackend(for: language), expected)
         }

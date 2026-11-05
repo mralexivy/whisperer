@@ -10,8 +10,9 @@ import Foundation
 // MARK: - Backend Type
 
 /// Declaration order is picker order — `allCases` is the source for the engine segmented
-/// control in `ModelsTabView`. Qwen3 leads the picker. Nemotron is the built-in engine and is
-/// deliberately filtered out of every picker; see `BackendType.isBuiltin`.
+/// control in `ModelsTabView`. Qwen3 leads the picker. Nemotron and its Hebrew sub-backend are
+/// filtered out of every picker (`selectable`). The built-in engine is not a `BackendType`: it is
+/// Apple dictation (`SystemLivePreviewBridge`), which drives live text for whichever one is picked.
 enum BackendType: String, CaseIterable, Identifiable {
     case qwen3asr = "Qwen3ASR"
     case whisperCpp = "whisper.cpp"
@@ -25,33 +26,29 @@ enum BackendType: String, CaseIterable, Identifiable {
 
     /// The backend a user with no stored preference gets.
     ///
-    /// Nemotron: it is the one engine that genuinely streams, so the live preview and the
-    /// meeting transcript appear as the audio arrives rather than after a re-decode. Measured
-    /// 2026-11-03 (`docs/knowledge/transcription/live-preview-whisper-base-vs-omni300m-2026-11-03.md`):
-    /// text lags the speaker by 0.04 s, never revises what it has shown, and finalizes 0.03 s
-    /// after the audio ends, against 0.5 s / 1 s for Qwen3's repeated decode. The model is a
-    /// ~650 MB download, so first-run onboarding fetches it.
+    /// Qwen3 only when its weights are already on disk. It is a 2.5 GB download, so resolving to
+    /// it before the model exists would hand a new user a backend that cannot transcribe
+    /// anything. Until it completes, whisper.cpp dictates — and the built-in engine (Apple
+    /// dictation, `SystemLivePreviewBridge`) covers while neither is loaded.
     ///
-    /// Final-text accuracy is lower than Qwen3's on Russian and English (FLEURS WER 13.1 and 10.9
-    /// against 6.4 and 4.1). That trade was made on purpose; Qwen3 stays selectable and
-    /// existing users keep whatever they chose.
+    /// Not Nemotron. It was the default from 2026-11-03 for its streaming live text; that job now
+    /// belongs to the built-in engine, which needs no download and runs beside the user's engine
+    /// instead of competing with it.
     static var defaultBackend: BackendType { defaultBackend(for: .auto) }
 
     /// The backend a user with no stored preference gets, given the language they transcribe in.
     ///
-    /// `language` matters because Nemotron's coverage is not uniform. NVIDIA lists Hebrew as
-    /// "adaptation-ready" (the tokenizer knows it, full ASR needs fine-tuning), and on 100 FLEURS
-    /// Hebrew clips it scores WER 0.436 against the ivrit-v3-turbo fine-tune's 0.148. Handing a
-    /// Hebrew user the streaming engine would make their dictation worse, so Hebrew falls back to
-    /// whisper.cpp, which runs ivrit.
+    /// `language` matters because Qwen3's lead is not uniform. Measured on the user's own
+    /// corpus (`Qwen3GateBenchmarkTests`, 2026-10-07): it leads English 0.039 to whisper's
+    /// 0.072, but on 56 genuinely Hebrew clips it scores 0.341 against the ivrit-v3-turbo
+    /// fine-tune's 0.183, and its output there is visibly garbled rather than merely imperfect.
+    /// Handing a Hebrew user the globally better engine would make their dictation worse.
     static func defaultBackend(for language: TranscriptionLanguage) -> BackendType {
-        guard BackendType.nemotron.isAvailable else { return .whisperCpp }
-        return BackendType.nemotron.weakLanguages.contains(language) ? .whisperCpp : .nemotron
+        guard BackendType.qwen3asr.isAvailable, Qwen3ASRBridge.isModelCached() else {
+            return .whisperCpp
+        }
+        return BackendType.qwen3asr.weakLanguages.contains(language) ? .whisperCpp : .qwen3asr
     }
-
-    /// The built-in engine: always downloaded, always resident, never offered as a choice. It drives
-    /// live text for every other engine and covers them when none is loaded or they are busy.
-    var isBuiltin: Bool { self == .nemotron }
 
     /// The engines a user can pick. Excludes the built-in engine and the Hebrew sub-backend.
     static var selectable: [BackendType] { allCases.filter { $0 != .nemotron && $0 != .nemotronHebrew } }

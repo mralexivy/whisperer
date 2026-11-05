@@ -920,3 +920,101 @@ Not routed yet: Parakeet, WhisperKit and Apple Speech keep their own live text; 
 Removed: the bundled base-q5_1 stand-in (`BuiltinModelStore`, `PrimaryInstallGate`, `WhisperModel.builtin`, the pack, its size script and tests). The bundled Silero VAD stays. Everything is backed up in `~/ai/whisperer-builtin-backup-2026-11-03/`. Consequence: a fresh install has no engine until the ~650 MB download finishes.
 
 Stability: the speech-swift Core ML runtime leaked ~1 MB per audio-second and aborted at ~400 s, but Whisperer's FluidAudio `StreamingNemotronMultilingualAsrManager` (1120 ms chunks) held a flat **886 MB** across a 20-minute session and finished cleanly. The resident cost of the built-in engine is therefore ~0.9 GB. Not covered: a 180-minute session, and the live app; the Debug build compiles, but the XCTest target does not at HEAD, so the changed tests have not run.
+
+
+## Decision: Apple dictation replaces Nemotron as the built-in engine (2026-11-04)
+
+Supersedes the 2026-11-03 Nemotron decision above. Every streaming candidate (Nemotron, Omni, Whisper Base, Qwen3's repeated decode) was chunky, needed its own model, and competed with the user's engine for memory and GPU. The built-in engine is now Apple's on-device dictation, `SystemLivePreviewBridge` (`Whisperer/Transcription/SpeechAnalyzer/`). It drives live text only, in the HUD and the meeting transcript. Qwen3 or Whisper V3 still produces the final text.
+
+**There are two Apple models, and only one of them has our languages.** Probed on this Mac (macOS 26, 2026-11-04):
+- `SpeechTranscriber`, used by the existing "Apple Speech" final engine (`SpeechAnalyzerBridge`), has 45 locales and **no he-IL and no ru-RU**.
+- `DictationTranscriber`, the System Settings › Dictation model, has 54 locales, including en, he and ru. The built-in engine uses this one.
+- Do not "just switch on" `SpeechAnalyzerBridge` for live text. It is also batch-only: it passes `reportingOptions: []` and keeps only `isFinal` results.
+
+**Measured** with `SystemLivePreviewTests`, real audio fed at wall-clock rate, preset `.progressiveLongDictation`:
+- English: first words at 1.2 s, then a word every 0.2–0.5 s.
+- Hebrew: first words at 0.7 s.
+- `endSession` takes 0.08–0.17 s.
+- Analyzer start costs 60 ms the first time and about 2 ms after that.
+- A no-sandbox CLI and the test host needed no speech-recognition permission prompt.
+- **Not yet verified:** the sandboxed app; see Open below.
+
+**Gotchas:**
+- Hebrew results start with U+200F. Strip it, as `clean()` does, or the text diffing downstream breaks.
+- `AssetInventory.status` reports `.supported`, not `.installed`, for locales that System Settings installed. Read `DictationTranscriber.installedLocales` instead. `assetInstallationRequest` returning nil means the assets are present; it must run once per locale before use.
+- No language detection: one locale per analyzer. In auto mode the session starts in the first installed preferred language. `pinLanguage` (driven by `LiveLanguageArbiter` through `pinNemotron(to:)`) retires the analyzer and starts a new one, carrying the text over.
+- Russian is "supported" but its assets download only on request. System Settings shows "Russian will download later" until something asks for it. `AppState.installSystemLanguage` does that, from onboarding and from the Settings › Models "Live preview" row.
+
+**Wiring:**
+- `LivePreviewEngine` (formerly `NemotronBridging`) is `nonisolated`. Under default MainActor isolation it had been inferred `@MainActor`, which actors cannot conform to; that was the HEAD test-target compile failure.
+- `builtinEngineDrivesLiveText` requires an installed language. Handing over the display switches off the main engine's own preview, so with no Apple assets the HUD would otherwise go blank.
+- `builtinCovers`: while the user's engine is not loaded, Apple's text is the final dictation text.
+- The default main engine is back to Qwen3 when cached, else whisper.cpp. Saved `.nemotron` choices migrate at launch.
+
+**Open:**
+- Run the live app: sandbox TCC for `DictationTranscriber`, a real meeting with speaker attribution fed by Apple partials (volatile revisions can shrink the text, and `MeetingSpeakerCoordinator` drops shrinking updates), and the Russian install end to end.
+- No HUD hint yet when the session's language is still installing.
+
+
+## Language ID for the built-in engine: restricted, calibrated language ID on the main engine (2026-11-04)
+
+**Symptom:** with Apple dictation driving live text, English worked and Hebrew and Russian did not.
+- Every session started in the primary language (en).
+- The fused verdict pinned the real language 9–10 s in, longer than most dictations, so they showed wrong-language nonsense throughout.
+- The 10 s voiced-sample floor on the old V3 detect is one cause of the delay.
+- Apple's he and ru output were fine once the language was right.
+
+**Ruled out:**
+- Apple has no built-in language ID.
+- `.transcriptionConfidence` is empty on volatile results.
+- Racing en, he and ru Apple transcribers does not work: the wrong one emits fluent text in its own language as fast as the right one.
+
+**First attempt, reverted the same day: a calibrated WhisperKit base on the ANE.**
+- On FLEURS it looked best: 89/90 with the session rule, 141–178 ms per probe.
+- On the user's own microphone it failed badly:
+  - English → he 0.62–0.83.
+  - Two Russian dictations → he 0.99 and he 1.00.
+  - Each wrong answer was confident enough to commit at 1 s.
+- **Rule this taught:** FLEURS read speech is not evidence for a language probe. Gate on real mic recordings (`WhispererTests/TestData/live-preview/`, `LanguageProbeBenchmarkTests.testRealRecordings`).
+
+**What ships: `LanguageProbe` on the user's main engine** (no model of its own). It only identifies the language: Apple produces the live text, and the main engine the final text.
+- **Qwen3-ASR:** prefill the audio prompt plus the `language` token, then read the logits of each candidate's name token (`Qwen3ASREngine.languageLogits`). One pass, no decode, ~90–125 ms on the GPU, on the bridge's serial queue. Fully silence-calibrated.
+- **Whisper V3 (whisper.cpp), when it is the main engine:** `WhisperBridge.detectLanguage`, half-calibrated. Fully calibrated, it pulled the user's accented English to ru (0.57 at 3 s, Apple stayed in Russian).
+- Restricted to the user's languages. Unrestricted, V3 called Hebrew "es" (eager pass) and FLEURS Hebrew "ar".
+- No probe right after launch, before any engine has loaded. The session then keeps its sticky start, and the log says so ("Language probe: no answer").
+
+**Gate, the user's 9 real dictations (3 en, 2 he, 4 ru) with the session rule:**
+
+| Probe | Correct | Confident wrong windows | Per window |
+|---|---|---|---|
+| Qwen3, calibrated, first checkpoint 2 s | 9/9 | 0 | ~125 ms |
+| V3 on the ANE, fully calibrated (shipped briefly, removed) | 8/9 | 0 | ~800 ms, 626 MB extra |
+| NVIDIA AmberNet (ONNX) | 7/9 | 5 | 49 ms |
+| SpeechBrain ECAPA (Core ML) | 6/9 | 3 | 7 ms |
+
+- The acoustic models (ECAPA, AmberNet) fail on accented English: the user's English read he/ru at up to 0.95. The Whisper and Qwen3 models judge by the words. All four reach 87–90/90 on FLEURS, which does not separate them.
+- **Qwen3 on 1.0–1.5 s is a coin flip between he and ru at p 1.00.** The user's 3.1 s Russian read he 1.00 from a window starting at 0.28 s and ru 1.00 from 0.06 s. From 2.0 s, all 18 windows (9 dictations × 2 starts) were right at 1.00. Hence `Source.earliestSeconds`: 2.0 s for Qwen3, 1.0 s for V3. English was right from 1.0 s on every window.
+- Qwen's published LID table (Qwen3 1.7B 97.9% vs Whisper V3 94.1%) measures whole utterances unrestricted, so it says nothing about 1–2 s windows.
+- **Correction:** the "V3 is 29/30 at 1 s" figure from `whisper-cli -dl -d 1000` was wrong. `-d` limits only the decode span; language ID ran on the mel of the whole clip.
+
+**Session rule** (`SystemLivePreviewBridge`):
+- Sticky start: begin in the last decided language (`builtinEngineLastLanguage`).
+- Probe at the engine's first checkpoint (Qwen3 2.0 s, V3 1.0 s) and commit if p ≥ 0.8. From 1.0 s, if unsure, ask again at 2.0 s; if still unsure, take the 3.0 s answer. The 2.0 s step exists because the user's 9.6 s Russian read ru 0.64 at 1 s, and waiting for 3 s put Russian on screen at 4.3 s; with it, 3.25 s.
+- An early commit is re-checked at 3.0 s, and only a confident re-check overturns it.
+- When the probe corrects the language, restart the analyzer and **replay** the session's audio (up to 30 s held), dropping the wrong-language text.
+- A later external pin carries the text over instead, because a mid-session pin means the language changed.
+- **Pitfalls found on the user's recordings:**
+  - Actor reentrancy let a second switch start while the first awaited Apple, which restarted twice. The language is now claimed before the first await.
+  - Audio fed during a switch was lost to the new analyzer. The replay is now read from `sessionAudio` in the same turn that publishes the new input.
+  - One-time costs inside the session (Apple's first per-process asset allocation for ru-RU, the V3 calibration encode) pushed the first Russian text to 4.8 s. `prepare()` pays them at engine start.
+- **End to end**, real-time feed and deliberately wrong start, on the user's recordings: ru (en start) 2.16 s, short ru (he start) 2.00 s, he (ru start) 2.03 s, en (he start) 1.03 s.
+- Test-host pitfall: the test host shares the app's defaults, so an auto-mode test starts in the user's last language unless it sets `builtinEngineLastLanguage`.
+
+**Meetings:**
+- Apple's volatile text cannot feed `MeetingSpeakerCoordinator`, which rejects rewrites.
+- With continuous speech Apple finalizes only at a pause: 34 s of read Russian produced one final, at the end, even with `.frequentFinalization`.
+- So the bridge commits words by local agreement and passes only committed words to the coordinator, through `MeetingTranscriptAccumulator`:
+  - A word is committed when it is unchanged across 3 consecutive updates and is not among the last 3 words.
+  - Nothing is committed until the probe has decided.
+- The volatile remainder is shown after the coordinator's pending tail.
+- `prepareMeetingASRBridge` no longer falls back to Nemotron. It uses resident Qwen3, else the user's resident engine with Apple live text, else a fresh Qwen3 load, else loads the user's engine.

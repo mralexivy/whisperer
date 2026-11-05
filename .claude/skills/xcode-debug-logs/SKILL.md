@@ -7,7 +7,7 @@ description: >
   or when the user says "show me the xcode logs", "debug session logs", "console output",
   "what happened last run", "check xcresult", or "latest session logs".
 metadata:
-  version: 1.0.0
+  version: 2.0.0
   category: debug
   tags: [debug, xcode, logs, console, xcresult, session]
 ---
@@ -16,6 +16,47 @@ metadata:
 
 Whisperer's Xcode launch sessions store full console output in `.xcresult` bundles under DerivedData.
 This skill finds the latest session, extracts its console log, and presents it in a structured form.
+
+**Prefer the native Xcode MCP server (`xcode`) when it is connected; fall back to the xcresult procedure below only if it is not.**
+
+## Xcode MCP (preferred)
+
+Apple's `mcpbridge` exposes Xcode's live IDE state as MCP tools (`mcp__xcode__*`). Tools are deferred — load schemas with `ToolSearch` (`select:mcp__xcode__GetConsoleOutput,...`) before calling.
+
+| Need | Tool |
+|---|---|
+| Find the open workspace (`tabIdentifier`/workspace id) | `XcodeListWorkspaces` (open it with `XcodeOpenWorkspace` if empty) |
+| Console of running/last launch (regex filter supported) | `GetConsoleOutput` |
+| Build errors/warnings | `BuildProject`, `GetBuildLog` |
+| Per-file compiler diagnostics without building | `XcodeRefreshCodeIssuesInFile` |
+| Run / stop the app | `RunProject`, `StopProject` |
+| Scoped tests | `GetTestList`, `RunSomeTests` (never `RunAllTests` — see CLAUDE.md) |
+| Live lldb | `InvokeDebuggerCommand` |
+| Crash triage | `GetTopCrashIssues`, `GetCrashIssueLogs` |
+| Apple API docs | `DocumentationSearch` |
+
+Workflow: `XcodeListWorkspaces` (if it errors "agent isn't approved", call `XcodeOpenWorkspace` on `Whisperer.xcodeproj` — that triggers the approval) → `GetConsoleOutput` with a regex like `\[ERROR\]|\[WARN\]|Stall|FAIL` for the summary, then unfiltered for the tail. Then continue at Step 4 (rolling log) and Step 5 (summary) below.
+
+**Limits — when the user pressed Run in Xcode themselves:**
+- `GetConsoleOutput` only sees launches started via `RunProject`; a user-started run returns "No active launch session". Don't conclude there are no logs.
+- The `.xcresult` for a run is only written when the run **ends**. While the app is still running, the newest bundle is the *previous* run (often empty: console is just the title `Run whisperer - Console`). Compare its timestamp with the run shown in Xcode before trusting it.
+- **For a live/running session, read the rolling log (Step 4) — it holds the same Logger lines in real time.** Use `grep -E ' [EW] |Stall'` for errors/warnings (format: `+offset LEVEL cat ~ msg @file:line`) and `tail -40` for the latest activity.
+
+### Setup / troubleshooting
+
+Check first: `claude mcp list | grep xcode`. If missing or failing:
+
+1. Xcode (27.x) > Settings > Intelligence > Model Context Protocol: enable **Allow external agents to use Xcode tools**. Xcode must be running with the Whisperer project open; the first call triggers an approval dialog in Xcode — accept it.
+2. `xcrun mcpbridge` fails with `unable to find utility "mcpbridge"` when `xcode-select -p` points at `/Library/Developer/CommandLineTools`. Fix with `sudo xcode-select -s /Applications/Xcode.app/Contents/Developer`, or sidestep it by registering the absolute path:
+   ```bash
+   claude mcp add --scope user --transport stdio xcode \
+     --env DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer \
+     -- /Applications/Xcode.app/Contents/Developer/usr/bin/mcpbridge
+   ```
+   (Put `--env` before `--`; `-e` is variadic and swallows the command name.)
+3. Restart Claude Code after adding the server so the tools load.
+
+## Fallback: xcresult procedure
 
 ## When to invoke
 
@@ -32,7 +73,10 @@ Run all steps as bash commands. Parse fast with Python inline scripts.
 
 ### Step 1 — Find the latest xcresult
 
+`xcresulttool` fails with `unable to find utility` when `xcode-select -p` is CommandLineTools — prefix every `xcrun` call below with `DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer`.
+
 ```bash
+export DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer
 XCRESULT=$(find ~/Library/Developer/Xcode/DerivedData/Whisperer-*/Logs/Launch \
   -name "*.xcresult" -type d 2>/dev/null | LC_ALL=C sort | tail -1)
 echo "Session: $(basename "$XCRESULT")"

@@ -73,6 +73,17 @@ When the user reports the HUD is stuck (e.g., "Listening… forever", "HUD won't
 3. **Do not propose fixes from logs alone** — read the dump first. The dump definitively tells you whether `AppState.state`, `AudioRecorder.recorderState`, and `audioEngine.isRunning` agree, which thread (if any) is blocked, and what preceded the freeze.
 4. The watchdog lives in `AppState.startRecordingWatchdog()` and dumps via `StuckStateDumper.dump(reason:)`. Trigger artificially with `sudo killall coreaudiod` while recording — within ~15s a dump is written and the HUD recovers to `.idle`.
 
+## Debugging a Running / Recent Build
+
+When asked to debug app behavior, check what the app just did, or verify a change at runtime ("what happened", "check the logs", "did it work", "why did X fail", a pasted symptom), **invoke the `xcode-debug-logs` skill first — don't ask the user to paste logs.** It pulls the current Xcode run's console and Whisperer's rolling log (`~/Library/Logs/Whisperer/whisperer-YYYY-MM-DD.log`) and summarises errors, warnings and sessions.
+
+- The Xcode MCP (`mcp__xcode__*`, deferred — load via `ToolSearch`) is connected. If tools say the agent isn't approved, call `XcodeOpenWorkspace` on `Whisperer.xcodeproj` once.
+- `GetConsoleOutput` only sees runs started via `RunProject`. If the user pressed Run in Xcode, it returns "No active launch session" — that does **not** mean no logs.
+- A run's `.xcresult` appears only when the run ends; while it is live, the newest bundle is the previous run. **For a live run, read the rolling log** (same Logger lines, real time).
+- `xcrun` needs `DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer` (`xcode-select` points at CommandLineTools).
+- To verify a change yourself: `BuildProject` → `RunProject` → `GetConsoleOutput` (regex filter), or scoped `RunSomeTests`. Never `RunAllTests`.
+- HUD stuck / "Listening…" forever → use `stuck-dump-analyze` (see above) instead.
+
 ## Documentation
 
 **Read these with the Read tool when the task calls for it — do NOT use `@` imports here.**
@@ -101,6 +112,8 @@ only relevant to a fraction of tasks. The Critical Rules above are the always-on
 
 Each skill is a folder in `.claude/skills/` with a `SKILL.md` (YAML frontmatter for auto-triggering) and optional `references/`. Claude loads them automatically based on trigger phrases — they are not slash commands.
 
+- **xcode-debug-logs** — Console + rolling-log retrieval for the current/latest Xcode run via the Xcode MCP. Triggers on any runtime debugging, "what happened", "check logs", "console output".
+- **stuck-dump-analyze** — Root-cause analysis of `stuck-*.dump` files. Triggers on HUD stuck / "Listening…" forever.
 - **design-check** — Design system compliance. Triggers on UI code changes.
 - **app-store-check** — Guideline 2.4.5 compliance scan. Triggers on KeyListener/TextInjector/Permissions changes.
 - **submission-prep** — Full App Store submission workflow with templates. Triggers on "prepare submission", "build for release".

@@ -267,6 +267,18 @@ nonisolated final class Qwen3ASRBridge: TranscriptionBackend, @unchecked Sendabl
         }
     }
 
+    /// Restricted language-ID logits for the built-in engine's language probe
+    /// (`Qwen3ASREngine.languageLogits`). Runs on the inference queue like every other pass; one
+    /// prefill, no decode (~125 ms). Not gated on `shouldAbort`: it decodes no text.
+    func languageLogits(samples: [Float], codes: [String]) async -> [String: Float]? {
+        guard !isShuttingDown, !samples.isEmpty else { return nil }
+        return await withCheckedContinuation { continuation in
+            enqueue(label: "lid") { [weak self] in
+                continuation.resume(returning: self?.engine?.languageLogits(samples: samples, codes: codes))
+            }
+        }
+    }
+
     func isContextHealthy() -> Bool {
         (try? stateLock.withLock { !_isShuttingDown && _hasEngine }) ?? false
     }

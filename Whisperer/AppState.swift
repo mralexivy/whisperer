@@ -323,6 +323,10 @@ class AppState: ObservableObject {
                 releaseCurrentBridge()
                 preloadSpeechAnalyzer()
             }
+            // The built-in engine streams in the user's languages; install any new one.
+            if systemLivePreviewInstance != nil && oldValue != selectedLanguage {
+                startBuiltinEngine()
+            }
         }
     }
 
@@ -545,13 +549,22 @@ class AppState: ObservableObject {
     @Published var nemotronDownloadStatus: String = ""
     var nemotronLoadTask: Task<Void, Never>?
     #if canImport(FluidAudio)
-    var nemotronBridgeInstance: NemotronBridge? {
-        didSet { builtinEngineLoaded = nemotronBridgeInstance != nil }
-    }
+    var nemotronBridgeInstance: NemotronBridge?
     #endif
-    /// Whether the built-in engine (Nemotron) is resident. Published because the bridge itself is
-    /// not, and the Models tab shows this as the engine's loaded / not loaded state.
+
+    /// The built-in engine: Apple's on-device dictation (`SystemLivePreviewBridge`), streaming
+    /// live text into the HUD and the meeting transcript for whichever engine the user picked.
+    /// Nothing to download or keep resident: the OS owns the model, so this is created once and
+    /// never released.
+    private(set) var systemLivePreviewInstance: SystemLivePreviewBridge? {
+        didSet { builtinEngineLoaded = systemLivePreviewInstance != nil }
+    }
+    /// Whether the built-in engine exists. Published because the bridge itself is not.
     @Published private(set) var builtinEngineLoaded: Bool = false
+    /// Apple dictation status per language the user dictates in — drives the Settings and
+    /// onboarding install prompts and `builtinEngineDrivesLiveText`.
+    @Published private(set) var systemLanguageStatuses: [TranscriptionLanguage: SystemLanguageStatus] = [:]
+    private var systemLanguageInstallTasks: [TranscriptionLanguage: Task<Void, Never>] = [:]
 
     // Nemotron Hebrew streaming model state
     @Published var isDownloadingNemotronHebrew: Bool = false
@@ -582,7 +595,7 @@ class AppState: ObservableObject {
     @Published var isDownloadingEou: Bool = false
     @Published var eouDownloadProgress: Double = 0
     @Published var eouDownloadStatus: String = ""
-    // LivePreviewEngine removed — StreamingTranscriber.onTranscription provides live preview directly
+    // The old LivePreviewEngine class was removed; the name is now the streaming-engine protocol (LivePreviewEngine.swift)
 
     // SpeechAnalyzer (macOS 26+) load state
     @Published var isLoadingSpeechAnalyzer: Bool = false
@@ -605,6 +618,25 @@ class AppState: ObservableObject {
         isLoadingSpeechAnalyzer ||
         isDownloadingWhisperKit ||
         isLoadingWhisperKit
+    }
+
+    /// True while a model file is being fetched (as opposed to loaded into memory).
+    var isDownloadingAnyModel: Bool {
+        downloadingModel != nil ||
+        isDownloadingParakeet ||
+        isDownloadingNemotron ||
+        isDownloadingNemotronHebrew ||
+        isDownloadingQwen3ASR ||
+        isDownloadingWhisperKit
+    }
+
+    /// What the header says instead of "Ready" while dictation cannot start; nil once it can.
+    /// `.idle` alone only means "not recording" — it says nothing about whether a model is loaded.
+    var modelPreparationText: String? {
+        guard !isModelLoaded else { return nil }
+        if isDownloadingAnyModel { return "Downloading model\u{2026} \(Int(downloadProgress * 100))%" }
+        if isModelBusy { return "Loading model\u{2026}" }
+        return "No model loaded"
     }
 
     // LLM post-processing
@@ -757,6 +789,10 @@ class AppState: ObservableObject {
     /// feed (Qwen3). Reset at the start of every in-app recording — a snapshot carried over
     /// from the previous meeting would make the next meeting's first update look like a shrink.
     private var meetingTranscriptAccumulator = MeetingTranscriptAccumulator()
+    /// The coordinator's not-yet-attributed text and Apple's still-volatile words after it; the
+    /// meeting's live line is the two joined. See the `.accumulatedPartials` wiring.
+    private var meetingPendingTail = ""
+    private var meetingVolatileTail = ""
     /// The ASR backend a meeting borrowed and must hand back, or nil when no meeting holds one.
     ///
     /// Meetings need a backend whose live output is the **growing accumulated transcript** that
@@ -773,8 +809,8 @@ class AppState: ObservableObject {
     private var meetingBorrowedBackend: BackendType?
 
     /// True while a meeting holds its own Nemotron bridge. Nemotron's teardown protection is
-    /// specific to it (`previewOwnsNemotron` can also claim the same bridge), so the checks
-    /// scattered through `releaseCurrentBridge` keep asking this rather than the enum.
+    /// specific to it, so the checks scattered through `releaseCurrentBridge` keep asking this
+    /// rather than the enum.
     private var meetingOwnsNemotron: Bool { meetingBorrowedBackend == .nemotron }
 
     /// True while a meeting holds the Qwen3 bridge and must release it when the meeting ends.
@@ -785,10 +821,6 @@ class AppState: ObservableObject {
     /// Read-only view for `StuckStateDumper`. A meeting that borrowed a bridge and never gave it
     /// back is one of the states a stall dump has to be able to distinguish.
     var meetingBorrowedBackendForDebug: BackendType? { meetingBorrowedBackend }
-    /// True when Nemotron was preloaded to serve as the live-preview source alongside
-    /// whisper.cpp dictation. Protects the bridge from being torn down by a backend switch
-    /// that should only affect the user's selected backend, not the preview engine.
-    private var previewOwnsNemotron = false
     /// Set when free memory was too tight to hold the user's backend and Nemotron at once,
     /// so the user's bridge was evicted for the duration of the meeting and must be reloaded
     /// afterwards. `selectedBackendType` is still never written.
@@ -844,6 +876,12 @@ class AppState: ObservableObject {
                     modelPool?.releaseAll()
                     modelPool = nil
                 }
+            }
+            // The built-in engine streams in the user's languages; install any new one.
+            if systemLivePreviewInstance != nil
+                && (routingConfig.allowedLanguages != oldValue.allowedLanguages
+                    || routingConfig.primaryLanguage != oldValue.primaryLanguage) {
+                startBuiltinEngine()
             }
         }
     }
@@ -1027,8 +1065,16 @@ class AppState: ObservableObject {
         // Load backend type and Parakeet model selection
         if let savedBackend = UserDefaults.standard.string(forKey: "selectedBackendType"),
            let backend = BackendType(rawValue: savedBackend) {
-            // Migrate old "MLX" backend to Parakeet
-            selectedBackendType = backend
+            if backend == .nemotron {
+                // Nemotron was the default from 2026-11-03 for its live text, which the built-in
+                // engine (Apple dictation) now provides beside any engine. Hand these users the
+                // current default instead of a model that is no longer downloaded.
+                selectedBackendType = BackendType.defaultBackend(for: selectedLanguage)
+                UserDefaults.standard.set(selectedBackendType.rawValue, forKey: "selectedBackendType")
+                Logger.info("Migrated engine Nemotron → \(selectedBackendType.displayName)", subsystem: .model)
+            } else {
+                selectedBackendType = backend
+            }
         } else if UserDefaults.standard.string(forKey: "selectedBackendType") == "MLX" {
             selectedBackendType = .parakeet
             UserDefaults.standard.set(BackendType.parakeet.rawValue, forKey: "selectedBackendType")
@@ -1281,8 +1327,8 @@ class AppState: ObservableObject {
 
     /// Release the active transcription bridge and all satellite resources (EOU, VAD, CTC)
     func releaseCurrentBridge() {
-        // The built-in engine (Nemotron) is permanent: a backend switch never releases it, because
-        // it drives live text for every other engine and covers them when they are busy.
+        // The built-in engine (Apple dictation, `systemLivePreviewInstance`) is permanent: a backend
+        // switch never releases it, because it drives live text for every other engine.
 
         let memBefore = BenchmarkUtilities.currentMemoryMB()
 
@@ -1294,8 +1340,8 @@ class AppState: ObservableObject {
         speechAnalyzerLoadTask?.cancel()
         speechAnalyzerLoadTask = nil
         #if canImport(FluidAudio)
-        // The built-in engine's load must survive a backend switch.
-        if !meetingOwnsNemotron && !previewOwnsNemotron {
+        // A meeting's Nemotron load must survive a backend switch.
+        if !meetingOwnsNemotron {
             nemotronLoadTask?.cancel()
             nemotronLoadTask = nil
         }
@@ -1314,9 +1360,8 @@ class AppState: ObservableObject {
 
         // Release Nemotron bridge if loaded
         #if canImport(FluidAudio)
-        // The built-in engine survives backend switches — it serves live text for whichever
-        // engine is selected.
-        if let nemotron = nemotronBridgeInstance, !meetingOwnsNemotron && !previewOwnsNemotron {
+        // A meeting's Nemotron survives backend switches — it is decoding the meeting.
+        if let nemotron = nemotronBridgeInstance, !meetingOwnsNemotron {
             Task { await nemotron.prepareForShutdown() }
             nemotronBridgeInstance = nil
             isLoadingNemotron = false
@@ -1738,7 +1783,7 @@ class AppState: ObservableObject {
         return count
     }
 
-    // LivePreviewEngine + Parakeet EOU removed — live preview comes from StreamingTranscriber.onTranscription
+    // The old LivePreviewEngine class + Parakeet EOU removed — live preview comes from StreamingTranscriber.onTranscription
 
     private func preloadParakeetModel() {
         let variant = selectedParakeetModel
@@ -1852,6 +1897,130 @@ class AppState: ObservableObject {
         }
     }
 
+    // MARK: - Built-in engine (Apple dictation)
+
+    /// Languages the built-in engine streams in, primary first: the routing shortlist, else the
+    /// selected language, else (auto with no shortlist) the Mac's preferred languages.
+    var builtinEngineLanguages: [TranscriptionLanguage] {
+        var languages: [TranscriptionLanguage] = routingConfig.isRoutingEnabled
+            ? [routingConfig.primaryLanguage].compactMap { $0 } + routingConfig.allowedLanguages
+            : [routingConfig.singleLanguageStartLanguage ?? selectedLanguage]
+        if languages.allSatisfy({ $0 == .auto }) {
+            languages = Locale.preferredLanguages.compactMap { TranscriptionLanguage.from(languageTag: $0) }
+        }
+        var seen = Set<TranscriptionLanguage>()
+        return languages.filter { $0 != .auto && seen.insert($0).inserted }
+    }
+
+    /// Whether the built-in engine should supply live text for `backend`.
+    ///
+    /// whisper.cpp and Qwen3 only: they decode committed chunks, so the transcriber can hand the
+    /// display to the built-in engine and keep their output for the final text. Other engines
+    /// keep their own live text until that routing is verified for them.
+    ///
+    /// Requires an installed language. Handing over the display also switches off the main
+    /// engine's own preview, so a language Apple has no assets for must keep that preview rather
+    /// than show a blank HUD.
+    func builtinEngineDrivesLiveText(for backend: BackendType) -> Bool {
+        guard systemLivePreviewInstance != nil else { return false }
+        guard backend == .whisperCpp || backend == .qwen3asr else { return false }
+        return builtinEngineLanguages.contains { systemLanguageStatuses[$0] == .ready }
+    }
+
+    /// Start the built-in engine: Apple's on-device dictation.
+    ///
+    /// It is not something the user picks. It drives live text (dictation HUD and meeting live
+    /// transcript) for the user's engine. There is no model of ours to download or load — the
+    /// OS owns it — so this only creates the bridge, tells it the user's languages, and installs
+    /// Apple's assets for any of them that are missing. Safe to call repeatedly; call it again
+    /// whenever the language selection changes.
+    func startBuiltinEngine() {
+        guard !AppEnvironment.isRunningTests else { return }
+        let languages = builtinEngineLanguages
+        if let bridge = systemLivePreviewInstance {
+            Task {
+                await bridge.setPreferredLanguages(languages)
+                await bridge.prepare()
+            }
+        } else {
+            let bridge = SystemLivePreviewBridge(preferredLanguages: languages)
+            systemLivePreviewInstance = bridge
+            // Language ID on the user's main engine (Qwen3 or Whisper V3), resolved per session.
+            let probe = LanguageProbe { AppState.shared.languageProbeSource }
+            Task {
+                await bridge.setLanguageProbe(probe)
+                await bridge.prepare()
+            }
+            Logger.info("Built-in engine: Apple dictation (\(languages.map(\.rawValue).joined(separator: ", ")))", subsystem: .model)
+        }
+        refreshSystemLanguages(installMissing: true)
+    }
+
+    /// The main engine the language probe runs on: the selected engine when it is loaded, else
+    /// whichever multilingual one is resident. Nil right after launch, before any engine loads —
+    /// sessions then start in the last language and follow the engine's own pin.
+    var languageProbeSource: LanguageProbe.Source? {
+        let qwen3 = qwen3asrBridgeInstance.flatMap { $0.isContextHealthy() ? $0 : nil }
+        var whisper: WhisperBridge?
+        if let profile = modelPool?.fallbackProfile, profile.model.isMultilingual {
+            whisper = modelPool?.warmBackend(for: profile) as? WhisperBridge
+        }
+        if whisper == nil, selectedModel.isMultilingual, let bridge = whisperBridge as? WhisperBridge,
+           bridge.isContextHealthy() {
+            whisper = bridge
+        }
+        if selectedBackendType == .qwen3asr, let qwen3 { return .qwen3(qwen3) }
+        if let whisper { return .whisper(whisper) }
+        return qwen3.map { .qwen3($0) }
+    }
+
+    /// Re-read Apple's install state for the user's languages and, optionally, install the
+    /// missing ones in the background.
+    func refreshSystemLanguages(installMissing: Bool = false) {
+        let languages = builtinEngineLanguages
+        Task { [weak self] in
+            var statuses: [TranscriptionLanguage: SystemLanguageStatus] = [:]
+            for language in languages {
+                statuses[language] = await SystemLivePreviewBridge.status(for: language)
+            }
+            guard let self else { return }
+            // An install in flight owns its row: it is reporting live progress.
+            for (language, status) in statuses where self.systemLanguageInstallTasks[language] == nil {
+                self.systemLanguageStatuses[language] = status
+            }
+            guard installMissing else { return }
+            for (language, status) in statuses where status == .notInstalled {
+                self.installSystemLanguage(language)
+            }
+        }
+    }
+
+    /// Download Apple's dictation assets for `language`. The OS fetches and owns them.
+    func installSystemLanguage(_ language: TranscriptionLanguage) {
+        guard systemLanguageInstallTasks[language] == nil else { return }
+        systemLanguageStatuses[language] = .downloading(0)
+        systemLanguageInstallTasks[language] = Task { [weak self] in
+            do {
+                try await SystemLivePreviewBridge.install(language) { fraction in
+                    Task { @MainActor [weak self] in
+                        guard let self, self.systemLanguageInstallTasks[language] != nil else { return }
+                        self.systemLanguageStatuses[language] = .downloading(fraction)
+                    }
+                }
+                guard let self else { return }
+                // Cleared first so a progress update still in flight cannot overwrite the result.
+                self.systemLanguageInstallTasks[language] = nil
+                self.systemLanguageStatuses[language] = .ready
+            } catch {
+                Logger.error("Built-in engine: installing \(language.rawValue) failed: \(error.localizedDescription)", subsystem: .model)
+                guard let self else { return }
+                self.systemLanguageInstallTasks[language] = nil
+                self.systemLanguageStatuses[language] = await SystemLivePreviewBridge.status(for: language)
+                self.errorMessage = "Couldn't install \(language.displayName) for live preview: \(error.localizedDescription)"
+            }
+        }
+    }
+
     // MARK: - Nemotron
 
     #if canImport(FluidAudio)
@@ -1903,53 +2072,6 @@ class AppState: ObservableObject {
                 }
             }
         }
-    }
-
-    /// Start the built-in engine: Nemotron, downloaded at startup and kept resident.
-    ///
-    /// It is not something the user picks. It drives live text (dictation HUD and meeting live
-    /// transcript) for every other engine, and it transcribes on its own when no other engine is
-    /// loaded or they are busy. Always downloads when missing; loads when cached. When another
-    /// engine is selected it only loads if there is memory headroom, so it never evicts the
-    /// user's engine.
-    /// Whether the resident built-in engine should supply live text for `backend`.
-    ///
-    /// whisper.cpp and Qwen3 only: they decode committed chunks, so the transcriber can hand the
-    /// display to Nemotron and keep their output for the final text. Other engines keep their own
-    /// live text until that routing is verified for them.
-    ///
-    /// Not for Hebrew. The built-in engine's Hebrew is "adaptation-ready", not supported: 100 FLEURS
-    /// clips scored WER 0.436 against ivrit-v3-turbo's 0.148, so a Hebrew user's live text
-    /// stays with their own engine. Same measured-weakness rule as `BackendType.weakLanguages`.
-    func builtinEngineDrivesLiveText(for backend: BackendType) -> Bool {
-        guard previewOwnsNemotron, nemotronBridgeInstance != nil else { return false }
-        guard backend == .whisperCpp || backend == .qwen3asr else { return false }
-        let configured: [TranscriptionLanguage] = routingConfig.isRoutingEnabled
-            ? routingConfig.allowedLanguages
-            : [selectedLanguage]
-        let weak = BackendType.nemotron.weakLanguages
-        return !configured.contains(where: { weak.contains($0) })
-    }
-
-    func startBuiltinEngine() {
-        guard !AppEnvironment.isRunningTests else { return }
-        // Permanent from here on: backend switches never release it.
-        previewOwnsNemotron = true
-        guard isNemotronModelCached() else {
-            guard !isDownloadingNemotron else { return }
-            Logger.info("Built-in engine: downloading Nemotron", subsystem: .model)
-            downloadNemotronModel()
-            return
-        }
-        guard nemotronBridgeInstance == nil, !isLoadingNemotron else { return }
-        if selectedBackendType != .nemotron {
-            guard SystemMemory.availableGB() >= Self.meetingDualBackendHeadroomGB else {
-                Logger.info("Built-in engine: not loading — only \(String(format: "%.1f", SystemMemory.availableGB()))GB free", subsystem: .model)
-                return
-            }
-        }
-        Logger.info("Built-in engine: loading Nemotron", subsystem: .model)
-        preloadNemotronModel()
     }
 
     func preloadNemotronModel() {
@@ -2177,7 +2299,6 @@ class AppState: ObservableObject {
     #else
     func isNemotronModelCached() -> Bool { false }
     func downloadNemotronModel() { }
-    func startBuiltinEngine() { }
     func preloadNemotronModel() { }
     func isNemotronHebrewModelCached() -> Bool { false }
     func downloadNemotronHebrewModel() { }
@@ -3364,17 +3485,13 @@ class AppState: ObservableObject {
                 #endif
 
                 #if canImport(FluidAudio)
-                let nemotronInApp: NemotronBridge? = {
-                    if inAppBackend == .nemotron { return nemotronBridgeInstance }
-                    // Preview-only: the built-in engine drives live text and the selected engine
-                    // produces the final transcript. See `builtinEngineDrivesLiveText`.
-                    if builtinEngineDrivesLiveText(for: inAppBackend),
-                       let bridge = nemotronBridgeInstance { return bridge }
-                    return nil
-                }()
-                let nemotronPreviewOnlyInApp = nemotronInApp != nil && inAppBackend != .nemotron
+                let nemotronInApp: NemotronBridge? = inAppBackend == .nemotron ? nemotronBridgeInstance : nil
+                // Preview-only: the built-in engine (Apple dictation) drives live text and the
+                // selected engine produces the final transcript. See `builtinEngineDrivesLiveText`.
+                let builtinInApp: AnyObject? = builtinEngineDrivesLiveText(for: inAppBackend) ? systemLivePreviewInstance : nil
+                let nemotronPreviewOnlyInApp = builtinInApp != nil
                 let nemotronHebrewInApp: NemotronHebrewBridge? = inAppBackend == .nemotronHebrew ? nemotronHebrewBridgeInstance : nil
-                let anyNemotronInApp: (any AnyObject)? = (nemotronInApp as AnyObject?) ?? (nemotronHebrewInApp as AnyObject?)
+                let anyNemotronInApp: (any AnyObject)? = (nemotronInApp as AnyObject?) ?? builtinInApp ?? (nemotronHebrewInApp as AnyObject?)
                 #else
                 let anyNemotronInApp: AnyObject? = nil
                 #endif
@@ -3410,7 +3527,7 @@ class AppState: ObservableObject {
                 // degrade attribution — it stops it dead. Naming the three shapes beats
                 // re-deriving them from `inAppBackend` at each callback.
                 let coordinatorFeed = MeetingCoordinatorFeed(inAppBackend: inAppBackend,
-                                                             previewOwnsNemotron: nemotronPreviewOnlyInApp)
+                                                             builtinDrivesPreview: nemotronPreviewOnlyInApp)
                 let hasAccumulatedSource = coordinatorFeed != nil
                     && (anyNemotronInApp != nil || inAppBackend == .qwen3asr)
                 if let meetingSession = capturedMeetingSession, hasAccumulatedSource {
@@ -3420,9 +3537,28 @@ class AppState: ObservableObject {
                     // snapshot would make this meeting's first update read as a shrink and be
                     // dropped for the whole recording.
                     meetingTranscriptAccumulator.reset()
+                    meetingPendingTail = ""
+                    meetingVolatileTail = ""
                     // Signal to MeetingSession that livePreviewText is now owned by the
                     // coordinator's onPendingTail callback — accumulate() must not clear it.
                     meetingSession.coordinatorOwnsTail = true
+                    // Apple dictation revises its newest words, so its live text cannot feed the
+                    // coordinator (which rejects any rewrite). Its committed words can: they
+                    // never change. The still-volatile words are shown after the pending tail.
+                    if coordinatorFeed == .accumulatedPartials, let builtin = builtinInApp as? SystemLivePreviewBridge {
+                        Task {
+                            await builtin.setStableTextCallback { [weak self] committed in
+                                Task { @MainActor [weak self] in
+                                    guard let self, let coordinator = self.meetingSpeakerCoordinator,
+                                          let accumulated = self.meetingTranscriptAccumulator.accept(committed) else { return }
+                                    self.diarizerFeedTask = Task { [previous = self.diarizerFeedTask] in
+                                        await previous?.value
+                                        await coordinator.onPartial(accumulated)
+                                    }
+                                }
+                            }
+                        }
+                    }
                     Task {
                         await coordinator.setCallbacks(
                             onAttributed: { text, speakerIndex, start, end in
@@ -3436,10 +3572,11 @@ class AppState: ObservableObject {
                                     )
                                 }
                             },
-                            onPendingTail: { tail in
+                            onPendingTail: { [weak self] tail in
                                 Task { @MainActor in
                                     guard meetingSession.chunkGeneration == capturedGeneration else { return }
-                                    meetingSession.livePreviewText = tail
+                                    self?.meetingPendingTail = tail
+                                    meetingSession.livePreviewText = SystemLivePreviewBridge.join(tail, self?.meetingVolatileTail ?? "")
                                 }
                             },
                             onLiveSpeaker: { index in
@@ -3560,7 +3697,23 @@ class AppState: ObservableObject {
                         //
                         // Qwen3's tail is window-local, so it is NOT accumulated and must not
                         // come here. That feed is `.transcriberAccumulated`, wired below.
-                        if coordinatorFeed == .accumulatedPartials,
+                        //
+                        // `.accumulatedFinal` (Nemotron as the meeting's own decoder) needs the
+                        // same feed: its partials are the only live text there is until
+                        // `finish()`. Dropping them left the live transcript empty for the whole
+                        // meeting. The final text is diffed against what the partials already
+                        // emitted, so it still refines the tail rather than duplicating it.
+                        // `.accumulatedPartials` is the built-in engine (Apple dictation): its
+                        // committed words reach the coordinator through the stable-text callback
+                        // wired at session start. Here only the words after them — the ones Apple
+                        // may still revise — are shown, after the coordinator's pending tail.
+                        if coordinatorFeed == .accumulatedPartials, self.meetingSpeakerCoordinator != nil {
+                            let committedCount = SystemLivePreviewBridge.words(self.meetingTranscriptAccumulator.published).count
+                            self.meetingVolatileTail = SystemLivePreviewBridge.words(tail).dropFirst(committedCount).joined(separator: " ")
+                            self.activeMeetingSession?.livePreviewText = SystemLivePreviewBridge.join(self.meetingPendingTail, self.meetingVolatileTail)
+                            return
+                        }
+                        if coordinatorFeed == .accumulatedFinal,
                            let coordinator = self.meetingSpeakerCoordinator {
                             self.diarizerFeedTask = Task { [previous = self.diarizerFeedTask] in
                                 await previous?.value
@@ -3872,7 +4025,12 @@ class AppState: ObservableObject {
         #else
         let nemotronReady = false
         #endif
-        guard whisperBridge != nil || nemotronReady else {
+        // The built-in engine covers dictation while the user's engine is still downloading or
+        // loading: Apple's text becomes the final text, so the app works from the first launch.
+        let builtinCovers = whisperBridge == nil && !nemotronReady
+            && builtinEngineLanguages.contains { systemLanguageStatuses[$0] == .ready }
+            && systemLivePreviewInstance != nil
+        guard whisperBridge != nil || nemotronReady || builtinCovers else {
             showModelLoadingToast = true
             // Safety timeout — dismiss if model never loads (e.g., no model downloaded)
             DispatchQueue.main.asyncAfter(deadline: .now() + 10.0) { [weak self] in
@@ -3972,16 +4130,22 @@ class AppState: ObservableObject {
 
                 #if canImport(FluidAudio)
                 let nemotron: (any AnyObject)? = {
+                    if builtinCovers { return systemLivePreviewInstance }
                     if selectedBackendType == .nemotron { return nemotronBridgeInstance as AnyObject? }
                     if selectedBackendType == .nemotronHebrew { return nemotronHebrewBridgeInstance as AnyObject? }
-                    if builtinEngineDrivesLiveText(for: selectedBackendType),
-                       let bridge = nemotronBridgeInstance { return bridge as AnyObject? }
+                    // Preview-only: the built-in engine (Apple dictation) drives live text and the
+                    // selected engine produces the final transcript.
+                    if builtinEngineDrivesLiveText(for: selectedBackendType) { return systemLivePreviewInstance }
                     return nil
                 }()
-                let nemotronPreviewOnlyDictation = selectedBackendType != .nemotron && selectedBackendType != .nemotronHebrew && nemotron != nil
+                // When covering, the built-in engine is the final decoder (bridge is the null backend).
+                let nemotronPreviewOnlyDictation = !builtinCovers && selectedBackendType != .nemotron && selectedBackendType != .nemotronHebrew && nemotron != nil
                 #else
                 let nemotron: AnyObject? = nil
                 #endif
+                if builtinCovers {
+                    Logger.info("Dictation: \(selectedBackendType.displayName) not loaded yet — Apple dictation produces the text", subsystem: .transcription)
+                }
                 // See the matching comment at the in-app transcriber creation above.
                 let startLanguage = routingConfig.singleLanguageStartLanguage ?? selectedLanguage
                 streamingTranscriber = StreamingTranscriber(backend: bridge, vad: sileroVAD, language: startLanguage, initialPrompt: promptWordsString, fillerWordRemovalEnabled: fillerWordRemovalEnabled, modelPool: modelPool, languageRouter: routingConfig.isRoutingEnabled ? LanguageRouter(allowed: routingConfig.allowedLanguages, primary: routingConfig.primaryLanguage) : nil, modelRouter: routingConfig.isRoutingEnabled ? ModelRouter(languageModelMap: buildLanguageModelMap(), fallbackProfile: buildFallbackProfile()) : nil, previewBridge: livePreviewBridge(for: bridge), nemotronBridge: nemotron, nemotronPreviewOnly: nemotronPreviewOnlyDictation)
@@ -4020,9 +4184,10 @@ class AppState: ObservableObject {
                         guard self.llmEnabled,
                               !self.deterministicPolishHandlesPostProcessing else { return }
                         let mode = AIModeManager.shared.postProcessMode
-                        // Nemotron fires onChunkCompleted once with the full session text at stop time.
-                        // Per-chunk LLM is redundant — full-text path runs in stopRecording() instead.
-                        guard mode.supportsChunkProcessing, self.selectedBackendType != .nemotron, self.selectedBackendType != .nemotronHebrew else { return }
+                        // Nemotron (and the built-in engine when it covers) fires onChunkCompleted once
+                        // with the full session text at stop time. Per-chunk LLM is redundant —
+                        // full-text path runs in stopRecording() instead.
+                        guard mode.supportsChunkProcessing, !builtinCovers, self.selectedBackendType != .nemotron, self.selectedBackendType != .nemotronHebrew else { return }
                         self.chunkLLMCoordinator.enqueue(chunkText: chunkText)
                     }
                 }
@@ -5242,21 +5407,21 @@ class AppState: ObservableObject {
 
     /// Gets an ASR bridge ready for a meeting, without disturbing the user's backend.
     ///
-    /// A meeting needs a backend whose live output is the **growing accumulated transcript**
-    /// that speaker attribution diffs against. Two qualify, and they are tried in this order:
+    /// Live text in a meeting comes from the built-in engine (Apple dictation) whenever the
+    /// user's engine is whisper.cpp or Qwen3 (`builtinEngineDrivesLiveText`); the engine itself
+    /// only has to produce the final transcript. Tried in this order:
     ///
-    /// 1. **The resident Qwen3 bridge.** When the user already dictates with Qwen3 — the
-    ///    default — the meeting borrows it and loads nothing at all. No second model, no load
-    ///    wait, no extra memory. This is the whole point of making Qwen3 the one engine.
-    /// 2. **A fresh Qwen3 load**, when the weights are cached but no bridge is up.
-    /// 3. **Nemotron**, for users who have it but not Qwen3. Unchanged from before.
+    /// 1. **The resident Qwen3 bridge.** Borrowed, nothing loaded.
+    /// 2. **The user's own resident engine** (whisper.cpp) with Apple driving live text. Nothing
+    ///    loaded either.
+    /// 3. **A fresh Qwen3 load**, when its weights are cached.
+    /// 4. **The user's engine, loaded now** — the meeting waits for it.
+    ///
+    /// Never Nemotron. It used to be the fallback for users without Qwen3, which loaded a ~650 MB
+    /// model for one meeting and fed whisper's chunk deltas to the speaker coordinator (three
+    /// "shorter than emittedWordCount" rejections in a 30 s meeting on 2026-11-04).
     ///
     /// Called before the meeting record is created so a failure leaves nothing half-started.
-    ///
-    /// A borrowed bridge is loaded *alongside* whatever the user dictates with rather than
-    /// swapped in: `selectBackend()` tore the previous backend down and rebuilt it on the way
-    /// out, ~62s of pure loading per meeting, with the return leg landing on top of the
-    /// post-meeting AI work.
     ///
     /// Returns `false` when no suitable bridge can be made ready — the caller must not record.
     func prepareMeetingASRBridge() async -> Bool {
@@ -5268,12 +5433,15 @@ class AppState: ObservableObject {
             Logger.info("Meeting: reusing the resident Qwen3 bridge — no model load", subsystem: .model)
             return true
         }
-        if nemotronBridgeInstance != nil {
-            meetingBorrowedBackend = .nemotron
+
+        // 2. The user's own engine, with Apple dictation for live text.
+        if whisperBridge != nil, builtinEngineDrivesLiveText(for: selectedBackendType) {
+            meetingBorrowedBackend = nil
+            Logger.info("Meeting: \(selectedBackendType.displayName) + Apple dictation live text — no model load", subsystem: .model)
             return true
         }
 
-        // 2. Load Qwen3 when its weights are on disk.
+        // 3. Load Qwen3 when its weights are on disk.
         if isQwen3ASRModelCached() {
             meetingBorrowedBackend = .qwen3asr
             meetingOwnsQwen3 = selectedBackendType != .qwen3asr
@@ -5281,31 +5449,22 @@ class AppState: ObservableObject {
             if qwen3asrLoadTask == nil { preloadQwen3ASRModel() }
             await qwen3asrLoadTask?.value
             if qwen3asrBridgeInstance != nil { return true }
-            Logger.warning("Meeting: Qwen3 did not finish loading — falling back to Nemotron", subsystem: .model)
+            Logger.warning("Meeting: Qwen3 did not finish loading — using \(selectedBackendType.displayName)", subsystem: .model)
             meetingBorrowedBackend = nil
             meetingOwnsQwen3 = false
         }
 
-        // 3. Nemotron fallback.
-        guard isNemotronModelCached() else {
-            errorMessage = "Meeting Notes needs a speech model. Download Qwen3 ASR from the Models tab, then start the meeting."
+        // 4. The user's engine, loaded now.
+        meetingBorrowedBackend = nil
+        if whisperBridge == nil {
+            if !isModelBusy { preloadModel() }
+            await whisperLoadTask?.value
+        }
+        guard whisperBridge != nil else {
+            errorMessage = "Meeting Notes needs a speech model. Download one from the Models tab, then start the meeting."
             return false
         }
-        meetingBorrowedBackend = .nemotron
-        evictUserBackendIfMemoryTight(borrowing: .nemotron)
-
-        if nemotronLoadTask == nil {
-            preloadNemotronModel()
-        }
-        // The load runs detached and is queued behind any other model work. Waiting beats
-        // starting a meeting that records no words.
-        await nemotronLoadTask?.value
-
-        guard nemotronBridgeInstance != nil else {
-            errorMessage = "The speech model did not finish loading — try starting the meeting again."
-            releaseMeetingASRBridge()
-            return false
-        }
+        Logger.info("Meeting: using \(selectedBackendType.displayName)", subsystem: .model)
         return true
     }
 

@@ -21,9 +21,9 @@ enum MeetingCoordinatorFeed: Equatable {
 
     /// `onPreviewTail` carries the whole transcript so far.
     ///
-    /// Nemotron accumulates internally: each partial is the full session, not a window. Used
-    /// both when Nemotron is the final decoder's preview and on the whisper.cpp + Nemotron
-    /// preview-only path, where whisper's chunk commits are deltas and must be ignored.
+    /// The built-in engine (Apple dictation) accumulates internally: each partial is the full
+    /// session, not a window. Used on the preview-only path alongside whisper.cpp or Qwen3, where
+    /// the main engine's chunk commits are deltas and must be ignored.
     case accumulatedPartials
 
     /// `onChunkCompleted` carries the whole transcript, once, at `finish()`.
@@ -47,18 +47,18 @@ enum MeetingCoordinatorFeed: Equatable {
     ///   - inAppBackend: `AppState.effectiveInAppBackend` — the backend the recording actually
     ///     decodes through, which during a meeting may be a borrowed bridge rather than the
     ///     user's dictation choice.
-    ///   - previewOwnsNemotron: true when Nemotron was loaded purely to preview alongside
-    ///     whisper.cpp. Without it, whisper.cpp has no accumulated source at all.
-    init?(inAppBackend: BackendType, previewOwnsNemotron: Bool) {
+    ///   - builtinDrivesPreview: true when the built-in engine (Apple dictation) drives live
+    ///     text. Without it, whisper.cpp has no accumulated source at all.
+    init?(inAppBackend: BackendType, builtinDrivesPreview: Bool) {
         switch inAppBackend {
         case .nemotron, .nemotronHebrew:
             self = .accumulatedFinal
         case .qwen3asr:
             // With the built-in engine driving live text, Qwen3 only produces chunk deltas, so the
-            // accumulated source is Nemotron's partials. Without it, Qwen3's own joined display.
-            self = previewOwnsNemotron ? .accumulatedPartials : .transcriberAccumulated
+            // accumulated source is the built-in engine's partials. Without it, Qwen3's own joined display.
+            self = builtinDrivesPreview ? .accumulatedPartials : .transcriberAccumulated
         case .whisperCpp:
-            guard previewOwnsNemotron else { return nil }
+            guard builtinDrivesPreview else { return nil }
             self = .accumulatedPartials
         case .parakeet, .speechAnalyzer, .whisperKit:
             return nil

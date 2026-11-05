@@ -46,7 +46,7 @@ private final class SilentEagerBackend: TranscriptionBackend, @unchecked Sendabl
 #if canImport(FluidAudio)
 /// A Nemotron bridge whose `feed()` is deliberately slower than real time — the condition that
 /// produced the unbounded backlog in the field.
-private actor SlowNemotronBridge: NemotronBridging {
+private actor SlowNemotronBridge: LivePreviewEngine {
     let feedDelayNanos: UInt64
     private(set) var feedCount = 0
     private(set) var fedSamples = 0

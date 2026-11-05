@@ -1530,7 +1530,7 @@ class WhisperBridge: TranscriptionBackend {
 
     /// Detect language from audio samples. Returns probabilities for all languages, or nil on failure. Returns probabilities for all languages, or nil on failure.
     /// Serialized with transcription via ctxLock — safe to call from any thread.
-    func detectLanguage(samples: [Float]) -> [String: Float]? {
+    func detectLanguage(samples: [Float], minProbability: Float = 0.001) -> [String: Float]? {
         guard !isShuttingDown, isInitialized else { return nil }
         guard !samples.isEmpty else { return nil }
 
@@ -1561,7 +1561,7 @@ class WhisperBridge: TranscriptionBackend {
                 for i in 0...maxId {
                     if let langStr = whisper_lang_str(Int32(i)) {
                         let prob = probs[i]
-                        if prob > 0.001 {
+                        if prob > minProbability {
                             result[String(cString: langStr)] = prob
                         }
                     }
