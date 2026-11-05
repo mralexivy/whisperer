@@ -146,18 +146,24 @@ actor SystemLivePreviewBridge: LivePreviewEngine {
 
     nonisolated static func status(for language: TranscriptionLanguage) async -> SystemLanguageStatus {
         guard let locale = await locale(for: language) else { return .unsupported }
-        // `installedLocales` is not the truth. On a Mac with system Dictation switched off it
-        // listed en-US while the module still needed assets, so this said Ready, the launch-time
-        // auto-install skipped it, and every session logged "assets not installed" with no live
-        // text. The installation request is the check `startAnalyzer` itself makes, so ask it.
+        // Installed means macOS lists the locale's assets, or Apple has nothing to install for it.
+        //
+        // A non-nil installation request is NOT "missing assets". On a second Mac (system
+        // Dictation off) Apple returned a request for en, ru and he every time, even right after
+        // a real download had finished; completing it took 0.4 s — an allocation step, not a
+        // download. Reading the request as "not installed" re-ran the install at every session
+        // start and kept the installing banner up (2026-11-05). `startAnalyzer` completes the
+        // request when it opens a session, which is what Apple's flow expects.
         // `.installed` is not reported for locales installed by System Settings (en and he read
         // `.supported` on a Mac that dictates in both), so only `.downloading` is trusted there.
+        let id = locale.identifier(.bcp47)
+        if await DictationTranscriber.installedLocales.contains(where: { $0.identifier(.bcp47) == id }) { return .ready }
         let module = DictationTranscriber(locale: locale, preset: preset)
         if case .downloading = await AssetInventory.status(forModules: [module]) { return .downloading(0) }
         do {
             return try await AssetInventory.assetInstallationRequest(supporting: [module]) == nil ? .ready : .notInstalled
         } catch {
-            Logger.warning("System dictation: asset check for \(locale.identifier(.bcp47)) failed: \(error.localizedDescription)", subsystem: .model)
+            Logger.warning("System dictation: asset check for \(id) failed: \(error.localizedDescription)", subsystem: .model)
             return .notInstalled
         }
     }
@@ -196,6 +202,26 @@ actor SystemLivePreviewBridge: LivePreviewEngine {
         try await request.downloadAndInstall()
         progress(1)
         Logger.info("System dictation: installed \(locale.identifier(.bcp47))", subsystem: .model)
+    }
+
+    /// How long a session start waits for Apple to finish an installation request: enough for the
+    /// allocation-only case (0.4 s measured), far short of a real download (~25 s measured).
+    nonisolated static let sessionInstallBudget: Double = 3
+
+    /// Whether `request` finishes within `seconds`. The install itself is never cancelled: when the
+    /// budget runs out it carries on in the background and the next session finds it done.
+    nonisolated private static func completes(_ request: AssetInstallationRequest, within seconds: Double) async -> Bool {
+        let install = Task { try await request.downloadAndInstall() }
+        return await withTaskGroup(of: Bool.self) { group in
+            group.addTask { (try? await install.value) != nil }
+            group.addTask {
+                try? await Task.sleep(for: .seconds(seconds))
+                return false
+            }
+            let first = await group.next() ?? false
+            group.cancelAll()
+            return first
+        }
     }
 
     // MARK: - LivePreviewEngine
@@ -502,12 +528,18 @@ actor SystemLivePreviewBridge: LivePreviewEngine {
         let id = locale.identifier(.bcp47)
         do {
             if !allocatedLocales.contains(id) {
-                // Non-nil means assets are missing. Never download mid-recording: installs go
-                // through `install(_:progress:)`, which the UI drives.
-                if try await AssetInventory.assetInstallationRequest(supporting: [module]) != nil {
-                    Logger.warning("System dictation: \(id) assets not installed", subsystem: .transcription)
-                    missingLanguage = sessionLanguage
-                    return
+                // A request is how Apple allocates the locale to this process, and it comes back
+                // even when the assets are on disk — then completing it takes well under a second.
+                // Refusing to start whenever one came back meant a Mac that always gets a request
+                // never streamed at all. Complete it here, bounded: a real download that takes
+                // longer keeps going in the background, and this session uses the engine's preview.
+                if let request = try await AssetInventory.assetInstallationRequest(supporting: [module]) {
+                    guard await Self.completes(request, within: Self.sessionInstallBudget) else {
+                        Logger.warning("System dictation: \(id) still installing — the engine's own preview shows live text this session", subsystem: .transcription)
+                        missingLanguage = sessionLanguage
+                        return
+                    }
+                    Logger.info("System dictation: \(id) allocated", subsystem: .transcription)
                 }
                 allocatedLocales.insert(id)
             }

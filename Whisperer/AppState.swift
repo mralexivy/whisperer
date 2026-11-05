@@ -571,6 +571,11 @@ class AppState: ObservableObject {
     /// onboarding install prompts and `builtinEngineDrivesLiveText`.
     @Published private(set) var systemLanguageStatuses: [TranscriptionLanguage: SystemLanguageStatus] = [:]
     private var systemLanguageInstallTasks: [TranscriptionLanguage: Task<Void, Never>] = [:]
+    /// Languages whose Apple install completed during this run. Apple may keep handing out an
+    /// installation request for them anyway (seen on a second Mac: every session "installed" the
+    /// same three languages again in 0.4 s and showed the installing banner), so once one has
+    /// succeeded its status is not asked again until relaunch.
+    private var installedSystemLanguagesThisRun: Set<TranscriptionLanguage> = []
 
     // Nemotron Hebrew streaming model state
     @Published var isDownloadingNemotronHebrew: Bool = false
@@ -2106,7 +2111,11 @@ class AppState: ObservableObject {
         Task { [weak self] in
             var statuses: [TranscriptionLanguage: SystemLanguageStatus] = [:]
             for language in languages {
-                statuses[language] = await SystemLivePreviewBridge.status(for: language)
+                if self?.installedSystemLanguagesThisRun.contains(language) == true {
+                    statuses[language] = .ready
+                } else {
+                    statuses[language] = await SystemLivePreviewBridge.status(for: language)
+                }
             }
             guard let self else { return }
             // An install in flight owns its row: it is reporting live progress.
@@ -2135,6 +2144,7 @@ class AppState: ObservableObject {
                 guard let self else { return }
                 // Cleared first so a progress update still in flight cannot overwrite the result.
                 self.systemLanguageInstallTasks[language] = nil
+                self.installedSystemLanguagesThisRun.insert(language)
                 self.systemLanguageStatuses[language] = .ready
             } catch {
                 Logger.error("Built-in engine: installing \(language.rawValue) failed: \(error.localizedDescription)", subsystem: .model)
