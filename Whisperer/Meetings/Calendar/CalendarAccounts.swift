@@ -232,7 +232,15 @@ final class CalendarOAuthClient: NSObject, ASWebAuthenticationPresentationContex
         request.httpMethod = "POST"
         request.setValue("application/x-www-form-urlencoded", forHTTPHeaderField: "Content-Type")
         request.httpBody = form.map { "\($0.key)=\(Self.formEncode($0.value))" }.joined(separator: "&").data(using: .utf8)
-        let (data, response) = try await URLSession.shared.data(for: request)
+        let data: Data, response: URLResponse
+        do {
+            (data, response) = try await URLSession.shared.data(for: request)
+        } catch let error as URLError where error.code == .networkConnectionLost {
+            // A pooled connection that went stale while the browser was in front fails once with
+            // -1005; the authorization code is still valid, so one immediate retry completes it.
+            Logger.info("Calendar OAuth: \(provider.rawValue) token exchange lost its connection — retrying once", subsystem: .app)
+            (data, response) = try await URLSession.shared.data(for: request)
+        }
         let status = (response as? HTTPURLResponse)?.statusCode ?? 0
         guard status == 200 else {
             Logger.warning("Calendar OAuth: \(provider.rawValue) token endpoint returned \(status)", subsystem: .app)

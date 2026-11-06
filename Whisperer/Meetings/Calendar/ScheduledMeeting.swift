@@ -38,12 +38,14 @@ struct MeetingParticipant: Codable, Sendable, Equatable, Hashable {
     var isOrganizer: Bool
     var response: MeetingRSVP
 
-    /// What to call them: the invite's display name, else a readable form of the address
-    /// ("dana.levi@x.com" → "Dana Levi").
+    /// What to call them: the invite's display name, else "Me" for the user (Google never names
+    /// the signed-in attendee, and "ialex.ivy" → "Ialex Ivy" reads as someone else), else a
+    /// readable form of the address ("dana.levi@x.com" → "Dana Levi").
     var displayName: String {
         if let name = name?.trimmingCharacters(in: .whitespacesAndNewlines), !name.isEmpty, !name.contains("@") {
             return name
         }
+        if isSelf { return "Me" }
         let local = email.split(separator: "@").first.map(String.init) ?? email
         return local.split(whereSeparator: { ".-_+".contains($0) })
             .map { $0.prefix(1).uppercased() + $0.dropFirst() }

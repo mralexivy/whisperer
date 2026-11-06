@@ -108,6 +108,8 @@ final class CalendarAccountMappingTests: XCTestCase {
         XCTAssertEqual(p.displayName, "Dana Levi Cohen")
         let named = MeetingParticipant(name: "  ", email: "x@y.z", isSelf: false, isOrganizer: false, response: .unknown)
         XCTAssertEqual(named.displayName, "X", "a blank display name falls back to the address")
+        let me = MeetingParticipant(name: nil, email: "ialex.ivy@gmail.com", isSelf: true, isOrganizer: true, response: .accepted)
+        XCTAssertEqual(me.displayName, "Me", "the user is never renamed from their own address")
     }
 
     func testNamespacedCalendarIDsRoundTrip() {
