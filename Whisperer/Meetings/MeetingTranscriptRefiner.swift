@@ -60,7 +60,7 @@ final class MeetingTranscriptRefiner: ObservableObject {
     /// Context carried into the next window's `initial_prompt`, matching FileTranscriptionManager.
     private static let contextMaxLength = 100
     /// Below this, loading a second multi-GB model on top of the meeting backend risks a swap
-    /// storm. Same threshold `AppState.prepareMeetingASRBridge()` uses.
+    /// storm.
     private static let minAvailableGB = 2.0
     /// A decode shorter than this is silence or a read error, not speech.
     private static let minWindowSamples = Int(0.2 * 16000.0)

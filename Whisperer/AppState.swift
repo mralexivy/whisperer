@@ -1064,13 +1064,14 @@ class AppState: ObservableObject {
         // Load backend type and Parakeet model selection
         if let savedBackend = UserDefaults.standard.string(forKey: "selectedBackendType"),
            let backend = BackendType(rawValue: savedBackend) {
-            if backend == .nemotron {
+            if backend == .nemotron || backend == .speechAnalyzer {
                 // Nemotron was the default from 2026-11-03 for its live text, which the built-in
-                // engine (Apple dictation) now provides beside any engine. Hand these users the
-                // current default instead of a model that is no longer downloaded.
-                selectedBackendType = BackendType.defaultBackend(for: selectedLanguage)
+                // engine (Apple dictation) now provides beside any engine. Apple Speech left the
+                // picker for the same reason: Apple's recognizer already runs as the live preview.
+                // Hand these users the current default instead of an engine they cannot pick.
+                selectedBackendType = BackendType.defaultBackend
                 UserDefaults.standard.set(selectedBackendType.rawValue, forKey: "selectedBackendType")
-                Logger.info("Migrated engine Nemotron → \(selectedBackendType.displayName)", subsystem: .model)
+                Logger.info("Migrated engine \(backend.displayName) → \(selectedBackendType.displayName)", subsystem: .model)
             } else {
                 selectedBackendType = backend
             }
@@ -1078,10 +1079,8 @@ class AppState: ObservableObject {
             selectedBackendType = .parakeet
             UserDefaults.standard.set(BackendType.parakeet.rawValue, forKey: "selectedBackendType")
         } else if UserDefaults.standard.object(forKey: "selectedBackendType") == nil {
-            // First launch — Qwen3 when its weights are on disk and the user's language is one
-            // it leads. See `BackendType.defaultBackend(for:)`: the download is never assumed,
-            // and Hebrew is routed to whisper.cpp because Qwen3 is measurably worse at it.
-            selectedBackendType = BackendType.defaultBackend(for: selectedLanguage)
+            // First launch — whisper.cpp with Whisperer V3. See `BackendType.defaultBackend`.
+            selectedBackendType = BackendType.defaultBackend
         }
         if let savedParakeet = UserDefaults.standard.string(forKey: "selectedParakeetModel"),
            let parakeetModel = ParakeetModelVariant(rawValue: savedParakeet) {
@@ -1519,18 +1518,25 @@ class AppState: ObservableObject {
     /// Call this once after model download completes
     /// Whether the selected engine's files are on disk.
     ///
-    /// `ModelDownloader` only knows the whisper.cpp file. Nemotron, the default engine, is
-    /// fetched by `downloadNemotronModel()`, so first-run code has to ask this instead of
-    /// `ModelDownloader.shared.isModelDownloaded(selectedModel)` or it would download the wrong thing.
+    /// `ModelDownloader` only knows the whisper.cpp file. Nemotron and Qwen3 are fetched by
+    /// their own downloaders, so first-run code and the meeting prep sheet have to ask this
+    /// instead of `ModelDownloader.shared.isModelDownloaded(selectedModel)` or they would report
+    /// (and download) the wrong thing.
     var isSelectedEngineDownloaded: Bool {
-        selectedBackendType == .nemotron
-            ? isNemotronModelCached()
-            : ModelDownloader.shared.isModelDownloaded(selectedModel)
+        switch selectedBackendType {
+        case .nemotron: return isNemotronModelCached()
+        case .qwen3asr: return isQwen3ASRModelCached()
+        default: return ModelDownloader.shared.isModelDownloaded(selectedModel)
+        }
     }
 
     /// True while the selected engine's files are downloading.
     var isSelectedEngineDownloading: Bool {
-        selectedBackendType == .nemotron ? isDownloadingNemotron : downloadingModel != nil
+        switch selectedBackendType {
+        case .nemotron: return isDownloadingNemotron
+        case .qwen3asr: return isDownloadingQwen3ASR
+        default: return downloadingModel != nil
+        }
     }
 
     /// First-run and launch: load the selected engine, or download it first when it is missing.
@@ -1542,6 +1548,8 @@ class AppState: ObservableObject {
         } else if !AppEnvironment.isRunningTests {
             if selectedBackendType == .nemotron {
                 downloadNemotronModel()
+            } else if selectedBackendType == .qwen3asr {
+                downloadQwen3ASRModel()
             } else {
                 let model = selectedModel
                 Task { await downloadModel(model) }
@@ -5583,21 +5591,22 @@ class AppState: ObservableObject {
     // MARK: - Meeting Mode
 
     #if canImport(FluidAudio)
-    /// Minimum free memory required to hold Nemotron alongside a different dictation backend.
-    /// Below this the user's bridge is evicted for the meeting and reloaded afterwards.
-    private static let meetingDualBackendHeadroomGB: Double = 2.0
-
-    /// Gets an ASR bridge ready for a meeting, without disturbing the user's backend.
+    /// Gets an ASR bridge ready for a meeting: the engine the user already dictates with.
     ///
     /// Live text in a meeting comes from the built-in engine (Apple dictation) whenever the
     /// user's engine is whisper.cpp or Qwen3 (`builtinEngineDrivesLiveText`); the engine itself
-    /// only has to produce the final transcript. Tried in this order:
+    /// only has to produce the final transcript, so the one already resident is the right one —
+    /// a meeting loads nothing beside it. Tried in this order:
     ///
-    /// 1. **The resident Qwen3 bridge.** Borrowed, nothing loaded.
-    /// 2. **The user's own resident engine** (whisper.cpp) with Apple driving live text. Nothing
-    ///    loaded either.
-    /// 3. **A fresh Qwen3 load**, when its weights are cached.
-    /// 4. **The user's engine, loaded now** — the meeting waits for it.
+    /// 1. **The user's resident engine.** Borrowed, nothing loaded. With Qwen3 the meeting
+    ///    records the borrow so the in-app path decodes through the Qwen3 bridge, but never owns
+    ///    it: the bridge belongs to dictation and must outlive the meeting.
+    /// 2. **The user's engine, loaded now** — the meeting waits for it.
+    ///
+    /// Never a second engine. Up to 2026-11-06 a meeting loaded Qwen3 whenever its weights were
+    /// on disk, even for a Whisper user — 2.5 GB beside the resident model for one meeting.
+    /// Accuracy is still recovered after the meeting: the cleanup pass re-decodes with the best
+    /// model per language (`RefineModelTable`), which is where Hebrew gets ivrit-ai's fine-tune.
     ///
     /// Never Nemotron. It used to be the fallback for users without Qwen3, which loaded a ~650 MB
     /// model for one meeting and fed whisper's chunk deltas to the speaker coordinator (three
@@ -5607,39 +5616,31 @@ class AppState: ObservableObject {
     ///
     /// Returns `false` when no suitable bridge can be made ready — the caller must not record.
     func prepareMeetingASRBridge() async -> Bool {
+        meetingOwnsQwen3 = false
+
         // 1. Reuse what dictation already has up.
-        if qwen3asrBridgeInstance != nil {
+        if selectedBackendType == .qwen3asr, qwen3asrBridgeInstance != nil {
             meetingBorrowedBackend = .qwen3asr
-            // Not "owned": the bridge belongs to dictation and must outlive the meeting.
-            meetingOwnsQwen3 = selectedBackendType != .qwen3asr
             Logger.info("Meeting: reusing the resident Qwen3 bridge — no model load", subsystem: .model)
             return true
         }
-
-        // 2. The user's own engine, with Apple dictation for live text.
-        if whisperBridge != nil, builtinEngineDrivesLiveText(for: selectedBackendType) {
+        if whisperBridge != nil {
             meetingBorrowedBackend = nil
-            Logger.info("Meeting: \(selectedBackendType.displayName) + Apple dictation live text — no model load", subsystem: .model)
+            Logger.info("Meeting: reusing resident \(selectedBackendType.displayName) — no model load", subsystem: .model)
             return true
         }
 
-        // 3. Load Qwen3 when its weights are on disk.
-        if isQwen3ASRModelCached() {
-            meetingBorrowedBackend = .qwen3asr
-            meetingOwnsQwen3 = selectedBackendType != .qwen3asr
-            evictUserBackendIfMemoryTight(borrowing: .qwen3asr)
-            if qwen3asrLoadTask == nil { preloadQwen3ASRModel() }
-            await qwen3asrLoadTask?.value
-            if qwen3asrBridgeInstance != nil { return true }
-            Logger.warning("Meeting: Qwen3 did not finish loading — using \(selectedBackendType.displayName)", subsystem: .model)
-            meetingBorrowedBackend = nil
-            meetingOwnsQwen3 = false
-        }
-
-        // 4. The user's engine, loaded now.
+        // 2. The user's engine, loaded now.
         meetingBorrowedBackend = nil
-        if whisperBridge == nil {
-            if !isModelBusy { preloadModel() }
+        if !isModelBusy { preloadModel() }
+        if selectedBackendType == .qwen3asr {
+            await qwen3asrLoadTask?.value
+            if qwen3asrBridgeInstance != nil {
+                meetingBorrowedBackend = .qwen3asr
+                Logger.info("Meeting: using Qwen3", subsystem: .model)
+                return true
+            }
+        } else {
             await whisperLoadTask?.value
         }
         guard whisperBridge != nil else {
@@ -5648,20 +5649,6 @@ class AppState: ObservableObject {
         }
         Logger.info("Meeting: using \(selectedBackendType.displayName)", subsystem: .model)
         return true
-    }
-
-    /// Two ASR models resident at once is the trade that buys back the swap time, but only when
-    /// there is room for it. When there isn't, evict the user's bridge for the duration and
-    /// reload it at the end — the old behaviour, minus the write to `selectedBackendType`.
-    ///
-    /// A no-op when the meeting borrows the backend the user already dictates with, which is
-    /// the common case now that Qwen3 is the default: there is no second model to make room for.
-    private func evictUserBackendIfMemoryTight(borrowing backend: BackendType) {
-        guard backend != selectedBackendType else { return }
-        guard SystemMemory.availableGB() < Self.meetingDualBackendHeadroomGB else { return }
-        Logger.info("Meeting: low memory — evicting \(selectedBackendType.displayName) for the meeting", subsystem: .model)
-        meetingEvictedUserBackend = true
-        releaseCurrentBridge()
     }
 
     /// Hands back the ASR bridge a meeting borrowed.

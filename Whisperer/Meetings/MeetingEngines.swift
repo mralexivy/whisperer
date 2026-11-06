@@ -3,7 +3,8 @@
 //  Whisperer
 //
 //  Dedicated engine lifecycle for meeting features: download + warm the four model
-//  engines (speech/Nemotron, cleanup/WhisperBridge, intelligence/LLM, speakers/Nemotron3Diarizer)
+//  engines (speech/the user's own engine, cleanup/WhisperBridge, intelligence/LLM,
+//  speakers/Nemotron3Diarizer)
 //  so meeting AI works even when the user's dictation LLM toggle is off.
 //
 
@@ -44,7 +45,7 @@ enum MeetingEngine: CaseIterable {
     /// Approximate download size string shown in the UI.
     var downloadSizeLabel: String {
         switch self {
-        case .speech:       return MeetingEngines.speechEngineIsQwen3 ? Qwen3ASREngine.downloadSizeLabel : "~1.5 GB"
+        case .speech:       return MeetingEngines.speechEngineIsQwen3 ? Qwen3ASREngine.downloadSizeLabel : "~547 MB"
         case .cleanup:
             // Computed from the actual model set so the UI stays honest as specialists change.
             let totalBytes = MeetingEngines.cleanupModelSet()
@@ -62,7 +63,7 @@ enum MeetingEngine: CaseIterable {
     /// Byte size used for weighted progress calculation.
     var downloadBytes: Double {
         switch self {
-        case .speech:       return MeetingEngines.speechEngineIsQwen3 ? 2_500_000_000 : 1_500_000_000
+        case .speech:       return MeetingEngines.speechEngineIsQwen3 ? 2_500_000_000 : 547_000_000
         case .cleanup:
             return MeetingEngines.cleanupModelSet()
                 .map { $0.approximateDownloadBytes }
@@ -101,12 +102,18 @@ final class MeetingEngines: ObservableObject {
     /// — `MeetingPrepView`'s progress rail is weighted by those.
     static let intelligenceVariant: LLMModelVariant = .qwen3_5_4B_mtp
 
-    /// True when the `.speech` engine resolves to Qwen3 rather than Nemotron. Drives the
-    /// download size shown in `MeetingPrepView`'s weighted progress rail, so it must answer the
-    /// same question `AppState.prepareMeetingASRBridge()` does: Qwen3 first, Nemotron only as a
-    /// fallback for users who have it and not Qwen3.
+    /// True when the `.speech` engine resolves to Qwen3. A meeting transcribes with the engine
+    /// the user dictates with (`AppState.prepareMeetingASRBridge()`), so this is Qwen3 exactly
+    /// when the user picked it — never because its weights happen to be on disk. Drives the
+    /// download size in `MeetingPrepView`'s weighted progress rail and which cleanup models
+    /// `RefineModelTable` asks for.
     static var speechEngineIsQwen3: Bool {
-        Qwen3ASRBridge.isModelCached() || !NemotronBridge.isModelCached()
+        AppState.shared.selectedBackendType == .qwen3asr
+    }
+
+    /// The user's engine is loaded, or its files are on disk so the meeting can load it.
+    static var speechEngineOnDisk: Bool {
+        AppState.shared.whisperBridge != nil || AppState.shared.isSelectedEngineDownloaded
     }
 
     // MARK: - Published state
@@ -234,14 +241,14 @@ final class MeetingEngines: ObservableObject {
     /// Snapshot the current on-disk readiness state for each engine.
     /// Never downgrades an in-progress download or warm pass.
     private func refreshReadiness() {
-        // .speech — Qwen3 (preferred) or Nemotron (fallback) on disk. Qwen3 is usually the
-        // backend the user already dictates with, in which case a meeting loads nothing at all.
+        // .speech — the engine the user dictates with. Usually already resident, in which case
+        // a meeting loads nothing at all.
         switch readiness[.speech] {
         case .downloading, .preparing: break
         default:
-            readiness[.speech] = (Qwen3ASRBridge.isModelCached() || NemotronBridge.isModelCached())
+            readiness[.speech] = Self.speechEngineOnDisk
                 ? .ready
-                : .needsDownload("Download Qwen3 ASR from the Models tab.")
+                : .needsDownload("Download a \(AppState.shared.selectedBackendType.friendlyName) model from the Models tab.")
         }
 
         // .cleanup — baseline (Whisperer V3) plus any language specialists, all on disk AND
@@ -318,7 +325,7 @@ final class MeetingEngines: ObservableObject {
     /// Downloads and warms each engine that is not yet ready. Idempotent and safe to call
     /// on every app launch and on every meeting detection event.
     func prefetch() {
-        // Not from a test host. This warms all three engines: a Nemotron load, a model download
+        // Not from a test host. This warms all three engines: a speech-engine load, a model download
         // followed by a blocking Core ML compile the cleanup path itself measures at ~40s, and
         // an MLX LLM load/unload. It is reachable at launch *and* from meeting detection — and
         // recording tests turn the microphone on, which is exactly what the detector watches, so
@@ -368,14 +375,14 @@ final class MeetingEngines: ObservableObject {
     // wrappers needed. After each `await`, execution resumes on the main actor.
 
     private func runSpeech() async {
-        guard Qwen3ASRBridge.isModelCached() || NemotronBridge.isModelCached() else {
+        guard Self.speechEngineOnDisk else {
             Logger.info("MeetingEngines: speech model not on disk, skipping warm", subsystem: .model)
             return
         }
         readiness[.speech] = .preparing
         statusText = "Preparing \(MeetingEngine.speech.roleLabel)…"
-        // prepareMeetingASRBridge manages its own ModelWorkQueue slot ("qwen3asr-load" or
-        // "nemotron-load"), and both use `runBlocking`. Do NOT wrap this in an outer MWQ job —
+        // prepareMeetingASRBridge manages its own ModelWorkQueue slot (the user's engine's
+        // load job), which uses `runBlocking`. Do NOT wrap this in an outer MWQ job —
         // that would deadlock: the outer slot is held while the inner job queues behind it and
         // is never dequeued.
         let success = await AppState.shared.prepareMeetingASRBridge()

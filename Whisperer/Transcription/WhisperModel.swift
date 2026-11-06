@@ -161,14 +161,17 @@ enum WhisperModel: String, CaseIterable, Identifiable {
         }
     }
 
+    /// Must be a real SF Symbol — an unknown name draws nothing (`star.of.david.fill` never
+    /// existed). `sparkles` belongs to Qwen3 (`BackendType.iconName`), so the default model uses
+    /// the seal instead of repeating another engine's mark.
     var categoryIcon: String {
         switch self {
         case .largeTurboQ5:
-            return "sparkles"
+            return "checkmark.seal.fill"
         case .largeTurbo, .largeV3Q5:
             return "bolt.fill"
         case .ivritLargeTurbo:
-            return "star.of.david.fill"
+            return "character.bubble.fill"
         case .distilLargeV3, .distilSmallEn:
             return "wand.and.stars"
         default:
@@ -192,6 +195,10 @@ enum WhisperModel: String, CaseIterable, Identifiable {
     }
 
     var isRecommended: Bool { self == .largeTurboQ5 }
+
+    /// The models the Models tab lists up front: the default, the Hebrew fine-tune and
+    /// full-precision Turbo. The rest of `displayOrder` sits behind "More models".
+    static let primaryOrder: [WhisperModel] = [.largeTurboQ5, .ivritLargeTurbo, .largeTurbo]
 
     /// Display order with recommended model first
     static let displayOrder: [WhisperModel] = [

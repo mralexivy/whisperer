@@ -562,9 +562,8 @@ enum MenuTab: String, CaseIterable {
 
 // MARK: - Menu Bar Colors (dark navy palette — matches workspace & onboarding)
 
-/// Internal, not fileprivate: menu bar cards now live in their own files
-/// (`Whisperer/UI/Qwen3UpgradeCard.swift`) so this file does not keep growing, and they must
-/// draw from the same palette. See `DESIGN.md` — one palette, no per-view colour constants.
+/// Internal, not fileprivate: menu bar cards may live in their own files under `Whisperer/UI/`
+/// so this file does not keep growing, and they must draw from the same palette. See `DESIGN.md` — one palette, no per-view colour constants.
 enum MBColors {
     static let background       = Color(red: 0.047, green: 0.047, blue: 0.102)  // #0C0C1A
     static let cardSurface      = Color(red: 0.078, green: 0.078, blue: 0.169)  // #14142B
@@ -1081,17 +1080,7 @@ struct StatusTabView: View {
         }
     }
 
-    private var activeModelColor: Color {
-        switch appState.selectedBackendType {
-        case .whisperCpp: return .blue
-        case .parakeet: return .green
-        case .nemotron: return .purple
-        case .nemotronHebrew: return .orange
-        case .qwen3asr: return .purple
-        case .speechAnalyzer: return .cyan
-        case .whisperKit: return .blue
-        }
-    }
+    private var activeModelColor: Color { appState.selectedBackendType.tint }
 
     var body: some View {
         ScrollView(showsIndicators: false) {
@@ -1103,10 +1092,6 @@ struct StatusTabView: View {
 
                 // Self-hides once the model is installed; see PolishModelCard.
                 PolishModelCard()
-
-                // Offers the default engine's 2.5 GB download. Self-hides once Qwen3 is cached
-                // or the user declines; see Qwen3UpgradeCard.
-                Qwen3UpgradeCard()
 
                 // In-App Transcription — core feature, no Accessibility required.
                 // Hidden during a meeting: the card reads AppState's live recording state, which a
@@ -1521,18 +1506,37 @@ struct StatusTabView: View {
 
 // MARK: - Models Tab
 
+extension BackendType {
+    /// Per-engine icon colour, shared by the Models tab picker and the Status tab card.
+    var tint: Color {
+        switch self {
+        case .whisperCpp: return MBColors.accent
+        case .qwen3asr: return .purple
+        case .parakeet: return .green
+        case .nemotron: return .purple
+        case .nemotronHebrew: return .orange
+        case .speechAnalyzer: return .cyan
+        case .whisperKit: return .blue
+        }
+    }
+}
+
 struct ModelsTabView: View {
     @ObservedObject var appState = AppState.shared
     /// Which section is currently shown — independent of the loaded backend.
     /// Tabs update this; model rows call selectBackend/download separately.
     @State private var displayedEngine: BackendType = .whisperCpp
 
+    /// Whether the Whisper tab shows its long tail of models. Opens on its own when the model in
+    /// use is one of them, so the active row is never hidden.
+    @State private var showAllWhisperModels = false
+
     /// Normalise the hidden backends to a tab that exists. nemotronHebrew lives under Parakeet.
-    /// Qwen3 has no tab of its own: it is listed in the Accurate tab beside the Whisper models. The
-    /// built-in engine has no tab either, so while it is the engine the Models tab browses Accurate.
+    /// Nemotron and Apple Speech have no tab — Apple's recognizer already runs as the live
+    /// preview for every engine — so while either is the engine the Models tab browses Whisper.
     private func normalise(_ b: BackendType) -> BackendType {
         switch b {
-        case .nemotron, .qwen3asr: return .whisperCpp
+        case .nemotron, .speechAnalyzer: return .whisperCpp
         case .nemotronHebrew: return .parakeet
         default: return b
         }
@@ -1548,6 +1552,7 @@ struct ModelsTabView: View {
         }
         .onAppear {
             displayedEngine = normalise(appState.selectedBackendType)
+            if !WhisperModel.primaryOrder.contains(appState.selectedModel) { showAllWhisperModels = true }
         }
         .onChange(of: appState.selectedBackendType) { newVal in
             // Keep display in sync when the backend changes via means other than the tab
@@ -1555,117 +1560,38 @@ struct ModelsTabView: View {
         }
     }
 
-    /// The backend best suited for the user's current language configuration.
-    /// Parakeet if all routing languages (or the selected single language) are in its 25-language set.
-    /// Whisper otherwise (broader coverage).
-    private var recommendedBackend: BackendType {
-        // Qwen3 leads the Open ASR Leaderboard and covers 31 languages, so it is the
-        // recommendation on any machine that can run it — except for the languages it is
-        // measured to be weak at (see `BackendType.weakLanguages`), where recommending it
-        // would point the user at a worse transcript than the one they have.
-        if BackendType.qwen3asr.isAvailable {
-            let configured: [TranscriptionLanguage] = appState.routingConfig.isRoutingEnabled
-                ? appState.routingConfig.allowedLanguages
-                : [appState.selectedLanguage]
-            let weak = BackendType.qwen3asr.weakLanguages
-            if !configured.contains(where: { weak.contains($0) }) { return .qwen3asr }
-        }
-        guard BackendType.parakeet.isAvailable else { return .whisperCpp }
-        let languages: [TranscriptionLanguage]
-        if appState.routingConfig.isRoutingEnabled {
-            languages = appState.routingConfig.allowedLanguages
-        } else if appState.selectedLanguage != .auto {
-            languages = [appState.selectedLanguage]
-        } else {
-            // Auto-detect, no routing — Parakeet handles most common languages
-            return .parakeet
-        }
-        let allSupported = languages.allSatisfy { BackendType.parakeet.supportsLanguage($0, parakeetVariant: .v3) }
-        return allSupported ? .parakeet : .whisperCpp
-    }
-
-    /// The built-in engine: Apple's on-device dictation. Not a choice — it drives live text (HUD
-    /// and meeting transcript) for whichever engine is picked. Nothing of ours to download; the
-    /// row shows, per language the user dictates in, whether Apple has it installed, and offers
-    /// to install it when not.
-    private var builtinEngineRow: some View {
-        let languages = appState.builtinEngineLanguages
+    /// Apple dictation's state, shown only when it needs the user: a language it has not
+    /// installed yet, or one installing now. Apple dictation is not a choice — it drives live
+    /// text (HUD and meeting transcript) for whichever engine is picked — so a Ready state is
+    /// nothing to report and the menu stays quiet.
+    @ViewBuilder
+    private var livePreviewNotice: some View {
         let statuses = appState.systemLanguageStatuses
-        let anyReady = languages.contains { statuses[$0] == .ready }
-        let anyDownloading = languages.contains { if case .downloading = statuses[$0] { return true } else { return false } }
-        let status: String = anyReady ? "Ready" : anyDownloading ? "Installing" : "Needs a language"
-        let dot: Color = anyReady ? .green : anyDownloading ? .orange : MBColors.textTertiary
-
-        return VStack(alignment: .leading, spacing: 10) {
-            HStack(spacing: 10) {
-                ZStack {
-                    RoundedRectangle(cornerRadius: 6)
-                        .fill(Color.green.opacity(0.15))
-                        .frame(width: 26, height: 26)
-                    Image(systemName: "waveform.badge.mic")
-                        .foregroundColor(.green)
-                        .font(.system(size: 12, weight: .medium))
-                }
-
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("Live preview")
-                        .font(.system(size: 12, weight: .semibold))
-                        .foregroundColor(MBColors.textPrimary)
-                    Text("Apple dictation, on-device")
-                        .font(.caption2)
-                        .foregroundColor(MBColors.textTertiary)
-                }
-
-                Spacer()
-
-                Circle().fill(dot).frame(width: 7, height: 7)
-                Text(status)
-                    .font(.caption)
-                    .foregroundColor(MBColors.textSecondary)
+        let pending = appState.builtinEngineLanguages.filter { language in
+            switch statuses[language] {
+            case .notInstalled, .downloading: return true
+            default: return false
             }
-
+        }
+        if !pending.isEmpty {
             VStack(alignment: .leading, spacing: 6) {
-                ForEach(languages, id: \.self) { language in
+                HStack(spacing: 6) {
+                    Image(systemName: "text.bubble")
+                        .font(.system(size: 10, weight: .medium))
+                        .foregroundColor(.green)
+                    Text("Live preview needs Apple dictation for:")
+                        .font(.caption)
+                        .foregroundColor(MBColors.textSecondary)
+                }
+                ForEach(pending, id: \.self) { language in
                     systemLanguageRow(language, status: statuses[language])
                 }
-                if languages.count > 1 {
-                    languageDetectionRow
-                }
             }
+            .padding(10)
+            .background(MBColors.elevated.opacity(0.5))
+            .cornerRadius(8)
+            .transition(.opacity)
         }
-        .padding(10)
-        .background(MBColors.cardSurface)
-        .overlay(
-            RoundedRectangle(cornerRadius: 8)
-                .stroke(MBColors.border, lineWidth: 1)
-        )
-        .cornerRadius(8)
-        .animation(.easeInOut(duration: 0.2), value: anyDownloading)
-        .onAppear { appState.refreshSystemLanguages() }
-    }
-
-    /// What tells Apple dictation which of the user's languages is being spoken: the user's main
-    /// engine (Qwen3 or Whisper V3). Only shown with more than one language.
-    private var languageDetectionRow: some View {
-        HStack(spacing: 8) {
-            Text("Language detection")
-                .font(.caption)
-                .foregroundColor(MBColors.textPrimary)
-
-            Spacer()
-
-            if let source = appState.languageProbeSource {
-                Label(source.name == "Qwen3" ? "Qwen3" : "Whisper V3", systemImage: "checkmark.circle.fill")
-                    .labelStyle(.titleAndIcon)
-                    .font(.caption2)
-                    .foregroundColor(.green)
-            } else {
-                Text("Waiting for your engine")
-                    .font(.caption2)
-                    .foregroundColor(MBColors.textTertiary)
-            }
-        }
-        .help("Picks which of your languages you are speaking within a second or two, so live text starts in the right one")
     }
 
     private func systemLanguageRow(_ language: TranscriptionLanguage, status: SystemLanguageStatus?) -> some View {
@@ -1702,29 +1628,14 @@ struct ModelsTabView: View {
                 Text("Unsupported")
                     .font(.caption2)
                     .foregroundColor(.orange.opacity(0.7))
-                    .padding(.horizontal, 6)
-                    .padding(.vertical, 2)
-                    .background(Color.orange.opacity(0.1))
-                    .cornerRadius(4)
-                    .help("Apple dictation has no \(language.displayName). Live preview uses your engine instead.")
             case nil:
                 ProgressView().controlSize(.mini)
             }
         }
     }
 
-    /// The engine picker's tabs. Qwen3 is not one: it is offered inside Accurate.
-    private var engineTabs: [BackendType] {
-        BackendType.selectable.filter { $0 != .qwen3asr }
-    }
-
-    private func engineTabSubtitle(_ backend: BackendType) -> String {
-        backend == .whisperCpp ? "Qwen3 \u{2022} Whisper" : backend.settingsSubtitle
-    }
-
     private var engineSection: some View {
         VStack(alignment: .leading, spacing: 12) {
-            // Engine header + segmented control
             HStack(spacing: 10) {
                 ZStack {
                     RoundedRectangle(cornerRadius: 6)
@@ -1742,104 +1653,29 @@ struct ModelsTabView: View {
                 Spacer()
             }
 
-            builtinEngineRow
+            engineTabs
 
-            HStack(spacing: 0) {
-                ForEach(Array(engineTabs.enumerated()), id: \.element.id) { index, backend in
-                    let isSelected = displayedEngine == backend
-                    let isUnavailable = !backend.isAvailable
-                    // Qwen3 lives inside the Accurate tab, so recommending it recommends that tab.
-                    let isRecommended = !isUnavailable
-                        && (backend == recommendedBackend || (backend == .whisperCpp && recommendedBackend == .qwen3asr))
-
-                    Button(action: {
-                        displayedEngine = backend
-                    }) {
-                        VStack(spacing: 1) {
-                            HStack(spacing: 4) {
-                                Image(systemName: backend.iconName)
-                                    .font(.system(size: 9, weight: .medium))
-                                Text(backend.friendlyName)
-                                    .font(.system(size: 11, weight: isSelected ? .semibold : .medium))
-                                    .lineLimit(1)
-                            }
-                            if isRecommended && !isSelected {
-                                Text("Recommended")
-                                    .font(.system(size: 8, weight: .bold))
-                                    .lineLimit(1)
-                                    .opacity(0.9)
-                            } else {
-                                Text(engineTabSubtitle(backend))
-                                    .font(.system(size: 9, weight: .medium))
-                                    .lineLimit(1)
-                                    .opacity(0.7)
-                            }
-                        }
-                        .foregroundColor(isSelected ? .white : (isRecommended ? MBColors.accent : MBColors.textSecondary))
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 6)
-                        .background(
-                            RoundedRectangle(cornerRadius: 6)
-                                .fill(isSelected ? MBColors.accent : Color.clear)
-                        )
-                        .contentShape(Rectangle())
-                        .opacity(isUnavailable ? 0.4 : 1.0)
-                    }
-                    .buttonStyle(.plain).pointerOnHover()
-                    .disabled(appState.isModelBusy || isUnavailable)
-                }
-            }
-            .padding(2)
-            .opacity(appState.isModelBusy ? 0.5 : 1.0)
-            .background(
-                RoundedRectangle(cornerRadius: 8)
-                    .fill(MBColors.elevated.opacity(0.5))
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: 8)
-                    .stroke(MBColors.border, lineWidth: 1)
-            )
-
-            // Models for selected engine
+            // Models for the displayed engine. The tab already names the family, so no second
+            // header repeats it here.
             Group {
-                if displayedEngine == .whisperCpp {
+                switch displayedEngine {
+                case .qwen3asr:
                     #if canImport(FluidAudio)
                     qwen3ModelSection
                     #endif
-
-                    HStack(spacing: 10) {
-                        ZStack {
-                            RoundedRectangle(cornerRadius: 6)
-                                .fill(MBColors.accent.opacity(0.15))
-                                .frame(width: 26, height: 26)
-                            Image(systemName: "waveform")
-                                .foregroundColor(MBColors.accent)
-                                .font(.system(size: 12, weight: .medium))
-                        }
-
-                        Text("Whisper Models")
-                            .font(.system(size: 12, weight: .semibold))
-                            .foregroundColor(MBColors.textPrimary)
-
-                        Spacer()
-                    }
-
-                    VStack(spacing: 4) {
-                        ForEach(WhisperModel.displayOrder) { model in
-                            ModelMenuItem(model: model)
-                        }
-                    }
-                } else if displayedEngine == .whisperKit {
+                case .parakeet:
+                    parakeetModelSection
+                case .whisperKit:
                     #if canImport(WhisperKit)
                     whisperKitModelSection
                     #endif
-                } else if displayedEngine == .parakeet {
-                    parakeetModelSection
-                } else if displayedEngine == .speechAnalyzer {
-                    speechAnalyzerSection
+                default:
+                    whisperModelSection
                 }
             }
             .padding(.horizontal, 4)
+
+            livePreviewNotice
         }
         .padding(12)
         .background(MBColors.cardSurface)
@@ -1848,6 +1684,95 @@ struct ModelsTabView: View {
             RoundedRectangle(cornerRadius: 10)
                 .stroke(MBColors.border, lineWidth: 1)
         )
+        .animation(.easeInOut(duration: 0.2), value: displayedEngine)
+    }
+
+    /// One segment per model family, named by the family itself. A dot marks the family the
+    /// engine in use belongs to, so browsing another tab never hides where dictation runs.
+    private var engineTabs: some View {
+        HStack(spacing: 0) {
+            ForEach(BackendType.selectable) { backend in
+                let isSelected = displayedEngine == backend
+                let isUnavailable = !backend.isAvailable
+                let isInUse = normalise(appState.selectedBackendType) == backend
+
+                Button(action: {
+                    displayedEngine = backend
+                }) {
+                    VStack(spacing: 1) {
+                        HStack(spacing: 4) {
+                            Image(systemName: backend.iconName)
+                                .font(.system(size: 9, weight: .medium))
+                                .foregroundColor(isSelected ? .white : backend.tint)
+                            Text(backend.friendlyName)
+                                .font(.system(size: 11, weight: isSelected ? .semibold : .medium))
+                                .lineLimit(1)
+                            if isInUse {
+                                Circle()
+                                    .fill(isSelected ? Color.white : Color.green)
+                                    .frame(width: 5, height: 5)
+                                    .accessibilityLabel("In use")
+                            }
+                        }
+                        Text(backend.settingsSubtitle)
+                            .font(.system(size: 9, weight: .medium))
+                            .lineLimit(1)
+                            .opacity(0.7)
+                    }
+                    .foregroundColor(isSelected ? .white : MBColors.textSecondary)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 6)
+                    .background(
+                        RoundedRectangle(cornerRadius: 6)
+                            .fill(isSelected ? MBColors.accent : Color.clear)
+                    )
+                    .contentShape(Rectangle())
+                    .opacity(isUnavailable ? 0.4 : 1.0)
+                }
+                .buttonStyle(.plain).pointerOnHover()
+                .disabled(appState.isModelBusy || isUnavailable)
+                .help(isUnavailable ? "\(backend.friendlyName) needs Apple Silicon" : "\(backend.friendlyName) models")
+            }
+        }
+        .padding(2)
+        .opacity(appState.isModelBusy ? 0.5 : 1.0)
+        .background(
+            RoundedRectangle(cornerRadius: 8)
+                .fill(MBColors.elevated.opacity(0.5))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 8)
+                .stroke(MBColors.border, lineWidth: 1)
+        )
+    }
+
+    /// The default family. Three models cover nearly everyone — Whisperer V3 (the default), the
+    /// Hebrew fine-tune and full-precision Turbo; the rest sit behind "More models".
+    private var whisperModelSection: some View {
+        let hidden = WhisperModel.displayOrder.filter { !WhisperModel.primaryOrder.contains($0) }
+        return VStack(alignment: .leading, spacing: 4) {
+            ForEach(WhisperModel.primaryOrder) { model in
+                ModelMenuItem(model: model)
+            }
+            if showAllWhisperModels {
+                ForEach(hidden) { model in
+                    ModelMenuItem(model: model)
+                }
+            }
+            Button(action: { showAllWhisperModels.toggle() }) {
+                HStack(spacing: 4) {
+                    Image(systemName: showAllWhisperModels ? "chevron.up" : "chevron.down")
+                        .font(.system(size: 9, weight: .semibold))
+                    Text(showAllWhisperModels ? "Fewer models" : "More models (\(hidden.count))")
+                        .font(.caption)
+                }
+                .foregroundColor(MBColors.textTertiary)
+                .padding(.horizontal, 8)
+                .padding(.vertical, 4)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain).pointerOnHover()
+        }
     }
 
     private var languageSection: some View {
@@ -1920,23 +1845,6 @@ struct ModelsTabView: View {
     #if canImport(WhisperKit)
     private var whisperKitModelSection: some View {
         VStack(alignment: .leading, spacing: 8) {
-            HStack(spacing: 10) {
-                ZStack {
-                    RoundedRectangle(cornerRadius: 6)
-                        .fill(Color.blue.opacity(0.15))
-                        .frame(width: 26, height: 26)
-                    Image(systemName: "bolt.fill")
-                        .foregroundColor(.blue)
-                        .font(.system(size: 12, weight: .medium))
-                }
-
-                Text("Core ML Models")
-                    .font(.system(size: 12, weight: .semibold))
-                    .foregroundColor(MBColors.textPrimary)
-
-                Spacer()
-            }
-
             VStack(spacing: 4) {
                 WhisperKitModelRow()
             }
@@ -1966,23 +1874,6 @@ struct ModelsTabView: View {
 
     private var parakeetModelSection: some View {
         VStack(alignment: .leading, spacing: 8) {
-            HStack(spacing: 10) {
-                ZStack {
-                    RoundedRectangle(cornerRadius: 6)
-                        .fill(Color.green.opacity(0.15))
-                        .frame(width: 26, height: 26)
-                    Image(systemName: "bird.fill")
-                        .foregroundColor(.green)
-                        .font(.system(size: 12, weight: .medium))
-                }
-
-                Text("Fast Models")
-                    .font(.system(size: 12, weight: .semibold))
-                    .foregroundColor(MBColors.textPrimary)
-
-                Spacer()
-            }
-
             VStack(spacing: 4) {
                 ForEach(ParakeetModelVariant.allCases) { model in
                     ParakeetModelRow(model: model)
@@ -2073,27 +1964,10 @@ struct ModelsTabView: View {
     }
 
     #if canImport(FluidAudio)
-    /// The default engine's own tab. Separate from "Fast Models" because Qwen3 is neither a
-    /// Parakeet variant nor a fallback for one — it is what a new install transcribes with.
+    /// Qwen3's own tab. Separate from Parakeet because Qwen3 is neither a Parakeet variant nor a
+    /// fallback for one.
     private var qwen3ModelSection: some View {
         VStack(alignment: .leading, spacing: 8) {
-            HStack(spacing: 10) {
-                ZStack {
-                    RoundedRectangle(cornerRadius: 6)
-                        .fill(Color.purple.opacity(0.15))
-                        .frame(width: 26, height: 26)
-                    Image(systemName: "waveform.badge.sparkles")
-                        .foregroundColor(.purple)
-                        .font(.system(size: 12, weight: .medium))
-                }
-
-                Text("Leading Model")
-                    .font(.system(size: 12, weight: .semibold))
-                    .foregroundColor(MBColors.textPrimary)
-
-                Spacer()
-            }
-
             VStack(spacing: 4) {
                 Qwen3ASRModelRow()
             }
@@ -2120,99 +1994,6 @@ struct ModelsTabView: View {
         }
     }
     #endif
-
-    private var speechAnalyzerAvailable: Bool {
-        if #available(macOS 26.0, *) { return true }
-        return false
-    }
-
-    private var speechAnalyzerSection: some View {
-        let isActive = appState.isModelLoaded && appState.loadedBackendType == .speechAnalyzer
-        let isLoading = appState.isLoadingSpeechAnalyzer
-        let isAvailable = speechAnalyzerAvailable
-        let isHighlighted = isActive || isLoading
-
-        return VStack(alignment: .leading, spacing: 8) {
-            HStack(spacing: 10) {
-                ZStack {
-                    RoundedRectangle(cornerRadius: 6)
-                        .fill(Color.cyan.opacity(0.15))
-                        .frame(width: 26, height: 26)
-                    Image(systemName: "apple.logo")
-                        .foregroundColor(.cyan)
-                        .font(.system(size: 12, weight: .medium))
-                }
-
-                Text("Apple Speech")
-                    .font(.system(size: 12, weight: .semibold))
-                    .foregroundColor(MBColors.textPrimary)
-
-                Spacer()
-            }
-
-            // Clickable model row
-            Button(action: {
-                if isAvailable && !isActive && !isLoading {
-                    appState.preloadModel()
-                }
-            }) {
-                HStack(spacing: 10) {
-                    Image(systemName: "apple.logo")
-                        .foregroundColor(.cyan)
-                        .font(.system(size: 10, weight: .medium))
-                        .frame(width: 16)
-
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("On-Device Model")
-                            .font(.system(size: 12, weight: isHighlighted ? .semibold : .regular))
-                            .foregroundColor(isHighlighted ? MBColors.textPrimary : MBColors.textSecondary)
-
-                        Text(isAvailable ? "System-managed \u{2022} On-device" : "Requires macOS 26+")
-                            .font(.caption2)
-                            .foregroundColor(MBColors.textTertiary)
-                    }
-
-                    Spacer()
-
-                    if isLoading {
-                        HStack(spacing: 4) {
-                            ProgressView()
-                                .scaleEffect(0.5)
-                                .frame(width: 12, height: 12)
-                            Text("Loading")
-                                .font(.caption2)
-                                .foregroundColor(MBColors.accent)
-                        }
-                    } else if isActive {
-                        Text("Active")
-                            .font(.system(size: 10, weight: .semibold))
-                            .foregroundColor(MBColors.accent)
-                            .padding(.horizontal, 8)
-                            .padding(.vertical, 3)
-                            .background(Capsule().fill(MBColors.accent.opacity(0.15)))
-                    } else if isAvailable {
-                        Image(systemName: "checkmark.circle.fill")
-                            .foregroundColor(MBColors.accent.opacity(0.5))
-                            .font(.system(size: 14))
-                    }
-                }
-                .padding(.vertical, 6)
-                .padding(.horizontal, 8)
-                .background(
-                    RoundedRectangle(cornerRadius: 6)
-                        .fill(isHighlighted ? MBColors.accent.opacity(0.12) : Color.clear)
-                )
-                .overlay(
-                    RoundedRectangle(cornerRadius: 6)
-                        .stroke(isHighlighted ? MBColors.accent.opacity(0.3) : Color.clear, lineWidth: 1)
-                )
-                .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain).pointerOnHover()
-            .disabled(!isAvailable || appState.isModelBusy)
-            .opacity(!isAvailable ? 0.5 : 1.0)
-        }
-    }
 }
 
 // MARK: - Settings Tab
@@ -2932,6 +2713,15 @@ struct ModelMenuItem: View {
                             .font(.system(size: 12, weight: isHighlighted ? .semibold : .regular))
                             .foregroundColor(isHighlighted ? MBColors.textPrimary : MBColors.textSecondary)
 
+                        if model.isRecommended {
+                            Text("Default")
+                                .font(.system(size: 9, weight: .semibold))
+                                .foregroundColor(MBColors.accent)
+                                .padding(.horizontal, 5)
+                                .padding(.vertical, 1)
+                                .background(Capsule().fill(MBColors.accent.opacity(0.15)))
+                        }
+
                         if let lang = model.supportedLanguage {
                             Text(lang.displayName)
                                 .font(.system(size: 9, weight: .semibold))
@@ -3326,8 +3116,8 @@ struct Qwen3ASRModelRow: View {
             }
         }) {
             HStack(spacing: 10) {
-                Image(systemName: "waveform.badge.sparkles")
-                    .foregroundColor(.purple)
+                Image(systemName: BackendType.qwen3asr.iconName)
+                    .foregroundColor(BackendType.qwen3asr.tint)
                     .font(.system(size: 10, weight: .medium))
                     .frame(width: 16)
 
@@ -3336,7 +3126,7 @@ struct Qwen3ASRModelRow: View {
                         .font(.system(size: 12, weight: isHighlighted ? .semibold : .regular))
                         .foregroundColor(isHighlighted ? MBColors.textPrimary : MBColors.textSecondary)
 
-                    Text("Top of Open ASR Leaderboard · 30 languages")
+                    Text("Strongest on English · 31 languages")
                         .font(.caption2)
                         .foregroundColor(MBColors.textTertiary)
                 }

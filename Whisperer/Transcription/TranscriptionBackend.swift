@@ -9,13 +9,14 @@ import Foundation
 
 // MARK: - Backend Type
 
-/// Declaration order is picker order — `allCases` is the source for the engine segmented
-/// control in `ModelsTabView`. Qwen3 leads the picker. Nemotron and its Hebrew sub-backend are
-/// filtered out of every picker (`selectable`). The built-in engine is not a `BackendType`: it is
-/// Apple dictation (`SystemLivePreviewBridge`), which drives live text for whichever one is picked.
+/// Declaration order is picker order — `selectable` is the source for the engine segmented
+/// control in `ModelsTabView`. whisper.cpp (Whisperer V3) leads it as the default. Nemotron, its
+/// Hebrew sub-backend and Apple Speech are filtered out of every picker (`selectable`). The
+/// built-in engine is not a `BackendType`: it is Apple dictation (`SystemLivePreviewBridge`),
+/// which drives live text for whichever one is picked.
 enum BackendType: String, CaseIterable, Identifiable {
-    case qwen3asr = "Qwen3ASR"
     case whisperCpp = "whisper.cpp"
+    case qwen3asr = "Qwen3ASR"
     case parakeet = "Parakeet"
     case nemotron = "Nemotron"
     case nemotronHebrew = "NemotronHebrew"
@@ -24,34 +25,25 @@ enum BackendType: String, CaseIterable, Identifiable {
 
     var id: String { rawValue }
 
-    /// The backend a user with no stored preference gets.
+    /// The backend a user with no stored preference gets: whisper.cpp with Whisperer V3.
     ///
-    /// Qwen3 only when its weights are already on disk. It is a 2.5 GB download, so resolving to
-    /// it before the model exists would hand a new user a backend that cannot transcribe
-    /// anything. Until it completes, whisper.cpp dictates — and the built-in engine (Apple
-    /// dictation, `SystemLivePreviewBridge`) covers while neither is loaded.
+    /// Not Qwen3, which was the default from 2026-10-07. The engine benchmarks across languages,
+    /// mixed-language speech and punctuation came out split — Qwen3 leads English, Whisper leads
+    /// elsewhere and covers 97 languages to Qwen3's 31 — so the default is the engine that works
+    /// for every user, with no 2.5 GB download in front of it. Qwen3 stays one tap away in the
+    /// picker. Meetings follow the same choice (`AppState.prepareMeetingASRBridge()`).
     ///
-    /// Not Nemotron. It was the default from 2026-11-03 for its streaming live text; that job now
-    /// belongs to the built-in engine, which needs no download and runs beside the user's engine
-    /// instead of competing with it.
-    static var defaultBackend: BackendType { defaultBackend(for: .auto) }
+    /// Not Nemotron either. It was the default from 2026-11-03 for its streaming live text; that
+    /// job now belongs to the built-in engine, which needs no download and runs beside the user's
+    /// engine instead of competing with it.
+    static var defaultBackend: BackendType { .whisperCpp }
 
-    /// The backend a user with no stored preference gets, given the language they transcribe in.
-    ///
-    /// `language` matters because Qwen3's lead is not uniform. Measured on the user's own
-    /// corpus (`Qwen3GateBenchmarkTests`, 2026-10-07): it leads English 0.039 to whisper's
-    /// 0.072, but on 56 genuinely Hebrew clips it scores 0.341 against the ivrit-v3-turbo
-    /// fine-tune's 0.183, and its output there is visibly garbled rather than merely imperfect.
-    /// Handing a Hebrew user the globally better engine would make their dictation worse.
-    static func defaultBackend(for language: TranscriptionLanguage) -> BackendType {
-        guard BackendType.qwen3asr.isAvailable, Qwen3ASRBridge.isModelCached() else {
-            return .whisperCpp
-        }
-        return BackendType.qwen3asr.weakLanguages.contains(language) ? .whisperCpp : .qwen3asr
+    /// The engines a user can pick. Excludes the built-in engine, the Hebrew sub-backend and
+    /// Apple Speech — Apple's on-device recognizer already runs for every engine as the live
+    /// preview, so offering it again as an engine of its own only duplicated it.
+    static var selectable: [BackendType] {
+        allCases.filter { $0 != .nemotron && $0 != .nemotronHebrew && $0 != .speechAnalyzer }
     }
-
-    /// The engines a user can pick. Excludes the built-in engine and the Hebrew sub-backend.
-    static var selectable: [BackendType] { allCases.filter { $0 != .nemotron && $0 != .nemotronHebrew } }
 
     var displayName: String {
         switch self {
@@ -71,35 +63,38 @@ enum BackendType: String, CaseIterable, Identifiable {
         case .parakeet: return "bird.fill"
         case .nemotron: return "waveform.badge.mic"
         case .nemotronHebrew: return "waveform.badge.mic"
-        case .qwen3asr: return "waveform.badge.sparkles"
+        case .qwen3asr: return "sparkles"
         case .speechAnalyzer: return "apple.logo"
         case .whisperKit: return "bolt.fill"
         }
     }
 
-    /// Short user-facing label for settings pickers (vs. displayName which is used in logs/technical contexts)
+    /// Short user-facing label for the engine picker and the Status tab: the model family's own
+    /// name, not a quality adjective. "Accurate" / "Fast" / "Leading" read as a ranking the
+    /// benchmarks do not support — which engine wins depends on the language.
     var friendlyName: String {
         switch self {
-        case .whisperCpp: return "Accurate"
-        case .parakeet: return "Fast"
-        case .nemotron: return "Streaming"
+        case .whisperCpp: return "Whisper"
+        case .parakeet: return "Parakeet"
+        case .nemotron: return "Nemotron"
         case .nemotronHebrew: return "Hebrew"
-        case .qwen3asr: return "Leading"
-        case .speechAnalyzer: return "System"
+        case .qwen3asr: return "Qwen3"
+        case .speechAnalyzer: return "Apple Speech"
         case .whisperKit: return "Core ML"
         }
     }
 
-    /// One-line benefit description shown under the picker option
+    /// One-line benefit description shown under the picker option. Short: four of these share
+    /// the menu bar's width.
     var settingsSubtitle: String {
         switch self {
         case .whisperCpp: return "97 languages"
-        case .parakeet: return "ANE-accelerated"
+        case .parakeet: return "25 languages"
         case .nemotron: return "True streaming, 37ms/chunk"
         case .nemotronHebrew: return "Hebrew fine-tune, 37ms/chunk"
-        case .qwen3asr: return "Top of Open ASR Leaderboard · 31 languages"
+        case .qwen3asr: return "31 languages"
         case .speechAnalyzer: return "macOS 26+"
-        case .whisperKit: return "Core ML optimized · 100 languages"
+        case .whisperKit: return "100 languages"
         }
     }
 
