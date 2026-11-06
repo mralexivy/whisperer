@@ -298,6 +298,7 @@ class MeetingManager: ObservableObject {
             try? ctx.save()
         }
         updateItem(id: meetingID) { $0.wordCount = words }
+        NotificationCenter.default.post(name: .meetingSegmentsDidPersist, object: meetingID)
     }
 
     // MARK: - Bulk speaker rename
@@ -355,6 +356,7 @@ class MeetingManager: ObservableObject {
             $0.duration = duration
             if let url = audioFileURL { $0.audioFileURL = url }
         }
+        NotificationCenter.default.post(name: .meetingSegmentsDidPersist, object: meetingID)
     }
 
     /// Flags a meeting whose input never delivered a non-silent sample.

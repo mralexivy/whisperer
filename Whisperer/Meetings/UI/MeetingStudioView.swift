@@ -41,10 +41,13 @@ struct MeetingStudioView: View {
                 selectedMeetingID = first.id
             }
         }
-        .onChange(of: selectedMeetingID) { _, newID in
-            audioPlayer.stop()
-            detailVM.clear()
-            if let id = newID { Task { await detailVM.load(meetingID: id) } }
+        // `.task(id:)`, not `.onChange`: it also runs on appear. The selection lives in the
+        // parent and survives switching sidebar tabs, but `detailVM` is recreated with this
+        // view — with `.onChange` a meeting that was already selected was never loaded, and
+        // its transcript stayed empty until the user clicked another meeting and back.
+        .task(id: selectedMeetingID) {
+            if detailVM.loadedMeetingID != selectedMeetingID { audioPlayer.stop() }
+            await detailVM.select(selectedMeetingID)
         }
         .onChange(of: detailVM.meeting?.id) { _, _ in
             if let url = detailVM.meeting?.resolvedAudioURL,
@@ -77,6 +80,10 @@ struct MeetingStudioView: View {
             } else if let id = selectedMeetingID, !meetings.contains(where: { $0.id == id }) {
                 selectedMeetingID = meetings.first?.id
             }
+            if !session.isRecording {
+                let item = meetings.first(where: { $0.id == selectedMeetingID })
+                Task { await detailVM.refreshIfStale(listItem: item) }
+            }
             if let item = meetings.first(where: { $0.id == selectedMeetingID }),
                let url = item.resolvedAudioURL,
                FileManager.default.fileExists(atPath: url.path),
@@ -92,10 +99,9 @@ struct MeetingStudioView: View {
                     selectedMeetingID = first.id
                 }
             }
-            .onChange(of: selectedMeetingID) { _, newID in
-                audioPlayer.stop()
-                detailVM.clear()
-                if let id = newID { Task { await detailVM.load(meetingID: id) } }
+            .task(id: selectedMeetingID) {
+                if detailVM.loadedMeetingID != selectedMeetingID { audioPlayer.stop() }
+                await detailVM.select(selectedMeetingID)
             }
             .onChange(of: detailVM.meeting?.id) { _, _ in
                 if let url = detailVM.meeting?.resolvedAudioURL,
@@ -127,6 +133,10 @@ struct MeetingStudioView: View {
                     selectedMeetingID = meetings.first?.id
                 } else if let id = selectedMeetingID, !meetings.contains(where: { $0.id == id }) {
                     selectedMeetingID = meetings.first?.id
+                }
+                if !session.isRecording {
+                    let item = meetings.first(where: { $0.id == selectedMeetingID })
+                    Task { await detailVM.refreshIfStale(listItem: item) }
                 }
                 if let item = meetings.first(where: { $0.id == selectedMeetingID }),
                    let url = item.resolvedAudioURL,

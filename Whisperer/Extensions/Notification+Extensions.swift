@@ -18,6 +18,8 @@ extension NSNotification.Name {
     /// A meeting's notes changed outside the view showing them (an AI app added one over MCP).
     /// `object` is the meeting id, `userInfo["notes"]` the full new list.
     static let meetingNotesDidChange       = Notification.Name("meetingNotesDidChange")
+    /// A meeting's segments were written to Core Data. `object` is the meeting id.
+    static let meetingSegmentsDidPersist   = Notification.Name("meetingSegmentsDidPersist")
     static let dictionaryDidRebuild = Notification.Name("dictionaryDidRebuild")
     static let overlaySettingsChanged  = Notification.Name("overlaySettingsChanged")
     static let islandPlacementChanged  = Notification.Name("islandPlacementChanged")

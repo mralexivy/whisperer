@@ -19,8 +19,14 @@ final class MeetingDetailViewModel: ObservableObject {
     @Published var hasMoreSegments = false
 
     private(set) var allSegments: [MeetingSegment] = []
-    private var loadedMeetingID: UUID? = nil
+    private(set) var loadedMeetingID: UUID? = nil
     private let pageSize = 20
+    /// Bumped by every `load`; only the newest load may publish its result or clear
+    /// `isLoading`. An older fetch that lands late used to switch the skeleton off while the
+    /// current meeting was still loading, which flashed "no transcript".
+    private var loadGeneration = 0
+    /// Reads a meeting from Core Data. Replaced in tests.
+    var fetcher: (UUID) async -> MeetingRecord?
 
     // MARK: Prose / RTL cache
     //
@@ -64,7 +70,8 @@ final class MeetingDetailViewModel: ObservableObject {
 
     private var notificationObservers = Set<AnyCancellable>()
 
-    init() {
+    init(fetcher: ((UUID) async -> MeetingRecord?)? = nil) {
+        self.fetcher = fetcher ?? { id in await MeetingDetailViewModel.fetchRecord(id) }
         // Refresh when AI overview generates so MeetingOverviewView sees the new aiSummary.
         NotificationCenter.default.publisher(for: .meetingOverviewDidGenerate)
             .receive(on: DispatchQueue.main)
@@ -75,6 +82,38 @@ final class MeetingDetailViewModel: ObservableObject {
                 Task { await self.refreshDetail() }
             }
             .store(in: &notificationObservers)
+
+        // The transcript of the shown meeting was saved after it was loaded (the end of a
+        // recording, the refine pass, a polish): show the saved version.
+        NotificationCenter.default.publisher(for: .meetingSegmentsDidPersist)
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] notif in
+                guard let self, let id = notif.object as? UUID, id == self.loadedMeetingID else { return }
+                Task { await self.refreshDetail() }
+            }
+            .store(in: &notificationObservers)
+    }
+
+    /// What the workspace calls whenever the selection is (re)established — on change *and*
+    /// on appear. The selection outlives this object (it lives in the parent), so a fresh
+    /// view model with an already-selected meeting must still load it.
+    func select(_ id: UUID?) async {
+        guard let id else { clear(); return }
+        if id == loadedMeetingID, meeting != nil { return }
+        clear()
+        await load(meetingID: id)
+    }
+
+    /// Re-fetches the shown meeting when the library row says it changed (word count or
+    /// duration differ from what is loaded) — e.g. a transcript saved after the load.
+    func refreshIfStale(listItem: MeetingListItem?) async {
+        guard let item = listItem, item.id == loadedMeetingID, !isLoading, let m = meeting else { return }
+        let loadedWords = m.segments.reduce(0) {
+            $0 + $1.text.components(separatedBy: .whitespacesAndNewlines).filter { !$0.isEmpty }.count
+        }
+        if item.wordCount != loadedWords || (m.segments.isEmpty && item.wordCount > 0) {
+            await refreshDetail()
+        }
     }
 
     // MARK: - Load
@@ -83,19 +122,18 @@ final class MeetingDetailViewModel: ObservableObject {
         // Skip if already loaded (but allow force if meeting is nil, e.g. after clear())
         guard meetingID != loadedMeetingID || meeting == nil else { return }
         loadedMeetingID = meetingID
+        loadGeneration += 1
+        let generation = loadGeneration
         isLoading = true
         meeting = nil
         displayedSegments = []
         allSegments = []
         hasMoreSegments = false
 
-        let record = await fetchRecord(meetingID)
+        let record = await fetcher(meetingID)
 
-        // Discard stale result if a different meeting was selected during the async fetch
-        guard loadedMeetingID == meetingID else {
-            isLoading = false
-            return
-        }
+        // A newer load (another meeting, or this one again after a clear) owns the state now.
+        guard generation == loadGeneration, loadedMeetingID == meetingID else { return }
 
         allSegments = record?.segments ?? []
         displayedSegments = Array(allSegments.prefix(pageSize))
@@ -116,7 +154,7 @@ final class MeetingDetailViewModel: ObservableObject {
 
     func refreshDetail() async {
         guard let id = loadedMeetingID else { return }
-        let record = await fetchRecord(id)
+        let record = await fetcher(id)
         guard loadedMeetingID == id, let record else { return }
         allSegments = record.segments
         // Extend display window but never shrink it
@@ -128,6 +166,7 @@ final class MeetingDetailViewModel: ObservableObject {
 
     func clear() {
         loadedMeetingID = nil
+        loadGeneration += 1
         meeting = nil
         displayedSegments = []
         allSegments = []
@@ -196,7 +235,7 @@ final class MeetingDetailViewModel: ObservableObject {
 
     // MARK: - CoreData fetch
 
-    private func fetchRecord(_ id: UUID) async -> MeetingRecord? {
+    nonisolated static func fetchRecord(_ id: UUID) async -> MeetingRecord? {
         let ctx = HistoryDatabase.shared.newBackgroundContext()
         return await ctx.perform {
             let req = MeetingEntity.fetchRequest()
