@@ -44,9 +44,7 @@ struct MeetingLiveTranscriptView: View {
     /// Content decides direction; the language setting is only the fallback when there is no
     /// text yet. Same rule as `MeetingTranscriptView`.
     private var isRTL: Bool {
-        // Live: the session's sticky verdict, so the direction cannot flip per update.
-        if isLive, let live = session.liveIsRTL { return live }
-        return MeetingTranscriptText.isRightToLeft(
+        MeetingTranscriptText.isRightToLeft(
             segments: segments,
             liveTail: isLive ? session.currentSegmentText + " " + session.livePreviewText : "",
             fallback: TranscriptionLanguage(rawValue: meeting?.language ?? ""))
@@ -240,15 +238,15 @@ struct MeetingLiveTranscriptView: View {
                 // `Text` here printed a whole ASR batch at once and left a static bar blinking
                 // beside it — the dump-then-dead-air artefact the pour exists to remove.
                 //
-                // A committed card *shrinks* `combinedSegmentText` back to the tail. It used to be
-                // keyed on the open card's start, which destroyed the view and re-poured the whole
-                // remainder from blank on every commit — the blink. `rebasesOnShrink` shows the
-                // remainder (already on screen) at once and pours only words that are new.
+                // Keyed on the open card's start: the updater's projection is append-only, so a
+                // committed segment (which *shrinks* `combinedSegmentText` back to the tail) would
+                // otherwise be ignored and the bubble would keep showing text that has already
+                // moved into a card above it. Identity is the reset.
                 LivePourText(text: combinedSegmentText,
                              fontSize: 14,
                              fontDesign: .default,
-                             placeholder: nil,
-                             rebasesOnShrink: true)
+                             placeholder: nil)
+                    .id(session.currentSegmentStartTimestamp)
             }
         }
         .padding(.horizontal, 11)

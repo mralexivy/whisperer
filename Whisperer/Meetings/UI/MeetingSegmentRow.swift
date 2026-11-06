@@ -303,19 +303,6 @@ struct MeetingSegmentTextView: NSViewRepresentable {
         field.attributedStringValue = attributed
     }
 
-    /// Height for the width SwiftUI offers. Without it the wrapping label sized itself from
-    /// its intrinsic (single-line) size and was re-measured as text grew — the live RTL bubble
-    /// jumped height on updates.
-    func sizeThatFits(_ proposal: ProposedViewSize, nsView field: NSTextField, context: Context) -> CGSize? {
-        guard let width = proposal.width, width.isFinite, width > 0 else { return nil }
-        field.preferredMaxLayoutWidth = width
-        let height = field.attributedStringValue.boundingRect(
-            with: NSSize(width: width, height: .greatestFiniteMagnitude),
-            options: [.usesLineFragmentOrigin, .usesFontLeading]
-        ).height
-        return CGSize(width: width, height: ceil(height))
-    }
-
     final class Coordinator {
         var lastText: String = ""
         var lastQuery: String = ""

@@ -37,11 +37,6 @@ class MeetingSession: ObservableObject {
     /// Set by the started-by-mistake card (countdown ran out, or Discard pressed). The stop path
     /// then deletes the meeting — but only if it is still empty once the tail has landed.
     var discardRequested = false
-    /// Text direction of the live transcript, decided with hysteresis
-    /// (`MeetingTranscriptText.stickyRightToLeft`) and updated when cards commit, not on every
-    /// live update — the per-render verdict flipped a mixed Hebrew/English meeting near the
-    /// threshold. nil until there is enough text to judge.
-    @Published private(set) var liveIsRTL: Bool?
     @Published var elapsedSeconds: Double = 0
 
     /// Backing store for `livePreviewText`. Private so every write goes through the editor
@@ -330,7 +325,6 @@ class MeetingSession: ObservableObject {
         silenceFlushTask = nil
         discardRequested = false
         isPausedForDictation = false
-        liveIsRTL = nil
         meetingID = nil
         segments = []
         notes = []
@@ -748,26 +742,14 @@ class MeetingSession: ObservableObject {
             currentSegmentStartTimestamp = chunkStart
         } else if chunkStart - lastChunkEndTimestamp >= silenceSplitGap {
             // The speaker paused — or the diarizer's finalized timeline has a hole, which is
-            // the same thing on the audio clock. A pause is the natural paragraph boundary, so
-            // `.pauseBreak` closes a substantial card even without a sentence terminator.
-            closeSegment(endTimestamp: lastChunkEndTimestamp, policy: .pauseBreak)
+            // the same thing on the audio clock. `.softBreak` makes the text arbitrate.
+            closeSegment(endTimestamp: lastChunkEndTimestamp, policy: .softBreak)
             // A declined break, or one that carried a remainder forward, leaves the paragraph
             // open — only restart the clock when the card actually closed empty.
-            if currentSegmentText.isEmpty { currentSegmentStartTimestamp = chunkStart }
-        } else if chunkEnd - currentSegmentStartTimestamp > maxSegmentDuration {
-            // This item would carry the card past the cap. Close it *before* appending: checked
-            // only after, an overshooting card was cut into several cards by `splitByDuration`
-            // in a single frame — the "one big paragraph suddenly breaks into chunks".
-            closeSegment(endTimestamp: lastChunkEndTimestamp, policy: .capBreak)
             if currentSegmentText.isEmpty { currentSegmentStartTimestamp = chunkStart }
         }
 
         currentSegmentText += currentSegmentText.isEmpty ? utterance : " " + utterance
-        // Before the first card: decide direction from the open text once, then leave it to
-        // commits — so the very first Hebrew words already render right-to-left.
-        if liveIsRTL == nil {
-            liveIsRTL = MeetingTranscriptText.stickyRightToLeft(current: nil, text: currentSegmentText)
-        }
         currentSegmentChunks.append(DeterministicPolisher.Chunk(text: utterance,
                                                                 start: chunkStart,
                                                                 end: chunkEnd))
@@ -812,7 +794,7 @@ class MeetingSession: ObservableObject {
             try? await Task.sleep(nanoseconds: 2_500_000_000)
             guard !Task.isCancelled else { return }
             guard let self, self.isRecording, !self.currentSegmentText.isEmpty else { return }
-            self.closeSegment(endTimestamp: self.lastChunkEndTimestamp, policy: .pauseBreak)
+            self.closeSegment(endTimestamp: self.lastChunkEndTimestamp, policy: .softBreak)
         }
     }
 
@@ -855,10 +837,6 @@ class MeetingSession: ObservableObject {
         case capBreak
         /// Speaker change, stop, tail drain. Commits everything as-is — no carry, no floors.
         case commitAll
-        /// The speaker paused. Commits the whole card if it is substantial: a pause is a paragraph
-        /// boundary even when the recognizer left out the period (Apple's committed words often
-        /// do). A card too short to stand alone stays open.
-        case pauseBreak
     }
 
     private func closeSegment(endTimestamp: Double, policy: SegmentBreakPolicy) {
@@ -867,15 +845,6 @@ class MeetingSession: ObservableObject {
 
         let start = currentSegmentStartTimestamp
         let end = max(endTimestamp, start)
-
-        // A pause closes the whole card: the speaker stopped, so whatever follows the last
-        // period is the end of their thought, not the start of the next (Apple often leaves the
-        // final period out). Too short to stand alone → stay open and keep collecting.
-        if policy == .pauseBreak {
-            guard isSubstantial(text, from: start, to: end) else { return }
-            commitSegment(text: text, start: start, end: end, carrying: nil, from: end)
-            return
-        }
 
         if policy != .commitAll, let split = Self.splitAtLastSentenceEnd(text) {
             // Same character-share arithmetic `splitByDuration` uses: with no word-level
@@ -934,11 +903,6 @@ class MeetingSession: ObservableObject {
             )
         }
         segments.append(contentsOf: newSegments)
-        // Recent cards decide the direction, so a meeting that moves from English to Hebrew
-        // follows — but only past the hysteresis band, never back and forth per card.
-        let recent = segments.suffix(12).map(\.text).joined(separator: " ")
-        let direction = MeetingTranscriptText.stickyRightToLeft(current: liveIsRTL, text: recent)
-        if direction != liveIsRTL { liveIsRTL = direction }
 
         let carried = (remainder ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
         currentSegmentText = carried
@@ -1081,30 +1045,12 @@ class MeetingSession: ObservableObject {
     /// Tentative speaker report from the diarizer. Deliberately does **not** touch
     /// `currentSpeakerIndex`: tentative segments flip around, and a flush triggered by one
     /// would fragment the transcript into cards that later turn out to be the same speaker.
-    /// The diarizer's latest confirmed speaker, applied to the live bubble's header only once it
-    /// has held for `liveSpeakerSettle`. Taken raw, a one-second blip of someone else flipped the
-    /// header (and the bubble's stripe and padding) and flipped it back — a ~20 pt jump each way.
     func noteLiveSpeaker(_ index: Int) {
         hasSpeakerSignal = true
-        guard index != liveSpeakerIndex else {
-            liveSpeakerCandidate = nil
-            return
-        }
-        let now = Date()
-        if let candidate = liveSpeakerCandidate, candidate.index == index {
-            guard now.timeIntervalSince(candidate.since) >= Self.liveSpeakerSettle else { return }
-        } else {
-            liveSpeakerCandidate = (index, now)
-            // The first speaker ever shown needs no settling — there is nothing to wobble from.
-            guard segments.isEmpty && currentSegmentText.isEmpty else { return }
-        }
-        liveSpeakerCandidate = nil
+        guard index != liveSpeakerIndex else { return }
         liveSpeakerIndex = index
         liveSpeakerName = speakerName(for: index)
     }
-
-    private var liveSpeakerCandidate: (index: Int, since: Date)?
-    private static let liveSpeakerSettle: TimeInterval = 1.2
 
     /// Applies a rename to the **live** session copy: every segment that speaker owns, plus
     /// the label future flushes will use. Keyed by `speakerIndex` so two speakers that share

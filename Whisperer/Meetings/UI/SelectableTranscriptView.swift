@@ -157,12 +157,9 @@ struct SelectableTranscriptView: NSViewRepresentable {
             Task { @MainActor in
                 coordinator.searchModel?.ingest(text: snapshot)
             }
-            // Only when the text changed. This view re-renders on every live-tail update of a
-            // recording (several a second) while its own text changes once per committed card;
-            // a full `ensureLayout` on each of those was steady main-thread load that grew with
-            // the meeting. Width changes recompute through `frameDidChange`.
-            coordinator.recomputeMetrics()
         }
+
+        coordinator.recomputeMetrics()
     }
 
     static func dismantleNSView(_ textView: NSTextView, coordinator: Coordinator) {

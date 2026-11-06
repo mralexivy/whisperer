@@ -629,25 +629,3 @@ cancel and redo; never drop the shortcut.
 - **No modal on Start.** `MeetingConsentView` was removed on 2026-11-06; pressing Start is the
   consent (see `docs/exec-plans/app-store-submission.md`). Don't put a modal between Start and
   recording.
-
-## Live paragraphs and speakers (2026-11-06)
-
-- **Pauses must reach the session as audio-clock gaps.** The coordinator starts an item that
-  follows a ≥1.2 s word-arrival pause at an estimate of when its words began (0.4 s/word). Items
-  used to abut, so the pause folded inside and only the 30 s cap closed cards.
-- **`.pauseBreak` commits the whole card** when it is substantial (≥12 words, ≥5 s), even with
-  no period. Apple's committed words often lack terminators. It never splits at the last
-  sentence end: across a pause the trailing words end a thought, they don't start one.
-- **Cap before append.** An item that would carry a card past 30 s closes the card first.
-  Checked only after, `splitByDuration` produced several cards in one frame.
-- **Live direction is sticky** (`MeetingSession.liveIsRTL`, `stickyRightToLeft`). It is decided
-  once, updated on commit, and flips only above 45% / below 15% RTL letters.
-- **Never reset the live bubble by identity.** `LivePourText(rebasesOnShrink:)` shows the
-  remainder at once when a commit takes words off the front. The old `.id(start)` re-poured
-  from blank on every commit.
-- **The live speaker header settles** for 1.2 s before changing, so blips don't flip it.
-- **Speakers are numbered by first committed words** in `MeetingSpeakerCoordinator`. A new slot
-  needs 1 s of finalized speech to be introduced. The live label only names known speakers.
-  Stored meetings are normalized on read and in `renameSpeaker`.
-- Workspace live view: one coalesced scroll per runloop (animated only when a card lands), a
-  cached segment index, and layout recompute only when the text changes.
