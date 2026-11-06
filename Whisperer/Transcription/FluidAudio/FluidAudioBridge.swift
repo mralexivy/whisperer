@@ -121,10 +121,16 @@ nonisolated class FluidAudioBridge: TranscriptionBackend {
         return AsrModels.defaultCacheDirectory(for: version)
     }
 
-    /// Download Parakeet models without loading them
-    static func downloadModel(variant: ParakeetModelVariant) async throws {
+    /// Download Parakeet models without loading them. `progress` gets FluidAudio's real
+    /// fraction; the Core ML compile that follows the transfer reports as complete.
+    static func downloadModel(variant: ParakeetModelVariant,
+                              progress: (@Sendable (Double) -> Void)? = nil) async throws {
         let version: AsrModelVersion = variant == .v2 ? .v2 : .v3
-        try await AsrModels.download(version: version)
+        try await AsrModels.download(version: version, progressHandler: progress.map { report in
+            { snapshot in
+                if case .compiling = snapshot.phase { report(1) } else { report(snapshot.fractionCompleted) }
+            }
+        })
     }
 
     /// Load Parakeet models from cache and initialize dual ASR managers

@@ -1290,6 +1290,35 @@ struct StatusTabView: View {
                 }
                 .buttonStyle(.plain).pointerOnHover()
                 .disabled(!appState.isModelLoaded || permissionManager.microphoneStatus != .granted)
+
+                // A greyed-out button with no reason reads as broken. Say what it is waiting on.
+                if let preparing = appState.modelPreparationText {
+                    Button(action: {
+                        withAnimation(.easeInOut(duration: 0.2)) { selectedTab = .models }
+                    }) {
+                        HStack(spacing: 6) {
+                            if appState.isSelectedEngineDownloading || appState.isModelBusy {
+                                ProgressView().controlSize(.mini)
+                            } else {
+                                Image(systemName: appState.selectedEngineDownloadFailure != nil
+                                      ? "exclamationmark.triangle.fill" : "arrow.down.circle")
+                                    .font(.system(size: 10))
+                                    .foregroundColor(appState.selectedEngineDownloadFailure != nil ? .orange : MBColors.accent)
+                            }
+                            Text(preparing)
+                                .font(.system(size: 11))
+                                .foregroundColor(MBColors.textSecondary)
+                                .monospacedDigit()
+                            Spacer()
+                            Image(systemName: "chevron.right")
+                                .font(.system(size: 9, weight: .semibold))
+                                .foregroundColor(MBColors.textTertiary)
+                        }
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain).pointerOnHover()
+                    .help("Open Models")
+                }
             }
         }
         .padding(12)
@@ -1730,12 +1759,12 @@ struct ModelsTabView: View {
                     .opacity(isUnavailable ? 0.4 : 1.0)
                 }
                 .buttonStyle(.plain).pointerOnHover()
-                .disabled(appState.isModelBusy || isUnavailable)
+                // Browsing never blocks: a download or load in progress must not lock the tabs.
+                .disabled(isUnavailable)
                 .help(isUnavailable ? "\(backend.friendlyName) needs Apple Silicon" : "\(backend.friendlyName) models")
             }
         }
         .padding(2)
-        .opacity(appState.isModelBusy ? 0.5 : 1.0)
         .background(
             RoundedRectangle(cornerRadius: 8)
                 .fill(MBColors.elevated.opacity(0.5))
@@ -1845,29 +1874,7 @@ struct ModelsTabView: View {
     #if canImport(WhisperKit)
     private var whisperKitModelSection: some View {
         VStack(alignment: .leading, spacing: 8) {
-            VStack(spacing: 4) {
-                WhisperKitModelRow()
-            }
-
-            if appState.isDownloadingWhisperKit || appState.isLoadingWhisperKit {
-                VStack(alignment: .leading, spacing: 6) {
-                    HStack(spacing: 6) {
-                        ProgressView()
-                            .scaleEffect(0.5)
-                            .frame(width: 12, height: 12)
-                        Text(appState.whisperKitDownloadStatus)
-                            .font(.system(size: 11, weight: .medium))
-                            .foregroundColor(MBColors.textSecondary)
-                    }
-
-                    if appState.isDownloadingWhisperKit {
-                        ProgressView(value: appState.downloadProgress)
-                            .progressViewStyle(.linear)
-                            .tint(MBColors.accent)
-                    }
-                }
-                .padding(.leading, 20)
-            }
+            WhisperKitModelRow()
         }
     }
     #endif
@@ -1899,67 +1906,6 @@ struct ModelsTabView: View {
                 .padding(.horizontal, 8).padding(.vertical, 4)
                 .background(Capsule().fill(Color.green.opacity(0.1)))
             }
-
-            if appState.isDownloadingParakeet || appState.isLoadingParakeet {
-                VStack(alignment: .leading, spacing: 6) {
-                    HStack(spacing: 6) {
-                        ProgressView()
-                            .scaleEffect(0.5)
-                            .frame(width: 12, height: 12)
-                        Text(appState.parakeetDownloadStatus)
-                            .font(.system(size: 11, weight: .medium))
-                            .foregroundColor(MBColors.textSecondary)
-                    }
-
-                    if appState.isDownloadingParakeet {
-                        ProgressView()
-                            .progressViewStyle(.linear)
-                            .tint(MBColors.accent)
-                    }
-                }
-                .padding(.leading, 20)
-            }
-
-            #if canImport(FluidAudio)
-            if appState.isDownloadingNemotron || appState.isLoadingNemotron {
-                VStack(alignment: .leading, spacing: 6) {
-                    HStack(spacing: 6) {
-                        ProgressView()
-                            .scaleEffect(0.5)
-                            .frame(width: 12, height: 12)
-                        Text(appState.nemotronDownloadStatus)
-                            .font(.system(size: 11, weight: .medium))
-                            .foregroundColor(MBColors.textSecondary)
-                    }
-
-                    if appState.isDownloadingNemotron {
-                        ProgressView()
-                            .progressViewStyle(.linear)
-                            .tint(MBColors.accent)
-                    }
-                }
-                .padding(.leading, 20)
-            }
-            if appState.isDownloadingNemotronHebrew || appState.isLoadingNemotronHebrew {
-                VStack(alignment: .leading, spacing: 6) {
-                    HStack(spacing: 6) {
-                        ProgressView()
-                            .scaleEffect(0.5)
-                            .frame(width: 12, height: 12)
-                        Text(appState.nemotronHebrewDownloadStatus)
-                            .font(.system(size: 11, weight: .medium))
-                            .foregroundColor(MBColors.textSecondary)
-                    }
-
-                    if appState.isDownloadingNemotronHebrew {
-                        ProgressView()
-                            .progressViewStyle(.linear)
-                            .tint(MBColors.accent)
-                    }
-                }
-                .padding(.leading, 20)
-            }
-            #endif
         }
     }
 
@@ -1968,29 +1914,7 @@ struct ModelsTabView: View {
     /// fallback for one.
     private var qwen3ModelSection: some View {
         VStack(alignment: .leading, spacing: 8) {
-            VStack(spacing: 4) {
-                Qwen3ASRModelRow()
-            }
-
-            if appState.isDownloadingQwen3ASR || appState.isLoadingQwen3ASR {
-                VStack(alignment: .leading, spacing: 6) {
-                    HStack(spacing: 6) {
-                        ProgressView()
-                            .scaleEffect(0.5)
-                            .frame(width: 12, height: 12)
-                        Text(appState.qwen3asrDownloadStatus)
-                            .font(.system(size: 11, weight: .medium))
-                            .foregroundColor(MBColors.textSecondary)
-                    }
-
-                    if appState.isDownloadingQwen3ASR {
-                        ProgressView(value: appState.downloadProgress)
-                            .progressViewStyle(.linear)
-                            .tint(MBColors.accent)
-                    }
-                }
-                .padding(.leading, 20)
-            }
+            Qwen3ASRModelRow()
         }
     }
     #endif
@@ -2576,8 +2500,14 @@ struct SettingsTabView: View {
                     // "Prepare now" button when anything is missing
                     if engines.needsPreparation {
                         Button("Prepare Now") {
-                            // Open Meeting Studio which shows MeetingPrepView when needsPreparation
-                            NotificationCenter.default.post(name: .switchToMeetingStudioTab, object: nil)
+                            // Start the downloads here, then open Meeting Studio, which shows
+                            // MeetingPrepView with their progress. Posting the tab switch alone
+                            // did nothing while the window was closed — no one was listening.
+                            engines.prefetch()
+                            HistoryWindowManager.shared.showWindowAndDismissMenu()
+                            DispatchQueue.main.async {
+                                NotificationCenter.default.post(name: .switchToMeetingStudioTab, object: nil)
+                            }
                         }
                         .buttonStyle(.plain)
                         .foregroundColor(Color(hex: "5B6CF7"))
@@ -2692,154 +2622,38 @@ struct ModelMenuItem: View {
     let model: WhisperModel
     @ObservedObject var appState = AppState.shared
 
-    var isActive: Bool { appState.selectedModel == model && appState.isModelLoaded && appState.loadedBackendType == .whisperCpp }
-    var isHighlighted: Bool { isActive }
-    var isSelected: Bool { appState.selectedModel == model }
-    var isDownloaded: Bool { appState.isModelDownloaded(model) }
-    var isDownloading: Bool { appState.downloadingModel == model }
-    var isReadyToActivate: Bool { appState.readyToActivateModel == model }
-
     var body: some View {
-        Button(action: { handleTap() }) {
-            HStack(spacing: 10) {
-                Image(systemName: model.categoryIcon)
-                    .foregroundColor(model.categoryColor)
-                    .font(.system(size: 10, weight: .medium))
-                    .frame(width: 16)
-
-                VStack(alignment: .leading, spacing: 2) {
-                    HStack(spacing: 6) {
-                        Text(model.displayName)
-                            .font(.system(size: 12, weight: isHighlighted ? .semibold : .regular))
-                            .foregroundColor(isHighlighted ? MBColors.textPrimary : MBColors.textSecondary)
-
-                        if model.isRecommended {
-                            Text("Default")
-                                .font(.system(size: 9, weight: .semibold))
-                                .foregroundColor(MBColors.accent)
-                                .padding(.horizontal, 5)
-                                .padding(.vertical, 1)
-                                .background(Capsule().fill(MBColors.accent.opacity(0.15)))
-                        }
-
-                        if let lang = model.supportedLanguage {
-                            Text(lang.displayName)
-                                .font(.system(size: 9, weight: .semibold))
-                                .foregroundColor(.blue)
-                                .padding(.horizontal, 5)
-                                .padding(.vertical, 1)
-                                .background(Capsule().fill(Color.blue.opacity(0.15)))
-                        }
-                    }
-
-                    HStack(spacing: 6) {
-                        Text(model.sizeDescription)
-                            .font(.caption2)
-                        Text("\u{2022}")
-                            .font(.caption2)
-                        Text(model.speedDescription)
-                            .font(.caption2)
-                    }
-                    .foregroundColor(MBColors.textTertiary)
-                }
-
-                Spacer()
-
-                statusBadge
-            }
-            .padding(.vertical, 6)
-            .padding(.horizontal, 8)
-            .background(
-                RoundedRectangle(cornerRadius: 6)
-                    .fill(isHighlighted ? MBColors.accent.opacity(0.12) : Color.clear)
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: 6)
-                    .stroke(isHighlighted ? MBColors.accent.opacity(0.3) : Color.clear, lineWidth: 1)
-            )
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain).pointerOnHover()
-        // Allow tap-through when this row is downloading (cancel button) or ready to activate
-        .disabled(!isDownloading && !isReadyToActivate && appState.isModelBusy)
-    }
-
-    var isLoading: Bool { appState.isLoadingWhisper && appState.selectedModel == model && appState.selectedBackendType == .whisperCpp }
-
-    @ViewBuilder var statusBadge: some View {
-        if isDownloading {
-            VStack(alignment: .trailing, spacing: 4) {
-                HStack(spacing: 6) {
-                    ProgressView(value: appState.downloadProgress)
-                        .progressViewStyle(.linear)
-                        .frame(width: 70)
-                        .tint(MBColors.accent)
-                    Text("\(Int(appState.downloadProgress * 100))%")
-                        .font(.caption2)
-                        .foregroundColor(MBColors.accent)
-                        .monospacedDigit()
-                    Button(action: { appState.cancelModelDownload() }) {
-                        Image(systemName: "xmark.circle.fill")
-                            .foregroundColor(.red.opacity(0.8))
-                            .font(.system(size: 14))
-                    }
-                    .buttonStyle(.plain)
-                }
-                if let retryInfo = appState.downloadRetryInfo {
-                    Text(retryInfo)
-                        .font(.system(size: 9))
-                        .foregroundColor(.orange)
-                }
-            }
-        } else if isReadyToActivate {
-            Button(action: { appState.activateReadyModel() }) {
-                Text("Activate")
-                    .font(.system(size: 10, weight: .semibold))
-                    .foregroundColor(.white)
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 3)
-                    .background(Capsule().fill(MBColors.accent))
-            }
-            .buttonStyle(.plain)
-            .disabled(appState.state != .idle)
-        } else if isLoading {
-            HStack(spacing: 4) {
-                ProgressView()
-                    .scaleEffect(0.5)
-                Text("Loading")
-                    .font(.caption2)
+        let isWhisper = appState.selectedBackendType == .whisperCpp
+        ModelRow(
+            asset: .whisper(model),
+            icon: model.categoryIcon,
+            iconColor: model.categoryColor,
+            title: model.displayName,
+            subtitle: "\(model.sizeDescription) \u{2022} \(model.speedDescription)",
+            state: ModelRowState(
+                isActive: appState.selectedModel == model && appState.isModelLoaded && appState.loadedBackendType == .whisperCpp,
+                isLoading: appState.isLoadingWhisper && appState.selectedModel == model && isWhisper,
+                isOnDisk: appState.isModelDownloaded(model),
+                isReadyToActivate: appState.readyToActivateModel == model
+            ),
+            onSelect: { appState.selectModel(model) },
+            onActivate: { appState.activateReadyModel() }
+        ) {
+            if model.isRecommended {
+                Text("Default")
+                    .font(.system(size: 9, weight: .semibold))
                     .foregroundColor(MBColors.accent)
+                    .padding(.horizontal, 5)
+                    .padding(.vertical, 1)
+                    .background(Capsule().fill(MBColors.accent.opacity(0.15)))
             }
-        } else if isActive {
-            Text("Active")
-                .font(.system(size: 10, weight: .semibold))
-                .foregroundColor(MBColors.accent)
-                .padding(.horizontal, 8)
-                .padding(.vertical, 3)
-                .background(Capsule().fill(MBColors.accent.opacity(0.15)))
-        } else if isDownloaded {
-            Image(systemName: "checkmark.circle.fill")
-                .foregroundColor(MBColors.accent.opacity(0.5))
-                .font(.system(size: 14))
-        } else {
-            HStack(spacing: 4) {
-                Image(systemName: "arrow.down.circle")
-                    .font(.system(size: 14))
-                Text("Download")
-                    .font(.caption2)
-            }
-            .foregroundColor(MBColors.accent)
-        }
-    }
-
-    func handleTap() {
-        if isReadyToActivate {
-            appState.activateReadyModel()
-        } else if isDownloaded {
-            appState.selectModel(model)
-        } else if !isDownloading {
-            Task {
-                await appState.downloadModel(model)
+            if let lang = model.supportedLanguage {
+                Text(lang.displayName)
+                    .font(.system(size: 9, weight: .semibold))
+                    .foregroundColor(.blue)
+                    .padding(.horizontal, 5)
+                    .padding(.vertical, 1)
+                    .background(Capsule().fill(Color.blue.opacity(0.15)))
             }
         }
     }
@@ -2851,82 +2665,20 @@ struct ParakeetModelRow: View {
     let model: ParakeetModelVariant
     @ObservedObject var appState = AppState.shared
 
-    var isActive: Bool { appState.selectedParakeetModel == model && appState.isModelLoaded && appState.loadedBackendType == .parakeet }
-    var isLoading: Bool { appState.selectedParakeetModel == model && appState.selectedBackendType == .parakeet && (appState.isDownloadingParakeet || appState.isLoadingParakeet) }
-    var isHighlighted: Bool { isActive || isLoading }
-    var isSelected: Bool { appState.selectedParakeetModel == model }
-    var isCached: Bool { appState.isParakeetModelCached(model) }
-
     var body: some View {
-        Button(action: {
-            if isCached {
-                appState.selectParakeetModel(model)
-            } else {
-                appState.downloadParakeetModel(model)
-            }
-        }) {
-            HStack(spacing: 10) {
-                Image(systemName: "bird.fill")
-                    .foregroundColor(.green)
-                    .font(.system(size: 10, weight: .medium))
-                    .frame(width: 16)
-
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(model.displayName)
-                        .font(.system(size: 12, weight: isHighlighted ? .semibold : .regular))
-                        .foregroundColor(isHighlighted ? MBColors.textPrimary : MBColors.textSecondary)
-
-                    Text(model.languageDescription)
-                        .font(.caption2)
-                        .foregroundColor(MBColors.textTertiary)
-                }
-
-                Spacer()
-
-                if isLoading {
-                    HStack(spacing: 4) {
-                        ProgressView()
-                            .scaleEffect(0.5)
-                            .frame(width: 12, height: 12)
-                        Text("Loading")
-                            .font(.caption2)
-                            .foregroundColor(MBColors.accent)
-                    }
-                } else if isActive {
-                    Text("Active")
-                        .font(.system(size: 10, weight: .semibold))
-                        .foregroundColor(MBColors.accent)
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 3)
-                        .background(Capsule().fill(MBColors.accent.opacity(0.15)))
-                } else if isCached {
-                    Image(systemName: "checkmark.circle.fill")
-                        .foregroundColor(MBColors.accent.opacity(0.5))
-                        .font(.system(size: 14))
-                } else {
-                    HStack(spacing: 4) {
-                        Image(systemName: "arrow.down.circle")
-                            .font(.system(size: 14))
-                        Text("Download")
-                            .font(.caption2)
-                    }
-                    .foregroundColor(MBColors.accent)
-                }
-            }
-            .padding(.vertical, 6)
-            .padding(.horizontal, 8)
-            .background(
-                RoundedRectangle(cornerRadius: 6)
-                    .fill(isHighlighted ? MBColors.accent.opacity(0.12) : Color.clear)
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: 6)
-                    .stroke(isHighlighted ? MBColors.accent.opacity(0.3) : Color.clear, lineWidth: 1)
-            )
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain).pointerOnHover()
-        .disabled(appState.isModelBusy)
+        ModelRow(
+            asset: .parakeet(model),
+            icon: "bird.fill",
+            iconColor: .green,
+            title: model.displayName,
+            subtitle: model.languageDescription,
+            state: ModelRowState(
+                isActive: appState.selectedParakeetModel == model && appState.isModelLoaded && appState.loadedBackendType == .parakeet,
+                isLoading: appState.selectedParakeetModel == model && appState.selectedBackendType == .parakeet && appState.isLoadingParakeet,
+                isOnDisk: appState.isParakeetModelCached(model)
+            ),
+            onSelect: { appState.selectParakeetModel(model) }
+        )
     }
 }
 
@@ -2936,81 +2688,20 @@ struct ParakeetModelRow: View {
 struct NemotronModelRow: View {
     @ObservedObject var appState = AppState.shared
 
-    var isActive: Bool { appState.isModelLoaded && appState.loadedBackendType == .nemotron }
-    var isLoading: Bool { appState.isDownloadingNemotron || appState.isLoadingNemotron }
-    var isHighlighted: Bool { isActive || isLoading }
-    var isCached: Bool { appState.isNemotronModelCached() }
-
     var body: some View {
-        Button(action: {
-            if isCached {
-                appState.selectBackend(.nemotron)
-            } else {
-                appState.downloadNemotronModel()
-            }
-        }) {
-            HStack(spacing: 10) {
-                Image(systemName: "waveform.badge.mic")
-                    .foregroundColor(.purple)
-                    .font(.system(size: 10, weight: .medium))
-                    .frame(width: 16)
-
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("Nemotron Multilingual")
-                        .font(.system(size: 12, weight: isHighlighted ? .semibold : .regular))
-                        .foregroundColor(isHighlighted ? MBColors.textPrimary : MBColors.textSecondary)
-
-                    Text("True streaming · 97 languages · 37ms/chunk")
-                        .font(.caption2)
-                        .foregroundColor(MBColors.textTertiary)
-                }
-
-                Spacer()
-
-                if isLoading {
-                    HStack(spacing: 4) {
-                        ProgressView()
-                            .scaleEffect(0.5)
-                            .frame(width: 12, height: 12)
-                        Text(isActive ? "Loading" : "Downloading")
-                            .font(.caption2)
-                            .foregroundColor(MBColors.accent)
-                    }
-                } else if isActive {
-                    Text("Active")
-                        .font(.system(size: 10, weight: .semibold))
-                        .foregroundColor(MBColors.accent)
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 3)
-                        .background(Capsule().fill(MBColors.accent.opacity(0.15)))
-                } else if isCached {
-                    Image(systemName: "checkmark.circle.fill")
-                        .foregroundColor(MBColors.accent.opacity(0.5))
-                        .font(.system(size: 14))
-                } else {
-                    HStack(spacing: 4) {
-                        Image(systemName: "arrow.down.circle")
-                            .font(.system(size: 14))
-                        Text("1.5 GB")
-                            .font(.caption2)
-                    }
-                    .foregroundColor(MBColors.accent)
-                }
-            }
-            .padding(.vertical, 6)
-            .padding(.horizontal, 8)
-            .background(
-                RoundedRectangle(cornerRadius: 6)
-                    .fill(isHighlighted ? MBColors.accent.opacity(0.12) : Color.clear)
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: 6)
-                    .stroke(isHighlighted ? MBColors.accent.opacity(0.3) : Color.clear, lineWidth: 1)
-            )
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain).pointerOnHover()
-        .disabled(appState.isModelBusy)
+        ModelRow(
+            asset: .nemotron,
+            icon: "waveform.badge.mic",
+            iconColor: .purple,
+            title: "Nemotron Multilingual",
+            subtitle: "True streaming \u{00B7} 97 languages \u{00B7} 37ms/chunk",
+            state: ModelRowState(
+                isActive: appState.isModelLoaded && appState.loadedBackendType == .nemotron,
+                isLoading: appState.isLoadingNemotron,
+                isOnDisk: appState.isNemotronModelCached()
+            ),
+            onSelect: { appState.selectBackend(.nemotron) }
+        )
     }
 }
 
@@ -3019,81 +2710,20 @@ struct NemotronModelRow: View {
 struct NemotronHebrewModelRow: View {
     @ObservedObject var appState = AppState.shared
 
-    var isActive: Bool { appState.isModelLoaded && appState.loadedBackendType == .nemotronHebrew }
-    var isLoading: Bool { appState.isDownloadingNemotronHebrew || appState.isLoadingNemotronHebrew }
-    var isHighlighted: Bool { isActive || isLoading }
-    var isCached: Bool { appState.isNemotronHebrewModelCached() }
-
     var body: some View {
-        Button(action: {
-            if isCached {
-                appState.selectBackend(.nemotronHebrew)
-            } else {
-                appState.downloadNemotronHebrewModel()
-            }
-        }) {
-            HStack(spacing: 10) {
-                Image(systemName: "waveform.badge.mic")
-                    .foregroundColor(.orange)
-                    .font(.system(size: 10, weight: .medium))
-                    .frame(width: 16)
-
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("Nemotron Hebrew")
-                        .font(.system(size: 12, weight: isHighlighted ? .semibold : .regular))
-                        .foregroundColor(isHighlighted ? MBColors.textPrimary : MBColors.textSecondary)
-
-                    Text("Hebrew fine-tune · True streaming · 37ms/chunk")
-                        .font(.caption2)
-                        .foregroundColor(MBColors.textTertiary)
-                }
-
-                Spacer()
-
-                if isLoading {
-                    HStack(spacing: 4) {
-                        ProgressView()
-                            .scaleEffect(0.5)
-                            .frame(width: 12, height: 12)
-                        Text(isActive ? "Loading" : "Downloading")
-                            .font(.caption2)
-                            .foregroundColor(MBColors.accent)
-                    }
-                } else if isActive {
-                    Text("Active")
-                        .font(.system(size: 10, weight: .semibold))
-                        .foregroundColor(MBColors.accent)
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 3)
-                        .background(Capsule().fill(MBColors.accent.opacity(0.15)))
-                } else if isCached {
-                    Image(systemName: "checkmark.circle.fill")
-                        .foregroundColor(MBColors.accent.opacity(0.5))
-                        .font(.system(size: 14))
-                } else {
-                    HStack(spacing: 4) {
-                        Image(systemName: "arrow.down.circle")
-                            .font(.system(size: 14))
-                        Text("~1.5 GB")
-                            .font(.caption2)
-                    }
-                    .foregroundColor(MBColors.accent)
-                }
-            }
-            .padding(.vertical, 6)
-            .padding(.horizontal, 8)
-            .background(
-                RoundedRectangle(cornerRadius: 6)
-                    .fill(isHighlighted ? MBColors.accent.opacity(0.12) : Color.clear)
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: 6)
-                    .stroke(isHighlighted ? MBColors.accent.opacity(0.3) : Color.clear, lineWidth: 1)
-            )
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain).pointerOnHover()
-        .disabled(appState.isModelBusy)
+        ModelRow(
+            asset: .nemotronHebrew,
+            icon: "waveform.badge.mic",
+            iconColor: .orange,
+            title: "Nemotron Hebrew",
+            subtitle: "Hebrew fine-tune \u{00B7} True streaming \u{00B7} 37ms/chunk",
+            state: ModelRowState(
+                isActive: appState.isModelLoaded && appState.loadedBackendType == .nemotronHebrew,
+                isLoading: appState.isLoadingNemotronHebrew,
+                isOnDisk: appState.isNemotronHebrewModelCached()
+            ),
+            onSelect: { appState.selectBackend(.nemotronHebrew) }
+        )
     }
 }
 
@@ -3102,81 +2732,20 @@ struct NemotronHebrewModelRow: View {
 struct Qwen3ASRModelRow: View {
     @ObservedObject var appState = AppState.shared
 
-    var isActive: Bool { appState.isModelLoaded && appState.loadedBackendType == .qwen3asr }
-    var isLoading: Bool { appState.isDownloadingQwen3ASR || appState.isLoadingQwen3ASR }
-    var isHighlighted: Bool { isActive || isLoading }
-    var isCached: Bool { appState.isQwen3ASRModelCached() }
-
     var body: some View {
-        Button(action: {
-            if isCached {
-                appState.selectBackend(.qwen3asr)
-            } else {
-                appState.downloadQwen3ASRModel()
-            }
-        }) {
-            HStack(spacing: 10) {
-                Image(systemName: BackendType.qwen3asr.iconName)
-                    .foregroundColor(BackendType.qwen3asr.tint)
-                    .font(.system(size: 10, weight: .medium))
-                    .frame(width: 16)
-
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("Qwen3 ASR")
-                        .font(.system(size: 12, weight: isHighlighted ? .semibold : .regular))
-                        .foregroundColor(isHighlighted ? MBColors.textPrimary : MBColors.textSecondary)
-
-                    Text("Strongest on English · 31 languages")
-                        .font(.caption2)
-                        .foregroundColor(MBColors.textTertiary)
-                }
-
-                Spacer()
-
-                if isLoading {
-                    HStack(spacing: 4) {
-                        ProgressView()
-                            .scaleEffect(0.5)
-                            .frame(width: 12, height: 12)
-                        Text(isActive ? "Loading" : "Downloading")
-                            .font(.caption2)
-                            .foregroundColor(MBColors.accent)
-                    }
-                } else if isActive {
-                    Text("Active")
-                        .font(.system(size: 10, weight: .semibold))
-                        .foregroundColor(MBColors.accent)
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 3)
-                        .background(Capsule().fill(MBColors.accent.opacity(0.15)))
-                } else if isCached {
-                    Image(systemName: "checkmark.circle.fill")
-                        .foregroundColor(MBColors.accent.opacity(0.5))
-                        .font(.system(size: 14))
-                } else {
-                    HStack(spacing: 4) {
-                        Image(systemName: "arrow.down.circle")
-                            .font(.system(size: 14))
-                        Text(Qwen3ASREngine.downloadSizeLabel)
-                            .font(.caption2)
-                    }
-                    .foregroundColor(MBColors.accent)
-                }
-            }
-            .padding(.vertical, 6)
-            .padding(.horizontal, 8)
-            .background(
-                RoundedRectangle(cornerRadius: 6)
-                    .fill(isHighlighted ? MBColors.accent.opacity(0.12) : Color.clear)
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: 6)
-                    .stroke(isHighlighted ? MBColors.accent.opacity(0.3) : Color.clear, lineWidth: 1)
-            )
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain).pointerOnHover()
-        .disabled(appState.isModelBusy)
+        ModelRow(
+            asset: .qwen3,
+            icon: BackendType.qwen3asr.iconName,
+            iconColor: BackendType.qwen3asr.tint,
+            title: "Qwen3 ASR",
+            subtitle: "Strongest on English \u{00B7} 31 languages",
+            state: ModelRowState(
+                isActive: appState.isModelLoaded && appState.loadedBackendType == .qwen3asr,
+                isLoading: appState.isLoadingQwen3ASR,
+                isOnDisk: appState.isQwen3ASRModelCached()
+            ),
+            onSelect: { appState.selectBackend(.qwen3asr) }
+        )
     }
 }
 #endif
@@ -3187,81 +2756,20 @@ struct Qwen3ASRModelRow: View {
 struct WhisperKitModelRow: View {
     @ObservedObject var appState = AppState.shared
 
-    var isActive: Bool { appState.isModelLoaded && appState.loadedBackendType == .whisperKit }
-    var isLoading: Bool { appState.isDownloadingWhisperKit || appState.isLoadingWhisperKit }
-    var isHighlighted: Bool { isActive || isLoading }
-    var isCached: Bool { appState.isWhisperKitModelCached() }
-
     var body: some View {
-        Button(action: {
-            if isCached {
-                appState.selectBackend(.whisperKit)
-            } else {
-                appState.downloadWhisperKitModel()
-            }
-        }) {
-            HStack(spacing: 10) {
-                Image(systemName: "bolt.fill")
-                    .foregroundColor(.blue)
-                    .font(.system(size: 10, weight: .medium))
-                    .frame(width: 16)
-
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("WhisperKit Turbo")
-                        .font(.system(size: 12, weight: isHighlighted ? .semibold : .regular))
-                        .foregroundColor(isHighlighted ? MBColors.textPrimary : MBColors.textSecondary)
-
-                    Text("Core ML optimized · 100 languages · ~646 MB download")
-                        .font(.caption2)
-                        .foregroundColor(MBColors.textTertiary)
-                }
-
-                Spacer()
-
-                if isLoading {
-                    HStack(spacing: 4) {
-                        ProgressView()
-                            .scaleEffect(0.5)
-                            .frame(width: 12, height: 12)
-                        Text(appState.isDownloadingWhisperKit ? "Downloading" : "Loading")
-                            .font(.caption2)
-                            .foregroundColor(MBColors.accent)
-                    }
-                } else if isActive {
-                    Text("Active")
-                        .font(.system(size: 10, weight: .semibold))
-                        .foregroundColor(MBColors.accent)
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 3)
-                        .background(Capsule().fill(MBColors.accent.opacity(0.15)))
-                } else if isCached {
-                    Image(systemName: "checkmark.circle.fill")
-                        .foregroundColor(MBColors.accent.opacity(0.5))
-                        .font(.system(size: 14))
-                } else {
-                    HStack(spacing: 4) {
-                        Image(systemName: "arrow.down.circle")
-                            .font(.system(size: 14))
-                        Text("~646 MB")
-                            .font(.caption2)
-                    }
-                    .foregroundColor(MBColors.accent)
-                }
-            }
-            .padding(.vertical, 6)
-            .padding(.horizontal, 8)
-            .background(
-                RoundedRectangle(cornerRadius: 6)
-                    .fill(isHighlighted ? MBColors.accent.opacity(0.12) : Color.clear)
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: 6)
-                    .stroke(isHighlighted ? MBColors.accent.opacity(0.3) : Color.clear, lineWidth: 1)
-            )
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain).pointerOnHover()
-        .disabled(appState.isModelBusy)
+        ModelRow(
+            asset: .whisperKit,
+            icon: "bolt.fill",
+            iconColor: .blue,
+            title: "WhisperKit Turbo",
+            subtitle: "Core ML optimized \u{00B7} 100 languages",
+            state: ModelRowState(
+                isActive: appState.isModelLoaded && appState.loadedBackendType == .whisperKit,
+                isLoading: appState.isLoadingWhisperKit,
+                isOnDisk: appState.isWhisperKitModelCached()
+            ),
+            onSelect: { appState.selectBackend(.whisperKit) }
+        )
     }
 }
 #endif

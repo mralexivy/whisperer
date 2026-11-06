@@ -1185,7 +1185,7 @@ struct OnboardingView: View {
                     .font(.system(size: 34, weight: .bold))
                     .foregroundColor(OnboardingColors.textPrimary)
 
-                Text("Downloading the built-in engine for live\ntext. This may take a minute.")
+                Text("Downloading \(onboardingEngineName), the speech model\nthat runs on this Mac. Nothing leaves your device.")
                     .font(.system(size: 14))
                     .foregroundColor(OnboardingColors.textSecondary)
                     .lineSpacing(3)
@@ -1234,7 +1234,7 @@ struct OnboardingView: View {
                         Image(systemName: "checkmark.circle.fill")
                             .foregroundColor(.green)
                             .font(.system(size: 18))
-                        Text("Model ready")
+                        Text("Ready — hold your shortcut and speak")
                             .font(.system(size: 14, weight: .medium))
                             .foregroundColor(.green)
                     }
@@ -1247,38 +1247,73 @@ struct OnboardingView: View {
                             completeOnboarding()
                         }
                     }
-                } else if appState.isSelectedEngineDownloading {
-                    // Downloading
+                } else if let asset = appState.selectedEngineAsset, let progress = appState.modelDownloads[asset] {
                     VStack(alignment: .leading, spacing: 8) {
-                        ProgressView(value: appState.downloadProgress)
-                            .tint(OnboardingColors.accentBlue)
+                        ModelDownloadBar(progress: progress, height: 6)
 
-                        Text("Downloading... \(Int(appState.downloadProgress * 100))%")
-                            .font(.system(size: 12, weight: .medium))
-                            .foregroundColor(OnboardingColors.textSecondary)
+                        HStack {
+                            Text(progress.detailText(approximateTotal: asset.approximateBytes))
+                                .font(.system(size: 12, weight: .medium))
+                                .foregroundColor(progress.phase == .waitingForNetwork ? .orange : OnboardingColors.textSecondary)
+                                .monospacedDigit()
+                            Spacer()
+                            if progress.phase == .downloading {
+                                Text("\(Int(progress.fraction * 100))%")
+                                    .font(.system(size: 12, weight: .semibold))
+                                    .foregroundColor(OnboardingColors.textPrimary)
+                                    .monospacedDigit()
+                            }
+                        }
+                    }
+                } else if let asset = appState.selectedEngineAsset, let failure = appState.modelDownloadFailures[asset] {
+                    VStack(alignment: .leading, spacing: 10) {
+                        HStack(alignment: .top, spacing: 8) {
+                            Image(systemName: "exclamationmark.triangle.fill")
+                                .foregroundColor(.orange)
+                                .font(.system(size: 13))
+                            Text(failure)
+                                .font(.system(size: 13, weight: .medium))
+                                .foregroundColor(OnboardingColors.textPrimary)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+                        Button(action: { appState.startDownload(asset) }) {
+                            Label("Try Again", systemImage: "arrow.clockwise")
+                                .font(.system(size: 13, weight: .semibold))
+                                .foregroundColor(.white)
+                                .padding(.horizontal, 16)
+                                .padding(.vertical, 8)
+                                .background(Capsule().fill(OnboardingColors.accentBlue))
+                        }
+                        .buttonStyle(.plain).pointerOnHover()
                     }
                 } else if appState.isSelectedEngineDownloaded {
                     // Downloaded but not yet loaded
                     HStack(spacing: 10) {
                         ProgressView()
                             .controlSize(.small)
-                        Text("Loading model...")
+                        Text("Loading \(onboardingEngineName) into memory…")
                             .font(.system(size: 14, weight: .medium))
                             .foregroundColor(OnboardingColors.textSecondary)
                     }
                 } else {
-                    // Not yet started (brief moment before onAppear triggers)
+                    // Before the download registers (one runloop tick). The button is the way out
+                    // if it never does, so this state can never be a dead end.
                     HStack(spacing: 10) {
                         ProgressView()
                             .controlSize(.small)
-                        Text("Preparing download...")
+                        Text("Starting download…")
                             .font(.system(size: 14, weight: .medium))
                             .foregroundColor(OnboardingColors.textSecondary)
+                        Button("Start") { appState.startSelectedEngine() }
+                            .buttonStyle(.plain)
+                            .font(.system(size: 13, weight: .semibold))
+                            .foregroundColor(OnboardingColors.accentBlue)
+                            .pointerOnHover()
                     }
                 }
 
                 Button(action: { completeOnboarding() }) {
-                    Text("Skip for Now")
+                    Text(appState.isSelectedEngineDownloading ? "Continue — finish in the background" : "Skip for Now")
                         .font(.system(size: 13, weight: .medium))
                         .foregroundColor(OnboardingColors.textSecondary)
                         .padding(.leading, 4)
@@ -1286,7 +1321,9 @@ struct OnboardingView: View {
                 .buttonStyle(.plain).pointerOnHover()
 
                 if !appState.isModelLoaded {
-                    Text("You can download models later\nfrom the menu bar Settings tab.")
+                    Text(appState.isSelectedEngineDownloading
+                         ? "The download keeps going. Progress is in the menu bar,\nunder Models."
+                         : "You can download models later from the menu bar,\nunder Models.")
                         .font(.system(size: 11))
                         .foregroundColor(OnboardingColors.textTertiary)
                         .lineSpacing(2)
@@ -1346,14 +1383,14 @@ struct OnboardingView: View {
         }
     }
 
-    /// Nemotron is the default engine and is not a whisper file, so the card names whichever
-    /// engine the app will actually load.
+    /// Names whichever engine the app will actually load, for every engine — not only Whisper.
     private var onboardingEngineName: String {
-        appState.selectedBackendType == .nemotron ? "Built-in engine" : appState.selectedModel.displayName
+        appState.selectedEngineAsset?.displayName ?? appState.selectedBackendType.friendlyName
     }
 
     private var onboardingEngineSize: String {
-        appState.selectedBackendType == .nemotron ? "About 650 MB" : appState.selectedModel.sizeDescription
+        guard let asset = appState.selectedEngineAsset else { return "Managed by macOS" }
+        return "\(asset.sizeLabel) download \u{00B7} stays on this Mac"
     }
 
     private func startModelDownloadIfNeeded() {

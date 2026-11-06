@@ -606,12 +606,20 @@ struct ProcessingIndicator: View {
 
 // MARK: - Model Loading Toast
 
+/// Shown when the shortcut is pressed before a model is ready. Says what is actually happening —
+/// "Downloading Whisperer V3… 42%", "Loading Qwen3 ASR…", a failed download — rather than a
+/// fixed "Loading model…" that was shown even when nothing was loading at all.
 struct ModelLoadingIndicator: View {
     var scale: CGFloat = 1.0
+    @ObservedObject private var appState = AppState.shared
     private let accentPurple = Color(red: 0.545, green: 0.361, blue: 0.965)
 
     var body: some View {
-        AnimatedStatusCapsule(text: "Loading model...", borderColor: accentPurple, scale: scale)
+        AnimatedStatusCapsule(
+            text: appState.modelPreparationText ?? "Loading model\u{2026}",
+            borderColor: appState.selectedEngineDownloadFailure != nil ? .orange : accentPurple,
+            scale: scale
+        )
     }
 }
 

@@ -167,6 +167,24 @@ class LLMPostProcessor: ObservableObject {
 
     // MARK: - Model Management
 
+    /// Whether the model's files are on disk, so `loadModel` will not touch the network.
+    static func isOnDisk(_ variant: LLMModelVariant) -> Bool {
+        let dir = ModelConfiguration(id: variant.huggingFaceId).modelDirectory(hub: HubApi())
+        return FileManager.default.fileExists(atPath: dir.appendingPathComponent("config.json").path)
+    }
+
+    /// Fetches the model's files without loading them. Lets a caller download outside
+    /// `ModelWorkQueue` — a multi-GB transfer held in a queue slot trips its stall ceiling and
+    /// blocks every other model job for the whole download — and then load from disk inside it.
+    static func download(_ variant: LLMModelVariant,
+                         progress: @escaping @Sendable (Double) -> Void) async throws {
+        guard !isOnDisk(variant) else { return }
+        _ = try await HubApi().snapshot(from: variant.huggingFaceId,
+                                        matching: ["*.safetensors", "*.json", "*.jinja"]) { p in
+            progress(p.fractionCompleted)
+        }
+    }
+
     func loadModel(_ variant: LLMModelVariant) async throws {
         guard !isLoading else {
             Logger.debug("LLM load already in progress, skipping", subsystem: .model)

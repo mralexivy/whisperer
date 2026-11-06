@@ -47,26 +47,37 @@ enum ModelDownloadError: Error, LocalizedError {
     }
 }
 
+/// What a transfer reports while it runs. Delivered on the main queue.
+enum ModelTransferEvent {
+    case progress(written: Int64, expected: Int64)
+    case waitingForNetwork
+    case retrying(attempt: Int, of: Int)
+}
+
 class ModelDownloader {
     static let shared = ModelDownloader()
 
-    /// Current download task (for cancellation support)
-    private var currentDownloadTask: URLSessionDownloadTask?
-    private var currentDownloadSession: URLSession?
-    private let downloadLock = NSLock()
+    /// One transfer per model. A second request for a model already downloading joins the
+    /// running transfer instead of starting another one into the same file — the meeting cleanup
+    /// prefetch and a tap in the Models tab can ask for Whisperer V3 at the same moment.
+    private var inFlight: [WhisperModel: Task<Void, Error>] = [:]
+    /// Everyone waiting on a model's transfer, so each caller's progress UI hears every event.
+    /// Both maps are main-actor state (the project's default isolation); the URLSession delegate
+    /// hops here before touching them.
+    private var observers: [WhisperModel: [UUID: (ModelTransferEvent) -> Void]] = [:]
 
-    /// Cancel the current download if any
-    func cancelCurrentDownload() {
-        downloadLock.lock()
-        defer { downloadLock.unlock() }
+    /// Cancel a model's download. Stops the transfer itself, including during the backoff
+    /// between retries — an earlier version only cancelled the URLSession task, so a cancel that
+    /// landed in the backoff was followed by the next attempt and a model the user had cancelled
+    /// finished downloading and activated.
+    func cancelDownload(_ model: WhisperModel) {
+        guard let task = inFlight[model] else { return }
+        task.cancel()
+        Logger.info("Download of \(model.displayName) cancelled", subsystem: .model)
+    }
 
-        if let task = currentDownloadTask {
-            task.cancel()
-            Logger.info("Download task cancelled", subsystem: .model)
-        }
-        currentDownloadTask = nil
-        currentDownloadSession?.invalidateAndCancel()
-        currentDownloadSession = nil
+    func isDownloading(_ model: WhisperModel) -> Bool {
+        inFlight[model] != nil
     }
 
     private var appSupportDir: URL {
@@ -152,19 +163,67 @@ class ModelDownloader {
         try? fm.removeItem(at: appSupportDir.appendingPathComponent("__MACOSX"))
     }
 
-    /// Download a specific model with retry logic and file validation
+    /// Download a specific model with retry logic and file validation. Fraction-only form for
+    /// background callers (meeting cleanup, routing) that do not show bytes.
     func downloadModel(
         _ model: WhisperModel,
         progressCallback: @escaping (Double) -> Void,
         retryStatusCallback: ((Int, Int) -> Void)? = nil
     ) async throws {
-        let destination = modelPath(for: model)
+        try await downloadModel(model) { event in
+            switch event {
+            case .progress(let written, let expected):
+                progressCallback(expected > 0 ? Double(written) / Double(expected) : 0)
+            case .retrying(let attempt, let max):
+                retryStatusCallback?(attempt, max)
+                progressCallback(0)
+            case .waitingForNetwork:
+                break
+            }
+        }
+    }
 
+    /// Download a specific model with retry logic and file validation.
+    ///
+    /// Joins the transfer already running for `model` if there is one. Cancelling the calling
+    /// Task stops waiting; `cancelDownload(_:)` stops the transfer for everyone.
+    func downloadModel(_ model: WhisperModel, onEvent: @escaping (ModelTransferEvent) -> Void) async throws {
         // Check if valid model already exists (size-validated, not just file existence)
         if isModelFileValid(model) {
             Logger.info("Model \(model.displayName) already exists and is valid", subsystem: .model)
             return
         }
+
+        let observerID = UUID()
+        observers[model, default: [:]][observerID] = onEvent
+        let task: Task<Void, Error>
+        if let running = inFlight[model] {
+            task = running
+            Logger.info("Joining the running download of \(model.displayName)", subsystem: .model)
+        } else {
+            task = Task(priority: .userInitiated) { [weak self] in
+                guard let self else { throw CancellationError() }
+                try await self.runTransfer(model)
+            }
+            inFlight[model] = task
+            // Clears the slot whichever way the transfer ends.
+            Task { [weak self] in
+                _ = await task.result
+                self?.inFlight[model] = nil
+                self?.observers[model] = nil
+            }
+        }
+
+        defer { observers[model]?[observerID] = nil }
+        try await task.value
+    }
+
+    private func broadcast(_ event: ModelTransferEvent, for model: WhisperModel) {
+        for callback in observers[model].map({ Array($0.values) }) ?? [] { callback(event) }
+    }
+
+    private func runTransfer(_ model: WhisperModel) async throws {
+        let destination = modelPath(for: model)
 
         // Clean up any corrupted partial file before downloading
         if FileManager.default.fileExists(atPath: destination.path) {
@@ -176,29 +235,38 @@ class ModelDownloader {
 
         let maxAttempts = 3
         var lastError: Error?
+        /// Bytes already fetched by a failed attempt. A dropped connection 1.2 GB into a 1.5 GB
+        /// model resumes from there instead of starting the bar over at zero.
+        var resumeData: Data?
 
         for attempt in 1...maxAttempts {
             do {
                 if attempt > 1 {
                     let backoffSeconds = UInt64(1 << (attempt - 2))  // 1s, 2s
-                    Logger.info("Retrying download (\(attempt)/\(maxAttempts)) after \(backoffSeconds)s backoff...", subsystem: .model)
-
-                    retryStatusCallback?(attempt, maxAttempts)
-                    progressCallback(0)
-
+                    Logger.info("Retrying download (\(attempt)/\(maxAttempts)) after \(backoffSeconds)s backoff\(resumeData != nil ? ", resuming" : "")...", subsystem: .model)
+                    broadcast(.retrying(attempt: attempt, of: maxAttempts), for: model)
                     try await Task.sleep(nanoseconds: backoffSeconds * 1_000_000_000)
-
-                    // Clean up partial file from previous attempt
-                    if FileManager.default.fileExists(atPath: destination.path) {
+                    try Task.checkCancellation()
+                    if resumeData == nil, FileManager.default.fileExists(atPath: destination.path) {
                         try? FileManager.default.removeItem(at: destination)
                     }
                 }
 
-                try await performDownload(url: model.downloadURL, destination: destination, progressCallback: progressCallback)
+                try await performDownload(
+                    url: model.downloadURL,
+                    destination: destination,
+                    resumeData: resumeData,
+                    fallbackExpectedBytes: Int64(model.approximateDownloadBytes),
+                    onEvent: { [weak self] event in
+                        // Delegate queue → main, in order.
+                        DispatchQueue.main.async { MainActor.assumeIsolated { self?.broadcast(event, for: model) } }
+                    }
+                )
 
                 // Post-download validation
                 guard isModelFileValid(model) else {
                     Logger.error("Downloaded model \(model.displayName) failed size validation (attempt \(attempt)/\(maxAttempts))", subsystem: .model)
+                    resumeData = nil
                     throw ModelDownloadError.invalidFileSize
                 }
 
@@ -207,18 +275,12 @@ class ModelDownloader {
 
             } catch {
                 lastError = error
+                if ModelDownloadFailure.isCancellation(error) || Task.isCancelled {
+                    Logger.info("Download cancelled by user, not retrying", subsystem: .model)
+                    throw CancellationError()
+                }
+                resumeData = (error as NSError).userInfo[NSURLSessionDownloadTaskResumeData] as? Data
                 Logger.warning("Download attempt \(attempt)/\(maxAttempts) failed: \(error.localizedDescription)", subsystem: .model)
-
-                // Don't retry on cancellation (Swift CancellationError or URLSession -999)
-                if error is CancellationError { throw error }
-                if let urlError = error as? URLError, urlError.code == .cancelled {
-                    Logger.info("Download cancelled by user, not retrying", subsystem: .model)
-                    throw error
-                }
-                if (error as NSError).code == NSURLErrorCancelled {
-                    Logger.info("Download cancelled by user, not retrying", subsystem: .model)
-                    throw error
-                }
             }
         }
 
@@ -273,7 +335,12 @@ class ModelDownloader {
 
         Logger.info("Downloading VAD \(model.displayName)", subsystem: .model)
 
-        try await performDownload(url: model.downloadURL, destination: destination, progressCallback: progressCallback)
+        try await performDownload(url: model.downloadURL, destination: destination, resumeData: nil,
+                                  fallbackExpectedBytes: 1_000_000) { event in
+            if case .progress(let written, let expected) = event, expected > 0 {
+                DispatchQueue.main.async { progressCallback(Double(written) / Double(expected)) }
+            }
+        }
     }
 
     /// Download VAD model if needed (silent, no progress)
@@ -299,130 +366,161 @@ class ModelDownloader {
 
     // MARK: - Private
 
-    private func performDownload(url: URL, destination: URL, progressCallback: @escaping (Double) -> Void) async throws {
-        return try await withCheckedThrowingContinuation { [weak self] continuation in
-            let delegate = DownloadDelegate(
-                destination: destination,
-                progressCallback: progressCallback,
-                onComplete: { [weak self] result in
-                    // Clear the stored task/session on completion
-                    self?.downloadLock.lock()
-                    self?.currentDownloadTask = nil
-                    self?.currentDownloadSession = nil
-                    self?.downloadLock.unlock()
+    /// `onEvent` is called on URLSession's delegate queue.
+    private nonisolated func performDownload(
+        url: URL,
+        destination: URL,
+        resumeData: Data?,
+        fallbackExpectedBytes: Int64,
+        onEvent: @escaping @Sendable (ModelTransferEvent) -> Void
+    ) async throws {
+        let config = URLSessionConfiguration.default
+        // Waits instead of failing when offline; the delegate reports it so the UI can say so.
+        config.waitsForConnectivity = true
+        config.timeoutIntervalForRequest = 30
+        config.timeoutIntervalForResource = 3600  // 1 hour for large model downloads
+        config.requestCachePolicy = .reloadIgnoringLocalCacheData
 
-                    switch result {
-                    case .success:
-                        continuation.resume()
-                    case .failure(let error):
-                        continuation.resume(throwing: error)
+        let box = DownloadTaskBox()
+        try await withTaskCancellationHandler {
+            try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
+                let delegate = DownloadDelegate(
+                    destination: destination,
+                    fallbackExpectedBytes: fallbackExpectedBytes,
+                    onEvent: onEvent,
+                    onComplete: { result in
+                        switch result {
+                        case .success: continuation.resume()
+                        case .failure(let error): continuation.resume(throwing: error)
+                        }
                     }
-                }
-            )
-
-            // Create configuration optimized for sandboxed apps
-            let config = URLSessionConfiguration.default
-            config.waitsForConnectivity = true
-            config.timeoutIntervalForRequest = 30
-            config.timeoutIntervalForResource = 3600  // 1 hour for large model downloads
-            config.requestCachePolicy = .reloadIgnoringLocalCacheData
-
-            // Create session with delegate
-            let session = URLSession(configuration: config, delegate: delegate, delegateQueue: nil)
-            let task = session.downloadTask(with: url)
-
-            // Store for cancellation support
-            self?.downloadLock.lock()
-            self?.currentDownloadTask = task
-            self?.currentDownloadSession = session
-            self?.downloadLock.unlock()
-
-            // Keep session and delegate alive
-            objc_setAssociatedObject(task, "session", session, .OBJC_ASSOCIATION_RETAIN)
-            objc_setAssociatedObject(task, "delegate", delegate, .OBJC_ASSOCIATION_RETAIN)
-
-            task.resume()
+                )
+                let session = URLSession(configuration: config, delegate: delegate, delegateQueue: nil)
+                let task = resumeData.map { session.downloadTask(withResumeData: $0) }
+                    ?? session.downloadTask(with: url)
+                box.set(task, session: session)
+                // A cancel that arrived before the task existed.
+                if Task.isCancelled { task.cancel() }
+                task.resume()
+            }
+        } onCancel: {
+            box.cancel()
         }
+    }
+}
+
+/// Holds the URLSession task so a Swift Task cancellation can reach it.
+private nonisolated final class DownloadTaskBox: @unchecked Sendable {
+    private let lock = NSLock()
+    private var task: URLSessionDownloadTask?
+    private var session: URLSession?
+    private var cancelled = false
+
+    func set(_ task: URLSessionDownloadTask, session: URLSession) {
+        lock.lock()
+        self.task = task
+        self.session = session
+        let shouldCancel = cancelled
+        lock.unlock()
+        if shouldCancel { task.cancel() }
+    }
+
+    func cancel() {
+        lock.lock()
+        cancelled = true
+        let task = self.task
+        lock.unlock()
+        task?.cancel()
+    }
+
+    deinit {
+        session?.finishTasksAndInvalidate()
     }
 }
 
 // MARK: - Download Delegate
 
-private class DownloadDelegate: NSObject, URLSessionDownloadDelegate {
+private nonisolated final class DownloadDelegate: NSObject, URLSessionDownloadDelegate, @unchecked Sendable {
     let destination: URL
-    let progressCallback: (Double) -> Void
-    let onComplete: (Result<Void, Error>) -> Void
+    let fallbackExpectedBytes: Int64
+    let onEvent: @Sendable (ModelTransferEvent) -> Void
+    let onComplete: @Sendable (Result<Void, Error>) -> Void
     private let completionLock = NSLock()
     private var _hasCompleted = false
-    private var hasCompleted: Bool {
-        get { completionLock.lock(); defer { completionLock.unlock() }; return _hasCompleted }
-        set { completionLock.lock(); _hasCompleted = newValue; completionLock.unlock() }
-    }
+    private var lastReportedPercent: Int = -1
+    private var lastReportedAt = Date.distantPast
 
-    init(destination: URL, progressCallback: @escaping (Double) -> Void, onComplete: @escaping (Result<Void, Error>) -> Void) {
+    init(destination: URL, fallbackExpectedBytes: Int64,
+         onEvent: @escaping @Sendable (ModelTransferEvent) -> Void,
+         onComplete: @escaping @Sendable (Result<Void, Error>) -> Void) {
         self.destination = destination
-        self.progressCallback = progressCallback
+        self.fallbackExpectedBytes = fallbackExpectedBytes
+        self.onEvent = onEvent
         self.onComplete = onComplete
     }
 
-    func urlSession(_ session: URLSession, downloadTask: URLSessionDownloadTask, didFinishDownloadingTo location: URL) {
+    /// Returns true exactly once, for whichever completion path gets here first.
+    private func claimCompletion() -> Bool {
         completionLock.lock()
-        guard !_hasCompleted else {
-            completionLock.unlock()
+        defer { completionLock.unlock() }
+        guard !_hasCompleted else { return false }
+        _hasCompleted = true
+        return true
+    }
+
+    func urlSession(_ session: URLSession, downloadTask: URLSessionDownloadTask, didFinishDownloadingTo location: URL) {
+        // A 404/500 still "finishes" with an error page as the file.
+        if let http = downloadTask.response as? HTTPURLResponse, !(200...299).contains(http.statusCode) {
+            guard claimCompletion() else { return }
+            Logger.error("Model download got HTTP \(http.statusCode)", subsystem: .model)
+            onComplete(.failure(URLError(.badServerResponse)))
+            session.finishTasksAndInvalidate()
             return
         }
-        _hasCompleted = true
-        completionLock.unlock()
-
+        guard claimCompletion() else { return }
         do {
             // Move file to destination
             if FileManager.default.fileExists(atPath: destination.path) {
                 try FileManager.default.removeItem(at: destination)
             }
-
             try FileManager.default.moveItem(at: location, to: destination)
             Logger.debug("Model downloaded successfully to: \(destination.path)", subsystem: .model)
-
             onComplete(.success(()))
         } catch {
             Logger.error("Failed to move model file: \(error)", subsystem: .model)
             onComplete(.failure(error))
         }
+        session.finishTasksAndInvalidate()
     }
 
     func urlSession(_ session: URLSession, task: URLSessionTask, didCompleteWithError error: Error?) {
-        completionLock.lock()
-        guard !_hasCompleted else {
-            completionLock.unlock()
-            return
-        }
-
-        if let error = error {
-            _hasCompleted = true
-            completionLock.unlock()
-            Logger.error("Download failed: \(error)", subsystem: .model)
-            onComplete(.failure(error))
-        } else {
-            completionLock.unlock()
-        }
+        guard let error else { return }
+        guard claimCompletion() else { return }
+        Logger.error("Download failed: \(error)", subsystem: .model)
+        onComplete(.failure(error))
+        session.finishTasksAndInvalidate()
     }
 
     func urlSession(_ session: URLSession, downloadTask: URLSessionDownloadTask, didWriteData bytesWritten: Int64, totalBytesWritten: Int64, totalBytesExpectedToWrite: Int64) {
-        let progress = Double(totalBytesWritten) / Double(totalBytesExpectedToWrite)
-        let percent = Int(progress * 100)
-
-        // Only fire callback when percentage changes (every 1%)
-        guard percent != lastReportedPercent else { return }
+        // Servers that send no Content-Length report -1; use the catalogue size instead of
+        // producing a negative fraction.
+        let expected = totalBytesExpectedToWrite > 0 ? totalBytesExpectedToWrite : max(fallbackExpectedBytes, totalBytesWritten)
+        let percent = Int(Double(totalBytesWritten) / Double(expected) * 100)
+        let now = Date()
+        // Every 1%, or every half second — bytes and the ETA keep moving between percents.
+        guard percent != lastReportedPercent || now.timeIntervalSince(lastReportedAt) >= 0.5 else { return }
         lastReportedPercent = percent
-
-        DispatchQueue.main.async { [weak self] in
-            self?.progressCallback(progress)
-        }
+        lastReportedAt = now
+        onEvent(.progress(written: totalBytesWritten, expected: expected))
     }
 
-    private var lastReportedPercent: Int = -1
+    func urlSession(_ session: URLSession, downloadTask: URLSessionDownloadTask, didResumeAtOffset fileOffset: Int64, expectedTotalBytes: Int64) {
+        Logger.info("Download resumed at \(fileOffset) bytes", subsystem: .model)
+        onEvent(.progress(written: fileOffset, expected: expectedTotalBytes > 0 ? expectedTotalBytes : fallbackExpectedBytes))
+    }
 
     func urlSession(_ session: URLSession, taskIsWaitingForConnectivity task: URLSessionTask) {
-        Logger.debug("Waiting for network connectivity...", subsystem: .model)
+        Logger.info("Model download waiting for network connectivity", subsystem: .model)
+        onEvent(.waitingForNetwork)
     }
 }

@@ -197,3 +197,30 @@ the geometry callback, which parks the label at the panel's far edge. Publish th
 `PreferenceKey` in a **named** coordinate space (the panel's, not `.global`) and refuse to render the
 chip until an anchor for that title exists. Measuring in `.global` while offsetting against a
 separately recomputed envelope width is the same bug in a second form.
+
+## Model downloads (2026-11-06)
+
+Every downloadable speech model goes through one record: `AppState.modelDownloads[ModelAsset]`
+(progress) and `AppState.modelDownloadFailures[ModelAsset]` (why the last attempt failed).
+Rows use `ModelRow`, onboarding and the meeting prep view read the same record. Rules:
+
+- **No shared percent.** The old `AppState.downloadProgress` was written by six downloaders, so
+  two downloads at once showed each other's numbers. It is now a read-only convenience; rows read
+  their own asset.
+- **A download never blocks.** No `state = .downloadingModel` and no `isModelBusy` for a
+  download: dictation, browsing tabs and picking another model all keep working. `isModelBusy` is
+  loads only.
+- **Every download can be cancelled, and every failure is shown inline with Retry.** The failure
+  stays until a retry; the user's own cancel is not a failure. A download that finishes
+  mid-recording activates when the recording ends (`pendingActivationAfterDownload`).
+- **Real progress or say why not.** Bytes and time left for whisper.cpp; real fractions from
+  FluidAudio, Hugging Face and WhisperKit. Waiting for network, retrying and finishing each have
+  their own words. Parakeet's file-count estimate is gone.
+- **`ModelDownloader` holds one transfer per model.** A second request joins it. `cancelDownload`
+  cancels the Swift Task, so a cancel during the retry backoff sticks. Retries resume from
+  `NSURLSessionDownloadTaskResumeData`, and an HTTP error status is a failure, not a model file.
+- **Switching engines does not cancel a download.**
+- **Never download inside a `ModelWorkQueue` slot.** Meeting intelligence (3.2 GB) used to, and
+  tripped the 120 s stall ceiling. Download first, then hold the slot only to load from disk.
+- **Draw the bar (`ModelDownloadBar`).** `ProgressView` turns grey when its window is not key,
+  which the menu bar popover often is not.

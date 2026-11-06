@@ -58,6 +58,11 @@ class AppState: ObservableObject {
         didSet {
             // Notify observers when state changes
             NotificationCenter.default.post(name: NSNotification.Name("AppStateChanged"), object: nil)
+            if state == .idle, let backend = pendingActivationAfterDownload {
+                // A download that finished mid-recording activates the moment the recording ends.
+                pendingActivationAfterDownload = nil
+                DispatchQueue.main.async { [weak self] in self?.activateBackendAfterDownload(backend) }
+            }
             if state == .idle {
                 // Zero waveform data without touching renderer count or the timer — the timer
                 // stays running if the menu bar popover or dictation HUD is still visible.
@@ -338,9 +343,28 @@ class AppState: ObservableObject {
 
     // Model selection
     @Published var selectedModel: WhisperModel = .largeTurboQ5
-    @Published var downloadingModel: WhisperModel? = nil
-    @Published var downloadProgress: Double = 0
-    @Published var downloadRetryInfo: String?
+    /// Every speech-model download in flight, one record per model. The single source of truth
+    /// for download UI — see `ModelDownloadProgress.swift` for why there is no shared percent.
+    @Published private(set) var modelDownloads: [ModelAsset: ModelDownloadProgress] = [:]
+    /// Why a model's last download failed, until the user retries it. Shown inline on its row.
+    @Published private(set) var modelDownloadFailures: [ModelAsset: String] = [:]
+    private var modelDownloadTasks: [ModelAsset: Task<Void, Never>] = [:]
+    /// A backend whose download finished while a recording was running; activated on idle.
+    private var pendingActivationAfterDownload: BackendType?
+
+    /// The Whisper model downloading, preferring the selected one when several are.
+    var downloadingModel: WhisperModel? {
+        if modelDownloads[.whisper(selectedModel)] != nil { return selectedModel }
+        for asset in modelDownloads.keys { if case .whisper(let model) = asset { return model } }
+        return nil
+    }
+
+    /// Fraction for the download the user is most likely waiting on: the selected engine's,
+    /// else any. For single-number surfaces only; rows read `modelDownloads[asset]`.
+    var downloadProgress: Double {
+        if let asset = selectedEngineAsset, let progress = modelDownloads[asset] { return progress.fraction }
+        return modelDownloads.values.first?.fraction ?? 0
+    }
     /// Set when a Whisper model finishes downloading but hasn't been activated yet.
     /// Allows the user to keep recording on the current model and activate when ready.
     @Published var readyToActivateModel: WhisperModel? = nil
@@ -544,13 +568,13 @@ class AppState: ObservableObject {
     private var whisperLoadTask: Task<Void, Never>?
 
     // Parakeet model download/load state
-    @Published var isDownloadingParakeet: Bool = false
+    var isDownloadingParakeet: Bool { modelDownloads.keys.contains { if case .parakeet = $0 { return true } else { return false } } }
     @Published var isLoadingParakeet: Bool = false
     @Published var parakeetDownloadStatus: String = ""
     private var parakeetLoadTask: Task<Void, Never>?
 
     // Nemotron multilingual streaming model state
-    @Published var isDownloadingNemotron: Bool = false
+    var isDownloadingNemotron: Bool { modelDownloads[.nemotron] != nil }
     @Published var isLoadingNemotron: Bool = false
     @Published var nemotronDownloadStatus: String = ""
     var nemotronLoadTask: Task<Void, Never>?
@@ -573,7 +597,7 @@ class AppState: ObservableObject {
     private var systemLanguageInstallTasks: [TranscriptionLanguage: Task<Void, Never>] = [:]
 
     // Nemotron Hebrew streaming model state
-    @Published var isDownloadingNemotronHebrew: Bool = false
+    var isDownloadingNemotronHebrew: Bool { modelDownloads[.nemotronHebrew] != nil }
     @Published var isLoadingNemotronHebrew: Bool = false
     @Published var nemotronHebrewDownloadStatus: String = ""
     var nemotronHebrewLoadTask: Task<Void, Never>?
@@ -582,7 +606,7 @@ class AppState: ObservableObject {
     #endif
 
     // Qwen3-ASR-1.7B (Open ASR Leaderboard leader) model state
-    @Published var isDownloadingQwen3ASR: Bool = false
+    var isDownloadingQwen3ASR: Bool { modelDownloads[.qwen3] != nil }
     @Published var isLoadingQwen3ASR: Bool = false
     @Published var qwen3asrDownloadStatus: String = ""
     var qwen3asrLoadTask: Task<Void, Never>?
@@ -591,10 +615,9 @@ class AppState: ObservableObject {
     #endif
 
     // WhisperKit CoreML backend state
-    @Published var isDownloadingWhisperKit: Bool = false
+    var isDownloadingWhisperKit: Bool { modelDownloads[.whisperKit] != nil }
     @Published var isLoadingWhisperKit: Bool = false
     @Published var whisperKitDownloadStatus: String = ""
-    var whisperKitDownloadTask: Task<Void, Never>?
     var whisperKitLoadTask: Task<Void, Never>?
 
     // Parakeet EOU (streaming live preview) download/load state
@@ -608,41 +631,36 @@ class AppState: ObservableObject {
     @Published var speechAnalyzerStatus: String = ""
     private var speechAnalyzerLoadTask: Task<Void, Never>?
 
-    /// True when any model download or load is in progress — blocks model selection UI
+    /// True while a model is being *loaded* into memory — the one thing that must not overlap
+    /// another load or a backend switch. Downloads are deliberately not part of it: they run in
+    /// the background and must never freeze the Models tab or block picking another model.
     var isModelBusy: Bool {
-        downloadingModel != nil ||
         isLoadingWhisper ||
-        isDownloadingParakeet ||
         isLoadingParakeet ||
-        isDownloadingNemotron ||
         isLoadingNemotron ||
-        isDownloadingNemotronHebrew ||
         isLoadingNemotronHebrew ||
-        isDownloadingQwen3ASR ||
         isLoadingQwen3ASR ||
         isDownloadingEou ||
         isLoadingSpeechAnalyzer ||
-        isDownloadingWhisperKit ||
         isLoadingWhisperKit
     }
 
     /// True while a model file is being fetched (as opposed to loaded into memory).
-    var isDownloadingAnyModel: Bool {
-        downloadingModel != nil ||
-        isDownloadingParakeet ||
-        isDownloadingNemotron ||
-        isDownloadingNemotronHebrew ||
-        isDownloadingQwen3ASR ||
-        isDownloadingWhisperKit
-    }
+    var isDownloadingAnyModel: Bool { !modelDownloads.isEmpty }
 
     /// What the header says instead of "Ready" while dictation cannot start; nil once it can.
     /// `.idle` alone only means "not recording" — it says nothing about whether a model is loaded.
     var modelPreparationText: String? {
         guard !isModelLoaded else { return nil }
+        if let asset = selectedEngineAsset {
+            if let progress = modelDownloads[asset] {
+                return "Downloading \(asset.displayName)\u{2026} \(Int(progress.fraction * 100))%"
+            }
+            if modelDownloadFailures[asset] != nil { return "Download failed \u{2014} open Models to retry" }
+        }
+        if isModelBusy { return "Loading \(selectedEngineAsset?.displayName ?? "model")\u{2026}" }
         if isDownloadingAnyModel { return "Downloading model\u{2026} \(Int(downloadProgress * 100))%" }
-        if isModelBusy { return "Loading model\u{2026}" }
-        return "No model loaded"
+        return "No model yet \u{2014} pick one in Models"
     }
 
     // LLM post-processing
@@ -1287,7 +1305,11 @@ class AppState: ObservableObject {
     /// this backend, which is exactly the case where a previous attempt left the selection set
     /// but no bridge resident.
     func activateBackendAfterDownload(_ backend: BackendType) {
-        guard state == .idle else { return }
+        guard state == .idle else {
+            // Finished mid-recording: switch the moment the recording ends, not never.
+            pendingActivationAfterDownload = backend
+            return
+        }
         if selectedBackendType == backend {
             guard !(isModelLoaded && loadedBackendType == backend) else { return }
             preloadModel()
@@ -1349,12 +1371,11 @@ class AppState: ObservableObject {
         #endif
         nemotronHebrewLoadTask?.cancel()
         nemotronHebrewLoadTask = nil
-        whisperKitDownloadTask?.cancel()
-        whisperKitDownloadTask = nil
+        // Downloads are not cancelled here: a download is the user's, and switching engines
+        // while one runs must not silently throw it away. Only loads belong to the bridge.
         whisperKitLoadTask?.cancel()
         whisperKitLoadTask = nil
         isLoadingWhisperKit = false
-        isDownloadingWhisperKit = false
 
         // Release Nemotron bridge if loaded
         #if canImport(FluidAudio)
@@ -1420,12 +1441,11 @@ class AppState: ObservableObject {
         }
     }
 
-    /// Download a model
+    /// Download a Whisper model. Several can download at once; a second tap on the same one is a
+    /// no-op. Recording stays available throughout.
     func downloadModel(_ model: WhisperModel) async {
-        guard downloadingModel == nil else {
-            Logger.warning("Already downloading a model", subsystem: .model)
-            return
-        }
+        let asset = ModelAsset.whisper(model)
+        guard modelDownloads[asset] == nil else { return }
 
         guard !isModelDownloaded(model) else {
             Logger.debug("Model \(model.displayName) already downloaded", subsystem: .model)
@@ -1433,75 +1453,152 @@ class AppState: ObservableObject {
             return
         }
 
-        downloadingModel = model
-        downloadProgress = 0
-        downloadRetryInfo = nil
-        // Do NOT set state = .downloadingModel — recording must remain available while downloading
-
+        beginModelDownload(asset)
         do {
-            try await ModelDownloader.shared.downloadModel(model, progressCallback: { [weak self] progress in
-                Task { @MainActor in
-                    self?.downloadProgress = progress
-                }
-            }, retryStatusCallback: { [weak self] attempt, maxAttempts in
-                Task { @MainActor in
-                    self?.downloadRetryInfo = "Retrying download (\(attempt)/\(maxAttempts))..."
-                }
-            })
-
+            try await ModelDownloader.shared.downloadModel(model) { [weak self] event in
+                self?.handleTransferEvent(event, for: asset)
+            }
+            // Cancelled while the last bytes landed.
+            guard modelDownloads[asset] != nil else { return }
             Logger.info("Downloaded \(model.displayName)", subsystem: .model)
-            downloadingModel = nil
-            downloadProgress = 0
-            downloadRetryInfo = nil
+            finishModelDownload(asset, error: nil)
 
-            // Don't auto-activate — let the user decide when to switch.
-            // If no model is currently loaded (e.g. first download), activate immediately.
+            // Don't hot-swap a working model — the row offers Activate. Activate at once when
+            // nothing is loaded yet (first run) or this is the model already selected.
             guard selectedBackendType == .whisperCpp else {
                 Logger.info("Backend switched during download, skipping activation of \(model.displayName)", subsystem: .model)
                 return
             }
-            if isModelLoaded {
+            if isModelLoaded && loadedModel != nil && selectedModel != model {
                 readyToActivateModel = model
-            } else {
+            } else if state == .idle {
                 selectModel(model)
+            } else {
+                readyToActivateModel = model
             }
         } catch {
-            // Check if this was a user cancellation (downloadingModel already cleared by cancelModelDownload)
-            let wasCancelled = downloadingModel == nil ||
-                (error as? URLError)?.code == .cancelled ||
-                (error as NSError).code == NSURLErrorCancelled
-
-            if wasCancelled {
-                Logger.info("Download was cancelled, not showing error", subsystem: .model)
-            } else {
-                Logger.error("Failed to download \(model.displayName): \(error)", subsystem: .model)
-                errorMessage = "Failed to download \(model.displayName): \(error.localizedDescription)"
-            }
-
-            downloadingModel = nil
-            downloadProgress = 0
-            downloadRetryInfo = nil
-            state = .idle
+            finishModelDownload(asset, error: error)
         }
     }
 
-    /// Cancel the current model download and return to idle state
+    /// Cancel the selected Whisper model's download (or any Whisper download). Kept for callers
+    /// that do not know which model; rows call `cancelDownload(_:)`.
     func cancelModelDownload() {
-        guard downloadingModel != nil else { return }
-        Logger.info("Model download cancelled by user", subsystem: .model)
+        guard let model = downloadingModel else { return }
+        cancelDownload(.whisper(model))
+    }
 
-        // Actually cancel the URLSession download task
-        ModelDownloader.shared.cancelCurrentDownload()
+    // MARK: - Download bookkeeping
 
-        // Clean up partial file if exists
-        if let model = downloadingModel {
-            let partialPath = ModelDownloader.shared.modelPath(for: model)
-            try? FileManager.default.removeItem(at: partialPath)
+    /// The asset the selected engine needs, or nil for engines with nothing to download.
+    var selectedEngineAsset: ModelAsset? {
+        switch selectedBackendType {
+        case .whisperCpp: return .whisper(selectedModel)
+        case .parakeet: return .parakeet(selectedParakeetModel)
+        case .nemotron: return .nemotron
+        case .nemotronHebrew: return .nemotronHebrew
+        case .qwen3asr: return .qwen3
+        case .whisperKit: return .whisperKit
+        case .speechAnalyzer: return nil
         }
+    }
 
-        downloadingModel = nil
-        downloadProgress = 0
-        downloadRetryInfo = nil
+    /// Starts (or retries) the download for `asset`.
+    func startDownload(_ asset: ModelAsset) {
+        switch asset {
+        case .whisper(let model): Task { await downloadModel(model) }
+        case .parakeet(let variant): downloadParakeetModel(variant)
+        case .nemotron: downloadNemotronModel()
+        case .nemotronHebrew: downloadNemotronHebrewModel()
+        case .qwen3: downloadQwen3ASRModel()
+        case .whisperKit: downloadWhisperKitModel()
+        }
+    }
+
+    /// Stops a download. The row returns to "Download" at once; partial files are left for the
+    /// downloader's own resume where it has one.
+    func cancelDownload(_ asset: ModelAsset) {
+        guard modelDownloads[asset] != nil else { return }
+        Logger.info("Download of \(asset.displayName) cancelled by user", subsystem: .model)
+        if case .whisper(let model) = asset { ModelDownloader.shared.cancelDownload(model) }
+        modelDownloadTasks[asset]?.cancel()
+        modelDownloadTasks[asset] = nil
+        modelDownloads[asset] = nil
+    }
+
+    func dismissDownloadFailure(_ asset: ModelAsset) {
+        modelDownloadFailures[asset] = nil
+    }
+
+    /// Internal (not private) so tests can drive the record without a network.
+    func beginModelDownload(_ asset: ModelAsset) {
+        modelDownloadFailures[asset] = nil
+        modelDownloads[asset] = ModelDownloadProgress()
+        Logger.info("Download of \(asset.displayName) started", subsystem: .model)
+    }
+
+    func handleTransferEvent(_ event: ModelTransferEvent, for asset: ModelAsset) {
+        guard var progress = modelDownloads[asset] else { return }
+        switch event {
+        case .progress(let written, let expected):
+            let fraction = expected > 0 ? Double(written) / Double(expected) : 0
+            progress.update(fraction: fraction, bytesWritten: written, bytesExpected: expected,
+                            approximateTotal: asset.approximateBytes)
+        case .waitingForNetwork:
+            progress.phase = .waitingForNetwork
+        case .retrying(let attempt, let max):
+            progress.restart(phase: .retrying(attempt: attempt, of: max))
+        }
+        modelDownloads[asset] = progress
+    }
+
+    /// Fraction-only progress, for downloaders that report no bytes (Hugging Face snapshots).
+    private func reportModelDownload(_ asset: ModelAsset, fraction: Double) {
+        guard var progress = modelDownloads[asset] else { return }
+        progress.update(fraction: fraction, bytesWritten: nil, bytesExpected: nil,
+                        approximateTotal: asset.approximateBytes)
+        modelDownloads[asset] = progress
+    }
+
+    func finishModelDownload(_ asset: ModelAsset, error: Error?) {
+        let wasCancelled = modelDownloads[asset] == nil
+        modelDownloads[asset] = nil
+        modelDownloadTasks[asset] = nil
+        guard let error else { return }
+        if wasCancelled || ModelDownloadFailure.isCancellation(error) {
+            Logger.info("Download of \(asset.displayName) ended by cancel", subsystem: .model)
+            return
+        }
+        Logger.error("Failed to download \(asset.displayName): \(error)", subsystem: .model)
+        modelDownloadFailures[asset] = ModelDownloadFailure.message(for: error)
+    }
+
+    /// Runs an engine download through the per-model record. `work` reports a fraction; the
+    /// record, cancel, failure text and the never-blocking-recording rule are handled here once,
+    /// instead of six times with six status strings.
+    private func runModelDownload(
+        _ asset: ModelAsset,
+        work: @escaping @Sendable (_ report: @escaping @Sendable (Double) -> Void) async throws -> Void,
+        onSuccess: @escaping @MainActor () -> Void
+    ) {
+        guard modelDownloads[asset] == nil else { return }
+        beginModelDownload(asset)
+        modelDownloadTasks[asset] = Task.detached(priority: .userInitiated) { [weak self] in
+            do {
+                try await work { fraction in
+                    Task { @MainActor [weak self] in self?.reportModelDownload(asset, fraction: fraction) }
+                }
+                try Task.checkCancellation()
+                await MainActor.run { [weak self] in
+                    guard let self, self.modelDownloads[asset] != nil else { return }
+                    Logger.info("\(asset.displayName) downloaded", subsystem: .model)
+                    self.finishModelDownload(asset, error: nil)
+                    onSuccess()
+                }
+            } catch {
+                await MainActor.run { [weak self] in self?.finishModelDownload(asset, error: error) }
+            }
+        }
     }
 
     /// Activate a model that finished downloading. No-op while recording is in progress.
@@ -1523,19 +1620,30 @@ class AppState: ObservableObject {
     /// instead of `ModelDownloader.shared.isModelDownloaded(selectedModel)` or they would report
     /// (and download) the wrong thing.
     var isSelectedEngineDownloaded: Bool {
-        switch selectedBackendType {
-        case .nemotron: return isNemotronModelCached()
-        case .qwen3asr: return isQwen3ASRModelCached()
-        default: return ModelDownloader.shared.isModelDownloaded(selectedModel)
-        }
+        guard let asset = selectedEngineAsset else { return true }  // Apple Speech: OS-managed
+        return isOnDisk(asset)
     }
 
     /// True while the selected engine's files are downloading.
     var isSelectedEngineDownloading: Bool {
-        switch selectedBackendType {
-        case .nemotron: return isDownloadingNemotron
-        case .qwen3asr: return isDownloadingQwen3ASR
-        default: return downloadingModel != nil
+        selectedEngineAsset.map { modelDownloads[$0] != nil } ?? false
+    }
+
+    /// Why the selected engine's last download failed, if it did.
+    var selectedEngineDownloadFailure: String? {
+        selectedEngineAsset.flatMap { modelDownloadFailures[$0] }
+    }
+
+    /// Whether a model's files are on disk. Touches the filesystem — call from actions and
+    /// `onAppear`, not from hot paths.
+    func isOnDisk(_ asset: ModelAsset) -> Bool {
+        switch asset {
+        case .whisper(let model): return ModelDownloader.shared.isModelDownloaded(model)
+        case .parakeet(let variant): return isParakeetModelCached(variant)
+        case .nemotron: return isNemotronModelCached()
+        case .nemotronHebrew: return isNemotronHebrewModelCached()
+        case .qwen3: return isQwen3ASRModelCached()
+        case .whisperKit: return isWhisperKitModelCached()
         }
     }
 
@@ -1545,15 +1653,10 @@ class AppState: ObservableObject {
         defer { startBuiltinEngine() }
         if isSelectedEngineDownloaded {
             preloadModel()
-        } else if !AppEnvironment.isRunningTests {
-            if selectedBackendType == .nemotron {
-                downloadNemotronModel()
-            } else if selectedBackendType == .qwen3asr {
-                downloadQwen3ASRModel()
-            } else {
-                let model = selectedModel
-                Task { await downloadModel(model) }
-            }
+        } else if !AppEnvironment.isRunningTests, let asset = selectedEngineAsset {
+            // Each engine's own downloader — an earlier version fetched the Whisper file for
+            // Parakeet, WhisperKit and Nemotron Hebrew users, who then never got a model.
+            startDownload(asset)
         }
     }
 
@@ -1703,91 +1806,26 @@ class AppState: ObservableObject {
     /// Download Parakeet model (separate from loading)
     func downloadParakeetModel(_ variant: ParakeetModelVariant? = nil) {
         let variant = variant ?? selectedParakeetModel
-        guard !isDownloadingParakeet else { return }
-
-        isDownloadingParakeet = true
-        parakeetDownloadStatus = "Downloading \(variant.displayName)..."
-        downloadProgress = 0
-        state = .downloadingModel(progress: 0)
-
-        // Poll the download directory to track file-level progress.
-        // FluidAudio's DownloadUtils doesn't expose a progress callback,
-        // so we count files appearing on disk vs the expected total.
-        let cacheDir = FluidAudioBridge.cacheDirectory(for: variant)
-        let progressTask = Task.detached(priority: .utility) { [weak self] in
-            // Expected file count for Parakeet models (4 .mlmodelc dirs + vocab + metadata)
-            // Each .mlmodelc dir contains ~4-5 files. The HF API reports ~23 total files.
-            let expectedFileCount = 23
-            while !Task.isCancelled {
-                try? await Task.sleep(nanoseconds: 500_000_000) // 500ms
-                let fileCount = Self.countFilesRecursively(at: cacheDir)
-                let progress = min(Double(fileCount) / Double(expectedFileCount), 0.95)
-                await MainActor.run { [weak self] in
-                    guard let self, self.isDownloadingParakeet else { return }
-                    self.downloadProgress = progress
-                    self.state = .downloadingModel(progress: progress)
+        runModelDownload(.parakeet(variant), work: { report in
+            try await FluidAudioBridge.downloadModel(variant: variant, progress: report)
+        }, onSuccess: { [weak self] in
+            guard let self else { return }
+            // The row click that started this download was the user picking this
+            // variant — settle the selection first so the backend activation below
+            // loads the model they asked for rather than the previously selected one.
+            if self.selectedParakeetModel != variant {
+                if self.selectedBackendType == .parakeet {
+                    self.selectParakeetModel(variant)
+                    return
                 }
+                // Record the pick without loading — `selectParakeetModel` would preload
+                // through the *current* backend, so the switch below would immediately
+                // tear that down again.
+                self.selectedParakeetModel = variant
+                UserDefaults.standard.set(variant.rawValue, forKey: "selectedParakeetModel")
             }
-        }
-
-        Task.detached(priority: .userInitiated) { [weak self] in
-            do {
-                try await FluidAudioBridge.downloadModel(variant: variant)
-                progressTask.cancel()
-                Logger.info("Parakeet \(variant.displayName) downloaded", subsystem: .model)
-
-                await MainActor.run { [weak self] in
-                    guard let self = self else { return }
-                    self.isDownloadingParakeet = false
-                    self.parakeetDownloadStatus = ""
-                    self.downloadProgress = 0
-                    self.state = .idle
-
-                    // The row click that started this download was the user picking this
-                    // variant — settle the selection first so the backend activation below
-                    // loads the model they asked for rather than the previously selected one.
-                    if self.selectedParakeetModel != variant {
-                        if self.selectedBackendType == .parakeet {
-                            self.selectParakeetModel(variant)
-                            return
-                        }
-                        // Record the pick without loading — `selectParakeetModel` would preload
-                        // through the *current* backend, so the switch below would immediately
-                        // tear that down again.
-                        self.selectedParakeetModel = variant
-                        UserDefaults.standard.set(variant.rawValue, forKey: "selectedParakeetModel")
-                    }
-                    self.activateBackendAfterDownload(.parakeet)
-                }
-            } catch {
-                progressTask.cancel()
-                Logger.error("Failed to download Parakeet \(variant.displayName): \(error)", subsystem: .model)
-                await MainActor.run { [weak self] in
-                    guard let self = self else { return }
-                    self.isDownloadingParakeet = false
-                    self.parakeetDownloadStatus = ""
-                    self.downloadProgress = 0
-                    self.state = .idle
-                    self.errorMessage = "Failed to download Parakeet: \(error.localizedDescription)"
-                }
-            }
-        }
-    }
-
-    /// Count files recursively in a directory (for download progress tracking)
-    private nonisolated static func countFilesRecursively(at url: URL) -> Int {
-        guard let enumerator = FileManager.default.enumerator(
-            at: url,
-            includingPropertiesForKeys: [.isRegularFileKey],
-            options: [.skipsHiddenFiles]
-        ) else { return 0 }
-        var count = 0
-        for case let fileURL as URL in enumerator {
-            if (try? fileURL.resourceValues(forKeys: [.isRegularFileKey]).isRegularFile) == true {
-                count += 1
-            }
-        }
-        return count
+            self.activateBackendAfterDownload(.parakeet)
+        })
     }
 
     // The old LivePreviewEngine class + Parakeet EOU removed — live preview comes from StreamingTranscriber.onTranscription
@@ -2184,51 +2222,18 @@ class AppState: ObservableObject {
     func isNemotronModelCached() -> Bool { NemotronBridge.isModelCached() }
 
     func downloadNemotronModel() {
-        guard !isDownloadingNemotron else { return }
-        isDownloadingNemotron = true
-        nemotronDownloadStatus = "Downloading Nemotron Multilingual..."
-        downloadProgress = 0
-        // Recording stays available while the built-in engine downloads in the background behind
-        // another engine; only when Nemotron is the engine itself is there nothing to record with.
-        if selectedBackendType == .nemotron { state = .downloadingModel(progress: 0) }
-
-        Task.detached(priority: .userInitiated) { [weak self] in
-            do {
-                try await NemotronBridge.download { [weak self] downloadProgress in
-                    let fraction = downloadProgress.fractionCompleted
-                    Task { @MainActor [weak self] in
-                        guard let self, self.isDownloadingNemotron else { return }
-                        self.downloadProgress = fraction
-                        if self.selectedBackendType == .nemotron { self.state = .downloadingModel(progress: fraction) }
-                    }
-                }
-                Logger.info("Nemotron multilingual downloaded", subsystem: .model)
-                await MainActor.run { [weak self] in
-                    guard let self else { return }
-                    self.isDownloadingNemotron = false
-                    self.nemotronDownloadStatus = ""
-                    self.downloadProgress = 0
-                    if case .downloadingModel = self.state { self.state = .idle }
-                    // Never switch the user's engine: the download is of the built-in engine, which
-                    // loads alongside whichever one they chose. It *is* their engine only when selected.
-                    if self.selectedBackendType == .nemotron {
-                        self.activateBackendAfterDownload(.nemotron)
-                    } else {
-                        self.startBuiltinEngine()
-                    }
-                }
-            } catch {
-                Logger.error("Failed to download Nemotron: \(error)", subsystem: .model)
-                await MainActor.run { [weak self] in
-                    guard let self else { return }
-                    self.isDownloadingNemotron = false
-                    self.nemotronDownloadStatus = ""
-                    self.downloadProgress = 0
-                    if case .downloadingModel = self.state { self.state = .idle }
-                    self.errorMessage = "Failed to download the built-in engine: \(error.localizedDescription)"
-                }
+        runModelDownload(.nemotron, work: { report in
+            try await NemotronBridge.download { progress in report(progress.fractionCompleted) }
+        }, onSuccess: { [weak self] in
+            guard let self else { return }
+            // Never switch the user's engine: the download is of the built-in engine, which
+            // loads alongside whichever one they chose. It *is* their engine only when selected.
+            if self.selectedBackendType == .nemotron {
+                self.activateBackendAfterDownload(.nemotron)
+            } else {
+                self.startBuiltinEngine()
             }
-        }
+        })
     }
 
     func preloadNemotronModel() {
@@ -2289,43 +2294,11 @@ class AppState: ObservableObject {
     func isNemotronHebrewModelCached() -> Bool { NemotronHebrewBridge.isModelCached() }
 
     func downloadNemotronHebrewModel() {
-        guard !isDownloadingNemotronHebrew else { return }
-        isDownloadingNemotronHebrew = true
-        nemotronHebrewDownloadStatus = "Downloading Nemotron Hebrew..."
-        downloadProgress = 0
-        state = .downloadingModel(progress: 0)
-
-        Task.detached(priority: .userInitiated) { [weak self] in
-            do {
-                try await NemotronHebrewBridge.download { [weak self] downloadProgress in
-                    let fraction = downloadProgress.fractionCompleted
-                    Task { @MainActor [weak self] in
-                        guard let self, self.isDownloadingNemotronHebrew else { return }
-                        self.downloadProgress = fraction
-                        self.state = .downloadingModel(progress: fraction)
-                    }
-                }
-                Logger.info("Nemotron Hebrew downloaded", subsystem: .model)
-                await MainActor.run { [weak self] in
-                    guard let self else { return }
-                    self.isDownloadingNemotronHebrew = false
-                    self.nemotronHebrewDownloadStatus = ""
-                    self.downloadProgress = 0
-                    self.state = .idle
-                    self.activateBackendAfterDownload(.nemotronHebrew)
-                }
-            } catch {
-                Logger.error("Failed to download Nemotron Hebrew: \(error)", subsystem: .model)
-                await MainActor.run { [weak self] in
-                    guard let self else { return }
-                    self.isDownloadingNemotronHebrew = false
-                    self.nemotronHebrewDownloadStatus = ""
-                    self.downloadProgress = 0
-                    self.state = .idle
-                    self.errorMessage = "Failed to download Nemotron Hebrew: \(error.localizedDescription)"
-                }
-            }
-        }
+        runModelDownload(.nemotronHebrew, work: { report in
+            try await NemotronHebrewBridge.download { progress in report(progress.fractionCompleted) }
+        }, onSuccess: { [weak self] in
+            self?.activateBackendAfterDownload(.nemotronHebrew)
+        })
     }
 
     func preloadNemotronHebrewModel() {
@@ -2369,41 +2342,12 @@ class AppState: ObservableObject {
     func isQwen3ASRModelCached() -> Bool { Qwen3ASRBridge.isModelCached() }
 
     func downloadQwen3ASRModel() {
-        guard !isDownloadingQwen3ASR else { return }
-        isDownloadingQwen3ASR = true
-        qwen3asrDownloadStatus = "Downloading Qwen3 ASR..."
-        downloadProgress = 0
-        // Do NOT set state = .downloadingModel — recording must remain available
-        // during this long background download (~2.5 GB). Progress is shown in the popover.
-
-        Task.detached(priority: .userInitiated) { [weak self] in
-            do {
-                try await Qwen3ASRBridge.download { [weak self] fraction in
-                    Task { @MainActor [weak self] in
-                        guard let self, self.isDownloadingQwen3ASR else { return }
-                        self.downloadProgress = fraction
-                        self.qwen3asrDownloadStatus = String(format: "Downloading… %.0f%%", fraction * 100)
-                    }
-                }
-                Logger.info("Qwen3 ASR downloaded", subsystem: .model)
-                await MainActor.run { [weak self] in
-                    guard let self else { return }
-                    self.isDownloadingQwen3ASR = false
-                    self.qwen3asrDownloadStatus = ""
-                    self.downloadProgress = 0
-                    self.activateBackendAfterDownload(.qwen3asr)
-                }
-            } catch {
-                Logger.error("Failed to download Qwen3 ASR: \(error)", subsystem: .model)
-                await MainActor.run { [weak self] in
-                    guard let self else { return }
-                    self.isDownloadingQwen3ASR = false
-                    self.qwen3asrDownloadStatus = ""
-                    self.downloadProgress = 0
-                    self.errorMessage = "Failed to download Qwen3 ASR: \(error.localizedDescription)"
-                }
-            }
-        }
+        // ~2.5 GB in the background; recording stays available and progress is per row.
+        runModelDownload(.qwen3, work: { report in
+            try await Qwen3ASRBridge.download(progress: report)
+        }, onSuccess: { [weak self] in
+            self?.activateBackendAfterDownload(.qwen3asr)
+        })
     }
 
     func preloadQwen3ASRModel() {
@@ -2477,44 +2421,14 @@ class AppState: ObservableObject {
 
     func downloadWhisperKitModel() {
         #if canImport(WhisperKit)
-        guard !isDownloadingWhisperKit else { return }
-        isDownloadingWhisperKit = true
-        whisperKitDownloadStatus = "Downloading WhisperKit…"
-        downloadProgress = 0
-        state = .downloadingModel(progress: 0)
-
-        whisperKitDownloadTask = Task.detached(priority: .userInitiated) { [weak self] in
-            do {
-                try await WhisperKitBridge.download { [weak self] fraction in
-                    Task { @MainActor [weak self] in
-                        guard let self, self.isDownloadingWhisperKit else { return }
-                        self.downloadProgress = fraction
-                        self.state = .downloadingModel(progress: fraction)
-                    }
-                }
-                Logger.info("WhisperKit model downloaded", subsystem: .model)
-                await MainActor.run { [weak self] in
-                    guard let self else { return }
-                    self.isDownloadingWhisperKit = false
-                    self.whisperKitDownloadStatus = ""
-                    self.downloadProgress = 0
-                    self.state = .idle
-                    if self.selectedBackendType == .whisperKit {
-                        self.preloadWhisperKitModel()
-                    }
-                }
-            } catch {
-                Logger.error("Failed to download WhisperKit: \(error)", subsystem: .model)
-                await MainActor.run { [weak self] in
-                    guard let self else { return }
-                    self.isDownloadingWhisperKit = false
-                    self.whisperKitDownloadStatus = ""
-                    self.downloadProgress = 0
-                    self.state = .idle
-                    self.errorMessage = "Failed to download WhisperKit: \(error.localizedDescription)"
-                }
+        runModelDownload(.whisperKit, work: { report in
+            try await WhisperKitBridge.download(progressCallback: report)
+        }, onSuccess: { [weak self] in
+            guard let self else { return }
+            if self.selectedBackendType == .whisperKit {
+                self.activateBackendAfterDownload(.whisperKit)
             }
-        }
+        })
         #endif
     }
 
@@ -4220,7 +4134,14 @@ class AppState: ObservableObject {
             // until the meeting finalization completes and a reload happens to be triggered.
             // `preloadModel()` is idempotent — it no-ops when a load task is already in flight.
             if isModelLoaded == false && !isModelBusy {
-                preloadModel()
+                if isSelectedEngineDownloaded {
+                    preloadModel()
+                } else if !isSelectedEngineDownloading && selectedEngineDownloadFailure == nil {
+                    // Nothing on disk and nothing fetching (e.g. onboarding was skipped): pressing
+                    // the shortcut is the user asking for their engine, so start fetching it. A
+                    // failed download is not retried behind their back — the HUD says it failed.
+                    startSelectedEngine()
+                }
             }
             return
         }

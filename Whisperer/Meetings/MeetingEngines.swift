@@ -477,11 +477,24 @@ final class MeetingEngines: ObservableObject {
         defer { bridgeCancellable?.cancel(); bridgeCancellable = nil }
 
         do {
-            // loadModel downloads (if needed) then loads weights into memory.
-            // unloadModel frees GPU memory and Metal resources.
-            // Both hop to main actor inside the ModelWorkQueue body — the slot is held
-            // for the full download+load+unload pass so no other model work overlaps.
-            try await ModelWorkQueue.shared.run("meeting-engine-warm-intelligence") {
+            // 1. Download outside the queue. Holding a queue slot through a 3.2 GB transfer
+            //    tripped the 120 s stall ceiling (a false "stuck" report and a reclaimed slot)
+            //    and kept every other model job waiting for the whole download.
+            if !LLMPostProcessor.isOnDisk(Self.intelligenceVariant) {
+                readiness[.intelligence] = .downloading(0)
+                try await LLMPostProcessor.download(Self.intelligenceVariant) { fraction in
+                    Task { @MainActor [weak self] in
+                        guard let self, case .downloading(let current) = self.readiness[.intelligence],
+                              fraction > current else { return }
+                        self.readiness[.intelligence] = .downloading(fraction)
+                        self.updateStatusText()
+                    }
+                }
+                readiness[.intelligence] = .preparing
+            }
+            // 2. Load from disk and unload, inside the queue so no other model work overlaps.
+            //    `-load` gives it the load ceiling: first-run Metal compile is not a stall.
+            try await ModelWorkQueue.shared.run("meeting-engine-intelligence-load") {
                 try await processor.loadModel(Self.intelligenceVariant)
                 await processor.unloadModel()
                 Logger.info("MeetingEngines: intelligence warm done — weights paged in+out", subsystem: .model)

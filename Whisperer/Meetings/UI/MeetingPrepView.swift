@@ -12,6 +12,9 @@ import SwiftUI
 struct MeetingPrepView: View {
     @Binding var continueAnyway: Bool
     @ObservedObject private var engines = MeetingEngines.shared
+    /// The speech engine is the user's own dictation engine, downloaded through AppState — its
+    /// progress lives there, not in `engines.readiness`.
+    @ObservedObject private var appState = AppState.shared
 
     @State private var pulse = false
     @State private var breathe = false
@@ -71,6 +74,11 @@ struct MeetingPrepView: View {
                 }
             }
             engines.prefetch()
+        }
+        .onChange(of: appState.isSelectedEngineDownloading) { downloading in
+            // The speech engine just landed on disk: re-check, so its row turns ready without
+            // the user leaving and re-entering the screen.
+            if !downloading { engines.prefetch() }
         }
     }
 
@@ -198,6 +206,24 @@ struct MeetingPrepView: View {
 
     @ViewBuilder
     private func stateIndicator(for readiness: EngineReadiness, engine: MeetingEngine) -> some View {
+        if engine == .speech, let asset = appState.selectedEngineAsset,
+           let progress = appState.modelDownloads[asset] {
+            // The user's engine downloading (from here or from the Models tab).
+            HStack(spacing: 6) {
+                breathingOrb
+                Text("\(progress.detailText(approximateTotal: asset.approximateBytes))")
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundColor(.white.opacity(0.6))
+                    .lineLimit(1)
+                    .monospacedDigit()
+            }
+        } else {
+            readinessIndicator(readiness, engine: engine)
+        }
+    }
+
+    @ViewBuilder
+    private func readinessIndicator(_ readiness: EngineReadiness, engine: MeetingEngine) -> some View {
         switch readiness {
         case .ready:
             Image(systemName: "checkmark.circle.fill")
@@ -221,11 +247,47 @@ struct MeetingPrepView: View {
                     .foregroundColor(.white.opacity(0.6))
             }
 
-        case .needsDownload, .needsWarmup, .unavailable:
-            Circle()
-                .fill(Color.white.opacity(0.35))
-                .frame(width: 8, height: 8)
+        case .needsWarmup:
+            // On disk; the warm pass starts with the others.
+            Text("Ready to prepare")
+                .font(.system(size: 11, weight: .medium))
+                .foregroundColor(.white.opacity(0.5))
+
+        case .needsDownload(let message):
+            // A grey dot said nothing. Name what is missing and offer the one action that fixes it.
+            if engine == .speech, let asset = appState.selectedEngineAsset {
+                actionButton(appState.modelDownloadFailures[asset] != nil ? "Retry" : "Download \(asset.sizeLabel)",
+                             help: appState.modelDownloadFailures[asset] ?? "Downloads \(asset.displayName), your dictation engine") {
+                    appState.startDownload(asset)
+                }
+            } else {
+                actionButton("Download", help: message.isEmpty ? "Download \(engine.roleLabel.lowercased())" : message) {
+                    engines.prefetch()
+                }
+            }
+
+        case .unavailable(let message):
+            HStack(spacing: 8) {
+                Image(systemName: "exclamationmark.triangle.fill")
+                    .font(.system(size: 11))
+                    .foregroundColor(.orange)
+                    .help(message)
+                actionButton("Retry", help: message) { engines.prefetch() }
+            }
         }
+    }
+
+    private func actionButton(_ title: String, help: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Text(title)
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundColor(.white)
+                .padding(.horizontal, 10)
+                .padding(.vertical, 4)
+                .background(Capsule().fill(accent))
+        }
+        .buttonStyle(.plain).pointerOnHover()
+        .help(help)
     }
 
     /// Breathing orb reused from MeetingProcessingBanner, scaled to 20 pt.
