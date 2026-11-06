@@ -640,7 +640,7 @@ cancel and redo; never drop the shortcut.
 
 `136e50a4` (pause gaps from the coordinator, `.pauseBreak`, cap-before-append,
 `LivePourText(rebasesOnShrink:)`, sticky RTL, settled speaker header) was reverted in
-`cb0359a7`. In a real meeting the live text jumped and was visibly rewritten:
+`63ef169e`. In a real meeting the live text jumped and was visibly rewritten:
 `rebasesOnShrink` applied every non-append revision at once, where the append-only pour had
 hidden them. The stop also left one-word cards and a duplicated last sentence, which may
 predate it. Unit tests on synthetic attributed text passed and caught none of this. **Redo it
