@@ -314,6 +314,8 @@ struct MeetingDetailView: View {
                 Text(meeting?.formattedDate ?? "")
                     .font(.system(size: 12, weight: .regular))
                     .foregroundColor(.white.opacity(0.4))
+                    .lineLimit(1)
+                    .truncationMode(.tail)
 
                 if let duration = meeting?.duration, duration > 0 {
                     Text("·")
@@ -321,6 +323,8 @@ struct MeetingDetailView: View {
                     Text(meeting?.displayDuration ?? "")
                         .font(.system(size: 12, weight: .regular))
                         .foregroundColor(.white.opacity(0.4))
+                        .lineLimit(1)
+                        .fixedSize()
                 }
 
                 // Processing chip lives here so nothing below ever shifts when a phase
@@ -333,8 +337,9 @@ struct MeetingDetailView: View {
                     .transition(.opacity.combined(with: .scale(scale: 0.9)))
                 }
 
-                Spacer()
+                Spacer(minLength: 8)
                 speakerPills
+                    .fixedSize()
             }
         }
         .padding(.horizontal, 20)
@@ -517,9 +522,12 @@ struct MeetingDetailView: View {
                 // What the chosen AI can do with this transcript, and who did it.
                 if selectedTab == .transcript, let meeting, !detailVM.allSegments.isEmpty,
                    !(session.isRecording && session.meetingID == meeting.id) {
-                    TranscriptPolishBar(meetingID: meeting.id, segments: detailVM.allSegments)
-                        .padding(.bottom, 4)
-                        .transition(.opacity)
+                    ViewThatFits(in: .horizontal) {
+                        TranscriptPolishBar(meetingID: meeting.id, segments: detailVM.allSegments)
+                        TranscriptPolishBar(meetingID: meeting.id, segments: detailVM.allSegments, compact: true)
+                    }
+                    .padding(.bottom, 4)
+                    .transition(.opacity)
                 }
             }
             .padding(.horizontal, 16)

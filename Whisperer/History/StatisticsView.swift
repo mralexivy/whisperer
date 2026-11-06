@@ -37,42 +37,24 @@ struct StatisticsView: View {
                     summaryCardsGrid
                         .sectionFadeIn(index: 0, appeared: $appearedSections)
 
-                    ViewThatFits(in: .horizontal) {
-                        HStack(alignment: .top, spacing: 12) {
-                            dailyActivityCard
-                            appUsageCard
-                        }
-                        VStack(spacing: 12) {
-                            dailyActivityCard
-                            appUsageCard
-                        }
+                    StatsCardRow {
+                        dailyActivityCard
+                        appUsageCard
                     }
                     .sectionFadeIn(index: 1, appeared: $appearedSections)
 
-                    ViewThatFits(in: .horizontal) {
-                        HStack(alignment: .top, spacing: 12) {
-                            languagesCard
-                            peakHoursCard
-                        }
-                        VStack(spacing: 12) {
-                            languagesCard
-                            peakHoursCard
-                        }
+                    StatsCardRow {
+                        languagesCard
+                        peakHoursCard
                     }
                     .sectionFadeIn(index: 2, appeared: $appearedSections)
 
                     growthAndStreakColumn
                         .sectionFadeIn(index: 3, appeared: $appearedSections)
 
-                    ViewThatFits(in: .horizontal) {
-                        HStack(alignment: .top, spacing: 12) {
-                            milestonesCard
-                            personalRecordsCard
-                        }
-                        VStack(spacing: 12) {
-                            milestonesCard
-                            personalRecordsCard
-                        }
+                    StatsCardRow {
+                        milestonesCard
+                        personalRecordsCard
                     }
                     .sectionFadeIn(index: 4, appeared: $appearedSections)
 
@@ -90,19 +72,6 @@ struct StatisticsView: View {
         .background(WhispererColors.background(colorScheme))
         .task {
             await statsManager.computeStatistics()
-        }
-        .onChange(of: statsManager.selectedPeriod) { _ in
-            // Reset animations on period change
-            appearedSections = []
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
-                for i in 0..<6 {
-                    DispatchQueue.main.asyncAfter(deadline: .now() + Double(i) * 0.08) {
-                        withAnimation(.easeOut(duration: 0.4)) {
-                            _ = appearedSections.insert(i)
-                        }
-                    }
-                }
-            }
         }
         .onAppear {
             for i in 0..<6 {
@@ -179,10 +148,10 @@ struct StatisticsView: View {
     // MARK: - Summary Cards
 
     private var summaryCardsGrid: some View {
-        LazyVGrid(columns: [GridItem(.adaptive(minimum: 130, maximum: 320), spacing: 10)], spacing: 10) {
+        StatTileGrid(minTileWidth: 138, spacing: 10) {
             StatsSummaryCard(
                 icon: "text.word.spacing",
-                label: "WORDS TRANSCRIBED",
+                label: "WORDS",
                 value: statsManager.formattedWords(statsManager.totalWords),
                 subLabel: statsManager.comparisonLabel(current: statsManager.totalWords, previous: statsManager.previousPeriodWords),
                 color: WhispererColors.accentBlue,
@@ -190,7 +159,7 @@ struct StatisticsView: View {
             )
             StatsSummaryCard(
                 icon: "clock",
-                label: "AUDIO RECORDED",
+                label: "AUDIO",
                 value: statsManager.formattedDuration(statsManager.totalDuration),
                 subLabel: statsManager.durationComparisonLabel(current: statsManager.totalDuration, previous: statsManager.previousPeriodDuration),
                 color: Color(hex: "22C55E"),
@@ -198,7 +167,7 @@ struct StatisticsView: View {
             )
             StatsSummaryCard(
                 icon: "waveform",
-                label: "TOTAL SESSIONS",
+                label: "SESSIONS",
                 value: "\(statsManager.totalSessions)",
                 subLabel: statsManager.comparisonLabel(current: statsManager.totalSessions, previous: statsManager.previousPeriodSessions),
                 color: Color(hex: "F97316"),
@@ -207,7 +176,8 @@ struct StatisticsView: View {
             StatsSummaryCard(
                 icon: "speedometer",
                 label: "AVG SPEED",
-                value: "\(statsManager.averageWPM) wpm",
+                value: "\(statsManager.averageWPM)",
+                unit: "wpm",
                 subLabel: statsManager.comparisonLabel(current: statsManager.averageWPM, previous: statsManager.previousPeriodWPM),
                 color: Color(hex: "06B6D4"),
                 colorScheme: colorScheme
@@ -228,29 +198,17 @@ struct StatisticsView: View {
     private var dailyActivityCard: some View {
         SettingsCard(colorScheme: colorScheme, fillHeight: true) {
             VStack(alignment: .leading, spacing: 16) {
-                HStack {
-                    SettingsSectionHeader(
-                        icon: "chart.bar.fill",
-                        title: "Daily Activity",
-                        colorScheme: colorScheme,
-                        color: Color(hex: "F97316")
-                    )
-
-                    Spacer()
-
-                    HStack(spacing: 4) {
-                        ForEach(ActivityMetric.allCases, id: \.self) { metric in
-                            FilterTab(
-                                title: metric.rawValue,
-                                isSelected: activityMetric == metric,
-                                colorScheme: colorScheme,
-                                color: WhispererColors.accentBlue
-                            ) {
-                                withAnimation(.spring(response: 0.3)) {
-                                    activityMetric = metric
-                                }
-                            }
-                        }
+                // The metric tabs drop under the title when the card is narrow rather
+                // than wrapping "Sessions" onto two lines.
+                ViewThatFits(in: .horizontal) {
+                    HStack {
+                        dailyActivityTitle
+                        Spacer(minLength: 12)
+                        activityMetricTabs
+                    }
+                    VStack(alignment: .leading, spacing: 10) {
+                        dailyActivityTitle
+                        activityMetricTabs
                     }
                 }
 
@@ -263,6 +221,34 @@ struct StatisticsView: View {
                     .frame(height: 140)
 
                 summaryPills
+            }
+        }
+    }
+
+    private var dailyActivityTitle: some View {
+        SettingsSectionHeader(
+            icon: "chart.bar.fill",
+            title: "Daily Activity",
+            colorScheme: colorScheme,
+            color: Color(hex: "F97316")
+        )
+        .fixedSize()
+    }
+
+    private var activityMetricTabs: some View {
+        HStack(spacing: 4) {
+            ForEach(ActivityMetric.allCases, id: \.self) { metric in
+                FilterTab(
+                    title: metric.rawValue,
+                    isSelected: activityMetric == metric,
+                    colorScheme: colorScheme,
+                    color: WhispererColors.accentBlue
+                ) {
+                    withAnimation(.spring(response: 0.3)) {
+                        activityMetric = metric
+                    }
+                }
+                .fixedSize()
             }
         }
     }
@@ -855,7 +841,7 @@ struct StatisticsView: View {
     // MARK: - Growth & Streak
 
     private var growthAndStreakColumn: some View {
-        HStack(alignment: .top, spacing: 12) {
+        StatsCardRow {
             growthCard
             streakCard
         }
@@ -1384,8 +1370,8 @@ struct StatisticsView: View {
             Color(hex: "06B6D4"),
             Color(hex: "EF4444"),
         ]
-        // Deterministic color based on language code hash
-        let hash = abs(code.hashValue)
+        // Stable across launches (String.hashValue is seeded per process)
+        let hash = code.unicodeScalars.reduce(0) { ($0 &* 31 &+ Int($1.value)) & 0x7fffffff }
         return colors[hash % colors.count]
     }
 
@@ -1418,6 +1404,106 @@ struct StatisticsView: View {
     ]
 }
 
+// MARK: - Responsive Layouts
+
+/// Summary tiles in balanced rows. Takes as many columns as fit at
+/// `minTileWidth`, then evens the rows out (5 tiles → 5, 3+2, 2+2+1, 1×5) so a
+/// row is never left with one stray tile beside a gap. Every tile gets the same
+/// width and the same height, decided by the window width alone — never by the
+/// numbers inside, so switching Week/Month/Year cannot reshuffle the grid.
+struct StatTileGrid: Layout {
+    var minTileWidth: CGFloat = 150
+    var spacing: CGFloat = 10
+
+    func columns(width: CGFloat, count: Int) -> Int {
+        guard count > 0, width.isFinite else { return max(1, count) }
+        let fit = max(1, Int((width + spacing) / (minTileWidth + spacing)))
+        let rows = Int((Double(count) / Double(min(count, fit))).rounded(.up))
+        return Int((Double(count) / Double(rows)).rounded(.up))
+    }
+
+    private func metrics(width: CGFloat, subviews: Subviews) -> (cols: Int, tileWidth: CGFloat, tileHeight: CGFloat) {
+        let cols = columns(width: width, count: subviews.count)
+        let tileWidth = max(0, (width - spacing * CGFloat(cols - 1)) / CGFloat(cols))
+        let tileHeight = subviews
+            .map { $0.sizeThatFits(ProposedViewSize(width: tileWidth, height: nil)).height }
+            .max() ?? 0
+        return (cols, tileWidth, tileHeight)
+    }
+
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        // SwiftUI also asks with nil (ideal) and .infinity (maximum); both mean "one row".
+        let ideal = (minTileWidth + spacing) * CGFloat(subviews.count) - spacing
+        let width = proposal.width.flatMap { $0.isFinite ? $0 : nil } ?? ideal
+        let m = metrics(width: width, subviews: subviews)
+        let rows = subviews.isEmpty ? 0 : (subviews.count + m.cols - 1) / m.cols
+        return CGSize(width: width, height: CGFloat(rows) * m.tileHeight + CGFloat(max(0, rows - 1)) * spacing)
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+        let m = metrics(width: bounds.width, subviews: subviews)
+        for (index, subview) in subviews.enumerated() {
+            let col = index % m.cols
+            let row = index / m.cols
+            subview.place(
+                at: CGPoint(
+                    x: bounds.minX + CGFloat(col) * (m.tileWidth + spacing),
+                    y: bounds.minY + CGFloat(row) * (m.tileHeight + spacing)
+                ),
+                proposal: ProposedViewSize(width: m.tileWidth, height: m.tileHeight)
+            )
+        }
+    }
+}
+
+/// Two cards side by side with equal widths and equal heights when the window
+/// is wide enough for both at `minCardWidth`, otherwise stacked at full width.
+/// The switch depends only on the available width (unlike `ViewThatFits`,
+/// which measures content and flipped layouts when a period's labels grew).
+struct StatsCardRow: Layout {
+    var minCardWidth: CGFloat = 340
+    var spacing: CGFloat = 12
+
+    private func sideBySide(_ width: CGFloat, _ count: Int) -> Bool {
+        count > 1 && width >= minCardWidth * CGFloat(count) + spacing * CGFloat(count - 1)
+    }
+
+    private func cardWidth(_ width: CGFloat, _ count: Int) -> CGFloat {
+        (width - spacing * CGFloat(count - 1)) / CGFloat(count)
+    }
+
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        let ideal = (minCardWidth + spacing) * CGFloat(subviews.count) - spacing
+        let width = proposal.width.flatMap { $0.isFinite ? $0 : nil } ?? ideal
+        if sideBySide(width, subviews.count) {
+            let w = cardWidth(width, subviews.count)
+            let height = subviews.map { $0.sizeThatFits(ProposedViewSize(width: w, height: nil)).height }.max() ?? 0
+            return CGSize(width: width, height: height)
+        }
+        let heights = subviews.map { $0.sizeThatFits(ProposedViewSize(width: width, height: nil)).height }
+        return CGSize(width: width, height: heights.reduce(0, +) + spacing * CGFloat(max(0, heights.count - 1)))
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+        if sideBySide(bounds.width, subviews.count) {
+            let w = cardWidth(bounds.width, subviews.count)
+            for (index, subview) in subviews.enumerated() {
+                subview.place(
+                    at: CGPoint(x: bounds.minX + CGFloat(index) * (w + spacing), y: bounds.minY),
+                    proposal: ProposedViewSize(width: w, height: bounds.height)
+                )
+            }
+            return
+        }
+        var y = bounds.minY
+        for subview in subviews {
+            let h = subview.sizeThatFits(ProposedViewSize(width: bounds.width, height: nil)).height
+            subview.place(at: CGPoint(x: bounds.minX, y: y), proposal: ProposedViewSize(width: bounds.width, height: h))
+            y += h + spacing
+        }
+    }
+}
+
 // MARK: - Section Fade-In Modifier
 
 private struct SectionFadeIn: ViewModifier {
@@ -1443,6 +1529,7 @@ private struct StatsSummaryCard: View {
     let icon: String
     let label: String
     let value: String
+    var unit: String? = nil
     let subLabel: String
     let color: Color
     let colorScheme: ColorScheme
@@ -1456,8 +1543,10 @@ private struct StatsSummaryCard: View {
                     .font(.system(size: 9.5, weight: .bold))
                     .foregroundColor(WhispererColors.tertiaryText(colorScheme))
                     .tracking(0.9)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.8)
 
-                Spacer()
+                Spacer(minLength: 6)
 
                 ZStack {
                     RoundedRectangle(cornerRadius: 7)
@@ -1471,16 +1560,30 @@ private struct StatsSummaryCard: View {
             }
             .padding(.bottom, 14)
 
-            Text(value)
-                .font(.system(size: 32, weight: .light, design: .rounded))
-                .foregroundColor(WhispererColors.primaryText(colorScheme))
-                .monospacedDigit()
-                .contentTransition(.numericText())
-                .animation(.easeOut(duration: 0.4), value: value)
+            // Every line is single-line so all tiles share one height whatever
+            // the period's numbers and comparison text are.
+            HStack(alignment: .firstTextBaseline, spacing: 4) {
+                Text(value)
+                    .font(.system(size: 32, weight: .light, design: .rounded))
+                    .foregroundColor(WhispererColors.primaryText(colorScheme))
+                    .monospacedDigit()
+                    .contentTransition(.numericText())
+                    .animation(.easeOut(duration: 0.4), value: value)
+                if let unit {
+                    Text(unit)
+                        .font(.system(size: 13, weight: .medium, design: .rounded))
+                        .foregroundColor(WhispererColors.secondaryText(colorScheme))
+                }
+            }
+            .lineLimit(1)
+            .minimumScaleFactor(0.6)
 
             Text(subLabel.isEmpty ? " " : subLabel)
                 .font(.system(size: 11))
                 .foregroundColor(subLabel.isEmpty ? .clear : WhispererColors.tertiaryText(colorScheme))
+                .lineLimit(1)
+                .truncationMode(.tail)
+                .minimumScaleFactor(0.85)
                 .padding(.top, 5)
 
             // Accent bar
@@ -1493,6 +1596,7 @@ private struct StatsSummaryCard: View {
                 .animation(.spring(response: 0.3), value: isHovered)
         }
         .padding(18)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .background(
             RoundedRectangle(cornerRadius: 14)
                 .fill(WhispererColors.cardBackground(colorScheme))

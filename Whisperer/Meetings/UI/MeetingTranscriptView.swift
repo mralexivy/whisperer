@@ -451,7 +451,9 @@ struct MeetingTranscriptView: View {
         Text(text)
             .font(.system(size: size, weight: .medium).monospacedDigit())
             .foregroundColor(color)
-            .frame(width: timestampCol - 10, height: 14, alignment: isRTL ? .leading : .trailing)
+            // Hug the card, not the window edge — flush to the edge the stamps were clipped by
+            // the scroller and read as belonging to nothing.
+            .frame(width: timestampCol - 10, height: 14, alignment: isRTL ? .trailing : .leading)
     }
 
     // MARK: - Live bubble (same card style, no timestamps yet)

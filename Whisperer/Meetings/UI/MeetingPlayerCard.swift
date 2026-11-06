@@ -52,10 +52,10 @@ struct MeetingPlayerCard: View {
                     .frame(height: 56)
                     .padding(.horizontal, 8)
 
-                HStack(spacing: 16) {
+                HStack(spacing: 12) {
                     playButton
                     timeDisplay
-                    Spacer()
+                    Spacer(minLength: 8)
                     speedControl
                 }
             }
@@ -117,6 +117,7 @@ struct MeetingPlayerCard: View {
                 .font(.system(size: 11, weight: .bold, design: .rounded))
                 .foregroundColor(WhispererColors.secondaryText(.dark))
                 .tracking(0.8)
+                .lineLimit(1)
         }
     }
 
@@ -266,6 +267,9 @@ struct MeetingPlayerCard: View {
                 .font(.system(size: 13, weight: .medium, design: .monospaced))
                 .foregroundColor(WhispererColors.secondaryText(.dark))
         }
+        // A clock is one token — never wrap it digit by digit when the column is narrow.
+        .lineLimit(1)
+        .fixedSize()
     }
 
     // MARK: - Speed control

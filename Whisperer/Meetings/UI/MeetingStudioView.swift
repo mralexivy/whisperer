@@ -14,6 +14,11 @@ struct MeetingStudioView: View {
     /// Throttled to whole seconds so MeetingDetailView doesn't re-render 30× per second.
     @State private var playheadIntSeconds: Int = 0
     @StateObject private var detailVM = MeetingDetailViewModel()
+    /// Width the user dragged the player column to. Clamped on every layout pass, so a value
+    /// saved on a wide display can never squeeze the transcript on a narrow one.
+    @AppStorage("meetings.rightPanelWidth") private var preferredRightWidth: Double = 340
+    /// The notes list slides in over the transcript when the window is too narrow to dock it.
+    @State private var isListOverlayOpen = false
 
     private var session: MeetingSession {
         appState.activeMeetingSession ?? localSession
@@ -152,43 +157,148 @@ struct MeetingStudioView: View {
 
     private var mainContent: some View {
         GeometryReader { geo in
+            let layout = columnLayout(total: geo.size.width)
             HStack(spacing: 0) {
-                // Left: library + live card
-                MeetingListPanel(
-                    session: session,
-                    selectedMeetingID: $selectedMeetingID
-                )
-                .frame(width: listWidth(in: geo.size.width))
+                // Left: library + live card — docked when there is room, otherwise a rail
+                // whose button slides the same list in over the transcript.
+                if layout.dockList {
+                    MeetingListPanel(
+                        session: session,
+                        selectedMeetingID: $selectedMeetingID
+                    )
+                    .frame(width: layout.list)
 
-                divider
-
-                // Center: transcript / overview — always show if a selection exists or is loading
-                if selectedMeetingID != nil || detailVM.isLoading {
-                    MeetingDetailView(detailVM: detailVM, session: session, playheadSeconds: Double(playheadIntSeconds))
-                        .onChange(of: Int(audioPlayer.currentTime)) { _, newSec in
-                            playheadIntSeconds = newSec
-                        }
-                        .id(selectedMeetingID)
-                        .frame(minWidth: 200)
-                        .layoutPriority(1)
+                    divider
                 } else {
-                    notesPlaceholder
-                        .layoutPriority(1)
+                    collapsedListRail
+                    divider
                 }
 
-                divider
+                // Center: transcript / overview — always show if a selection exists or is loading
+                Group {
+                    if selectedMeetingID != nil || detailVM.isLoading {
+                        MeetingDetailView(detailVM: detailVM, session: session, playheadSeconds: Double(playheadIntSeconds))
+                            .onChange(of: Int(audioPlayer.currentTime)) { _, newSec in
+                                playheadIntSeconds = newSec
+                            }
+                            .id(selectedMeetingID)
+                    } else {
+                        notesPlaceholder
+                    }
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .overlay(alignment: .leading) {
+                    if !layout.dockList && isListOverlayOpen {
+                        listOverlay(width: layout.list)
+                    }
+                }
 
-                // Right: player + assistant
+                // Right: player + assistant. Drag its left edge to widen it, as on Transcriptions.
+                ResizableDivider(colorScheme: .dark) { delta in
+                    var transaction = Transaction()
+                    transaction.animation = nil
+                    withTransaction(transaction) {
+                        preferredRightWidth = Double(min(max(layout.right - delta, Self.minRightWidth),
+                                                         layout.maxRight))
+                    }
+                }
+                .background(Color(hex: "0A0A18"))
+
                 MeetingRightPanel(meeting: detailVM.meeting,
                                   session: session,
                                   player: audioPlayer,
                                   onSpeakerRenamed: { speakerIndex, name in
                                       Task { await handleSpeakerRename(speakerIndex: speakerIndex, newName: name) }
                                   })
-                    .frame(width: rightWidth(in: geo.size.width))
+                    .frame(width: layout.right)
                     .id(selectedMeetingID)
             }
+            .onChange(of: layout.dockList) { _, docked in
+                if docked { isListOverlayOpen = false }
+            }
+            .onChange(of: selectedMeetingID) { _, _ in
+                withAnimation(.spring(response: 0.3, dampingFraction: 0.9)) { isListOverlayOpen = false }
+            }
         }
+    }
+
+    // MARK: - Column layout
+
+    /// Smallest player column that shows play, time and speed on one line.
+    static let minRightWidth: CGFloat = 320
+    static let maxRightWidth: CGFloat = 520
+    /// Below this the header and transcript toolbar start to crowd — the list undocks first.
+    static let minDetailWidth: CGFloat = 440
+    private static let railWidth: CGFloat = 44
+    /// 1pt hairline after the list or rail + the 12pt resize handle before the player.
+    private static let chromeWidth: CGFloat = 13
+
+    private struct ColumnLayout {
+        var dockList: Bool
+        var list: CGFloat
+        var right: CGFloat
+        var maxRight: CGFloat
+    }
+
+    /// The transcript keeps at least `minDetailWidth`; the player keeps at least
+    /// `minRightWidth`. When both cannot fit beside the docked list, the list undocks to a rail
+    /// rather than squeezing either — nothing is ever cut or wrapped letter by letter.
+    private func columnLayout(total: CGFloat) -> ColumnLayout {
+        let list = listWidth(in: total)
+        let dockList = total - Self.chromeWidth - list - Self.minRightWidth >= Self.minDetailWidth
+        let leading = dockList ? list : Self.railWidth
+        let maxRight = max(Self.minRightWidth,
+                           min(Self.maxRightWidth, total - Self.chromeWidth - leading - Self.minDetailWidth))
+        let right = min(max(CGFloat(preferredRightWidth), Self.minRightWidth), maxRight)
+        return ColumnLayout(dockList: dockList, list: list, right: right, maxRight: maxRight)
+    }
+
+    private var collapsedListRail: some View {
+        VStack(spacing: 10) {
+            railButton(icon: "sidebar.left", help: "Show notes") {
+                withAnimation(.spring(response: 0.3, dampingFraction: 0.9)) { isListOverlayOpen.toggle() }
+            }
+            railButton(icon: "plus", help: "New note") {
+                Task { await session.startRecording(title: defaultNoteTitle(), surface: .workspace) }
+            }
+            .disabled(session.isRecording)
+            .opacity(session.isRecording ? 0.35 : 1)
+            Spacer()
+        }
+        .padding(.top, 14)
+        .frame(width: Self.railWidth)
+        .frame(maxHeight: .infinity)
+        .background(Color(hex: "0A0A18"))
+    }
+
+    private func railButton(icon: String, help: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Image(systemName: icon)
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundColor(.white.opacity(0.7))
+                .frame(width: 30, height: 30)
+                .background(RoundedRectangle(cornerRadius: 8).fill(Color.white.opacity(0.06)))
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .help(help)
+    }
+
+    private func listOverlay(width: CGFloat) -> some View {
+        ZStack(alignment: .leading) {
+            // Click anywhere off the list to put it away.
+            Color.black.opacity(0.35)
+                .contentShape(Rectangle())
+                .onTapGesture {
+                    withAnimation(.spring(response: 0.3, dampingFraction: 0.9)) { isListOverlayOpen = false }
+                }
+            MeetingListPanel(session: session, selectedMeetingID: $selectedMeetingID)
+                .frame(width: width)
+                .frame(maxHeight: .infinity)
+                .overlay(alignment: .trailing) { divider }
+                .shadow(color: .black.opacity(0.45), radius: 18, x: 6)
+        }
+        .transition(.move(edge: .leading).combined(with: .opacity))
     }
 
     // MARK: - Speaker rename (from Speakers panel)
@@ -228,11 +338,6 @@ struct MeetingStudioView: View {
     private func listWidth(in total: CGFloat) -> CGFloat {
         // Floor raised to 216 so all three pills fit without dropping at the minimum window size.
         min(280, max(216, total * 0.20))
-    }
-
-    private func rightWidth(in total: CGFloat) -> CGFloat {
-        // Yield space to the transcript first — the right panel compresses a little more.
-        min(400, max(260, total * 0.26))
     }
 
     private var divider: some View {

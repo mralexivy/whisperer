@@ -17,6 +17,9 @@ struct TranscriptPolishBar: View {
     let meetingID: UUID
     let segments: [MeetingSegment]
     var testScope: String = ""
+    /// Icon-only actions and no provider name, for a narrow centre column. The tab bar picks
+    /// this through `ViewThatFits`, so labels drop before anything wraps or clips.
+    var compact: Bool = false
 
     @ObservedObject private var store = ConnectedAIStore.shared
     @ObservedObject private var polish = TranscriptPolishController.shared
@@ -35,17 +38,21 @@ struct TranscriptPolishBar: View {
             case .running(let done, let total):
                 runningPill(done: done, total: total)
             case .failed(let message):
-                Text(message)
-                    .font(.system(size: 11))
-                    .foregroundColor(Color(hex: "EF4444").opacity(0.9))
-                    .lineLimit(1)
+                if !compact {
+                    Text(message)
+                        .font(.system(size: 11))
+                        .foregroundColor(Color(hex: "EF4444").opacity(0.9))
+                        .lineLimit(1)
+                }
                 actionButton(title: "Try again", icon: "arrow.clockwise", prominent: false) { start() }
+                    .help(message)
             default:
                 if let polishedBy {
                     polishedPill(polishedBy)
                     actionButton(title: "Undo", icon: "arrow.uturn.backward", prominent: false) {
                         Task { await polish.undo(meetingID: meetingID, segments: segments) }
                     }
+                    .help("Restore the original transcript")
                     .uiTestFrame("polish.undo")
                 } else {
                     actionButton(title: provider == nil ? "Polish with AI" : "Polish",
@@ -63,6 +70,8 @@ struct TranscriptPolishBar: View {
                 }
             }
         }
+        .lineLimit(1)
+        .fixedSize()
         .environment(\.uiTestScope, testScope)
         .animation(reduceMotion ? nil : .spring(response: 0.35, dampingFraction: 0.85), value: phase)
     }
@@ -78,9 +87,11 @@ struct TranscriptPolishBar: View {
     private func runningPill(done: Int, total: Int) -> some View {
         HStack(spacing: 8) {
             ProviderMark(provider: polish.providerID, size: 14)
-            Text(polish.providerID?.badgeName ?? "AI")
-                .font(.system(size: 11, weight: .semibold))
-                .foregroundColor(.white.opacity(0.85))
+            if !compact {
+                Text(polish.providerID?.badgeName ?? "AI")
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundColor(.white.opacity(0.85))
+            }
             Text("Polishing…")
                 .font(.system(size: 11, weight: .semibold))
                 .foregroundColor(.white.opacity(0.85))
@@ -124,7 +135,11 @@ struct TranscriptPolishBar: View {
 
     private func polishedPill(_ p: MeetingAIProvenance) -> some View {
         HStack(spacing: 4) {
-            ProviderBadge(provider: p.provider)
+            if compact {
+                ProviderMark(provider: p.provider, size: 14)
+            } else {
+                ProviderBadge(provider: p.provider)
+            }
             Image(systemName: "checkmark.circle.fill")
                 .font(.system(size: 11, weight: .semibold))
                 .foregroundColor(Color(hex: "10B981"))
@@ -141,8 +156,12 @@ struct TranscriptPolishBar: View {
                 } else {
                     Image(systemName: icon).font(.system(size: 10, weight: .semibold))
                 }
-                Text(title).font(.system(size: 11, weight: .semibold))
+                if !compact || prominent {
+                    Text(title).font(.system(size: 11, weight: .semibold))
+                }
             }
+            .lineLimit(1)
+            .fixedSize()
             .foregroundColor(prominent ? .white : .white.opacity(0.75))
             .padding(.horizontal, 10).padding(.vertical, 5)
             .background(
