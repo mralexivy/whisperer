@@ -31,6 +31,8 @@ public class MeetingEntity: NSManagedObject {
     @NSManaged public var titleIsUserSet: Bool
     @NSManaged public var sourceBundleID: String?
     @NSManaged public var sourceAppName: String?
+    /// `[MeetingParticipant]` from the calendar invite, when the recording was linked to one.
+    @NSManaged public var participantsJSON: String?
 }
 
 extension MeetingEntity: Identifiable {}

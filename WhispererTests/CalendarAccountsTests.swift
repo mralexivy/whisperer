@@ -58,6 +58,58 @@ final class CalendarAccountMappingTests: XCTestCase {
         XCTAssertEqual(MeetingEventClassifier.meeting(from: s)?.provider, .teams)
     }
 
+    // MARK: Participants
+
+    func testGoogleParticipantsKeepPeopleDropRoomsAndMarkSelfAndOrganizer() throws {
+        let item: [String: Any] = [
+            "id": "p1", "summary": "Design review", "hangoutLink": "https://meet.google.com/a-b-c",
+            "start": ["dateTime": "2026-11-06T09:00:00Z"], "end": ["dateTime": "2026-11-06T09:30:00Z"],
+            "attendees": [
+                ["email": "dana@example.com", "self": true, "responseStatus": "accepted"],
+                ["email": "avi.cohen@example.com", "displayName": "Avi Cohen", "organizer": true, "responseStatus": "accepted"],
+                ["email": "noa.levi@example.com", "responseStatus": "declined"],
+                ["email": "room-4@resource.calendar.google.com", "displayName": "Room 4", "resource": true],
+            ],
+        ]
+        let s = try XCTUnwrap(GoogleCalendarSource.snapshot(item, calendarID: google.namespaced("primary")))
+        XCTAssertEqual(s.participants.map(\.email), ["dana@example.com", "avi.cohen@example.com", "noa.levi@example.com"],
+                       "the meeting room is not a person")
+        XCTAssertEqual(s.participants.first { $0.isSelf }?.email, "dana@example.com")
+        XCTAssertEqual(s.participants.first { $0.isOrganizer }?.displayName, "Avi Cohen")
+        XCTAssertEqual(s.participants.expectedOthers.map(\.displayName), ["Avi Cohen"],
+                       "neither the user nor someone who declined is an expected voice")
+        let meeting = try XCTUnwrap(MeetingEventClassifier.meeting(from: s))
+        XCTAssertEqual(meeting.participants, s.participants, "participants travel with the scheduled meeting")
+    }
+
+    func testMicrosoftParticipantsMergeOrganizerAndMarkTheAccount() throws {
+        let item: [String: Any] = [
+            "id": "AAMk2", "subject": "1:1", "isOrganizer": false,
+            "start": ["dateTime": "2026-11-06T14:00:00.0000000"], "end": ["dateTime": "2026-11-06T14:30:00.0000000"],
+            "onlineMeeting": ["joinUrl": "https://teams.microsoft.com/l/meetup-join/1"],
+            "organizer": ["emailAddress": ["name": "Maya Ben", "address": "maya@contoso.com"]],
+            "attendees": [
+                ["type": "required", "emailAddress": ["name": "Dana", "address": "DANA@contoso.com"],
+                 "status": ["response": "accepted"]],
+                ["type": "required", "emailAddress": ["name": "Maya Ben", "address": "maya@contoso.com"]],
+                ["type": "resource", "emailAddress": ["name": "Board room", "address": "board@contoso.com"]],
+            ],
+        ]
+        let s = try XCTUnwrap(MicrosoftCalendarSource.snapshot(item, calendarID: microsoft.namespaced("cal"),
+                                                              selfEmail: microsoft.email))
+        XCTAssertEqual(s.participants.count, 2, "organizer listed once, room dropped")
+        XCTAssertEqual(s.participants.first { $0.isOrganizer }?.displayName, "Maya Ben")
+        XCTAssertEqual(s.participants.first { $0.isSelf }?.name, "Dana", "the account is matched case-insensitively")
+    }
+
+    func testParticipantDisplayNameFallsBackToReadableAddress() {
+        let p = MeetingParticipant(name: nil, email: "dana.levi-cohen@example.com", isSelf: false,
+                                   isOrganizer: false, response: .unknown)
+        XCTAssertEqual(p.displayName, "Dana Levi Cohen")
+        let named = MeetingParticipant(name: "  ", email: "x@y.z", isSelf: false, isOrganizer: false, response: .unknown)
+        XCTAssertEqual(named.displayName, "X", "a blank display name falls back to the address")
+    }
+
     func testNamespacedCalendarIDsRoundTrip() {
         let ns = google.namespaced("team@group.calendar.google.com")
         XCTAssertEqual(google.localCalendarID(ns), "team@group.calendar.google.com")

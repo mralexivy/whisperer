@@ -745,6 +745,20 @@ struct SpeakersPane: View {
         SpeakerNaming.duplicateIndices(in: roster)
     }
 
+    private var participants: [MeetingParticipant] {
+        (meeting?.participants ?? []).filter { $0.response != .declined }
+    }
+
+    /// Invite names nobody has been given yet — offered as one-click names for unnamed voices.
+    private var unassignedNames: [String] {
+        let taken = Set(roster.map { SpeakerNaming.normalized($0.name) })
+        var seen = Set<String>()
+        return participants.map(\.displayName).filter {
+            let key = SpeakerNaming.normalized($0)
+            return !taken.contains(key) && seen.insert(key).inserted
+        }
+    }
+
     var body: some View {
         ScrollView {
             LazyVStack(spacing: 10) {
@@ -767,12 +781,90 @@ struct SpeakersPane: View {
                             fraction: Double(sp.wordCount) / Double(totalWords),
                             isDuplicate: duplicateIndices.contains(sp.index),
                             speakerRoster: roster,
+                            suggestedNames: [MeetingSegment].isDefaultSpeakerName(sp.name) ? unassignedNames : [],
                             onRenamed: onSpeakerRenamed
                         )
                     }
                 }
+                if !participants.isEmpty {
+                    InviteParticipantsCard(participants: participants)
+                }
             }
             .padding(14)
+        }
+    }
+}
+
+/// The people on the calendar invite, so you can see who was expected even before every voice
+/// has a name.
+struct InviteParticipantsCard: View {
+    let participants: [MeetingParticipant]
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 6) {
+                Image(systemName: "calendar")
+                    .font(.system(size: 10, weight: .semibold))
+                    .foregroundColor(Color(hex: "F97316"))
+                Text("ON THE INVITE")
+                    .font(.system(size: 9.5, weight: .bold))
+                    .tracking(0.8)
+                    .foregroundColor(.white.opacity(0.45))
+            }
+            ForEach(participants, id: \.email) { person in
+                HStack(spacing: 8) {
+                    Text(person.displayName)
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundColor(.white.opacity(0.85))
+                        .lineLimit(1)
+                    if person.isSelf { tag("You") }
+                    if person.isOrganizer { tag("Organizer") }
+                    Spacer(minLength: 4)
+                }
+                .help(person.email)
+            }
+        }
+        .padding(12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color(hex: "14142B").opacity(0.6))
+        .clipShape(RoundedRectangle(cornerRadius: 8))
+    }
+
+    private func tag(_ text: String) -> some View {
+        Text(text)
+            .font(.system(size: 9, weight: .bold))
+            .foregroundColor(.white.opacity(0.5))
+            .padding(.horizontal, 5)
+            .padding(.vertical, 1)
+            .background(Capsule().fill(Color.white.opacity(0.08)))
+    }
+}
+
+/// Wraps chips onto as many lines as they need.
+struct SuggestionFlow: Layout {
+    var spacing: CGFloat = 6
+
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        let width = proposal.width.flatMap { $0.isFinite ? $0 : nil } ?? .greatestFiniteMagnitude
+        var x: CGFloat = 0, y: CGFloat = 0, row: CGFloat = 0, widest: CGFloat = 0
+        for view in subviews {
+            let size = view.sizeThatFits(.unspecified)
+            if x > 0, x + size.width > width { y += row + spacing; x = 0; row = 0 }
+            x += size.width + spacing
+            row = max(row, size.height)
+            widest = max(widest, x - spacing)
+        }
+        return CGSize(width: min(widest, width), height: y + row)
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+        var x = bounds.minX, y = bounds.minY, row: CGFloat = 0
+        for view in subviews {
+            let size = view.sizeThatFits(.unspecified)
+            if x > bounds.minX, x + size.width > bounds.maxX { y += row + spacing; x = bounds.minX; row = 0 }
+            view.place(at: CGPoint(x: x, y: y), proposal: ProposedViewSize(size))
+            x += size.width + spacing
+            row = max(row, size.height)
         }
     }
 }
@@ -832,6 +924,8 @@ struct SpeakerStatRow: View {
     let fraction: Double
     var isDuplicate: Bool = false
     var speakerRoster: [(index: Int, name: String)] = []
+    /// Names from the calendar invite not given to anyone yet; one click names this voice.
+    var suggestedNames: [String] = []
     var onRenamed: ((Int, String) -> Void)?
 
     @State private var isHovered = false
@@ -959,6 +1053,32 @@ struct SpeakerStatRow: View {
                 }
             }
             .frame(height: 4)
+
+            if !isEditing && !suggestedNames.isEmpty {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("Who is this?")
+                        .font(.system(size: 10.5, weight: .semibold))
+                        .foregroundColor(.white.opacity(0.45))
+                    SuggestionFlow(spacing: 6) {
+                        ForEach(suggestedNames, id: \.self) { name in
+                            Button { onRenamed?(speaker.index, name) } label: {
+                                Text(name)
+                                    .font(.system(size: 11, weight: .medium))
+                                    .foregroundColor(.white.opacity(0.85))
+                                    .lineLimit(1)
+                                    .padding(.horizontal, 9)
+                                    .padding(.vertical, 4)
+                                    .background(Capsule().fill(accent.opacity(0.14)))
+                                    .overlay(Capsule().stroke(accent.opacity(0.3), lineWidth: 1))
+                            }
+                            .buttonStyle(.plain)
+                            .pointerOnHover()
+                            .help("Name this voice \(name)")
+                        }
+                    }
+                }
+                .padding(.top, 2)
+            }
         }
         .padding(12)
         .background(Color(hex: "14142B"))

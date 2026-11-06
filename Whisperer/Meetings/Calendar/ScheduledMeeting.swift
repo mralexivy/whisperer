@@ -28,6 +28,36 @@ enum MeetingKind: String, Codable, Sendable {
     case online, inPerson, unknown
 }
 
+/// Someone on the invite. Read from the calendar so a recording knows who was in the room:
+/// the user's own name for their voice, and the names to offer for everyone else's.
+struct MeetingParticipant: Codable, Sendable, Equatable, Hashable {
+    var name: String?
+    var email: String
+    /// The signed-in user.
+    var isSelf: Bool
+    var isOrganizer: Bool
+    var response: MeetingRSVP
+
+    /// What to call them: the invite's display name, else a readable form of the address
+    /// ("dana.levi@x.com" → "Dana Levi").
+    var displayName: String {
+        if let name = name?.trimmingCharacters(in: .whitespacesAndNewlines), !name.isEmpty, !name.contains("@") {
+            return name
+        }
+        let local = email.split(separator: "@").first.map(String.init) ?? email
+        return local.split(whereSeparator: { ".-_+".contains($0) })
+            .map { $0.prefix(1).uppercased() + $0.dropFirst() }
+            .joined(separator: " ")
+    }
+}
+
+extension Array where Element == MeetingParticipant {
+    /// People other than the user who did not decline — the voices a recording may hear.
+    var expectedOthers: [MeetingParticipant] {
+        filter { !$0.isSelf && $0.response != .declined }
+    }
+}
+
 /// Conferencing providers whose join links Whisperer recognizes. Only these hosts are offered
 /// as "Join" — an arbitrary link in an event's notes is never opened.
 enum ConferenceProvider: String, Codable, Sendable, CaseIterable {
@@ -82,6 +112,8 @@ struct CalendarEventSnapshot: Sendable, Equatable {
     var currentUserRSVP: MeetingRSVP
     /// True when the user is the organizer and the only attendee, or has no attendees at all.
     var isSoloEvent: Bool
+    /// Human attendees (rooms and resources dropped), organizer included.
+    var participants: [MeetingParticipant] = []
 }
 
 struct ScheduledMeeting: Identifiable, Equatable, Sendable {
@@ -100,6 +132,7 @@ struct ScheduledMeeting: Identifiable, Equatable, Sendable {
     let hasOtherParticipants: Bool?
     let response: MeetingRSVP
     let kind: MeetingKind
+    var participants: [MeetingParticipant] = []
 
     func isLive(at now: Date) -> Bool { startAt <= now && now < endAt }
 }
@@ -154,7 +187,8 @@ nonisolated enum MeetingEventClassifier {
             hasConflictingLinks: distinct.count > 1,
             hasOtherParticipants: hasOthers,
             response: event.currentUserRSVP,
-            kind: kind
+            kind: kind,
+            participants: event.participants
         )
     }
 

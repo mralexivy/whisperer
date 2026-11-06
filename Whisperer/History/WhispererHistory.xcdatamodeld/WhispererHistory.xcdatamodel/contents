@@ -31,6 +31,7 @@
         <attribute name="titleIsUserSet" attributeType="Boolean" defaultValueString="NO" usesScalarValueType="YES"/>
         <attribute name="sourceBundleID" optional="YES" attributeType="String"/>
         <attribute name="sourceAppName" optional="YES" attributeType="String"/>
+        <attribute name="participantsJSON" optional="YES" attributeType="String"/>
     </entity>
     <entity name="TranscriptionEntity" representedClassName="TranscriptionEntity" syncable="YES">
         <attribute name="aiEnhancedText" optional="YES" attributeType="String"/>

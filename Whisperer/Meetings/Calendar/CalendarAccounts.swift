@@ -457,7 +457,19 @@ nonisolated struct GoogleCalendarSource: RemoteCalendarSource {
             notes: item["description"] as? String,
             attendeeCount: attendees.isEmpty ? nil : attendees.count,
             currentUserRSVP: rsvp(me?["responseStatus"] as? String),
-            isSoloEvent: others.isEmpty)
+            isSoloEvent: others.isEmpty,
+            participants: participants(attendees))
+    }
+
+    /// Attendees minus rooms and resources. Google lists the organizer among them, flagged.
+    static func participants(_ attendees: [[String: Any]]) -> [MeetingParticipant] {
+        attendees.compactMap { a in
+            guard a["resource"] as? Bool != true, let email = a["email"] as? String, !email.isEmpty else { return nil }
+            return MeetingParticipant(name: a["displayName"] as? String, email: email,
+                                      isSelf: a["self"] as? Bool == true,
+                                      isOrganizer: a["organizer"] as? Bool == true,
+                                      response: rsvp(a["responseStatus"] as? String))
+        }
     }
 
     static func rsvp(_ status: String?) -> MeetingRSVP {
@@ -495,7 +507,7 @@ nonisolated struct MicrosoftCalendarSource: RemoteCalendarSource {
 
     func events(from start: Date, to end: Date, calendarIDs: [String]) async throws -> [CalendarEventSnapshot] {
         var all: [CalendarEventSnapshot] = []
-        let select = "id,iCalUId,subject,start,end,isAllDay,isCancelled,responseStatus,onlineMeeting,onlineMeetingUrl,location,attendees,bodyPreview,showAs,isOrganizer"
+        let select = "id,iCalUId,subject,start,end,isAllDay,isCancelled,responseStatus,onlineMeeting,onlineMeetingUrl,location,attendees,organizer,bodyPreview,showAs,isOrganizer"
         for calendarID in calendarIDs {
             var c = URLComponents(string: "https://graph.microsoft.com/v1.0/me/calendars/\(calendarID)/calendarView")!
             c.queryItems = [
@@ -508,7 +520,8 @@ nonisolated struct MicrosoftCalendarSource: RemoteCalendarSource {
             while let url = next {
                 let json = try await http.json(url, headers: ["Prefer": "outlook.timezone=\"UTC\""])
                 for item in json["value"] as? [[String: Any]] ?? [] {
-                    if let snapshot = Self.snapshot(item, calendarID: account.namespaced(calendarID)) { all.append(snapshot) }
+                    if let snapshot = Self.snapshot(item, calendarID: account.namespaced(calendarID),
+                                                    selfEmail: account.email) { all.append(snapshot) }
                 }
                 next = (json["@odata.nextLink"] as? String).flatMap(URL.init(string:))
             }
@@ -516,7 +529,7 @@ nonisolated struct MicrosoftCalendarSource: RemoteCalendarSource {
         return all
     }
 
-    static func snapshot(_ item: [String: Any], calendarID: String) -> CalendarEventSnapshot? {
+    static func snapshot(_ item: [String: Any], calendarID: String, selfEmail: String = "") -> CalendarEventSnapshot? {
         guard let id = item["id"] as? String,
               let s = (item["start"] as? [String: Any])?["dateTime"] as? String,
               let e = (item["end"] as? [String: Any])?["dateTime"] as? String,
@@ -540,7 +553,33 @@ nonisolated struct MicrosoftCalendarSource: RemoteCalendarSource {
             notes: item["bodyPreview"] as? String,
             attendeeCount: attendees.isEmpty ? nil : attendees.count + (isOrganizer ? 1 : 0),
             currentUserRSVP: isOrganizer ? .accepted : rsvp(response),
-            isSoloEvent: attendees.isEmpty)
+            isSoloEvent: attendees.isEmpty,
+            participants: participants(attendees: attendees, organizer: item["organizer"] as? [String: Any],
+                                       isOrganizer: isOrganizer, selfEmail: selfEmail))
+    }
+
+    /// Graph lists the organizer separately from `attendees`; merge them, drop rooms and
+    /// resources, and mark the signed-in account.
+    static func participants(attendees: [[String: Any]], organizer: [String: Any]?,
+                             isOrganizer: Bool, selfEmail: String) -> [MeetingParticipant] {
+        let me = selfEmail.lowercased()
+        var seen = Set<String>()
+        var result: [MeetingParticipant] = []
+        if let address = organizer?["emailAddress"] as? [String: Any], let email = address["address"] as? String, !email.isEmpty {
+            seen.insert(email.lowercased())
+            result.append(MeetingParticipant(name: address["name"] as? String, email: email,
+                                             isSelf: isOrganizer || email.lowercased() == me,
+                                             isOrganizer: true, response: .accepted))
+        }
+        for a in attendees where a["type"] as? String != "resource" {
+            guard let address = a["emailAddress"] as? [String: Any], let email = address["address"] as? String,
+                  !email.isEmpty, seen.insert(email.lowercased()).inserted else { continue }
+            let response = (a["status"] as? [String: Any])?["response"] as? String
+            result.append(MeetingParticipant(name: address["name"] as? String, email: email,
+                                             isSelf: email.lowercased() == me, isOrganizer: false,
+                                             response: rsvp(response)))
+        }
+        return result
     }
 
     static func rsvp(_ response: String?) -> MeetingRSVP {

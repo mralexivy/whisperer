@@ -424,6 +424,21 @@ class MeetingManager: ObservableObject {
         }
     }
 
+    /// Attach the calendar invite's participants to a recording linked to that event.
+    func updateParticipants(meetingID: UUID, participants: [MeetingParticipant]) async {
+        guard let data = try? JSONEncoder().encode(participants),
+              let json = String(data: data, encoding: .utf8) else { return }
+        let ctx = database.newBackgroundContext()
+        await ctx.perform {
+            let req = MeetingEntity.fetchRequest()
+            req.predicate = NSPredicate(format: "id == %@", meetingID as CVarArg)
+            req.fetchLimit = 1
+            guard let entity = try? ctx.fetch(req).first else { return }
+            entity.participantsJSON = json
+            try? ctx.save()
+        }
+    }
+
     /// Persist the language the meeting was actually spoken in.
     ///
     /// `beginSession` writes the *setting* into this column, which for the default Auto is the

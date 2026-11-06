@@ -302,6 +302,9 @@ final class MeetingSessionCoordinator: ObservableObject {
         }
         tracked = Tracked(session: session, origin: origin, bundleID: bundleID, signals: signals,
                           startedAt: Date(), occurrenceID: occurrence?.id)
+        if let occurrence, !occurrence.participants.isEmpty, let meetingID = session.meetingID {
+            await MeetingManager.shared.updateParticipants(meetingID: meetingID, participants: occurrence.participants)
+        }
         Logger.info("Meetings: recording started (origin \(origin), calendar=\(occurrence != nil))", subsystem: .app)
         clearDetection()
         startMonitoring()

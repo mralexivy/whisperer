@@ -36,6 +36,8 @@ struct MeetingRecord: Identifiable, Equatable {
     var titleIsUserSet: Bool = false
     var sourceBundleID: String?
     var sourceAppName: String?
+    /// Who was on the calendar invite; empty for meetings with no linked event.
+    var participants: [MeetingParticipant] = []
 
     // MARK: - Computed
 
@@ -97,6 +99,11 @@ struct MeetingRecord: Identifiable, Equatable {
         self.sourceAppName = entity.sourceAppName
 
         let decoder = JSONDecoder()
+
+        if let json = entity.participantsJSON, let data = json.data(using: .utf8),
+           let people = try? decoder.decode([MeetingParticipant].self, from: data) {
+            self.participants = people
+        }
 
         if let json = entity.segmentsJSON, let data = json.data(using: .utf8),
            let segs = try? decoder.decode([MeetingSegment].self, from: data) {
