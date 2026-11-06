@@ -41,9 +41,14 @@ nothing else to configure.
 
 Project `whisperer-491716`, client "Whisperer macOS" (iOS type, bundle `com.ivy.whisperer`), client
 ID in `Info.plist`. Done 2026-11-06: Calendar API enabled, consent screen (External), test user
-`ialex.ivy@gmail.com`, sign-in verified end to end in the Debug app. **Still Testing** — while it
-is, only test users can sign in, so App Review cannot use "Continue with Google": publish before
-shipping a build that shows it.
+`ialex.ivy@gmail.com`, sign-in verified end to end in the Debug app. Later the same day: Branding
+filled in (home, privacy, terms, authorized domain `whispererapp.com`) and **verified and
+published**; Data Access lists `calendar.events.readonly` (sensitive),
+`calendar.calendarlist.readonly`, `userinfo.email`, `openid`; publishing status **In production**
+(anyone can sign in; Google's unverified-app warning and the 100-user cap stay until the
+sensitive-scope review passes). Demo video recorded (3:44, sign-in → consent with both scopes →
+connected → meeting with Join & Record → recording named after the invite → participants in
+Speakers). Remaining: upload it to YouTube (unlisted) and submit in Verification Center.
 
 To publish and verify (Google Auth Platform):
 1. **Branding** — home page `https://whispererapp.com`, privacy `https://whispererapp.com/privacy`
