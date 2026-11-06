@@ -37,6 +37,36 @@ and say "sign-in isn't set up in this build".
 The redirect is derived from the client ID (`com.googleusercontent.apps.<id>:/oauth2redirect`);
 nothing else to configure.
 
+### Google verification (sensitive scopes) — status and submission text
+
+Project `whisperer-491716`, client "Whisperer macOS" (iOS type, bundle `com.ivy.whisperer`), client
+ID in `Info.plist`. Done 2026-11-06: Calendar API enabled, consent screen (External), test user
+`ialex.ivy@gmail.com`, sign-in verified end to end in the Debug app. **Still Testing** — while it
+is, only test users can sign in, so App Review cannot use "Continue with Google": publish before
+shipping a build that shows it.
+
+To publish and verify (Google Auth Platform):
+1. **Branding** — home page `https://whispererapp.com`, privacy `https://whispererapp.com/privacy`
+   (has the Calendar Data section and the Limited Use statement), terms
+   `https://whispererapp.com/terms`, authorized domain `whispererapp.com`. Skip the logo: a logo
+   triggers a separate brand review.
+2. **Data Access** — add `.../auth/calendar.events.readonly` and
+   `.../auth/calendar.calendarlist.readonly`. Justifications:
+   - *calendar.events.readonly*: "Whisperer is a macOS meeting-notes app. It reads the user's
+     upcoming events (title, time, meeting link, organizer and attendees) to remind them before a
+     meeting, open the meeting link and start a recording in one click, and name the recording and
+     its speakers after the invite. Read-only; event data stays on the user's Mac and is never sent
+     to our servers (we have none)."
+   - *calendar.calendarlist.readonly*: "Lists the user's calendars so they can choose which ones
+     Whisperer uses for reminders. Read-only; stays on the Mac."
+3. **Audience → Publish app** (moves to production; the unverified-app warning stays until
+   verification passes, 100-user cap).
+4. **Demo video** (YouTube, unlisted), recorded from the App Store build: Workspace → Calendar →
+   Continue with Google → the consent screen with the client ID visible in the address bar → back
+   in the app: account connected, calendars listed, an upcoming meeting with Join & Record, a
+   reminder card, and a recording named after the invite with participants offered in Speakers.
+5. **Verification Center → Submit**. Typical review: a few days to 2–3 weeks.
+
 ## Outlook / Microsoft 365
 
 1. **Azure portal → Microsoft Entra ID → App registrations → New registration**: name
