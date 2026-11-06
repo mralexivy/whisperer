@@ -18,8 +18,22 @@ struct CalendarSettingsRows: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             connectionRow
+            ForEach(CalendarAccountProvider.allCases, id: \.self) { provider in
+                divider
+                accountRows(provider)
+            }
+            if let error = store.signInError {
+                HStack(spacing: 6) {
+                    Image(systemName: "exclamationmark.triangle.fill").foregroundColor(.orange).font(.system(size: 10))
+                    Text(error).font(.system(size: 11)).foregroundColor(.orange)
+                    Spacer()
+                    Button(action: { store.dismissSignInError() }) {
+                        Image(systemName: "xmark").font(.system(size: 9, weight: .semibold)).foregroundColor(MBColors.textTertiary)
+                    }.buttonStyle(.plain)
+                }
+            }
 
-            if store.isConnected && store.access == .granted {
+            if store.hasAnySource {
                 divider
                 if store.calendars.isEmpty {
                     noCalendarsRow
@@ -47,6 +61,53 @@ struct CalendarSettingsRows: View {
 
     private var divider: some View {
         Divider().background(MBColors.border).padding(.vertical, 2)
+    }
+
+    /// Sign in with Google / Microsoft directly — for calendars not added to macOS.
+    @ViewBuilder
+    private func accountRows(_ provider: CalendarAccountProvider) -> some View {
+        let signedIn = store.accounts.filter { $0.provider == provider }
+        HStack(alignment: .center) {
+            VStack(alignment: .leading, spacing: 3) {
+                Text(provider.displayName)
+                    .font(.system(size: 13, weight: .medium))
+                    .foregroundColor(MBColors.textPrimary)
+                Text(signedIn.isEmpty
+                     ? (provider.isConfigured ? "Sign in to read your \(provider.shortName) calendars directly" : "\(provider.shortName) sign-in isn't set up in this build")
+                     : "Read-only access · tokens kept in your Keychain")
+                    .font(.system(size: 11))
+                    .foregroundColor(MBColors.textSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            Spacer()
+            if store.signingIn == provider {
+                ProgressView().controlSize(.small)
+            } else {
+                smallButton(signedIn.isEmpty ? "Sign In" : "Add Account", subtle: !signedIn.isEmpty) {
+                    Task { await store.signIn(provider) }
+                }
+                .disabled(!provider.isConfigured || store.signingIn != nil)
+                .opacity(provider.isConfigured ? 1 : 0.45)
+                .uiTestFrame("settings.calendar.signIn.\(provider.rawValue)")
+            }
+        }
+        ForEach(signedIn) { account in
+            HStack(spacing: 8) {
+                Image(systemName: store.accountsNeedingReconnect.contains(account.id) ? "exclamationmark.circle.fill" : "checkmark.circle.fill")
+                    .font(.system(size: 11))
+                    .foregroundColor(store.accountsNeedingReconnect.contains(account.id) ? .orange : .green)
+                Text(account.email)
+                    .font(.system(size: 12))
+                    .foregroundColor(MBColors.textPrimary)
+                    .lineLimit(1)
+                Spacer()
+                if store.accountsNeedingReconnect.contains(account.id) {
+                    smallButton("Sign In Again") { Task { await store.signIn(provider) } }
+                }
+                smallButton("Remove", subtle: true) { store.removeAccount(account) }
+            }
+            .padding(.leading, 4)
+        }
     }
 
     @ViewBuilder
@@ -78,7 +139,7 @@ struct CalendarSettingsRows: View {
             }
             return "Connected — no upcoming meetings this week"
         default:
-            return "Reminds you to record meetings from the calendars on this Mac — iCloud, and any Google or Outlook account added to macOS."
+            return "Calendars already on this Mac — iCloud, and any account added in System Settings → Internet Accounts."
         }
     }
 
@@ -310,7 +371,7 @@ struct NextMeetingRow: View {
     @ObservedObject private var appState = AppState.shared
 
     var body: some View {
-        if store.isConnected, store.showNextMeetingInMenuBar, let next = store.nextMeeting {
+        if store.hasAnySource, store.showNextMeetingInMenuBar, let next = store.nextMeeting {
             HStack(spacing: 12) {
                 ZStack {
                     RoundedRectangle(cornerRadius: 8)

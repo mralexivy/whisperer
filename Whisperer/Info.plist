@@ -28,6 +28,12 @@
 	<string>Whisperer needs microphone access to transcribe your voice.</string>
 	<key>NSCameraUsageDescription</key>
 	<string>Whisperer checks whether your camera is in use so it can tell a video call apart from an app that is only using the microphone. Whisperer never records or views camera video.</string>
+	<!-- OAuth client IDs for "Sign in with Google / Microsoft" calendar access.
+	     Setup: docs/exec-plans/calendar-oauth-setup.md. Empty = that sign-in is hidden as "not set up". -->
+	<key>WhispererGoogleCalendarClientID</key>
+	<string></string>
+	<key>WhispererMicrosoftCalendarClientID</key>
+	<string></string>
 	<key>NSCalendarsFullAccessUsageDescription</key>
 	<string>Whisperer reads upcoming events from the calendars on this Mac to remind you to record your meetings. It never changes your calendar, and event details stay on this Mac.</string>
 	<key>NSSupportsAutomaticGraphicsSwitching</key>

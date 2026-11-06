@@ -37,6 +37,7 @@ final class CalendarMeetingsStore: ObservableObject {
         static let showNextMeeting = "calendar.showNextMeetingInMenuBar"
         static let includeUnlinkedSolo = "calendar.includeUnlinkedSolo"
         static let decisions = "calendar.occurrenceDecisions"
+        static let accounts = "calendar.accounts"
     }
 
     /// Lead times offered in Settings. nil = reminders off.
@@ -63,6 +64,16 @@ final class CalendarMeetingsStore: ObservableObject {
         }
     }
 
+    /// Google / Microsoft accounts signed in directly (calendars not added to macOS).
+    @Published private(set) var accounts: [CalendarAccount] = []
+    /// Accounts whose access was revoked or expired — they need "Sign in again".
+    @Published private(set) var accountsNeedingReconnect: Set<String> = []
+    @Published private(set) var signingIn: CalendarAccountProvider?
+    @Published private(set) var signInError: String?
+
+    /// Any calendar source at all: macOS Calendars or a signed-in account.
+    var hasAnySource: Bool { (isConnected && access == .granted) || !accounts.isEmpty }
+
     /// Meetings from now−30 min to now+7 days, in start order.
     @Published private(set) var upcoming: [ScheduledMeeting] = []
     /// The reminder on screen, if any.
@@ -77,6 +88,15 @@ final class CalendarMeetingsStore: ObservableObject {
     }
 
     private let provider: CalendarMeetingProvider
+    /// Last good events per account, kept through a network failure so reminders survive it.
+    private var remoteCache: [String: (calendars: [CalendarSummary], events: [CalendarEventSnapshot])] = [:]
+    /// Injected in tests; real accounts use the provider's REST API.
+    var makeRemoteSource: (CalendarAccount) -> RemoteCalendarSource = { account in
+        switch account.provider {
+        case .google: return GoogleCalendarSource(account: account)
+        case .microsoft: return MicrosoftCalendarSource(account: account)
+        }
+    }
     private var decisions: [String: OccurrenceDecision] = [:]
     private var reminderTask: Task<Void, Never>?
     private var reconcileTimer: Timer?
@@ -99,6 +119,10 @@ final class CalendarMeetingsStore: ObservableObject {
         showNextMeetingInMenuBar = defaults.object(forKey: Keys.showNextMeeting) as? Bool ?? true
         includeUnlinkedSolo = defaults.bool(forKey: Keys.includeUnlinkedSolo)
         decisions = Self.loadDecisions()
+        if let data = defaults.data(forKey: Keys.accounts),
+           let saved = try? JSONDecoder().decode([CalendarAccount].self, from: data) {
+            accounts = saved
+        }
     }
 
     // MARK: - Lifecycle
@@ -159,13 +183,58 @@ final class CalendarMeetingsStore: ObservableObject {
     func disconnect() {
         isConnected = false
         UserDefaults.standard.set(false, forKey: Keys.connected)
-        upcoming = []
-        calendars = []
-        activeReminder = nil
-        reminderTask?.cancel()
-        decisions = [:]
-        Self.saveDecisions(decisions)
-        Logger.info("Calendar: disconnected — cached events cleared", subsystem: .app)
+        Logger.info("Calendar: macOS Calendars disconnected — cached events cleared", subsystem: .app)
+        if accounts.isEmpty {
+            upcoming = []
+            calendars = []
+            activeReminder = nil
+            reminderTask?.cancel()
+            decisions = [:]
+            Self.saveDecisions(decisions)
+        } else {
+            Task { await refresh(reason: "macOS calendars disconnected") }
+        }
+    }
+
+    // MARK: - Google / Microsoft accounts
+
+    /// "Sign in with Google / Microsoft": the provider's own sign-in sheet, read-only access.
+    func signIn(_ provider: CalendarAccountProvider) async {
+        signInError = nil
+        signingIn = provider
+        defer { signingIn = nil }
+        do {
+            let (account, _) = try await CalendarOAuthClient.shared.signIn(provider)
+            if !accounts.contains(account) { accounts.append(account) }
+            accountsNeedingReconnect.remove(account.id)
+            saveAccounts()
+            Logger.info("Calendar: \(provider.rawValue) account connected", subsystem: .app)
+            start()
+            await refresh(reason: "account connected")
+        } catch CalendarAccountError.cancelled {
+            Logger.info("Calendar: \(provider.rawValue) sign-in cancelled", subsystem: .app)
+        } catch {
+            signInError = error.localizedDescription
+            Logger.warning("Calendar: \(provider.rawValue) sign-in failed — \(error.localizedDescription)", subsystem: .app)
+        }
+    }
+
+    /// Signs the account out of Whisperer: tokens deleted, its cached events and calendars gone.
+    func removeAccount(_ account: CalendarAccount) {
+        CalendarOAuthClient.shared.forget(account)
+        accounts.removeAll { $0 == account }
+        accountsNeedingReconnect.remove(account.id)
+        remoteCache[account.id] = nil
+        saveAccounts()
+        Task { await refresh(reason: "account removed") }
+    }
+
+    func dismissSignInError() { signInError = nil }
+
+    private func saveAccounts() {
+        if let data = try? JSONEncoder().encode(accounts) {
+            UserDefaults.standard.set(data, forKey: Keys.accounts)
+        }
     }
 
     func setCalendar(_ id: String, enabled: Bool) {
@@ -194,20 +263,34 @@ final class CalendarMeetingsStore: ObservableObject {
 
     func refresh(reason: String) async {
         access = provider.accessStatus()
-        guard isConnected, access == .granted else {
-            if isConnected, access != .granted {
-                // Revoked in System Settings: stop quietly, keep the connect intent so a re-grant
-                // resumes without another click.
-                upcoming = []
-                activeReminder = nil
-            }
+        let useEventKit = isConnected && access == .granted
+        guard useEventKit || !accounts.isEmpty else {
+            upcoming = []
+            calendars = []
+            activeReminder = nil
             return
         }
-        calendars = provider.calendars()
         let now = Date()
-        let snapshots = await provider.events(from: now.addingTimeInterval(-30 * 60),
-                                              to: now.addingTimeInterval(7 * 86_400),
-                                              calendarIDs: enabledCalendarIDs)
+        let start = now.addingTimeInterval(-30 * 60)
+        let end = now.addingTimeInterval(7 * 86_400)
+
+        var allCalendars: [CalendarSummary] = []
+        var snapshots: [CalendarEventSnapshot] = []
+        if useEventKit {
+            allCalendars += provider.calendars()
+            let ekSelection = enabledCalendarIDs.map { ids in ids.filter { !$0.contains("|") } }
+            snapshots += await provider.events(from: start, to: end, calendarIDs: ekSelection)
+        }
+        for account in accounts {
+            let (calendars, events) = await fetchRemote(account, from: start, to: end)
+            allCalendars += calendars
+            snapshots += events
+        }
+        calendars = allCalendars
+
+        // The same event reached through two sources (a Google calendar added to macOS *and*
+        // signed in directly) has one occurrence ID — its iCalendar UID plus start — so it
+        // appears once.
         var seen = Set<String>()
         upcoming = snapshots
             .compactMap { MeetingEventClassifier.meeting(from: $0, includeUnlinkedSolo: includeUnlinkedSolo) }
@@ -222,7 +305,29 @@ final class CalendarMeetingsStore: ObservableObject {
             activeReminder = fresh
         }
         scheduleNextReminder()
-        Logger.debug("Calendar: \(upcoming.count) meeting(s) after \(reason)", subsystem: .app)
+        Logger.debug("Calendar: \(upcoming.count) meeting(s) from \(useEventKit ? 1 : 0) macOS + \(accounts.count) account source(s) after \(reason)", subsystem: .app)
+    }
+
+    /// One account's calendars and events. On a network failure the last good copy is used, so
+    /// a flaky connection does not drop reminders; a revoked grant flags the account instead.
+    private func fetchRemote(_ account: CalendarAccount, from start: Date, to end: Date)
+        async -> (calendars: [CalendarSummary], events: [CalendarEventSnapshot]) {
+        let source = makeRemoteSource(account)
+        do {
+            let calendars = try await source.calendars()
+            let selected = calendars.map(\.id).filter { isCalendarEnabled($0) }.compactMap(account.localCalendarID)
+            let events = try await source.events(from: start, to: end, calendarIDs: selected)
+            remoteCache[account.id] = (calendars, events)
+            accountsNeedingReconnect.remove(account.id)
+            return (calendars, events)
+        } catch CalendarAccountError.needsReconnect {
+            accountsNeedingReconnect.insert(account.id)
+            Logger.warning("Calendar: \(account.provider.rawValue) account needs signing in again", subsystem: .app)
+            return remoteCache[account.id] ?? ([], [])
+        } catch {
+            Logger.warning("Calendar: \(account.provider.rawValue) refresh failed — \(error.localizedDescription); keeping last copy", subsystem: .app)
+            return remoteCache[account.id] ?? ([], [])
+        }
     }
 
     // MARK: - Reminders
