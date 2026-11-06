@@ -127,7 +127,7 @@ struct MeetingConsentView: View {
                 bulletPoint(
                     icon: "folder.fill",
                     title: "Where it is stored",
-                    detail: "On your Mac only. Audio and transcripts go to an AI service only if you connect one and ask it to work on a meeting."
+                    detail: "On your Mac. Transcripts are sent to an AI service only if you connect one in Whisperer, which then polishes and summarizes your meetings."
                 )
             }
             .padding(.vertical, 8)
