@@ -48,7 +48,9 @@ published**; Data Access lists `calendar.events.readonly` (sensitive),
 (anyone can sign in; Google's unverified-app warning and the 100-user cap stay until the
 sensitive-scope review passes). Demo video recorded (3:44, sign-in → consent with both scopes →
 connected → meeting with Join & Record → recording named after the invite → participants in
-Speakers). Remaining: upload it to YouTube (unlisted) and submit in Verification Center.
+Speakers), uploaded unlisted: https://youtu.be/pScKXpS0IqI. Scope justification saved on Data
+Access. **Submitted for verification 2026-11-06 18:39** — status "data access is under review";
+Google writes to ialex.ivy@gmail.com. Until it passes: unverified-app warning, 100-user cap.
 
 To publish and verify (Google Auth Platform):
 1. **Branding** — home page `https://whispererapp.com`, privacy `https://whispererapp.com/privacy`
