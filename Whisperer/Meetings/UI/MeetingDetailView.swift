@@ -345,19 +345,7 @@ struct MeetingDetailView: View {
     }
 
     private var liveBadge: some View {
-        HStack(spacing: 5) {
-            Circle()
-                .fill(Color.red)
-                .frame(width: 6, height: 6)
-            Text("LIVE")
-                .font(.system(size: 10, weight: .bold))
-                .tracking(0.8)
-        }
-        .foregroundColor(Color.red)
-        .padding(.horizontal, 8)
-        .padding(.vertical, 3)
-        .background(Color.red.opacity(0.12))
-        .clipShape(Capsule())
+        MeetingLiveBadge(session: session)
     }
 
     /// Only offered when this meeting is the one the live window would show. The floating window

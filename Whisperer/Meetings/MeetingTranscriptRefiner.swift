@@ -57,6 +57,9 @@ final class MeetingTranscriptRefiner: ObservableObject {
     private static let windowDuration = 30.0
     /// Audio prepended before each window so the first word is not clipped mid-utterance.
     private static let leadInSeconds = 0.5
+    /// Decode attempts per window before the group gives up. Each retry follows a dictation that
+    /// pre-empted the previous attempt; three dictations inside one 1–3 s window is pathological.
+    private static let maxWindowAttempts = 4
     /// Context carried into the next window's `initial_prompt`, matching FileTranscriptionManager.
     private static let contextMaxLength = 100
     /// Below this, loading a second multi-GB model on top of the meeting backend risks a swap
@@ -472,36 +475,60 @@ final class MeetingTranscriptRefiner: ObservableObject {
                 // lock timed out used to come back as an empty array and be recorded as silence,
                 // which marked the window handled and left the card holding whatever the unwind
                 // above had reduced it to. Those are now errors and end the group instead.
-                let timed: [WhisperTimedSegment]
-                do {
-                    // Register the abort handler so a dictation that starts mid-decode aborts this
-                    // window immediately rather than waiting up to 7s for it to complete naturally.
-                    // The abort is harmless if dictation never starts: `shouldAbort` stays false
-                    // and the window runs to completion. The handler is cleared in `defer` so a
-                    // dictation that arrives after this window finishes does not fire into the next.
-                    await ModelWorkQueue.shared.registerInFlightAbort { [weak groupBridge] in
-                        groupBridge?.requestAbort()
+                // A dictation pre-empts a window mid-decode (the abort handler below). That used
+                // to `break` out of the whole group, and nothing re-ran it — one dictation during
+                // cleanup left the rest of the meeting un-refined for good. Now the window waits
+                // for the dictation to finish and decodes again from the same audio; only a real
+                // cancel or a decode error ends the group.
+                var timed: [WhisperTimedSegment] = []
+                var windowAttempt = 0
+                var windowFailed = false
+                decodeWindow: while true {
+                    windowAttempt += 1
+                    do {
+                        // Register the abort handler so a dictation that starts mid-decode aborts
+                        // this window immediately rather than waiting up to 7s for it to complete.
+                        // Harmless if no dictation starts: `shouldAbort` stays false. Cleared in
+                        // `defer` so a dictation after this window does not fire into the next.
+                        await ModelWorkQueue.shared.registerInFlightAbort { [weak groupBridge] in
+                            groupBridge?.requestAbort()
+                        }
+                        defer { Task { await ModelWorkQueue.shared.clearInFlightAbort() } }
+                        timed = try await ModelWorkQueue.shared.runBlocking("meeting-refine") {
+                            try groupBridge.transcribeTimestampedChecked(samples: samples, initialPrompt: prompt, language: fixedLanguage)
+                        }
+                    } catch {
+                        Logger.warning("Transcript refine: window at \(window.start)s did not decode — \(error.localizedDescription)", subsystem: .transcription)
+                        windowFailed = true
+                        break decodeWindow
                     }
-                    defer { Task { await ModelWorkQueue.shared.clearInFlightAbort() } }
-                    timed = try await ModelWorkQueue.shared.runBlocking("meeting-refine") {
-                        try groupBridge.transcribeTimestampedChecked(samples: samples, initialPrompt: prompt, language: fixedLanguage)
-                    }
-                } catch {
-                    Logger.warning("Transcript refine: window at \(window.start)s did not decode — \(error.localizedDescription)", subsystem: .transcription)
-                    break
-                }
 
-                // An abort truncates the decode wherever it happened to be, and whisper still
-                // returns the segments it had already emitted. Those are a fragment of the
-                // window, not a refinement of it — persisting them (with `rawText` stamped, which
-                // marks the card permanently polished) replaces good live text with half a
-                // sentence. The usual source is a dictation `stopAsync()` on the borrowed
-                // resident bridge, or the `registerInFlightAbort` handler above. Drop the window
-                // and leave the group for a later pass.
-                if groupBridge.shouldAbort {
-                    Logger.warning("Transcript refine: window at \(window.start)s aborted mid-decode — discarding partial output", subsystem: .transcription)
-                    break
+                    // An abort truncates the decode wherever it happened to be, and whisper still
+                    // returns the segments it had already emitted. Those are a fragment of the
+                    // window, not a refinement of it — persisting them (with `rawText` stamped,
+                    // which marks the card permanently polished) replaces good live text with half
+                    // a sentence. Never keep them.
+                    guard groupBridge.shouldAbort else { break decodeWindow }
+                    let cancelled = Task.isCancelled || cancelledMeetingID == meetingID
+                    guard !cancelled, windowAttempt < Self.maxWindowAttempts else {
+                        Logger.warning("Transcript refine: window at \(window.start)s aborted mid-decode — discarding partial output", subsystem: .transcription)
+                        windowFailed = true
+                        break decodeWindow
+                    }
+                    Logger.info("Transcript refine: window at \(window.start)s paused for a dictation — decoding it again after (attempt \(windowAttempt + 1))", subsystem: .transcription)
+                    await ModelWorkQueue.shared.waitWhileDictationActive("meeting-refine-\(Int(window.start))s-retry")
+                    await ForegroundGate.shared.waitWhileRaisedAsync("meeting-refine-retry")
+                    // Only clears a flag this run owns; a dictation decoding on the borrowed
+                    // resident bridge keeps its own.
+                    Self.clearStaleAbort(groupBridge, owned: ownsGroupBridge)
+                    if groupBridge.shouldAbort {
+                        // Still flagged: the dictation is mid-decode on the shared bridge. Give
+                        // it a moment rather than spin.
+                        try? await Task.sleep(nanoseconds: 300_000_000)
+                        Self.clearStaleAbort(groupBridge, owned: ownsGroupBridge)
+                    }
                 }
+                if windowFailed { break }
 
                 let shifted = timed
                     .map { WhisperTimedSegment(text: $0.text, start: bufferStart + $0.start, end: bufferStart + $0.end) }

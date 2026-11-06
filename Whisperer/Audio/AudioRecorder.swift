@@ -68,6 +68,19 @@ class AudioRecorder: NSObject {
     }
     private var currentURL: URL?
 
+    /// While true, captured audio is neither archived nor counted: the engine keeps running (no
+    /// restart cost on resume) but the session file skips the same span the transcriber does.
+    ///
+    /// Pausing used to gate only `onStreamingSamples`. The transcript's clock is samples fed, the
+    /// file's is samples written, so after an N-second pause every later card pointed N seconds
+    /// early into the recording — the refiner then re-decoded the wrong audio for it, and
+    /// playback started mid-word. Gating both here keeps the two clocks identical.
+    private var _isArchivePaused = false
+    var isArchivePaused: Bool {
+        get { isRecordingLock.lock(); defer { isRecordingLock.unlock() }; return _isArchivePaused }
+        set { isRecordingLock.lock(); _isArchivePaused = newValue; isRecordingLock.unlock() }
+    }
+
     // MARK: - Callbacks
 
     var onAmplitudeUpdate: ((Float) -> Void)?
@@ -334,6 +347,7 @@ class AudioRecorder: NSObject {
         guard !shield_capture_blocked() else { throw PrivacyShieldError.unavailable("Wait for the audio driver installation to finish before recording.") }
         recoveryAttemptCount = 0
         recoveryPolicy = recovery
+        isArchivePaused = false
         hasEverReceivedNonSilentAudio = false
         hasReportedSilenceEpisode = false
 
@@ -716,6 +730,9 @@ class AudioRecorder: NSObject {
         }
 
         autoreleasepool { onStreamingSamples?(samples) }
+
+        // Paused: the span is skipped in the file exactly as it is in the transcript.
+        if isArchivePaused { return }
 
         // Disk write — reconstruct AVAudioPCMBuffer from [Float] for the Opus encoder.
         // Gated on `isRecording` (checked at the top of this function, under its own lock) rather

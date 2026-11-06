@@ -31,6 +31,9 @@ class MeetingSession: ObservableObject {
     var chunkGeneration: Int = 0
     @Published var notes: [MeetingNote] = []
     @Published var isRecording: Bool = false
+    /// True while the user dictates on top of this meeting (`AppState.beginMeetingInterlude`).
+    /// The meeting's capture is paused for that span; the surfaces show it.
+    @Published var isPausedForDictation: Bool = false
     @Published var elapsedSeconds: Double = 0
 
     /// Backing store for `livePreviewText`. Private so every write goes through the editor
@@ -266,6 +269,9 @@ class MeetingSession: ObservableObject {
         var rewritten = 0
         for index in working.indices {
             if Task.isCancelled { break }
+            // The same polish model serves dictation's Fast Polish; a meeting's hundreds of
+            // cards wait while the user's one dictation goes first.
+            await ForegroundGate.shared.waitWhileRaisedAsync("meeting-editor")
             let original = working[index].text
             let result = await editor.polish(text: original, context: context)
             let polished = result.text.isEmpty ? original : result.text
@@ -286,6 +292,14 @@ class MeetingSession: ObservableObject {
         isStarting = true
         AppState.shared.pendingMeetingStarts += 1
         defer { isStarting = false; AppState.shared.pendingMeetingStarts -= 1 }
+
+        // A dictation in progress goes first: the meeting starts the moment its text is typed.
+        // Starting now would create the record, show it recording, and then be refused the
+        // recorder (`startMeetingRecording` requires `.idle`) — a meeting that records nothing.
+        guard await AppState.shared.waitForDictationToFinish() else {
+            AppState.shared.errorMessage = "Couldn't start the meeting — a dictation is still running."
+            return
+        }
 
         #if canImport(FluidAudio)
         // Force Nemotron before anything is created — a failure here must leave no
@@ -1106,7 +1120,11 @@ class MeetingSession: ObservableObject {
                 guard let self else { return }
                 await MainActor.run {
                     // Display counter only. Segment boundaries are placed on the audio
-                    // clock in onNewChunk / flushCurrentSegment, never on this one.
+                    // clock in onNewChunk / flushCurrentSegment, never on this one. It stops
+                    // while capture is paused so notes and the duration keep matching the
+                    // recording, which skips those spans too.
+                    let app = AppState.shared
+                    guard !self.isPausedForDictation, !app.isPaused else { return }
                     self.elapsedSeconds += 1
                 }
             }

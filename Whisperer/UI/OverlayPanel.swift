@@ -267,6 +267,8 @@ class OverlayPanel: NSPanel {
         let shouldShow = (appState.state != .idle || appState.showModelLoadingToast || appState.showClipboardToast || appState.showFileTranscribingToast || appState.showMeetingDetectedToast || appState.learnedEntryToast != nil || appState.liveLanguageOffer != nil || appState.livePreviewNoticeLanguage != nil)
             && !appState.isMeetingMode
             || appState.showSilentMeetingToast
+            // A dictation on top of a meeting gets the HUD even in meeting mode.
+            || appState.meetingInterlude != nil
 
         if shouldShow && !self.isVisible {
             // Reposition at bottom-center every time we show

@@ -397,7 +397,8 @@ actor MeetingAIService {
                     rowCount: chunks.count, maxRowTokens: mapChunkTokens)
                 let partials = await llm.processBatch(requests: mapRequests,
                                                       instructions: mapInstructions,
-                                                      timeoutSeconds: mapTimeout)
+                                                      timeoutSeconds: mapTimeout,
+                                                      priority: .background)
                 let joined = partials.joined(separator: "\n\n")
                 Logger.info("Meeting overview: map done — \(joined.count) chars condensed from \(transcript.count) (chunks=\(chunks.count) timeout=\(Int(mapTimeout))s)", subsystem: .transcription)
 
@@ -480,7 +481,9 @@ actor MeetingAIService {
                 // Runs once per meeting; warming this prefix only evicts the dictation cache.
                 reuseWarmCache:         false,
                 onPartialText:          partial,
-                assistantPrefill:       prefill
+                assistantPrefill:       prefill,
+                // Nobody is waiting on a summary; a dictation is. Pauses between tokens.
+                priority:               .background
             )
         }
 
@@ -531,7 +534,8 @@ actor MeetingAIService {
                 outputTokensHint:       reduceRequest.outputTokensHint,
                 timeoutSecondsOverride: reduceRequest.timeoutSeconds,
                 throwOnFallback:        true,
-                reuseWarmCache:         false
+                reuseWarmCache:         false,
+                priority:               .background
             ), let cleaned = MeetingOverviewParser.sanitizedOverview(prose) {
                 Logger.info("Meeting overview: rung2 produced \(cleaned.count) chars", subsystem: .transcription)
                 summary = MeetingAISummary(

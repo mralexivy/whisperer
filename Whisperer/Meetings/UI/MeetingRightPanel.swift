@@ -132,22 +132,27 @@ private struct RecordingInProgressView: View {
 
     // MARK: - Live badge
 
+    /// Paused (by the user, or while they dictate on top of the meeting) reads amber, not red.
+    private var isPausedCapture: Bool { session.isPausedForDictation || AppState.shared.isPaused }
+    private var badgeColor: Color { isPausedCapture ? Color(red: 0.961, green: 0.620, blue: 0.043) : .red }
+
     private var liveBadge: some View {
         HStack(spacing: 6) {
             Circle()
-                .fill(Color.red)
+                .fill(badgeColor)
                 .frame(width: 6, height: 6)
-                .opacity(dotBright ? 1.0 : 0.2)
+                .opacity(isPausedCapture || dotBright ? 1.0 : 0.2)
 
-            Text("RECORDING LIVE")
+            Text(session.isPausedForDictation ? "PAUSED \u{00B7} YOU'RE DICTATING"
+                 : AppState.shared.isPaused ? "PAUSED" : "RECORDING LIVE")
                 .font(.system(size: 11, weight: .bold))
                 .tracking(0.9)
-                .foregroundColor(Color.red.opacity(0.9))
+                .foregroundColor(badgeColor.opacity(0.9))
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 7)
-        .background(Color.red.opacity(0.08))
-        .overlay(Capsule().stroke(Color.red.opacity(0.22), lineWidth: 1))
+        .background(badgeColor.opacity(0.08))
+        .overlay(Capsule().stroke(badgeColor.opacity(0.22), lineWidth: 1))
         .clipShape(Capsule())
     }
 }

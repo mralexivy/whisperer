@@ -177,6 +177,13 @@ struct OverlayView: View {
 
     var body: some View {
         VStack(spacing: 8 * scale) {
+            // A dictation on top of a meeting. The one dictation card allowed during meeting mode —
+            // the Island and live window keep the meeting's own UI and show it paused.
+            if let phase = appState.meetingInterlude {
+                MeetingInterludeCard(phase: phase, scale: scale)
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
+            }
+
             // Silent-meeting toast — shown during meeting mode, independently of other HUD cards.
             if appState.showSilentMeetingToast {
                 SilentMeetingCard(watcher: appState.meetingSilenceWatcher)
@@ -601,6 +608,88 @@ struct ProcessingIndicator: View {
 
     var body: some View {
         AnimatedStatusCapsule(text: "Processing", borderColor: accentPurple, scale: scale)
+    }
+}
+
+// MARK: - Dictation during a meeting
+
+/// The HUD for a dictation the user started on top of a live meeting. Says, at every phase,
+/// that the meeting is paused (and then resumed), so nobody wonders whether it is still recording.
+struct MeetingInterludeCard: View {
+    let phase: MeetingInterludePhase
+    var scale: CGFloat = 1.0
+    @ObservedObject private var appState = AppState.shared
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    private let hudBackground = Color(red: 0.078, green: 0.078, blue: 0.169)
+    private let accent = Color(red: 0.357, green: 0.424, blue: 0.969)
+    private let amber = Color(red: 0.961, green: 0.620, blue: 0.043)
+
+    private var title: String {
+        switch phase {
+        case .waitingForMeetingStop: return "Saving the meeting — keep holding to dictate"
+        case .listening: return "Dictating"
+        case .finishing: return "Typing it in"
+        }
+    }
+
+    private var meetingNote: String {
+        switch phase {
+        case .waitingForMeetingStop: return "Starts in a moment"
+        case .listening: return "Meeting paused"
+        case .finishing: return "Meeting resumed"
+        }
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8 * scale) {
+            HStack(spacing: 10 * scale) {
+                if phase == .listening {
+                    WaveformView(waveformState: appState.waveformState)
+                        .frame(width: 80 * scale, height: 22 * scale)
+                        .onAppear { appState.waveformState.addRenderer() }
+                        .onDisappear { appState.waveformState.removeRenderer() }
+                } else {
+                    ProgressView().controlSize(.small)
+                }
+                Text(title)
+                    .font(.system(size: 13 * scale, weight: .semibold))
+                    .foregroundColor(.white)
+                Spacer(minLength: 8 * scale)
+                HStack(spacing: 5 * scale) {
+                    Circle()
+                        .fill(phase == .listening ? amber : Color.green)
+                        .frame(width: 6 * scale, height: 6 * scale)
+                    Text(meetingNote)
+                        .font(.system(size: 11 * scale, weight: .medium))
+                        .foregroundColor(.white.opacity(0.7))
+                }
+                .padding(.horizontal, 8 * scale)
+                .padding(.vertical, 3 * scale)
+                .background(Capsule().fill(Color.white.opacity(0.06)))
+                .accessibilityElement(children: .combine)
+            }
+            if phase == .listening, !appState.interludeLiveText.isEmpty {
+                Text(appState.interludeLiveText)
+                    .font(.system(size: 13 * scale))
+                    .foregroundColor(.white.opacity(0.85))
+                    .lineLimit(3)
+                    .frame(maxWidth: 420 * scale, alignment: .leading)
+                    .transition(.opacity)
+            }
+        }
+        .padding(.horizontal, 16 * scale)
+        .padding(.vertical, 10 * scale)
+        .frame(minWidth: 320 * scale)
+        .background(
+            RoundedRectangle(cornerRadius: 14 * scale)
+                .fill(hudBackground)
+                .overlay(RoundedRectangle(cornerRadius: 14 * scale)
+                    .stroke((phase == .listening ? amber : accent).opacity(0.35), lineWidth: 1)
+                    .allowsHitTesting(false))
+        )
+        .animation(reduceMotion ? nil : .easeOut(duration: 0.2), value: appState.interludeLiveText)
+        .animation(reduceMotion ? nil : .spring(response: 0.3, dampingFraction: 0.85), value: phase)
     }
 }
 

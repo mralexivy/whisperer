@@ -165,6 +165,25 @@ class LLMPostProcessor: ObservableObject {
     // Download progress — promoted from local var to avoid @Sendable capture hazard.
     private var didReceiveDownloadProgress = false
 
+    // MARK: - Active-time timeouts
+
+    /// Sleeps until `seconds` of *active* time have passed — wall time minus any time
+    /// `ForegroundGate` was raised. Interactive work never pauses, so for it this is a plain sleep.
+    nonisolated static func sleepActive(_ seconds: Double, priority: ModelWorkPriority) async throws {
+        guard priority == .background else {
+            try await Task.sleep(nanoseconds: UInt64(seconds * 1_000_000_000))
+            return
+        }
+        let gate = ForegroundGate.shared
+        let start = Date()
+        let raisedAtStart = gate.raisedSecondsTotal
+        while true {
+            let remaining = seconds - gate.activeSeconds(since: start, raisedAtStart: raisedAtStart)
+            if remaining <= 0 { return }
+            try await Task.sleep(nanoseconds: UInt64(min(remaining, 0.5) * 1_000_000_000))
+        }
+    }
+
     // MARK: - Model Management
 
     /// Whether the model's files are on disk, so `loadModel` will not touch the network.
@@ -541,7 +560,11 @@ class LLMPostProcessor: ObservableObject {
         // pre-seeding "1| <title>\n3| " — it is structurally impossible to EOS before
         // the overview body. MTP path only; ignored (with a warning) on the ChatSession
         // fallback. The result always prepends the prefill so callers get a complete artifact.
-        assistantPrefill: String? = nil
+        assistantPrefill: String? = nil,
+        // `.background` makes the generation pause between tokens while the user dictates
+        // (`ForegroundGate`) and resume with its KV cache and partial output intact; its timeout
+        // then counts active time only. Dictation's own cleanup stays `.interactive`.
+        priority: ModelWorkPriority = .interactive
     ) async throws -> String {
         #if DEBUG
         if let hook = LLMPostProcessor._testProcessHook {
@@ -557,6 +580,9 @@ class LLMPostProcessor: ObservableObject {
         guard !systemPrompt.isEmpty else {
             return text
         }
+
+        // A prefill is one indivisible GPU step; never start one under a dictation.
+        await ForegroundGate.shared.waitWhileRaisedAsync("llm-prefill", priority: priority)
 
         isProcessing = true
         defer { isProcessing = false }
@@ -610,7 +636,8 @@ class LLMPostProcessor: ObservableObject {
                 throwOnFallback: throwOnFallback,
                 reuseWarmCache: reuseWarmCache,
                 onPartialText: onPartialText,
-                assistantPrefill: assistantPrefill
+                assistantPrefill: assistantPrefill,
+                priority: priority
             )
             return mtpResult
         }
@@ -676,6 +703,7 @@ class LLMPostProcessor: ObservableObject {
         var result = ""
         var completionInfo: GenerateCompletionInfo?
 
+        let gate = ForegroundGate.shared
         let genTask = Task {
             var r = ""
             var info: GenerateCompletionInfo?
@@ -684,6 +712,9 @@ class LLMPostProcessor: ObservableObject {
             generation: for try await token in session.streamDetails(
                 to: userMessage, images: [], videos: []
             ) {
+                // Between tokens is the one place a long background generation can hand the GPU
+                // back to a dictation without losing anything.
+                await gate.waitWhileRaisedAsync("llm-stream", priority: priority)
                 switch token {
                 case .chunk(let chunk):
                     let lengthBefore = charCount
@@ -708,7 +739,7 @@ class LLMPostProcessor: ObservableObject {
         }
 
         let timeoutTask = Task {
-            try await Task.sleep(nanoseconds: UInt64(timeoutSeconds * 1_000_000_000))
+            try await Self.sleepActive(timeoutSeconds, priority: priority)
             genTask.cancel()
         }
 
@@ -819,14 +850,16 @@ class LLMPostProcessor: ObservableObject {
         throwOnFallback: Bool = false,
         reuseWarmCache: Bool = true,
         onPartialText: (@Sendable (String) -> Void)? = nil,
-        assistantPrefill: String? = nil
+        assistantPrefill: String? = nil,
+        priority: ModelWorkPriority = .interactive
     ) async throws -> String {
         let timeoutSeconds: Double = timeoutSecondsOverride ?? (charCount < 30 ? 5 : charCount < 200 ? 10 : 15)
         let mtpOutput = MTPOutput()
 
-        // Timeout: sets stop flag so onToken returns false, ending generation early.
+        // Timeout: sets stop flag so onToken returns false, ending generation early. Counts
+        // active time, so a pause for a dictation never eats the budget.
         let timeoutTask = Task { [mtpOutput] in
-            try? await Task.sleep(nanoseconds: UInt64(timeoutSeconds * 1_000_000_000))
+            try? await Self.sleepActive(timeoutSeconds, priority: priority)
             if !mtpOutput.stop {
                 Logger.warning("MTP gen: timeout after \(Int(timeoutSeconds))s, stopping", subsystem: .transcription)
                 mtpOutput.stop = true
@@ -910,6 +943,10 @@ class LLMPostProcessor: ObservableObject {
                 eosTokenIds: eosIds,
                 repetitionPenalty: repetitionPenalty,
                 onToken: { tokenId in
+                    if mtpOutput.stop { return false }
+                    // Pause here (blocking this generation thread, not the GPU) while the user
+                    // dictates; the KV cache and the output so far stay exactly as they are.
+                    ForegroundGate.shared.waitWhileRaised("llm-mtp", priority: priority)
                     if mtpOutput.stop { return false }
                     let piece = tokenizer.decode(tokens: [tokenId])
                     guard mtpOutput.append(tokenId: tokenId, piece: piece) else {

@@ -576,3 +576,31 @@
     that much work. The flag must be set at *every* site that mutates the array, including the ones
     that change no visible text — the `rawText` convergence stamp and the per-card language — or
     those never reach disk and rule 73's fix is undone.
+
+## Dictation always pre-empts long meeting work (2026-11-06)
+
+A quick dictation must run immediately, then the long operation resumes where it stopped. Never
+cancel and redo; never drop the shortcut.
+
+- **During a live meeting** the shortcut starts an *interlude* (`AppState.beginMeetingInterlude`).
+  The audio engine keeps running. The mic is routed to a second, dictation-only transcriber.
+  The meeting's transcriber, diarizer and `.opus` file all skip the span
+  (`AudioRecorder.isArchivePaused`). On release the file resumes at once. The meeting's samples
+  are held in `MeetingSampleBacklog` until the dictation's final decode returns, so the two never
+  decode on the shared bridge together and the meeting loses nothing. Never route this through
+  `startRecording()`/`stopRecording()`: they restart the one recorder and split the meeting's file.
+- **Pause and mute skip the file too.** The old soft pause gated only the transcriber, so every
+  card after a pause pointed early into the audio (wrong refine windows, playback mid-word).
+- **Pressed while a meeting is saving** (`state == .stopping`): remembered as
+  `.waitingForMeetingStop` and started when the meeting lets go, if the key is still held.
+- **A meeting start waits for a dictation in progress** (`waitForDictationToFinish`). Before this,
+  it created the record, showed it recording, and was refused the recorder.
+- **Post-meeting work pauses in place** on `ForegroundGate`, which is raised synchronously with
+  the key press:
+  - LLM generation pauses between tokens (stream, MTP and batch), only for `priority: .background`.
+    Dictation's own cleanup stays `.interactive`, so it never waits on itself. Timeouts count
+    active time (`sleepActive`), so a paused summary never falls to a worse rung.
+  - A refine window aborted by a dictation is decoded again after it, up to `maxWindowAttempts`.
+    It used to `break` the whole group, leaving the rest of the meeting un-refined.
+  - The mmBERT editor pass pauses between cards.
+  - `registerInFlightAbort` fires at once if a dictation is already active.

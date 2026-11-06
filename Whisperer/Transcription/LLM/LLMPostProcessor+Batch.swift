@@ -132,7 +132,9 @@ extension LLMPostProcessor {
         requests: [LLMBatchRequest],
         instructions: String,
         repetitionPenalty: Float = 1.0,
-        timeoutSeconds: Double? = nil
+        timeoutSeconds: Double? = nil,
+        // `.background` pauses between decode steps while the user dictates; see `ForegroundGate`.
+        priority: ModelWorkPriority = .interactive
     ) async -> [String] {
         guard !requests.isEmpty else { return [] }
         #if DEBUG
@@ -145,6 +147,8 @@ extension LLMPostProcessor {
         guard let container = modelContainer, !instructions.isEmpty else {
             return requests.map(\.text)
         }
+
+        await ForegroundGate.shared.waitWhileRaisedAsync("llm-batch-prefill", priority: priority)
 
         // Build the warm prefix first if it is missing. Doing it here, before the batch, means one
         // ~880-token prefill for the whole batch instead of one per row.
@@ -160,7 +164,7 @@ extension LLMPostProcessor {
         for (index, request) in requests.enumerated() { output.texts[index] = request.text }
 
         let deadline = Task { [output] in
-            try? await Task.sleep(nanoseconds: UInt64(timeoutSeconds * 1_000_000_000))
+            try? await Self.sleepActive(timeoutSeconds, priority: priority)
             if !output.stop {
                 Logger.warning(
                     "batch gen: timeout after \(Int(timeoutSeconds))s, stopping",
@@ -258,6 +262,9 @@ extension LLMPostProcessor {
                     eosTokenIds: eosIds,
                     repetitionPenalty: repetitionPenalty,
                     onToken: { row, tokenId in
+                        if output.stop { return false }
+                        // Once per step in practice: after the first row waits, the gate is down.
+                        ForegroundGate.shared.waitWhileRaised("llm-batch", priority: priority)
                         if output.stop { return false }
                         let request = requests[slice[row]]
                         let piece = tokenizer.decode(tokens: [tokenId])

@@ -58,6 +58,9 @@ class AppState: ObservableObject {
         didSet {
             // Notify observers when state changes
             NotificationCenter.default.post(name: NSNotification.Name("AppStateChanged"), object: nil)
+            if state == .idle, dictationPendingAfterMeetingStop, !isMeetingMode {
+                DispatchQueue.main.async { [weak self] in self?.startDictationPendingAfterMeetingStop() }
+            }
             if state == .idle, let backend = pendingActivationAfterDownload {
                 // A download that finished mid-recording activates the moment the recording ends.
                 pendingActivationAfterDownload = nil
@@ -497,8 +500,44 @@ class AppState: ObservableObject {
         }
     }
     @Published var isHandsFreeRecording: Bool = false
-    @Published var isMicMuted: Bool = false
-    @Published var isPaused: Bool = false  // Pause recording (soft pause — engine runs, samples discarded)
+    @Published var isMicMuted: Bool = false { didSet { syncArchivePause() } }
+    /// Pause recording (soft pause — engine runs, samples discarded, and not archived either).
+    @Published var isPaused: Bool = false { didSet { syncArchivePause() } }
+
+    /// Keeps the session file skipping exactly what the transcriber skips — see
+    /// `AudioRecorder.isArchivePaused`. Mute counts: a muted mic must not keep recording to disk.
+    private func syncArchivePause() {
+        audioRecorder?.isArchivePaused = isPaused || isMicMuted || meetingInterlude == .listening
+    }
+
+    // MARK: Dictation during a meeting (state)
+
+    /// A dictation the user started on top of a live meeting — see `beginMeetingInterlude()`.
+    /// `nil` when none. Published for the HUD card and the meeting surfaces' "paused" badge.
+    @Published private(set) var meetingInterlude: MeetingInterludePhase? {
+        didSet {
+            guard oldValue != meetingInterlude else { return }
+            syncArchivePause()
+            NotificationCenter.default.post(name: NSNotification.Name("AppStateChanged"), object: nil)
+        }
+    }
+    /// Live text of the dictation running during a meeting. Separate from `liveTranscription`,
+    /// which the meeting's own transcriber writes.
+    @Published private(set) var interludeLiveText = ""
+    /// The dictation's transcriber. Read from the audio thread by the meeting's sample closure,
+    /// the same way `streamingTranscriber` is.
+    private var interludeTranscriber: StreamingTranscriber?
+    /// Meeting audio captured while the dictation's final decode runs. Fed to the meeting as soon
+    /// as that decode returns, so the meeting loses nothing and never competes with it.
+    private let interludeBacklog = MeetingSampleBacklog()
+    /// The running finish (decode → cleanup → paste) of a meeting dictation, so a meeting stop
+    /// can let it land before stopping a transcriber that shares its model.
+    private var interludeFinishTask: Task<Void, Never>?
+    /// Feeds the live meeting's diarizer. Stored so the post-dictation backlog reaches it too.
+    private var meetingDiarizerFeed: (([Float]) -> Void)?
+    /// The shortcut was pressed while a meeting was saving its last seconds; the dictation starts
+    /// the moment the meeting lets go of the recorder, if the key is still held.
+    private var dictationPendingAfterMeetingStop = false
     @Published var isOutputAudioMuted: Bool = true  // Runtime toggle for system audio mute during recording
     @Published var showHandsFreeToast: Bool = false {
         didSet {
@@ -3831,10 +3870,24 @@ class AppState: ObservableObject {
                 #endif
 
                 audioRecorder?.onStreamingSamples = { [weak self] samples in
-                    guard let self = self, !self.isMicMuted, !self.isPaused else { return }
+                    guard let self = self else { return }
+                    // A dictation on top of the meeting owns the mic: the meeting is paused (its
+                    // file skips this span too — `syncArchivePause`) and resumes after.
+                    if let interlude = self.interludeTranscriber {
+                        interlude.addSamples(samples)
+                        return
+                    }
+                    // The dictation's final decode is running: hold the meeting's audio until it
+                    // returns rather than decode both on one bridge at once.
+                    if self.bufferMeetingSamplesIfInterludeFinishing(samples) { return }
+                    guard !self.isMicMuted, !self.isPaused else { return }
                     self.streamingTranscriber?.addSamples(samples)
                     // Feed the silence watcher (no-op once speech latches).
                     self.meetingSilenceWatcher.feed(samples)
+                    self.feedMeetingDiarizer(samples)
+                }
+                meetingDiarizerFeed = { [weak self] samples in
+                    guard let self else { return }
                     #if canImport(FluidAudio)
                     // Same buffers the ASR sees, so the coordinator's sample counter is an exact
                     // audio clock. Chained rather than fire-and-forget: Nemotron3Diarizer is not
@@ -3903,6 +3956,10 @@ class AppState: ObservableObject {
 
     /// Stop in-app recording — stores result in lastInAppTranscription, no text entry into other apps
     func stopInAppRecording() {
+        // The meeting is ending while a dictation runs on top of it: deliver the dictation, and
+        // hand the meeting every sample it is owed before its transcriber is stopped.
+        if meetingInterlude == .listening { finishMeetingInterlude() }
+        flushInterludeMeetingBacklog()
         guard case .recording = state else {
             // Capture already collapsed underneath us — `handleAudioFlowTimeout()` reset the
             // state to `.idle` while the meeting scaffolding stayed standing. Returning here is
@@ -3943,7 +4000,14 @@ class AppState: ObservableObject {
         state = .stopping
         startStopWatchdog()
 
+        let pendingInterlude = interludeFinishTask
         Task {
+            // A dictation typed on top of this meeting finishes first. Its final decode shares
+            // the model with the meeting's tail, and the meeting's stop aborts in-flight decodes
+            // on that bridge — it would cut the user's dictation short.
+            if let pendingInterlude { await pendingInterlude.value }
+            flushInterludeMeetingBacklog()
+
             // Capture meeting-stop flag synchronously before any await.
             // activeMeetingSession is still set at this point — it is nilled below after
             // stopAsync() completes so the tail chunk can route to the meeting session.
@@ -4108,7 +4172,17 @@ class AppState: ObservableObject {
         // meeting is capturing, but not while one is stopping or between its internal state hops,
         // and a dictation started there would seize the recorder out from under the meeting.
         if isMeetingMode {
-            Logger.info("startRecording() ignored — a meeting recording is active", subsystem: .app)
+            // A dictation on top of a live meeting pauses the meeting and resumes it after —
+            // the shortcut is never just swallowed. See `beginMeetingInterlude()`.
+            if case .recording = state, !isMeetingStopInFlight {
+                beginMeetingInterlude()
+            } else {
+                // The meeting is saving its last seconds and still holds the recorder. Start the
+                // moment it lets go instead of dropping the press.
+                dictationPendingAfterMeetingStop = true
+                meetingInterlude = .waitingForMeetingStop
+                Logger.info("Dictation requested while a meeting stops — starting when it finishes", subsystem: .app)
+            }
             return
         }
 
@@ -4481,6 +4555,7 @@ class AppState: ObservableObject {
         case .recording, .stopping:
             break
         default:
+            ForegroundGate.shared.end("dictation")
             Task { await ModelWorkQueue.shared.clearStrandedDictationGate(reason: reason) }
             MeetingJobQueue.shared.clearStrandedDictationSuspension(reason: reason)
         }
@@ -4496,6 +4571,10 @@ class AppState: ObservableObject {
     /// from ~800 ms to 10,933 ms, past the stop ceiling, so the user was pasted the live preview
     /// instead of the final text. See the `ModelWorkQueue` header for the full measurement.
     private func raiseDictationModelGate() {
+        // Synchronous, in the same turn as the key press: background generations and decodes
+        // poll this between tokens/windows and pause in place. The queue gate below is an actor
+        // hop away and only holds back jobs that have not started.
+        ForegroundGate.shared.begin("dictation")
         Task { await ModelWorkQueue.shared.setDictationActive(true) }
         // Pause the meeting post-processing pipeline too. The running pipeline parks itself at
         // `waitWhileDictationActive` calls; no task cancel is needed.
@@ -4507,6 +4586,7 @@ class AppState: ObservableObject {
     /// suspends all background model work for the rest of the process.
     private func lowerDictationModelGate(reason: String) {
         Logger.debug("Lowering the dictation model-work gate (\(reason))", subsystem: .app)
+        ForegroundGate.shared.end("dictation")
         Task { await ModelWorkQueue.shared.setDictationActive(false) }
         MeetingJobQueue.shared.resumeAfterDictation()
     }
@@ -4539,6 +4619,16 @@ class AppState: ObservableObject {
         // guard while the matching release still lands here with state == .recording. That saved
         // the whole meeting into transcription history and typed the transcript into whatever app
         // happened to be focused.
+        if meetingInterlude == .listening {
+            finishMeetingInterlude()
+            return
+        }
+        if meetingInterlude == .waitingForMeetingStop || dictationPendingAfterMeetingStop {
+            // Released before the meeting finished saving: nothing was recorded, nothing to type.
+            dictationPendingAfterMeetingStop = false
+            if meetingInterlude == .waitingForMeetingStop { meetingInterlude = nil }
+            if !isMeetingMode { return }
+        }
         if isMeetingMode {
             Logger.info("stopRecording() ignored — a meeting recording is active", subsystem: .app)
             return
@@ -4982,6 +5072,7 @@ class AppState: ObservableObject {
     /// captured. Ordered as in `stopInAppRecording()` — the queue gate comes down before the
     /// release job is submitted, or the release waits behind a gate nothing will lower.
     private func abandonMeetingMode(reason: String) {
+        cancelMeetingInterlude(reason: "meeting abandoned (\(reason))")
         guard let session = activeMeetingSession else { return }
         // A meeting already stopping the normal way owns its own teardown: `stopInAppRecording()`
         // lowers the gate in its defer, the tail chunk is still being routed through
@@ -5087,6 +5178,11 @@ class AppState: ObservableObject {
         // down through abandonMeetingMode() — no audio moved into Meetings/, no summary, no title,
         // and the live window closed mid-call. A meeting only ends through its own stop button.
         // Mirrors the same guard in stopRecording().
+        if meetingInterlude != nil || dictationPendingAfterMeetingStop {
+            // Cancels only the dictation; the meeting resumes untouched.
+            cancelMeetingInterlude(reason: "cancelled from the shortcut")
+            return
+        }
         if isMeetingMode {
             Logger.info("cancelRecording() ignored — a meeting recording is active", subsystem: .app)
             return
@@ -5728,4 +5824,251 @@ class AppState: ObservableObject {
             stopRecording()
         }
     }
+}
+
+// MARK: - Dictation during a meeting
+
+/// Where a dictation started on top of a meeting is.
+enum MeetingInterludePhase: Equatable {
+    /// The shortcut was pressed while the meeting was saving; starts when it finishes.
+    case waitingForMeetingStop
+    /// Capturing. The meeting is paused: its transcriber, diarizer and audio file all skip this.
+    case listening
+    /// Key released; the final decode, cleanup and paste are running. The meeting has resumed.
+    case finishing
+}
+
+extension AppState {
+
+    /// Starts a dictation on top of a live meeting.
+    ///
+    /// The shortcut used to be swallowed for the whole meeting. Now the meeting **pauses in place**
+    /// — the audio engine keeps running, so there is no restart cost either way — and the mic is
+    /// routed to a second, dictation-only transcriber. The meeting's transcriber, diarizer and
+    /// session file all skip the span (`AudioRecorder.isArchivePaused`), so its transcript and
+    /// audio stay aligned. Release types the text into the app the user was in, exactly like a
+    /// normal dictation, and the meeting carries on.
+    ///
+    /// Deliberately not `startRecording()`: that restarts the one `AudioRecorder` and opens a new
+    /// session file, which would cut the meeting's audio in two.
+    func beginMeetingInterlude() {
+        guard meetingInterlude == nil || meetingInterlude == .waitingForMeetingStop else { return }
+        guard let bridge = inAppTranscriptionBridge ?? whisperBridge else {
+            showModelLoadingToast = true
+            DispatchQueue.main.asyncAfter(deadline: .now() + 4) { [weak self] in self?.showModelLoadingToast = false }
+            Logger.warning("Meeting dictation: no speech model loaded", subsystem: .app)
+            meetingInterlude = nil
+            return
+        }
+
+        // Where the text goes: captured before our HUD takes focus.
+        textInjector?.captureTargetApp()
+        currentStyleProfile = perAppStyleEnabled
+            ? AppStyleProfile.profile(forBundleID: textInjector?.targetBundleID)
+            : .unknown
+        if let front = NSWorkspace.shared.frontmostApplication,
+           front.bundleIdentifier != Bundle.main.bundleIdentifier {
+            lastTargetAppName = front.localizedName
+            lastTargetAppBundleID = front.bundleIdentifier
+        }
+
+        // Apple dictation is not used here: the meeting's transcriber holds its one streaming
+        // session. The engine's own eager preview drives this dictation's live text instead.
+        let startLanguage = routingConfig.singleLanguageStartLanguage ?? selectedLanguage
+        let transcriber = StreamingTranscriber(
+            backend: bridge, vad: sileroVAD, language: startLanguage,
+            initialPrompt: promptWordsString, fillerWordRemovalEnabled: fillerWordRemovalEnabled,
+            modelPool: modelPool,
+            languageRouter: routingConfig.isRoutingEnabled ? LanguageRouter(allowed: routingConfig.allowedLanguages, primary: routingConfig.primaryLanguage) : nil,
+            modelRouter: routingConfig.isRoutingEnabled ? ModelRouter(languageModelMap: buildLanguageModelMap(), fallbackProfile: buildFallbackProfile()) : nil,
+            previewBridge: livePreviewBridge(for: bridge),
+            nemotronBridge: nil, nemotronPreviewOnly: false)
+        transcriber.start { [weak self] text in
+            Task { @MainActor in
+                guard let self, self.meetingInterlude == .listening else { return }
+                self.interludeLiveText = self.normalizeLivePreviewCase(text)
+            }
+        }
+
+        interludeLiveText = ""
+        // Background work yields to this dictation exactly as it does to any other.
+        raiseDictationModelGate()
+        interludeTranscriber = transcriber          // the mic now feeds the dictation
+        meetingInterlude = .listening               // and the meeting's file pauses
+        activeMeetingSession?.isPausedForDictation = true
+        Logger.info("Meeting dictation: started — meeting paused", subsystem: .app)
+    }
+
+    /// Key released: decode, clean up and type the dictation; resume the meeting at once.
+    func finishMeetingInterlude() {
+        guard meetingInterlude == .listening, let transcriber = interludeTranscriber else { return }
+
+        // Resume the meeting's file immediately (no audio lost), but hold its transcriber's new
+        // samples until the dictation's final decode is back — both share one model.
+        interludeBacklog.startHolding()
+        interludeTranscriber = nil
+        meetingInterlude = .finishing
+        activeMeetingSession?.isPausedForDictation = false
+
+        interludeFinishTask = Task {
+            defer {
+                interludeFinishTask = nil
+                lowerDictationModelGate(reason: "meeting dictation finished")
+                if meetingInterlude == .finishing { meetingInterlude = nil }
+                interludeLiveText = ""
+            }
+
+            let skipCorrections = llmEnabled || (loadedBackendType ?? selectedBackendType) == .whisperKit
+            let stopTask = Task.detached(priority: .userInitiated) { [weak transcriber] in
+                await transcriber?.stopAsync(skipCorrections: skipCorrections) ?? ""
+            }
+            var finalText = await withTimeoutResult(
+                seconds: Self.stopCeilingSeconds(forRecordedDuration: transcriber.recordedDuration)
+            ) {
+                await stopTask.value
+            } ?? ""
+            if finalText.isEmpty {
+                stopTask.cancel()
+                let preview = transcriber.currentTranscription
+                if !preview.isEmpty {
+                    finalText = await Self.applyDictionaryOffMainThread(transcriber, to: preview)
+                }
+            }
+
+            // The model is free again: the meeting catches up on what it heard meanwhile.
+            flushInterludeMeetingBacklog()
+
+            guard !finalText.isEmpty else {
+                Logger.info("Meeting dictation: no speech", subsystem: .app)
+                return
+            }
+            let listFormatted = await applyListFormatting(finalText)
+            let processed = await applyLLMPostProcessingSegmented(listFormatted)
+            let textToInsert = TrailingPeriodSuppressor.suppress(
+                appendTrailingSpace ? processed + " " : processed, profile: currentStyleProfile)
+
+            // History, without audio: the span is not in the meeting's file, and a dictation
+            // during a meeting has no file of its own.
+            let record = TranscriptionRecord(
+                id: UUID(), transcription: processed, audioFileURL: nil,
+                duration: transcriber.recordedDuration,
+                language: transcriber.effectiveLanguage.rawValue,
+                modelUsed: activeModelDisplayName,
+                corrections: transcriber.lastAppliedCorrections,
+                targetAppName: lastTargetAppName, targetAppBundleID: lastTargetAppBundleID)
+            Task { try? await HistoryManager.shared.saveTranscription(record) }
+
+            lastTranscribedText = textToInsert
+            lastTranscriptionDate = Date()
+            do {
+                try await textInjector?.insertText(textToInsert)
+                Logger.info("Meeting dictation: typed \(textToInsert.count) chars — meeting resumed", subsystem: .app)
+            } catch {
+                errorMessage = "Failed to enter text: \(error.localizedDescription)"
+            }
+        }
+    }
+
+    #if DEBUG
+    /// Test seam: attach a meeting session without starting capture.
+    func _setActiveMeetingSessionForTesting(_ session: MeetingSession?) {
+        activeMeetingSession = session
+    }
+    #endif
+
+    /// Drops the dictation without typing anything and resumes the meeting.
+    func cancelMeetingInterlude(reason: String) {
+        dictationPendingAfterMeetingStop = false
+        guard let phase = meetingInterlude else { return }
+        if phase == .listening, let transcriber = interludeTranscriber {
+            interludeTranscriber = nil
+            Task.detached { [weak transcriber] in await transcriber?.cancelAsync() }
+            lowerDictationModelGate(reason: "meeting dictation cancelled")
+        }
+        activeMeetingSession?.isPausedForDictation = false
+        if phase != .finishing { meetingInterlude = nil }
+        interludeLiveText = ""
+        Logger.info("Meeting dictation: cancelled (\(reason)) — meeting resumed", subsystem: .app)
+    }
+
+    /// While the dictation's final decode runs, holds the meeting's samples instead of feeding
+    /// them. Returns true when it took them. Called from the audio thread.
+    func bufferMeetingSamplesIfInterludeFinishing(_ samples: [Float]) -> Bool {
+        interludeBacklog.holdIfHolding(samples)
+    }
+
+    /// Feeds the meeting everything it heard while the dictation's final decode ran, then goes
+    /// back to live feeding. Same samples the file got, so the clocks stay identical.
+    func flushInterludeMeetingBacklog() {
+        let backlog = interludeBacklog.release()
+        guard !backlog.isEmpty, !isMicMuted, !isPaused else { return }
+        streamingTranscriber?.addSamples(backlog)
+        meetingSilenceWatcher.feed(backlog)
+        feedMeetingDiarizer(backlog)
+        Logger.debug("Meeting dictation: meeting caught up on \(backlog.count / 16_000)s of audio", subsystem: .app)
+    }
+
+    func feedMeetingDiarizer(_ samples: [Float]) {
+        meetingDiarizerFeed?(samples)
+    }
+
+    /// The meeting finished saving while the shortcut was held: start the dictation now.
+    func startDictationPendingAfterMeetingStop() {
+        guard dictationPendingAfterMeetingStop else { return }
+        dictationPendingAfterMeetingStop = false
+        if meetingInterlude == .waitingForMeetingStop { meetingInterlude = nil }
+        guard state == .idle, !isMeetingMode else { return }
+        guard keyListener?.isShortcutHeld ?? true else {
+            Logger.info("Dictation after meeting stop: key no longer held — not starting", subsystem: .app)
+            return
+        }
+        Logger.info("Dictation after meeting stop: starting now", subsystem: .app)
+        startRecording()
+    }
+
+    /// Holds a meeting start until a dictation in progress has typed its text — the meeting would
+    /// otherwise be created, shown as recording, and refused the recorder (`state != .idle`).
+    /// Returns false when the dictation did not finish within `timeout`.
+    func waitForDictationToFinish(timeout: TimeInterval = 60) async -> Bool {
+        let started = Date()
+        while state != .idle, !isMeetingMode {
+            if Date().timeIntervalSince(started) > timeout { return false }
+            try? await Task.sleep(nanoseconds: 100_000_000)
+        }
+        return true
+    }
+}
+
+/// Meeting samples held back while a dictation's final decode runs. Lock-protected and
+/// nonisolated: it is filled from the audio thread and drained on the main actor.
+nonisolated final class MeetingSampleBacklog: @unchecked Sendable {
+    private let lock = NSLock()
+    private var samples: [Float] = []
+    private var holding = false
+    /// Ten minutes at 16 kHz. A stop decode is capped well below this; the cap only bounds
+    /// memory if a release were somehow never called.
+    private let capacity = 16_000 * 600
+
+    func startHolding() {
+        lock.lock(); samples.removeAll(keepingCapacity: true); holding = true; lock.unlock()
+    }
+
+    /// Takes the samples when holding. Returns false (caller feeds them live) otherwise.
+    func holdIfHolding(_ incoming: [Float]) -> Bool {
+        lock.lock(); defer { lock.unlock() }
+        guard holding else { return false }
+        if samples.count + incoming.count <= capacity { samples.append(contentsOf: incoming) }
+        return true
+    }
+
+    /// Stops holding and returns everything held, in order.
+    func release() -> [Float] {
+        lock.lock(); defer { lock.unlock() }
+        holding = false
+        let out = samples
+        samples.removeAll()
+        return out
+    }
+
+    var isHolding: Bool { lock.lock(); defer { lock.unlock() }; return holding }
 }

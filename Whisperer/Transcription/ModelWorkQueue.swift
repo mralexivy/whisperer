@@ -231,6 +231,9 @@ actor ModelWorkQueue {
     /// that starts after a window completes never fires a stale abort into the next one.
     func registerInFlightAbort(_ handler: @escaping () -> Void) {
         inFlightAbort = handler
+        // A dictation that began between the caller's last pause check and this registration
+        // already fired (into nothing). Fire now, or the window decodes in full under it.
+        if dictationActive || ForegroundGate.shared.isRaised { handler() }
     }
 
     /// Clears the in-flight abort handler. Call after each decode window, whether it succeeded,

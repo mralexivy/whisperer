@@ -90,6 +90,11 @@ class GlobalKeyListener {
     // While holding Fn, press L → "locks" recording on, release Fn → recording continues
     // Press Fn again → stops recording
     private var isHandsFreeMode = false
+
+    /// Whether the user is still asking for a recording: the key is held (hold mode) or toggled
+    /// on. Lets a deferred start — one that had to wait for a meeting to finish saving — check
+    /// the user has not let go in the meantime.
+    var isShortcutHeld: Bool { recordingInProgress || isRecordingToggled }
     private let handsFreeKeyCode: CGKeyCode = 37  // L key
 
     private let debounceInterval: TimeInterval = 0.02  // 20ms for instant response

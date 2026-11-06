@@ -497,7 +497,9 @@ final class IslandCoordinator: ObservableObject {
             model.isOutputMuted = appState.isOutputAudioMuted
         }
 
-        if appState.isPaused {
+        // A dictation on top of the meeting pauses its capture too; the Island says so rather
+        // than show a live meeting that is not hearing anything.
+        if appState.isPaused || appState.meetingInterlude == .listening {
             if model.capture == .recording { send(.capturePaused) }
         } else {
             if model.capture == .paused   { send(.captureResumed) }
@@ -733,6 +735,8 @@ private struct AppStateSnapshot: Equatable {
     /// recording state has already collapsed to `.idle` still wakes the sync — without it the
     /// snapshot would compare equal and the Island would keep showing the last happy state.
     let captureFailure:         AppState.CaptureFailure?
+    /// A dictation on top of the meeting — shown as the meeting's capture paused.
+    let isDictatingOverMeeting: Bool
 
     init() {
         let a = AppState.shared
@@ -745,5 +749,6 @@ private struct AppStateSnapshot: Equatable {
         isPaused               = a.isPaused
         activeMeetingID        = a.activeMeetingSession?.meetingID
         captureFailure         = a.captureFailure
+        isDictatingOverMeeting = a.meetingInterlude == .listening
     }
 }
