@@ -57,12 +57,17 @@ stays hidden.
 feature that never captures a frame and produced no visible result. Now gated behind
 `AppState.cameraDetectionEnabled`, off by default, with a toggle in Meeting settings.
 
-### Guideline 2.5.14 consent added
+### Guideline 2.5.14 consent — the Start action, not a modal
 
-`MeetingConsentView` is shown before the first meeting recording. It states what is recorded
-(microphone only), where it is stored, that nothing leaves the Mac, and that the user is
-responsible for obtaining consent from other participants where the law requires it. Persisted as
-`hasConsentedToMeetingRecording`. No recording path runs without it.
+A meeting records only when the user starts it: the Start button in Meeting Studio, the meeting
+list, the Island, or the meeting-detected card. Nothing starts a recording on its own. That press
+is the explicit consent, and the recording indicator below makes the recording visible for its
+whole duration.
+
+The `MeetingConsentView` modal that used to sit between the press and the recording was removed
+on 2026-11-06 at the product owner's request: it interrupted the one action the user had just
+asked for. If App Review asks for an explicit first-use disclosure, put it in onboarding or the
+meeting-detected card, never as a modal on Start.
 
 **Recording indicator — verified.** 2.5.14 also requires a clear indication for the duration of
 the recording. The Island satisfies this: while recording it sits at `.peek`, which renders a
@@ -235,7 +240,7 @@ tccutil reset All com.ivy.whisperer
 - [ ] First launch prompts for **microphone only**. No camera prompt. No Accessibility prompt.
 - [ ] Enabling "Also use camera activity to detect meetings" prompts for camera with the new purpose string.
 - [ ] Meeting detection fires a visible notification when Zoom/Teams/Meet starts.
-- [ ] The first meeting recording shows the consent modal. Declining prevents recording.
+- [ ] No meeting records without the user pressing Start (Studio, list, Island or detection card).
 - [ ] The recording indicator stays visible for the whole recording and cannot be concealed.
 - [ ] MCP is **off** on first launch. `curl http://localhost:8080/mcp` without a token returns 401.
 - [ ] `MCPClientInstaller`'s generated config works (token included).

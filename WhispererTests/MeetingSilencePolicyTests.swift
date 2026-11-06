@@ -2,166 +2,153 @@
 //  MeetingSilencePolicyTests.swift
 //  WhispererTests
 //
+//  Silent-meeting handling: "started by mistake" counts down to a discard, "went quiet" never
+//  does. Pure — the tracker is a value type driven on a fake session clock.
+//
 
 import XCTest
 @testable import whisperer
 
 final class MeetingSilencePolicyTests: XCTestCase {
 
-    // MARK: - Stage transitions
+    private typealias T = MeetingQuietTracker
 
-    func testHiddenBeforeWarnThreshold() {
-        XCTAssertEqual(
-            MeetingSilencePolicy.stage(elapsed: 5.9, speechDetected: false, dismissed: false),
-            .hidden
-        )
+    /// Advances `tracker` one second at a time to `end`, like the watcher's 1 Hz tick.
+    private func run(_ tracker: inout T, from start: Double = 1, to end: Double, paused: Bool = false) {
+        var t = start
+        while t <= end {
+            tracker.update(elapsed: t, capturePaused: paused)
+            t += 1
+        }
     }
 
-    func testWarningAtWarnThreshold() {
-        XCTAssertEqual(
-            MeetingSilencePolicy.stage(elapsed: MeetingSilencePolicy.warnAfter, speechDetected: false, dismissed: false),
-            .warning
-        )
+    // MARK: - Started by mistake
+
+    func testNothingShownBeforeFifteenSeconds() {
+        var tracker = T()
+        run(&tracker, to: T.mistakePromptAfter - 1)
+        XCTAssertEqual(tracker.prompt, .none)
     }
 
-    func testWarningBetweenThresholds() {
-        XCTAssertEqual(
-            MeetingSilencePolicy.stage(elapsed: 9.0, speechDetected: false, dismissed: false),
-            .warning
-        )
+    func testEmptyMeetingCountsDownThirtySecondsThenDiscards() {
+        var tracker = T()
+        run(&tracker, to: T.mistakePromptAfter)
+        XCTAssertEqual(tracker.prompt, .startedByMistake(secondsLeft: 30, micSilent: true))
+        XCTAssertFalse(tracker.autoDiscardDue)
+
+        run(&tracker, from: T.mistakePromptAfter + 1, to: T.mistakePromptAfter + 29)
+        XCTAssertEqual(tracker.prompt, .startedByMistake(secondsLeft: 1, micSilent: true))
+        XCTAssertFalse(tracker.autoDiscardDue, "never before the countdown ends")
+
+        tracker.update(elapsed: T.mistakePromptAfter + 30, capturePaused: false)
+        XCTAssertTrue(tracker.autoDiscardDue)
+        XCTAssertGreaterThanOrEqual(T.mistakePromptAfter + T.discardCountdown, 40,
+                                    "at least 40 s from Start before anything is discarded")
     }
 
-    func testConfidentJustBeforeThreshold() {
-        XCTAssertEqual(
-            MeetingSilencePolicy.stage(elapsed: 11.9, speechDetected: false, dismissed: false),
-            .warning
-        )
+    /// The old card latched off for good on the first noise and vanished before anyone read it.
+    func testANoiseRestartsTheCountdownButNeverHidesTheCard() {
+        var tracker = T()
+        run(&tracker, to: 30)
+        guard case .startedByMistake(let before, _) = tracker.prompt else { return XCTFail("card should show") }
+        tracker.noteVoice(at: 30)
+        tracker.update(elapsed: 31, capturePaused: false)
+        guard case .startedByMistake(let after, _) = tracker.prompt else {
+            return XCTFail("a cough must not make the card disappear")
+        }
+        XCTAssertGreaterThan(after, before, "the countdown starts over")
+        XCTAssertEqual(after, 29)
     }
 
-    func testConfidentAtThreshold() {
-        XCTAssertEqual(
-            MeetingSilencePolicy.stage(elapsed: MeetingSilencePolicy.confidentAfter, speechDetected: false, dismissed: false),
-            .confident
-        )
+    func testWordsEndTheQuestionForGood() {
+        var tracker = T()
+        run(&tracker, to: 20)
+        tracker.noteContent(at: 20)
+        run(&tracker, from: 21, to: 200)
+        XCTAssertEqual(tracker.prompt, .none)
+        XCTAssertFalse(tracker.autoDiscardDue, "a meeting with words is never discarded")
     }
 
-    func testConfidentAboveThreshold() {
-        XCTAssertEqual(
-            MeetingSilencePolicy.stage(elapsed: 60.0, speechDetected: false, dismissed: false),
-            .confident
-        )
+    func testKeepStopsTheCountdownForTheSession() {
+        var tracker = T()
+        run(&tracker, to: 25)
+        tracker.keep()
+        run(&tracker, from: 26, to: 600)
+        XCTAssertEqual(tracker.prompt, .none)
+        XCTAssertFalse(tracker.autoDiscardDue)
     }
 
-    // MARK: - Speech latch
-
-    func testSpeechDetectedForcesHidden() {
-        XCTAssertEqual(
-            MeetingSilencePolicy.stage(elapsed: 30.0, speechDetected: true, dismissed: false),
-            .hidden
-        )
+    func testMicThatProducesSoundIsNotCalledSilent() {
+        var tracker = T()
+        tracker.noteAudioSignal()
+        run(&tracker, to: T.mistakePromptAfter)
+        XCTAssertEqual(tracker.prompt, .startedByMistake(secondsLeft: 30, micSilent: false))
     }
 
-    func testSpeechDetectedForcesHiddenEvenWhenDismissed() {
-        XCTAssertEqual(
-            MeetingSilencePolicy.stage(elapsed: 30.0, speechDetected: true, dismissed: true),
-            .hidden
-        )
+    /// Paused, muted or dictating on top: silence is not evidence, and the clock restarts.
+    func testPausedCaptureNeverCountsDown() {
+        var tracker = T()
+        run(&tracker, to: 40)
+        XCTAssertNotEqual(tracker.prompt, .none)
+        run(&tracker, from: 41, to: 200, paused: true)
+        XCTAssertEqual(tracker.prompt, .none)
+        XCTAssertFalse(tracker.autoDiscardDue)
+        // Resumed: a fresh 15 s before asking again.
+        run(&tracker, from: 201, to: 201 + T.mistakePromptAfter - 2)
+        XCTAssertEqual(tracker.prompt, .none)
     }
 
-    // MARK: - Dismiss
+    // MARK: - Went quiet mid-meeting
 
-    func testDismissedForcesHidden() {
-        XCTAssertEqual(
-            MeetingSilencePolicy.stage(elapsed: 30.0, speechDetected: false, dismissed: true),
-            .hidden
-        )
+    func testRealMeetingThatGoesQuietIsAskedNotDiscarded() {
+        var tracker = T()
+        tracker.noteContent(at: 10)
+        run(&tracker, from: 11, to: 10 + T.quietPromptAfter)
+        XCTAssertEqual(tracker.prompt, .wentQuiet(minutes: 5))
+        run(&tracker, from: 11 + T.quietPromptAfter, to: 4000)
+        XCTAssertFalse(tracker.autoDiscardDue, "content is never discarded, however long the silence")
+        if case .wentQuiet = tracker.prompt {} else { XCTFail("still asking, not acting") }
     }
 
-    // MARK: - Progress
-
-    func testProgressZeroBeforeWarnThreshold() {
-        XCTAssertEqual(MeetingSilencePolicy.progress(elapsed: 5.0), 0.0, accuracy: 0.001)
+    func testKeepGoingAsksAgainTenMinutesLater() {
+        var tracker = T()
+        tracker.noteContent(at: 0)
+        run(&tracker, to: T.quietPromptAfter)
+        tracker.snoozeQuiet(at: T.quietPromptAfter)
+        run(&tracker, from: T.quietPromptAfter + 1, to: T.quietPromptAfter + T.quietSnooze - 1)
+        XCTAssertEqual(tracker.prompt, .none)
+        tracker.update(elapsed: T.quietPromptAfter + T.quietSnooze, capturePaused: false)
+        if case .wentQuiet = tracker.prompt {} else { XCTFail("asks again after the snooze") }
     }
 
-    func testProgressZeroAtWarnThreshold() {
-        XCTAssertEqual(MeetingSilencePolicy.progress(elapsed: MeetingSilencePolicy.warnAfter), 0.0, accuracy: 0.001)
+    func testTalkingAgainClearsTheQuietCard() {
+        var tracker = T()
+        tracker.noteContent(at: 0)
+        run(&tracker, to: T.quietPromptAfter + 5)
+        tracker.noteContent(at: T.quietPromptAfter + 5)
+        XCTAssertEqual(tracker.prompt, .none)
     }
 
-    func testProgressHalfway() {
-        let midpoint = (MeetingSilencePolicy.warnAfter + MeetingSilencePolicy.confidentAfter) / 2
-        XCTAssertEqual(MeetingSilencePolicy.progress(elapsed: midpoint), 0.5, accuracy: 0.001)
+    // MARK: - Stop-time discard rule
+
+    func testShortSilentMeetingIsDiscardedAtStop() {
+        XCTAssertTrue(MeetingSilencePolicy.shouldDiscard(elapsed: 5, hasTranscript: false,
+                                                         hasNotes: false, speechDetected: false))
+        XCTAssertFalse(MeetingSilencePolicy.shouldDiscard(elapsed: MeetingSilencePolicy.discardUnder,
+                                                          hasTranscript: false, hasNotes: false,
+                                                          speechDetected: false))
+        XCTAssertFalse(MeetingSilencePolicy.shouldDiscard(elapsed: 5, hasTranscript: false,
+                                                          hasNotes: false, speechDetected: true))
     }
 
-    func testProgressOneAtConfidentThreshold() {
-        XCTAssertEqual(MeetingSilencePolicy.progress(elapsed: MeetingSilencePolicy.confidentAfter), 1.0, accuracy: 0.001)
-    }
-
-    func testProgressClampedAboveOne() {
-        XCTAssertEqual(MeetingSilencePolicy.progress(elapsed: 999.0), 1.0, accuracy: 0.001)
-    }
-
-    // MARK: - shouldDiscard truth table
-
-    func testDiscardAllConditionsMet() {
-        XCTAssertTrue(MeetingSilencePolicy.shouldDiscard(
-            elapsed: 5.0,
-            hasTranscript: false,
-            hasNotes: false,
-            speechDetected: false
-        ))
-    }
-
-    func testNoDiscardWhenTranscriptExists() {
-        XCTAssertFalse(MeetingSilencePolicy.shouldDiscard(
-            elapsed: 5.0,
-            hasTranscript: true,
-            hasNotes: false,
-            speechDetected: false
-        ))
-    }
-
-    func testNoDiscardWhenNotesExist() {
-        XCTAssertFalse(MeetingSilencePolicy.shouldDiscard(
-            elapsed: 5.0,
-            hasTranscript: false,
-            hasNotes: true,
-            speechDetected: false
-        ))
-    }
-
-    func testNoDiscardWhenSpeechDetected() {
-        XCTAssertFalse(MeetingSilencePolicy.shouldDiscard(
-            elapsed: 5.0,
-            hasTranscript: false,
-            hasNotes: false,
-            speechDetected: true
-        ))
-    }
-
-    func testNoDiscardWhenElapsedAtOrAboveCeiling() {
-        XCTAssertFalse(MeetingSilencePolicy.shouldDiscard(
-            elapsed: MeetingSilencePolicy.discardUnder,
-            hasTranscript: false,
-            hasNotes: false,
-            speechDetected: false
-        ))
-    }
-
-    func testNoDiscardWhenElapsedWellAboveCeiling() {
-        XCTAssertFalse(MeetingSilencePolicy.shouldDiscard(
-            elapsed: 60.0,
-            hasTranscript: false,
-            hasNotes: false,
-            speechDetected: false
-        ))
-    }
-
-    func testDiscardJustBelowCeiling() {
-        XCTAssertTrue(MeetingSilencePolicy.shouldDiscard(
-            elapsed: MeetingSilencePolicy.discardUnder - 0.1,
-            hasTranscript: false,
-            hasNotes: false,
-            speechDetected: false
-        ))
+    /// A requested discard (countdown ran out / Discard pressed) lifts the length and noise
+    /// conditions — but a word or a note that arrived with the tail still keeps the meeting.
+    func testRequestedDiscardNeverDeletesContent() {
+        XCTAssertTrue(MeetingSilencePolicy.shouldDiscard(elapsed: 45, hasTranscript: false, hasNotes: false,
+                                                         speechDetected: true, requested: true))
+        XCTAssertFalse(MeetingSilencePolicy.shouldDiscard(elapsed: 45, hasTranscript: true, hasNotes: false,
+                                                          speechDetected: true, requested: true))
+        XCTAssertFalse(MeetingSilencePolicy.shouldDiscard(elapsed: 45, hasTranscript: false, hasNotes: true,
+                                                          speechDetected: false, requested: true))
     }
 }

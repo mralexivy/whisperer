@@ -29,6 +29,33 @@ struct MeetingLiveBadge: View {
     }
 
     var body: some View {
+        // Paused by the user: the badge is the resume control. Without it a meeting paused from
+        // the quiet card had no way back except the Island, which hides while a window is open.
+        if appState.isPaused && !session.isPausedForDictation {
+            Button(action: { appState.togglePause() }) {
+                HStack(spacing: 5) {
+                    Image(systemName: "play.fill").font(.system(size: 8, weight: .bold))
+                    Text("PAUSED \u{00B7} RESUME")
+                        .font(.system(size: 10, weight: .bold))
+                        .tracking(0.8)
+                }
+                .foregroundColor(Self.amber)
+                .padding(.horizontal, 8)
+                .padding(.vertical, 3)
+                .background(Self.amber.opacity(0.16))
+                .clipShape(Capsule())
+                .contentShape(Capsule())
+            }
+            .buttonStyle(.plain)
+            .pointerOnHover()
+            .help("Resume recording")
+            .accessibilityLabel("Paused. Resume recording")
+        } else {
+            badge
+        }
+    }
+
+    private var badge: some View {
         HStack(spacing: 5) {
             Circle()
                 .fill(color)

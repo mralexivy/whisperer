@@ -34,6 +34,9 @@ class MeetingSession: ObservableObject {
     /// True while the user dictates on top of this meeting (`AppState.beginMeetingInterlude`).
     /// The meeting's capture is paused for that span; the surfaces show it.
     @Published var isPausedForDictation: Bool = false
+    /// Set by the started-by-mistake card (countdown ran out, or Discard pressed). The stop path
+    /// then deletes the meeting — but only if it is still empty once the tail has landed.
+    var discardRequested = false
     @Published var elapsedSeconds: Double = 0
 
     /// Backing store for `livePreviewText`. Private so every write goes through the editor
@@ -62,6 +65,9 @@ class MeetingSession: ObservableObject {
         set {
             let trimmed = newValue.trimmingCharacters(in: .whitespacesAndNewlines)
             livePreviewStorage = trimmed.isEmpty ? "" : polishUtterance(trimmed)
+            // Live words are content too — a long first sentence reaches here well before its
+            // chunk commits, and the started-by-mistake card must not count down over it.
+            if !trimmed.isEmpty, isRecording { AppState.shared.meetingSilenceWatcher.noteSpeech() }
         }
     }
 
@@ -317,6 +323,8 @@ class MeetingSession: ObservableObject {
         // leaks into the view during the async CoreData round-trip.
         silenceFlushTask?.cancel()
         silenceFlushTask = nil
+        discardRequested = false
+        isPausedForDictation = false
         meetingID = nil
         segments = []
         notes = []
@@ -434,12 +442,16 @@ class MeetingSession: ObservableObject {
                 }
 
                 // Silent discard: short recording with no words and no confirmed speech.
+                let discardRequested = self.discardRequested
+                self.discardRequested = false
                 if MeetingSilencePolicy.shouldDiscard(
                     elapsed: self.elapsedSeconds,
                     hasTranscript: false,
                     hasNotes: !self.notes.isEmpty,
-                    speechDetected: silenceWatcherSpeechDetected
+                    speechDetected: silenceWatcherSpeechDetected,
+                    requested: discardRequested
                 ) {
+                    if discardRequested { AppState.shared.noteEmptyMeetingDiscarded() }
                     Logger.info("Meeting discarded: \(String(format: "%.1f", self.elapsedSeconds))s, no speech detected",
                                 subsystem: .app)
                     MeetingManager.shared.setProcessing(nil, for: id)
@@ -1063,6 +1075,8 @@ class MeetingSession: ObservableObject {
         let note = MeetingNote(kind: kind, timestamp: elapsedSeconds)
         notes.append(note)
         persistNotes()
+        // A note is the user saying this meeting matters: never treat it as started by mistake.
+        if isRecording { AppState.shared.meetingSilenceWatcher.noteSpeech() }
     }
 
     func updateNote(_ note: MeetingNote) {

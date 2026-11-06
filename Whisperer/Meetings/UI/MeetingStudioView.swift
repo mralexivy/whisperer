@@ -293,7 +293,6 @@ struct MeetingStudioView: View {
 
             Button {
                 Task {
-                    guard await MeetingConsentPrompt.ensureConsent() else { return }
                     await session.startRecording(title: defaultNoteTitle(), surface: .workspace)
                 }
             } label: {

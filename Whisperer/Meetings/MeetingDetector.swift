@@ -649,7 +649,11 @@ final class MeetingDetector {
         case .debouncing(let task):
             task.cancel()
         case .prompted:
-            AppState.shared.dismissMeetingNotification()
+            // Not dismissed here. Call apps release the mic for a moment when you mute, join a
+            // breakout or switch devices, and this used to make the prompt vanish within a
+            // second of appearing. It stays for its full window (`showMeetingNotification`)
+            // or until the user answers it.
+            break
         case .suppressedUntilHardwareIdle, .idle:
             break
         }

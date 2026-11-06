@@ -587,12 +587,20 @@ class AppState: ObservableObject {
         // taps Start Recording — so the ANE compile costs are already paid.
         MeetingEngines.shared.prefetch()
         #endif
+        // Long enough to notice and answer while a call is getting started. The token keeps an
+        // earlier prompt's timer from closing a newer one.
+        let token = UUID()
+        meetingPromptToken = token
         Task { @MainActor [weak self] in
-            try? await Task.sleep(nanoseconds: 30_000_000_000)
-            guard let self, self.showMeetingDetectedToast else { return }
+            try? await Task.sleep(nanoseconds: UInt64(Self.meetingPromptSeconds * 1_000_000_000))
+            guard let self, self.showMeetingDetectedToast, self.meetingPromptToken == token else { return }
             self.dismissMeetingNotification()
         }
     }
+
+    /// How long the meeting-detected prompt stays up unanswered.
+    static let meetingPromptSeconds: Double = 45
+    private var meetingPromptToken: UUID?
 
     func dismissMeetingNotification() {
         showMeetingDetectedToast = false
@@ -1001,11 +1009,6 @@ class AppState: ObservableObject {
     // Meeting detection camera opt-in
     @Published var cameraDetectionEnabled: Bool = UserDefaults.standard.bool(forKey: "cameraDetectionEnabled") {
         didSet { UserDefaults.standard.set(cameraDetectionEnabled, forKey: "cameraDetectionEnabled") }
-    }
-
-    // Meeting recording consent (Guideline 2.5.14)
-    @Published var hasConsentedToMeetingRecording: Bool = UserDefaults.standard.bool(forKey: "hasConsentedToMeetingRecording") {
-        didSet { UserDefaults.standard.set(hasConsentedToMeetingRecording, forKey: "hasConsentedToMeetingRecording") }
     }
 
     /// Returns true when mcpCustomURL contains a parseable http/https URL.
@@ -5759,11 +5762,14 @@ class AppState: ObservableObject {
 
         // Start silent-meeting watcher before audio begins.
         meetingSilenceWatcher.start(vad: sileroVAD)
-        silenceWatcherObserver = meetingSilenceWatcher.$stage
+        silenceWatcherObserver = meetingSilenceWatcher.$prompt
             .receive(on: RunLoop.main)
-            .sink { [weak self] stage in
-                self?.showSilentMeetingToast = (stage == .warning || stage == .confident)
+            .sink { [weak self] prompt in
+                self?.showSilentMeetingToast = prompt != .none
             }
+        meetingSilenceWatcher.onAutoDiscard = { [weak self] in
+            self?.discardEmptyMeeting(reason: "nothing was said for the whole countdown")
+        }
 
         // Reuse in-app recording path (isInAppMode = true suppresses text injection)
         isInAppMode = true
@@ -5817,6 +5823,33 @@ class AppState: ObservableObject {
     }
 
     /// Stops whichever recording mode is active. Used by the HUD stop button.
+    /// Stops the live meeting and deletes it — the started-by-mistake card's countdown ran out,
+    /// or the user pressed Discard. The deletion itself is decided at stop, after the tail has
+    /// landed: a word that arrives with it keeps the meeting (`MeetingSilencePolicy.shouldDiscard`).
+    func discardEmptyMeeting(reason: String) {
+        guard let session = activeMeetingSession, session.isRecording,
+              !meetingSilenceWatcher.hasContent, session.notes.isEmpty else { return }
+        // Never mid-dictation: the user is talking, just not to the meeting.
+        guard meetingInterlude == nil else { return }
+        Logger.info("Meeting: discarding an empty meeting — \(reason)", subsystem: .app)
+        session.discardRequested = true
+        Task { await session.stopRecording() }
+    }
+
+    /// Shown for a few seconds after an empty meeting was discarded, so a meeting never just
+    /// disappears without a word.
+    @Published private(set) var emptyMeetingDiscardedToast = false {
+        didSet { NotificationCenter.default.post(name: NSNotification.Name("AppStateChanged"), object: nil) }
+    }
+
+    func noteEmptyMeetingDiscarded() {
+        emptyMeetingDiscardedToast = true
+        Task { @MainActor [weak self] in
+            try? await Task.sleep(nanoseconds: 4_000_000_000)
+            self?.emptyMeetingDiscardedToast = false
+        }
+    }
+
     func stopActiveRecording() {
         if let session = activeMeetingSession {
             Task { await session.stopRecording() }

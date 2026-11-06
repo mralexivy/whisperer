@@ -590,7 +590,6 @@ final class IslandCoordinator: ObservableObject {
             case .startMeeting:
                 let session = MeetingSession()
                 Task { @MainActor in
-                    guard await MeetingConsentPrompt.ensureConsent() else { return }
                     await session.startRecording(
                         title: NSLocalizedString("island.newMeeting", value: "Meeting",
                                                  comment: "Default title for a meeting started from the Island"),

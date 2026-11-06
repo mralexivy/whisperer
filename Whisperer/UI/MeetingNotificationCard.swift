@@ -135,8 +135,6 @@ struct MeetingNotificationCard: View {
     private func handleStartNotes() {
         let capturedApp = app
         Task { @MainActor in
-            // Recording consent (Guideline 2.5.14). Declining leaves the card up.
-            guard await MeetingConsentPrompt.ensureConsent() else { return }
             Task { @MainActor in
                 let session = MeetingSession()
                 await session.startRecording(title: capturedApp.name, surface: .floatingWindow,

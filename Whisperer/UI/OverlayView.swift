@@ -190,6 +190,10 @@ struct OverlayView: View {
                     .transition(.move(edge: .bottom).combined(with: .opacity))
             }
 
+            if appState.emptyMeetingDiscardedToast {
+                EmptyMeetingDiscardedCard()
+            }
+
             // In meeting mode the Island / MeetingLiveWindow own the recording UI — nothing else
             // from the HUD should appear. Guard at the outermost level so we never accidentally
             // render the live transcript, the stop indicator, or any other dictation card on top

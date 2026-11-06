@@ -45,6 +45,7 @@ struct MeetingRightPanel: View {
 
 private struct RecordingInProgressView: View {
     @ObservedObject var session: MeetingSession
+    @ObservedObject private var appState = AppState.shared
     @State private var pulse = false
     @State private var dotBright = false
 
@@ -133,7 +134,7 @@ private struct RecordingInProgressView: View {
     // MARK: - Live badge
 
     /// Paused (by the user, or while they dictate on top of the meeting) reads amber, not red.
-    private var isPausedCapture: Bool { session.isPausedForDictation || AppState.shared.isPaused }
+    private var isPausedCapture: Bool { session.isPausedForDictation || appState.isPaused }
     private var badgeColor: Color { isPausedCapture ? Color(red: 0.961, green: 0.620, blue: 0.043) : .red }
 
     private var liveBadge: some View {
@@ -144,7 +145,7 @@ private struct RecordingInProgressView: View {
                 .opacity(isPausedCapture || dotBright ? 1.0 : 0.2)
 
             Text(session.isPausedForDictation ? "PAUSED \u{00B7} YOU'RE DICTATING"
-                 : AppState.shared.isPaused ? "PAUSED" : "RECORDING LIVE")
+                 : appState.isPaused ? "PAUSED \u{00B7} RESUME FROM THE HEADER" : "RECORDING LIVE")
                 .font(.system(size: 11, weight: .bold))
                 .tracking(0.9)
                 .foregroundColor(badgeColor.opacity(0.9))

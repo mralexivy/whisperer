@@ -62,7 +62,6 @@ struct MeetingListPanel: View {
             Spacer()
             Button {
                 Task {
-                    guard await MeetingConsentPrompt.ensureConsent() else { return }
                     await session.startRecording(title: defaultTitle(), surface: .workspace)
                 }
             } label: {

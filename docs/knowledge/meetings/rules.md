@@ -604,3 +604,28 @@ cancel and redo; never drop the shortcut.
     It used to `break` the whole group, leaving the rest of the meeting un-refined.
   - The mmBERT editor pass pauses between cards.
   - `registerInFlightAbort` fires at once if a dictation is already active.
+
+## Silent meetings: started by mistake ≠ went quiet (2026-11-06)
+
+`MeetingQuietTracker` (pure; `MeetingSilencePolicy.swift`) decides, driven at 1 Hz by
+`MeetingSilenceWatcher` on the session clock, which stops while capture is paused.
+
+- **Started by mistake** means no transcript words, no live text and no notes since Start.
+  - After 15 s of silence, a card counts down 30 s (Keep recording / Discard). At 0 the meeting
+    is stopped and deleted. That is at least 45 s from Start.
+  - Sound (VAD/RMS) restarts the countdown; it never hides the card. The old watcher latched off
+    on the first noise and the card vanished.
+  - Only content or Keep ends it.
+  - The delete is decided at stop, after the tail lands. `shouldDiscard(requested:)` never deletes
+    a meeting with a transcript or notes.
+  - An "Empty meeting discarded" toast follows, so nothing vanishes silently.
+- **Went quiet** means content exists, then 5 min with no content and no voice. It is never
+  discarded and nothing is automatic: Pause / Keep going (asks again in 10 min) / Stop.
+- **Paused, muted or dictating on top**: no prompts, and the clocks restart on resume.
+- **A paused meeting must always offer Resume.** `MeetingLiveBadge` becomes a "PAUSED · RESUME"
+  button. The Island is the only other resume control, and it hides while a window is open.
+- **The meeting-detected prompt stays up for 45 s** and is not dismissed when the mic hardware
+  blinks idle. Call apps release the mic on mute or join, which made it vanish within a second.
+- **No modal on Start.** `MeetingConsentView` was removed on 2026-11-06; pressing Start is the
+  consent (see `docs/exec-plans/app-store-submission.md`). Don't put a modal between Start and
+  recording.
