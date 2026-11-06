@@ -31,7 +31,7 @@
 	<!-- OAuth client IDs for "Sign in with Google / Microsoft" — the app's only calendar sources.
 	     Setup: docs/exec-plans/calendar-oauth-setup.md. Empty = that sign-in is hidden as "not set up". -->
 	<key>WhispererGoogleCalendarClientID</key>
-	<string></string>
+	<string>933733507703-dscuf8ihu48vek7iis0lhmjbrthblglg.apps.googleusercontent.com</string>
 	<key>WhispererMicrosoftCalendarClientID</key>
 	<string></string>
 	<key>NSSupportsAutomaticGraphicsSwitching</key>
