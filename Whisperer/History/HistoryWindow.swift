@@ -155,6 +155,12 @@ extension HistoryWindow: NSWindowDelegate {
         toolbar = nil
     }
 
+    func windowDidFailToEnterFullScreen(_ window: NSWindow) {
+        // The toolbar was taken down in windowWillEnterFullScreen; a failed transition never
+        // reaches windowDidExitFullScreen, so put it back here or the window stays without it.
+        windowDidExitFullScreen(Notification(name: NSWindow.didExitFullScreenNotification, object: self))
+    }
+
     func windowDidExitFullScreen(_ notification: Notification) {
         // Restore toolbar for normal windowed mode
         toolbar = savedToolbar

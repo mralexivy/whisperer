@@ -280,37 +280,54 @@ struct HistoryWindowView: View {
 
     private var sidebarView: some View {
         VStack(spacing: 0) {
-            // Logo/Brand header
+            // Logo/Brand header — pinned; never pushed up under the traffic lights.
             brandHeader
 
-            // Navigation items
-            VStack(spacing: 4) {
-                ForEach(HistorySidebarItem.visibleItems) { item in
-                    SidebarNavItem(
-                        item: item,
-                        isSelected: selectedSidebarItem == item,
-                        colorScheme: colorScheme
-                    ) {
-                        withAnimation(.spring(response: 0.3)) {
-                            selectedSidebarItem = item
-                        }
+            // The sidebar is taller than a short window (13 items + stats ≈ 900pt). Instead of
+            // overflowing — SwiftUI then centres the column, sliding the header under the
+            // traffic lights and cutting the bottom off — it sheds the stats card first and
+            // then scrolls the items.
+            ViewThatFits(in: .vertical) {
+                VStack(spacing: 0) {
+                    sidebarNavItems
+                    Spacer(minLength: 12)
+                    if let stats = historyManager.statistics {
+                        sidebarStatsCard(stats)
                     }
+                    sidebarVersionLabel
+                }
+                VStack(spacing: 0) {
+                    sidebarNavItems
+                    Spacer(minLength: 8)
+                    sidebarVersionLabel
+                }
+                ScrollView(.vertical, showsIndicators: false) {
+                    sidebarNavItems
+                        .padding(.bottom, 12)
                 }
             }
-            .padding(.horizontal, 12)
-            .padding(.top, 8)
-
-            Spacer()
-
-            // Stats card
-            if let stats = historyManager.statistics {
-                sidebarStatsCard(stats)
-            }
-
-            sidebarVersionLabel
+            .frame(maxHeight: .infinity, alignment: .top)
         }
         .frame(width: 220)
         .background(WhispererColors.sidebarBackground(colorScheme))
+    }
+
+    private var sidebarNavItems: some View {
+        VStack(spacing: 4) {
+            ForEach(HistorySidebarItem.visibleItems) { item in
+                SidebarNavItem(
+                    item: item,
+                    isSelected: selectedSidebarItem == item,
+                    colorScheme: colorScheme
+                ) {
+                    withAnimation(.spring(response: 0.3)) {
+                        selectedSidebarItem = item
+                    }
+                }
+            }
+        }
+        .padding(.horizontal, 12)
+        .padding(.top, 8)
     }
 
     private var brandHeader: some View {
