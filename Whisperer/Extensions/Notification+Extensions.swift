@@ -12,6 +12,9 @@ extension NSNotification.Name {
     static let switchToAIModesTab          = Notification.Name("switchToAIModesTab")
     static let switchToMeetingStudioTab    = Notification.Name("switchToMeetingStudioTab")
     static let switchToFileTranscriptionTab = Notification.Name("switchToFileTranscriptionTab")
+    static let switchToLLMTab              = Notification.Name("switchToLLMTab")
+    /// A connected AI failed and the meeting was handled on this Mac instead. `object` is the meeting id.
+    static let connectedAIDidFallBack      = Notification.Name("connectedAIDidFallBack")
     static let dictionaryDidRebuild = Notification.Name("dictionaryDidRebuild")
     static let overlaySettingsChanged  = Notification.Name("overlaySettingsChanged")
     static let islandPlacementChanged  = Notification.Name("islandPlacementChanged")

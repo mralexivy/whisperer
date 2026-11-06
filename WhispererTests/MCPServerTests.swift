@@ -36,7 +36,9 @@ final class MCPServerTests: XCTestCase {
 
         let ready = XCTestExpectation(description: "MCP server listening on \(testPort)")
         Task {
-            await WhispererMCPServer.shared.start(port: testPort)
+            // restart, not start: the server is a singleton and another suite (e.g.
+            // MCPMultiClientTests) may have left it listening on a different port.
+            await WhispererMCPServer.shared.restart(port: testPort)
             ready.fulfill()
         }
         guard XCTWaiter().wait(for: [ready], timeout: 10) == .completed else {
@@ -74,10 +76,20 @@ final class MCPServerTests: XCTestCase {
         return connected
     }
 
+    /// The token is optional on loopback; this suite tests the token-required mode.
+    private var savedRequireToken = false
+
     override func setUpWithError() throws {
         try super.setUpWithError()
+        savedRequireToken = AppState.shared.mcpRequireToken
+        AppState.shared.mcpRequireToken = true
         // Fail this class rather than let every test report an unrelated connection error.
         if let failure = Self.startupFailure { XCTFail(failure) }
+    }
+
+    override func tearDownWithError() throws {
+        AppState.shared.mcpRequireToken = savedRequireToken
+        try super.tearDownWithError()
     }
 
     override class func tearDown() {
@@ -345,6 +357,64 @@ final class MCPServerTests: XCTestCase {
             text.contains("Unknown tool") || text.contains("isError"),
             "Unknown tool should return error content. Got: \(text.prefix(600))"
         )
+    }
+
+    // MARK: - Transport compatibility over a real socket
+
+    func testHealthOverSocket() async throws {
+        let url = URL(string: "http://localhost:\(Self.testPort)/health")!
+        let (data, response) = try await URLSession.shared.data(from: url)
+        XCTAssertEqual((response as? HTTPURLResponse)?.statusCode, 200)
+        let json = try XCTUnwrap(try JSONSerialization.jsonObject(with: data) as? [String: Any])
+        XCTAssertEqual(json["ok"] as? Bool, true)
+    }
+
+    /// A plain HTTP client (Accept: application/json only) gets a JSON body, not SSE.
+    func testJSONOnlyInitializeOverSocket() async throws {
+        var req = URLRequest(url: mcpURL())
+        req.httpMethod = "POST"
+        req.setValue("application/json", forHTTPHeaderField: "Accept")
+        req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        req.setValue("Bearer \(await authToken())", forHTTPHeaderField: "Authorization")
+        req.httpBody = Data(#"{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-03-26","capabilities":{},"clientInfo":{"name":"json-client","version":"1"}}}"#.utf8)
+        let (data, response) = try await URLSession.shared.data(for: req)
+        let http = try XCTUnwrap(response as? HTTPURLResponse)
+        XCTAssertEqual(http.statusCode, 200)
+        XCTAssertEqual(http.value(forHTTPHeaderField: "Content-Type"), "application/json")
+        XCTAssertNotNil(http.value(forHTTPHeaderField: "MCP-Session-Id"))
+        let json = try XCTUnwrap(try JSONSerialization.jsonObject(with: data) as? [String: Any])
+        XCTAssertNotNil((json["result"] as? [String: Any])?["serverInfo"])
+    }
+
+    /// Legacy HTTP+SSE end to end through the NWListener: endpoint event, POST, result on the stream.
+    func testLegacySSEOverSocket() async throws {
+        var get = URLRequest(url: URL(string: "http://localhost:\(Self.testPort)/sse")!)
+        get.setValue("text/event-stream", forHTTPHeaderField: "Accept")
+        get.setValue("Bearer \(await authToken())", forHTTPHeaderField: "Authorization")
+        let (bytes, response) = try await URLSession.shared.bytes(for: get)
+        XCTAssertEqual((response as? HTTPURLResponse)?.statusCode, 200)
+
+        var lines = bytes.lines.makeAsyncIterator()
+        var endpoint: String?
+        while endpoint == nil, let line = try await lines.next() {
+            if line.hasPrefix("data: ") { endpoint = String(line.dropFirst(6)) }
+        }
+        let path = try XCTUnwrap(endpoint)
+        XCTAssertTrue(path.hasPrefix("/messages?sessionId="))
+
+        var post = URLRequest(url: URL(string: "http://localhost:\(Self.testPort)\(path)")!)
+        post.httpMethod = "POST"
+        post.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        post.setValue("Bearer \(await authToken())", forHTTPHeaderField: "Authorization")
+        post.httpBody = Data(#"{"jsonrpc":"2.0","id":9,"method":"tools/list"}"#.utf8)
+        let (_, postResponse) = try await URLSession.shared.data(for: post)
+        XCTAssertEqual((postResponse as? HTTPURLResponse)?.statusCode, 202)
+
+        var result: String?
+        while result == nil, let line = try await lines.next() {
+            if line.hasPrefix("data: "), line.contains("list_meetings") { result = line }
+        }
+        XCTAssertNotNil(result, "tools/list result must arrive on the SSE stream")
     }
 
     func testToolDefinitionsNotEmpty() {

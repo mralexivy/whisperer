@@ -1,16 +1,133 @@
+---
+version: alpha
+name: Whisperer
+description: >
+  Native macOS dark-navy design system for Whisperer — workspace window, menu bar, overlay
+  HUD and onboarding. Follows the DESIGN.md format (github.com/google-labs-code/design.md):
+  tokens here, the reasoning below. SwiftUI sources of truth: `WhispererColors`
+  (Whisperer/History/HistoryWindowView.swift), `MBColors`, `OnboardingColors`.
+colors:
+  background: "#0C0C1A"
+  surface: "#14142B"
+  sidebar: "#0A0A18"
+  elevated: "#1C1C3A"
+  primary: "#5B6CF7"
+  primary-dark: "#4C5DE8"
+  secondary: "#8B5CF6"
+  text-primary: "#FFFFFF"
+  text-secondary: "rgba(255,255,255,0.5)"
+  text-tertiary: "rgba(255,255,255,0.35)"
+  border: "rgba(255,255,255,0.06)"
+  pill: "rgba(255,255,255,0.08)"
+  success: "#10B981"
+  warning: "#F59E0B"
+  danger: "#EF4444"
+  info: "#06B6D4"
+  vendor-anthropic: "#D97757"
+  vendor-openai: "#10A37F"
+  vendor-google: "#4285F4"
+typography:
+  page-title:
+    fontFamily: SF Pro
+    fontSize: 26px
+    fontWeight: 300
+  section-label:
+    fontFamily: SF Pro
+    fontSize: 11px
+    fontWeight: 600
+    letterSpacing: 1.2px
+  row-title:
+    fontFamily: SF Pro
+    fontSize: 14px
+    fontWeight: 600
+  body:
+    fontFamily: SF Pro
+    fontSize: 13px
+    fontWeight: 400
+  caption:
+    fontFamily: SF Pro
+    fontSize: 11px
+    fontWeight: 500
+  code:
+    fontFamily: SF Mono
+    fontSize: 12px
+    fontWeight: 400
+rounded:
+  pill: 999px
+  sm: 7px
+  md: 8px
+  row: 12px
+  card: 14px
+spacing:
+  gutter: 32px
+  section: 28px
+  card-padding: 20px
+  row-padding-x: 14px
+  row-padding-y: 12px
+  stack: 8px
+components:
+  primary-button:
+    backgroundColor: "{colors.primary}"
+    textColor: "{colors.text-primary}"
+    rounded: "{rounded.md}"
+    padding: 8px 14px
+  secondary-button:
+    backgroundColor: "{colors.elevated}"
+    textColor: "{colors.text-primary}"
+    rounded: "{rounded.md}"
+    padding: 8px 12px
+  choice-row:
+    backgroundColor: "{colors.surface}"
+    rounded: "{rounded.row}"
+    padding: 12px 14px
+  status-pill:
+    rounded: "{rounded.pill}"
+    padding: 4px 9px
+  provider-badge:
+    rounded: "{rounded.pill}"
+    padding: 3px 8px
+---
+
 # Whisperer Design System
+
+## Overview
+
+Whisperer is a private, native Mac tool: calm, dark, precise. Surfaces are dark navy,
+interaction is blue→purple, and every element has its own color so a screen reads at a
+glance. The best references in the app are **Workspace → LLM** (`LLMPageView`) and
+**Workspace → MCP** (`MCPConnectPageView`) — rebuild any settings or "connect" screen on
+their pattern:
+
+1. **One question per screen, answered first.** Show the current state before any choice
+   (LLM: an animated "Your meeting → AI → Notes" banner; MCP: a hero with the live server
+   status and one big switch).
+2. **One list or grid of choices, not stacked cards of options.** Detected or ready items
+   first, the rest after or behind "More…". Each item is a row/tile with icon, name, one
+   plain sentence, a status pill and a selection indicator.
+3. **Progressive disclosure in place.** Clicking an item either does the thing, or unfolds
+   the one step it still needs *inside that item* (consent, numbered sign-in steps, a key
+   field, "Show config"). No modal sheets for the main flow.
+4. **One primary action at a time** (gradient), everything else secondary. After it: visible
+   success (checkmark draw-in), then automatic verification (connection test, readiness).
+5. **Plumbing is collapsed.** Ports, tokens, endpoints, network → one "Advanced" disclosure,
+   each setting with a plain-language line.
+6. **Motion explains state changes**, never decorates: springs on expand/select, a moving dot
+   or sheen for "working", pulses for "live". Always honor Reduce Motion.
+7. **Say who did it with an icon and a name**, never a sentence ("ChatGPT", not "Answered by
+   ChatGPT"). See *Provider identity* under Components.
 
 ## Table of Contents
 
-1. [Color System](#1-color-system) — Unified dark navy palette, blue-purple accents, per-element colorful icons
-2. [Typography](#2-typography) — Font scale, weight ladder, tracking, design variants
-3. [Layout Patterns](#3-layout-patterns) — Workspace window, sidebar, panels, overlay HUD, onboarding
-4. [Components](#4-components) — Cards, rows, buttons, filters, icons, search, animations
-5. [Anti-Patterns](#5-anti-patterns) — Collected rules for what NOT to do
+1. [Colors](#colors) — Unified dark navy palette, blue-purple accents, per-element colorful icons
+2. [Typography](#typography) — Font scale, weight ladder, tracking, design variants
+3. [Layout](#layout) — Workspace window, sidebar, panels, overlay HUD, onboarding, settings pages
+4. [Elevation & Depth](#elevation--depth) — Card shadows, glows, hover lift
+5. [Shapes](#shapes) — Corner radii by element
+6. [Components](#components) — Cards, rows, buttons, choice lists, connect flow, provider badges, motion
+7. [Do's and Don'ts](#dos-and-donts) — Collected rules, including interaction guardrails
 
 ---
-
-## 1. Color System
+## Colors
 
 ### Core Principle
 
@@ -185,7 +302,7 @@ Color(hex: "FF22C55E")   // 8-char with alpha
 
 ---
 
-## 2. Typography
+## Typography
 
 Whisperer uses **explicit font sizes** with `.system(size:weight:design:)` in workspace and onboarding windows. The menu bar panel uses `.caption` / `.caption2` for compact secondary text (info card labels, model size/speed, badge text, permission descriptions) where the smaller semantic sizes fit the dense layout.
 
@@ -252,7 +369,7 @@ Whisperer uses **explicit font sizes** with `.system(size:weight:design:)` in wo
 
 ---
 
-## 3. Layout Patterns
+## Layout
 
 ### Workspace Window (HistoryWindow + HistoryWindowView)
 
@@ -293,7 +410,87 @@ Whisperer uses **explicit font sizes** with `.system(size:weight:design:)` in wo
 
 ---
 
-## 4. Components
+### Settings & Connect Pages (LLMPageView, MCPConnectPageView)
+
+- Content column centered, `maxWidth: 860`, `32pt` side gutter, `28pt` between sections.
+- Order: header (gradient icon tile + 26pt `.light` title + one-sentence subtitle) → current
+  state banner / hero → the choice list or grid → secondary sections → Privacy/Advanced last.
+- Section labels: 11pt semibold, uppercase, `tracking(1.2)`, tertiary text, with one 13pt
+  secondary sentence under them saying what the section decides.
+- Group labels inside a list: 10pt semibold uppercase `tracking(1.0)` + an 11pt hint.
+
+## Elevation & Depth
+
+- Every card and row has a shadow: rest `black 5%, r4, y1`; hover `black 12%, r8, y3`.
+- The selected item glows: `primary 45%, r6` around its 1.5pt `primary` ring.
+- Hero/state banners carry a soft colored shadow (`primary 12%, r10, y3`); primary buttons
+  `secondary 20%` at rest → `45%, r8` on hover.
+- Hover never moves layout: change fill, shadow and at most `scaleEffect(1.02)` on buttons.
+
+## Shapes
+
+- Pills, chips, badges, status: capsule. Buttons and inputs: 8pt. Icon tiles: 7–9pt.
+- Choice rows and panels: 12pt. Cards and hero banners: 14pt. Use `.continuous` corners for
+  app-icon-like marks.
+
+## Components
+
+### Choice List (LLM page) — `ChoiceRow` in LLMPageView.swift
+
+The pattern for "pick one of N":
+
+- Row: 36pt icon (the item's real icon when there is one) · title 14pt semibold + optional
+  orange PREVIEW pill · one-line 12pt subtitle · `StatusPill` · radio (check fills on select).
+- Selection ring is one `matchedGeometryEffect`, so it *slides* between rows.
+- Tapping a row: ready + allowed → select; ready + not allowed → inline consent panel;
+  not ready → inline setup (numbered steps, `CommandPill` with Copy→Copied, "Check again");
+  the row already in use → inline manage panel. Logic lives in a controller
+  (`ConnectedAIPageController`) so it is unit-tested; the view only renders.
+- Inline panel: separated by a 1pt border, indented under the title (64pt), unfolds with
+  `.move(edge: .top) + .opacity`.
+- `StatusPill`: dot + text in a tinted capsule; green ready, amber needs-attention,
+  red error, grey neutral; a pulsing halo while checking; a 2pt progress bar for downloads.
+
+### Connect Flow (MCP page) — MCPConnectPageView + MCPClientConnectPanel
+
+The pattern for "connect X to Y":
+
+- Hero: value sentence, live status (`MCPPulsingDot`), one big switch, then fact chips
+  (`MCPChip`: "Only this Mac", "Read-only", "1 app connected") and the URL with `MCPCopyButton`.
+- Grid of app tiles (min 260pt): detected apps first with a badge (Connected → Needs update →
+  Installed), the rest under a collapsed "More apps (n)".
+- Selecting a tile opens one panel: three numbered step cards (what happens, what to do,
+  what to try), one gradient button ("Connect to Codex", or "Copy setup" when it can't write),
+  "Show config" disclosure (`MCPCodeBlock`, path + Reveal). Success → `MCPSuccessCheck`
+  draw-in → automatic connection test → inline result with a fix suggestion on failure.
+- Every side effect (install, copy, reveal, test, detect) goes through an injectable
+  actions struct (`MCPConnectActions`) so click tests never touch real config files.
+
+### Provider Identity — `ProviderMark` / `ProviderBadge` (ProviderBadge.swift)
+
+- An AI is shown as **its real icon + its name**, e.g. [icon] ChatGPT. Icons come from the
+  user's installed apps (ChatGPT.app, Claude.app, the Codex icon inside ChatGPT.app,
+  Antigravity/Gemini); nothing is bundled. Fallback: vendor-colored glyph tile
+  (Anthropic `#D97757`, OpenAI `#10A37F`, Google `#4285F4`).
+- Never a sentence around it: no "by", "Answered by", "Powered by", "Polished by". The
+  tooltip says what the AI did; a green check may follow when an action completed.
+- Use the same mark everywhere the AI acted: overview, Ask AI chip and each answer, transcript
+  polish, meeting list rows, settings rows.
+
+### Motion
+
+- Expand/collapse and selection: `.spring(response: 0.38, dampingFraction: 0.86)`.
+- Working: a moving sheen (`LinearGradient` offset, 1.4s linear repeat) or a travelling dot;
+  live: pulsing halo; done: checkmark draw-in or `.scale + .opacity` transition.
+- Copy buttons morph to "Copied ✓"; counters use `.contentTransition(.numericText())`.
+- Read `@Environment(\.accessibilityReduceMotion)` and drop repeating animations when set.
+
+### Testability (required for new screens)
+
+- Tag every interactive control with `.uiTestFrame("screen.control.id")` and set
+  `.environment(\.uiTestScope, …)` on the page; write click tests that send real mouse
+  events (see `LLMPageClickTests`, `MCPConnectPageClickTests`, docs/knowledge/ui/).
+- Keep behavior in a controller/model object; the view forwards clicks to it.
 
 ### Icon Containers (Colorful Tinted Style)
 
@@ -386,7 +583,7 @@ Gradient card in sidebar showing recording stats:
 
 ---
 
-## 5. Anti-Patterns
+## Do's and Don'ts
 
 ### Colors
 - DO NOT use `.background(.ultraThinMaterial)` — use dark navy backgrounds
@@ -415,3 +612,14 @@ Gradient card in sidebar showing recording stats:
 - DO NOT use plain bare icons for section labels — wrap in colorful tinted container
 - DO NOT use gradient on filter tabs or toggles — flat accent only
 - DO NOT create cards without shadows
+
+### Interaction Guardrails
+
+- **Never put a hit-testable view on top of a control.** An `.overlay { RoundedRectangle().stroke() }`
+  on a row swallowed every click on its button. Borders/rings go in `.background { }`, or add
+  `.allowsHitTesting(false)`.
+- Don't add a second sheet or modal for something that can unfold in place.
+- Don't show more than one gradient button in a view.
+- Don't show a disabled control without saying why (status pill or one-line hint).
+- Don't use jargon in the main flow (ports, tokens, schemas) — it belongs under Advanced.
+- Don't attribute with a sentence ("by ChatGPT") — use `ProviderBadge`.

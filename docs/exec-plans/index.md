@@ -2,6 +2,9 @@
 
 ## Active Plans
 
+- [Connected AI providers](connected-ai-providers.md) — proposed: meeting notes + Ask AI on the
+  user's own AI (Codex / Claude Code / Antigravity CLIs, ChatGPT OAuth, API keys), local default
+
 - [W2 — Correction learning](correction-learning.md) — conservative, off-by-default candidate
   collection; automatic dictionary promotion is explicitly not enabled
 - [Fast Polish — where we stand](deterministic-polish-status.md) — non-generative polishing on

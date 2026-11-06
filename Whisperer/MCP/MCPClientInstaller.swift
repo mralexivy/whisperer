@@ -2,17 +2,19 @@
 //  MCPClientInstaller.swift
 //  Whisperer
 //
-//  Writes (or copies) the per-client MCP config entry for Whisperer.
+//  Writes (or copies) the per-client MCP config entry for Whisperer. The entry shapes
+//  and merge logic live in MCPClientConfig.swift (pure, unit-tested); this file only
+//  does the file system and pasteboard side effects.
 //
 //  In non-sandboxed builds the entry is merged directly into the client's config
 //  file.  In the sandboxed AppStore build the entry is copied to the clipboard
 //  and the config file is revealed in Finder — we cannot write to files outside
 //  the container.
 //
-//  Merge semantics: read existing config, replace only the "whisperer" key,
-//  write back atomically.  Pre-existing servers are untouched.  If the file is
-//  missing it is created.  If it is malformed the operation falls back to
-//  copy + reveal (never overwrites a malformed file).
+//  Merge semantics: read existing config, replace only the "whisperer" entry,
+//  write back atomically after backing the old file up to `<file>.whisperer.bak`.
+//  Pre-existing servers are untouched.  If the file is missing it is created.  If it
+//  is malformed the operation falls back to copy + reveal (never overwrites it).
 //
 
 import AppKit
@@ -23,279 +25,161 @@ import Foundation
 enum MCPInstallResult {
     case installed(path: String)       // file written successfully
     case copied(hint: String)          // clipboard set; hint for user
-    case revealed(path: String)        // file revealed in Finder (AppStore)
+    case revealed(path: String)        // file revealed in Finder (AppStore / malformed file)
     case failed(String)                // unrecoverable error
-}
-
-// MARK: - Client definitions
-
-enum MCPClient: CaseIterable {
-    case claudeCode
-    case claudeDesktop
-    case codex
-    case chatgpt
-
-    var displayName: String {
-        switch self {
-        case .claudeCode:    return "Claude Code"
-        case .claudeDesktop: return "Claude Desktop"
-        case .codex:         return "Codex"
-        case .chatgpt:       return "ChatGPT"
-        }
-    }
-
-    var description: String {
-        switch self {
-        case .claudeCode:    return "Add to Claude Code (CLI + IDE extensions)"
-        case .claudeDesktop: return "Add to Claude Desktop"
-        case .codex:         return "Add to Codex (OpenAI agent)"
-        case .chatgpt:       return "Copy connection URL"
-        }
-    }
-
-    var iconName: String {
-        switch self {
-        case .claudeCode:    return "terminal.fill"
-        case .claudeDesktop: return "desktopcomputer"
-        case .codex:         return "cpu"
-        case .chatgpt:       return "bubble.left.and.bubble.right.fill"
-        }
-    }
-
-    /// Absolute path to the config file, nil for clients with no file (ChatGPT).
-    func configPath() -> URL? {
-        let home = FileManager.default.homeDirectoryForCurrentUser
-        switch self {
-        case .claudeCode:
-            return home.appendingPathComponent(".claude.json")
-        case .claudeDesktop:
-            return FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)
-                .first?.appendingPathComponent("Claude/claude_desktop_config.json")
-        case .codex:
-            return home.appendingPathComponent(".codex/config.toml")
-        case .chatgpt:
-            return nil
-        }
-    }
 }
 
 // MARK: - Installer
 
 enum MCPClientInstaller {
 
+    /// The user's real home directory — also inside the App Sandbox, where
+    /// `homeDirectoryForCurrentUser` points into the container.
+    static var realHomeDirectory: URL {
+        if let pw = getpwuid(getuid()), let dir = pw.pointee.pw_dir {
+            return URL(fileURLWithPath: String(cString: dir), isDirectory: true)
+        }
+        return FileManager.default.homeDirectoryForCurrentUser
+    }
+
+    static func configURL(for client: MCPClient) -> URL? {
+        client.configPath(home: realHomeDirectory)
+    }
+
+    /// Whether this build can write the client's config itself.
+    static func canAutoInstall(_ client: MCPClient) -> Bool {
+#if APP_STORE
+        return false
+#else
+        return client.canAutoInstall
+#endif
+    }
+
     /// Install or copy the Whisperer MCP entry for the given client.
-    /// `url` is the full MCP endpoint URL (e.g. "http://localhost:8080/mcp").
-    static func install(_ client: MCPClient, url: String) -> MCPInstallResult {
-        switch client {
-        case .chatgpt:
-            return installChatGPT(url: url)
-        case .claudeCode:
-            return installJSON(client: client, url: url)
-        case .claudeDesktop:
-            return installJSON(client: client, url: url)
-        case .codex:
-            return installTOML(url: url)
+    static func install(_ client: MCPClient, info: MCPConnectionInfo) -> MCPInstallResult {
+        let snippet = client.snippet(for: info)
+
+        guard let configURL = configURL(for: client) else {
+            copy(snippet)
+            return .copied(hint: client.instructions)
         }
-    }
-
-    // MARK: - ChatGPT (URL copy only — requires a public https URL for remote connectors)
-
-    private static func installChatGPT(url: String) -> MCPInstallResult {
-        NSPasteboard.general.clearContents()
-        NSPasteboard.general.setString(url, forType: .string)
-        return .copied(hint: "Paste this URL in ChatGPT → Settings → Connectors → Add custom connector. ChatGPT requires a public https URL; enable LAN access or use a tunnel for remote connectivity.")
-    }
-
-    // MARK: - JSON-based configs (Claude Code, Claude Desktop)
-
-    private static func installJSON(client: MCPClient, url: String) -> MCPInstallResult {
-        guard let configURL = client.configPath() else {
-            return .failed("No config path for \(client.displayName)")
-        }
-
-        let entry = jsonEntry(for: client, url: url)
-        let snippet = snippetForCopy(client: client, entry: entry)
 
 #if APP_STORE
-        return copyAndReveal(snippet: snippet, path: configURL)
+        return copyAndReveal(snippet: snippet, path: configURL, client: client)
 #else
-        return mergeJSON(configURL: configURL, serverName: "whisperer", entry: entry, snippet: snippet)
+        switch client.snippetFormat {
+        case .toml:
+            return installCodex(info: info, configURL: configURL, snippet: snippet)
+        case .json:
+            return installJSON(client: client, info: info, configURL: configURL, snippet: snippet)
+        case .text:
+            copy(snippet)
+            return .copied(hint: client.instructions)
+        }
 #endif
     }
 
-    /// Returns the JSON object to place under `mcpServers.whisperer`.
-    private static func jsonEntry(for client: MCPClient, url: String) -> [String: Any] {
-        let token = AppState.shared.mcpBearerToken
-        switch client {
-        case .claudeCode:
-            // Claude Code supports streamable-http natively.
-            return [
-                "type": "streamable-http",
-                "url": url,
-                "headers": ["Authorization": "Bearer \(token)"]
-            ]
-        case .claudeDesktop:
-            // Claude Desktop routes http MCP via mcp-remote (stdio bridge).
-            return [
-                "command": "npx",
-                "args": ["-y", "mcp-remote@latest", url, "--header", "Authorization: Bearer \(token)"],
-                "env": [String: String](),
-            ]
-        default:
-            return [:]
-        }
+    /// Copies text to the general pasteboard.
+    static func copy(_ text: String) {
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(text, forType: .string)
     }
 
-    private static func snippetForCopy(client: MCPClient, entry: [String: Any]) -> String {
-        let wrapper = ["mcpServers": ["whisperer": entry]]
-        if let data = try? JSONSerialization.data(withJSONObject: wrapper, options: [.prettyPrinted, .sortedKeys]),
-           let str = String(data: data, encoding: .utf8) {
-            return str
-        }
-        return "{}"
-    }
-
-    private static func mergeJSON(configURL: URL,
-                                  serverName: String,
-                                  entry: [String: Any],
-                                  snippet: String) -> MCPInstallResult {
+    /// Reveals the client's config file (or its folder when the file does not exist yet).
+    static func reveal(_ client: MCPClient) {
+        guard let url = configURL(for: client) else { return }
         let fm = FileManager.default
+        if fm.fileExists(atPath: url.path) {
+            NSWorkspace.shared.activateFileViewerSelecting([url])
+        } else if fm.fileExists(atPath: url.deletingLastPathComponent().path) {
+            NSWorkspace.shared.activateFileViewerSelecting([url.deletingLastPathComponent()])
+        }
+    }
 
-        // Ensure parent directory exists.
-        let dir = configURL.deletingLastPathComponent()
-        if !fm.fileExists(atPath: dir.path) {
-            do {
-                try fm.createDirectory(at: dir, withIntermediateDirectories: true)
-            } catch {
-                return .failed("Could not create directory \(dir.path): \(error.localizedDescription)")
-            }
+#if !APP_STORE
+    // MARK: - JSON configs
+
+    private static func installJSON(client: MCPClient,
+                                    info: MCPConnectionInfo,
+                                    configURL: URL,
+                                    snippet: String) -> MCPInstallResult {
+        guard let rootKey = client.jsonRootKey, let entry = client.jsonEntry(for: info) else {
+            return .failed("No config format for \(client.displayName)")
+        }
+        let fm = FileManager.default
+        let existing = fm.fileExists(atPath: configURL.path) ? (try? Data(contentsOf: configURL)) : nil
+        if fm.fileExists(atPath: configURL.path) && existing == nil {
+            return copyAndReveal(snippet: snippet, path: configURL, client: client)
         }
 
-        // Read existing config or start fresh.
-        var root: [String: Any]
-        if fm.fileExists(atPath: configURL.path) {
-            guard let data = try? Data(contentsOf: configURL),
-                  let parsed = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
-                // Malformed — fall back to copy + reveal rather than clobbering.
-                Logger.warning("MCPClientInstaller: \(configURL.lastPathComponent) is malformed — falling back to copy", subsystem: .app)
-                NSPasteboard.general.clearContents()
-                NSPasteboard.general.setString(snippet, forType: .string)
-                NSWorkspace.shared.activateFileViewerSelecting([configURL])
-                return .revealed(path: configURL.path)
-            }
-            root = parsed
-        } else {
-            root = [:]
-        }
-
-        // Merge mcpServers.whisperer.
-        var servers = root["mcpServers"] as? [String: Any] ?? [:]
-        servers[serverName] = entry
-        root["mcpServers"] = servers
-
-        // Write atomically with a backup.
+        let merged: Data
         do {
-            let newData = try JSONSerialization.data(withJSONObject: root, options: [.prettyPrinted, .sortedKeys])
-
-            // Backup existing file alongside as .bak.
-            let backupURL = configURL.appendingPathExtension("whisperer.bak")
-            if fm.fileExists(atPath: configURL.path) {
-                _ = try? fm.replaceItemAt(backupURL, withItemAt: configURL)
-            }
-
-            let tmpURL = configURL.appendingPathExtension("tmp")
-            try newData.write(to: tmpURL, options: .atomic)
-            _ = try fm.replaceItemAt(configURL, withItemAt: tmpURL)
-
-            Logger.info("MCPClientInstaller: wrote \(configURL.lastPathComponent)", subsystem: .app)
-            return .installed(path: configURL.path)
+            merged = try MCPConfigMerge.mergeJSON(existing: existing, rootKey: rootKey, entry: entry)
         } catch {
-            return .failed("Could not write \(configURL.lastPathComponent): \(error.localizedDescription)")
+            Logger.warning("MCPClientInstaller: \(configURL.lastPathComponent) is malformed — falling back to copy", subsystem: .app)
+            return copyAndReveal(snippet: snippet, path: configURL, client: client)
         }
+        return write(merged, to: configURL)
     }
 
-    // MARK: - TOML config (Codex)
+    // MARK: - Codex TOML
 
-    private static func installTOML(url: String) -> MCPInstallResult {
-        guard let configURL = MCPClient.codex.configPath() else {
-            return .failed("No config path for Codex")
-        }
-
-        let token = AppState.shared.mcpBearerToken
-        let block = """
-
-[mcp_servers.whisperer]
-url = "\(url)"
-headers = { Authorization = "Bearer \(token)" }
-
-"""
-
-#if APP_STORE
-        NSPasteboard.general.clearContents()
-        NSPasteboard.general.setString(block.trimmingCharacters(in: .newlines), forType: .string)
-        if FileManager.default.fileExists(atPath: configURL.path) {
-            NSWorkspace.shared.activateFileViewerSelecting([configURL])
-            return .revealed(path: configURL.path)
-        }
-        return .copied(hint: "Paste this block into ~/.codex/config.toml")
-#else
-        return mergeTOML(configURL: configURL, block: block)
-#endif
-    }
-
-    private static func mergeTOML(configURL: URL, block: String) -> MCPInstallResult {
+    private static func installCodex(info: MCPConnectionInfo,
+                                     configURL: URL,
+                                     snippet: String) -> MCPInstallResult {
         let fm = FileManager.default
-
-        let dir = configURL.deletingLastPathComponent()
-        if !fm.fileExists(atPath: dir.path) {
-            do { try fm.createDirectory(at: dir, withIntermediateDirectories: true) }
-            catch { return .failed("Could not create \(dir.path): \(error.localizedDescription)") }
-        }
-
         var existing = ""
         if fm.fileExists(atPath: configURL.path) {
-            existing = (try? String(contentsOf: configURL, encoding: .utf8)) ?? ""
+            guard let text = try? String(contentsOf: configURL, encoding: .utf8) else {
+                return copyAndReveal(snippet: snippet, path: configURL, client: .codex)
+            }
+            existing = text
+        }
+        let merged = MCPConfigMerge.mergeCodexTOML(existing: existing,
+                                                   block: MCPClient.codexTOMLBlock(for: info))
+        return write(Data(merged.utf8), to: configURL)
+    }
+
+    // MARK: - Writing
+
+    /// Backs up the current file, then writes atomically.
+    private static func write(_ data: Data, to configURL: URL) -> MCPInstallResult {
+        let fm = FileManager.default
+        let dir = configURL.deletingLastPathComponent()
+        do {
+            try fm.createDirectory(at: dir, withIntermediateDirectories: true)
+        } catch {
+            return .failed("Could not create \(dir.path): \(error.localizedDescription)")
         }
 
-        // Remove any existing [mcp_servers.whisperer] block.
-        let cleaned = removeTOMLSection(existing, header: "[mcp_servers.whisperer]")
-        let merged = cleaned + block
+        if fm.fileExists(atPath: configURL.path) {
+            let backupURL = configURL.appendingPathExtension("whisperer.bak")
+            try? fm.removeItem(at: backupURL)
+            do {
+                try fm.copyItem(at: configURL, to: backupURL)
+            } catch {
+                Logger.warning("MCPClientInstaller: could not back up \(configURL.lastPathComponent): \(error.localizedDescription)", subsystem: .app)
+            }
+        }
 
         do {
-            let backupURL = configURL.appendingPathExtension("whisperer.bak")
-            if fm.fileExists(atPath: configURL.path) {
-                try? fm.copyItem(at: configURL, to: backupURL)
-            }
-            try merged.write(to: configURL, atomically: true, encoding: .utf8)
+            try data.write(to: configURL, options: .atomic)
             Logger.info("MCPClientInstaller: wrote \(configURL.lastPathComponent)", subsystem: .app)
             return .installed(path: configURL.path)
         } catch {
             return .failed("Could not write \(configURL.lastPathComponent): \(error.localizedDescription)")
         }
     }
+#endif
 
-    /// Removes a TOML section (from its header line to the next section header or EOF).
-    private static func removeTOMLSection(_ toml: String, header: String) -> String {
-        var lines = toml.components(separatedBy: "\n")
-        guard let start = lines.firstIndex(where: { $0.trimmingCharacters(in: .whitespaces) == header }) else {
-            return toml  // section not present
-        }
-        // Find the next section header (line starting with "[" but not after the match).
-        let rest = lines.indices.dropFirst(start + 1)
-        let end = rest.first(where: { lines[$0].trimmingCharacters(in: .whitespaces).hasPrefix("[") }) ?? lines.endIndex
-        lines.removeSubrange(start..<end)
-        return lines.joined(separator: "\n")
-    }
+    // MARK: - Copy + reveal fallback
 
-    // MARK: - AppStore fallback: copy + reveal
-
-    private static func copyAndReveal(snippet: String, path: URL) -> MCPInstallResult {
-        NSPasteboard.general.clearContents()
-        NSPasteboard.general.setString(snippet, forType: .string)
+    private static func copyAndReveal(snippet: String, path: URL, client: MCPClient) -> MCPInstallResult {
+        copy(snippet)
         if FileManager.default.fileExists(atPath: path.path) {
             NSWorkspace.shared.activateFileViewerSelecting([path])
             return .revealed(path: path.path)
         }
-        return .copied(hint: "Paste this into \(path.lastPathComponent)")
+        return .copied(hint: "Copied. Paste it into \(client.configPathDisplay ?? path.lastPathComponent).")
     }
 }

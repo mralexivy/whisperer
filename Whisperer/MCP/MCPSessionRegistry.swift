@@ -2,7 +2,18 @@
 //  MCPSessionRegistry.swift
 //  Whisperer
 //
-//  Manages a bounded pool of concurrent MCP sessions — one per client.
+//  Routes every HTTP request the MCP listener receives, and manages a bounded pool of
+//  concurrent MCP sessions — one per client.
+//
+//  Endpoints (query string ignored for routing):
+//  - `/mcp`  Streamable HTTP (2025-03-26+). Stateful sessions keyed by Mcp-Session-Id; a
+//            POST without a session that is not `initialize` is served by one shared
+//            stateless transport, so plain HTTP clients / curl can call tools directly.
+//            POST responses are SSE only when the client explicitly accepts
+//            text/event-stream; otherwise they are collapsed to a single JSON body.
+//  - `/sse` + `/messages?sessionId=`  legacy HTTP+SSE transport (2024-11-05).
+//  - `/health`  unauthenticated liveness probe; reveals nothing sensitive.
+//  - anything else → 404.
 //
 //  The MCP HTTP transport (StatefulHTTPServerTransport) is single-session by design:
 //  it holds one sessionID and hard-rejects re-initialization.  Instead of that being
@@ -17,6 +28,11 @@
 //    reaped by a periodic background task.
 //  - At most maxSessions sessions coexist; the oldest idle session is evicted to
 //    make room (falling back to the least-recently-active one).
+//  - Legacy SSE sessions live exactly as long as their GET /sse stream, capped at
+//    maxSessions as well (oldest evicted).
+//
+//  Authentication: see MCPAuthPolicy for the threat model. The token is optional on
+//  loopback and always required when LAN access is on.
 //
 
 import Foundation
@@ -26,14 +42,14 @@ import MCP
 
 /// A SessionIDGenerator that returns a pre-minted id, allowing the registry to
 /// assign the id before the transport validates requests against it.
-private struct FixedSessionIDGenerator: SessionIDGenerator {
+nonisolated private struct FixedSessionIDGenerator: SessionIDGenerator {
     let id: String
     func generateSessionID() -> String { id }
 }
 
 // MARK: - Session container
 
-private final class MCPSession: @unchecked Sendable {
+nonisolated private final class MCPSession: @unchecked Sendable {
     let transport: StatefulHTTPServerTransport
     let server: Server
     let supervisor: Task<Void, Never>
@@ -47,6 +63,18 @@ private final class MCPSession: @unchecked Sendable {
         self.transport = transport
         self.server = server
         self.supervisor = supervisor
+    }
+}
+
+nonisolated private final class LegacySSESession: @unchecked Sendable {
+    let transport: LegacySSEServerTransport
+    let server: Server
+    var supervisor: Task<Void, Never>?
+    let created = Date()
+
+    init(transport: LegacySSEServerTransport, server: Server) {
+        self.transport = transport
+        self.server = server
     }
 }
 
@@ -65,7 +93,14 @@ actor MCPSessionRegistry {
     // MARK: State
 
     private var sessions: [String: MCPSession] = [:]
+    private var legacySessions: [String: LegacySSESession] = [:]
     private var reaperTask: Task<Void, Never>?
+
+    /// Shared transport for sessionless POSTs (plain HTTP clients). Created on first use.
+    private var statelessTransport: StatelessHTTPServerTransport?
+    private var statelessServer: Server?
+
+    var legacySessionCount: Int { legacySessions.count }
 
     var sessionCount: Int { sessions.count }
 
@@ -99,6 +134,16 @@ actor MCPSessionRegistry {
             Logger.info("MCP session evicted on shutdown: \(id)", subsystem: .app)
         }
         sessions.removeAll()
+
+        for (_, session) in legacySessions {
+            session.supervisor?.cancel()
+            await session.server.stop()
+        }
+        legacySessions.removeAll()
+
+        if let server = statelessServer { await server.stop() }
+        statelessServer = nil
+        statelessTransport = nil
     }
 
     // MARK: - Routing
@@ -108,14 +153,39 @@ actor MCPSessionRegistry {
                lanEnabled: Bool,
                port: Int) async -> HTTPResponse {
 
-        // Bearer token authentication
-        let expectedToken = await MainActor.run { AppState.shared.mcpBearerToken }
-        let authHeader = request.header("Authorization") ?? ""
-        let providedToken = authHeader.hasPrefix("Bearer ")
-            ? String(authHeader.dropFirst(7)).trimmingCharacters(in: .whitespaces)
-            : ""
+        let target = MCPRequestTarget(request.path)
+        let method = request.method.uppercased()
+        let route = target.route
 
-        if providedToken != expectedToken {
+        guard route != .notFound else {
+            return makeErrorResponse(status: 404, message: "Not Found: use /mcp (Streamable HTTP) or /sse (legacy SSE)")
+        }
+
+        // DNS-rebinding / browser protection for every endpoint (the SDK transports repeat
+        // this check for /mcp; doing it here also covers /sse, /messages and /health).
+        if let rejected = originValidator(lanEnabled: lanEnabled, port: port)
+            .validate(request, context: HTTPValidationContext(httpMethod: method)) {
+            return rejected
+        }
+
+        let (expectedToken, requireToken) = await MainActor.run {
+            (AppState.shared.mcpBearerToken, AppState.shared.mcpRequireToken)
+        }
+        // LAN access always requires the token, whatever the toggle says.
+        let tokenRequired = requireToken || lanEnabled
+
+        if route == .health {
+            guard method == "GET" else {
+                return .error(statusCode: 405, .invalidRequest("Method Not Allowed"),
+                              extraHeaders: [HTTPHeaderName.allow: "GET"])
+            }
+            return healthResponse(tokenRequired: tokenRequired)
+        }
+
+        guard MCPAuthPolicy.isAuthorized(headers: request.headers,
+                                         path: request.path,
+                                         expectedToken: expectedToken,
+                                         required: tokenRequired) else {
             return HTTPResponse.textBody(
                 status: 401,
                 headers: ["WWW-Authenticate": "Bearer realm=\"Whisperer MCP\""],
@@ -123,34 +193,204 @@ actor MCPSessionRegistry {
             )
         }
 
-        let sessionID = request.header(HTTPHeaderName.sessionID)
+        switch route {
+        case .legacySSE:
+            guard method == "GET" else {
+                return .error(statusCode: 405, .invalidRequest("Method Not Allowed: open the SSE stream with GET /sse"),
+                              extraHeaders: [HTTPHeaderName.allow: "GET"])
+            }
+            return await openLegacySession(target: target)
+        case .legacyMessages:
+            return await routeLegacyMessage(request, target: target)
+        default:
+            return await routeStreamable(request, lanEnabled: lanEnabled, port: port)
+        }
+    }
 
-        if let sid = sessionID {
+    // MARK: - Streamable HTTP
+
+    private func routeStreamable(_ request: HTTPRequest,
+                                 lanEnabled: Bool,
+                                 port: Int) async -> HTTPResponse {
+        let method = request.method.uppercased()
+        let wantsSSE = MCPAcceptHeader(request.header(HTTPHeaderName.accept)).explicitlyWantsSSE
+
+        if let sid = request.header(HTTPHeaderName.sessionID) {
             // Route to existing session.
-            if let session = sessions[sid] {
-                session.lastActivity = Date()
-                let response = await session.transport.handleRequest(request)
-                // Evict on DELETE after the transport has replied.
-                if request.method.uppercased() == "DELETE" {
-                    await evict(id: sid)
-                }
-                return response
-            } else {
+            guard let session = sessions[sid] else {
                 // Unknown or expired session id — match SDK wording exactly.
                 return makeErrorResponse(status: 404,
                     message: "Not Found: Invalid or expired session ID")
             }
+            session.lastActivity = Date()
+            let response = await session.transport.handleRequest(request)
+            // Evict on DELETE after the transport has replied.
+            if method == "DELETE" {
+                await evict(id: sid)
+            }
+            return method == "POST" ? await collapseIfNeeded(response, wantsSSE: wantsSSE) : response
         }
 
-        // No session id: only allowed for POST initialize.
-        if request.method.uppercased() == "POST",
-           let body = request.body,
-           isInitializeBody(body) {
-            return await makeSession(request: request, lanEnabled: lanEnabled, port: port)
+        guard method == "POST", let body = request.body, !body.isEmpty else {
+            return makeErrorResponse(status: 400,
+                message: "Bad Request: Session not initialized")
         }
 
-        return makeErrorResponse(status: 400,
-            message: "Bad Request: Session not initialized")
+        if isInitializeBody(body) {
+            let response = await makeSession(request: request, lanEnabled: lanEnabled, port: port)
+            return await collapseIfNeeded(response, wantsSSE: wantsSSE)
+        }
+
+        // Sessionless call (tools/list, tools/call… straight from curl or a plain HTTP client).
+        return await handleStateless(request, lanEnabled: lanEnabled, port: port)
+    }
+
+    /// Turns a POST's SSE response into a single JSON body for clients that did not ask
+    /// for text/event-stream.
+    private func collapseIfNeeded(_ response: HTTPResponse, wantsSSE: Bool) async -> HTTPResponse {
+        guard !wantsSSE, case .stream(let stream, let streamHeaders) = response else { return response }
+        guard let json = await MCPSSECollapser.firstResponse(in: stream) else {
+            return .error(statusCode: 500, .internalError("No response from MCP server"),
+                          sessionID: streamHeaders[HTTPHeaderName.sessionID])
+        }
+        var headers = streamHeaders
+        headers[HTTPHeaderName.contentType] = "application/json"
+        headers[HTTPHeaderName.cacheControl] = nil
+        headers[HTTPHeaderName.connection] = nil
+        return .data(json, headers: headers)
+    }
+
+    private func handleStateless(_ request: HTTPRequest,
+                                 lanEnabled: Bool,
+                                 port: Int) async -> HTTPResponse {
+        guard let transport = await sharedStatelessTransport(lanEnabled: lanEnabled, port: port) else {
+            return makeErrorResponse(status: 500, message: "Internal error: could not start stateless server")
+        }
+        guard let body = request.body,
+              let remapped = MCPJSONRPCIDRemapper.replaceID(in: body, with: "whisperer-\(UUID().uuidString)")
+        else {
+            // Notifications (no id) and malformed bodies go straight through.
+            return await transport.handleRequest(request)
+        }
+        let rewritten = HTTPRequest(method: request.method, headers: request.headers,
+                                    body: remapped.body, path: request.path)
+        let response = await transport.handleRequest(rewritten)
+        if case .data(let data, let headers) = response {
+            return .data(MCPJSONRPCIDRemapper.restoreID(in: data, originalID: remapped.originalID),
+                         headers: headers)
+        }
+        return response
+    }
+
+    private func sharedStatelessTransport(lanEnabled: Bool, port: Int) async -> StatelessHTTPServerTransport? {
+        if let statelessTransport { return statelessTransport }
+        let transport = StatelessHTTPServerTransport(
+            validationPipeline: StandardValidationPipeline(validators: [
+                originValidator(lanEnabled: lanEnabled, port: port),
+                LenientAcceptValidator(),
+                ContentTypeValidator(),
+                ProtocolVersionValidator(),
+            ])
+        )
+        let server = await makeMCPServer()
+        do {
+            try await server.start(transport: transport)
+        } catch {
+            Logger.error("MCP: failed to start stateless server: \(error)", subsystem: .app)
+            return nil
+        }
+        // Another request may have raced us across the awaits above.
+        if let existing = statelessTransport {
+            await server.stop()
+            return existing
+        }
+        statelessTransport = transport
+        statelessServer = server
+        return transport
+    }
+
+    // MARK: - Legacy HTTP+SSE
+
+    private func openLegacySession(target: MCPRequestTarget) async -> HTTPResponse {
+        if legacySessions.count >= maxSessions,
+           let oldest = legacySessions.min(by: { $0.value.created < $1.value.created }) {
+            Logger.info("MCP: legacy SSE cap reached (\(maxSessions)), evicting \(oldest.key)", subsystem: .app)
+            await evictLegacy(id: oldest.key)
+        }
+
+        let id = UUID().uuidString
+        var endpoint = "/messages?sessionId=\(id)"
+        // A client that authenticated with ?token= cannot add a header to its POSTs either.
+        if let token = target.queryItems[MCPAuthPolicy.tokenQueryParameter],
+           let encoded = token.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) {
+            endpoint += "&\(MCPAuthPolicy.tokenQueryParameter)=\(encoded)"
+        }
+
+        let (transport, eventStream) = LegacySSEServerTransport.make(sessionID: id, endpoint: endpoint)
+        let server = await makeMCPServer()
+        do {
+            try await server.start(transport: transport)
+        } catch {
+            Logger.error("MCP: failed to start legacy SSE session \(id): \(error)", subsystem: .app)
+            return makeErrorResponse(status: 500, message: "Internal error: could not start session")
+        }
+
+        let session = LegacySSESession(transport: transport, server: server)
+        session.supervisor = Task { [weak self] in
+            await server.waitUntilCompleted()
+            await self?.removeLegacy(id: id)
+        }
+        legacySessions[id] = session
+        Logger.info("MCP legacy SSE session created: \(id) total=\(legacySessions.count)", subsystem: .app)
+
+        return .stream(eventStream, headers: LegacySSEServerTransport.responseHeaders)
+    }
+
+    private func routeLegacyMessage(_ request: HTTPRequest, target: MCPRequestTarget) async -> HTTPResponse {
+        guard request.method.uppercased() == "POST" else {
+            return .error(statusCode: 405, .invalidRequest("Method Not Allowed"),
+                          extraHeaders: [HTTPHeaderName.allow: "POST"])
+        }
+        guard let id = target.queryItems["sessionId"] ?? target.queryItems["session_id"] else {
+            return makeErrorResponse(status: 400, message: "Bad Request: missing sessionId")
+        }
+        guard let session = legacySessions[id] else {
+            return makeErrorResponse(status: 404, message: "Not Found: Invalid or expired session ID")
+        }
+        return await session.transport.handlePost(request)
+    }
+
+    private func evictLegacy(id: String) async {
+        guard let session = legacySessions.removeValue(forKey: id) else { return }
+        session.supervisor?.cancel()
+        await session.server.stop()
+    }
+
+    /// Called by the supervisor when the SSE stream closed and the server finished.
+    private func removeLegacy(id: String) async {
+        guard let session = legacySessions.removeValue(forKey: id) else { return }
+        await session.server.stop()
+        Logger.info("MCP legacy SSE session closed: \(id) remaining=\(legacySessions.count)", subsystem: .app)
+    }
+
+    // MARK: - Health
+
+    private func healthResponse(tokenRequired: Bool) -> HTTPResponse {
+        let version = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.0"
+        let body: [String: Any] = [
+            "ok": true,
+            "name": "Whisperer",
+            "version": version,
+            "transports": ["streamable-http", "sse"],
+            "endpoints": ["streamableHTTP": "/mcp", "sse": "/sse"],
+            "tokenRequired": tokenRequired,
+        ]
+        let data = (try? JSONSerialization.data(withJSONObject: body, options: [.sortedKeys])) ?? Data("{}".utf8)
+        return .data(data, headers: [HTTPHeaderName.contentType: "application/json"])
+    }
+
+    private func originValidator(lanEnabled: Bool, port: Int) -> OriginValidator {
+        lanEnabled ? .disabled : .localhost(port: port)
     }
 
     /// Called by the connection layer when an SSE stream opens.
@@ -198,15 +438,11 @@ actor MCPSessionRegistry {
 
         let id = UUID().uuidString
 
-        let originValidator: OriginValidator = lanEnabled
-            ? .disabled
-            : .localhost(port: port)
-
         let transport = StatefulHTTPServerTransport(
             sessionIDGenerator: FixedSessionIDGenerator(id: id),
             validationPipeline: StandardValidationPipeline(validators: [
-                originValidator,
-                AcceptHeaderValidator(mode: .sseRequired),
+                originValidator(lanEnabled: lanEnabled, port: port),
+                LenientAcceptValidator(),
                 ContentTypeValidator(),
                 ProtocolVersionValidator(),
                 SessionValidator(),
@@ -298,7 +534,14 @@ func makeMCPServer() async -> Server {
     )
 
     await s.withMethodHandler(ListTools.self) { _ in
-        ListTools.Result(tools: MCPMeetingTools.toolDefinitions + MCPTranscriptionTools.toolDefinitions)
+        // Every Whisperer tool only reads the library. Saying so lets clients that gate tool
+        // calls on annotations (Codex, Claude) run them without an approval prompt.
+        ListTools.Result(tools: (MCPMeetingTools.toolDefinitions + MCPTranscriptionTools.toolDefinitions).map { tool in
+            var annotated = tool
+            annotated.annotations = .init(readOnlyHint: true, destructiveHint: false,
+                                          idempotentHint: true, openWorldHint: false)
+            return annotated
+        })
     }
 
     await s.withMethodHandler(CallTool.self) { params in
@@ -322,7 +565,7 @@ func makeMCPServer() async -> Server {
 private extension HTTPResponse {
     /// A plain-text response for status codes that don't map to an SDK enum case.
     /// We abuse .error() since it sets the status code we want and serialises a body.
-    static func textBody(status: Int, headers: [String: String] = [:], body: String) -> HTTPResponse {
+    nonisolated static func textBody(status: Int, headers: [String: String] = [:], body: String) -> HTTPResponse {
         // .error takes an MCPError — use internalError for 503, invalidRequest for 400/404.
         // The body we really want is plain text, but the transport will re-serialise it as
         // JSON-RPC anyway.  Use a fabricated MCPError whose message is our text.

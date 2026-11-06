@@ -94,7 +94,7 @@ only relevant to a fraction of tasks. The Critical Rules above are the always-on
 |---|---|
 | Writing/editing any Swift — naming, error handling, logging, memory | `AGENTS.md` |
 | Touching audio capture, the state machine, meetings, MCP, or storage | `ARCHITECTURE.md` |
-| Touching any SwiftUI/AppKit view, color, or font | `DESIGN.md` |
+| Touching any SwiftUI/AppKit view, color, or font — and **before designing or redesigning any screen** | `DESIGN.md` (DESIGN.md format: tokens in front matter; Overview = screen principles; Components = Choice List, Connect Flow, Provider Identity, Motion, Testability) |
 | Deciding what a feature should do or how it should feel | `PRODUCT_SENSE.md` |
 | Picking up planned work or logging tech debt | `PLANS.md` |
 | Editing `WhisperBridge` or anything calling whisper.cpp C APIs | `docs/references/whisper-cpp-integration.md` |
@@ -102,6 +102,17 @@ only relevant to a fraction of tasks. The Critical Rules above are the always-on
 | Preparing a submission or touching `#if APP_STORE` paths | `docs/exec-plans/app-store-submission.md` |
 
 `ARCHITECTURE.md` is 900+ lines — jump to the relevant `##` section rather than reading it whole.
+
+## Designing Screens
+
+`DESIGN.md` follows the [DESIGN.md format](https://github.com/google-labs-code/design.md): design
+tokens in YAML front matter, rationale and patterns in the body. New or redesigned screens reuse
+the patterns of **Workspace → LLM** (`LLMPageView`) and **Workspace → MCP** (`MCPConnectPageView`):
+current state first, one list of choices, steps that unfold in place, one primary action, plumbing
+under "Advanced", real provider icons + names (`ProviderBadge`), springs that respect Reduce
+Motion — and click tests with real mouse events (`.uiTestFrame` + `LLMPageClickTests` pattern).
+Never put a hit-testable `.overlay` on top of a control (it swallows clicks). Run the
+`design-check` skill on UI changes.
 
 ## Slash Commands
 

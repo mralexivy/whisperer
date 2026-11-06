@@ -92,6 +92,7 @@ enum HistorySidebarItem: String, CaseIterable, Identifiable {
     case fileTranscription = "File Transcription"
     case dictionary = "Dictionary"
     case aiModes = "AI Modes"
+    case llm = "LLM"
     case statistics = "Statistics"
     case mcp = "MCP"
     case settings = "Settings"
@@ -109,6 +110,7 @@ enum HistorySidebarItem: String, CaseIterable, Identifiable {
         case .statistics: return "chart.xyaxis.line"
         case .dictionary: return "book.closed"
         case .aiModes: return "wand.and.sparkles"
+        case .llm: return "sparkles"
         case .mcp: return "point.3.connected.trianglepath.dotted"
         case .settings: return "gearshape"
         case .commandMode: return "terminal.fill"
@@ -125,6 +127,7 @@ enum HistorySidebarItem: String, CaseIterable, Identifiable {
         case .statistics: return .cyan
         case .dictionary: return .red
         case .aiModes: return Color(hex: "8B5CF6")
+        case .llm: return Color(hex: "EC4899")  // pink — distinct from AI Modes' purple
         case .mcp: return Color(hex: "06B6D4")  // cyan — matches the network theme
         case .settings: return .orange
         case .commandMode: return Color(hex: "22C55E")
@@ -136,10 +139,10 @@ enum HistorySidebarItem: String, CaseIterable, Identifiable {
     /// Items shown in the sidebar
     static var visibleItems: [HistorySidebarItem] {
         #if !APP_STORE
-        var items: [HistorySidebarItem] = [.transcriptions, .meetingStudio, .fileTranscription, .dictionary, .aiModes, .statistics, .mcp, .setup, .feedback, .settings]
+        var items: [HistorySidebarItem] = [.transcriptions, .meetingStudio, .fileTranscription, .dictionary, .aiModes, .llm, .statistics, .mcp, .setup, .feedback, .settings]
         items.insert(.commandMode, at: items.count - 3) // Before setup
         #else
-        let items: [HistorySidebarItem] = [.transcriptions, .meetingStudio, .fileTranscription, .dictionary, .aiModes, .statistics, .mcp, .setup, .settings]
+        let items: [HistorySidebarItem] = [.transcriptions, .meetingStudio, .fileTranscription, .dictionary, .aiModes, .llm, .statistics, .mcp, .setup, .settings]
         #endif
         return items
     }
@@ -192,6 +195,8 @@ struct HistoryWindowView: View {
                     DictionaryView()
                 case .aiModes:
                     AIModesView()
+                case .llm:
+                    LLMPageView(colorScheme: colorScheme)
                 case .mcp:
                     MCPConnectPageView(colorScheme: colorScheme)
                 case .settings:
@@ -222,6 +227,14 @@ struct HistoryWindowView: View {
         .onReceive(NotificationCenter.default.publisher(for: .switchToAIModesTab)) { _ in
             withAnimation(.spring(response: 0.3)) {
                 selectedSidebarItem = .aiModes
+                if isSidebarCollapsed {
+                    isSidebarCollapsed = false
+                }
+            }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .switchToLLMTab)) { _ in
+            withAnimation(.spring(response: 0.3)) {
+                selectedSidebarItem = .llm
                 if isSidebarCollapsed {
                     isSidebarCollapsed = false
                 }
@@ -1162,6 +1175,7 @@ struct HistorySettingsView: View {
                     #endif
                     dictionarySection
                     languageRoutingSection
+                    connectedAISection
                     mcpSection
                     dataManagementSection
                     dangerZoneSection
@@ -2259,6 +2273,20 @@ struct HistorySettingsView: View {
 
     // MARK: - MCP Server Section
 
+    private var connectedAISection: some View {
+        SettingsCard(colorScheme: colorScheme) {
+            VStack(alignment: .leading, spacing: 20) {
+                SettingsSectionHeader(
+                    icon: "sparkles.rectangle.stack",
+                    title: "LLM",
+                    colorScheme: colorScheme,
+                    color: Color(hex: "EC4899")
+                )
+                LLMSettingsSummary(colorScheme: colorScheme)
+            }
+        }
+    }
+
     private var mcpSection: some View {
         SettingsCard(colorScheme: colorScheme) {
             VStack(alignment: .leading, spacing: 20) {
@@ -3317,6 +3345,47 @@ struct WorkspaceMCPSettingsView: View {
                             .tint(WhispererColors.accent)
                             .labelsHidden()
                             .disabled(!appState.mcpEnabled)
+                    }
+                }
+
+                // Access token (optional on this Mac, forced on with LAN)
+                SettingsRow(colorScheme: colorScheme) {
+                    HStack(spacing: 14) {
+                        ZStack {
+                            RoundedRectangle(cornerRadius: 8)
+                                .fill(
+                                    LinearGradient(
+                                        colors: [Color.yellow.opacity(0.18), Color.yellow.opacity(0.08)],
+                                        startPoint: .topLeading, endPoint: .bottomTrailing
+                                    )
+                                )
+                                .frame(width: 36, height: 36)
+                            Image(systemName: "key.fill")
+                                .font(.system(size: 15, weight: .semibold))
+                                .foregroundColor(.yellow)
+                        }
+
+                        VStack(alignment: .leading, spacing: 3) {
+                            Text("Require access token")
+                                .font(.system(size: 13, weight: .medium))
+                                .foregroundColor(WhispererColors.primaryText(colorScheme))
+                            Text(appState.mcpLANEnabled
+                                 ? "Always required while LAN access is on"
+                                 : "Optional for apps on this Mac — client snippets and connection tests are on the MCP page")
+                                .font(.system(size: 11))
+                                .foregroundColor(WhispererColors.secondaryText(colorScheme))
+                        }
+
+                        Spacer()
+
+                        Toggle("", isOn: Binding(
+                            get: { appState.mcpTokenRequired },
+                            set: { appState.mcpRequireToken = $0 }
+                        ))
+                        .toggleStyle(.switch)
+                        .tint(WhispererColors.accent)
+                        .labelsHidden()
+                        .disabled(!appState.mcpEnabled || appState.mcpLANEnabled)
                     }
                 }
 

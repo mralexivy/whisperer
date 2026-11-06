@@ -16,14 +16,18 @@ struct MeetingChatMessage: Codable, Identifiable {
     let text: String
     let sources: [RAGChunk]?   // only populated for assistant messages
     let createdAt: Date
+    /// Display name of the connected AI that answered; nil for this Mac (and for messages
+    /// saved before this field existed — the synthesized decoder treats it as optional).
+    var answeredBy: String?
 
     init(id: UUID = UUID(), role: String, text: String,
-         sources: [RAGChunk]? = nil, createdAt: Date = Date()) {
-        self.id        = id
-        self.role      = role
-        self.text      = text
-        self.sources   = sources
-        self.createdAt = createdAt
+         sources: [RAGChunk]? = nil, createdAt: Date = Date(), answeredBy: String? = nil) {
+        self.id         = id
+        self.role       = role
+        self.text       = text
+        self.sources    = sources
+        self.createdAt  = createdAt
+        self.answeredBy = answeredBy
     }
 }
 

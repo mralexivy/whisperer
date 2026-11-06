@@ -27,7 +27,7 @@ If no UI files changed, report "No UI files changed — nothing to check" and st
 
 ### Step 2: Load Design Reference
 
-Read `DESIGN.md` for the complete design system (unified dark navy palette, blue-purple accents, colorful icons, typography, layout, components, anti-patterns).
+Read `DESIGN.md` for the complete design system (DESIGN.md format: tokens in front matter; Overview screen principles; Colors, Typography, Layout, Elevation & Depth, Shapes, Components incl. Choice List / Connect Flow / Provider Identity / Motion / Testability; Do's and Don'ts incl. interaction guardrails).
 
 ### Step 3: Scan Each Changed File
 
@@ -54,6 +54,14 @@ For each changed UI file, check for these violations:
 - [ ] `.font(.body)`, `.font(.title)`, `.font(.caption)` or other semantic text styles (should be explicit `.system(size:weight:design:)`)
 - [ ] Uppercase text without `.tracking()` applied
 - [ ] `.bold` weight on text 20pt or larger (should be `.light` for elegance)
+
+#### Interaction & Pattern Violations
+- [ ] `.overlay { … }` containing a shape or view on top of a `Button`/row without `.allowsHitTesting(false)` (swallows clicks)
+- [ ] A modal sheet for a step that could unfold in place (consent, setup, config)
+- [ ] More than one gradient primary button in a view
+- [ ] Attribution written as a sentence ("by ChatGPT", "Answered by …") instead of `ProviderBadge`
+- [ ] Repeating animation without an `accessibilityReduceMotion` check
+- [ ] Interactive controls on a new screen without `.uiTestFrame(…)` tags
 
 #### Component Violations
 - [ ] `ContentUnavailableView` (should use custom empty state pattern)

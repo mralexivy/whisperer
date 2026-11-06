@@ -263,3 +263,21 @@ display. One 560pt box saved by an older build then permanently defeated `prefer
 changes to the resting shape were invisible and looked like the layout code was broken. A frame
 that depends on which screen the pointer is on is a derived shape, not a user preference — restoring
 it across launches would have to be per-display anyway. Drag/resize still holds for the session.
+
+## Click-testing SwiftUI in the unit-test host (2026-11-06)
+
+- Real clicks work without a UI-test bundle: host the view in a borderless `NSWindow`
+  (re-`setFrame` after `makeKeyAndOrderFront`, which constrains it to the screen), tag controls
+  with `.uiTestFrame("id")` (Whisperer/UI/UITestFrames.swift), and send `mouseMoved` →
+  `leftMouseDown` (hold ~0.2 s) → `leftMouseUp` through `NSWindow.sendEvent`. A bare
+  down/up pair 50 ms apart did not fire a SwiftUI `Button` whose row has hover tracking.
+- **Spin the run loop, don't `Task.sleep`**: SwiftUI only commits updates when
+  `RunLoop.current.run(mode:before:)` runs. And use a *synchronous* `setUpWithError` — an async
+  setUp holds the main actor while it spins, so the view's own `.task` work lands later and
+  overwrites what the test injected.
+- **An `.overlay { RoundedRectangle().stroke(…) }` on a row swallowed every click on the button
+  underneath** (found by these tests; the LLM page's rows were dead for real users too). Put
+  borders and selection rings in `.background { … }`, or add `.allowsHitTesting(false)`.
+- In-process accessibility (`AXUIElementCreateApplication(getpid())` from the main thread)
+  deadlocks: the AX request waits on the main run loop it is blocking. SwiftUI's own
+  `accessibilityChildren()` is empty until an assistive client asks.

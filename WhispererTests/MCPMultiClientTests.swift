@@ -61,9 +61,19 @@ final class MCPMultiClientTests: XCTestCase {
         }
     }
 
+    /// These clients send no token: run in the default loopback mode (token optional).
+    private var savedRequireToken = false
+
     override func setUpWithError() throws {
         try super.setUpWithError()
+        savedRequireToken = AppState.shared.mcpRequireToken
+        AppState.shared.mcpRequireToken = false
         if let failure = Self.startupFailure { XCTFail(failure) }
+    }
+
+    override func tearDownWithError() throws {
+        AppState.shared.mcpRequireToken = savedRequireToken
+        try super.tearDownWithError()
     }
 
     // MARK: - Helpers

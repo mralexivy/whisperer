@@ -465,7 +465,7 @@ struct OnboardingView: View {
                     .font(.system(size: 34, weight: .bold))
                     .foregroundColor(OnboardingColors.textPrimary)
 
-                Text("Whisperer processes everything on-device.\nMicrophone access is needed to\ntranscribe — nothing leaves your Mac.")
+                Text("Whisperer transcribes on-device.\nMicrophone access is needed to\ntranscribe — your audio never leaves your Mac.")
                     .font(.system(size: 14))
                     .foregroundColor(OnboardingColors.textSecondary)
                     .lineSpacing(3)
@@ -477,7 +477,7 @@ struct OnboardingView: View {
             VStack(spacing: 10) {
                 privacyCard(icon: "lock.shield.fill", color: OnboardingColors.accentBlue, title: "100% Offline", subtitle: "Audio never leaves your Mac")
                 privacyCard(icon: "xmark.icloud.fill", color: .red, title: "No Internet", subtitle: "Works without any connection")
-                privacyCard(icon: "checkmark.shield.fill", color: .green, title: "On-Device Only", subtitle: "All data stays on your Mac")
+                privacyCard(icon: "checkmark.shield.fill", color: .green, title: "On-Device by Default", subtitle: "Data stays on your Mac unless you connect an AI")
             }
             .padding(.leading, 36)
             .padding(.trailing, 24)

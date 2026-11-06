@@ -13,6 +13,10 @@ struct MeetingOverviewView: View {
     @State private var generationFailed = false
     @State private var shimmerPhase = false
     @State private var noLLMBanner = false
+    /// Set when a connected AI failed on this meeting and the notes were made locally.
+    @State private var fallbackNotice: String?
+    @State private var provenance: MeetingAIProvenance?
+    @ObservedObject private var connectedAI = ConnectedAIStore.shared
 
     private var summary: MeetingAISummary? { meeting?.aiSummary }
 
@@ -21,6 +25,9 @@ struct MeetingOverviewView: View {
             VStack(spacing: 16) {
                 if noLLMBanner {
                     noLLMWarning
+                }
+                if let fallbackNotice {
+                    fallbackBanner(fallbackNotice)
                 }
                 if isGenerating {
                     generatingSkeleton
@@ -38,6 +45,16 @@ struct MeetingOverviewView: View {
             guard let nid = note.object as? UUID, nid == meeting?.id else { return }
             isGenerating = false
             generationFailed = false
+            provenance = MeetingAIProvenance.lookup(nid)
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .connectedAIDidFallBack)) { note in
+            guard let nid = note.object as? UUID, nid == meeting?.id else { return }
+            fallbackNotice = connectedAI.lastNotice
+        }
+        .onAppear { provenance = meeting.flatMap { MeetingAIProvenance.lookup($0.id) } }
+        .onChange(of: meeting?.id) { id in
+            provenance = id.flatMap { MeetingAIProvenance.lookup($0) }
+            fallbackNotice = nil
         }
         .onReceive(NotificationCenter.default.publisher(for: .meetingOverviewDidFail)) { note in
             guard let nid = note.object as? UUID, nid == meeting?.id else { return }
@@ -107,15 +124,13 @@ struct MeetingOverviewView: View {
             Text("  ·  from \(meeting?.displayDuration ?? "") of audio  ·  \(generatedAgoString(s.generatedAt))")
                 .font(.system(size: 11))
                 .foregroundColor(.white.opacity(0.28))
-            Spacer()
-            Button { regenerate() } label: {
-                Image(systemName: "arrow.clockwise")
-                    .font(.system(size: 11))
-                    .foregroundColor(.white.opacity(0.35))
+            if let provenance, !provenance.isLocal {
+                provenancePill(provenance)
+                    .padding(.leading, 8)
             }
-            .buttonStyle(.plain)
-            .help("Regenerate overview")
-            .padding(.leading, 12)
+            Spacer()
+            regenerateMenu
+                .padding(.leading, 12)
             Button {
                 NSPasteboard.general.clearContents()
                 NSPasteboard.general.setString(s.overview, forType: .string)
@@ -289,10 +304,14 @@ struct MeetingOverviewView: View {
         VStack(alignment: .leading, spacing: 12) {
             // Status header
             HStack(spacing: 8) {
-                Text("✦")
-                    .font(.system(size: 13))
-                    .foregroundColor(Color(hex: "5B6CF7"))
-                Text("Generating AI overview…")
+                if let provider = connectedAI.activeProviderID {
+                    ProviderBadge(provider: provider)
+                } else {
+                    Text("✦")
+                        .font(.system(size: 13))
+                        .foregroundColor(Color(hex: "5B6CF7"))
+                }
+                Text("Writing notes…")
                     .font(.system(size: 13))
                     .foregroundColor(.white.opacity(0.5))
                 Spacer()
@@ -427,13 +446,68 @@ struct MeetingOverviewView: View {
         .clipShape(RoundedRectangle(cornerRadius: 10))
     }
 
+    // MARK: - Connected AI
+
+    private func provenancePill(_ p: MeetingAIProvenance) -> some View {
+        ProviderBadge(provider: p.provider, compact: true)
+        .help(p.model.map { "Generated with \(p.displayName) (\($0))" } ?? "Generated with \(p.displayName)")
+    }
+
+    /// Regenerate with the current setting, or once with another AI.
+    private var regenerateMenu: some View {
+        Menu {
+            Button("Regenerate") { regenerate() }
+            Divider()
+            Button("Regenerate on this Mac") { regenerate(using: .local) }
+            ForEach(connectedAI.availableProviders.filter { connectedAI.hasConsent($0) }) { id in
+                Button("Regenerate with \(id.displayName)") { regenerate(using: .provider(id)) }
+            }
+            Divider()
+            Button("LLM settings…") {
+                NotificationCenter.default.post(name: .switchToLLMTab, object: nil)
+            }
+        } label: {
+            Image(systemName: "arrow.clockwise")
+                .font(.system(size: 11))
+                .foregroundColor(.white.opacity(0.35))
+        }
+        .menuStyle(.borderlessButton)
+        .menuIndicator(.hidden)
+        .fixedSize()
+        .help("Regenerate overview")
+    }
+
+    private func fallbackBanner(_ text: String) -> some View {
+        HStack(alignment: .top, spacing: 10) {
+            Image(systemName: "arrow.triangle.branch")
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundColor(Color(hex: "F59E0B"))
+            Text(text)
+                .font(.system(size: 12))
+                .foregroundColor(.white.opacity(0.75))
+                .fixedSize(horizontal: false, vertical: true)
+            Spacer()
+            Button { fallbackNotice = nil } label: {
+                Image(systemName: "xmark")
+                    .font(.system(size: 10, weight: .semibold))
+                    .foregroundColor(.white.opacity(0.4))
+            }
+            .buttonStyle(.plain)
+        }
+        .padding(12)
+        .background(Color(hex: "F59E0B").opacity(0.08))
+        .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color(hex: "F59E0B").opacity(0.2), lineWidth: 1))
+        .clipShape(RoundedRectangle(cornerRadius: 10))
+    }
+
     // MARK: - Helpers
 
-    private func regenerate() {
+    private func regenerate(using choice: ProviderChoice = .automatic) {
         guard !isGenerating else { return }
         guard let meeting else { return }
         noLLMBanner = false
         generationFailed = false
+        fallbackNotice = nil
         isGenerating = true
         let segments = meeting.segments
         let id = meeting.id
@@ -442,7 +516,7 @@ struct MeetingOverviewView: View {
             // MeetingEngines.borrowLLM(). If the engine is unavailable either method
             // posts .meetingOverviewDidFail, which sets generationFailed = true.
             await MeetingAIService.shared.generateTitle(meetingID: id)
-            await MeetingAIService.shared.generateOverview(segments: segments, meetingID: id)
+            await MeetingAIService.shared.generateOverview(segments: segments, meetingID: id, using: choice)
             await MainActor.run { isGenerating = false }
         }
     }

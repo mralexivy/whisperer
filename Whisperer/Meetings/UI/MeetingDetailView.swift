@@ -526,6 +526,13 @@ struct MeetingDetailView: View {
                     tabButton(tab)
                 }
                 Spacer()
+                // What the chosen AI can do with this transcript, and who did it.
+                if selectedTab == .transcript, let meeting, !detailVM.allSegments.isEmpty,
+                   !(session.isRecording && session.meetingID == meeting.id) {
+                    TranscriptPolishBar(meetingID: meeting.id, segments: detailVM.allSegments)
+                        .padding(.bottom, 4)
+                        .transition(.opacity)
+                }
             }
             .padding(.horizontal, 16)
             .padding(.bottom, 0)

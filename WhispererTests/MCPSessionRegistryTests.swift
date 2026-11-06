@@ -14,6 +14,21 @@ final class MCPSessionRegistryTests: XCTestCase {
 
     private static let port = 51999
 
+    /// The token is optional on loopback; these tests run in token-required mode so the
+    /// rejection paths stay covered (MCPCompatTests covers the optional mode).
+    private var savedRequireToken = false
+
+    override func setUp() {
+        super.setUp()
+        savedRequireToken = AppState.shared.mcpRequireToken
+        AppState.shared.mcpRequireToken = true
+    }
+
+    override func tearDown() {
+        AppState.shared.mcpRequireToken = savedRequireToken
+        super.tearDown()
+    }
+
     private func token() async -> String {
         await MainActor.run { AppState.shared.mcpBearerToken }
     }
@@ -128,7 +143,9 @@ final class MCPSessionRegistryTests: XCTestCase {
         XCTAssertEqual(n, 0)
     }
 
-    func testNonInitializeWithoutSessionIs400() async {
+    /// A sessionless non-initialize POST (plain HTTP client / curl) is served by the shared
+    /// stateless server instead of being rejected — and must not create a session.
+    func testNonInitializeWithoutSessionIsServedStatelessly() async {
         let registry = MCPSessionRegistry()
         let req = HTTPRequest(
             method: "POST",
@@ -137,9 +154,22 @@ final class MCPSessionRegistryTests: XCTestCase {
             body: Data(#"{"jsonrpc":"2.0","id":2,"method":"tools/list"}"#.utf8),
             path: "/mcp")
         let r = await registry.route(req, lanEnabled: false, port: Self.port)
-        XCTAssertEqual(statusCode(r), 400)
+        XCTAssertEqual(statusCode(r), 200)
+        let text = String(decoding: r.bodyData ?? Data(), as: UTF8.self)
+        XCTAssertTrue(text.contains("list_meetings"), "Got: \(text.prefix(300))")
         let n = await registry.sessionCount
         XCTAssertEqual(n, 0)
+        await registry.shutdown()
+    }
+
+    func testGetWithoutSessionIs400() async {
+        let registry = MCPSessionRegistry()
+        let req = HTTPRequest(
+            method: "GET",
+            headers: ["Authorization": "Bearer \(await token())", "Accept": "text/event-stream"],
+            body: nil, path: "/mcp")
+        let r = await registry.route(req, lanEnabled: false, port: Self.port)
+        XCTAssertEqual(statusCode(r), 400)
     }
 
     func testDeleteFreesSlot() async {

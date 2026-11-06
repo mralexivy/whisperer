@@ -5,7 +5,8 @@
 //  Local MCP server exposing meeting notes and transcription search.
 //  HTTP transport via NWListener; multiple concurrent clients are supported via
 //  MCPSessionRegistry — each client gets its own MCP session identified by the
-//  Mcp-Session-Id header.
+//  Mcp-Session-Id header. Endpoints: /mcp (Streamable HTTP), /sse + /messages
+//  (legacy HTTP+SSE), /health — see MCPSessionRegistry for routing.
 //
 //  Connection lifecycle notes:
 //  - MCP clients (Claude Desktop, Claude Code, Cursor, ChatGPT Desktop…) open a
@@ -73,7 +74,7 @@ actor WhispererMCPServer {
                     name: "Whisperer MCP",
                     type: "_whisperer-mcp._tcp",
                     domain: nil,
-                    txtRecord: NWTXTRecord(["path": "/mcp"])
+                    txtRecord: NWTXTRecord(["path": "/mcp", "sse": "/sse"])
                 )
             }
 
@@ -269,9 +270,14 @@ actor WhispererMCPServer {
         case 200: "OK"
         case 202: "Accepted"
         case 400: "Bad Request"
+        case 401: "Unauthorized"
+        case 403: "Forbidden"
         case 404: "Not Found"
         case 405: "Method Not Allowed"
+        case 406: "Not Acceptable"
         case 409: "Conflict"
+        case 415: "Unsupported Media Type"
+        case 421: "Misdirected Request"
         case 500: "Internal Server Error"
         case 503: "Service Unavailable"
         default: "Unknown"

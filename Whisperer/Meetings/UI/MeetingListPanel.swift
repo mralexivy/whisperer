@@ -353,6 +353,12 @@ struct MeetingLibraryRow: View {
                         .font(.system(size: 13, weight: .semibold))
                         .foregroundColor(isSelected ? .white : .white.opacity(0.85))
                         .lineLimit(1)
+                    // Which AI wrote this meeting's notes, when it wasn't this Mac.
+                    if let by = MeetingAIProvenance.lookup(meeting.id), let provider = by.provider {
+                        Spacer(minLength: 4)
+                        ProviderMark(provider: provider, size: 13)
+                            .help("Notes by \(provider.displayName)")
+                    }
                 }
 
                 Text(meeting.formattedTime)

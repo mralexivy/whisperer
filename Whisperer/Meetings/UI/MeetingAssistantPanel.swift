@@ -81,6 +81,9 @@ struct AskAIPane: View {
     @State private var thinkingPhase: String = "Searching transcript…"
     @State private var expandedSourceID: UUID? = nil
     @State private var showClearConfirm: Bool = false
+    /// The answer as a connected provider streams it; empty for the local model.
+    @State private var streamingText: String = ""
+    @ObservedObject private var connectedAI = ConnectedAIStore.shared
 
     var body: some View {
         VStack(spacing: 0) {
@@ -110,6 +113,7 @@ struct AskAIPane: View {
 
     private var statusBar: some View {
         HStack(spacing: 6) {
+            answererChip
             Spacer()
 
             if !messages.isEmpty {
@@ -126,6 +130,18 @@ struct AskAIPane: View {
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 6)
+    }
+
+    /// Who answers: the connected AI the user chose, or this Mac. Click opens the LLM page.
+    private var answererChip: some View {
+        let id = connectedAI.activeProviderID
+        return Button {
+            NotificationCenter.default.post(name: .switchToLLMTab, object: nil)
+        } label: {
+            ProviderBadge(provider: id, compact: true)
+        }
+        .buttonStyle(.plain)
+        .help("Choose which AI answers on the LLM page")
     }
 
     // MARK: - Empty state
@@ -146,6 +162,10 @@ struct AskAIPane: View {
             Text("Ask anything about this meeting")
                 .font(.system(size: 13, weight: .medium))
                 .foregroundColor(.white.opacity(0.5))
+
+            ProviderBadge(provider: connectedAI.activeProviderID)
+                .help(connectedAI.activeProviderID.map { "Questions go to \($0.displayName) under your \($0.recipient) account" }
+                      ?? "Answered privately on this Mac")
 
             VStack(spacing: 6) {
                 ForEach(starterQuestions, id: \.self) { q in
@@ -268,6 +288,16 @@ struct AskAIPane: View {
             if let sources = msg.sources, !sources.isEmpty {
                 sourcesDisclosure(messageID: msg.id, sources: sources)
             }
+
+            if let by = msg.answeredBy {
+                HStack(spacing: 4) {
+                    ProviderMark(provider: AIProviderID.allCases.first { $0.displayName == by }, size: 11)
+                    Text(AIProviderID.allCases.first { $0.displayName == by }?.badgeName ?? by)
+                        .font(.system(size: 10, weight: .medium))
+                        .foregroundColor(.white.opacity(0.4))
+                }
+                .padding(.leading, isRTL ? 0 : 20)
+            }
         }
     }
 
@@ -347,7 +377,23 @@ struct AskAIPane: View {
         .help("Jump to \(chunk.formattedStart) in transcript")
     }
 
+    @ViewBuilder
     private var thinkingBubble: some View {
+        if !streamingText.isEmpty {
+            let isRTL = Self.detectRTL(streamingText)
+            HStack(alignment: .top, spacing: 8) {
+                Text("✦")
+                    .font(.system(size: 12))
+                    .foregroundColor(Color(hex: "5B6CF7").opacity(0.7))
+                ChatBubbleTextView(text: streamingText, isRTL: isRTL,
+                                   fontSize: 13, textColor: NSColor.white.withAlphaComponent(0.75))
+            }
+        } else {
+            thinkingDots
+        }
+    }
+
+    private var thinkingDots: some View {
         HStack(alignment: .center, spacing: 8) {
             Text("✦")
                 .font(.system(size: 12))
@@ -381,7 +427,8 @@ struct AskAIPane: View {
 
     private var inputBar: some View {
         HStack(spacing: 8) {
-            TextField("Ask about this meeting…", text: $question, axis: .vertical)
+            TextField(connectedAI.activeProviderID.map { "Ask \($0.displayName) about this meeting…" } ?? "Ask about this meeting…",
+                      text: $question, axis: .vertical)
                 .font(.system(size: 13))
                 .foregroundColor(.white)
                 .textFieldStyle(.plain)
@@ -420,18 +467,27 @@ struct AskAIPane: View {
             await MeetingChatStore.shared.append(userMsg, meetingID: meeting.id)
 
             // Switch phase label before LLM call
-            await MainActor.run { thinkingPhase = "Generating answer…" }
+            await MainActor.run {
+                streamingText = ""
+                thinkingPhase = connectedAI.activeProviderID.map { "Asking \($0.displayName)…" }
+                    ?? "Generating answer…"
+            }
 
             let answer = await MeetingAIService.shared.ask(
                 question: q,
                 meetingID: meeting.id,
-                segments: meeting.segments
+                segments: meeting.segments,
+                onPartial: { partial in
+                    Task { @MainActor in streamingText = partial }
+                }
             )
+            await MainActor.run { streamingText = "" }
 
             let assistantMsg = MeetingChatMessage(
                 role:    "assistant",
                 text:    answer.text,
-                sources: answer.sources.isEmpty ? nil : answer.sources
+                sources: answer.sources.isEmpty ? nil : answer.sources,
+                answeredBy: answer.answeredBy?.displayName
             )
 
             await MainActor.run {

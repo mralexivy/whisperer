@@ -338,6 +338,26 @@ final class MeetingJobQueue: ObservableObject {
 
         if Task.isCancelled { return await finishCancelled(meetingID: meetingID) }
 
+        // MARK: AI polish
+        // With an AI chosen on the LLM page, it cleans up the transcript (misheard words,
+        // punctuation, fillers) before the summary is written from it. The original stays in
+        // `rawText`, and a meeting the AI already polished is not polished again.
+        let polisher = TranscriptPolishController.shared
+        if ConnectedAIStore.shared.activeProviderID != nil, !segments.isEmpty,
+           polisher.provenance(for: meetingID) == nil {
+            let language = MeetingAIService.dominantLanguage(of: segments)
+            if let polish = polisher.start(meetingID: meetingID, segments: segments,
+                                           languageName: language == .auto ? nil : language.displayName) {
+                await polish.value
+                if case .finished = polisher.phase(for: meetingID),
+                   let fresh = await MeetingManager.shared.meeting(id: meetingID) {
+                    segments = fresh.segments
+                }
+            }
+        }
+
+        if Task.isCancelled { return await finishCancelled(meetingID: meetingID) }
+
         // MARK: summarizing
         transition(meetingID: meetingID, to: .summarizing, status: .running)
         let intelligenceNotice: String?

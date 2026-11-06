@@ -923,6 +923,24 @@ class AppState: ObservableObject {
         return token
     }()
 
+    /// Whether loopback clients must present the access token. Off by default: on loopback the
+    /// Host/Origin check already blocks browsers, and local processes could read the token
+    /// from client configs anyway (see MCPAuthPolicy). LAN access always requires it.
+    @Published var mcpRequireToken: Bool = UserDefaults.standard.bool(forKey: "mcpRequireToken") {
+        didSet { UserDefaults.standard.set(mcpRequireToken, forKey: "mcpRequireToken") }
+    }
+
+    /// The effective token requirement the server enforces.
+    var mcpTokenRequired: Bool { mcpRequireToken || mcpLANEnabled }
+
+    /// Replaces the access token. Clients configured with the old one must be updated.
+    func regenerateMCPToken() {
+        let token = MCPAuthPolicy.makeToken()
+        UserDefaults.standard.set(token, forKey: "mcpBearerToken")
+        mcpBearerToken = token
+        Logger.info("MCP access token regenerated", subsystem: .app)
+    }
+
     // Meeting detection camera opt-in
     @Published var cameraDetectionEnabled: Bool = UserDefaults.standard.bool(forKey: "cameraDetectionEnabled") {
         didSet { UserDefaults.standard.set(cameraDetectionEnabled, forKey: "cameraDetectionEnabled") }
@@ -953,6 +971,12 @@ class AppState: ObservableObject {
             return "http://\(hostname):\(mcpPort)/mcp"
         }
         return "http://localhost:\(mcpPort)/mcp"
+    }
+
+    /// What client configs and snippets should point at: the URL plus the token, only when
+    /// the server will actually demand it.
+    var mcpConnectionInfo: MCPConnectionInfo {
+        MCPConnectionInfo(url: mcpServerURL, token: mcpTokenRequired ? mcpBearerToken : nil)
     }
 
     private var currentAudioURL: URL?

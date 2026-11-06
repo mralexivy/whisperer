@@ -4106,6 +4106,29 @@ struct MCPSettingsView: View {
                         .disabled(!appState.mcpEnabled)
                 }
 
+                // Access token toggle (forced on with LAN)
+                HStack {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Require access token")
+                            .font(.system(size: 12, weight: .medium))
+                            .foregroundColor(MBColors.textPrimary)
+                        Text(appState.mcpLANEnabled
+                             ? "Always required with LAN access"
+                             : "Optional for apps on this Mac")
+                            .font(.system(size: 10))
+                            .foregroundColor(MBColors.textSecondary)
+                    }
+                    Spacer()
+                    Toggle("", isOn: Binding(
+                        get: { appState.mcpTokenRequired },
+                        set: { appState.mcpRequireToken = $0 }
+                    ))
+                    .toggleStyle(.switch)
+                    .tint(MBColors.accent)
+                    .labelsHidden()
+                    .disabled(!appState.mcpEnabled || appState.mcpLANEnabled)
+                }
+
                 Divider().background(MBColors.border)
 
                 // What AI tools can access
