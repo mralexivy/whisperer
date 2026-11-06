@@ -57,6 +57,37 @@ enum SpeakerNaming {
 
 extension Array where Element == MeetingSegment {
 
+    /// Speakers renumbered by first appearance: whoever speaks first is index 0 / "Speaker 1",
+    /// the next new voice index 1 / "Speaker 2", and so on.
+    ///
+    /// Meetings recorded before `MeetingSpeakerCoordinator` mapped diarizer slots to display
+    /// order stored the raw slot, so they can open on "Speaker 2". Applied wherever a stored
+    /// transcript is read or rewritten, so reads and renames (keyed by index) always agree.
+    /// Custom names are kept; only the default "Speaker N" names follow the new number.
+    /// Idempotent, and a no-op for meetings already in order.
+    func normalizedSpeakerOrder() -> [MeetingSegment] {
+        var ordinal: [Int: Int] = [:]
+        for segment in sorted(by: { $0.timestamp < $1.timestamp }) where ordinal[segment.speakerIndex] == nil {
+            ordinal[segment.speakerIndex] = ordinal.count
+        }
+        guard ordinal.contains(where: { $0.key != $0.value }) else { return self }
+        return map { segment in
+            var copy = segment
+            let shown = ordinal[segment.speakerIndex] ?? segment.speakerIndex
+            copy.speakerIndex = shown
+            if Self.isDefaultSpeakerName(segment.speakerName) {
+                copy.speakerName = "Speaker \(shown + 1)"
+            }
+            return copy
+        }
+    }
+
+    /// "Speaker 3" — the generated label, as opposed to a name the user typed.
+    static func isDefaultSpeakerName(_ name: String) -> Bool {
+        guard name.hasPrefix("Speaker ") else { return false }
+        return Int(name.dropFirst("Speaker ".count)) != nil
+    }
+
     /// Renames every segment belonging to `speakerIndex` to `name`.
     mutating func renameSpeaker(index speakerIndex: Int, to name: String) {
         for i in self.indices where self[i].speakerIndex == speakerIndex {

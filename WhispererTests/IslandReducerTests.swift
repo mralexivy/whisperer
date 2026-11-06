@@ -31,23 +31,23 @@ final class IslandReducerTests: XCTestCase {
         XCTAssertEqual(m.capture, .starting)
     }
 
-    // MARK: - captureConfirmed promotes peek to compact
+    // MARK: - captureConfirmed rests at the minimal nub
 
     func testCaptureConfirmedFromStartingProducesRecording() {
         var m = freshModel()
         IslandReducer.reduce(&m, .captureConfirmed)
         XCTAssertEqual(m.capture, .recording)
-        // Starting rows need to be legible — cannot stay in peek.
-        XCTAssertEqual(m.presentation, .compact,
-                       "captureConfirmed must promote peek to compact for legible recording row")
+        // The resting recording indicator is the minimal nub; hover expands it.
+        XCTAssertEqual(m.presentation, .peek,
+                       "a recording rests at the minimal nub, not the full compact bar")
     }
 
     // MARK: - Three-tier ladder: peek → compact → expanded
 
     func testExpandFromPeekGoesToCompact() {
         var m = freshModel()
-        IslandReducer.reduce(&m, .captureConfirmed)    // .recording, .compact
-        // Manually set back to peek to simulate hover entry.
+        IslandReducer.reduce(&m, .captureConfirmed)    // .recording, .peek
+        // Explicit, in case the resting tier ever changes.
         m.presentation = .peek
 
         IslandReducer.reduce(&m, .expand)
@@ -56,7 +56,8 @@ final class IslandReducerTests: XCTestCase {
 
     func testExpandFromCompactGoesToExpanded() {
         var m = freshModel()
-        IslandReducer.reduce(&m, .captureConfirmed)    // .recording, .compact
+        IslandReducer.reduce(&m, .captureConfirmed)    // .recording, rests at .peek
+        IslandReducer.reduce(&m, .expand)              // hover → .compact
 
         IslandReducer.reduce(&m, .expand)
         XCTAssertEqual(m.presentation, .expanded)
@@ -65,6 +66,7 @@ final class IslandReducerTests: XCTestCase {
     func testExpandFromExpandedIsNoOp() {
         var m = freshModel()
         IslandReducer.reduce(&m, .captureConfirmed)
+        IslandReducer.reduce(&m, .expand)              // → .compact
         IslandReducer.reduce(&m, .expand)              // → .expanded
 
         IslandReducer.reduce(&m, .expand)
@@ -76,6 +78,7 @@ final class IslandReducerTests: XCTestCase {
     func testCollapseFromExpandedGoesToCompact() {
         var m = freshModel()
         IslandReducer.reduce(&m, .captureConfirmed)
+        IslandReducer.reduce(&m, .expand)   // .compact
         IslandReducer.reduce(&m, .expand)   // .expanded
 
         IslandReducer.reduce(&m, .collapse)

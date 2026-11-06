@@ -149,24 +149,63 @@ struct IslandLayout: View {
 
     private var peekBody: some View { recordingNubBody }
 
+    /// The resting recording indicator: dot, level, clock, pause/resume. Everything else
+    /// (stop, mute, open window) is one hover away in the compact row.
     private var recordingNubBody: some View {
-        HStack(spacing: 8) {
-            RecordingDot(isPaused: vm.isPaused)
+        Group {
+            if isVertical {
+                VStack(spacing: 8) {
+                    RecordingDot(isPaused: vm.isPaused, isStarting: vm.capture == .starting)
+                    PeekLevelMeter(level: levelBridge.peekLevel,
+                                   isPaused: vm.isPaused || vm.isMicMuted)
+                        .rotationEffect(.degrees(-90))
+                        .frame(maxHeight: .infinity)
+                    nubPauseButton
+                }
+                .padding(.vertical, 6)
+            } else {
+                HStack(spacing: 7) {
+                    RecordingDot(isPaused: vm.isPaused, isStarting: vm.capture == .starting)
 
-            PeekLevelMeter(level: levelBridge.peekLevel,
-                           isPaused: vm.isPaused || vm.isMicMuted)
-                .frame(maxWidth: .infinity)
+                    PeekLevelMeter(level: levelBridge.peekLevel,
+                                   isPaused: vm.isPaused || vm.isMicMuted)
+                        .frame(maxWidth: .infinity)
 
-            Text(clock.displayText)
-                .font(.system(size: 11, weight: .semibold, design: .rounded).monospacedDigit())
-                .foregroundColor(IC.primary.opacity(0.82))
-                .lineLimit(1)
-                .fixedSize()
-                .contentTransition(.numericText())
-                .animation(.smooth(duration: 0.3), value: clock.displayText)
+                    Text(clock.displayText)
+                        .font(.system(size: 11, weight: .semibold, design: .rounded).monospacedDigit())
+                        .foregroundColor(IC.primary.opacity(vm.isPaused ? 0.55 : 0.82))
+                        .lineLimit(1)
+                        .fixedSize()
+                        .contentTransition(.numericText())
+                        .animation(.smooth(duration: 0.3), value: clock.displayText)
+
+                    nubPauseButton
+                }
+                .padding(.leading, 11)
+                .padding(.trailing, 4)
+                .environment(\.layoutDirection, .leftToRight)
+            }
         }
-        .padding(.horizontal, 12)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .animation(.spring(response: 0.3, dampingFraction: 0.85), value: vm.isPaused)
+    }
+
+    /// Pause / resume right on the nub, so the minimal bar is never just a picture.
+    @ViewBuilder
+    private var nubPauseButton: some View {
+        if vm.capture == .recording || vm.capture == .paused {
+            IslandHoverButton(
+                icon: vm.isPaused ? "play.fill" : "pause.fill",
+                diameter: 22,
+                iconColor: vm.isPaused ? IC.attention : IC.primary.opacity(0.85),
+                tinted: vm.isPaused
+            ) {
+                coordinator.send(.pauseResumeRequested(sessionID: vm.sessionID))
+            }
+            .help(vm.isPaused ? "Resume recording" : "Pause recording")
+            .accessibilityLabel(vm.isPaused ? "Resume recording" : "Pause recording")
+            .transition(.opacity)
+        }
     }
 
     // MARK: - Compact body (state-branching)
@@ -833,9 +872,14 @@ struct PulsingModifier: ViewModifier {
 
 struct RecordingDot: View {
     var isPaused: Bool
+    var isStarting: Bool = false
     var body: some View {
-        if isPaused {
-            Circle().fill(Color.red.opacity(0.6)).frame(width: 8, height: 8)
+        if isStarting {
+            // Grey until audio is confirmed — red means "recording", and it is not yet.
+            Circle().fill(Color.white.opacity(0.45)).frame(width: 8, height: 8).modifier(PulsingModifier())
+        } else if isPaused {
+            // Amber, matching every other "paused" in the app (HUD, LIVE badge).
+            Circle().fill(Color(red: 0.961, green: 0.620, blue: 0.043)).frame(width: 8, height: 8)
         } else {
             Circle().fill(Color.red).frame(width: 8, height: 8).modifier(PulsingModifier())
         }

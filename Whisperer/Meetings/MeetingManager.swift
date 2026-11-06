@@ -322,6 +322,9 @@ class MeetingManager: ObservableObject {
                 if let json = entity.segmentsJSON, let data = json.data(using: .utf8) {
                     segments = (try? dec.decode([MeetingSegment].self, from: data)) ?? []
                 }
+                // The index came from a normalized read (`MeetingRecord`); rename in the same
+                // numbering, and store it that way so the row stops needing normalizing.
+                segments = segments.normalizedSpeakerOrder()
                 segments.renameSpeaker(index: speakerIndex, to: newName)
                 if let data = try? enc.encode(segments),
                    let json = String(data: data, encoding: .utf8) {

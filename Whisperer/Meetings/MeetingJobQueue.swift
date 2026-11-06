@@ -301,6 +301,12 @@ final class MeetingJobQueue: ObservableObject {
 
             let willPolish = MeetingTranscriptRefiner.shared.shouldRun(for: segments, audioURL: audioURL)
 
+            // Fast Polish (the same mmBERT + deterministic pass short dictations get) runs on every
+            // meeting. It used to run only after a re-transcription, so a meeting whose cleanup
+            // was skipped — model not downloaded, cleanup off, no audio on disk — got no polish
+            // at all. Without a connected AI this pass is the whole of the text cleanup: no local
+            // LLM polishes a meeting transcript, by design (it is minutes of wait for little gain).
+            var editorPassRan = false
             if willPolish {
                 if let reason = MeetingTranscriptRefiner.shared.blockingReason(for: meetingID, audioURL: audioURL) {
                     Logger.warning("MeetingJobQueue: cleanup skipped — \(reason)", subsystem: .transcription)
@@ -314,11 +320,15 @@ final class MeetingJobQueue: ObservableObject {
                         meetingID: meetingID, segments: segments, redoAll: true)
                     if Task.isCancelled { return await finishCancelled(meetingID: meetingID) }
                     segments = await runEditorPass(segments: refined, meetingID: meetingID)
+                    editorPassRan = true
                 }
             } else {
                 let skipReason = audioURL == nil ? "audio file not found on disk"
                     : "all segments already polished"
                 Logger.info("MeetingJobQueue: fine-tuning skipped — \(skipReason)", subsystem: .transcription)
+            }
+            if !editorPassRan, !segments.isEmpty, !Task.isCancelled {
+                segments = await runEditorPass(segments: segments, meetingID: meetingID)
             }
         }
 

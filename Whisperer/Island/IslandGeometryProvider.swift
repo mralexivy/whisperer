@@ -79,8 +79,10 @@ struct IslandGeometryProvider {
 
     // nonisolated so the pure IslandContentSizer can read these without an actor hop.
     nonisolated enum C {
-        // Peek capsule — a real floating pill, not an edge slab. Carries dot + level + timer.
-        static let peekWidth:           CGFloat = 208
+        // Peek capsule — a real floating pill, not an edge slab. Carries dot + level + timer +
+        // pause/resume. The resting state of a recording, so it is kept as small as it can be
+        // while every element stays legible and the button keeps a usable target.
+        static let peekWidth:           CGFloat = 168
         static let peekHeight:          CGFloat = 30
         static let peekRadius:          CGFloat = 15    // height / 2 → true capsule
 

@@ -87,6 +87,19 @@ actor MeetingSpeakerCoordinator {
     /// whole transcript view.
     private var lastPublishedTail: String?
 
+    /// Raw diarizer slot → the number the user sees, in order of first committed words.
+    ///
+    /// The diarizer's slots are model columns, not arrival order, and their raw index used to be
+    /// stored and shown as "Speaker \(index + 1)" — so a meeting could open on "Speaker 2". Every
+    /// surface (live, saved JSON, colours, export, MCP, AI) reads what this coordinator emits, so
+    /// mapping here, once, makes them all agree. Internal logic stays on raw slots.
+    private var displayOrdinal: [Int: Int] = [:]
+    /// Finalized seconds per raw slot, so a new voice is introduced on real speech, not a blip.
+    private var slotCoverage: [Int: TimeInterval] = [:]
+    /// Least finalized speech before a slot nobody has heard yet becomes a new speaker. A cough
+    /// or a crosstalk flicker is a finalized turn too (the timeline has no minimum duration).
+    static let minIntroductionSeconds: TimeInterval = 1.0
+
     // MARK: - Lifecycle
 
     /// Arms the diarizer from the resident model bundle.
@@ -151,6 +164,16 @@ actor MeetingSpeakerCoordinator {
         lastPartialAudioSeconds = 0
         emittedWordCount = 0
         lastPublishedTail = nil
+        displayOrdinal = [:]
+        slotCoverage = [:]
+    }
+
+    /// The display number for `raw`, assigning the next one on first use.
+    private func ordinal(forRaw raw: Int) -> Int {
+        if let known = displayOrdinal[raw] { return known }
+        let next = displayOrdinal.count
+        displayOrdinal[raw] = next
+        return next
     }
 
     // MARK: - Audio
@@ -303,20 +326,38 @@ actor MeetingSpeakerCoordinator {
     // MARK: - Timeline
 
     private func integrate(_ update: DiarizerTimelineUpdate) {
-        for segment in update.finalizedSegments {
-            let start = TimeInterval(segment.startTime)
-            let end = TimeInterval(segment.endTime)
-            guard end > start else { continue }
-            finalized.append(SpeakerAttribution.Turn(start: start, end: end, speaker: segment.speakerIndex))
-            finalizedUntil = max(finalizedUntil, end)
+        integrate(turns: update.finalizedSegments.map {
+            (start: TimeInterval($0.startTime), end: TimeInterval($0.endTime), slot: $0.speakerIndex)
+        })
+    }
+
+    private func integrate(turns: [(start: TimeInterval, end: TimeInterval, slot: Int)]) {
+        for turn in turns {
+            guard turn.end > turn.start else { continue }
+            finalized.append(SpeakerAttribution.Turn(start: turn.start, end: turn.end, speaker: turn.slot))
+            finalizedUntil = max(finalizedUntil, turn.end)
+            slotCoverage[turn.slot, default: 0] += turn.end - turn.start
         }
+        // Commit what these turns now cover first, so a voice introduced by them is known
+        // before the live label is decided.
+        drainPending()
 
         // The latest finalized segment is who the model most recently confirmed as talking.
         // Nemotron3 emits no tentative predictions, so we read the live speaker from finalized.
-        if let latest = update.finalizedSegments.max(by: { $0.endTime < $1.endTime }) {
-            onLiveSpeaker?(latest.speakerIndex)
+        // Only a speaker the transcript already knows: announcing a voice whose words have not
+        // been committed is how the live header showed "Speaker 2" before any "Speaker 1".
+        if let latest = turns.max(by: { $0.end < $1.end }),
+           let shown = displayOrdinal[latest.slot] {
+            onLiveSpeaker?(shown)
         }
     }
+
+    #if DEBUG
+    /// Test seam: finalized diarizer turns, as `(start, end, raw slot)`, without a model.
+    func _integrateForTesting(_ turns: [(start: TimeInterval, end: TimeInterval, slot: Int)]) {
+        integrate(turns: turns)
+    }
+    #endif
 
     // MARK: - Draining
 
@@ -409,15 +450,23 @@ actor MeetingSpeakerCoordinator {
 
     private func deliver(words: [String], speaker: Int, start: TimeInterval, end: TimeInterval) {
         guard !words.isEmpty else { return }
+        // A voice nobody has heard yet takes over only once it has said something real. Without
+        // this, a lone blip on another slot could claim the meeting's opening words.
+        var raw = speaker
+        if displayOrdinal[raw] == nil, let current = lastEmittedSpeaker,
+           slotCoverage[raw, default: 0] < Self.minIntroductionSeconds {
+            raw = current
+        }
+        let shown = ordinal(forRaw: raw)
         // A switch closes a transcript card, so it is worth a line. Logged here rather than at
         // the session, which only sees the ones that survive its floors — the absence of any
         // speaker logging is what made per-second relabelling invisible in the log.
-        if let previous = lastEmittedSpeaker, previous != speaker {
-            Logger.info("Diarization: speaker \(previous + 1) → \(speaker + 1) at \(String(format: "%.1f", start))s",
+        if let previous = lastEmittedSpeaker, previous != raw {
+            Logger.info("Diarization: speaker \((displayOrdinal[previous] ?? previous) + 1) → \(shown + 1) at \(String(format: "%.1f", start))s (slot \(raw))",
                         subsystem: .model)
         }
-        lastEmittedSpeaker = speaker
-        onAttributed?(words.joined(separator: " "), speaker, start, end)
+        lastEmittedSpeaker = raw
+        onAttributed?(words.joined(separator: " "), shown, start, end)
     }
 
     /// The speaker the finalized timeline puts in the span, or the current one when it has no

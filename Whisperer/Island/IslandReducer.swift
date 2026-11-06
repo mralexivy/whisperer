@@ -54,8 +54,9 @@ enum IslandReducer {
             state.capture = .recording
             state.isPaused = false
             state.revision &+= 1
-            // Promote peek to compact — the nub cannot show "Starting…" legibly.
-            if state.presentation == .peek { state.presentation = .compact }
+            // Recording rests at the nub: dot, level, clock and pause/resume, a few centimetres
+            // wide. It used to be promoted to the 420 pt compact bar here, which is the oversized
+            // "recording" bar left on screen when every window is closed. Hover expands it.
             return []
 
         case .capturePaused:

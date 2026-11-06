@@ -100,7 +100,8 @@ struct MeetingRecord: Identifiable, Equatable {
 
         if let json = entity.segmentsJSON, let data = json.data(using: .utf8),
            let segs = try? decoder.decode([MeetingSegment].self, from: data) {
-            self.segments = segs
+            // Older meetings stored the diarizer's raw slot; show them in order of appearance.
+            self.segments = segs.normalizedSpeakerOrder()
         } else {
             self.segments = []
         }
