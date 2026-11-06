@@ -89,6 +89,7 @@ enum TimeFormatSetting: String, CaseIterable {
 enum HistorySidebarItem: String, CaseIterable, Identifiable {
     case transcriptions = "Transcriptions"
     case meetingStudio  = "Meeting Notes"
+    case calendar = "Calendar"
     case fileTranscription = "File Transcription"
     case dictionary = "Dictionary"
     case aiModes = "AI Modes"
@@ -106,6 +107,7 @@ enum HistorySidebarItem: String, CaseIterable, Identifiable {
         switch self {
         case .transcriptions: return "waveform.and.mic"
         case .meetingStudio:  return "note.text"
+        case .calendar: return "calendar"
         case .fileTranscription: return "doc.text.magnifyingglass"
         case .statistics: return "chart.xyaxis.line"
         case .dictionary: return "book.closed"
@@ -123,6 +125,7 @@ enum HistorySidebarItem: String, CaseIterable, Identifiable {
         switch self {
         case .transcriptions: return WhispererColors.accentBlue
         case .meetingStudio:  return Color(hex: "06B6D4")  // cyan
+        case .calendar: return Color(hex: "F97316")  // orange — the calendar/reminder colour everywhere
         case .fileTranscription: return .purple
         case .statistics: return .cyan
         case .dictionary: return .red
@@ -139,10 +142,10 @@ enum HistorySidebarItem: String, CaseIterable, Identifiable {
     /// Items shown in the sidebar
     static var visibleItems: [HistorySidebarItem] {
         #if !APP_STORE
-        var items: [HistorySidebarItem] = [.transcriptions, .meetingStudio, .fileTranscription, .dictionary, .aiModes, .llm, .statistics, .mcp, .setup, .feedback, .settings]
+        var items: [HistorySidebarItem] = [.transcriptions, .meetingStudio, .calendar, .fileTranscription, .dictionary, .aiModes, .llm, .statistics, .mcp, .setup, .feedback, .settings]
         items.insert(.commandMode, at: items.count - 3) // Before setup
         #else
-        let items: [HistorySidebarItem] = [.transcriptions, .meetingStudio, .fileTranscription, .dictionary, .aiModes, .llm, .statistics, .mcp, .setup, .settings]
+        let items: [HistorySidebarItem] = [.transcriptions, .meetingStudio, .calendar, .fileTranscription, .dictionary, .aiModes, .llm, .statistics, .mcp, .setup, .settings]
         #endif
         return items
     }
@@ -187,6 +190,8 @@ struct HistoryWindowView: View {
                     TranscriptionsView()
                 case .meetingStudio:
                     MeetingStudioView(selectedMeetingID: $meetingStudioSelectedID)
+                case .calendar:
+                    CalendarPageView(colorScheme: colorScheme)
                 case .fileTranscription:
                     FileTranscriptionView()
                 case .statistics:
@@ -243,6 +248,14 @@ struct HistoryWindowView: View {
         .onReceive(NotificationCenter.default.publisher(for: .switchToMeetingStudioTab)) { _ in
             withAnimation(.spring(response: 0.3)) {
                 selectedSidebarItem = .meetingStudio
+                if isSidebarCollapsed {
+                    isSidebarCollapsed = false
+                }
+            }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .switchToCalendarTab)) { _ in
+            withAnimation(.spring(response: 0.3)) {
+                selectedSidebarItem = .calendar
                 if isSidebarCollapsed {
                     isSidebarCollapsed = false
                 }

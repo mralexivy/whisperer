@@ -13,6 +13,7 @@ extension NSNotification.Name {
     static let switchToMeetingStudioTab    = Notification.Name("switchToMeetingStudioTab")
     static let switchToFileTranscriptionTab = Notification.Name("switchToFileTranscriptionTab")
     static let switchToLLMTab              = Notification.Name("switchToLLMTab")
+    static let switchToCalendarTab         = Notification.Name("switchToCalendarTab")
     /// A connected AI failed and the meeting was handled on this Mac instead. `object` is the meeting id.
     static let connectedAIDidFallBack      = Notification.Name("connectedAIDidFallBack")
     /// A meeting's notes changed outside the view showing them (an AI app added one over MCP).

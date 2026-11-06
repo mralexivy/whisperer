@@ -2429,9 +2429,31 @@ struct SettingsTabView: View {
                     }
                 }
 
-                // Calendar — reminders before scheduled meetings, from the calendars on this Mac.
+                // Calendar — reminders before scheduled meetings, from Google or Outlook.
+                // The full page lives in the workspace; this card is the quick copy.
                 settingsCard(title: "Calendar", icon: "calendar", color: .orange) {
                     CalendarSettingsRows()
+                    Divider()
+                        .background(MBColors.border)
+                        .padding(.vertical, 2)
+                    Button {
+                        HistoryWindowManager.shared.showWindowAndDismissMenu()
+                        DispatchQueue.main.async {
+                            NotificationCenter.default.post(name: .switchToCalendarTab, object: nil)
+                        }
+                    } label: {
+                        HStack(spacing: 6) {
+                            Text("Open Calendar in Workspace")
+                                .font(.system(size: 12, weight: .semibold))
+                            Image(systemName: "arrow.up.forward.app")
+                                .font(.system(size: 11, weight: .semibold))
+                            Spacer()
+                        }
+                        .foregroundColor(MBColors.accent)
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .pointerOnHover()
                 }
 
                 // Meeting Detection

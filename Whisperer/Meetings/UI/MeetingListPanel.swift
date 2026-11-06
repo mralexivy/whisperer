@@ -46,6 +46,8 @@ struct MeetingListPanel: View {
             searchBar
             if session.isRecording {
                 liveCard
+            } else {
+                MeetingListCalendarStrip()
             }
             libraryList
         }
