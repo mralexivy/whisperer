@@ -5,8 +5,8 @@
 //  The calendar side of meetings: a normalized occurrence, and the pure rules that decide which
 //  calendar events are meetings worth a recording reminder.
 //
-//  Pure and nonisolated on purpose — EventKit objects are converted to `CalendarEventSnapshot`
-//  at the provider boundary, so every rule here is unit-testable without Calendar access.
+//  Pure and nonisolated on purpose — provider responses are converted to `CalendarEventSnapshot`
+//  at the source boundary, so every rule here is unit-testable without a network.
 //
 //  A calendar entry means a meeting *may* happen. It is never evidence that one *is* happening,
 //  so nothing here can start a recording on its own (see `MeetingSessionCoordinator`).
@@ -14,9 +14,10 @@
 
 import Foundation
 
-/// Where an event came from. EventKit only in this release; provider connectors may follow.
+/// Where an event came from: the account it was read from, signed in directly.
 enum CalendarSource: String, Codable, Sendable {
-    case eventKit
+    case google
+    case microsoft
 }
 
 enum MeetingRSVP: String, Codable, Sendable {
@@ -62,9 +63,9 @@ enum ConferenceProvider: String, Codable, Sendable, CaseIterable {
     }
 }
 
-/// What the classifier needs from a calendar event — copied out of `EKEvent` so rules never
-/// touch a live (possibly stale) EventKit object.
+/// What the classifier needs from a calendar event, normalized from the provider's API response.
 struct CalendarEventSnapshot: Sendable, Equatable {
+    var source: CalendarSource = .google
     var eventIdentifier: String
     var externalIdentifier: String?
     var calendarID: String
@@ -144,7 +145,7 @@ nonisolated enum MeetingEventClassifier {
         return ScheduledMeeting(
             id: occurrenceID(for: event),
             calendarID: event.calendarID,
-            source: .eventKit,
+            source: event.source,
             title: displayTitle(event.title),
             startAt: event.startAt,
             endAt: event.endAt,

@@ -2,10 +2,11 @@
 //  CalendarAccounts.swift
 //  Whisperer
 //
-//  Direct Google Calendar and Microsoft Outlook connections: "Sign in with Google / Microsoft",
-//  for calendars that are not added to macOS. Read-only scopes, OAuth with PKCE (no client
-//  secret ships in the app), tokens in the Keychain, events fetched straight from the provider —
-//  nothing passes through a server of ours.
+//  Google Calendar and Outlook / Microsoft 365, connected directly with "Sign in with Google /
+//  Microsoft". These are the app's only calendar sources — nothing depends on the macOS Calendar
+//  app or its permission. Read-only scopes, OAuth with PKCE (no client secret ships in the app),
+//  tokens in the Keychain, events fetched straight from the provider — nothing passes through a
+//  server of ours.
 //
 //  Configuration: each provider needs an OAuth client registered by the app's owner. Set the
 //  client IDs in Info.plist (`WhispererGoogleCalendarClientID`, `WhispererMicrosoftCalendarClientID`)
@@ -17,6 +18,15 @@ import AppKit
 import AuthenticationServices
 import CryptoKit
 import Foundation
+
+/// A calendar the user can switch on or off in Settings.
+struct CalendarSummary: Identifiable, Equatable, Sendable {
+    let id: String
+    let title: String
+    let sourceTitle: String
+    /// sRGB components of the calendar's colour, for the selection list.
+    let color: [Double]
+}
 
 // MARK: - Provider definitions
 
@@ -516,6 +526,7 @@ nonisolated struct MicrosoftCalendarSource: RemoteCalendarSource {
         let response = (item["responseStatus"] as? [String: Any])?["response"] as? String
         let isOrganizer = item["isOrganizer"] as? Bool ?? false
         return CalendarEventSnapshot(
+            source: .microsoft,
             eventIdentifier: id,
             externalIdentifier: item["iCalUId"] as? String,
             calendarID: calendarID,

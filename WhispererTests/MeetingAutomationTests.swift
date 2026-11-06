@@ -119,18 +119,23 @@ final class MeetingSessionCoordinatorTests: XCTestCase {
 
 // MARK: - Calendar store
 
-private final class FakeCalendarProvider: CalendarMeetingProvider, @unchecked Sendable {
+/// A signed-in Google account with two calendars, "work" and "home". Events are held by
+/// reference so a test can change them between refreshes.
+private final class FakeCalendarProvider: @unchecked Sendable {
+    static let account = CalendarAccount(provider: .google, email: "dana@example.com")
     var events: [CalendarEventSnapshot] = []
-    func accessStatus() -> CalendarAccess { .granted }
-    func requestReadAccess() async throws -> Bool { true }
-    func calendars() -> [CalendarSummary] {
-        [CalendarSummary(id: "work", title: "Work", sourceTitle: "iCloud", color: [1, 0, 0]),
-         CalendarSummary(id: "home", title: "Home", sourceTitle: "iCloud", color: [0, 1, 0])]
+}
+
+private struct FakeGoogleSource: RemoteCalendarSource {
+    let account: CalendarAccount
+    let backing: FakeCalendarProvider
+    func calendars() async throws -> [CalendarSummary] {
+        [CalendarSummary(id: account.namespaced("work"), title: "Work", sourceTitle: "Google", color: [1, 0, 0]),
+         CalendarSummary(id: account.namespaced("home"), title: "Home", sourceTitle: "Google", color: [0, 1, 0])]
     }
-    func events(from start: Date, to end: Date, calendarIDs: Set<String>?) async -> [CalendarEventSnapshot] {
-        events.filter { e in calendarIDs.map { $0.contains(e.calendarID) } ?? true }
+    func events(from start: Date, to end: Date, calendarIDs: [String]) async throws -> [CalendarEventSnapshot] {
+        backing.events.filter { e in calendarIDs.contains { account.namespaced($0) == e.calendarID } }
     }
-    func observeChanges() -> AsyncStream<Void> { AsyncStream { _ in } }
 }
 
 @MainActor
@@ -138,7 +143,7 @@ final class CalendarMeetingsStoreTests: XCTestCase {
 
     private static var keepAlive: [AnyObject] = []
     private var saved: [String: Any] = [:]
-    private let keys = [CalendarMeetingsStore.Keys.connected, CalendarMeetingsStore.Keys.enabledCalendars,
+    private let keys = [CalendarMeetingsStore.Keys.accounts, CalendarMeetingsStore.Keys.enabledCalendars,
                         CalendarMeetingsStore.Keys.reminderLead, CalendarMeetingsStore.Keys.decisions]
 
     override func setUp() async throws {
@@ -157,17 +162,23 @@ final class CalendarMeetingsStoreTests: XCTestCase {
 
     private func meetingEvent(id: String = "UID-1", calendar: String = "work", startsIn: TimeInterval) -> CalendarEventSnapshot {
         let start = Date().addingTimeInterval(startsIn)
-        return CalendarEventSnapshot(eventIdentifier: id, externalIdentifier: id, calendarID: calendar,
+        return CalendarEventSnapshot(eventIdentifier: id, externalIdentifier: id,
+                                     calendarID: FakeCalendarProvider.account.namespaced(calendar),
                                      title: "Standup", startAt: start, endAt: start.addingTimeInterval(1800),
                                      isAllDay: false, isCanceled: false, url: URL(string: "https://zoom.us/j/1"),
                                      location: nil, notes: nil, attendeeCount: 4, currentUserRSVP: .accepted,
                                      isSoloEvent: false)
     }
 
+    /// A store with the fake Google account signed in (same UserDefaults across "restarts").
     private func connectedStore(_ provider: FakeCalendarProvider) async -> CalendarMeetingsStore {
-        let store = CalendarMeetingsStore(provider: provider)
+        if let data = try? JSONEncoder().encode([FakeCalendarProvider.account]) {
+            UserDefaults.standard.set(data, forKey: CalendarMeetingsStore.Keys.accounts)
+        }
+        let store = CalendarMeetingsStore()
         Self.keepAlive.append(store)
-        _ = await store.connect()
+        store.makeRemoteSource = { FakeGoogleSource(account: $0, backing: provider) }
+        await store.refresh(reason: "test")
         return store
     }
 
@@ -216,9 +227,9 @@ final class CalendarMeetingsStoreTests: XCTestCase {
                            meetingEvent(id: "B", calendar: "home", startsIn: 7200)]
         let store = await connectedStore(provider)
         XCTAssertEqual(store.upcoming.count, 2)
-        store.setCalendar("home", enabled: false)
+        store.setCalendar(FakeCalendarProvider.account.namespaced("home"), enabled: false)
         await store.refresh(reason: "test")
-        XCTAssertEqual(store.upcoming.map(\.calendarID), ["work"])
+        XCTAssertEqual(store.upcoming.map(\.calendarID), [FakeCalendarProvider.account.namespaced("work")])
     }
 
     func testCancelledEventRemovesItsReminder() async throws {
@@ -241,13 +252,14 @@ final class CalendarMeetingsStoreTests: XCTestCase {
         XCTAssertNil(store.meeting(matching: .teams), "a Teams call is not this Zoom meeting")
     }
 
-    func testDisconnectClearsCachedEvents() async {
+    func testSigningOutClearsCachedEvents() async throws {
         let provider = FakeCalendarProvider()
         provider.events = [meetingEvent(startsIn: 3600)]
         let store = await connectedStore(provider)
         XCTAssertFalse(store.upcoming.isEmpty)
-        store.disconnect()
+        store.removeAccount(FakeCalendarProvider.account)
+        try await Task.sleep(nanoseconds: 200_000_000)
         XCTAssertTrue(store.upcoming.isEmpty)
-        XCTAssertFalse(store.isConnected)
+        XCTAssertFalse(store.hasAnySource)
     }
 }

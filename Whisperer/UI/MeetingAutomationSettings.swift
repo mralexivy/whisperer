@@ -17,9 +17,8 @@ struct CalendarSettingsRows: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            connectionRow
-            ForEach(CalendarAccountProvider.allCases, id: \.self) { provider in
-                divider
+            ForEach(Array(CalendarAccountProvider.allCases.enumerated()), id: \.element) { index, provider in
+                if index > 0 { divider }
                 accountRows(provider)
             }
             if let error = store.signInError {
@@ -36,7 +35,9 @@ struct CalendarSettingsRows: View {
             if store.hasAnySource {
                 divider
                 if store.calendars.isEmpty {
-                    noCalendarsRow
+                    Text("No calendars found in the connected account yet.")
+                        .font(.system(size: 11))
+                        .foregroundColor(MBColors.textSecondary)
                 } else {
                     calendarsRow
                 }
@@ -52,7 +53,7 @@ struct CalendarSettingsRows: View {
                           isOn: $store.includeUnlinkedSolo)
             }
 
-            Text("Event details stay on this Mac. Whisperer only reads your calendars — it never changes them.")
+            Text("Read-only: Whisperer never changes your calendars. Events are fetched directly from Google or Microsoft and stay on this Mac.")
                 .font(.system(size: 10.5))
                 .foregroundColor(MBColors.textTertiary)
                 .fixedSize(horizontal: false, vertical: true)
@@ -107,73 +108,6 @@ struct CalendarSettingsRows: View {
                 smallButton("Remove", subtle: true) { store.removeAccount(account) }
             }
             .padding(.leading, 4)
-        }
-    }
-
-    @ViewBuilder
-    private var connectionRow: some View {
-        HStack(alignment: .center) {
-            VStack(alignment: .leading, spacing: 3) {
-                Text("macOS Calendars")
-                    .font(.system(size: 13, weight: .medium))
-                    .foregroundColor(MBColors.textPrimary)
-                Text(connectionSubtitle)
-                    .font(.system(size: 11))
-                    .foregroundColor(store.access == .denied || store.access == .restricted ? .orange : MBColors.textSecondary)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-            Spacer()
-            connectionButton
-        }
-    }
-
-    private var connectionSubtitle: String {
-        switch (store.isConnected, store.access) {
-        case (_, .denied):
-            return "Calendar access is off for Whisperer. Turn it on in System Settings → Privacy & Security → Calendars."
-        case (_, .restricted):
-            return "Calendar access is restricted on this Mac."
-        case (true, .granted):
-            if let next = store.nextMeeting {
-                return "Next: \(next.title) · \(next.startAt.formatted(date: .abbreviated, time: .shortened))"
-            }
-            return "Connected — no upcoming meetings this week"
-        default:
-            return "Calendars already on this Mac — iCloud, and any account added in System Settings → Internet Accounts."
-        }
-    }
-
-    @ViewBuilder
-    private var connectionButton: some View {
-        switch (store.isConnected, store.access) {
-        case (_, .denied), (_, .restricted):
-            smallButton("Open Settings") { store.openPrivacySettings() }
-        case (true, .granted):
-            smallButton("Disconnect", subtle: true) { store.disconnect() }
-        default:
-            if connecting {
-                ProgressView().controlSize(.small)
-            } else {
-                smallButton("Connect") {
-                    connecting = true
-                    Task {
-                        await store.connect()
-                        connecting = false
-                    }
-                }
-                .uiTestFrame("settings.calendar.connect")
-            }
-        }
-    }
-
-    private var noCalendarsRow: some View {
-        HStack {
-            Text("No calendars on this Mac yet. Add Google, Outlook or another account in System Settings → Internet Accounts.")
-                .font(.system(size: 11))
-                .foregroundColor(MBColors.textSecondary)
-                .fixedSize(horizontal: false, vertical: true)
-            Spacer()
-            smallButton("Open", subtle: true) { store.openCalendarSettings() }
         }
     }
 

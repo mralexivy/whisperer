@@ -131,7 +131,6 @@ Every entitlement maps to a call site and a user-facing feature.
 | `com.apple.security.files.user-selected.read-write` | `NSOpenPanel` file picker | File transcription |
 | `com.apple.security.device.audio-input` | Microphone capture | Dictation and Meeting Notes |
 | `com.apple.security.device.camera` | `CameraUsageMonitor` presence check | Opt-in meeting detection booster |
-| `com.apple.security.personal-information.calendars` | `EventKitCalendarProvider` — read-only `EKEventStore` queries (`requestFullAccessToEvents`, `events(matching:)`); nothing is ever saved | Settings → Calendar → Connect: reminders before scheduled meetings. Asked only when the user clicks Connect; `NSCalendarsFullAccessUsageDescription` explains it |
 | `com.apple.security.files.user-selected.read-only` | Added by Xcode's `ENABLE_USER_SELECTED_FILES`, not by the entitlements file | File picker |
 
 The signed binary carries one entitlement that is **not** in `whisperer.entitlements`:
@@ -242,7 +241,7 @@ tccutil reset All com.ivy.whisperer
 - [ ] Enabling "Also use camera activity to detect meetings" prompts for camera with the new purpose string.
 - [ ] Meeting detection fires a visible notification when Zoom/Teams/Meet starts.
 - [ ] No meeting records without the user pressing Start (Studio, list, Island or detection card).
-- [ ] Calendar access is requested only from Settings → Calendar → Connect; denying it leaves dictation, manual recording and call detection working.
+- [ ] Calendars connect only through Settings → Calendar → Sign In (Google or Microsoft, read-only OAuth in the system sign-in sheet). No macOS Calendar permission is ever requested; with no account, dictation, recording and call detection all work.
 - [ ] "Automatically record detected meetings" is **off** on first launch. With it on, only a Zoom/Teams/Webex call starts recording, after a visible countdown with Cancel; browser calls always ask.
 - [ ] The recording indicator stays visible for the whole recording and cannot be concealed.
 - [ ] MCP is **off** on first launch. `curl http://localhost:8080/mcp` without a token returns 401.

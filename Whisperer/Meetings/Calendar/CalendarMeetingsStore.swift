@@ -2,8 +2,8 @@
 //  CalendarMeetingsStore.swift
 //  Whisperer
 //
-//  Upcoming meetings from the calendars on this Mac, kept current, and the reminder that fires
-//  shortly before each one. Independent of call detection: everything here works with detection
+//  Upcoming meetings from the user's Google and Microsoft calendars, kept current, and the
+//  reminder that fires shortly before each one. Independent of call detection: everything here works with detection
 //  off, and detection works with this never connected.
 //
 //  Local only. Event titles, links and attendees never leave the Mac and are never logged.
@@ -31,7 +31,6 @@ final class CalendarMeetingsStore: ObservableObject {
     // MARK: Settings
 
     enum Keys {
-        static let connected = "calendar.connected"
         static let enabledCalendars = "calendar.enabledCalendarIDs"
         static let reminderLead = "calendar.reminderLeadMinutes"
         static let showNextMeeting = "calendar.showNextMeetingInMenuBar"
@@ -44,10 +43,6 @@ final class CalendarMeetingsStore: ObservableObject {
     static let leadChoices: [Int?] = [nil, 0, 1, 2, 5]
     static let defaultLead = 2
 
-    /// The user pressed Connect. Distinct from the OS grant: disconnecting stops reminders and
-    /// clears our cache without touching the system permission (only the user can revoke that).
-    @Published private(set) var isConnected: Bool
-    @Published private(set) var access: CalendarAccess
     @Published private(set) var calendars: [CalendarSummary] = []
     /// nil = every calendar.
     @Published private(set) var enabledCalendarIDs: Set<String>?
@@ -64,15 +59,15 @@ final class CalendarMeetingsStore: ObservableObject {
         }
     }
 
-    /// Google / Microsoft accounts signed in directly (calendars not added to macOS).
+    /// Signed-in Google / Microsoft accounts — the calendar sources.
     @Published private(set) var accounts: [CalendarAccount] = []
     /// Accounts whose access was revoked or expired — they need "Sign in again".
     @Published private(set) var accountsNeedingReconnect: Set<String> = []
     @Published private(set) var signingIn: CalendarAccountProvider?
     @Published private(set) var signInError: String?
 
-    /// Any calendar source at all: macOS Calendars or a signed-in account.
-    var hasAnySource: Bool { (isConnected && access == .granted) || !accounts.isEmpty }
+    /// At least one account is signed in.
+    var hasAnySource: Bool { !accounts.isEmpty }
 
     /// Meetings from now−30 min to now+7 days, in start order.
     @Published private(set) var upcoming: [ScheduledMeeting] = []
@@ -87,7 +82,6 @@ final class CalendarMeetingsStore: ObservableObject {
         return upcoming.first { $0.endAt > now && decisions[$0.id] != .dismissed }
     }
 
-    private let provider: CalendarMeetingProvider
     /// Last good events per account, kept through a network failure so reminders survive it.
     private var remoteCache: [String: (calendars: [CalendarSummary], events: [CalendarEventSnapshot])] = [:]
     /// Injected in tests; real accounts use the provider's REST API.
@@ -100,15 +94,11 @@ final class CalendarMeetingsStore: ObservableObject {
     private var decisions: [String: OccurrenceDecision] = [:]
     private var reminderTask: Task<Void, Never>?
     private var reconcileTimer: Timer?
-    private var changeTask: Task<Void, Never>?
     private var observers: [NSObjectProtocol] = []
     private var started = false
 
-    init(provider: CalendarMeetingProvider = EventKitCalendarProvider.shared) {
-        self.provider = provider
+    init() {
         let defaults = UserDefaults.standard
-        isConnected = defaults.bool(forKey: Keys.connected)
-        access = provider.accessStatus()
         enabledCalendarIDs = (defaults.array(forKey: Keys.enabledCalendars) as? [String]).map(Set.init)
         if defaults.object(forKey: Keys.reminderLead) == nil {
             reminderLeadMinutes = Self.defaultLead
@@ -140,60 +130,12 @@ final class CalendarMeetingsStore: ObservableObject {
                 Task { @MainActor in await self?.refresh(reason: "clock or time zone") }
             })
         }
-        changeTask = Task { [weak self, provider] in
-            for await _ in provider.observeChanges() {
-                await self?.refresh(reason: "calendar changed")
-            }
-        }
-        // Reconciliation for anything the notifications miss; reminders themselves are exact.
+        // Provider APIs push no change events to a desktop app, so changes are picked up by this
+        // reconciliation (and on wake); reminders themselves fire at their exact time.
         reconcileTimer = Timer.scheduledTimer(withTimeInterval: 300, repeats: true) { [weak self] _ in
             Task { @MainActor in await self?.refresh(reason: "periodic") }
         }
         Task { await refresh(reason: "launch") }
-    }
-
-    // MARK: - Connect / disconnect
-
-    /// Asks macOS for Calendar access (once — macOS itself never asks twice) and connects.
-    @discardableResult
-    func connect() async -> Bool {
-        access = provider.accessStatus()
-        if access == .notDetermined {
-            do {
-                _ = try await provider.requestReadAccess()
-            } catch {
-                Logger.warning("Calendar: access request failed — \(error.localizedDescription)", subsystem: .app)
-            }
-            access = provider.accessStatus()
-        }
-        guard access == .granted else {
-            Logger.info("Calendar: access \(access) — connection not made", subsystem: .app)
-            return false
-        }
-        isConnected = true
-        UserDefaults.standard.set(true, forKey: Keys.connected)
-        Logger.info("Calendar: connected", subsystem: .app)
-        start()
-        await refresh(reason: "connected")
-        return true
-    }
-
-    /// Stops reminders and clears cached event data. Recordings are untouched, and the macOS
-    /// permission stays as the user left it.
-    func disconnect() {
-        isConnected = false
-        UserDefaults.standard.set(false, forKey: Keys.connected)
-        Logger.info("Calendar: macOS Calendars disconnected — cached events cleared", subsystem: .app)
-        if accounts.isEmpty {
-            upcoming = []
-            calendars = []
-            activeReminder = nil
-            reminderTask?.cancel()
-            decisions = [:]
-            Self.saveDecisions(decisions)
-        } else {
-            Task { await refresh(reason: "macOS calendars disconnected") }
-        }
     }
 
     // MARK: - Google / Microsoft accounts
@@ -247,24 +189,10 @@ final class CalendarMeetingsStore: ObservableObject {
 
     func isCalendarEnabled(_ id: String) -> Bool { enabledCalendarIDs?.contains(id) ?? true }
 
-    func openCalendarSettings() {
-        if let url = URL(string: "x-apple.systempreferences:com.apple.Internet-Accounts-Settings.extension") {
-            NSWorkspace.shared.open(url)
-        }
-    }
-
-    func openPrivacySettings() {
-        if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Calendars") {
-            NSWorkspace.shared.open(url)
-        }
-    }
-
     // MARK: - Refresh
 
     func refresh(reason: String) async {
-        access = provider.accessStatus()
-        let useEventKit = isConnected && access == .granted
-        guard useEventKit || !accounts.isEmpty else {
+        guard !accounts.isEmpty else {
             upcoming = []
             calendars = []
             activeReminder = nil
@@ -276,11 +204,6 @@ final class CalendarMeetingsStore: ObservableObject {
 
         var allCalendars: [CalendarSummary] = []
         var snapshots: [CalendarEventSnapshot] = []
-        if useEventKit {
-            allCalendars += provider.calendars()
-            let ekSelection = enabledCalendarIDs.map { ids in ids.filter { !$0.contains("|") } }
-            snapshots += await provider.events(from: start, to: end, calendarIDs: ekSelection)
-        }
         for account in accounts {
             let (calendars, events) = await fetchRemote(account, from: start, to: end)
             allCalendars += calendars
@@ -288,9 +211,8 @@ final class CalendarMeetingsStore: ObservableObject {
         }
         calendars = allCalendars
 
-        // The same event reached through two sources (a Google calendar added to macOS *and*
-        // signed in directly) has one occurrence ID — its iCalendar UID plus start — so it
-        // appears once.
+        // The same event reached through two accounts (an invite on both a Google and an Outlook
+        // calendar) has one occurrence ID — its iCalendar UID plus start — so it appears once.
         var seen = Set<String>()
         upcoming = snapshots
             .compactMap { MeetingEventClassifier.meeting(from: $0, includeUnlinkedSolo: includeUnlinkedSolo) }
@@ -305,7 +227,7 @@ final class CalendarMeetingsStore: ObservableObject {
             activeReminder = fresh
         }
         scheduleNextReminder()
-        Logger.debug("Calendar: \(upcoming.count) meeting(s) from \(useEventKit ? 1 : 0) macOS + \(accounts.count) account source(s) after \(reason)", subsystem: .app)
+        Logger.debug("Calendar: \(upcoming.count) meeting(s) from \(accounts.count) account(s) after \(reason)", subsystem: .app)
     }
 
     /// One account's calendars and events. On a network failure the last good copy is used, so

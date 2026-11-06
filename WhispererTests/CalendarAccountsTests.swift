@@ -89,20 +89,11 @@ private struct FakeRemote: RemoteCalendarSource {
     }
 }
 
-private final class EmptyMacCalendars: CalendarMeetingProvider, @unchecked Sendable {
-    var events: [CalendarEventSnapshot] = []
-    func accessStatus() -> CalendarAccess { .granted }
-    func requestReadAccess() async throws -> Bool { true }
-    func calendars() -> [CalendarSummary] { [CalendarSummary(id: "mac", title: "Mac", sourceTitle: "iCloud", color: [1, 1, 1])] }
-    func events(from start: Date, to end: Date, calendarIDs: Set<String>?) async -> [CalendarEventSnapshot] { events }
-    func observeChanges() -> AsyncStream<Void> { AsyncStream { _ in } }
-}
-
 @MainActor
 final class CalendarAccountStoreTests: XCTestCase {
     private static var keepAlive: [AnyObject] = []
     private var saved: [String: Any] = [:]
-    private let keys = [CalendarMeetingsStore.Keys.connected, CalendarMeetingsStore.Keys.enabledCalendars,
+    private let keys = [CalendarMeetingsStore.Keys.enabledCalendars,
                         CalendarMeetingsStore.Keys.reminderLead, CalendarMeetingsStore.Keys.decisions,
                         CalendarMeetingsStore.Keys.accounts]
     private let account = CalendarAccount(provider: .google, email: "dana@example.com")
@@ -124,46 +115,50 @@ final class CalendarAccountStoreTests: XCTestCase {
                                      location: nil, notes: nil, attendeeCount: 3, currentUserRSVP: .accepted, isSoloEvent: false)
     }
 
-    private func store(mac: [CalendarEventSnapshot], remote: Result<[CalendarEventSnapshot], CalendarAccountError>,
-                       connectMac: Bool) async -> CalendarMeetingsStore {
-        let macProvider = EmptyMacCalendars()
-        macProvider.events = mac
-        if let data = try? JSONEncoder().encode([account]) {
+    private func store(accounts: [CalendarAccount]? = nil,
+                       remote: @escaping (CalendarAccount) -> Result<[CalendarEventSnapshot], CalendarAccountError>) async -> CalendarMeetingsStore {
+        if let data = try? JSONEncoder().encode(accounts ?? [account]) {
             UserDefaults.standard.set(data, forKey: CalendarMeetingsStore.Keys.accounts)
         }
-        let s = CalendarMeetingsStore(provider: macProvider)
+        let s = CalendarMeetingsStore()
         Self.keepAlive.append(s)
-        let current = remote
-        s.makeRemoteSource = { FakeRemote(account: $0, result: current) }
-        if connectMac { _ = await s.connect() } else { await s.refresh(reason: "test") }
+        s.makeRemoteSource = { FakeRemote(account: $0, result: remote($0)) }
+        await s.refresh(reason: "test")
         return s
     }
 
-    func testSignedInAccountWorksWithoutMacCalendars() async {
-        let s = await store(mac: [], remote: .success([event(uid: "u1", calendar: account.namespaced("primary"), startsIn: 3600)]),
-                            connectMac: false)
+    func testSignedInAccountIsTheSource() async {
+        let s = await store { _ in .success([self.event(uid: "u1", calendar: self.account.namespaced("primary"), startsIn: 3600)]) }
         XCTAssertTrue(s.hasAnySource)
         XCTAssertEqual(s.upcoming.count, 1)
         XCTAssertEqual(s.calendars.map(\.title), ["Primary"])
     }
 
-    /// A Google calendar both added to macOS and signed in directly shows its meeting once.
-    func testTheSameEventFromTwoSourcesAppearsOnce() async {
-        let s = await store(mac: [event(uid: "shared-uid", calendar: "mac", startsIn: 3600)],
-                            remote: .success([event(uid: "shared-uid", calendar: account.namespaced("primary"), startsIn: 3600)]),
-                            connectMac: true)
+    /// An invite on both a Google and an Outlook calendar shows its meeting once.
+    func testTheSameEventFromTwoAccountsAppearsOnce() async {
+        let outlook = CalendarAccount(provider: .microsoft, email: "dana@contoso.com")
+        let s = await store(accounts: [account, outlook]) { acct in
+            .success([self.event(uid: "shared-uid", calendar: acct.namespaced("primary"), startsIn: 3600)])
+        }
         XCTAssertEqual(s.upcoming.count, 1)
+        XCTAssertEqual(s.calendars.count, 2, "both accounts' calendars are listed")
+    }
+
+    func testNoAccountMeansNoCalendarAndNoMacOSFallback() async {
+        let s = await store(accounts: []) { _ in .success([]) }
+        XCTAssertFalse(s.hasAnySource)
+        XCTAssertTrue(s.upcoming.isEmpty)
+        XCTAssertTrue(s.calendars.isEmpty)
     }
 
     func testRevokedAccountIsFlaggedNotCrashed() async {
-        let s = await store(mac: [], remote: .failure(.needsReconnect), connectMac: false)
+        let s = await store { _ in .failure(.needsReconnect) }
         XCTAssertTrue(s.accountsNeedingReconnect.contains(account.id))
         XCTAssertTrue(s.upcoming.isEmpty)
     }
 
     func testRemovingTheAccountClearsItsEvents() async {
-        let s = await store(mac: [], remote: .success([event(uid: "u1", calendar: account.namespaced("primary"), startsIn: 3600)]),
-                            connectMac: false)
+        let s = await store { _ in .success([self.event(uid: "u1", calendar: self.account.namespaced("primary"), startsIn: 3600)]) }
         XCTAssertFalse(s.upcoming.isEmpty)
         s.removeAccount(account)
         try? await Task.sleep(nanoseconds: 200_000_000)

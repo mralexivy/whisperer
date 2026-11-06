@@ -1,12 +1,12 @@
 # Calendar sign-in setup (Google, Microsoft)
 
-Whisperer reads calendars three ways:
+Whisperer reads calendars by signing in to the provider directly. It does **not** use the
+macOS Calendar app, EventKit or any macOS calendar permission.
 
 | Source | Needs | Where in the app |
 |---|---|---|
-| macOS Calendars (iCloud + any account added in System Settings → Internet Accounts) | Nothing — EventKit, one macOS permission prompt | Settings → Calendar → macOS Calendars → Connect |
-| Google Calendar, signed in directly | A Google OAuth client ID (below) | Settings → Calendar → Google Calendar → Sign In |
-| Outlook / Microsoft 365, signed in directly | A Microsoft Entra app registration (below) | Settings → Calendar → Outlook / Microsoft 365 → Sign In |
+| Google Calendar | A Google OAuth client ID (below) | Settings → Calendar → Google Calendar → Sign In |
+| Outlook / Microsoft 365 | A Microsoft Entra app registration (below) | Settings → Calendar → Outlook / Microsoft 365 → Sign In |
 
 Both direct sign-ins use OAuth 2.0 with PKCE through the system sign-in sheet
 (`ASWebAuthenticationSession`). There is **no client secret** in the app, access is read-only,
