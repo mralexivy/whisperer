@@ -149,62 +149,79 @@ struct IslandLayout: View {
 
     private var peekBody: some View { recordingNubBody }
 
-    /// The resting recording indicator: dot, level, clock, pause/resume. Everything else
-    /// (stop, mute, open window) is one hover away in the compact row.
+    /// The recording bar — one fixed element, never grown by hover: a dot that breathes with
+    /// the voice, the clock, and the three things a recording needs from here: pause/resume,
+    /// stop, and open the meeting.
     private var recordingNubBody: some View {
         Group {
             if isVertical {
-                VStack(spacing: 8) {
-                    RecordingDot(isPaused: vm.isPaused, isStarting: vm.capture == .starting)
-                    PeekLevelMeter(level: levelBridge.peekLevel,
-                                   isPaused: vm.isPaused || vm.isMicMuted)
-                        .rotationEffect(.degrees(-90))
-                        .frame(maxHeight: .infinity)
-                    nubPauseButton
+                VStack(spacing: 6) {
+                    LiveRecordingDot(level: levelBridge.peekLevel, capture: vm.capture, isMuted: vm.isMicMuted)
+                    Spacer(minLength: 0)
+                    nubControls
                 }
-                .padding(.vertical, 6)
+                .padding(.vertical, 7)
             } else {
-                HStack(spacing: 7) {
-                    RecordingDot(isPaused: vm.isPaused, isStarting: vm.capture == .starting)
-
-                    PeekLevelMeter(level: levelBridge.peekLevel,
-                                   isPaused: vm.isPaused || vm.isMicMuted)
-                        .frame(maxWidth: .infinity)
-
-                    Text(clock.displayText)
-                        .font(.system(size: 11, weight: .semibold, design: .rounded).monospacedDigit())
-                        .foregroundColor(IC.primary.opacity(vm.isPaused ? 0.55 : 0.82))
-                        .lineLimit(1)
-                        .fixedSize()
-                        .contentTransition(.numericText())
-                        .animation(.smooth(duration: 0.3), value: clock.displayText)
-
-                    nubPauseButton
+                HStack(spacing: 6) {
+                    LiveRecordingDot(level: levelBridge.peekLevel, capture: vm.capture, isMuted: vm.isMicMuted)
+                        .padding(.leading, 2)
+                    Group {
+                        if vm.capture == .finalizing {
+                            Text("Saving\u{2026}")
+                        } else {
+                            Text(clock.displayText)
+                                .contentTransition(.numericText())
+                                .animation(.smooth(duration: 0.3), value: clock.displayText)
+                        }
+                    }
+                    .font(.system(size: 11, weight: .semibold, design: .rounded).monospacedDigit())
+                    .foregroundColor(IC.primary.opacity(vm.isPaused ? 0.5 : 0.85))
+                    .lineLimit(1)
+                    .fixedSize()
+                    Spacer(minLength: 2)
+                    nubControls
                 }
-                .padding(.leading, 11)
-                .padding(.trailing, 4)
+                .padding(.leading, 10)
+                .padding(.trailing, 3)
                 .environment(\.layoutDirection, .leftToRight)
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .animation(.spring(response: 0.3, dampingFraction: 0.85), value: vm.isPaused)
+        .animation(.spring(response: 0.3, dampingFraction: 0.85), value: vm.capture)
     }
 
-    /// Pause / resume right on the nub, so the minimal bar is never just a picture.
+    /// Pause/resume, stop, open — on the bar, so nothing has to be revealed to reach them.
     @ViewBuilder
-    private var nubPauseButton: some View {
-        if vm.capture == .recording || vm.capture == .paused {
-            IslandHoverButton(
-                icon: vm.isPaused ? "play.fill" : "pause.fill",
-                diameter: 22,
-                iconColor: vm.isPaused ? IC.attention : IC.primary.opacity(0.85),
-                tinted: vm.isPaused
-            ) {
+    private var nubControls: some View {
+        let live = vm.capture == .recording || vm.capture == .paused
+        let stack = Group {
+          if live {
+            IslandHoverButton(icon: vm.isPaused ? "play.fill" : "pause.fill", diameter: 22,
+                              iconColor: vm.isPaused ? IC.attention : IC.primary.opacity(0.85),
+                              tinted: vm.isPaused) {
                 coordinator.send(.pauseResumeRequested(sessionID: vm.sessionID))
             }
             .help(vm.isPaused ? "Resume recording" : "Pause recording")
             .accessibilityLabel(vm.isPaused ? "Resume recording" : "Pause recording")
-            .transition(.opacity)
+
+            IslandHoverButton(icon: "stop.fill", diameter: 22, iconColor: Color(red: 1, green: 0.36, blue: 0.36)) {
+                coordinator.send(.stopRequested(sessionID: vm.sessionID))
+            }
+            .help("Stop and save the meeting")
+            .accessibilityLabel("Stop recording")
+          }
+
+            IslandHoverButton(icon: "arrow.up.forward.app", diameter: 22, iconColor: IC.primary.opacity(0.75)) {
+                coordinator.send(.openWindowRequested)
+            }
+            .help("Open the meeting")
+            .accessibilityLabel("Open the meeting")
+        }
+        if isVertical {
+            VStack(spacing: 2) { stack }
+        } else {
+            HStack(spacing: 1) { stack }
         }
     }
 
@@ -883,6 +900,43 @@ struct RecordingDot: View {
         } else {
             Circle().fill(Color.red).frame(width: 8, height: 8).modifier(PulsingModifier())
         }
+    }
+}
+
+/// The recording bar's status light. Red while recording, with a soft halo that follows the
+/// voice (so the bar shows it is hearing you without a meter); amber when paused; grey while
+/// starting or muted; a slow pulse while saving.
+private struct LiveRecordingDot: View {
+    var level: Float
+    var capture: IslandCaptureState
+    var isMuted: Bool
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    private var color: Color {
+        switch capture {
+        case .paused: return Color(red: 0.961, green: 0.620, blue: 0.043)
+        case .recording where !isMuted: return Color(red: 1, green: 0.27, blue: 0.27)
+        default: return Color.white.opacity(0.5)
+        }
+    }
+
+    var body: some View {
+        let halo = capture == .recording && !isMuted ? CGFloat(min(max(level, 0), 1)) : 0
+        ZStack {
+            Circle()
+                .fill(color.opacity(0.35))
+                .frame(width: 8 + 10 * halo, height: 8 + 10 * halo)
+                .opacity(halo > 0.02 ? 1 : 0)
+            if capture == .paused {
+                Circle().fill(color).frame(width: 8, height: 8)
+            } else {
+                Circle().fill(color).frame(width: 8, height: 8).modifier(PulsingModifier())
+            }
+        }
+        .frame(width: 18, height: 18)
+        .animation(reduceMotion ? nil : .easeOut(duration: 0.12), value: halo)
+        .animation(.easeInOut(duration: 0.2), value: capture)
+        .accessibilityLabel(capture == .paused ? "Paused" : "Recording")
     }
 }
 

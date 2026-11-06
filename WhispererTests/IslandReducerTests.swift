@@ -42,45 +42,33 @@ final class IslandReducerTests: XCTestCase {
                        "a recording rests at the minimal nub, not the full compact bar")
     }
 
-    // MARK: - Three-tier ladder: peek → compact → expanded
+    // MARK: - A recording is one fixed element
 
-    func testExpandFromPeekGoesToCompact() {
+    /// Hover or a tap used to grow the recording bar into the 420 pt strip. Every control a
+    /// recording needs is on the bar itself now, so it never grows.
+    func testARecordingNeverGrows() {
         var m = freshModel()
-        IslandReducer.reduce(&m, .captureConfirmed)    // .recording, .peek
-        // Explicit, in case the resting tier ever changes.
-        m.presentation = .peek
-
+        IslandReducer.reduce(&m, .captureConfirmed)
+        XCTAssertEqual(m.presentation, .peek)
         IslandReducer.reduce(&m, .expand)
-        XCTAssertEqual(m.presentation, .compact)
+        IslandReducer.reduce(&m, .expand)
+        XCTAssertEqual(m.presentation, .peek, "recording stays the small bar")
+        IslandReducer.reduce(&m, .capturePaused)
+        IslandReducer.reduce(&m, .expand)
+        XCTAssertEqual(m.presentation, .peek, "paused too")
     }
 
-    func testExpandFromCompactGoesToExpanded() {
-        var m = freshModel()
-        IslandReducer.reduce(&m, .captureConfirmed)    // .recording, rests at .peek
-        IslandReducer.reduce(&m, .expand)              // hover → .compact
+    // MARK: - Three-tier ladder (states that are not a recording)
 
+    /// A failure is shown in the strip; it can still open to the expanded tier and back.
+    func testLadderStillWorksOutsideARecording() {
+        var m = freshModel()
+        IslandReducer.reduce(&m, .captureFailed("mic"))
+        XCTAssertEqual(m.presentation, .compact)
         IslandReducer.reduce(&m, .expand)
         XCTAssertEqual(m.presentation, .expanded)
-    }
-
-    func testExpandFromExpandedIsNoOp() {
-        var m = freshModel()
-        IslandReducer.reduce(&m, .captureConfirmed)
-        IslandReducer.reduce(&m, .expand)              // → .compact
-        IslandReducer.reduce(&m, .expand)              // → .expanded
-
         IslandReducer.reduce(&m, .expand)
-        XCTAssertEqual(m.presentation, .expanded, "Expand from expanded must not change state")
-    }
-
-    // MARK: - Collapse walks down one tier
-
-    func testCollapseFromExpandedGoesToCompact() {
-        var m = freshModel()
-        IslandReducer.reduce(&m, .captureConfirmed)
-        IslandReducer.reduce(&m, .expand)   // .compact
-        IslandReducer.reduce(&m, .expand)   // .expanded
-
+        XCTAssertEqual(m.presentation, .expanded, "expand from expanded is a no-op")
         IslandReducer.reduce(&m, .collapse)
         XCTAssertEqual(m.presentation, .compact)
     }
@@ -269,15 +257,14 @@ final class IslandReducerTests: XCTestCase {
         XCTAssertEqual(m.presentation, .compact)
     }
 
-    func testStopRequested_PromotesPeekToCompact() {
+    func testStopRequested_SavesInPlaceOnTheSmallBar() {
         let id = UUID()
         var m = freshModel(sessionID: id)
         IslandReducer.reduce(&m, .captureConfirmed)
-        m.presentation = .peek
 
         IslandReducer.reduce(&m, .stopRequested(sessionID: id))
-        XCTAssertEqual(m.presentation, .compact,
-                       "Finalizing state must not stay at peek — label must be legible")
+        XCTAssertEqual(m.capture, .finalizing)
+        XCTAssertEqual(m.presentation, .peek, "the bar shows Saving… in place, it does not jump to the big strip")
     }
 
     // MARK: - Session correctness

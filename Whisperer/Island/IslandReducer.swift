@@ -77,8 +77,7 @@ enum IslandReducer {
             state.capture = .finalizing
             state.isPaused = false
             state.revision &+= 1
-            // Finalizing must be legible.
-            if state.presentation == .peek { state.presentation = .compact }
+            // The recording bar says "Saving…" in place — it no longer jumps to the big bar.
             return []
 
         case .captureEnded:
@@ -114,7 +113,6 @@ enum IslandReducer {
             guard !state.stopInFlight else { return [] }
             state.stopInFlight = true
             state.capture = .finalizing
-            if state.presentation == .peek { state.presentation = .compact }
             state.revision &+= 1
             return [.stopCapture]
 
@@ -173,6 +171,12 @@ enum IslandReducer {
         // MARK: Presentation — never touch capture
 
         case .expand:
+            // A recording is one fixed element: every control it needs (pause, stop, open the
+            // meeting) is on the bar itself, so hover and taps never grow it into the big bar.
+            switch state.capture {
+            case .starting, .recording, .paused, .finalizing: return []
+            default: break
+            }
             switch state.presentation {
             case .peek:    state.presentation = .compact
             // Idle has no secondary control row to reveal.
