@@ -64,7 +64,9 @@ struct MeetingTranscriptView: View {
         // entry the session started with, not what was actually spoken. Judged over the whole
         // transcript — see the note on `isRightToLeft(segments:)`; sampling the opening put a
         // Hebrew meeting with three mis-decoded English cards entirely left-to-right.
-        MeetingTranscriptText.isRightToLeft(
+        // Live: the session's sticky verdict, so the direction cannot flip per update.
+        if isLive, let live = session.liveIsRTL { return live }
+        return MeetingTranscriptText.isRightToLeft(
             segments: segments,
             liveTail: isLive ? session.currentSegmentText + " " + session.livePreviewText : "",
             fallback: TranscriptionLanguage(rawValue: meeting?.language ?? ""))
@@ -75,8 +77,15 @@ struct MeetingTranscriptView: View {
         refiner.activeMeetingID != nil && refiner.activeMeetingID == meeting?.id
     }
 
-    private var segmentByID: [UUID: MeetingSegment] {
-        Dictionary(segments.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
+    /// Built once per change of `segments`, not per lookup: it was a computed property read
+    /// per card, per render — quadratic in the meeting's length, at the live tail's cadence.
+    @State private var segmentByID: [UUID: MeetingSegment] = [:]
+    /// One live auto-scroll per runloop turn. Four change handlers each fired an animated scroll,
+    /// several times a second, and the animations fought each other.
+    @State private var liveScrollPending = false
+
+    private func reindexSegments() {
+        segmentByID = Dictionary(segments.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
     }
 
     /// Segment the playhead currently sits inside, used for the active card accent.
@@ -126,10 +135,12 @@ struct MeetingTranscriptView: View {
                 }
                 .padding(.vertical, 10)
             }
-            .onChange(of: segments.count)             { _, _ in scrollToLive(proxy) }
+            .onChange(of: segments.count)             { _, _ in scrollToLive(proxy, animated: true) }
             .onChange(of: transcriptHeight)           { _, _ in scrollToLive(proxy) }
             .onChange(of: session.livePreviewText)    { _, _ in scrollToLive(proxy) }
             .onChange(of: session.currentSegmentText) { _, _ in scrollToLive(proxy) }
+            .onChange(of: segments) { _, _ in reindexSegments() }
+            .onAppear { reindexSegments() }
             // When the speaker filter changes, start at the top of the filtered result
             // rather than staying wherever the scroll position was for the previous view.
             .onChange(of: visibleSpeakerIndices) { _, _ in
@@ -466,10 +477,20 @@ struct MeetingTranscriptView: View {
                     .padding(isRTL ? .leading : .trailing, outerMargin + timestampCol + innerHPad)
             }
 
-            Text(combinedSegmentText)
-                .font(.system(size: 14, weight: .regular))
-                .lineSpacing(5)
-                .multilineTextAlignment(isRTL ? .trailing : .leading)
+            // RTL through the same NSTextField path the cards use: SwiftUI `Text` has no base
+            // writing direction, so a Hebrew line with Latin words or punctuation laid out
+            // differently in the bubble and re-flowed visibly when it committed.
+            Group {
+                if isRTL {
+                    MeetingSegmentTextView(text: String(combinedSegmentText.characters),
+                                           highlightQuery: "", isRTL: true)
+                } else {
+                    Text(combinedSegmentText)
+                        .font(.system(size: 14, weight: .regular))
+                        .lineSpacing(5)
+                        .multilineTextAlignment(.leading)
+                }
+            }
                 .frame(maxWidth: .infinity, alignment: isRTL ? .trailing : .leading)
                 .padding(.horizontal, innerHPad)
                 .padding(.vertical, cardVPad)
@@ -544,9 +565,20 @@ struct MeetingTranscriptView: View {
 
     // MARK: - Helpers
 
-    private func scrollToLive(_ proxy: ScrollViewProxy) {
-        guard isLive else { return }
-        withAnimation { proxy.scrollTo("livePreview", anchor: .bottom) }
+    /// Keeps the live bubble in view. Coalesced to one scroll per runloop turn; animated only
+    /// when a card lands (a real change of position), instant while text grows — an animated
+    /// scroll per word is what made the transcript swim.
+    private func scrollToLive(_ proxy: ScrollViewProxy, animated: Bool = false) {
+        guard isLive, !liveScrollPending else { return }
+        liveScrollPending = true
+        DispatchQueue.main.async {
+            liveScrollPending = false
+            if animated {
+                withAnimation(.easeOut(duration: 0.2)) { proxy.scrollTo("livePreview", anchor: .bottom) }
+            } else {
+                proxy.scrollTo("livePreview", anchor: .bottom)
+            }
+        }
     }
 
     private func formatTimestamp(_ seconds: Double) -> String {

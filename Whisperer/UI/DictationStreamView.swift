@@ -217,6 +217,9 @@ struct LivePourText: View {
     var fontSize: CGFloat = 16
     var fontDesign: Font.Design = .rounded
     var placeholder: String?
+    /// The text can lose words off its front (a meeting card committing above the bubble).
+    /// Then the rest is shown at once instead of being ignored by the append-only pour.
+    var rebasesOnShrink: Bool = false
 
     @StateObject private var updater = SmoothTextUpdater()
 
@@ -230,7 +233,16 @@ struct LivePourText: View {
             placeholder: placeholder
         )
         .onAppear { updater.setTarget(text) }
-        .onChange(of: text) { _, newValue in updater.setTarget(newValue) }
+        .onChange(of: text) { oldValue, newValue in
+            // Grew → pour the new words. Anything else (front committed away, a revision) →
+            // show the new text as it is, at once: re-pouring words already on screen is a blink.
+            let grew = newValue.hasPrefix(oldValue.trimmingCharacters(in: .whitespaces))
+            if rebasesOnShrink, !grew {
+                updater.replaceInstantly(newValue)
+            } else {
+                updater.setTarget(newValue)
+            }
+        }
         .onDisappear { updater.stop() }
     }
 }

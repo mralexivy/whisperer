@@ -116,13 +116,33 @@ enum MeetingTranscriptText {
 
     /// Running RTL-vs-total letter count. A majority decides, so a Hebrew meeting keeps its
     /// direction through quoted English and Latin technical terms.
+    /// Direction for a transcript that is still growing, with hysteresis.
+    ///
+    /// The plain verdict (`> 30%` RTL letters) recomputed on every live update flipped a mixed
+    /// Hebrew/English meeting back and forth near the threshold, and every flip rebuilt the whole
+    /// transcript and moved its gutter and alignment. Once decided, this only changes on strong
+    /// evidence: to RTL above 45%, back to LTR below 15%.
+    nonisolated static func stickyRightToLeft(current: Bool?, text: String) -> Bool? {
+        var tally = ScriptTally()
+        tally.count(text, limit: directionSampleLetters)
+        guard let share = tally.rtlShare else { return current }
+        guard let current else { return share > 0.3 }
+        if current, share < 0.15 { return false }
+        if !current, share > 0.45 { return true }
+        return current
+    }
+
     private struct ScriptTally {
         private(set) var letters = 0
         private var rtl = 0
 
         var isRightToLeft: Bool? {
+            rtlShare.map { $0 > 0.3 }
+        }
+
+        var rtlShare: Double? {
             guard letters >= MeetingTranscriptText.directionMinimumLetters else { return nil }
-            return Double(rtl) / Double(letters) > 0.3
+            return Double(rtl) / Double(letters)
         }
 
         mutating func count(_ text: String, limit: Int) {

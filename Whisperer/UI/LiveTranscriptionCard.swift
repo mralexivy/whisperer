@@ -533,6 +533,20 @@ class SmoothTextUpdater: ObservableObject {
     /// user has been waiting on. Flushing is the honest response: the words are all equally old.
     private let flushBacklogThreshold = 12
 
+    /// Shows `text` at once, with no pour. For a target that *shrank* because its front moved
+    /// elsewhere — a meeting card committing the words above the live bubble. Those words were
+    /// already on screen; pouring them again from empty is the blink this exists to avoid.
+    func replaceInstantly(_ text: String) {
+        let newText = text.trimmingCharacters(in: .whitespaces)
+        animationTimer?.invalidate()
+        animationTimer = nil
+        pendingWords.removeAll()
+        committedText = newText
+        displayedText = newText
+        words = newText.split(whereSeparator: { $0.isWhitespace }).map(String.init)
+        if newText.isEmpty { isActive = false }
+    }
+
     func setTarget(_ text: String, rtl: Bool = false) {
         let newText = text.trimmingCharacters(in: .whitespaces)
         isRTL = rtl

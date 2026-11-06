@@ -94,6 +94,14 @@ actor MeetingSpeakerCoordinator {
     /// surface (live, saved JSON, colours, export, MCP, AI) reads what this coordinator emits, so
     /// mapping here, once, makes them all agree. Internal logic stays on raw slots.
     private var displayOrdinal: [Int: Int] = [:]
+    /// Audio time the last *new* words arrived. Partials that add nothing do not move it, so a
+    /// pause stays measurable.
+    private var lastWordsArrivalSeconds: TimeInterval = 0
+    /// Silence between word arrivals that reads as a pause. Kept at `MeetingSession`'s
+    /// `silenceSplitGap` so the gap this creates is one the session acts on.
+    static let pauseGapSeconds: TimeInterval = 1.2
+    /// Typical speaking rate, ~150 wpm, for estimating where a batch of words began.
+    static let secondsPerWord: TimeInterval = 0.4
     /// Finalized seconds per raw slot, so a new voice is introduced on real speech, not a blip.
     private var slotCoverage: [Int: TimeInterval] = [:]
     /// Least finalized speech before a slot nobody has heard yet becomes a new speaker. A cough
@@ -166,6 +174,7 @@ actor MeetingSpeakerCoordinator {
         lastPublishedTail = nil
         displayOrdinal = [:]
         slotCoverage = [:]
+        lastWordsArrivalSeconds = 0
     }
 
     /// The display number for `raw`, assigning the next one on first use.
@@ -311,7 +320,18 @@ actor MeetingSpeakerCoordinator {
 
         let suffix = divergence < words.count ? Array(words[divergence...]) : []
         if !suffix.isEmpty {
-            pending.append((words: suffix, start: min(queueStart, now), end: now))
+            var start = min(queueStart, now)
+            // New words after a pause. The item used to start where the previous one ended, so
+            // the pause was folded into this item's span and never reached `MeetingSession` as a
+            // gap — the paragraph rule could not see it, and only the 30 s cap ever closed a
+            // card. Start the item where its words plausibly began instead. Only for a plain
+            // append: a tail rewrite (queueStart moved back) keeps the span it re-covers.
+            if queueStart == lastPartialAudioSeconds, now - lastWordsArrivalSeconds >= Self.pauseGapSeconds {
+                let spoken = min(max(Double(suffix.count) * Self.secondsPerWord, Self.secondsPerWord), now - lastWordsArrivalSeconds)
+                start = max(lastWordsArrivalSeconds, now - spoken)
+            }
+            pending.append((words: suffix, start: start, end: now))
+            lastWordsArrivalSeconds = now
         }
 
         lastWords = words

@@ -73,6 +73,26 @@ final class MeetingSpeakerOrderTests: XCTestCase {
         XCTAssertTrue(box.live.isEmpty, "no 'Speaker N' before anyone's words are in")
     }
 
+    /// A pause between word arrivals reaches the session as an audio-clock gap, so the
+    /// paragraph can break there. Items used to abut and fold the pause inside.
+    func testAPauseBetweenWordsBecomesAGap() async {
+        let coordinator = MeetingSpeakerCoordinator()
+        final class Spans: @unchecked Sendable { var list: [(start: Double, end: Double)] = [] }
+        let spans = Spans()
+        await coordinator.setCallbacks(
+            onAttributed: { _, _, start, end in spans.list.append((start, end)) },
+            onPendingTail: { _ in }, onLiveSpeaker: { _ in })
+        await feed(coordinator, seconds: 2)
+        await coordinator.onPartial("we start now")
+        await feed(coordinator, seconds: 4)                 // drains the first item, then silence
+        await coordinator.onPartial("we start now next topic")
+        await feed(coordinator, seconds: 4)                 // drains the second
+        XCTAssertEqual(spans.list.count, 2)
+        guard spans.list.count == 2 else { return }
+        XCTAssertGreaterThanOrEqual(spans.list[1].start - spans.list[0].end, 1.2,
+                                    "the pause must be visible on the audio clock")
+    }
+
     // MARK: - Saved meetings from before the fix
 
     private func segment(_ t: Double, _ index: Int, _ name: String? = nil) -> MeetingSegment {
