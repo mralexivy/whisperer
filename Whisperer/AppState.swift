@@ -606,6 +606,13 @@ class AppState: ObservableObject {
 
     /// How long the meeting-detected prompt stays up unanswered.
     static let meetingPromptSeconds: Double = 45
+
+    /// The one-time recording acknowledgment (Guideline 2.5.14). A new key, so the current
+    /// wording (consent, automatic recording, calendar) is shown once even to users who accepted
+    /// the earlier, microphone-only text.
+    @Published var hasAcknowledgedMeetingRecording: Bool = UserDefaults.standard.bool(forKey: "meetingRecordingAcknowledged.v2") {
+        didSet { UserDefaults.standard.set(hasAcknowledgedMeetingRecording, forKey: "meetingRecordingAcknowledged.v2") }
+    }
     private var meetingPromptToken: UUID?
 
     func dismissMeetingNotification() {

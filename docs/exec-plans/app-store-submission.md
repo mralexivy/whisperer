@@ -57,17 +57,18 @@ stays hidden.
 feature that never captures a frame and produced no visible result. Now gated behind
 `AppState.cameraDetectionEnabled`, off by default, with a toggle in Meeting settings.
 
-### Guideline 2.5.14 consent — the Start action, not a modal
+### Guideline 2.5.14 consent — one-time acknowledgment, then the Start action
 
-A meeting records only when the user starts it: the Start button in Meeting Studio, the meeting
-list, the Island, or the meeting-detected card. Nothing starts a recording on its own. That press
-is the explicit consent, and the recording indicator below makes the recording visible for its
-whole duration.
+The first meeting recording ever, from any entry point (Studio, list, Island, detected-call card,
+calendar reminder, automatic recording), shows `MeetingConsentView` once: the user is responsible
+for participants' consent where the law requires it, automatic recording and reminders are their
+choice, what is recorded and where it is kept. "I understand" is persisted
+(`meetingRecordingAcknowledged.v2`) and the screen never shows again; "Not now" starts nothing.
+The gate is in `MeetingSession.startRecording` (every path) and `MeetingSessionCoordinator.start`.
 
-The `MeetingConsentView` modal that used to sit between the press and the recording was removed
-on 2026-11-06 at the product owner's request: it interrupted the one action the user had just
-asked for. If App Review asks for an explicit first-use disclosure, put it in onboarding or the
-meeting-detected card, never as a modal on Start.
+It was removed on 2026-11-06 and restored the same day as a strictly one-time screen: a per-start
+modal adds nothing legally, but one explicit acknowledgment is what places the participants'
+consent on the user (and the Terms say this screen exists). Never make it per-meeting again.
 
 **Recording indicator — verified.** 2.5.14 also requires a clear indication for the duration of
 the recording. The Island satisfies this: while recording it sits at `.peek`, which renders a

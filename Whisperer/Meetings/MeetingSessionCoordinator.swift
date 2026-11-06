@@ -289,6 +289,11 @@ final class MeetingSessionCoordinator: ObservableObject {
         startInFlight = true
         defer { startInFlight = false }
         startFailure = nil
+        // Ask before creating the session, so "Not now" is a choice, not a failed start.
+        guard await MeetingConsentPrompt.ensureConsent() else {
+            Logger.info("Meetings: start cancelled — recording acknowledgment not accepted", subsystem: .app)
+            return
+        }
 
         let session = MeetingSession()
         await session.startRecording(title: title, surface: .floatingWindow,

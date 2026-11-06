@@ -38,10 +38,11 @@ helps it distinguish a video meeting from an app that is only using the micropho
 
 ### Meeting recording consent
 
-Before the first meeting recording, the app shows a consent screen explaining that it records your
-microphone only, never other participants' audio, that recordings are stored locally, and that
-you are responsible for obtaining consent from other participants where the law requires it. No
-recording can start until you accept.
+Before the first meeting recording, the app shows a one-time screen explaining that you are
+responsible for obtaining consent from other participants where the law requires it, that
+automatic recording and calendar reminders are your choice, what is recorded (the audio input you
+choose, usually your microphone) and that recordings stay on your Mac. No recording can start
+until you accept; it is not shown again afterwards.
 
 While recording, a persistent on-screen indicator with a recording dot, an audio level, and an
 elapsed timer remains visible for the entire duration.

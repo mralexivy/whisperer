@@ -295,6 +295,8 @@ class MeetingSession: ObservableObject {
                         sourceBundleID: String? = nil, sourceAppName: String? = nil) async {
         guard AppState.shared.allowCaptureDuringAudioSetup() else { return }
         guard !isRecording, !isStarting else { return }
+        // Every entry point lands here, so the one-time acknowledgment cannot be skipped.
+        guard await MeetingConsentPrompt.ensureConsent() else { return }
         isStarting = true
         AppState.shared.pendingMeetingStarts += 1
         defer { isStarting = false; AppState.shared.pendingMeetingStarts -= 1 }
