@@ -268,6 +268,9 @@ class OverlayPanel: NSPanel {
             && !appState.isMeetingMode
             || appState.showSilentMeetingToast
             || appState.emptyMeetingDiscardedToast
+            || CalendarMeetingsStore.shared.activeReminder != nil
+            || MeetingSessionCoordinator.shared.endPendingPrompt
+            || MeetingSessionCoordinator.shared.startFailure != nil
             // A dictation on top of a meeting gets the HUD even in meeting mode.
             || appState.meetingInterlude != nil
 

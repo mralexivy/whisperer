@@ -144,6 +144,8 @@ extension View {
 
 struct OverlayView: View {
     @ObservedObject var appState = AppState.shared
+    @ObservedObject private var calendarStore = CalendarMeetingsStore.shared
+    @ObservedObject private var meetingCoordinator = MeetingSessionCoordinator.shared
     @AppStorage("overlaySize") private var overlaySizeRaw: String = OverlaySize.medium.rawValue
     @State private var isCloseHovered = false
 
@@ -192,6 +194,21 @@ struct OverlayView: View {
 
             if appState.emptyMeetingDiscardedToast {
                 EmptyMeetingDiscardedCard()
+            }
+
+            // Calendar and call-detection cards. Shown during a meeting too: a reminder for the
+            // next meeting, or "call may have ended" for the one being recorded.
+            if let reminder = calendarStore.activeReminder {
+                MeetingReminderCard(meeting: reminder)
+                    .id(reminder.id)
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
+            }
+            if meetingCoordinator.endPendingPrompt {
+                MeetingEndPendingCard()
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
+            }
+            if let failure = meetingCoordinator.startFailure {
+                MeetingStartFailedCard(message: failure)
             }
 
             // In meeting mode the Island / MeetingLiveWindow own the recording UI — nothing else

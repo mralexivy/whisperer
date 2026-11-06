@@ -1064,6 +1064,9 @@ actor MeetingAIService {
         let trimmed = title.trimmingCharacters(in: .whitespacesAndNewlines)
         if trimmed.isEmpty { return true }
         if trimmed.hasPrefix("Note ") || trimmed.hasPrefix("Meeting ") { return true }
+        // A detected call with no calendar event (`MeetingSessionCoordinator.defaultTitle`).
+        // A calendar event's title is the user's own and does not match, so it is never renamed.
+        if trimmed.hasPrefix("Unscheduled ") { return true }
         return autoTitleAppNames.contains(trimmed.lowercased())
     }
 

@@ -387,6 +387,7 @@ private struct MeetingCandidate {
     let iconColor: Color
     let bundleID: String
     let confidence: Double
+    let signals: MeetingCallSignals
 }
 
 private enum DetectorState {
@@ -407,6 +408,74 @@ final class MeetingDetector {
         let iconSystemName: String
         let iconColor: Color
         let bundleID: String
+        /// What the detector saw. Drives `confidence`, which is the only thing allowed to decide
+        /// whether a call may be recorded without a click (`MeetingSessionCoordinator`).
+        var signals: MeetingCallSignals = MeetingCallSignals(
+            source: .browserUnverified, provider: nil, processCaptureConfirmed: false,
+            virtualDeviceActive: false, sustainedSeconds: 0)
+
+        var confidence: MeetingCallConfidence { MeetingCallPolicy.confidence(signals) }
+        var provider: ConferenceProvider? { signals.provider }
+    }
+
+    // MARK: Liveness (for the session coordinator)
+
+    /// Whether the call `bundleID` was detected in is still live. Re-checked right before an
+    /// automatic start and polled to end an automatically started recording.
+    ///
+    /// A muted Zoom/Teams/Webex call keeps its in-call audio device running, so muting is "live",
+    /// not "ended" — a recording must not stop because someone muted.
+    func liveness(bundleID: String) -> MeetingCallLiveness {
+        refreshCapturingApps()
+        let running = NSWorkspace.shared.runningApplications.contains { $0.bundleIdentifier == bundleID }
+        guard running else { return .appQuit }
+        if let device = detectActiveVirtualMeetingDevice(),
+           conferenceProvider(forBundleID: device.bundleID) == conferenceProvider(forBundleID: bundleID),
+           conferenceProvider(forBundleID: bundleID) != nil {
+            return .live
+        }
+        switch processMonitor.captureStatus(for: bundleID) {
+        case .capturing: return .live
+        case .ended(let since): return .ended(since: since)
+        case .unobserved: return .unknown
+        }
+    }
+
+    /// The calendar-side provider for a detected app, for naming and calendar matching.
+    func conferenceProvider(forBundleID bundleID: String) -> ConferenceProvider? {
+        nativeApps.first { $0.bundleIDs.contains(bundleID) }.flatMap { Self.conferenceProvider($0.provider) }
+    }
+
+    private static func conferenceProvider(_ provider: MeetingProvider) -> ConferenceProvider? {
+        switch provider {
+        case .zoom: return .zoom
+        case .microsoftTeams: return .teams
+        case .webex: return .webex
+        case .googleMeet, .googleHangouts: return .googleMeet
+        case .slackHuddle: return .slack
+        case .whereby: return .whereby
+        case .around: return .around
+        case .facetime, .browserCall: return nil
+        }
+    }
+
+    /// Signals for a detection, from the same evidence the scorer used.
+    private func signals(bundleID: String, provider: MeetingProvider, processCapture: Bool,
+                         virtualDevice: Bool, verifiedTab: Bool) -> MeetingCallSignals {
+        let source: MeetingCallSignals.Source
+        if verifiedTab {
+            source = .browserVerifiedTab
+        } else if provider == .browserCall || browserBundleIDs.contains(bundleID) {
+            source = .browserUnverified
+        } else {
+            source = .nativeApp
+        }
+        return MeetingCallSignals(
+            source: source,
+            provider: Self.conferenceProvider(provider),
+            processCaptureConfirmed: processCapture,
+            virtualDeviceActive: virtualDevice,
+            sustainedSeconds: processMonitor.captureDuration(for: bundleID) ?? 0)
     }
 
     // MARK: Provider registry
@@ -739,9 +808,10 @@ final class MeetingDetector {
             name: candidate.displayName,
             iconSystemName: candidate.iconSystemName,
             iconColor: candidate.iconColor,
-            bundleID: candidate.bundleID
+            bundleID: candidate.bundleID,
+            signals: candidate.signals
         ))
-        Logger.info("MeetingDetector: \(candidate.displayName) (confidence \(String(format: "%.2f", candidate.confidence)))", subsystem: .app)
+        Logger.info("MeetingDetector: \(candidate.displayName) (score \(String(format: "%.2f", candidate.confidence)); \(MeetingCallPolicy.explain(candidate.signals)))", subsystem: .app)
     }
 
     // MARK: - Gate
@@ -1067,7 +1137,11 @@ final class MeetingDetector {
             iconSystemName: iconSystemName,
             iconColor: iconColor,
             bundleID: bundleID,
-            confidence: s
+            confidence: s,
+            signals: signals(bundleID: bundleID, provider: provider,
+                             processCapture: e.processCaptureConfirmed,
+                             virtualDevice: e.virtualMeetingDeviceActive,
+                             verifiedTab: e.browserMeetingWindow)
         )
     }
 
@@ -1116,7 +1190,9 @@ final class MeetingDetector {
         for def in nativeApps {
             guard let matchedBID = def.bundleIDs.first(where: { capturingApps.contains($0) }) else { continue }
             guard !recentlyFired(def.displayName) else { continue }
-            fireDirect(name: def.displayName, iconSystemName: def.iconSystemName, iconColor: def.iconColor, bundleID: matchedBID)
+            fireDirect(name: def.displayName, iconSystemName: def.iconSystemName, iconColor: def.iconColor, bundleID: matchedBID,
+                       signals: signals(bundleID: matchedBID, provider: def.provider, processCapture: true,
+                                        virtualDevice: false, verifiedTab: false))
             return
         }
 
@@ -1134,7 +1210,9 @@ final class MeetingDetector {
         if hardware.microphoneActive,
            let vd = detectActiveVirtualMeetingDevice(),
            !recentlyFired(vd.displayName) {
-            fireDirect(name: vd.displayName, iconSystemName: vd.iconSystemName, iconColor: vd.iconColor, bundleID: vd.bundleID)
+            fireDirect(name: vd.displayName, iconSystemName: vd.iconSystemName, iconColor: vd.iconColor, bundleID: vd.bundleID,
+                       signals: signals(bundleID: vd.bundleID, provider: vd.provider, processCapture: false,
+                                        virtualDevice: true, verifiedTab: false))
             return
         }
 
@@ -1144,7 +1222,9 @@ final class MeetingDetector {
         #if !APP_STORE
         if let result = detectBrowserMeeting(running: running) {
             guard !recentlyFired(result.displayName) else { return }
-            fireDirect(name: result.displayName, iconSystemName: result.iconSystemName, iconColor: result.iconColor, bundleID: result.bundleID)
+            fireDirect(name: result.displayName, iconSystemName: result.iconSystemName, iconColor: result.iconColor, bundleID: result.bundleID,
+                       signals: signals(bundleID: result.bundleID, provider: result.provider, processCapture: true,
+                                        virtualDevice: false, verifiedTab: true))
             return
         }
         #endif
@@ -1153,11 +1233,14 @@ final class MeetingDetector {
         // service. The only browser signal that survives without Accessibility.
         if let browser = sustainedCapturingBrowser(running: running),
            !recentlyFired(browser.displayName) {
-            fireDirect(name: browser.displayName, iconSystemName: "video.fill", iconColor: .blue, bundleID: browser.bundleID)
+            fireDirect(name: browser.displayName, iconSystemName: "video.fill", iconColor: .blue, bundleID: browser.bundleID,
+                       signals: signals(bundleID: browser.bundleID, provider: .browserCall, processCapture: true,
+                                        virtualDevice: false, verifiedTab: false))
         }
     }
 
-    private func fireDirect(name: String, iconSystemName: String, iconColor: Color, bundleID: String) {
+    private func fireDirect(name: String, iconSystemName: String, iconColor: Color, bundleID: String,
+                            signals: MeetingCallSignals) {
         ledger.recordPrompt(name: name, bundleID: bundleID)
         updateCaptureSampler()
         lastFiredName = name
@@ -1166,9 +1249,10 @@ final class MeetingDetector {
             name: name,
             iconSystemName: iconSystemName,
             iconColor: iconColor,
-            bundleID: bundleID
+            bundleID: bundleID,
+            signals: signals
         ))
-        Logger.info("MeetingDetector: fallback detected \(name)", subsystem: .app)
+        Logger.info("MeetingDetector: fallback detected \(name) (\(MeetingCallPolicy.explain(signals)))", subsystem: .app)
     }
 
     // MARK: - Browser / Accessibility detection (non-App Store only)

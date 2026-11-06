@@ -178,20 +178,31 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         appState.textInjector = TextInjector()
         appState.audioMuter = AudioMuter()
         appState.soundPlayer = SoundPlayer()
-        #if !APP_STORE
-        appState.textSelectionService = TextSelectionService()
+        // Meeting detection and calendar reminders run in every build, the App Store one
+        // included: the detector's signals are read-only CoreAudio process properties (no TCC
+        // grant), and only its Accessibility browser-title path is compiled out there. It used to
+        // sit inside the `!APP_STORE` block below, so the App Store build never detected a
+        // meeting despite shipping the card and the setting for it.
+        //
         // Not in tests: the detector installs camera/mic monitors plus 1s and 5s polls, and on
         // detection calls through to `MeetingEngines.prefetch()`. Recording tests turn the
         // microphone on, so the suite would trip its own meeting detection.
         if !AppEnvironment.isRunningTests {
             MeetingDetector.shared.start()
+            CalendarMeetingsStore.shared.start()
+        }
+        #if !APP_STORE
+        appState.textSelectionService = TextSelectionService()
+        if !AppEnvironment.isRunningTests {
             PrivacyShieldController.shared.resumeAtLaunch()
         }
+        #endif
         // Warm the speaker-diarization model on disk while the user is doing something
         // else. Gated on the same toggle MeetingDetector gates itself with, so users who
         // turned meetings off never pay for the download.
         #if canImport(FluidAudio)
-        if UserDefaults.standard.object(forKey: "meetingDetectionEnabled") == nil
+        if !AppEnvironment.isRunningTests,
+           UserDefaults.standard.object(forKey: "meetingDetectionEnabled") == nil
             || UserDefaults.standard.bool(forKey: "meetingDetectionEnabled") {
             MeetingDiarizerService.shared.prefetch()
             // Warm the meeting engine set for users who already have meetings — this is a
@@ -200,7 +211,6 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                 MeetingEngines.shared.prefetch()
             }
         }
-        #endif
         #endif
 
         // Register long-lived components with HealthManager
@@ -1092,6 +1102,9 @@ struct StatusTabView: View {
 
                 // Self-hides once the model is installed; see PolishModelCard.
                 PolishModelCard()
+
+                // Self-hides when no calendar is connected or nothing is coming up.
+                NextMeetingRow()
 
                 // In-App Transcription — core feature, no Accessibility required.
                 // Hidden during a meeting: the card reads AppState's live recording state, which a
@@ -2416,6 +2429,11 @@ struct SettingsTabView: View {
                     }
                 }
 
+                // Calendar — reminders before scheduled meetings, from the calendars on this Mac.
+                settingsCard(title: "Calendar", icon: "calendar", color: .orange) {
+                    CalendarSettingsRows()
+                }
+
                 // Meeting Detection
                 settingsCard(title: "Meeting Detection", icon: "video.fill", color: .blue) {
                     HStack {
@@ -2432,6 +2450,13 @@ struct SettingsTabView: View {
                             .toggleStyle(.switch)
                             .tint(MBColors.accent)
                             .labelsHidden()
+                    }
+
+                    if meetingDetectionEnabled {
+                        Divider()
+                            .background(MBColors.border)
+                            .padding(.vertical, 2)
+                        AutoRecordSettingsRows()
                     }
 
                     Divider()

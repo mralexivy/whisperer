@@ -580,6 +580,9 @@ class AppState: ObservableObject {
     @Published var detectedMeetingApp: MeetingDetector.DetectedMeetingApp? = nil
 
     func showMeetingNotification(app: MeetingDetector.DetectedMeetingApp) {
+        // One owner decides: excluded app, join-only calendar meeting, a recording already on,
+        // or auto-record's countdown. See `MeetingSessionCoordinator`.
+        guard MeetingSessionCoordinator.shared.shouldPresentDetection(app) else { return }
         detectedMeetingApp = app
         showMeetingDetectedToast = true
         #if canImport(FluidAudio)
@@ -594,7 +597,10 @@ class AppState: ObservableObject {
         Task { @MainActor [weak self] in
             try? await Task.sleep(nanoseconds: UInt64(Self.meetingPromptSeconds * 1_000_000_000))
             guard let self, self.showMeetingDetectedToast, self.meetingPromptToken == token else { return }
+            // A countdown in progress keeps its card until it starts or is cancelled.
+            if MeetingSessionCoordinator.shared.countdownSecondsLeft != nil { return }
             self.dismissMeetingNotification()
+            MeetingSessionCoordinator.shared.detectionCardClosed()
         }
     }
 
