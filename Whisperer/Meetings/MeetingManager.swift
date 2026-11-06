@@ -453,6 +453,29 @@ class MeetingManager: ObservableObject {
         // Notes live in full MeetingRecord; no scalar to update in MeetingListItem
     }
 
+    /// Read-modify-write of a meeting's notes inside one Core Data `perform`, so a note an AI
+    /// app adds through MCP and one the user adds can't overwrite each other. Returns the new
+    /// notes, or nil when the meeting doesn't exist.
+    func mutateNotes(meetingID: UUID, _ transform: @escaping @Sendable ([MeetingNote]) -> [MeetingNote]) async -> [MeetingNote]? {
+        let ctx = database.newBackgroundContext()
+        let enc = encoder
+        return await ctx.perform {
+            let req = MeetingEntity.fetchRequest()
+            req.predicate = NSPredicate(format: "id == %@", meetingID as CVarArg)
+            req.fetchLimit = 1
+            guard let entity = try? ctx.fetch(req).first else { return nil }
+            let current: [MeetingNote] = entity.notesJSON
+                .flatMap { $0.data(using: .utf8) }
+                .flatMap { try? JSONDecoder().decode([MeetingNote].self, from: $0) } ?? []
+            let updated = transform(current)
+            if let data = try? enc.encode(updated), let json = String(data: data, encoding: .utf8) {
+                entity.notesJSON = json
+                try? ctx.save()
+            }
+            return updated
+        }
+    }
+
     func updateAISummary(meetingID: UUID, summary: MeetingAISummary) async {
         let ctx = database.newBackgroundContext()
         let enc = encoder

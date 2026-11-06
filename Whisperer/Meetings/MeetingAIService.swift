@@ -169,7 +169,10 @@ actor MeetingAIService {
             usedBM25 = false
         }
 
-        let transcript = Self.timestampedTranscript(useSegments)
+        var transcript = Self.timestampedTranscript(useSegments)
+        if let notes = Self.notesBlock(await MeetingNotesService.notes(meetingID: meetingID) ?? []) {
+            transcript += "\n\n" + notes
+        }
         // System prompt contains only the transcript (no language pin) so the KV-cache prefix
         // stays stable across questions in different languages about the same meeting. The
         // language directive goes into the user message instead — see askUserMessage(_:).
@@ -1124,6 +1127,18 @@ actor MeetingAIService {
 
 extension MeetingAIService {
 
+    /// The meeting's notes — the user's and those AI apps added over MCP — as a block appended
+    /// to the transcript, so Ask AI and the notes can use them. Nil when there are none.
+    static func notesBlock(_ notes: [MeetingNote]) -> String? {
+        let written = notes.filter { !$0.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+        guard !written.isEmpty else { return nil }
+        let lines = written.map { n -> String in
+            let at = n.isGeneral ? "whole meeting" : "\(Int(n.timestamp))s"
+            return "[\(at)] \(n.author ?? "User") — \(n.kind.rawValue): \(n.text.replacingOccurrences(of: "\n", with: " "))"
+        }
+        return "NOTES (written during or after the meeting by the user and their AI apps; treat them as context, not as transcript):\n" + lines.joined(separator: "\n")
+    }
+
     /// The transcript a connected provider is handed: every line with its timestamp and
     /// speaker (cloud models use the names to attribute action items), or the evidence
     /// selection when the meeting is longer than the provider takes in one request.
@@ -1149,8 +1164,12 @@ extension MeetingAIService {
             mayTitle = await mayRename(meetingID: meetingID)
         }
 
+        var notesTranscript = Self.connectedTranscript(segments, maxChars: provider.maxTranscriptChars)
+        if let notes = Self.notesBlock(await MeetingNotesService.notes(meetingID: meetingID) ?? []) {
+            notesTranscript += "\n\n" + notes
+        }
         let input = MeetingNotesInput(
-            transcript: Self.connectedTranscript(segments, maxChars: provider.maxTranscriptChars),
+            transcript: notesTranscript,
             languageName: language == .auto ? nil : language.displayName,
             wordCount: wordCount,
             isShortNote: isNote)
@@ -1192,7 +1211,7 @@ extension MeetingAIService {
                       segments: [MeetingSegment],
                       onPartial: (@Sendable (String) -> Void)?) async -> RAGAnswer? {
         let full = Self.timestampedTranscript(segments)
-        let transcript: String
+        var transcript: String
         if full.count > provider.maxTranscriptChars {
             transcript = Self.bm25PrefilterSegments(segments, question: question,
                                                     charLimit: provider.maxTranscriptChars).0
@@ -1200,6 +1219,9 @@ extension MeetingAIService {
                 .joined(separator: "\n")
         } else {
             transcript = full
+        }
+        if let notes = Self.notesBlock(await MeetingNotesService.notes(meetingID: meetingID) ?? []) {
+            transcript += "\n\n" + notes
         }
         do {
             let text = try await provider.ask(MeetingAskInput(question: question, transcript: transcript)) { partial in

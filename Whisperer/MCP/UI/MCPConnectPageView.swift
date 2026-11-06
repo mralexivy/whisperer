@@ -30,6 +30,8 @@ struct MCPConnectPageView: View {
 
     @State private var customURLDraft = ""
     @State private var portDraft = ""
+    /// Whether AI apps may add notes to meetings (MCPNoteWrites).
+    @AppStorage(MCPNoteWrites.key) private var allowNoteWrites = true
     @State private var tokenRevealed = false
     @State private var confirmRegenerate = false
     @State private var appeared = false
@@ -189,7 +191,9 @@ struct MCPConnectPageView: View {
             MCPChip(icon: appState.mcpLANEnabled ? "wifi" : "lock.laptopcomputer",
                     text: appState.mcpLANEnabled ? "This Mac + your network" : "Only this Mac",
                     color: appState.mcpLANEnabled ? MCPPalette.warning : WhispererColors.accentBlue)
-            MCPChip(icon: "eye", text: "Read-only", color: WhispererColors.accentPurple)
+            MCPChip(icon: allowNoteWrites ? "note.text.badge.plus" : "eye",
+                    text: allowNoteWrites ? "Reads + adds notes" : "Read-only",
+                    color: WhispererColors.accentPurple)
             MCPChip(icon: appState.mcpTokenRequired ? "key.fill" : "key",
                     text: appState.mcpTokenRequired ? "Token required" : "No token",
                     color: Color(hex: "FBBF24"))
@@ -422,6 +426,18 @@ struct MCPConnectPageView: View {
                     rowDivider
                     tokenRow
                         .transition(.opacity)
+                }
+            }
+
+            advancedGroup("Notes") {
+                settingRow(icon: "note.text.badge.plus", color: Color(hex: "06B6D4"),
+                           title: "Let AI apps add notes",
+                           helper: "Claude, Codex and others can save their thoughts to a meeting. They show up labelled with the app's name, Ask AI uses them, and apps can only change notes they added — never yours.") {
+                    Toggle("", isOn: $allowNoteWrites)
+                        .toggleStyle(.switch)
+                        .tint(WhispererColors.accent)
+                        .labelsHidden()
+                        .uiTestFrame("mcp.allowNotes")
                 }
             }
 

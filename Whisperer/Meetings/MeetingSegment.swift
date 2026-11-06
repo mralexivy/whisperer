@@ -71,24 +71,37 @@ enum SegmentTag: String, Codable, CaseIterable {
 struct MeetingNote: Codable, Identifiable, Equatable {
     var id: UUID
     var kind: NoteKind
+    /// Seconds into the meeting the note is about; negative = about the meeting as a whole.
     var timestamp: Double
     var text: String
+    /// Who wrote it: nil = the user; otherwise the AI app that added it through MCP
+    /// ("Claude Code", "Codex"…). Optional, so notes saved before this field still decode.
+    var author: String?
+    var createdAt: Date?
 
-    init(id: UUID = UUID(), kind: NoteKind, timestamp: Double, text: String = "") {
+    init(id: UUID = UUID(), kind: NoteKind, timestamp: Double, text: String = "",
+         author: String? = nil, createdAt: Date? = Date()) {
         self.id = id
         self.kind = kind
         self.timestamp = timestamp
         self.text = text
+        self.author = author
+        self.createdAt = createdAt
     }
+
+    var isGeneral: Bool { timestamp < 0 }
+    var isByAI: Bool { author != nil }
 }
 
 enum NoteKind: String, Codable, CaseIterable {
+    case note     = "NOTE"
     case decision = "DECISION"
     case risk     = "RISK"
     case idea     = "IDEA"
 
     var colorHex: String {
         switch self {
+        case .note:     return "06B6D4"
         case .decision: return "10B981"
         case .risk:     return "F59E0B"
         case .idea:     return "5B6CF7"

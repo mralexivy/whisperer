@@ -65,3 +65,18 @@ Facts established while building meeting notes / Ask AI on the user's own AI sub
   which is enough to catch layout crashes in settings UI without a UI-test target.
 - `CLIProcessRunner` is testable with `#!/bin/sh` scripts in the temp dir: stdin round
   trip, 2 MB stdin (pipe-buffer deadlock), timeout, cancellation-kill and output cap.
+
+## MCP meeting tools for agents (2026-11-06)
+
+- `get_meeting` used to return every segment as pretty-printed JSON — a 2,000-line meeting is
+  ~300k characters (~75k tokens) in one tool result. It now returns summary, notes, outline and
+  transcript size only; `get_meeting_transcript` pages compact `[mm:ss] Speaker: text` lines
+  (12k chars default, cursor, time window, speaker); `search_meetings` returns snippets.
+- `list_meetings` used to `JSONSerialization`-parse every meeting's transcript just to count
+  segments. Counts now come from a substring scan; nothing is decoded for a list.
+- Notes written by AI apps (`add_meeting_note`) carry `author`; AI apps can change only notes
+  with an author, never the user's. During a live recording the `MeetingSession` owns notes in
+  memory and saves the whole array, so MCP writes go through the session
+  (`MeetingNotesService`), otherwise through an atomic Core Data read-modify-write.
+- Verified live: Claude Code (`--allowedTools mcp__whisperer__get_meeting,mcp__whisperer__add_meeting_note`)
+  read the newest meeting and added a note authored "Claude", which Ask AI's context then contained.

@@ -520,15 +520,20 @@ struct AskAIPane: View {
 
 // MARK: - Live Notes pane
 
+/// The meeting's notes: the user's own (during or after the meeting) and those AI apps added
+/// over MCP, each labelled with who wrote it. AI-added notes appear live.
 struct LiveNotesPane: View {
     @ObservedObject var session: MeetingSession
     let meeting: MeetingRecord?
 
+    /// Notes changed outside this pane (an AI app over MCP, or this pane after the meeting).
+    @State private var external: [MeetingNote]?
+
+    private var isLive: Bool { session.isRecording && session.meetingID == meeting?.id }
+
     private var notes: [MeetingNote] {
-        if session.isRecording && session.meetingID == meeting?.id {
-            return session.notes
-        }
-        return meeting?.notes ?? []
+        if isLive { return session.notes }
+        return external ?? meeting?.notes ?? []
     }
 
     var body: some View {
@@ -539,19 +544,45 @@ struct LiveNotesPane: View {
                 ScrollView {
                     LazyVStack(spacing: 6) {
                         ForEach(notes) { note in
-                            NoteCard(note: note, onUpdate: { updated in
-                                if session.isRecording { session.updateNote(updated) }
-                            })
+                            NoteCard(note: note,
+                                     onUpdate: { updated in save(updated) },
+                                     onDelete: { delete(note) })
+                                .transition(.move(edge: .top).combined(with: .opacity))
                         }
                     }
                     .padding(12)
+                    .animation(.spring(response: 0.35, dampingFraction: 0.85), value: notes.map(\.id))
                 }
             }
 
-            if session.isRecording {
-                addNoteBar
-            }
+            if meeting != nil { addNoteBar }
         }
+        .onReceive(NotificationCenter.default.publisher(for: .meetingNotesDidChange)) { note in
+            guard let id = note.object as? UUID, id == meeting?.id,
+                  let updated = note.userInfo?["notes"] as? [MeetingNote] else { return }
+            withAnimation(.spring(response: 0.35, dampingFraction: 0.85)) { external = updated }
+        }
+        .onChange(of: meeting?.id) { _ in external = nil }
+    }
+
+    private func save(_ updated: MeetingNote) {
+        if isLive { session.updateNote(updated); return }
+        guard let id = meeting?.id else { return }
+        Task { _ = try? await MeetingNotesService.update(noteID: updated.id, text: updated.text, kind: updated.kind,
+                                                        in: id, asAuthor: nil) }
+    }
+
+    private func delete(_ note: MeetingNote) {
+        if isLive { session.deleteNote(id: note.id); return }
+        guard let id = meeting?.id else { return }
+        Task { _ = try? await MeetingNotesService.delete(noteID: note.id, in: id, asAuthor: nil) }
+    }
+
+    private func add(_ kind: NoteKind) {
+        if isLive { session.addNote(kind: kind); return }
+        guard let id = meeting?.id else { return }
+        // After the meeting a note is about the meeting as a whole.
+        Task { _ = try? await MeetingNotesService.add(MeetingNote(kind: kind, timestamp: -1), to: id) }
     }
 
     private var emptyNotes: some View {
@@ -562,12 +593,12 @@ struct LiveNotesPane: View {
             Text("No notes yet")
                 .font(.system(size: 13))
                 .foregroundColor(.white.opacity(0.3))
-            if session.isRecording {
-                Text("Add timestamped notes while recording")
-                    .font(.system(size: 12))
-                    .foregroundColor(.white.opacity(0.2))
-                    .multilineTextAlignment(.center)
-            }
+            Text(isLive ? "Add timestamped notes while recording"
+                        : "Add your thoughts — or let Claude, Codex or ChatGPT add theirs through MCP. Ask AI reads them all.")
+                .font(.system(size: 12))
+                .foregroundColor(.white.opacity(0.25))
+                .multilineTextAlignment(.center)
+                .fixedSize(horizontal: false, vertical: true)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .padding()
@@ -579,9 +610,7 @@ struct LiveNotesPane: View {
                 .font(.system(size: 12))
                 .foregroundColor(.white.opacity(0.4))
             ForEach(NoteKind.allCases, id: \.self) { kind in
-                Button {
-                    session.addNote(kind: kind)
-                } label: {
+                Button { add(kind) } label: {
                     Text(kind.rawValue)
                         .font(.system(size: 11, weight: .semibold))
                         .foregroundColor(Color(hex: kind.colorHex))
@@ -600,13 +629,28 @@ struct LiveNotesPane: View {
     }
 }
 
+extension AIProviderID {
+    /// Best guess at which AI wrote a note, from the name it gave ("Claude", "codex-cli"…).
+    static func fromAuthor(_ author: String) -> AIProviderID? {
+        let a = author.lowercased()
+        if a.contains("claude") || a.contains("anthropic") { return .claudeCode }
+        if a.contains("codex") { return .codex }
+        if a.contains("chatgpt") || a.contains("openai") || a.contains("gpt") { return .chatGPT }
+        if a.contains("antigravity") { return .antigravity }
+        if a.contains("gemini") || a.contains("google") { return .geminiKey }
+        return nil
+    }
+}
+
 struct NoteCard: View {
     @State var note: MeetingNote
     var onUpdate: ((MeetingNote) -> Void)?
+    var onDelete: (() -> Void)?
+    @State private var hovering = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
-            HStack {
+            HStack(spacing: 6) {
                 Text(note.kind.rawValue)
                     .font(.system(size: 10, weight: .bold))
                     .tracking(0.4)
@@ -615,8 +659,18 @@ struct NoteCard: View {
                     .padding(.vertical, 2)
                     .background(Color(hex: note.kind.colorHex).opacity(0.12))
                     .clipShape(Capsule())
+                authorLabel
                 Spacer()
-                Text(formatTimestamp(note.timestamp))
+                if hovering, onDelete != nil {
+                    Button { onDelete?() } label: {
+                        Image(systemName: "trash")
+                            .font(.system(size: 10, weight: .semibold))
+                            .foregroundColor(.white.opacity(0.4))
+                    }
+                    .buttonStyle(.plain)
+                    .help("Delete note")
+                }
+                Text(note.isGeneral ? "Meeting" : formatTimestamp(note.timestamp))
                     .font(.system(size: 11).monospacedDigit())
                     .foregroundColor(.white.opacity(0.3))
             }
@@ -629,6 +683,26 @@ struct NoteCard: View {
         .padding(10)
         .background(Color(hex: "14142B"))
         .clipShape(RoundedRectangle(cornerRadius: 8))
+        .onHover { hovering = $0 }
+    }
+
+    /// "You", or the AI app's real icon + name.
+    @ViewBuilder
+    private var authorLabel: some View {
+        if let author = note.author {
+            HStack(spacing: 4) {
+                ProviderMark(provider: AIProviderID.fromAuthor(author), size: 12)
+                Text(author)
+                    .font(.system(size: 10, weight: .semibold))
+                    .foregroundColor(.white.opacity(0.55))
+                    .lineLimit(1)
+            }
+            .help("Added by \(author) through MCP")
+        } else {
+            Text("You")
+                .font(.system(size: 10, weight: .semibold))
+                .foregroundColor(.white.opacity(0.35))
+        }
     }
 
     private func formatTimestamp(_ seconds: Double) -> String {

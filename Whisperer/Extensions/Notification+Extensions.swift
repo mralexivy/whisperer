@@ -15,6 +15,9 @@ extension NSNotification.Name {
     static let switchToLLMTab              = Notification.Name("switchToLLMTab")
     /// A connected AI failed and the meeting was handled on this Mac instead. `object` is the meeting id.
     static let connectedAIDidFallBack      = Notification.Name("connectedAIDidFallBack")
+    /// A meeting's notes changed outside the view showing them (an AI app added one over MCP).
+    /// `object` is the meeting id, `userInfo["notes"]` the full new list.
+    static let meetingNotesDidChange       = Notification.Name("meetingNotesDidChange")
     static let dictionaryDidRebuild = Notification.Name("dictionaryDidRebuild")
     static let overlaySettingsChanged  = Notification.Name("overlaySettingsChanged")
     static let islandPlacementChanged  = Notification.Name("islandPlacementChanged")

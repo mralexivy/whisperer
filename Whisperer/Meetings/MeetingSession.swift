@@ -1058,6 +1058,12 @@ class MeetingSession: ObservableObject {
         persistNotes()
     }
 
+    /// Replaces the whole list (used by `MeetingNotesService` for notes added over MCP).
+    func replaceNotes(_ updated: [MeetingNote]) {
+        notes = updated
+        persistNotes()
+    }
+
     func deleteNote(id: UUID) {
         notes.removeAll { $0.id == id }
         persistNotes()

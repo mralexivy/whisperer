@@ -534,12 +534,14 @@ func makeMCPServer() async -> Server {
     )
 
     await s.withMethodHandler(ListTools.self) { _ in
-        // Every Whisperer tool only reads the library. Saying so lets clients that gate tool
-        // calls on annotations (Codex, Claude) run them without an approval prompt.
+        // Reads say so, which lets clients that gate tool calls on annotations (Codex, Claude)
+        // run them without a prompt. The note tools are writes; delete is destructive.
         ListTools.Result(tools: (MCPMeetingTools.toolDefinitions + MCPTranscriptionTools.toolDefinitions).map { tool in
             var annotated = tool
-            annotated.annotations = .init(readOnlyHint: true, destructiveHint: false,
-                                          idempotentHint: true, openWorldHint: false)
+            let writes = MCPMeetingTools.writeToolNames.contains(tool.name)
+            annotated.annotations = .init(readOnlyHint: !writes,
+                                          destructiveHint: MCPMeetingTools.destructiveToolNames.contains(tool.name),
+                                          idempotentHint: !writes, openWorldHint: false)
             return annotated
         })
     }

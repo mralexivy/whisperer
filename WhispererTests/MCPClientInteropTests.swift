@@ -85,7 +85,10 @@ final class MCPClientInteropTests: XCTestCase {
         let (tools, _) = try await client.listTools()
         let (content, isError) = try await client.callTool(name: "list_meetings", arguments: ["limit": 1])
         XCTAssertNotEqual(isError, true, "list_meetings returned an error: \(content)")
-        XCTAssertTrue(tools.allSatisfy { $0.annotations.readOnlyHint == true }, "every tool is declared read-only")
+        for tool in tools {
+            let writes = MCPMeetingTools.writeToolNames.contains(tool.name)
+            XCTAssertEqual(tool.annotations.readOnlyHint, !writes, "\(tool.name): reads are read-only, note tools are writes")
+        }
         await client.disconnect()
         return tools.map(\.name)
     }
@@ -148,6 +151,45 @@ final class MCPClientInteropTests: XCTestCase {
             stdin: "", files: ["mcp.json": snippet], timeout: 180)
         print("LIVE MCP claude (token \(tokenRequired)): exit=\(result.exitCode) \(result.stdout.prefix(300))")
         XCTAssertTrue(result.stdout.contains("WHISPERER_OK"), "stdout: \(result.stdout)\nstderr: \(result.stderr.suffix(500))")
+    }
+
+    /// The collaboration loop for real: Claude Code reads the newest meeting over MCP, adds a
+    /// note, the note is stored with Claude as its author and reaches Ask AI's context — then
+    /// the test removes it again so the user's meeting is left as it was.
+    func testLiveClaudeCodeAddsANote() async throws {
+        try liveEnabled()
+        guard let claude = CLIDiscovery.locate(.claudeCode) else { throw XCTSkip("claude not installed") }
+        _ = await setTokenRequired(false)
+        let ctx = HistoryDatabase.shared.newBackgroundContext()
+        let newest: UUID? = await ctx.perform {
+            let req = MeetingEntity.fetchRequest()
+            req.sortDescriptors = [NSSortDescriptor(key: "createdAt", ascending: false)]
+            req.fetchLimit = 1
+            return (try? ctx.fetch(req))?.first?.id
+        }
+        guard let meetingID = newest else { throw XCTSkip("no meetings") }
+        let before = await MeetingNotesService.notes(meetingID: meetingID) ?? []
+        let info = MCPConnectionInfo(url: endpoint.absoluteString, token: nil)
+        let prompt = "Use the whisperer MCP server. Call get_meeting for meeting \(meetingID.uuidString), then call add_meeting_note on it with author 'Claude' and a one-sentence note summarizing what the meeting was about. Reply with exactly WHISPERER_OK when the note is saved."
+        let (result, _) = try await CLIProcessRunner.run(
+            executable: claude,
+            arguments: { dir in
+                ["-p", "--mcp-config", dir.appendingPathComponent("mcp.json").path, "--strict-mcp-config",
+                 "--allowedTools", "mcp__whisperer__get_meeting,mcp__whisperer__add_meeting_note",
+                 "--no-session-persistence", "--output-format", "text", prompt]
+            },
+            stdin: "", files: ["mcp.json": MCPClient.claudeCode.snippet(for: info)], timeout: 240)
+        let after = await MeetingNotesService.notes(meetingID: meetingID) ?? []
+        let added = after.filter { n in !before.contains { $0.id == n.id } }
+        print("LIVE MCP note: exit=\(result.exitCode) reply=\(result.stdout.prefix(80)) added=\(added.map { "\($0.author ?? "user"): \($0.text)" })")
+        for note in added { _ = try? await MeetingNotesService.delete(noteID: note.id, in: meetingID, asAuthor: nil) }
+        XCTAssertTrue(result.stdout.contains("WHISPERER_OK"), result.stdout + result.stderr.suffix(400))
+        let note = try XCTUnwrap(added.first, "Claude's note is stored in Whisperer")
+        XCTAssertEqual(note.author, "Claude")
+        XCTAssertTrue(note.isByAI)
+        XCTAssertTrue(MeetingAIService.notesBlock(after)?.contains(note.text) == true, "Ask AI sees the note")
+        let restored = await MeetingNotesService.notes(meetingID: meetingID) ?? []
+        XCTAssertEqual(restored.map(\.id), before.map(\.id), "the test leaves the meeting's notes as they were")
     }
 
     func testLiveClaudeCodeConnectsWithoutToken() async throws { try liveEnabled(); try await runClaude(tokenRequired: false) }

@@ -201,7 +201,7 @@ enum MCPTranscriptionTools {
     }
 
     private static func jsonString(_ obj: Any) -> String? {
-        guard let data = try? JSONSerialization.data(withJSONObject: obj, options: [.prettyPrinted, .sortedKeys]),
+        guard let data = try? JSONSerialization.data(withJSONObject: obj, options: [.sortedKeys]),
               let str = String(data: data, encoding: .utf8) else { return nil }
         return str
     }
