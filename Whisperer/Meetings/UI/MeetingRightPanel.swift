@@ -67,6 +67,15 @@ private struct RecordingInProgressView: View {
                     .font(.system(size: 12, weight: .regular))
                     .foregroundColor(.white.opacity(0.25))
                     .multilineTextAlignment(.center)
+
+                if let note = session.callAudioNote {
+                    Label(note, systemImage: "speaker.wave.2")
+                        .font(.system(size: 11, weight: .regular))
+                        .foregroundColor(.white.opacity(0.45))
+                        .multilineTextAlignment(.center)
+                        .padding(.horizontal, 24)
+                        .accessibilityIdentifier("meetingCallAudioNote")
+                }
             }
 
             Spacer()

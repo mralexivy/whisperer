@@ -813,6 +813,8 @@ class AppState: ObservableObject {
 
     // Silent-meeting detection
     private(set) var meetingSilenceWatcher: MeetingSilenceWatcher = MeetingSilenceWatcher()
+    /// The other side of the call — see `MeetingCallAudioController`. Lives for one meeting.
+    let meetingCallAudio = MeetingCallAudioController()
     @Published var showSilentMeetingToast: Bool = false {
         didSet { NotificationCenter.default.post(name: NSNotification.Name("AppStateChanged"), object: nil) }
     }
@@ -4141,6 +4143,7 @@ class AppState: ObservableObject {
 
             // Tail transcription has now been delivered via onChunkCompleted — safe to nil meeting session.
             if wasMeetingStop {
+                meetingCallAudio.stop()   // already stopped by stopMeetingRecording; idempotent
                 activeMeetingSession = nil
             }
 
@@ -5139,6 +5142,7 @@ class AppState: ObservableObject {
         // `meetingWindowIsVisible` through the willClose observer, handing the HUD back.
         MeetingLiveWindowManager.shared.close()
         meetingWindowIsVisible = false
+        meetingCallAudio.stop()
 
         Task { @MainActor in
             await session.abandonRecording()
@@ -5824,6 +5828,9 @@ class AppState: ObservableObject {
         // Only once recording actually began: startInAppRecording() bails out early when no
         // backend is ready, and a gate raised then would never be lowered.
         if case .recording = state {
+            // The far end of the call, mixed into the recorder's stream. Attached before the
+            // engine's first buffer lands, so the session file has both sides from the start.
+            meetingCallAudio.start(for: session, recorder: audioRecorder)
             // suspendForRecording must be called BEFORE setMeetingActive(true) so the running
             // job stops enqueueing inner work before the gate rises. Both calls in one Task
             // with an explicit await between them — two Tasks have no ordering guarantee.
@@ -5868,6 +5875,7 @@ class AppState: ObservableObject {
         // Clearing it here would drop the last ~10s of content. It is nilled inside the
         // stopInAppRecording Task after finalText is obtained.
         isMeetingStopInFlight = true
+        meetingCallAudio.stop()
         // isInAppMode stays true so stopInAppRecording() takes the in-app path (not stopRecording())
         // and avoids both LLM post-processing and text insertion into other apps.
 

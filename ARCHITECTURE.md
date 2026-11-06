@@ -183,6 +183,44 @@ deleted, ensuring the UI accurately reflects what is on disk rather than what th
 | Audio (final, after stop) | `…/Meetings/<uuid>.opus` | same file, moved by `MeetingSession.stopRecording` — no transcode |
 | Chat history | `…/Meetings/<uuid>-chat.json` | JSON array of `MeetingChatMessage` |
 
+### Call audio — the other side of the call
+
+A meeting used to record only the microphone, so with headphones on the other participants were not
+in the transcript at all. `MeetingCallAudioController` (owned by `AppState.meetingCallAudio`, started
+in `startMeetingRecording`, stopped by every path that ends meeting mode) builds a **Core Audio
+process tap** for the length of the meeting:
+
+```
+CATapDescription (call app's processes, or global-minus-Whisperer) → AudioHardwareCreateProcessTap
+    → private aggregate device (default output as main sub-device + the tap) → IOProc on a serial queue
+    → downmix to mono → AVAudioConverter → 16 kHz Float32 → SystemAudioMixer (lock-guarded backlog)
+AudioRecorder.deliverSamples: mic buffer → mixer.mix(mic:) → onStreamingSamples + session file
+```
+
+- **One mixed stream, mic as the clock.** The mixer hands over exactly as many far-end samples as each
+  mic buffer holds (short backlog → silence, backlog > 0.5 s → oldest dropped), so transcriber,
+  diarizer, silence watcher, the Opus file, the post-stop refiner and playback all see both sides with
+  no timestamp moving. Sortformer separates the far-end voices from "Me" by itself. Keeping the
+  streams separate (mic = Me) is a possible follow-up; it would need a second ASR/diarizer feed.
+- **Silence detection and the level meter stay mic-only** — they diagnose the input device.
+- **Paused / dictating:** while `isArchivePaused` (pause, mute, or a dictation interlude in
+  `.listening`) the backlog is discarded rather than mixed, so a dictation on top of a meeting hears
+  only the user and nothing replays after resume.
+- **Target:** `CallAudioTapTarget.choose` — the detected app (`MeetingSession.sourceBundleID`), else
+  the one non-Whisperer app holding the mic (`AudioProcessMonitor`), else everything except Whisperer.
+  Helper processes are resolved to their owning app the same way attribution does, and a per-app tap is
+  re-pointed every 3 s if the app's process set changes (`kAudioTapPropertyDescription`).
+- **Echo:** on speakers the mic already hears the call, so mixing the tap would put every far-end word
+  in twice. `CallAudioOutputRoute.classify` (re-read every 3 s) turns the mix off for built-in
+  speakers / HDMI / DisplayPort / AirPlay and shows `MeetingSession.callAudioNote`. Bluetooth/USB are
+  assumed to be headsets; a Bluetooth *speaker* is the known echo case.
+- **Permission:** `NSAudioCaptureUsageDescription`; the system prompts on the first start. A denial
+  does not fail — the tap delivers digital silence — so the controller only logs after 60 s of exact
+  zeros. Tap/aggregate failures fall back to mic-only with a warning and a visible note.
+- The aggregate's UID prefix (`SystemAudioCapture.aggregateUIDPrefix`) is filtered out of
+  `AudioDeviceManager.enumerateInputDevices`, or it would appear in the microphone picker.
+- Setting: `meetingCaptureCallAudio` (default on), Settings → Meeting Detection.
+
 ### MeetingDetector
 
 `@MainActor final class MeetingDetector` (singleton). Watches hardware signals (mic + camera) and running apps to detect meetings. Two-stage debounce: 800ms hardware callback → 500ms confirmation → `AppState.showMeetingNotification`. Also runs a 5-second fallback poll to catch browser meetings and Bluetooth mic quirks.

@@ -2014,6 +2014,7 @@ struct SettingsTabView: View {
     @ObservedObject var appState = AppState.shared
     @AppStorage("meetingDetectionEnabled") private var meetingDetectionEnabled: Bool = true
     @AppStorage("meetingPolishEnabled") private var meetingPolishEnabled: Bool = true
+    @AppStorage(MeetingCallAudioController.settingKey) private var meetingCaptureCallAudio: Bool = true
     // The default here must match `PolishFeatureFlags.isFastPolishEnabled`, which reads the same
     // key and defaults to true for an absent one. They are two separate declarations of one
     // default, and while they disagreed the toggle rendered off on a fresh install while the
@@ -2501,6 +2502,27 @@ struct SettingsTabView: View {
                         }
                         Spacer()
                         Toggle("", isOn: $appState.cameraDetectionEnabled)
+                            .toggleStyle(.switch)
+                            .tint(MBColors.accent)
+                            .labelsHidden()
+                    }
+
+                    Divider()
+                        .background(MBColors.border)
+                        .padding(.vertical, 2)
+
+                    HStack {
+                        VStack(alignment: .leading, spacing: 3) {
+                            Text("Record the other participants")
+                                .font(.system(size: 13, weight: .medium))
+                                .foregroundColor(MBColors.textPrimary)
+                            Text("Also records the call app's audio, so people you hear through headphones are in the transcript. macOS asks once for permission to record system audio. When the call plays on speakers, your microphone records it instead.")
+                                .font(.system(size: 11))
+                                .foregroundColor(MBColors.textSecondary)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+                        Spacer()
+                        Toggle("", isOn: $meetingCaptureCallAudio)
                             .toggleStyle(.switch)
                             .tint(MBColors.accent)
                             .labelsHidden()

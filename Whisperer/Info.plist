@@ -26,6 +26,8 @@
 	<string>public.app-category.productivity</string>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>Whisperer needs microphone access to transcribe your voice.</string>
+	<key>NSAudioCaptureUsageDescription</key>
+	<string>When you record a meeting, Whisperer captures the audio of your call app so the transcript includes the other participants, not only you. The audio is transcribed on your Mac.</string>
 	<key>NSCameraUsageDescription</key>
 	<string>Whisperer checks whether your camera is in use so it can tell a video call apart from an app that is only using the microphone. Whisperer never records or views camera video.</string>
 	<!-- OAuth client IDs for "Sign in with Google / Microsoft" — the app's only calendar sources.

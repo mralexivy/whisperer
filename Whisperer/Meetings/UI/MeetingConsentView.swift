@@ -121,7 +121,7 @@ struct MeetingConsentView: View {
                 bulletPoint(
                     icon: "mic.fill",
                     title: "What is recorded",
-                    detail: "The audio input you choose, usually your microphone. Transcription runs on your Mac."
+                    detail: "Your microphone, and the audio of the call app so the other participants are in the transcript too. You can turn call audio off in Settings. Transcription runs on your Mac."
                 )
 
                 bulletPoint(

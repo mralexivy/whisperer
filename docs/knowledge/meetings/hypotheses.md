@@ -51,3 +51,17 @@ bursty, and its own post-processing runs on the same LLM the queue would otherwi
 Unverified: whether a background Sortformer or Nemotron load landing mid-dictation is perceptible.
 If a dictation ever shows a multi-second first-word delay with a `ModelWorkQueue: … ran=` line
 overlapping it in the log, the gate should widen to `state != .idle`.
+
+
+## Call-audio tap (2026-11-06) — unverified at runtime
+
+Shipped without a real call. To confirm or refute on the first real meetings:
+- A sandboxed (App Store) build can create a process tap with only `NSAudioCaptureUsageDescription`
+  and the existing `device.audio-input` entitlement — no extra entitlement.
+- A denied System Audio Recording permission yields exact zeros, not an error (log line
+  "only digital silence after 60s").
+- Chrome/Teams play the call through a helper whose process object resolves to the owning bundle ID;
+  if a per-app tap is silent while audio plays, the global fallback may be the safer default.
+- Re-setting `kAudioTapPropertyDescription` with a new `processes` list takes effect on a running tap.
+- Output-vs-mic clock drift stays well inside the 0.5 s backlog cap over an hour (watch `dropped=` and
+  `underrun=` in "Meeting call audio: stopped").

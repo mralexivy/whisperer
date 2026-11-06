@@ -114,6 +114,22 @@ final class AudioProcessMonitor {
         runPrecededByGap.removeAll()
     }
 
+    // MARK: - Process objects for a call-audio tap
+
+    /// Every CoreAudio process object owned by `bundleID`, helpers included — Chrome, Slack and
+    /// Teams play a call through helper processes, so tapping only the app's own pid would hear
+    /// nothing. Input-only processes are kept too: Zoom and Chrome's audio service do both.
+    func processObjects(ownedBy bundleID: String) -> [AudioObjectID] {
+        processObjectIDs().filter { owningBundleID(of: $0) == bundleID }
+    }
+
+    /// Whisperer's own process object(s), excluded from a system-wide tap so the meeting never
+    /// records Whisperer's own sounds.
+    func ownProcessObjects() -> [AudioObjectID] {
+        let me = getpid()
+        return processObjectIDs().filter { pid(of: $0) == me }
+    }
+
     // MARK: - Capture run tracking
 
     private func updateCaptureRuns(current: Set<String>) {

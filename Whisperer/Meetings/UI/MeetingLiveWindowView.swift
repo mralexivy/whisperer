@@ -74,6 +74,16 @@ struct MeetingLiveWindowView: View {
                 tabContent
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
 
+                if session.isRecording, let note = session.callAudioNote {
+                    Label(note, systemImage: "speaker.wave.2")
+                        .font(.system(size: 11, weight: .regular))
+                        .foregroundColor(.white.opacity(0.45))
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.horizontal, 14)
+                        .padding(.vertical, 6)
+                        .accessibilityIdentifier("meetingCallAudioNote")
+                }
+
                 Rectangle()
                     .fill(Color.white.opacity(0.06))
                     .frame(height: 1)

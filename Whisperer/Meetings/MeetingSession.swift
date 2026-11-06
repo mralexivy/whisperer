@@ -146,6 +146,12 @@ class MeetingSession: ObservableObject {
     @Published private(set) var sourceBundleID: String? = nil
     @Published private(set) var sourceAppName: String? = nil
 
+    /// A short, visible note when the call's audio is not being recorded from the call app —
+    /// the user is on speakers (the microphone hears it), or capture is unavailable. `nil`
+    /// while both sides are captured, or when the user turned call audio off in Settings.
+    /// Owned by `MeetingCallAudioController`.
+    @Published var callAudioNote: String? = nil
+
     // MARK: - Deterministic editor
 
     /// The two configurations of the shared editor this session runs.
@@ -345,6 +351,7 @@ class MeetingSession: ObservableObject {
         speakerNames = [:]
         self.sourceBundleID = sourceBundleID
         self.sourceAppName = sourceAppName
+        callAudioNote = nil
         makeEditors()
 
         let language = AppState.shared.selectedLanguage.rawValue

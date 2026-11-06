@@ -81,6 +81,16 @@ class AudioRecorder: NSObject {
         set { isRecordingLock.lock(); _isArchivePaused = newValue; isRecordingLock.unlock() }
     }
 
+    /// A meeting's far-end audio (the call app's output), summed into every buffer this recorder
+    /// delivers and archives. Set by `MeetingCallAudioController` for the length of a meeting;
+    /// `nil` for dictation. The microphone remains the clock — the mixer hands over exactly as
+    /// many samples as each mic buffer holds — so no downstream timestamp moves.
+    private var _systemAudioMixer: SystemAudioMixer?
+    var systemAudioMixer: SystemAudioMixer? {
+        get { isRecordingLock.lock(); defer { isRecordingLock.unlock() }; return _systemAudioMixer }
+        set { isRecordingLock.lock(); _systemAudioMixer = newValue; isRecordingLock.unlock() }
+    }
+
     // MARK: - Callbacks
 
     var onAmplitudeUpdate: ((Float) -> Void)?
@@ -727,10 +737,24 @@ class AudioRecorder: NSObject {
             }
         }
 
+        // Fold in the call's audio. Silence detection and the level meter above stay on the
+        // microphone alone — they diagnose the input device. While paused (including a dictation
+        // on top of the meeting) the far end is discarded, not mixed: the dictation must hear
+        // only the user, and the meeting skips the span anyway.
+        var samples = samples
+        let archivePaused = isArchivePaused
+        if let mixer = systemAudioMixer {
+            if archivePaused {
+                mixer.discardPending()
+            } else {
+                samples = mixer.mix(mic: samples)
+            }
+        }
+
         autoreleasepool { onStreamingSamples?(samples) }
 
         // Paused: the span is skipped in the file exactly as it is in the transcript.
-        if isArchivePaused { return }
+        if archivePaused { return }
 
         // Disk write — reconstruct AVAudioPCMBuffer from [Float] for the Opus encoder.
         // Gated on `isRecording` (checked at the top of this function, under its own lock) rather

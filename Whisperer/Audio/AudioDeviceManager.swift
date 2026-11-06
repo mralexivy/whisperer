@@ -164,7 +164,9 @@ class AudioDeviceManager: ObservableObject {
         for deviceID in deviceIDs {
             if hasInputStreams(deviceID: deviceID),
                let name = getDeviceName(deviceID: deviceID),
-               let uid = getDeviceUID(deviceID: deviceID) {
+               let uid = getDeviceUID(deviceID: deviceID),
+               // The meeting's call-audio aggregate (tap) has an input stream but is not a mic.
+               !uid.hasPrefix(SystemAudioCapture.aggregateUIDPrefix) {
                 inputDevices.append(AudioDevice(id: deviceID, name: name, uid: uid))
             }
         }
