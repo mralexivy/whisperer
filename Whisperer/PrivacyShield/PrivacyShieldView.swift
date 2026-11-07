@@ -35,7 +35,7 @@ struct PrivacyShieldView: View {
                 Text("First use sets up audio support and briefly restarts sound. macOS may ask for your password. Finish calls before turning it on.")
                     .font(.caption2).foregroundStyle(MBColors.textSecondary)
             }
-            Text("Experimental audio effect. It did not prevent transcription in our tests. Use headphones; speaker echo cancellation is not available.")
+            Text("A small model on your Mac adds a quiet, voice-shaped signal so AI notetakers and live captions get your words wrong. People on the call still hear you. It makes transcription much harder, not impossible. Use headphones.")
                 .font(.caption2).foregroundStyle(MBColors.textSecondary)
                 .fixedSize(horizontal: false, vertical: true)
             #else
