@@ -30,7 +30,8 @@ def main():
     torch.manual_seed(1)
     net = PerturbNet(max_amp=0.05)
     if len(sys.argv) > 1 and sys.argv[1].endswith(".pt"):
-        net.load_state_dict(torch.load(sys.argv[1], map_location="cpu")["model"])
+        ck = torch.load(sys.argv[1], map_location="cpu")
+        net = PerturbNet(max_amp=ck["args"].get("max_amp", 0.05)); net.load_state_dict(ck["model"])
     net.eval()
     wspn = Path(tempfile.mkdtemp()) / "w.wspn"; export_weights(net, wspn)
     lib = ctypes.CDLL(str(LIB))

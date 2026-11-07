@@ -4,14 +4,39 @@ import CoreML
 
 // One instance belongs to one session and is used exclusively by its C++ worker.
 final class PrivacyAudioProcessor {
+    /// The trained predictive perturbation network shipped in the app bundle
+    /// (Tools/privacy-shield/eval/pnet.py, exported with export_weights).
+    static let bundledNetworkName = "ShieldPerturbation"
+    static var bundledNetworkURL: URL? { Bundle.main.url(forResource: bundledNetworkName, withExtension: "wspn") }
+
+    private let network: UnsafeMutableRawPointer?
     private let baseline: UnsafeMutableRawPointer?
     private let model: MLModel?
     private let input: MLMultiArray?
     private let features: MLDictionaryFeatureProvider?
     private let strength: Float
 
-    init(modelURL: URL?, strength: Float) throws {
+    /// `networkURL` selects the native predictive network (the protection). `modelURL` keeps the
+    /// developer Core ML adapter. With neither, the unvalidated DSP baseline runs; it gives no
+    /// protection and is only for routing tests.
+    init(networkURL: URL? = nil, modelURL: URL?, strength: Float) throws {
         self.strength = strength
+        if let networkURL {
+            guard let handle = networkURL.withUnsafeFileSystemRepresentation({ $0.flatMap(shield_pnet_create) }) else {
+                throw PrivacyShieldError.unavailable("The voice protection model is damaged. Reinstall Whisperer.")
+            }
+            network = handle
+            model = nil; input = nil; features = nil; baseline = nil
+            // Warmup and validation before microphone capture is opened.
+            var silence = [Float](repeating: 0, count: 480), out = [Float](repeating: 0, count: 480)
+            shield_pnet_process(handle, &silence, &out, 480, strength)
+            guard out.allSatisfy({ $0.isFinite }) else {
+                throw PrivacyShieldError.unavailable("Voice protection warmup returned invalid output.")
+            }
+            shield_pnet_reset(handle)
+            return
+        }
+        network = nil
         if let modelURL {
             let config = MLModelConfiguration()
             config.computeUnits = .all
@@ -42,10 +67,18 @@ final class PrivacyAudioProcessor {
         }
     }
 
-    deinit { if let baseline { shield_baseline_destroy(baseline) } }
+    deinit {
+        if let baseline { shield_baseline_destroy(baseline) }
+        if let network { shield_pnet_destroy(network) }
+    }
 
     func process(_ source: UnsafePointer<Float>, _ destination: UnsafeMutablePointer<Float>, count: UInt32) -> Bool {
         guard count == 480 else { return false }
+        if let network {
+            shield_pnet_process(network, source, destination, count, strength)
+            for i in 0..<Int(count) where !destination[i].isFinite { return false }
+            return true
+        }
         return autoreleasepool {
             if let model, let input, let features {
                 do {

@@ -18,12 +18,12 @@ final class PrivacyAudioSession: @unchecked Sendable {
     private var native: OpaquePointer?
     private var processor: PrivacyAudioProcessor?
 
-    func start(input: AudioDeviceID, output: AudioDeviceID, model: URL?, strength: Float) async throws {
+    func start(input: AudioDeviceID, output: AudioDeviceID, network: URL?, model: URL?, strength: Float) async throws {
         try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
             queue.async { [weak self] in
                 guard let self else { continuation.resume(throwing: CancellationError()); return }
                 do {
-                    let processor = try PrivacyAudioProcessor(modelURL: model, strength: strength)
+                    let processor = try PrivacyAudioProcessor(networkURL: network, modelURL: model, strength: strength)
                     guard let native = shield_audio_create() else { throw PrivacyShieldError.native(-7006) }
                     self.native = native; self.processor = processor
                     let status = shield_audio_start(native, input, output, { context, input, output, count in
@@ -230,7 +230,11 @@ final class PrivacyShieldController {
                 // Save before switching; survives a process crash without losing the source.
                 UserDefaults.standard.set(microphone.uid, forKey: Self.restoreKey)
                 snapshot.microphoneName = microphone.name; snapshot.resetMetrics()
-                try await runner.start(input: microphone.id, output: output, model: nil, strength: 0.35)
+                // Fail closed: without the trained protection network there is no protection to offer.
+                guard let network = PrivacyAudioProcessor.bundledNetworkURL else {
+                    throw PrivacyShieldError.unavailable("Voice protection isn't included in this build.")
+                }
+                try await runner.start(input: microphone.id, output: output, network: network, model: nil, strength: 1.0)
                 guard token == generation, !Task.isCancelled else { await runner.stop(); break }
                 await runner.setProcessing(requested)
                 guard token == generation, !Task.isCancelled else { await runner.stop(); break }
