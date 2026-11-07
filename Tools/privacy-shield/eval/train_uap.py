@@ -42,6 +42,14 @@ def log_mel(audio, n_mels):
     log_spec = torch.maximum(log_spec, log_spec.max() - 8.0)
     return (log_spec + 4.0) / 4.0
 
+def envelope(x, ms=20):
+    """Causal RMS envelope (no look-ahead), detached: the real-time pipeline computes the same
+    thing with a one-pole follower over past samples only."""
+    w = int(SR * ms / 1000)
+    p = F.pad((x.detach() ** 2).view(1, 1, -1), (w - 1, 0))
+    return torch.sqrt(torch.clamp(F.avg_pool1d(p, w, stride=1).view(-1), min=0) + 1e-8) * 1.414
+
+
 def sim_call(x48, kbps, rnnoise):
     """Real conferencing proxy on numpy float32 48 kHz -> float32 16 kHz (same duration)."""
     enc = subprocess.run(["ffmpeg", "-v", "error", "-f", "f32le", "-ar", "48000", "-ac", "1", "-i", "-",
@@ -54,6 +62,12 @@ def sim_call(x48, kbps, rnnoise):
     n = len(x48) // 3
     return np.pad(y, (0, max(0, n - len(y))))[:n]
 
+def saved(delta, a):
+    """Relative mode stores the unit pattern tanh(delta); the processor multiplies by relative*env."""
+    t = torch.tanh(delta).detach().cpu().numpy()
+    return t if a.relative > 0 else a.eps * t
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("train"); ap.add_argument("--out", required=True)
@@ -62,6 +76,9 @@ def main():
     ap.add_argument("--models", default="base,small"); ap.add_argument("--lr", type=float, default=0.01)
     ap.add_argument("--rnnoise", default=""); ap.add_argument("--seed", type=int, default=0)
     ap.add_argument("--away-weight", type=float, default=0.3)
+    ap.add_argument("--relative", type=float, default=0.0,
+                    help="if >0, scale delta by a causal 20 ms speech envelope: d = relative * env(x) * tanh(delta) "
+                         "(speech-shaped: strong under the voice, silent in pauses); --eps is then ignored")
     a = ap.parse_args()
     torch.manual_seed(a.seed); random.seed(a.seed); np.random.seed(a.seed)
     dev = torch.device("mps" if torch.backends.mps.is_available() else "cpu")
@@ -92,9 +109,14 @@ def main():
             x = torch.from_numpy(x_np).to(dev)
             off = random.randrange(a.length)
             reps = (len(x) + off) // a.length + 1
-            d = (a.eps * torch.tanh(delta)).repeat(reps)[off: off + len(x)]
             gain = random.uniform(0.6, 1.4)
-            xa = torch.clamp(gain * x + d, -1, 1)
+            xg = gain * x
+            if a.relative > 0:
+                d = torch.tanh(delta).repeat(reps)[off: off + len(x)] * a.relative * envelope(xg)
+            else:
+                d = (a.eps * torch.tanh(delta)).repeat(reps)[off: off + len(x)]
+            xa = torch.clamp(xg + d, -1, 1)
+            xa = xa + 1e-5 * torch.randn_like(xa)   # -100 dB dither: exact-zero stretches give 0/0 gradients on MPS
             x16 = AF.resample(xa, SR, 16000)
             kbps = random.choice([16, 20, 24, 32])
             use_rn = bool(a.rnnoise) and random.random() < 0.5
@@ -128,8 +150,8 @@ def main():
             el = time.time() - t0
             print(f"step {step:4d}  loss {loss_total:+.3f}  mute_ce {mute_total:.3f}  true_ce {away_total:.3f}  {el/step:.1f}s/step", flush=True)
             log.append({"step": step, "loss": loss_total, "mute_ce": mute_total, "true_ce": away_total})
-            np.save(a.out, (a.eps * torch.tanh(delta)).detach().cpu().numpy())
-    np.save(a.out, (a.eps * torch.tanh(delta)).detach().cpu().numpy())
+            np.save(a.out, saved(delta, a))
+    np.save(a.out, saved(delta, a))
     Path(a.out).with_suffix(".log.json").write_text(json.dumps({"args": vars(a), "log": log}, indent=2))
     print("saved", a.out)
 
