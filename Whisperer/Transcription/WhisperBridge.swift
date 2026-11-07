@@ -595,9 +595,10 @@ nonisolated final class WhisperBridge: TranscriptionBackend, @unchecked Sendable
     }
 
     /// Compute SHA-256 of a file by streaming 4 MB chunks.
-    /// Stores the hash on first encounter; on subsequent loads verifies against stored value.
-    /// Throws `WhisperError.modelCorrupted` when the hash no longer matches.
-    private static func verifyModelIntegrity(at url: URL) throws {
+    /// A file with a pinned hash (`ModelChecksums`) must match it exactly. Any other file stores its
+    /// hash on first encounter and is verified against that on later loads.
+    /// Throws `WhisperError.modelCorrupted` when the hash does not match.
+    static func verifyModelIntegrity(at url: URL) throws {
         let filename = url.lastPathComponent
         let userDefaultsKey = "modelSHA256_\(filename)"
 
@@ -619,6 +620,15 @@ nonisolated final class WhisperBridge: TranscriptionBackend, @unchecked Sendable
         }
         let digest = hasher.finalize()
         let currentHash = digest.map { String(format: "%02x", $0) }.joined()
+
+        if let pinned = ModelChecksums.expectedSHA256(forFilename: filename) {
+            guard pinned == currentHash else {
+                Logger.error("Model integrity FAIL: \(filename) does not match its pinned hash (expected \(pinned.prefix(8))…, got \(currentHash.prefix(8))…)", subsystem: .model)
+                throw WhisperError.modelCorrupted
+            }
+            Logger.debug("Model integrity OK (pinned): \(filename)", subsystem: .model)
+            return
+        }
 
         let storedHash = UserDefaults.standard.string(forKey: userDefaultsKey)
         if let stored = storedHash {
