@@ -24,6 +24,24 @@ from whisper.tokenizer import get_tokenizer
 
 SR = 48000
 
+_WINDOWS = {}
+
+def log_mel(audio, n_mels):
+    """Same as whisper.log_mel_spectrogram, but |X|^2 is computed as re^2 + im^2. Whisper's
+    abs() of a complex tensor has a 0/0 gradient on silence (all the zero padding), which
+    turns delta into NaN within a few steps."""
+    from whisper.audio import mel_filters, N_FFT, HOP_LENGTH
+    key = (audio.device, n_mels)
+    if key not in _WINDOWS:
+        _WINDOWS[key] = (torch.hann_window(N_FFT, device=audio.device), mel_filters(audio.device, n_mels))
+    window, filters = _WINDOWS[key]
+    stft = torch.stft(audio, N_FFT, HOP_LENGTH, window=window, return_complex=True)
+    power = (stft.real ** 2 + stft.imag ** 2)[..., :-1]
+    mel = filters @ power
+    log_spec = torch.clamp(mel, min=1e-10).log10()
+    log_spec = torch.maximum(log_spec, log_spec.max() - 8.0)
+    return (log_spec + 4.0) / 4.0
+
 def sim_call(x48, kbps, rnnoise):
     """Real conferencing proxy on numpy float32 48 kHz -> float32 16 kHz (same duration)."""
     enc = subprocess.run(["ffmpeg", "-v", "error", "-f", "f32le", "-ar", "48000", "-ac", "1", "-i", "-",
@@ -80,14 +98,16 @@ def main():
             x16 = AF.resample(xa, SR, 16000)
             kbps = random.choice([16, 20, 24, 32])
             use_rn = bool(a.rnnoise) and random.random() < 0.5
-            y16 = torch.from_numpy(sim_call(xa.detach().cpu().numpy(), kbps, a.rnnoise if use_rn else "")).to(dev)
+            y_np = np.nan_to_num(sim_call(xa.detach().cpu().numpy(), kbps, a.rnnoise if use_rn else ""))
+            y_np = y_np + np.random.normal(0, 1e-5, len(y_np)).astype(np.float32)  # -100 dB dither: no exact-zero gated stretches
+            y16 = torch.from_numpy(y_np.astype(np.float32)).to(dev)
             n = min(len(x16), len(y16))
             z = x16[:n] + (y16[:n] - x16[:n]).detach()           # straight-through codec + denoiser
             audio = whisper.pad_or_trim(z)
             text_tokens = tok.encode(" " + text.strip())
             clip_loss = 0.0
             for m in models:
-                mel = whisper.log_mel_spectrogram(audio, n_mels=m.dims.n_mels).unsqueeze(0)
+                mel = log_mel(audio, m.dims.n_mels).unsqueeze(0)
                 feats = m.encoder(mel)
                 seq = torch.tensor([sot + text_tokens], device=dev)
                 logits = m.decoder(seq, feats)[0]                  # [T, vocab]
@@ -101,6 +121,8 @@ def main():
                 loss_total += loss.item(); mute_total += mute.item() / (len(models) * len(batch))
                 away_total += ce.item() / (len(models) * len(batch))
             clip_loss.backward()
+        if delta.grad is None or not torch.isfinite(delta.grad).all():
+            print(f"step {step}: non-finite gradient, skipped", flush=True); opt.zero_grad(); continue
         opt.step()
         if step % 10 == 0 or step == 1:
             el = time.time() - t0
