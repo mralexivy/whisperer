@@ -32,7 +32,7 @@ public:
         ok = ok && std::fread(header.data(), 1, hlen, f) == hlen;
         if (!ok) { std::fclose(f); return fail("bad header"); }
         C_ = field(header, "channels"); H_ = field(header, "hidden"); L_ = field(header, "layers");
-        maxAmp_ = fieldf(header, "max_amp"); eps_ = fieldf(header, "norm_eps");
+        maxAmp_ = fieldf(header, "max_amp"); eps_ = fieldf(header, "norm_eps"); relative_ = fieldf(header, "relative");
         long count = field(header, "count");
         if (field(header, "hop") != kHop || field(header, "win") != kWin || field(header, "rate") != 16000 || C_ <= 0 || H_ <= 0 || L_ <= 0 || L_ > 4) {
             std::fclose(f); return fail("unsupported layout");
@@ -114,9 +114,11 @@ private:
             x = h;
         }
         cblas_sgemv(CblasRowMajor, CblasNoTrans, kHop + 1, H_, 1.f, headW_, H_, x, 1, 0.f, head_.data(), 1);
-        float gain = sigmoid(head_[kHop] + headB_[kHop]) * maxAmp_;
-        float rms = std::sqrt(ms), follow = rms / (rms + .01f);
-        for (int i = 0; i < kHop; i++) d16_[i] = std::tanh(head_[i] + headB_[i]) * gain * follow;
+        float gate = sigmoid(head_[kHop] + headB_[kHop]);
+        float rms = std::sqrt(ms);
+        // relative > 0: hard bound at `relative` x the voice's recent RMS (quiet by construction).
+        float scale = relative_ > 0 ? gate * relative_ * rms : gate * maxAmp_ * (rms / (rms + .01f));
+        for (int i = 0; i < kHop; i++) d16_[i] = std::tanh(head_[i] + headB_[i]) * scale;
     }
 
     void designFilters() {   // 48-tap windowed-sinc low-pass at 7.2 kHz (48 kHz), unity DC gain
@@ -140,7 +142,7 @@ private:
         p = h.find(':', p); return std::strtof(h.c_str() + p + 1, nullptr);
     }
 
-    bool loaded_ = false; int C_ = 0, H_ = 0, L_ = 0; float maxAmp_ = 0, eps_ = 1e-5f;
+    bool loaded_ = false; int C_ = 0, H_ = 0, L_ = 0; float maxAmp_ = 0, eps_ = 1e-5f, relative_ = 0;
     std::vector<float> w_, feat_, state_, gi_, gh_, head_, hist_, d16_;
     const float *convW_ = nullptr, *convB_ = nullptr, *normW_ = nullptr, *normB_ = nullptr, *headW_ = nullptr, *headB_ = nullptr;
     Layer layers_[4]{};

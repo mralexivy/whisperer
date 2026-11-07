@@ -19,9 +19,12 @@ WIN = 400          # 25 ms analysis window, ending at the block boundary
 
 
 class PerturbNet(nn.Module):
-    def __init__(self, channels=96, hidden=256, layers=2, max_amp=0.05):
+    def __init__(self, channels=96, hidden=256, layers=2, max_amp=0.05, relative=0.0):
+        """relative > 0: hard loudness bound. The perturbation is at most `relative` x the RMS of the
+        past window (so SNR >= ~20*log10(1/relative) dB by construction) and max_amp is unused."""
         super().__init__()
         self.channels, self.hidden, self.layers, self.max_amp = channels, hidden, layers, max_amp
+        self.relative = relative
         self.frontend = nn.Conv1d(1, channels, WIN, stride=HOP, bias=True)
         self.norm = nn.LayerNorm(channels)
         self.gru = nn.GRU(channels + 1, hidden, num_layers=layers, batch_first=True)
@@ -41,11 +44,14 @@ class PerturbNet(nn.Module):
         h, _ = self.gru(torch.cat([f, loud], -1))
         out = self.head(h)                                            # [B, n, HOP+1]
         wave = torch.tanh(out[..., :HOP])
-        gain = torch.sigmoid(out[..., HOP:]) * self.max_amp
-        # Scale by the past window's RMS so the perturbation follows the voice (silent in silence).
         rms = frames.pow(2).mean(-1, keepdim=True).sqrt()
-        delta = wave * gain * (rms / (rms + 0.01))
+        delta = self._scale(wave, torch.sigmoid(out[..., HOP:]), rms)
         return delta.reshape(B, n * HOP)
+
+    def _scale(self, wave, gate, rms):
+        if self.relative > 0:
+            return wave * gate * self.relative * rms          # hard bound relative to the voice
+        return wave * gate * self.max_amp * (rms / (rms + 0.01))
 
     @torch.no_grad()
     def stream(self, x):
@@ -61,9 +67,8 @@ class PerturbNet(nn.Module):
             loud = torch.log10(hist.pow(2).mean() + 1e-6).view(1, 1, 1)
             h, state = self.gru(torch.cat([f, loud], -1), state)
             o = self.head(h).view(-1)
-            wave = torch.tanh(o[:HOP]); gain = torch.sigmoid(o[HOP:]) * self.max_amp
-            rms = hist.pow(2).mean().sqrt()
-            out.append(wave * gain * (rms / (rms + 0.01)))
+            wave = torch.tanh(o[:HOP]); rms = hist.pow(2).mean().sqrt()
+            out.append(self._scale(wave, torch.sigmoid(o[HOP:]), rms))
             hist = torch.cat([hist[HOP:], x[t * HOP:(t + 1) * HOP]])
         return torch.cat(out)
 
@@ -79,7 +84,7 @@ def export_weights(model, path):
                     getattr(m.gru, f"bias_ih_l{l}"), getattr(m.gru, f"bias_hh_l{l}")]
     tensors += [m.head.weight, m.head.bias]
     header = {"format": "whisperer-shield-pnet", "version": 1, "rate": 16000, "hop": HOP, "win": WIN,
-              "channels": m.channels, "hidden": m.hidden, "layers": m.layers, "max_amp": m.max_amp,
+              "channels": m.channels, "hidden": m.hidden, "layers": m.layers, "max_amp": m.max_amp, "relative": m.relative,
               "norm_eps": m.norm.eps, "count": int(sum(t.numel() for t in tensors))}
     blob = np.concatenate([t.detach().cpu().float().numpy().ravel() for t in tensors]).astype("<f4")
     h = json.dumps(header).encode()

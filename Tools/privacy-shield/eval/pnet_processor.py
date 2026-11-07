@@ -8,7 +8,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from pnet import PerturbNet, HOP
 
 _ck = torch.load(os.environ["SHIELD_PNET"], map_location="cpu")
-_net = PerturbNet(max_amp=_ck["args"].get("max_amp", 0.05)); _net.load_state_dict(_ck["model"]); _net.eval()
+_net = PerturbNet(max_amp=_ck["args"].get("max_amp", 0.05), relative=_ck["args"].get("relative", 0.0)); _net.load_state_dict(_ck["model"]); _net.eval()
 
 def process(x):
     x = torch.from_numpy(np.asarray(x, dtype=np.float32))

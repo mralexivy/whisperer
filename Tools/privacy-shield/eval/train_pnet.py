@@ -56,6 +56,7 @@ def main():
     ap.add_argument("--models", default="base,small"); ap.add_argument("--rnnoise", default="")
     ap.add_argument("--margin", type=float, default=12.0); ap.add_argument("--quiet-weight", type=float, default=0.05)
     ap.add_argument("--away-weight", type=float, default=0.3); ap.add_argument("--max-amp", type=float, default=0.05)
+    ap.add_argument("--relative", type=float, default=0.0, help="hard bound: delta <= relative x voice RMS")
     ap.add_argument("--resume", default=""); ap.add_argument("--seed", type=int, default=0)
     ap.add_argument("--init", default="", help="start from these network weights (no optimizer state)")
     ap.add_argument("--ctc-weight", type=float, default=0.0,
@@ -71,7 +72,7 @@ def main():
             r = json.loads(l); data.append((str(Path(a.synth) / r["audio"]), r["reference"]))
     print("utterances", len(data), flush=True)
 
-    net = PerturbNet(max_amp=a.max_amp).to(dev)
+    net = PerturbNet(max_amp=a.max_amp, relative=a.relative).to(dev)
     opt = torch.optim.AdamW(net.parameters(), lr=a.lr, weight_decay=1e-4)
     start = 1
     if a.resume:
