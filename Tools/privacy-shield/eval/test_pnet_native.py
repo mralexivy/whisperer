@@ -28,10 +28,11 @@ def reference(net, x48):
 
 def main():
     torch.manual_seed(1)
-    net = PerturbNet(max_amp=0.05, relative=float(__import__("os").environ.get("PNET_RELATIVE", "0")))
+    env = __import__("os").environ
+    net = PerturbNet(max_amp=0.05, relative=float(env.get("PNET_RELATIVE", "0")), ahead=int(env.get("PNET_AHEAD", "0")))
     if len(sys.argv) > 1 and sys.argv[1].endswith(".pt"):
         ck = torch.load(sys.argv[1], map_location="cpu")
-        net = PerturbNet(max_amp=ck["args"].get("max_amp", 0.05), relative=ck["args"].get("relative", 0.0)); net.load_state_dict(ck["model"])
+        net = PerturbNet(max_amp=ck["args"].get("max_amp", 0.05), relative=ck["args"].get("relative", 0.0), ahead=ck["args"].get("ahead", 0)); net.load_state_dict(ck["model"])
     net.eval()
     wspn = Path(tempfile.mkdtemp()) / "w.wspn"; export_weights(net, wspn)
     lib = ctypes.CDLL(str(LIB))

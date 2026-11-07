@@ -19,12 +19,16 @@ WIN = 400          # 25 ms analysis window, ending at the block boundary
 
 
 class PerturbNet(nn.Module):
-    def __init__(self, channels=96, hidden=256, layers=2, max_amp=0.05, relative=0.0):
+    def __init__(self, channels=96, hidden=256, layers=2, max_amp=0.05, relative=0.0, ahead=0):
         """relative > 0: hard loudness bound. The perturbation is at most `relative` x the RMS of the
         past window (so SNR >= ~20*log10(1/relative) dB by construction) and max_amp is unused."""
         super().__init__()
         self.channels, self.hidden, self.layers, self.max_amp = channels, hidden, layers, max_amp
         self.relative = relative
+        # ahead = 1: the window also covers the block being emitted. The app processes whole 10 ms
+        # blocks anyway, so this costs no added latency; it only gives up "predict before it is said".
+        assert ahead in (0, 1)
+        self.ahead = ahead
         self.frontend = nn.Conv1d(1, channels, WIN, stride=HOP, bias=True)
         self.norm = nn.LayerNorm(channels)
         self.gru = nn.GRU(channels + 1, hidden, num_layers=layers, batch_first=True)
@@ -35,7 +39,8 @@ class PerturbNet(nn.Module):
         B, T = x.shape
         n = T // HOP
         # Frame t sees x[160t-400 : 160t]: left-pad by WIN so frame 0 sees only silence.
-        xp = torch.nn.functional.pad(x, (WIN, 0))[:, : n * HOP + WIN - HOP]
+        a = self.ahead * HOP
+        xp = torch.nn.functional.pad(x, (WIN - a, a))[:, : n * HOP + WIN - HOP]
         f = self.frontend(xp.unsqueeze(1)).transpose(1, 2)            # [B, n, C]
         f = self.norm(torch.tanh(f))
         # Loudness of the same past window, log-compressed, as an explicit input (scale awareness).
@@ -62,6 +67,8 @@ class PerturbNet(nn.Module):
         state = torch.zeros(self.layers, 1, self.hidden)
         out = []
         for t in range(n):
+            if self.ahead:
+                hist = torch.cat([hist[HOP:], x[t * HOP:(t + 1) * HOP]])
             f = torch.tanh(self.frontend(hist.view(1, 1, WIN))).view(1, 1, -1)
             f = self.norm(f)
             loud = torch.log10(hist.pow(2).mean() + 1e-6).view(1, 1, 1)
@@ -69,11 +76,12 @@ class PerturbNet(nn.Module):
             o = self.head(h).view(-1)
             wave = torch.tanh(o[:HOP]); rms = hist.pow(2).mean().sqrt()
             out.append(self._scale(wave, torch.sigmoid(o[HOP:]), rms))
-            hist = torch.cat([hist[HOP:], x[t * HOP:(t + 1) * HOP]])
+            if not self.ahead:
+                hist = torch.cat([hist[HOP:], x[t * HOP:(t + 1) * HOP]])
         return torch.cat(out)
 
 
-def export_weights(model, path):
+def export_weights(model, path, reshape=0.0):
     """Flat little-endian float32 blob + JSON header for the native processor.
     Order: frontend.w [C,WIN], frontend.b [C], norm.w [C], norm.b [C], then per GRU layer
     w_ih [3H, in], w_hh [3H, H], b_ih [3H], b_hh [3H] (PyTorch gate order r,z,n), head.w [HOP+1, H], head.b."""
@@ -84,7 +92,7 @@ def export_weights(model, path):
                     getattr(m.gru, f"bias_ih_l{l}"), getattr(m.gru, f"bias_hh_l{l}")]
     tensors += [m.head.weight, m.head.bias]
     header = {"format": "whisperer-shield-pnet", "version": 1, "rate": 16000, "hop": HOP, "win": WIN,
-              "channels": m.channels, "hidden": m.hidden, "layers": m.layers, "max_amp": m.max_amp, "relative": m.relative,
+              "channels": m.channels, "hidden": m.hidden, "layers": m.layers, "max_amp": m.max_amp, "relative": m.relative, "reshape": float(reshape), "ahead": m.ahead,
               "norm_eps": m.norm.eps, "count": int(sum(t.numel() for t in tensors))}
     blob = np.concatenate([t.detach().cpu().float().numpy().ravel() for t in tensors]).astype("<f4")
     h = json.dumps(header).encode()

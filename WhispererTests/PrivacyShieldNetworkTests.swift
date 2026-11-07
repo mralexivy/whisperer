@@ -35,7 +35,7 @@ final class PrivacyShieldNetworkTests: XCTestCase {
         XCTAssertGreaterThan(size, 1_000_000, "weights file looks truncated")
     }
 
-    func testNetworkPerturbsSpeechAndLeavesSilenceAlone() throws {
+    func testNetworkReshapesSpeechAndLeavesSilenceAlone() throws {
         let url = try XCTUnwrap(PrivacyAudioProcessor.bundledNetworkURL)
         let processor = try PrivacyAudioProcessor(networkURL: url, modelURL: nil, strength: 1)
         let input = voice(blocks: 200)
@@ -43,15 +43,17 @@ final class PrivacyShieldNetworkTests: XCTestCase {
         XCTAssertTrue(valid)
         XCTAssertTrue(output.allSatisfy { $0.isFinite && abs($0) <= 0.98 })
         let half = input.count / 2
+        // The shield reshapes the voice (a causal pitch/formant shift) and adds a learned signal, so
+        // the processed speech differs materially from the input — not just by a tiny additive bound.
         let speechDelta = zip(input[..<half], output[..<half]).map { Double($1 - $0) }
-        let speechRMS = sqrt(speechDelta.map { $0 * $0 }.reduce(0, +) / Double(half))
-        // Skip the first 50 ms of silence: the network's analysis window still holds speech there.
-        let tail = Array(zip(input[(half + 2400)...], output[(half + 2400)...]).map { Double($1 - $0) })
+        let deltaRMS = sqrt(speechDelta.map { $0 * $0 }.reduce(0, +) / Double(half))
+        let inputRMS = sqrt(input[..<half].map { Double($0) * Double($0) }.reduce(0, +) / Double(half))
+        XCTAssertGreaterThan(deltaRMS, inputRMS * 0.1, "voice was not reshaped")
+        // Reshaper and perturbation both vanish without input. Skip the first 50 ms after speech
+        // stops: the reshaper's grain and the analysis window still hold the tail of the voice.
+        let tail = Array(output[(half + 2400)...].map { Double($0) })
         let silenceRMS = sqrt(tail.map { $0 * $0 }.reduce(0, +) / Double(tail.count))
-        XCTAssertGreaterThan(speechRMS, 1e-4, "no perturbation applied to speech")
-        XCTAssertLessThan(silenceRMS, speechRMS * 0.05, "perturbation should follow the voice and stop in silence")
-        let peak = speechDelta.map(abs).max() ?? 0
-        XCTAssertLessThan(peak, 0.12, "perturbation exceeds its trained bound")
+        XCTAssertLessThan(silenceRMS, deltaRMS * 0.05, "processing should follow the voice and stop in silence")
     }
 
     func testProcessingIsDeterministicAfterReset() throws {

@@ -4,14 +4,14 @@
 set -u
 ROOT=/Users/alexivy/ai/whisperer-shield
 E=$ROOT/build/privacy-shield/eval
-RUN=$E/runs/pnet-rel
+RUN=${RUN:-$E/runs/pnet-rel}
 PYW=/Users/alexivy/ai/whisperer-landing/.tts-venv/bin/python
 PYT=$E/.venv/bin/python
 WC=/Users/alexivy/ai/whisperer/whisper.cpp/build-static/bin/whisper-cli
 MODEL="$HOME/Library/Application Support/Whisperer/ggml-large-v3-turbo-q5_0.bin"
 RES=$RUN/results.jsonl
 : > $RES
-for step in 00200 00500 01000 01500 02000; do
+for step in ${=STEPS:-00200 00500 01000 01500 02000}; do
   CK=$RUN/step$step.pt
   until [ -f "$CK" ]; do sleep 30; [ -f "$RUN/.done" ] && [ ! -f "$CK" ] && break; done
   [ -f "$CK" ] || continue

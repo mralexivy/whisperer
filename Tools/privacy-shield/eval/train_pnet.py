@@ -54,6 +54,7 @@ def main():
     ap.add_argument("--out", required=True); ap.add_argument("--steps", type=int, default=3000)
     ap.add_argument("--batch", type=int, default=6); ap.add_argument("--lr", type=float, default=3e-4)
     ap.add_argument("--models", default="base,small"); ap.add_argument("--rnnoise", default="")
+    ap.add_argument("--no-codec", action="store_true", help="diagnostic: attack clean 16 kHz, skip Opus+RNNoise")
     ap.add_argument("--margin", type=float, default=12.0); ap.add_argument("--quiet-weight", type=float, default=0.05)
     ap.add_argument("--away-weight", type=float, default=0.3); ap.add_argument("--max-amp", type=float, default=0.05)
     ap.add_argument("--relative", type=float, default=0.0, help="hard bound: delta <= relative x voice RMS")
@@ -61,6 +62,13 @@ def main():
     ap.add_argument("--init", default="", help="start from these network weights (no optimizer state)")
     ap.add_argument("--ctc-weight", type=float, default=0.0,
                     help=">0 adds wav2vec2 (CTC, a non-Whisper family) to the ensemble for transfer")
+    ap.add_argument("--identity-weight", type=float, default=0.0,
+                    help=">0: hide WHO is speaking (ECAPA speaker embedding pushed away from the clean voice)")
+    ap.add_argument("--keep-words", action="store_true",
+                    help="Whisper term preserves the transcript instead of attacking it (identity mode)")
+    ap.add_argument("--reshape", type=float, default=0.0,
+                    help="!=0: pitch/formant reshaper ratio applied first; the network perturbs the reshaped voice")
+    ap.add_argument("--ahead", type=int, default=0, help="1: the network also sees the block it perturbs (no added latency)")
     a = ap.parse_args()
     random.seed(a.seed); torch.manual_seed(a.seed); np.random.seed(a.seed)
     dev = torch.device("mps" if torch.backends.mps.is_available() else "cpu")
@@ -72,7 +80,7 @@ def main():
             r = json.loads(l); data.append((str(Path(a.synth) / r["audio"]), r["reference"]))
     print("utterances", len(data), flush=True)
 
-    net = PerturbNet(max_amp=a.max_amp, relative=a.relative).to(dev)
+    net = PerturbNet(max_amp=a.max_amp, relative=a.relative, ahead=a.ahead).to(dev)
     opt = torch.optim.AdamW(net.parameters(), lr=a.lr, weight_decay=1e-4)
     start = 1
     if a.resume:
@@ -88,6 +96,17 @@ def main():
         def ctc_targets(text):
             t = "".join(c if c.isalpha() or c == "'" else ("|" if c == " " else "") for c in text.upper())
             return torch.tensor([lab[c] for c in t if c in lab], device=dev)
+    spk = None
+    if a.identity_weight > 0:
+        from speechbrain.inference.speaker import EncoderClassifier
+        spk = EncoderClassifier.from_hparams(source="speechbrain/spkrec-ecapa-voxceleb",
+                                             savedir=str(Path(__file__).resolve().parents[3] / "build/privacy-shield/eval/models/ecapa"),
+                                             run_opts={"device": str(dev)})
+        spk.mods.eval(); [p.requires_grad_(False) for p in spk.mods.parameters()]
+        def spk_embed(w):
+            lens = torch.ones(1, device=dev)
+            f = spk.mods.mean_var_norm(spk.mods.compute_features(w.view(1, -1)), lens)
+            return F.normalize(spk.mods.embedding_model(f, lens).view(-1), dim=0)
     models = [whisper.load_model(m, device=dev) for m in a.models.split(",")]
     for m in models:
         m.eval(); [p.requires_grad_(False) for p in m.parameters()]
@@ -106,18 +125,25 @@ def main():
             # variable utterance lengths made each step slower than the last (9 s -> 40 s).
             bucket = next(b for b in (4 * 16000, 8 * 16000, 12 * 16000) if len(x) <= b) if len(x) <= 12 * 16000 else 12 * 16000
             x = torch.nn.functional.pad(x[:bucket], (0, bucket - min(len(x), bucket)))
+            x_orig = x
+            if a.reshape:
+                from reshape import reshape_fast
+                x = torch.from_numpy(reshape_fast(x.cpu().numpy(), a.reshape, sr=16000)).to(dev)
             delta = net(x.view(1, -1))[0]
             xa = torch.clamp(x + delta, -1, 1) + 1e-5 * torch.randn_like(x)
             # quiet: perturbation must stay `margin` dB under the speech in every band and frame
             dd, dx = band_db(delta + 1e-7 * torch.randn_like(delta), fb), band_db(x, fb).detach()
             speech = (dx > dx.max() - 50).float()                      # ignore near-silent cells
             quiet = (F.relu(dd - dx + a.margin) * speech).sum() / (speech.sum() + 1)
-            # conferencing path at 48 kHz, straight-through
-            x48 = AF.resample(xa, 16000, 48000)
-            kbps = random.choice([16, 20, 24, 32]); use_rn = bool(a.rnnoise) and random.random() < 0.5
-            y = np.nan_to_num(sim_call(x48.detach().cpu().numpy(), kbps, a.rnnoise if use_rn else ""))
-            y = torch.from_numpy((y + np.random.normal(0, 1e-5, len(y))).astype(np.float32)).to(dev)
-            n = min(len(xa), len(y)); z = xa[:n] + (y[:n] - xa[:n]).detach()
+            if a.no_codec:
+                z = xa
+            else:
+                # conferencing path at 48 kHz, straight-through
+                x48 = AF.resample(xa, 16000, 48000)
+                kbps = random.choice([16, 20, 24, 32]); use_rn = bool(a.rnnoise) and random.random() < 0.5
+                y = np.nan_to_num(sim_call(x48.detach().cpu().numpy(), kbps, a.rnnoise if use_rn else ""))
+                y = torch.from_numpy((y + np.random.normal(0, 1e-5, len(y))).astype(np.float32)).to(dev)
+                n = min(len(xa), len(y)); z = xa[:n] + (y[:n] - xa[:n]).detach()
             audio = whisper.pad_or_trim(z)
             tt = tok.encode(" " + text)[:200]
             attack = 0.0
@@ -126,7 +152,10 @@ def main():
                 mute = F.cross_entropy(logits[len(sot) - 1: len(sot)], torch.tensor([tok.eot], device=dev))
                 tgt = torch.tensor(tt + [tok.eot], device=dev)
                 ce = F.cross_entropy(logits[len(sot) - 1: len(sot) - 1 + len(tgt)], tgt)
-                attack = attack + (mute - a.away_weight * torch.clamp(ce, max=8.0)) / len(models)
+                if a.keep_words:
+                    attack = attack + ce / len(models)          # the words must survive
+                else:
+                    attack = attack + (mute - a.away_weight * torch.clamp(ce, max=8.0)) / len(models)
                 stats["mute"] += mute.item() / (len(models) * a.batch); stats["true_ce"] += ce.item() / (len(models) * a.batch)
             if w2v is not None:
                 em, _ = w2v(z.view(1, -1)); lp = em.log_softmax(-1).transpose(0, 1)
@@ -135,6 +164,12 @@ def main():
                     ctc = F.ctc_loss(lp, tgt.view(1, -1), torch.tensor([lp.shape[0]]), torch.tensor([len(tgt)]), blank=0, zero_infinity=True) / len(tgt)
                     attack = attack - a.ctc_weight * torch.clamp(ctc, max=6.0)
                     stats["ctc"] = stats.get("ctc", 0.0) + ctc.item() / a.batch
+            if spk is not None:
+                with torch.no_grad():
+                    e_clean = spk_embed(x_orig)
+                sim = (spk_embed(z) * e_clean).sum()
+                attack = attack + a.identity_weight * F.relu(sim - 0.05)
+                stats["spk"] = stats.get("spk", 0.0) + sim.item() / a.batch
             loss = (attack + a.quiet_weight * quiet) / a.batch
             loss.backward()
             stats["quiet"] += quiet.item() / a.batch
@@ -146,7 +181,7 @@ def main():
         opt.step()
         if step % 10 == 0 or step == start:
             el = time.time() - t0
-            print(f"step {step:5d}  true_ce {stats['true_ce']:.3f}  ctc {stats.get('ctc', 0):.3f}  mute {stats['mute']:.3f}  quiet {stats['quiet']:.2f}  snr {stats['snr']:.1f} dB  {el / (step - start + 1):.1f}s/step", flush=True)
+            print(f"step {step:5d}  true_ce {stats['true_ce']:.3f}  spk {stats.get('spk', 0):.3f}  ctc {stats.get('ctc', 0):.3f}  mute {stats['mute']:.3f}  quiet {stats['quiet']:.2f}  snr {stats['snr']:.1f} dB  {el / (step - start + 1):.1f}s/step", flush=True)
             hist.append({"step": step, **stats})
         if step % 100 == 0 or step == a.steps:
             torch.save({"model": net.state_dict(), "opt": opt.state_dict(), "step": step, "args": vars(a)}, out / "last.pt")
