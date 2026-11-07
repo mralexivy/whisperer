@@ -102,7 +102,10 @@ def main():
         for path, text in random.sample(data, a.batch):
             x = load_audio16(path).to(dev)
             x = x * (random.uniform(0.15, 0.6) / (x.abs().max() + 1e-6))
-            x = x[: len(x) // HOP * HOP]
+            # Pad to one of three fixed lengths: MPS compiles a new graph for every new shape, so
+            # variable utterance lengths made each step slower than the last (9 s -> 40 s).
+            bucket = next(b for b in (4 * 16000, 8 * 16000, 12 * 16000) if len(x) <= b) if len(x) <= 12 * 16000 else 12 * 16000
+            x = torch.nn.functional.pad(x[:bucket], (0, bucket - min(len(x), bucket)))
             delta = net(x.view(1, -1))[0]
             xa = torch.clamp(x + delta, -1, 1) + 1e-5 * torch.randn_like(x)
             # quiet: perturbation must stay `margin` dB under the speech in every band and frame
@@ -145,7 +148,7 @@ def main():
             el = time.time() - t0
             print(f"step {step:5d}  true_ce {stats['true_ce']:.3f}  ctc {stats.get('ctc', 0):.3f}  mute {stats['mute']:.3f}  quiet {stats['quiet']:.2f}  snr {stats['snr']:.1f} dB  {el / (step - start + 1):.1f}s/step", flush=True)
             hist.append({"step": step, **stats})
-        if step % 200 == 0 or step == a.steps:
+        if step % 100 == 0 or step == a.steps:
             torch.save({"model": net.state_dict(), "opt": opt.state_dict(), "step": step, "args": vars(a)}, out / "last.pt")
             torch.save({"model": net.state_dict(), "step": step, "args": vars(a)}, out / f"step{step:05d}.pt")
             (out / "log.json").write_text(json.dumps(hist))
