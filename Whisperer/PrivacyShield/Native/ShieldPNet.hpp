@@ -4,6 +4,9 @@
 // convolution + LayerNorm + 2-layer GRU step + linear head on the PAST 25 ms window, interpolate the
 // 160-sample perturbation back to 48 kHz and add it to the current block. Allocation-free after load;
 // called only on the processing worker, never in the Core Audio callback.
+#ifndef ACCELERATE_NEW_LAPACK
+#define ACCELERATE_NEW_LAPACK
+#endif
 #include <Accelerate/Accelerate.h>
 #include <algorithm>
 #include <cmath>
