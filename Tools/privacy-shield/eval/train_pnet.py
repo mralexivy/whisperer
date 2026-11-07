@@ -57,6 +57,9 @@ def main():
     ap.add_argument("--margin", type=float, default=12.0); ap.add_argument("--quiet-weight", type=float, default=0.05)
     ap.add_argument("--away-weight", type=float, default=0.3); ap.add_argument("--max-amp", type=float, default=0.05)
     ap.add_argument("--resume", default=""); ap.add_argument("--seed", type=int, default=0)
+    ap.add_argument("--init", default="", help="start from these network weights (no optimizer state)")
+    ap.add_argument("--ctc-weight", type=float, default=0.0,
+                    help=">0 adds wav2vec2 (CTC, a non-Whisper family) to the ensemble for transfer")
     a = ap.parse_args()
     random.seed(a.seed); torch.manual_seed(a.seed); np.random.seed(a.seed)
     dev = torch.device("mps" if torch.backends.mps.is_available() else "cpu")
@@ -73,6 +76,17 @@ def main():
     start = 1
     if a.resume:
         ck = torch.load(a.resume, map_location=dev); net.load_state_dict(ck["model"]); opt.load_state_dict(ck["opt"]); start = ck["step"] + 1
+    if a.init:
+        net.load_state_dict(torch.load(a.init, map_location=dev)["model"])
+    w2v = None
+    if a.ctc_weight > 0:
+        import torchaudio
+        bundle = torchaudio.pipelines.WAV2VEC2_ASR_BASE_960H
+        w2v = bundle.get_model().to(dev).eval(); [p.requires_grad_(False) for p in w2v.parameters()]
+        labels = bundle.get_labels(); lab = {c: i for i, c in enumerate(labels)}
+        def ctc_targets(text):
+            t = "".join(c if c.isalpha() or c == "'" else ("|" if c == " " else "") for c in text.upper())
+            return torch.tensor([lab[c] for c in t if c in lab], device=dev)
     models = [whisper.load_model(m, device=dev) for m in a.models.split(",")]
     for m in models:
         m.eval(); [p.requires_grad_(False) for p in m.parameters()]
@@ -110,6 +124,13 @@ def main():
                 ce = F.cross_entropy(logits[len(sot) - 1: len(sot) - 1 + len(tgt)], tgt)
                 attack = attack + (mute - a.away_weight * torch.clamp(ce, max=8.0)) / len(models)
                 stats["mute"] += mute.item() / (len(models) * a.batch); stats["true_ce"] += ce.item() / (len(models) * a.batch)
+            if w2v is not None:
+                em, _ = w2v(z.view(1, -1)); lp = em.log_softmax(-1).transpose(0, 1)
+                tgt = ctc_targets(text)
+                if len(tgt) and lp.shape[0] > len(tgt):
+                    ctc = F.ctc_loss(lp, tgt.view(1, -1), torch.tensor([lp.shape[0]]), torch.tensor([len(tgt)]), blank=0, zero_infinity=True) / len(tgt)
+                    attack = attack - a.ctc_weight * torch.clamp(ctc, max=6.0)
+                    stats["ctc"] = stats.get("ctc", 0.0) + ctc.item() / a.batch
             loss = (attack + a.quiet_weight * quiet) / a.batch
             loss.backward()
             stats["quiet"] += quiet.item() / a.batch
@@ -121,7 +142,7 @@ def main():
         opt.step()
         if step % 10 == 0 or step == start:
             el = time.time() - t0
-            print(f"step {step:5d}  true_ce {stats['true_ce']:.3f}  mute {stats['mute']:.3f}  quiet {stats['quiet']:.2f}  snr {stats['snr']:.1f} dB  {el / (step - start + 1):.1f}s/step", flush=True)
+            print(f"step {step:5d}  true_ce {stats['true_ce']:.3f}  ctc {stats.get('ctc', 0):.3f}  mute {stats['mute']:.3f}  quiet {stats['quiet']:.2f}  snr {stats['snr']:.1f} dB  {el / (step - start + 1):.1f}s/step", flush=True)
             hist.append({"step": step, **stats})
         if step % 200 == 0 or step == a.steps:
             torch.save({"model": net.state_dict(), "opt": opt.state_dict(), "step": step, "args": vars(a)}, out / "last.pt")
