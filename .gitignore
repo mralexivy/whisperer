@@ -101,3 +101,5 @@ Tools/llm-eval/asr-engine-comparison/
 # omni-eval corpora and hypotheses (large / regenerable)
 Tools/omni-eval/corpus/
 Tools/omni-eval/hyp/
+# Privacy Shield evaluation scratch (generated corpus, runs, downloaded models)
+build/privacy-shield/eval/
