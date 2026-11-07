@@ -321,3 +321,31 @@ virtual input/output streams started and device 245 became the system default.
 The UI reached Ready with the toggle on. Switching off restored the MacBook
 microphone; enabling again reached Ready without a password or reinstall prompt.
 This closes the installer/startup failure, not receiver-side call or efficacy tests.
+
+## Adversarial perturbation experiments (2026-11-07, branch feature/privacy-shield-adversarial)
+
+Bench: `eval/make_corpus.py` (12 synthetic meeting lines, six voices, key facts) and `eval/run_eval.py`
+(direct and through a conferencing proxy: Opus VoIP 24 kbps then RNNoise; whisper.cpp large-v3-turbo-q5_0).
+"Drift" is WER of the shielded transcript against the clean transcript in the same condition. Training
+(`eval/train_uap.py`) uses 200 clips in eight voices disjoint from the test voices, white-box Whisper base +
+small, and real Opus (16-32 kbps) + RNNoise in every step through a straight-through gradient. Evaluation
+model (large-v3-turbo) is never trained against.
+
+| Processor | SNR | Drift direct | Drift after call | Key facts after call |
+|---|---|---|---|---|
+| Shipped baseline (AM + noise, 0.35) | 17.7 dB | 0.0% | 0.0% | 89% (= clean) |
+| Universal looped δ, ε 0.03 | 14.6 dB | 0.8% | 1.6% | 89% |
+| Universal looped δ, ε 0.1 | 0.4 dB | 15.5% | 21.7% | 67% |
+
+Findings:
+- The baseline is not adversarial; ASR ignores it. This is why "it is still transcribed".
+- A single looped perturbation transfers to an unseen model and survives Opus + RNNoise (the call column
+  is even slightly stronger), but only at speech-level loudness. Not shippable.
+- Speech-shaped scaling (perturbation × causal 20 ms envelope) did not beat a flat perturbation in
+  white-box sanity runs at the same loudness.
+- Implementation traps fixed: Whisper's log-mel abs() has 0/0 gradients on padding; exact-zero
+  stretches (RNNoise gating, TTS edges) and pooled-envelope rounding produce NaN on MPS.
+
+Conclusion: quiet protection needs an input-dependent perturbation (causal predictive network that sees
+the last 1-2 s and emits the next 10 ms), as in Neural Voice Camouflage. The current stateless 480-sample
+model contract must change to carry state.
