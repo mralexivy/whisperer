@@ -89,7 +89,7 @@ static OSStatus setupUnit(AudioUnit& unit,AudioDeviceID device,bool capture,doub
     set(kAudioUnitProperty_MaximumFramesPerSlice,kAudioUnitScope_Global,0,&max,4);
     AURenderCallbackStruct callback{capture?inputCallback:outputCallback,s};
     if(overrideCallback) callback.inputProc=overrideCallback;
-    set(capture?kAudioOutputUnitProperty_SetInputCallback:kAudioUnitProperty_SetRenderCallback,
+    set(capture?AudioUnitPropertyID(kAudioOutputUnitProperty_SetInputCallback):AudioUnitPropertyID(kAudioUnitProperty_SetRenderCallback),
         capture?kAudioUnitScope_Global:kAudioUnitScope_Input,0,&callback,sizeof(callback));
     if(!status) status=AudioUnitInitialize(unit);
     return status;

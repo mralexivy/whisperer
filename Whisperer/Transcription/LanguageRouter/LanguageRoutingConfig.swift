@@ -7,7 +7,7 @@
 
 import Foundation
 
-struct LanguageRoutingConfig: Codable {
+nonisolated struct LanguageRoutingConfig: Codable {
     var allowedLanguages: [TranscriptionLanguage]
     var primaryLanguage: TranscriptionLanguage?
     var languageModelOverrides: [String: String]  // lang rawValue → model rawValue

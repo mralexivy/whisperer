@@ -12,7 +12,11 @@ import Foundation
 import FluidAudio
 import AVFoundation
 
-nonisolated class FluidAudioBridge: TranscriptionBackend {
+/// `@unchecked Sendable`: inference runs on `queue` / `previewQueue`, and every mutable field
+/// another thread can touch is behind `modeLock` (mode, shutdown and abort flags, the vocabulary
+/// boosting trio). The three `AsrManager`s are set in `init` and cleared only by
+/// `prepareForShutdown()`, after both queues have been drained with `sync`.
+nonisolated final class FluidAudioBridge: TranscriptionBackend, @unchecked Sendable {
 
     // MARK: - Dual AsrManager
 
@@ -127,7 +131,7 @@ nonisolated class FluidAudioBridge: TranscriptionBackend {
                               progress: (@Sendable (Double) -> Void)? = nil) async throws {
         let version: AsrModelVersion = variant == .v2 ? .v2 : .v3
         try await AsrModels.download(version: version, progressHandler: progress.map { report in
-            { snapshot in
+            { @Sendable snapshot in
                 if case .compiling = snapshot.phase { report(1) } else { report(snapshot.fractionCompleted) }
             }
         })
@@ -177,16 +181,28 @@ nonisolated class FluidAudioBridge: TranscriptionBackend {
         vocabulary: CustomVocabularyContext,
         ctcModels: CtcModels
     ) async throws {
-        self.customVocabulary = vocabulary
         let blankId = ctcModels.vocabulary.count
-        self.ctcSpotter = CtcKeywordSpotter(models: ctcModels, blankId: blankId)
+        let spotter = CtcKeywordSpotter(models: ctcModels, blankId: blankId)
         let ctcModelDir = CtcModels.defaultCacheDirectory(for: ctcModels.variant)
-        self.vocabularyRescorer = try await VocabularyRescorer.create(
-            spotter: ctcSpotter!,
+        let rescorer = try await VocabularyRescorer.create(
+            spotter: spotter,
             vocabulary: vocabulary,
             config: .default,
             ctcModelDirectory: ctcModelDir
         )
+        // Published together under `modeLock`: `performTranscription` reads the trio on `queue`,
+        // and these were assigned field by field across an `await`, so a final pass could pick
+        // up a new vocabulary with the previous rescorer.
+        do {
+            try modeLock.withLock {
+                customVocabulary = vocabulary
+                ctcSpotter = spotter
+                vocabularyRescorer = rescorer
+            }
+        } catch {
+            Logger.error("Failed to publish vocabulary boosting state: \(error.localizedDescription)", subsystem: .transcription)
+            return
+        }
         Logger.info("Vocabulary boosting configured with \(vocabulary.terms.count) terms (final pass only)", subsystem: .transcription)
     }
 
@@ -231,9 +247,12 @@ nonisolated class FluidAudioBridge: TranscriptionBackend {
 
                 // Capture vocabulary boosting state for use inside Task
                 let isFinalPass = self.currentMode == .finalPass
-                let rescorer = self.vocabularyRescorer
-                let spotter = self.ctcSpotter
-                let vocabulary = self.customVocabulary
+                let boosting = try? self.modeLock.withLock {
+                    (self.vocabularyRescorer, self.ctcSpotter, self.customVocabulary)
+                }
+                let rescorer = boosting?.0
+                let spotter = boosting?.1
+                let vocabulary = boosting?.2
 
                 // Select manager based on current mode
                 guard let manager = (isFinalPass ? self.finalManager : self.streamingManager) else { return "" }
@@ -442,9 +461,11 @@ nonisolated class FluidAudioBridge: TranscriptionBackend {
         finalManager = nil
         previewManager = nil
         // Clear vocabulary boosting state
-        customVocabulary = nil
-        ctcSpotter = nil
-        vocabularyRescorer = nil
+        try? modeLock.withLock {
+            customVocabulary = nil
+            ctcSpotter = nil
+            vocabularyRescorer = nil
+        }
     }
 
     deinit {

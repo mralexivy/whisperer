@@ -30,7 +30,7 @@ import Tokenizers
 
 /// One text to correct inside a batch. Everything that varies per row; the system prompt and the
 /// sampling parameters are shared by the whole batch and live on the call.
-struct LLMBatchRequest {
+nonisolated struct LLMBatchRequest {
     /// The pre-cleaned source text. Returned unchanged if the row produces nothing usable.
     let text: String
     /// The `[INPUT]`-wrapped user message, exactly as the single-stream path builds it.
@@ -155,7 +155,9 @@ extension LLMPostProcessor {
         if warmPrefixCopy(for: instructions) == nil {
             await ensureWarmPrefix(for: instructions)
         }
+        // Wrapped for the hand-off into the `@Sendable` container closure: the copy is ours alone.
         let warm = warmPrefixCopy(for: instructions)
+            .map { KVCacheHandoff(caches: $0.cache, prefixLength: $0.prefixLength) }
 
         isProcessing = true
         defer { isProcessing = false }
@@ -177,7 +179,7 @@ extension LLMPostProcessor {
         let planner = BatchMemoryPlanner.forQwen35_4B
         let started = Date()
 
-        try? await container.perform { [output] context in
+        await container.perform { [output] context in
             let tokenizer = context.tokenizer
             guard let model = context.model as? any LLMModel else {
                 Logger.warning("batch gen: model is not an LLMModel, falling back",
@@ -215,7 +217,7 @@ extension LLMPostProcessor {
             // than the prefix would mean the template changed under us; prefill everything rather
             // than broadcast a prefix that is not there.
             let prefixLength = warm.map(\.prefixLength) ?? 0
-            let usableWarm = warm.map(\.cache).flatMap { cache in
+            let usableWarm = warm.map(\.caches).flatMap { cache in
                 full.allSatisfy { $0.count > prefixLength } ? cache : nil
             }
             let suffixes = usableWarm == nil ? full : full.map { Array($0[prefixLength...]) }
@@ -334,12 +336,18 @@ extension LLMPostProcessor {
 /// Collects per-row output from inside the `@Sendable` container closure.
 ///
 /// `@unchecked Sendable` for the same reason `MTPOutput` is: the closure runs on one thread at a
-/// time under `ModelContainer`'s own serialisation, and the only cross-thread field is `stop`,
-/// which is a one-way flag written by the timeout task and read in the token callback.
-private final class BatchOutputBox: @unchecked Sendable {
+/// time under `ModelContainer`'s own serialisation, and `texts`/`stats` are read on the main actor
+/// only after `perform` returns. The one cross-thread field is `stop`, written by the timeout task
+/// while the token callback reads it, so it is lock-backed.
+nonisolated private final class BatchOutputBox: @unchecked Sendable {
     var texts: [String]
     var stats: BatchStats?
-    var stop = false
+    private let stopLock = NSLock()
+    private var _stop = false
+    var stop: Bool {
+        get { stopLock.withLock { _stop } }
+        set { stopLock.withLock { _stop = newValue } }
+    }
 
     init(rowCount: Int) {
         self.texts = [String](repeating: "", count: rowCount)
@@ -349,7 +357,7 @@ private final class BatchOutputBox: @unchecked Sendable {
 extension BatchStats {
     /// Accumulates a slice's stats into a running total across the slices of one logical batch.
     /// Times add; `rowCount` adds; `steps` add, because slices run one after another.
-    fileprivate mutating func merge(_ other: BatchStats) {
+    nonisolated fileprivate mutating func merge(_ other: BatchStats) {
         rowCount += other.rowCount
         tokenCount += other.tokenCount
         steps += other.steps

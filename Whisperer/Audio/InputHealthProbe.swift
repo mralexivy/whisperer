@@ -29,7 +29,7 @@ import Foundation
 
 /// Raw readings taken from the HAL for one input device. Separated from the verdict so the
 /// decision logic can be tested without hardware.
-struct InputHealthFacts: Equatable {
+nonisolated struct InputHealthFacts: Equatable {
     var authorization: AVAuthorizationStatus = .authorized
     var deviceExists = true
     var isAlive = true
@@ -46,7 +46,7 @@ struct InputHealthFacts: Equatable {
 // MARK: - Verdict
 
 /// Why the input is producing silence, ordered from most to least actionable.
-enum InputHealthVerdict: Equatable {
+nonisolated enum InputHealthVerdict: Equatable {
     /// Nothing wrong with the device — the room really is quiet, or the HAL is wedged in a way
     /// no property exposes. The only case where rebuilding the engine is the right response.
     case healthy
@@ -124,7 +124,7 @@ enum InputHealthVerdict: Equatable {
 
 // MARK: - Probe
 
-enum InputHealthProbe {
+nonisolated enum InputHealthProbe {
 
     /// Below this the device is delivering, at best, sub-LSB signal. Not `== 0`: macOS stores
     /// the slider as a float and a nudged-then-returned-to-zero control can read 1e-7.

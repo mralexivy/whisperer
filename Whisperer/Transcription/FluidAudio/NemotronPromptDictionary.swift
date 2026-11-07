@@ -21,7 +21,7 @@ import Foundation
 ///
 /// The dictionary sits in the same `metadata.json` the loader already requires, so the answer is
 /// on disk next to the model. Nothing here guesses.
-struct NemotronPromptDictionary: Sendable {
+nonisolated struct NemotronPromptDictionary: Sendable {
     /// Every key in the model's `prompt_dictionary`, verbatim.
     let promptIDs: [String: Int]
 

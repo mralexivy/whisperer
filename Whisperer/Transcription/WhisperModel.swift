@@ -8,7 +8,7 @@
 import Foundation
 import SwiftUI
 
-enum WhisperModel: String, CaseIterable, Identifiable {
+nonisolated enum WhisperModel: String, CaseIterable, Identifiable {
     // Standard models
     case tiny = "ggml-tiny.bin"
     case base = "ggml-base.bin"

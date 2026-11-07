@@ -10,7 +10,7 @@ import Foundation
 import CoreData
 import MCP
 
-enum MCPTranscriptionTools {
+nonisolated enum MCPTranscriptionTools {
 
     // MARK: - Tool Definitions
 
@@ -62,7 +62,7 @@ enum MCPTranscriptionTools {
 
     // MARK: - Handler
 
-    static func handle(name: String, arguments: [String: Value]?) async throws -> CallTool.Result? {
+    @concurrent static func handle(name: String, arguments: [String: Value]?) async throws -> CallTool.Result? {
         switch name {
         case "search_transcriptions": return try await searchTranscriptions(arguments: arguments)
         case "get_transcription":     return try await getTranscription(arguments: arguments)
@@ -78,7 +78,7 @@ enum MCPTranscriptionTools {
         let dateFrom = parseDate(strArg(arguments, key: "dateFrom"))
         let dateTo   = parseDate(strArg(arguments, key: "dateTo"))
 
-        let ctx = HistoryDatabase.shared.newBackgroundContext()
+        let ctx = await HistoryDatabase.shared.newBackgroundContext()
         let rows: [[String: Any]] = await ctx.perform {
             let req = TranscriptionEntity.fetchRequest()
 
@@ -140,7 +140,7 @@ enum MCPTranscriptionTools {
             )
         }
 
-        let ctx = HistoryDatabase.shared.newBackgroundContext()
+        let ctx = await HistoryDatabase.shared.newBackgroundContext()
         let row: [String: Any]? = await ctx.perform {
             let req = TranscriptionEntity.fetchRequest()
             req.predicate = NSPredicate(format: "id == %@", uuid as CVarArg)

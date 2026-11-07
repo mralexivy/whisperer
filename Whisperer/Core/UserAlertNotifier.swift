@@ -74,7 +74,7 @@ final class UserAlertNotifier {
         }
 
         UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound]) { [weak self] granted, error in
-            Task { @MainActor in
+            Task { @MainActor [weak self] in
                 guard let self else { return }
                 if let error {
                     Logger.warning("Notification authorization failed: \(error.localizedDescription)", subsystem: .app)

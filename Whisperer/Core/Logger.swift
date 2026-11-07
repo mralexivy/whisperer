@@ -16,7 +16,7 @@ import AppKit
 
 // MARK: - Log Level
 
-enum LogLevel: Int, Comparable {
+nonisolated enum LogLevel: Int, Comparable, Sendable {
     case debug = 0
     case info = 1
     case warning = 2
@@ -51,7 +51,7 @@ enum LogLevel: Int, Comparable {
 
 // MARK: - Log Subsystem
 
-enum LogSubsystem: String, CaseIterable {
+nonisolated enum LogSubsystem: String, CaseIterable, Sendable {
     case app = "App"
     case audio = "Audio"
     case transcription = "Transcription"
@@ -81,7 +81,7 @@ enum LogSubsystem: String, CaseIterable {
 /// A stable `<area>.<verb>` event code. Stable codes are greppable, countable
 /// and diffable across runs, which an English sentence is not. Declare every
 /// code as a static member here so a code cannot drift between emission sites.
-struct LogEvent: ExpressibleByStringLiteral, CustomStringConvertible, Hashable {
+nonisolated struct LogEvent: ExpressibleByStringLiteral, CustomStringConvertible, Hashable, Sendable {
     let code: String
 
     init(stringLiteral value: StringLiteralType) { self.code = value }
@@ -90,7 +90,7 @@ struct LogEvent: ExpressibleByStringLiteral, CustomStringConvertible, Hashable {
     var description: String { code }
 }
 
-extension LogEvent {
+nonisolated extension LogEvent {
     // app
     static let appBoot: LogEvent            = "app.boot"
     static let appQuit: LogEvent            = "app.quit"
@@ -153,7 +153,10 @@ extension LogEvent {
 
 // MARK: - Logger
 
-final class Logger {
+// `nonisolated` + `@unchecked Sendable`: logging is called from every thread (audio IO, whisper
+// worker threads, detached tasks). File state is confined to `queue`; level/verbosity config and
+// the current file URL live behind `config`, so nothing here is read unsynchronised.
+nonisolated final class Logger: @unchecked Sendable {
     static let shared = Logger()
 
     /// Bumped whenever the on-disk grammar changes so a reader can tell versions apart.
@@ -161,6 +164,7 @@ final class Logger {
 
     private let queue = DispatchQueue(label: "whisperer.logger", qos: .utility)
     private var fileHandle: FileHandle?
+    /// Only touched on `queue` (and in `init`). Readers outside the queue use `config.fileURL`.
     private var logFileURL: URL
     private let logsDir: URL
     private let fileDateFormatter: DateFormatter
@@ -178,10 +182,19 @@ final class Logger {
     // Minimum log level to write
     // Default: .info in release, .debug in debug builds
     // Can be changed at runtime via Settings > Diagnostics > Verbose Logging
+    private struct Config {
+        var minimumLevel: LogLevel
+        var verboseSubsystems: Set<LogSubsystem>
+        var fileURL: URL
+    }
+    private let config: OSAllocatedUnfairLock<Config>
+
     var minimumLevel: LogLevel {
-        didSet {
-            UserDefaults.standard.set(minimumLevel.rawValue, forKey: "logMinimumLevel")
-            Logger.event("log.level", .app, ["to": .string(minimumLevel.code)])
+        get { config.withLock { $0.minimumLevel } }
+        set {
+            config.withLock { $0.minimumLevel = newValue }
+            UserDefaults.standard.set(newValue.rawValue, forKey: "logMinimumLevel")
+            Logger.event("log.level", .app, ["to": .string(newValue.code)])
         }
     }
 
@@ -194,19 +207,19 @@ final class Logger {
     /// Per-subsystem verbose overrides.
     /// When a subsystem is set to verbose, its debug messages are logged
     /// even when the global minimum level is .info.
-    private var verboseSubsystems: Set<LogSubsystem> = []
-
     /// Check if a specific subsystem has verbose logging enabled
     static func isSubsystemVerbose(_ subsystem: LogSubsystem) -> Bool {
-        shared.verboseSubsystems.contains(subsystem)
+        shared.config.withLock { $0.verboseSubsystems.contains(subsystem) }
     }
 
     /// Enable or disable verbose logging for a specific subsystem
     static func setSubsystemVerbose(_ verbose: Bool, for subsystem: LogSubsystem) {
-        if verbose {
-            shared.verboseSubsystems.insert(subsystem)
-        } else {
-            shared.verboseSubsystems.remove(subsystem)
+        shared.config.withLock { config in
+            if verbose {
+                config.verboseSubsystems.insert(subsystem)
+            } else {
+                config.verboseSubsystems.remove(subsystem)
+            }
         }
         UserDefaults.standard.set(verbose, forKey: "logVerbose_\(subsystem.rawValue)")
     }
@@ -229,12 +242,13 @@ final class Logger {
         let defaultLevel = LogLevel.info.rawValue
         #endif
         let savedLevel = UserDefaults.standard.object(forKey: "logMinimumLevel") as? Int ?? defaultLevel
-        minimumLevel = LogLevel(rawValue: savedLevel) ?? .info
+        let initialLevel = LogLevel(rawValue: savedLevel) ?? .info
 
         // Load per-subsystem verbose flags
+        var initialVerbose: Set<LogSubsystem> = []
         for subsystem in LogSubsystem.allCases {
             if UserDefaults.standard.bool(forKey: "logVerbose_\(subsystem.rawValue)") {
-                verboseSubsystems.insert(subsystem)
+                initialVerbose.insert(subsystem)
             }
         }
 
@@ -253,6 +267,9 @@ final class Logger {
         let today = fileDateFormatter.string(from: Date())
         currentLogDate = today
         logFileURL = logsDir.appendingPathComponent("whisperer-\(today).log")
+        config = OSAllocatedUnfairLock(initialState: Config(
+            minimumLevel: initialLevel, verboseSubsystems: initialVerbose, fileURL: logFileURL
+        ))
 
         openLogFile()
         cleanupOldLogs()
@@ -459,20 +476,20 @@ final class Logger {
     // MARK: - Log File Access
 
     static var logFileURL: URL {
-        return shared.logFileURL
+        shared.config.withLock { $0.fileURL }
     }
 
     static var logsDirectoryURL: URL {
         return shared.logsDir
     }
 
-    static func openLogInFinder() {
+    @MainActor static func openLogInFinder() {
         // Open the logs folder so users can see all logs including crash.log
         NSWorkspace.shared.open(logsDirectoryURL)
     }
 
-    static func openLogInConsole() {
-        NSWorkspace.shared.open(shared.logFileURL)
+    @MainActor static func openLogInConsole() {
+        NSWorkspace.shared.open(logFileURL)
     }
 
     // MARK: - Packing
@@ -512,7 +529,10 @@ final class Logger {
         file: String,
         line: Int
     ) {
-        guard level >= minimumLevel || (level == .debug && verboseSubsystems.contains(subsystem)) else { return }
+        let enabled = config.withLock { c in
+            level >= c.minimumLevel || (level == .debug && c.verboseSubsystems.contains(subsystem))
+        }
+        guard enabled else { return }
 
         blockState.withLock { state in
             if level == .warning { state.warn += 1 }
@@ -588,7 +608,7 @@ final class Logger {
         }
 
         fileHandle = try? FileHandle(forWritingTo: logFileURL)
-        try? fileHandle?.seekToEnd()
+        _ = try? fileHandle?.seekToEnd()
 
         // The legend is written once per FILE, not once per launch — the old 6-line
         // startup banner cost 2,191 lines a day on its own. `app.boot` marks launches.
@@ -639,6 +659,8 @@ final class Logger {
 
         currentLogDate = date
         logFileURL = logsDir.appendingPathComponent("whisperer-\(date).log")
+        let url = logFileURL
+        config.withLock { $0.fileURL = url }
 
         openLogFile()
         cleanupOldLogs()

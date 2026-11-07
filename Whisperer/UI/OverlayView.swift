@@ -403,10 +403,10 @@ struct PauseResumeButton: View {
             }
             if hovering { NSCursor.pointingHand.push() } else { NSCursor.pop() }
         }
-        .onChange(of: isRecording) { recording in
+        .onChange(of: isRecording) { _, recording in
             dotPulsing = recording && !isPaused
         }
-        .onChange(of: isPaused) { paused in
+        .onChange(of: isPaused) { _, paused in
             withAnimation {
                 dotPulsing = isRecording && !paused
             }

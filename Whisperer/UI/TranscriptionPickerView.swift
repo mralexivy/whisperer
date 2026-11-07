@@ -147,7 +147,7 @@ struct TranscriptionPickerView: View {
             }
             .frame(maxHeight: maxListHeight)
             // Follows hotkey cycling only — see TranscriptionPickerState.scrollToken.
-            .onChange(of: pickerState.scrollToken) { _ in
+            .onChange(of: pickerState.scrollToken) { _, _ in
                 withAnimation(.easeInOut(duration: 0.1)) {
                     proxy.scrollTo(pickerState.selectedIndex, anchor: .center)
                 }

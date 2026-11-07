@@ -8,7 +8,7 @@
 import Foundation
 import AVFoundation
 
-enum SessionStorage {
+nonisolated enum SessionStorage {
 
     // MARK: - URL Management
 

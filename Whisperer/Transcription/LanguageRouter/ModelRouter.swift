@@ -10,7 +10,7 @@ import Foundation
 // MARK: - ModelProfile
 
 /// Identity is (model, backend, language). isSpecialized is descriptive only.
-struct ModelProfile: Hashable {
+nonisolated struct ModelProfile: Hashable {
     let model: WhisperModel
     let backend: BackendType
     let language: TranscriptionLanguage
@@ -29,7 +29,7 @@ struct ModelProfile: Hashable {
 
 // MARK: - ModelRouteDecision
 
-struct ModelRouteDecision {
+nonisolated struct ModelRouteDecision {
     let lang: TranscriptionLanguage
     let profile: ModelProfile
     let confidence: Float

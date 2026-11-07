@@ -13,7 +13,7 @@
 import Foundation
 import os
 
-enum EventKind: String {
+nonisolated enum EventKind: String {
     case state
     case progress
     case error
@@ -21,7 +21,7 @@ enum EventKind: String {
     case performance
 }
 
-enum MetadataValue: CustomStringConvertible {
+nonisolated enum MetadataValue: CustomStringConvertible {
     case string(String)
     case int(Int)
     case double(Double)
@@ -40,20 +40,20 @@ enum MetadataValue: CustomStringConvertible {
 // Literal conformances so call sites read `["gen": 15, "route": "default"]`
 // instead of `["gen": .int(15), "route": .string("default")]`. Without these
 // the noise at the call site is worse than the prose the format replaces.
-extension MetadataValue: ExpressibleByStringLiteral {
+nonisolated extension MetadataValue: ExpressibleByStringLiteral {
     init(stringLiteral value: StringLiteralType) { self = .string(value) }
 }
-extension MetadataValue: ExpressibleByIntegerLiteral {
+nonisolated extension MetadataValue: ExpressibleByIntegerLiteral {
     init(integerLiteral value: IntegerLiteralType) { self = .int(value) }
 }
-extension MetadataValue: ExpressibleByFloatLiteral {
+nonisolated extension MetadataValue: ExpressibleByFloatLiteral {
     init(floatLiteral value: FloatLiteralType) { self = .double(value) }
 }
-extension MetadataValue: ExpressibleByBooleanLiteral {
+nonisolated extension MetadataValue: ExpressibleByBooleanLiteral {
     init(booleanLiteral value: BooleanLiteralType) { self = .bool(value) }
 }
 
-struct HealthEvent {
+nonisolated struct HealthEvent {
     let offset: Double       // seconds from recordingStart (negative = before recording)
     let component: String
     let operation: String
@@ -87,7 +87,7 @@ struct HealthEvent {
 }
 
 // Internal state bundled to minimize lock-region footprint
-private struct RingState {
+nonisolated private struct RingState {
     var events: [HealthEvent?]
     var head: Int = 0
     var count: Int = 0
@@ -118,7 +118,7 @@ private struct RingState {
     }
 }
 
-final class EventRingBuffer: Sendable {
+nonisolated final class EventRingBuffer: Sendable {
 
     static let shared = EventRingBuffer(capacity: 4096)
 

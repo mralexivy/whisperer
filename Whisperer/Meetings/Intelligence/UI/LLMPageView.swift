@@ -26,7 +26,7 @@ struct LLMPageView: View {
 
     private var store: ConnectedAIStore { controller.store }
 
-    init(colorScheme: ColorScheme, store: ConnectedAIStore = .shared) {
+    init(colorScheme: ColorScheme, store: ConnectedAIStore? = nil) {
         self.colorScheme = colorScheme
         _controller = StateObject(wrappedValue: ConnectedAIPageController(store: store))
     }
@@ -1016,11 +1016,11 @@ struct APIKeyEditorSheet: View {
     @State private var loadingModels = false
     @State private var message: String?
 
-    init(provider: AIProviderID, colorScheme: ColorScheme, store: ConnectedAIStore = .shared,
+    init(provider: AIProviderID, colorScheme: ColorScheme, store: ConnectedAIStore? = nil,
          onDone: @escaping () -> Void) {
         self.provider = provider
         self.colorScheme = colorScheme
-        self.store = store
+        self.store = store ?? .shared
         self.onDone = onDone
     }
 

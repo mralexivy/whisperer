@@ -13,7 +13,7 @@ import Foundation
 /// Each field replaces a concrete type check (`is WhisperBridge`, `is WhisperKitBridge`, etc.)
 /// in `StreamingTranscriber`. The struct is pure data — no inheritance, no shared state.
 /// Bridges return it from a computed var so it is always derived from immutable config.
-struct BackendStreamingPolicy {
+nonisolated struct BackendStreamingPolicy {
     /// True if the backend drives the eager word-by-word stream (whisper.cpp with flag on).
     /// When true, `StreamingTranscriber` creates an `EagerStreamEngine` and skips VAD chunking.
     let supportsEagerWordStream: Bool

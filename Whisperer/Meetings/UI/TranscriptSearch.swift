@@ -34,7 +34,7 @@ import Combine
 /// `id` is the ordinal (0-based) and doubles as the navigation index.
 /// `minY` / `maxY` are in the text view's flipped coordinate space, filled in after layout
 /// via `TranscriptSearch.locateMatches` and returned through `TranscriptSearchModel.report`.
-struct TranscriptMatch: Equatable, Identifiable {
+nonisolated struct TranscriptMatch: Equatable, Identifiable {
     let id: Int
     let range: NSRange
     var minY: CGFloat = 0
@@ -47,13 +47,13 @@ struct TranscriptMatch: Equatable, Identifiable {
 enum TranscriptSearch {
 
     /// Minimum query length before a scan is attempted.
-    static let minQueryLength = 2
+    nonisolated static let minQueryLength = 2
 
     /// Maximum number of matches to pre-paint and locate geometrically.
     /// `totalMatches` is always exact; only decoration is capped.
     static let maxDecorated = 2_000
 
-    static let scanOptions: String.CompareOptions = [.caseInsensitive, .diacriticInsensitive]
+    nonisolated static let scanOptions: String.CompareOptions = [.caseInsensitive, .diacriticInsensitive]
 
     // MARK: Colors
 
@@ -75,7 +75,7 @@ enum TranscriptSearch {
     /// Checks `Task.isCancelled` every 256 iterations so an in-flight scan can be
     /// abandoned when the query changes. Returns an empty array when cancelled or when
     /// `query` is shorter than `minQueryLength`.
-    static func findMatches(in text: String, query: String) -> [TranscriptMatch] {
+    nonisolated static func findMatches(in text: String, query: String) -> [TranscriptMatch] {
         guard query.count >= minQueryLength else { return [] }
         var results: [TranscriptMatch] = []
         var cursor = text.startIndex

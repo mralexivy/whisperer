@@ -9,7 +9,7 @@
 import Foundation
 
 /// Represents a suggestion result from SymSpell lookup
-struct SuggestItem: Equatable {
+nonisolated struct SuggestItem: Equatable {
     let term: String           // The suggested dictionary word
     let distance: Int          // Edit distance from input
     let entry: DictionaryEntry // Full dictionary entry for this suggestion
@@ -20,14 +20,14 @@ struct SuggestItem: Equatable {
 }
 
 /// Verbosity level for suggestions
-enum Verbosity {
+nonisolated enum Verbosity {
     case top        // Only return the top suggestion
     case closest    // Return all suggestions with the smallest edit distance
     case all        // Return all suggestions within maxEditDistance
 }
 
 /// SymSpell spelling correction algorithm
-class SymSpell {
+nonisolated final class SymSpell {
     // Dictionary: deletion -> [original terms]
     // E.g., "docker" generates deletes: "ocker", "dcker", "doker", etc.
     // If we search for "doker", we generate its deletes and find "docker" matches
@@ -97,7 +97,7 @@ class SymSpell {
         var candidates = [inputLower]
         consideredDeletes.insert(inputLower)
 
-        for deleteDistance in 0..<maxDist {
+        for _ in 0..<maxDist {
             var tempCandidates = [String]()
 
             for candidate in candidates {

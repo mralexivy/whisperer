@@ -20,7 +20,7 @@ import Foundation
 /// One kept utterance. `segmentID` is the whole point of the type: a DECISION the model
 /// writes from this line can be resolved back to the segment it came from, and from there
 /// to an audio offset the UI can play.
-struct EvidenceLine: Identifiable, Equatable {
+nonisolated struct EvidenceLine: Identifiable, Equatable {
     let segmentID: UUID
     let timestamp: Double
     let text: String
@@ -38,7 +38,7 @@ struct EvidenceLine: Identifiable, Equatable {
 }
 
 /// Result of one selection pass.
-struct SelectedEvidence {
+nonisolated struct SelectedEvidence {
     let lines: [EvidenceLine]
     /// Estimated prompt tokens of `transcriptText()`, by the same chars-per-token rule
     /// `LLMPostProcessor` sizes its output budget with.
@@ -72,7 +72,7 @@ struct SelectedEvidence {
 
 // MARK: - Selector
 
-enum EvidenceSelector {
+nonisolated enum EvidenceSelector {
 
     /// Upper bound on what the artifact pass is handed. The plan's band is 1,500–3,000
     /// tokens: below ~1,500 a long meeting loses whole chapters, above ~3,000 the prefill

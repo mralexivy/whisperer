@@ -66,7 +66,7 @@ final class AudioRetentionService {
         // A picker change should take effect now, not in up to six hours.
         defaultsObserver = NotificationCenter.default.addObserver(
             forName: UserDefaults.didChangeNotification, object: nil, queue: .main
-        ) { _ in
+        ) { [weak self] _ in
             Task { @MainActor [weak self] in
                 guard let self else { return }
                 let days = UserDefaults.standard.integer(forKey: Self.retentionDaysKey)
@@ -125,8 +125,9 @@ final class AudioRetentionService {
 
         // Always runs, independent of the retention setting: these files are leftovers no
         // record refers to, not part of anyone's library.
+        let orphanAge = Self.orphanSessionAge
         let orphans = await Task.detached(priority: .background) {
-            SessionStorage.deleteOrphanedSessions(olderThan: Self.orphanSessionAge)
+            SessionStorage.deleteOrphanedSessions(olderThan: orphanAge)
         }.value
 
         var transcriptionCount = 0

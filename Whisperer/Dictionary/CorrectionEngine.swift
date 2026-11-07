@@ -7,12 +7,17 @@
 
 import Foundation
 
-struct CorrectionResult {
+nonisolated struct CorrectionResult {
     let text: String
     let corrections: [(range: Range<String.Index>, original: String, replacement: String, category: String?, notes: String?, entryId: UUID)]
 }
 
-class CorrectionEngine {
+/// Built once (off the main thread — see `DictionaryManager.scheduleRebuild`) and then only read,
+/// from whichever thread applies the dictionary: `AppState.applyDictionaryOffMainThread` runs it
+/// on a global queue while a meeting refine can run it elsewhere at the same time. The indexes are
+/// immutable after `init`; the one thing `applyCorrections` writes is the compiled-pattern cache,
+/// which is guarded by `patternLock`. Hence `@unchecked Sendable`.
+nonisolated final class CorrectionEngine: @unchecked Sendable {
     // Fast O(1) exact lookup for single words - maps incorrectForm to DictionaryEntry
     private var exactLookup: [String: DictionaryEntry] = [:]
 
@@ -43,6 +48,7 @@ class CorrectionEngine {
     // triple already matched `phraseLookup` or a SymSpell entry, so the key space is the phrase
     // set. `rebuild(with:)` clears it, because an entry can change its `incorrectForm`.
     private var compiledPhrasePatterns: [String: NSRegularExpression] = [:]
+    private let patternLock = NSLock()
 
     init(entries: [DictionaryEntry]) {
         self.symSpell = SymSpell(maxEditDistance: 2, prefixLength: 7)
@@ -54,7 +60,7 @@ class CorrectionEngine {
         exactLookup.removeAll()
         phraseLookup.removeAll()
         phraseKeysByFirstToken.removeAll()
-        compiledPhrasePatterns.removeAll()
+        patternLock.withLock { compiledPhrasePatterns.removeAll() }
 
         for entry in entries where entry.isEnabled {
             let incorrect = entry.incorrectForm.lowercased()
@@ -206,12 +212,14 @@ class CorrectionEngine {
     /// A malformed pattern returns nil and is not cached, which keeps the caller's old
     /// `try?`-and-skip behaviour.
     private func compiledPattern(_ pattern: String) -> NSRegularExpression? {
-        if let cached = compiledPhrasePatterns[pattern] { return cached }
+        if let cached = patternLock.withLock({ compiledPhrasePatterns[pattern] }) { return cached }
+        // Compiled outside the lock: two threads racing on one pattern both compile it and the
+        // second write wins, which is harmless — the instances are equivalent.
         guard let regex = try? NSRegularExpression(pattern: pattern, options: .caseInsensitive) else {
             Logger.error("CorrectionEngine could not compile phrase pattern: \(pattern)", subsystem: .app)
             return nil
         }
-        compiledPhrasePatterns[pattern] = regex
+        patternLock.withLock { compiledPhrasePatterns[pattern] = regex }
         return regex
     }
 

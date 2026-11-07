@@ -12,21 +12,21 @@ import AppKit
 // MARK: - Shared Types
 
 /// Component decides its own status — HealthManager only aggregates.
-enum ComponentStatus: String {
+nonisolated enum ComponentStatus: String, Sendable {
     case healthy
     case busy     // late but still making progress — not yet alarming
     case stalled  // late AND no recent progress
 }
 
 /// Richer progress: monotonic sequence counter + fractional completeness + last update.
-struct ProgressInfo {
+nonisolated struct ProgressInfo: Sendable {
     var sequence: UInt64 = 0
     var completedWork: Double = 0.0   // 0.0–1.0
     var lastUpdate: ContinuousClock.Instant = .now
 }
 
 /// Per-operation identity and timing. `deadline` is mutable — component extends it as work proceeds.
-struct OperationInfo {
+nonisolated struct OperationInfo: Sendable {
     let id: UInt64                              // monotonic, e.g. 184
     let name: String
     let started: ContinuousClock.Instant
@@ -35,7 +35,7 @@ struct OperationInfo {
 }
 
 /// Full health snapshot from one component, read on every polling tick.
-struct ComponentHealth {
+nonisolated struct ComponentHealth: Sendable {
     var status: ComponentStatus = .healthy
     var operation: OperationInfo?               // nil when idle
     var progress: ProgressInfo = ProgressInfo()
@@ -44,7 +44,7 @@ struct ComponentHealth {
 }
 
 /// Any component that wants HealthManager to monitor it implements this.
-protocol HealthReportable: AnyObject {
+nonisolated protocol HealthReportable: AnyObject {
     var componentName: String { get }
     var healthState: ComponentHealth { get }
 }

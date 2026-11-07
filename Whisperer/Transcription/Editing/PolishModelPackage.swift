@@ -22,7 +22,7 @@ import Foundation
 /// key ships in this binary. It keeps the public HuggingFace repo from being a
 /// drop-in model download for someone else's project. Do not describe it as
 /// protection.
-enum PolishModelPackage {
+nonisolated enum PolishModelPackage {
 
     // MARK: - Manifest
 
@@ -319,7 +319,7 @@ enum PolishModelPackage {
 
 // MARK: - Small helpers
 
-private extension Data {
+nonisolated private extension Data {
     init(hexString: String) {
         var bytes = [UInt8]()
         bytes.reserveCapacity(hexString.count / 2)
@@ -333,6 +333,6 @@ private extension Data {
     }
 }
 
-private extension SHA256.Digest {
+nonisolated private extension SHA256.Digest {
     var hexString: String { map { String(format: "%02x", $0) }.joined() }
 }

@@ -48,10 +48,10 @@ private struct UITestFrameModifier: ViewModifier {
             let key = UITestFrames.key(scope: scope, id: id)
             Color.clear
                 .onAppear { UITestFrames.frames[key] = geometry.frame(in: .global) }
-                .onChange(of: geometry.frame(in: .global)) { frame in UITestFrames.frames[key] = frame }
+                .onChange(of: geometry.frame(in: .global)) { _, frame in UITestFrames.frames[key] = frame }
                 // A reused control whose label changes keeps its view identity, so onAppear
                 // does not fire again; record under the new key too.
-                .onChange(of: key) { newKey in UITestFrames.frames[newKey] = geometry.frame(in: .global) }
+                .onChange(of: key) { _, newKey in UITestFrames.frames[newKey] = geometry.frame(in: .global) }
         })
         #else
         content

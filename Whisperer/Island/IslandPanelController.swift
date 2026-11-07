@@ -177,7 +177,8 @@ final class IslandPanelController {
             object: nil,
             queue: .main
         ) { [weak self] _ in
-            self?.handleScreenChange()
+            // `queue: .main` delivers on the main thread; the closure type is just nonisolated.
+            MainActor.assumeIsolated { self?.handleScreenChange() }
         }
 
         // The Dock's presence — not `visibleFrame` — is what decides the anchor, and the Dock

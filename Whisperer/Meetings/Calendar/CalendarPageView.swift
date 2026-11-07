@@ -29,10 +29,10 @@ struct CalendarPageView: View {
 
     let testScope: String
 
-    init(colorScheme: ColorScheme, store: CalendarMeetingsStore = .shared, testScope: String = "") {
+    init(colorScheme: ColorScheme, store: CalendarMeetingsStore? = nil, testScope: String = "") {
         self.colorScheme = colorScheme
         self.testScope = testScope
-        _store = ObservedObject(wrappedValue: store)
+        _store = ObservedObject(wrappedValue: store ?? .shared)
     }
 
     /// The provider whose connect steps are unfolded.

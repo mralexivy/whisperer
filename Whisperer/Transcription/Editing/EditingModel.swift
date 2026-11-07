@@ -37,7 +37,7 @@ import Foundation
 /// benchmark report every quality number twice — once at full whisper.cpp evidence and once
 /// at `[]` — and a model that quietly behaves differently between the two columns is a model
 /// that will regress meetings, which run on Nemotron and therefore always at `[]`.
-struct EditContext: Sendable {
+nonisolated struct EditContext: Sendable {
 
     /// Which pass is asking. A live pass sees a fragment that may begin or end mid-sentence,
     /// so terminal punctuation and sentence-initial casing are not yet decidable; the

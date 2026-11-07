@@ -9,19 +9,19 @@ import Foundation
 
 // MARK: - Types
 
-struct RouteDecision {
+nonisolated struct RouteDecision {
     let lang: TranscriptionLanguage
     let confidence: Float
     let source: DecisionSource
 }
 
-enum DecisionSource {
+nonisolated enum DecisionSource {
     case detection
     case sessionLock
     case userOverride
 }
 
-enum RouterState {
+nonisolated enum RouterState {
     case undecided
     case locked(TranscriptionLanguage)
     case suspectedSwitch(candidate: TranscriptionLanguage, checkCount: Int)
@@ -29,7 +29,7 @@ enum RouterState {
 
 // MARK: - Thresholds
 
-enum RoutingThresholds {
+nonisolated enum RoutingThresholds {
     static let routeThreshold: Float = 0.75
     static let switchMargin: Float = 0.20
     static let switchConfirmations = 2

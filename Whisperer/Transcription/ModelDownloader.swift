@@ -8,7 +8,7 @@
 import Foundation
 
 // VAD Model definition
-enum VADModel: String, CaseIterable {
+nonisolated enum VADModel: String, CaseIterable {
     case sileroV6 = "ggml-silero-v6.2.0.bin"
 
     var displayName: String {

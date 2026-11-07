@@ -11,7 +11,7 @@ import QuartzCore  // CACurrentMediaTime
 // MARK: - RouteActivation
 
 /// Result of routing a target profile through ModelPool
-enum RouteActivation {
+nonisolated enum RouteActivation {
     /// Target model is warm — use this backend directly
     case warm(TranscriptionBackend)
 
@@ -24,7 +24,7 @@ enum RouteActivation {
 
 // MARK: - ModelPool Errors
 
-enum ModelPoolError: Error, LocalizedError {
+nonisolated enum ModelPoolError: Error, LocalizedError {
     case fallbackNotMultilingual
     case fallbackNotLoaded
     case modelLoadFailed(String)
@@ -138,7 +138,7 @@ final class ModelPool {
             // Register as warm and clean up in-flight
             self.warmBackends[profile] = backend
             do {
-                try self.inFlightLock.withLock {
+                _ = try self.inFlightLock.withLock {
                     self.inFlightLoads.removeValue(forKey: profile)
                 }
             } catch {

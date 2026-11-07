@@ -9,7 +9,7 @@ import Foundation
 import Accelerate
 import AVFoundation
 
-enum BenchmarkUtilities {
+nonisolated enum BenchmarkUtilities {
 
     // MARK: - Memory Measurement
 

@@ -418,7 +418,7 @@ class AudioRecorder: NSObject {
         Logger.step(.engBuild, .audio, preflightFields)
 
         // Track which device attempt 1 used so attempt 3 can avoid it.
-        var attempt1DeviceID: AudioDeviceID? = {
+        let attempt1DeviceID: AudioDeviceID? = {
             switch route {
             case .systemDefault: return InputRoutePreflight.systemDefaultInputDeviceID()
             case .explicit(_, let d): return d
@@ -529,7 +529,6 @@ class AudioRecorder: NSObject {
         consecutiveSilentCallbacks = 0
 
         let gracePeriod = startupGracePeriod
-        let startTime = recordingStartTime ?? Date()
 
         // Capture weak self for config change handler (runs on main thread).
         // The 1.5 s grace period suppresses rebuilds on ordinary startup noise — but a genuine
@@ -544,9 +543,8 @@ class AudioRecorder: NSObject {
                 Task { [weak self] in
                     guard let self else { return }
                     let settledFmt = await self.engineLifecycle.lastKnownInputFormat
-                    let liveFmt = await self.engineLifecycle.phase == .running(generation: 0)
-                        ? nil : settledFmt  // can't read inputNode format off-actor safely; proxy via settled
-                    // Use a lightweight HAL probe instead: compare settled sample rate to the
+                    // The input node's live format can't be read off-actor safely, so use a
+                    // lightweight HAL probe instead: compare settled sample rate to the
                     // device's current nominal rate. If they differ by more than 1 Hz the link
                     // re-negotiated and we must recover.
                     let deviceID = await self.engineLifecycle.lastKnownDeviceID

@@ -168,7 +168,7 @@ class PermissionManager: ObservableObject {
             return
         }
 
-        AVCaptureDevice.requestAccess(for: .audio) { granted in
+        AVCaptureDevice.requestAccess(for: .audio) { [weak self] granted in
             Task { @MainActor [weak self] in
                 guard let self else { return }
                 self.microphoneStatus = granted ? .granted : .denied

@@ -142,6 +142,29 @@ struct TranscriptPreCleaner {
         var placeholders: [String: String] = [:]
         var counter = 0
 
+        for (regex, prefix) in protectionRegexes {
+            let range = NSRange(result.startIndex..., in: result)
+            // Find all matches, replace from last to first to preserve ranges
+            let matches = regex.matches(in: result, range: range)
+            for match in matches.reversed() {
+                guard let matchRange = Range(match.range, in: result) else { continue }
+                let token = String(result[matchRange])
+                // Skip if already a placeholder
+                if token.hasPrefix("__") && token.hasSuffix("__") { continue }
+                // Skip single-char matches and common words
+                if token.count < 3 { continue }
+                let placeholder = "__\(prefix)_\(counter)__"
+                placeholders[placeholder] = token
+                result.replaceSubrange(matchRange, with: placeholder)
+                counter += 1
+            }
+        }
+
+        return (result, placeholders)
+    }
+
+    /// Compiled once rather than on every dictation — this runs on the main actor per utterance.
+    private static let protectionRegexes: [(NSRegularExpression, String)] = {
         let patterns: [(String, String)] = [
             // URLs
             ("https?://\\S+", "URL"),
@@ -171,25 +194,8 @@ struct TranscriptPreCleaner {
             ("`[^`]+`", "CODE"),
         ]
 
-        for (pattern, prefix) in patterns {
-            guard let regex = try? NSRegularExpression(pattern: pattern) else { continue }
-            let range = NSRange(result.startIndex..., in: result)
-            // Find all matches, replace from last to first to preserve ranges
-            let matches = regex.matches(in: result, range: range)
-            for match in matches.reversed() {
-                guard let matchRange = Range(match.range, in: result) else { continue }
-                let token = String(result[matchRange])
-                // Skip if already a placeholder
-                if token.hasPrefix("__") && token.hasSuffix("__") { continue }
-                // Skip single-char matches and common words
-                if token.count < 3 { continue }
-                let placeholder = "__\(prefix)_\(counter)__"
-                placeholders[placeholder] = token
-                result.replaceSubrange(matchRange, with: placeholder)
-                counter += 1
-            }
+        return patterns.compactMap { pattern, prefix in
+            (try? NSRegularExpression(pattern: pattern)).map { ($0, prefix) }
         }
-
-        return (result, placeholders)
-    }
+    }()
 }

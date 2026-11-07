@@ -633,31 +633,46 @@ class HistoryManager: ObservableObject {
 
     // MARK: - Statistics
 
+    /// Runs after every save, i.e. at the end of every dictation. It used to fetch every
+    /// `TranscriptionEntity` as a full managed object on the view context — on the main thread,
+    /// growing with the whole history. Now it fetches four columns as dictionaries on a
+    /// background context and only publishes the result here.
     private func updateStatistics() async {
-        let fetchRequest: NSFetchRequest<TranscriptionEntity> = TranscriptionEntity.fetchRequest()
-
-        do {
-            let allEntities = try context.fetch(fetchRequest)
-            let liveEntities = allEntities.filter { $0.targetAppName != "File Import" }
-
-            let totalRecordings = liveEntities.count
-            let totalWords = liveEntities.reduce(0) { $0 + Int($1.wordCount) }
-            let totalDuration = liveEntities.reduce(0.0) { $0 + $1.duration }
-
-            let uniqueDays = Set(liveEntities.map { Calendar.current.startOfDay(for: $0.timestamp) }).count
-
-            let avgWPM = totalDuration > 0 ? Int(Double(totalWords) / (totalDuration / 60.0)) : 0
-
-            statistics = HistoryStatistics(
-                totalRecordings: totalRecordings,
-                totalDays: uniqueDays,
-                totalWords: totalWords,
-                totalDuration: totalDuration,
-                averageWPM: avgWPM
-            )
-        } catch {
-            Logger.error("Failed to calculate statistics: \(error)", subsystem: .app)
+        let ctx = database.newBackgroundContext()
+        let computed: HistoryStatistics? = await ctx.perform {
+            let request = NSFetchRequest<NSDictionary>(entityName: "TranscriptionEntity")
+            request.resultType = .dictionaryResultType
+            request.propertiesToFetch = ["targetAppName", "wordCount", "duration", "timestamp"]
+            do {
+                let rows = try ctx.fetch(request)
+                var totalRecordings = 0
+                var totalWords = 0
+                var totalDuration = 0.0
+                var days = Set<Date>()
+                let calendar = Calendar.current
+                for row in rows {
+                    if (row["targetAppName"] as? String) == "File Import" { continue }
+                    totalRecordings += 1
+                    totalWords += (row["wordCount"] as? NSNumber)?.intValue ?? 0
+                    totalDuration += (row["duration"] as? NSNumber)?.doubleValue ?? 0
+                    if let timestamp = row["timestamp"] as? Date {
+                        days.insert(calendar.startOfDay(for: timestamp))
+                    }
+                }
+                let avgWPM = totalDuration > 0 ? Int(Double(totalWords) / (totalDuration / 60.0)) : 0
+                return HistoryStatistics(
+                    totalRecordings: totalRecordings,
+                    totalDays: days.count,
+                    totalWords: totalWords,
+                    totalDuration: totalDuration,
+                    averageWPM: avgWPM
+                )
+            } catch {
+                Logger.error("Failed to calculate statistics: \(error)", subsystem: .app)
+                return nil
+            }
         }
+        if let computed { statistics = computed }
     }
 }
 
@@ -669,7 +684,7 @@ enum TranscriptionFilter {
     case flagged
 }
 
-struct HistoryStatistics {
+nonisolated struct HistoryStatistics: Sendable {
     let totalRecordings: Int
     let totalDays: Int
     let totalWords: Int

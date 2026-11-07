@@ -7,7 +7,7 @@
 
 import Foundation
 
-struct DictionaryEntry: Identifiable, Codable {
+nonisolated struct DictionaryEntry: Identifiable, Codable {
     let id: UUID
     let incorrectForm: String
     let correctForm: String
@@ -73,7 +73,7 @@ struct DictionaryEntry: Identifiable, Codable {
 
 // MARK: - Dictionary Filter
 
-enum DictionaryFilter {
+nonisolated enum DictionaryFilter {
     case all
     case programming
     case devops
@@ -104,7 +104,7 @@ enum DictionaryFilter {
 
 // MARK: - Correction Result
 
-struct AppliedCorrection: Identifiable, Equatable, Codable {
+nonisolated struct AppliedCorrection: Identifiable, Equatable, Codable {
     let id: UUID
     let original: String
     let replacement: String
@@ -134,7 +134,7 @@ struct AppliedCorrection: Identifiable, Equatable, Codable {
 
 // MARK: - Bundled Dictionary Format
 
-struct BundledDictionary: Codable {
+nonisolated struct BundledDictionary: Codable {
     let version: String
     let entries: [BundledEntry]
 

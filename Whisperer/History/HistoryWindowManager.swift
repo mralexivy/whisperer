@@ -94,18 +94,20 @@ class HistoryWindowManager {
             forName: NSWindow.willCloseNotification,
             object: historyWindow,
             queue: .main
-        ) { [weak self] notification in
+        ) { notification in
             guard let window = notification.object as? HistoryWindow else { return }
+            // `queue: .main` delivers on the main thread; the closure type is just nonisolated.
+            MainActor.assumeIsolated {
+                // Save window position
+                let frameString = NSStringFromRect(window.frame)
+                UserDefaults.standard.set(frameString, forKey: "historyWindowFrame")
 
-            // Save window position
-            let frameString = NSStringFromRect(window.frame)
-            UserDefaults.standard.set(frameString, forKey: "historyWindowFrame")
-
-            // If a meeting is recording, show the HUD fallback bar instead — but only when the
-            // compact live window isn't already the surface, or closing the workspace would put
-            // two live surfaces on screen at once.
-            if AppState.shared.isMeetingMode && !MeetingLiveWindowManager.shared.isVisible {
-                AppState.shared.meetingWindowIsVisible = false
+                // If a meeting is recording, show the HUD fallback bar instead — but only when the
+                // compact live window isn't already the surface, or closing the workspace would put
+                // two live surfaces on screen at once.
+                if AppState.shared.isMeetingMode && !MeetingLiveWindowManager.shared.isVisible {
+                    AppState.shared.meetingWindowIsVisible = false
+                }
             }
 
             // Don't nil out historyWindow - keep it for reuse

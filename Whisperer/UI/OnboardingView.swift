@@ -822,10 +822,10 @@ struct OnboardingView: View {
             // the languages it is missing, in the background.
             appState.startBuiltinEngine()
         }
-        .onChange(of: selectedLanguages) { newValue in
+        .onChange(of: selectedLanguages) { _, newValue in
             saveLanguageConfig()
         }
-        .onChange(of: selectedPrimary) { _ in
+        .onChange(of: selectedPrimary) { _, _ in
             saveLanguageConfig()
         }
     }

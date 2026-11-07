@@ -28,7 +28,7 @@ import Foundation
 /// occurrences would reject it. A stuck decoder emits the phrase *back to back*. Counting the
 /// longest consecutive run is what separates the two, and it is also what makes the threshold
 /// meaningful: three copies in a row is not something a speaker does by accident.
-enum TranscriptRepetition {
+nonisolated enum TranscriptRepetition {
 
     /// Shortest phrase considered. Below three words the false-positive risk is real: "no no no"
     /// and "very very very" are things people say.

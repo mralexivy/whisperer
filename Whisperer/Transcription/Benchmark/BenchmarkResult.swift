@@ -34,7 +34,7 @@ struct BenchmarkResult: Identifiable {
     var memoryDeltaMB: Double { peakMemoryMB - baselineMemoryMB }
 }
 
-enum BenchmarkDuration: String, CaseIterable, Identifiable {
+nonisolated enum BenchmarkDuration: String, CaseIterable, Identifiable {
     case fiveSeconds = "5s"
     case tenSeconds = "10s"
     case thirtySeconds = "30s"

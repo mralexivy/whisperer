@@ -385,12 +385,16 @@ actor ModelWorkQueue {
     /// concurrent executor, and `body` — being `nonisolated(nonsending)` — then inherits *this*
     /// isolation instead of the original caller's. Removing the attribute silently reintroduces the
     /// main-thread freeze, which is what the tripwire below exists to catch.
+    /// Synchronous so the tripwire can ask which thread it is on — `Thread.isMainThread` is
+    /// unavailable from async code, and the question is exactly the one this check needs.
+    private nonisolated static func isOnMainThread() -> Bool { Thread.isMainThread }
+
     @concurrent
     private nonisolated static func offCallerExecutor<T>(
         _ label: String,
         _ body: @escaping @Sendable () async throws -> T
     ) async throws -> Transferred<T> {
-        if Thread.isMainThread {
+        if isOnMainThread() {
             Logger.error(
                 "ModelWorkQueue: \(label) entered on the main thread — isolation inheritance is back, "
                 + "the UI will freeze for the duration of this job",
@@ -642,7 +646,7 @@ actor ModelWorkQueue {
     private func armStallWatchdog(id: Int, label: String) {
         Task {
             try? await Task.sleep(nanoseconds: UInt64(Self.stallCeiling(for: label) * 1_000_000_000))
-            await self.reclaimIfStalled(id: id, label: label)
+            self.reclaimIfStalled(id: id, label: label)
         }
     }
 
@@ -658,7 +662,7 @@ actor ModelWorkQueue {
     private func armLongWaitWarning(id: Int, label: String) {
         Task {
             try? await Task.sleep(nanoseconds: UInt64(Self.longWaitWarning * 1_000_000_000))
-            await self.warnIfStillWaiting(id: id, label: label)
+            self.warnIfStillWaiting(id: id, label: label)
         }
     }
 

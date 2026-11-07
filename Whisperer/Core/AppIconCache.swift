@@ -58,13 +58,20 @@ enum AppIconCache {
 ///
 /// The directory is bounded to `maxSnapshots` files; oldest-by-modification-date entries are
 /// pruned on the first write of each launch.
-enum AppIconSnapshotStore {
+nonisolated enum AppIconSnapshotStore {
     private static let iconSize = CGSize(width: 64, height: 64)
     private static let maxSnapshots = 150
 
-    /// Set of bundle IDs already confirmed written this launch — avoids repeated FileManager hits.
-    private static var writtenThisLaunch: Set<String> = []
-    private static var hasPruned = false
+    /// Per-launch bookkeeping. `store` runs from `Task.detached` (off the main thread), and two
+    /// dictations in quick succession can run it concurrently, so the set and the prune flag are
+    /// only touched under `lock`.
+    private final class LaunchState: @unchecked Sendable {
+        let lock = NSLock()
+        /// Bundle IDs already confirmed written this launch — avoids repeated FileManager hits.
+        var writtenThisLaunch: Set<String> = []
+        var hasPruned = false
+    }
+    private static let launchState = LaunchState()
 
     static var snapshotsDirectory: URL {
         let appSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
@@ -75,7 +82,8 @@ enum AppIconSnapshotStore {
 
     /// Stores a 64×64 PNG snapshot for `bundleID`. Safe to call from any non-main queue.
     static func store(_ icon: NSImage, bundleID: String) {
-        guard !writtenThisLaunch.contains(bundleID) else { return }
+        let state = launchState
+        guard !state.lock.withLock({ state.writtenThisLaunch.contains(bundleID) }) else { return }
 
         let dir = snapshotsDirectory
         let filename = sanitize(bundleID) + ".png"
@@ -83,7 +91,7 @@ enum AppIconSnapshotStore {
 
         // Skip if the snapshot already exists
         if FileManager.default.fileExists(atPath: url.path) {
-            writtenThisLaunch.insert(bundleID)
+            _ = state.lock.withLock { state.writtenThisLaunch.insert(bundleID) }
             return
         }
 
@@ -91,8 +99,11 @@ enum AppIconSnapshotStore {
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
 
         // One-time prune per launch
-        if !hasPruned {
-            hasPruned = true
+        let shouldPrune = state.lock.withLock { () -> Bool in
+            defer { state.hasPruned = true }
+            return !state.hasPruned
+        }
+        if shouldPrune {
             pruneOldSnapshots(in: dir)
         }
 
@@ -100,7 +111,7 @@ enum AppIconSnapshotStore {
 
         do {
             try png.write(to: url, options: .atomic)
-            writtenThisLaunch.insert(bundleID)
+            _ = state.lock.withLock { state.writtenThisLaunch.insert(bundleID) }
             Logger.debug("AppIconSnapshotStore: wrote \(filename)", subsystem: .app)
         } catch {
             Logger.error("AppIconSnapshotStore: failed to write \(filename): \(error)", subsystem: .app)

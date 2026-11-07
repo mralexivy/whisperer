@@ -13,7 +13,9 @@ import Foundation
 /// `nonisolated`: every conformer is an actor. Under `SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor`
 /// the protocol would otherwise be inferred `@MainActor`, which actors cannot conform to (an error
 /// in the test target, where `StopPathDataLossTests` conforms a test actor).
-nonisolated protocol LivePreviewEngine: AnyObject {
+// `Sendable`: every conformer is an actor (`NemotronBridge`, `SystemLivePreviewBridge`), and the
+// engine is captured by the `@Sendable` partial callbacks that drive it.
+nonisolated protocol LivePreviewEngine: AnyObject, Sendable {
     /// The language code this engine would force for `language`, and whether it actually has a
     /// model for it.
     ///

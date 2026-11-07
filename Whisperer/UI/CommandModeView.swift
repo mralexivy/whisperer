@@ -95,7 +95,7 @@ struct CommandModeView: View {
                 }
                 .padding(16)
             }
-            .onChange(of: commandService.messages.count) { _ in
+            .onChange(of: commandService.messages.count) { _, _ in
                 if let last = commandService.messages.last {
                     withAnimation(.easeOut(duration: 0.2)) {
                         proxy.scrollTo(last.id, anchor: .bottom)

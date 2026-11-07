@@ -7,7 +7,7 @@
 
 import Foundation
 
-struct ListFormatter {
+nonisolated struct ListFormatter {
 
     // MARK: - Public API
 

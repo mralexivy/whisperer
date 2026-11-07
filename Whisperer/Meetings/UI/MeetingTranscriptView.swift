@@ -148,15 +148,22 @@ struct MeetingTranscriptView: View {
     // MARK: - Completed segments
 
     private var completedSegmentsView: some View {
+        // Resolved once per render, not once per card: `segmentByID` rebuilds a dictionary of
+        // every segment and `activeSegmentID` scans them all, so calling them inside the
+        // per-card builders made each render O(n²) — and the playhead re-renders several
+        // times a second during playback.
+        let byID = segmentByID
+        let activeID = activeSegmentID
+        let rtl = isRTL
         // The ZStack is inset by `timestampCol` so the NSTextView, the cards and the
         // gutter all measure from the same origin.
-        ZStack(alignment: .topLeading) {
+        return ZStack(alignment: .topLeading) {
             // Anchor the stack to the full content height. Without this the ZStack
             // collapses to its tallest child and .frame(height:) centres everything.
             Color.clear.frame(height: transcriptHeight)
 
             ForEach(segmentMetrics) { info in
-                card(for: info)
+                card(for: info, segment: byID[info.id], isActive: activeID == info.id, rtl: rtl)
             }
 
             // Polish progress. Pure overlay geometry from `segmentMetrics` — it never touches
@@ -171,14 +178,14 @@ struct MeetingTranscriptView: View {
             SelectableTranscriptView(
                 segments: segments,
                 search: search,
-                isRTL: isRTL,
+                isRTL: rtl,
                 contentHeight: $transcriptHeight,
                 segmentMetrics: $segmentMetrics
             )
             .frame(height: transcriptHeight)
 
             ForEach(segmentMetrics) { info in
-                segmentAccessories(for: info)
+                segmentAccessories(for: info, segment: byID[info.id], rtl: rtl)
             }
 
             // Match anchors (for scroll-to) and current-match pulse.
@@ -196,8 +203,10 @@ struct MeetingTranscriptView: View {
                 hoveredSegmentID = nil
             }
         }
-        .padding(isRTL ? .leading : .trailing, timestampCol)
-        .overlay(alignment: isRTL ? .topLeading : .topTrailing) { timestampGutter }
+        .padding(rtl ? .leading : .trailing, timestampCol)
+        .overlay(alignment: rtl ? .topLeading : .topTrailing) {
+            timestampGutter(byID: byID, activeID: activeID, rtl: rtl)
+        }
         .animation(.easeInOut(duration: 0.25), value: isPolishing)
         .onAppear { syncPolishSweep(isPolishing) }
         .onChange(of: isPolishing) { _, active in syncPolishSweep(active) }
@@ -268,13 +277,13 @@ struct MeetingTranscriptView: View {
         }
     }
 
-    private func card(for info: SegmentMetrics) -> some View {
-        let accent = speakerColor(for: segmentByID[info.id]?.speakerIndex ?? 0)
-        let isActive = activeSegmentID == info.id
+    private func card(for info: SegmentMetrics, segment: MeetingSegment?, isActive: Bool,
+                      rtl: Bool) -> some View {
+        let accent = speakerColor(for: segment?.speakerIndex ?? 0)
 
         return RoundedRectangle(cornerRadius: cardRadius, style: .continuous)
             .fill(Color(hex: "14142B"))
-            .overlay(alignment: isRTL ? .trailing : .leading) {
+            .overlay(alignment: rtl ? .trailing : .leading) {
                 Rectangle()
                     .fill(accent.opacity(isActive ? 0.9 : 0.32))
                     .frame(width: 3)
@@ -295,8 +304,9 @@ struct MeetingTranscriptView: View {
 
     /// Tag chips (always) and hover actions (rename / copy / tag), on the speaker line.
     @ViewBuilder
-    private func segmentAccessories(for info: SegmentMetrics) -> some View {
-        if let segment = segmentByID[info.id] {
+    private func segmentAccessories(for info: SegmentMetrics, segment: MeetingSegment?,
+                                    rtl: Bool) -> some View {
+        if let segment {
             let showActions = hoveredSegmentID == info.id || renamingSegmentID == info.id
             if showActions || !segment.tags.isEmpty {
                 HStack(spacing: 6) {
@@ -304,7 +314,7 @@ struct MeetingTranscriptView: View {
                     ForEach(segment.tags, id: \.self) { tagChip($0) }
                 }
                 .padding(.horizontal, outerMargin + 6)
-                .frame(maxWidth: .infinity, alignment: isRTL ? .leading : .trailing)
+                .frame(maxWidth: .infinity, alignment: rtl ? .leading : .trailing)
                 .offset(y: info.speakerY - 3)
             }
         }
@@ -413,21 +423,23 @@ struct MeetingTranscriptView: View {
     // Start time sits on the card's top edge, end time on its bottom edge, so the
     // pair brackets the segment. Both are outside the card.
 
-    private var timestampGutter: some View {
-        ZStack(alignment: isRTL ? .topLeading : .topTrailing) {
+    private func timestampGutter(byID: [UUID: MeetingSegment], activeID: UUID?,
+                                 rtl: Bool) -> some View {
+        ZStack(alignment: rtl ? .topLeading : .topTrailing) {
             // Full-height anchor — otherwise the ZStack shrinks to one label and
             // .frame(height:) centres every timestamp far below its card.
             Color.clear.frame(width: timestampCol, height: transcriptHeight)
 
             ForEach(segmentMetrics) { info in
-                if let segment = segmentByID[info.id] {
-                    let isActive = activeSegmentID == info.id
+                if let segment = byID[info.id] {
+                    let isActive = activeID == info.id
                     let accent = speakerColor(for: segment.speakerIndex)
 
                     stampLabel(
                         formatTimestamp(segment.timestamp),
                         size: 11,
-                        color: isActive ? accent : .white.opacity(0.38)
+                        color: isActive ? accent : .white.opacity(0.38),
+                        rtl: rtl
                     )
                     .offset(y: info.cardTop + 6)
 
@@ -436,7 +448,8 @@ struct MeetingTranscriptView: View {
                         stampLabel(
                             formatTimestamp(segment.endTimestamp),
                             size: 10,
-                            color: isActive ? accent.opacity(0.55) : .white.opacity(0.2)
+                            color: isActive ? accent.opacity(0.55) : .white.opacity(0.2),
+                            rtl: rtl
                         )
                         .offset(y: info.cardBottom - 20)
                     }
@@ -447,13 +460,13 @@ struct MeetingTranscriptView: View {
         .allowsHitTesting(false)
     }
 
-    private func stampLabel(_ text: String, size: CGFloat, color: Color) -> some View {
+    private func stampLabel(_ text: String, size: CGFloat, color: Color, rtl: Bool) -> some View {
         Text(text)
             .font(.system(size: size, weight: .medium).monospacedDigit())
             .foregroundColor(color)
             // Hug the card, not the window edge — flush to the edge the stamps were clipped by
             // the scroller and read as belonging to nothing.
-            .frame(width: timestampCol - 10, height: 14, alignment: isRTL ? .trailing : .leading)
+            .frame(width: timestampCol - 10, height: 14, alignment: rtl ? .trailing : .leading)
     }
 
     // MARK: - Live bubble (same card style, no timestamps yet)

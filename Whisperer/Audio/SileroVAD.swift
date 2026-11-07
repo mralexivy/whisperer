@@ -7,8 +7,9 @@
 //
 
 import Foundation
+import os
 
-enum VADError: Error, LocalizedError {
+nonisolated enum VADError: Error, LocalizedError {
     case modelLoadFailed
     case detectionFailed
 
@@ -23,7 +24,7 @@ enum VADError: Error, LocalizedError {
 }
 
 /// Represents a detected speech segment with start and end times in seconds
-struct SpeechSegment {
+nonisolated struct SpeechSegment {
     let startTime: Float  // Start time in seconds
     let endTime: Float    // End time in seconds
 
@@ -42,7 +43,12 @@ struct SpeechSegment {
 }
 
 /// Swift wrapper for Silero VAD using whisper.cpp's built-in VAD support
-class SileroVAD {
+///
+/// `nonisolated` + `@unchecked Sendable`: one instance is shared by the recorder, the streaming
+/// transcriber's VAD scan / eager gate and the meeting silence watcher, all on background
+/// threads. Every use of `vadCtx` holds `ctxLock`; the tuning parameters are set once during
+/// configuration, before the instance is shared.
+nonisolated final class SileroVAD: @unchecked Sendable {
     private var vadCtx: OpaquePointer?
     private let modelPath: URL
     private let threadCount: Int32
@@ -80,17 +86,24 @@ class SileroVAD {
         try loadModel()
     }
 
-    static var backendsLoaded = false
+    /// Whether `ggml_backend_load_all()` has run. Lock-protected: two VAD instances can be
+    /// created concurrently (dictation and a meeting), and a plain static flag let both load.
+    private static let backendsLoadedState = OSAllocatedUnfairLock(initialState: false)
+    static var backendsLoaded: Bool {
+        get { backendsLoadedState.withLock { $0 } }
+        set { backendsLoadedState.withLock { $0 = newValue } }
+    }
 
     private func loadModel() throws {
         Logger.info("Loading Silero VAD from: \(modelPath.lastPathComponent)", subsystem: .audio)
 
         // Load GGML backends (required before loading any models)
         // This is thread-safe and idempotent
-        if !SileroVAD.backendsLoaded {
+        SileroVAD.backendsLoadedState.withLock { loaded in
+            guard !loaded else { return }
             Logger.debug("Loading GGML backends", subsystem: .audio)
             ggml_backend_load_all()
-            SileroVAD.backendsLoaded = true
+            loaded = true
             Logger.debug("GGML backends loaded", subsystem: .audio)
         }
 

@@ -21,7 +21,7 @@ import Foundation
 import CoreData
 import MCP
 
-enum MCPMeetingTools {
+nonisolated enum MCPMeetingTools {
 
     // MARK: - Tool Definitions
 
@@ -125,7 +125,7 @@ enum MCPMeetingTools {
 
     // MARK: - Handler
 
-    static func handle(name: String, arguments: [String: Value]?) async throws -> CallTool.Result? {
+    @concurrent static func handle(name: String, arguments: [String: Value]?) async throws -> CallTool.Result? {
         switch name {
         case "list_meetings":          return await listMeetings(arguments)
         case "get_meeting":            return await getMeeting(arguments)
@@ -156,7 +156,7 @@ enum MCPMeetingTools {
     }
 
     static func load(_ id: UUID) async -> Loaded? {
-        let ctx = HistoryDatabase.shared.newBackgroundContext()
+        let ctx = await HistoryDatabase.shared.newBackgroundContext()
         return await ctx.perform {
             let req = MeetingEntity.fetchRequest()
             req.predicate = NSPredicate(format: "id == %@", id as CVarArg)
@@ -187,7 +187,7 @@ enum MCPMeetingTools {
         let offset = max(0, intArg(arguments, "offset") ?? 0)
         let query  = strArg(arguments, "query")?.trimmingCharacters(in: .whitespaces)
 
-        let ctx = HistoryDatabase.shared.newBackgroundContext()
+        let ctx = await HistoryDatabase.shared.newBackgroundContext()
         let rows: [[String: Any]] = await ctx.perform {
             let req = MeetingEntity.fetchRequest()
             req.sortDescriptors = [NSSortDescriptor(key: "createdAt", ascending: false)]
@@ -386,7 +386,7 @@ enum MCPMeetingTools {
             guard let m = await load(id) else { return error("Meeting not found: \(id.uuidString)") }
             meetings = [m]
         } else {
-            let ctx = HistoryDatabase.shared.newBackgroundContext()
+            let ctx = await HistoryDatabase.shared.newBackgroundContext()
             meetings = await ctx.perform {
                 let req = MeetingEntity.fetchRequest()
                 req.sortDescriptors = [NSSortDescriptor(key: "createdAt", ascending: false)]
@@ -544,9 +544,9 @@ enum MCPMeetingTools {
 
 /// Whether AI apps may add and change notes through MCP. On by default; the switch lives in
 /// the MCP page's Advanced section.
-enum MCPNoteWrites {
+nonisolated enum MCPNoteWrites {
     static let key = "mcpAllowNoteWrites"
-    nonisolated static var enabled: Bool {
+    static var enabled: Bool {
         UserDefaults.standard.object(forKey: key) as? Bool ?? true
     }
 }

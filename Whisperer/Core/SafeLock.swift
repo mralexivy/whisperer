@@ -8,7 +8,7 @@
 import Foundation
 
 /// Error thrown when lock acquisition times out
-enum SafeLockError: Error, LocalizedError {
+nonisolated enum SafeLockError: Error, LocalizedError {
     case timeout(duration: TimeInterval)
     case lockFailed
 
@@ -28,7 +28,7 @@ enum SafeLockError: Error, LocalizedError {
 // isolated, and the isolated deinit that `SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor` gives it
 // aborts the process when it is released off a task, which is how a corpus sweep died in
 // `SafeLock.deinit`.
-nonisolated final class SafeLock {
+nonisolated final class SafeLock: @unchecked Sendable {  // all mutable state is the NSLock itself
     private let lock = NSLock()
     private let defaultTimeout: TimeInterval
 
@@ -65,43 +65,6 @@ nonisolated final class SafeLock {
             return try block()
         } catch {
             Logger.error("Error in locked block: \(error)", subsystem: .app)
-            throw error
-        }
-    }
-
-    /// Execute an async block with the lock held
-    /// - Parameters:
-    ///   - timeout: Maximum time to wait for lock
-    ///   - block: Async block to execute
-    /// - Returns: Result of the block
-    func withLockAsync<T>(timeout: TimeInterval? = nil, _ block: @Sendable () async throws -> T) async throws -> T {
-        let actualTimeout = timeout ?? defaultTimeout
-        let deadline = Date().addingTimeInterval(actualTimeout)
-
-        // Try to acquire lock with timeout using async-safe approach
-        while true {
-            // Check if we can acquire the lock
-            if lock.try() {
-                // Lock acquired
-                break
-            }
-
-            if Date() > deadline {
-                Logger.error("Lock acquisition timeout after \(actualTimeout)s", subsystem: .app)
-                throw SafeLockError.timeout(duration: actualTimeout)
-            }
-
-            // Small sleep to avoid busy-waiting
-            try await Task.sleep(nanoseconds: 1_000_000)  // 1ms
-        }
-
-        // Ensure unlock happens even if task is cancelled
-        defer { lock.unlock() }
-
-        do {
-            return try await block()
-        } catch {
-            Logger.error("Error in async locked block: \(error)", subsystem: .app)
             throw error
         }
     }

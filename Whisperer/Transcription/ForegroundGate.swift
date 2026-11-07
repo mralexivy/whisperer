@@ -27,7 +27,7 @@ import Foundation
 
 /// Who a piece of model work is for. Background work yields to the user; interactive work is
 /// the user.
-enum ModelWorkPriority: Sendable {
+nonisolated enum ModelWorkPriority: Sendable {
     case interactive
     case background
 }

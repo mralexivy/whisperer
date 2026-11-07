@@ -731,7 +731,9 @@ struct MeetingDetailView: View {
                   language != .auto, !seen.contains(language) else { continue }
             seen.append(language)
         }
-        return seen.sorted { $0 == resolvedLanguage && $1 != resolvedLanguage }
+        // Hoisted: `resolvedLanguage` scans every segment, and the comparator runs per pair.
+        let dominant = resolvedLanguage
+        return seen.sorted { $0 == dominant && $1 != dominant }
     }
 
     /// What the picker offers: the shortlist when language routing is on, otherwise everything

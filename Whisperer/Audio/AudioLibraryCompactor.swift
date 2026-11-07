@@ -21,7 +21,7 @@ import AVFoundation
 import Combine
 
 /// What the audio library looks like right now.
-struct AudioLibrarySurvey: Equatable, Sendable {
+nonisolated struct AudioLibrarySurvey: Equatable, Sendable {
     /// Everything under `Recordings/` + `Meetings/` + `Sessions/`, including files no record
     /// refers to — this is the number the user sees in Finder.
     var totalBytes: Int64
@@ -206,7 +206,7 @@ final class AudioLibraryCompactor: ObservableObject {
 
 // MARK: - Filesystem work (no actor isolation — all of it runs off the main thread)
 
-enum AudioLibraryFiles {
+nonisolated enum AudioLibraryFiles {
 
     /// Measured: libopus's default for 16 kHz mono VoIP lands at 8.3 MB/hour. Used only to
     /// show an estimate before the user commits — the real figure is reported after the run.

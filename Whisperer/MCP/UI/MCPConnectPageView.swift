@@ -210,7 +210,7 @@ struct MCPConnectPageView: View {
                     .lineLimit(1)
                     .truncationMode(.middle)
                     .textSelection(.enabled)
-                MCPCopyButton(text: info.url, copy: model.actions.copy, testID: "mcp.copy.heroURL")
+                MCPCopyButton(text: info.url, copy: { model.actions.copy($0) }, testID: "mcp.copy.heroURL")
             }
         }
     }
@@ -548,7 +548,7 @@ struct MCPConnectPageView: View {
                     .textSelection(.enabled)
             }
             Spacer(minLength: 12)
-            MCPCopyButton(text: url, copy: model.actions.copy, testID: testID)
+            MCPCopyButton(text: url, copy: { model.actions.copy($0) }, testID: testID)
         }
         .padding(.vertical, 12)
     }
@@ -631,7 +631,7 @@ struct MCPConnectPageView: View {
             .buttonStyle(MCPSecondaryButtonStyle())
             .help(tokenRevealed ? "Hide token" : "Show token")
             .uiTestFrame("mcp.token.reveal")
-            MCPCopyButton(text: appState.mcpBearerToken, copy: model.actions.copy, testID: "mcp.token.copy")
+            MCPCopyButton(text: appState.mcpBearerToken, copy: { model.actions.copy($0) }, testID: "mcp.token.copy")
             Button("Regenerate") { confirmRegenerate = true }
                 .buttonStyle(MCPSecondaryButtonStyle())
                 .uiTestFrame("mcp.token.regenerate")

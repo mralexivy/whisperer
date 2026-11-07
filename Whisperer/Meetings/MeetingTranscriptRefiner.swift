@@ -323,7 +323,7 @@ final class MeetingTranscriptRefiner: ObservableObject {
             Logger.info("Transcript refine: downloading \(model.displayName) for \(meetingID)", subsystem: .transcription)
             do {
                 try await ModelDownloader.shared.downloadModel(model, progressCallback: { [weak self] prog in
-                    guard let self else { return }
+                    guard self != nil else { return }   // refiner gone: drop the progress tick
                     Task { @MainActor in
                         MeetingManager.shared.setProcessing(
                             .fineTuning,

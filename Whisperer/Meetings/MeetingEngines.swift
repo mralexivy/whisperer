@@ -401,7 +401,7 @@ final class MeetingEngines: ObservableObject {
             return
         }
         // Capture weak reference before closures that cross actor boundaries.
-        weak var weakSelf: MeetingEngines? = self
+        weak let weakSelf: MeetingEngines? = self
 
         for model in models {
             // 1. Download if not on disk.
@@ -482,9 +482,10 @@ final class MeetingEngines: ObservableObject {
             //    and kept every other model job waiting for the whole download.
             if !LLMPostProcessor.isOnDisk(Self.intelligenceVariant) {
                 readiness[.intelligence] = .downloading(0)
+                weak let weakSelf = self
                 try await LLMPostProcessor.download(Self.intelligenceVariant) { fraction in
-                    Task { @MainActor [weak self] in
-                        guard let self, case .downloading(let current) = self.readiness[.intelligence],
+                    Task { @MainActor in
+                        guard let self = weakSelf, case .downloading(let current) = self.readiness[.intelligence],
                               fraction > current else { return }
                         self.readiness[.intelligence] = .downloading(fraction)
                         self.updateStatusText()

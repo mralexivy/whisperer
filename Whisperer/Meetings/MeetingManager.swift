@@ -283,19 +283,22 @@ class MeetingManager: ObservableObject {
     func updateSegments(meetingID: UUID, segments: [MeetingSegment]) async {
         let ctx = database.newBackgroundContext()
         let enc = encoder
-        let words = segments.reduce(0) {
-            $0 + $1.text.components(separatedBy: .whitespacesAndNewlines).filter { !$0.isEmpty }.count
-        }
-        await ctx.perform {
+        // The word count splits every card of a possibly hours-long transcript, so it runs on
+        // the context's queue with the encode rather than on the main actor.
+        let words: Int = await ctx.perform {
+            let words = segments.reduce(0) {
+                $0 + $1.text.components(separatedBy: .whitespacesAndNewlines).filter { !$0.isEmpty }.count
+            }
             let req = MeetingEntity.fetchRequest()
             req.predicate = NSPredicate(format: "id == %@", meetingID as CVarArg)
             req.fetchLimit = 1
-            guard let entity = try? ctx.fetch(req).first else { return }
+            guard let entity = try? ctx.fetch(req).first else { return words }
             guard let data = try? enc.encode(segments),
-                  let json = String(data: data, encoding: .utf8) else { return }
+                  let json = String(data: data, encoding: .utf8) else { return words }
             entity.segmentsJSON = json
             entity.wordCount = Int32(words)
             try? ctx.save()
+            return words
         }
         updateItem(id: meetingID) { $0.wordCount = words }
         NotificationCenter.default.post(name: .meetingSegmentsDidPersist, object: meetingID)
@@ -341,7 +344,6 @@ class MeetingManager: ObservableObject {
 
     func finalizeSession(meetingID: UUID, duration: Double, audioFileURL: String?) async {
         let ctx = database.newBackgroundContext()
-        let dec = decoder
         await ctx.perform {
             let req = MeetingEntity.fetchRequest()
             req.predicate = NSPredicate(format: "id == %@", meetingID as CVarArg)

@@ -18,7 +18,7 @@
 import Foundation
 
 /// What the silent-meeting card shows.
-enum MeetingQuietPrompt: Equatable {
+nonisolated enum MeetingQuietPrompt: Equatable {
     case none
     /// Nothing captured since Start. `micSilent` when the input has produced no sound at all —
     /// the likelier cause is the microphone, not the room.

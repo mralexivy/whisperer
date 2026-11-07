@@ -32,13 +32,13 @@ import Foundation
 
 /// UIDs that begin with this prefix are transient CoreAudio aggregate wrappers. Binding them
 /// explicitly re-enters the same broken default instead of using the stable underlying device.
-let kCADefaultDeviceAggregatePrefix = "CADefaultDeviceAggregate"
+nonisolated let kCADefaultDeviceAggregatePrefix = "CADefaultDeviceAggregate"
 
 // MARK: - Readings
 
 /// Raw HAL readings used for the preflight decision. Separated so the verdict logic is
 /// unit-testable without hardware.
-struct RoutePreflightFacts: Equatable {
+nonisolated struct RoutePreflightFacts: Equatable {
     /// UID of the candidate device, or nil if unresolvable.
     var uid: String?
     /// Transport type (`kAudioDeviceTransportType*` constant, or 0 if unreadable).
@@ -52,7 +52,7 @@ struct RoutePreflightFacts: Equatable {
 // MARK: - Verdict
 
 /// How ready this route is for `buildGraph`.
-enum RouteReadiness: Equatable {
+nonisolated enum RouteReadiness: Equatable {
     /// Good to go. Wired / built-in device, or a Bluetooth one already running.
     case ready
     /// Cold Bluetooth link. The device will come up, but needs time to settle.
@@ -105,7 +105,7 @@ enum RouteReadiness: Equatable {
 
 // MARK: - Probe
 
-enum InputRoutePreflight {
+nonisolated enum InputRoutePreflight {
 
     // MARK: Decision (pure — unit-testable without hardware)
 

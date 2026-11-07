@@ -14,7 +14,7 @@ import Foundation
 /// Hebrew sub-backend and Apple Speech are filtered out of every picker (`selectable`). The
 /// built-in engine is not a `BackendType`: it is Apple dictation (`SystemLivePreviewBridge`),
 /// which drives live text for whichever one is picked.
-enum BackendType: String, CaseIterable, Identifiable {
+nonisolated enum BackendType: String, CaseIterable, Identifiable {
     case whisperCpp = "whisper.cpp"
     case qwen3asr = "Qwen3ASR"
     case parakeet = "Parakeet"
@@ -164,7 +164,7 @@ enum BackendType: String, CaseIterable, Identifiable {
 
 // MARK: - Transcription Backend Protocol
 
-protocol TranscriptionBackend: AnyObject {
+nonisolated protocol TranscriptionBackend: AnyObject {
     /// Synchronous transcription of audio samples (16kHz mono float32)
     func transcribe(
         samples: [Float],
@@ -209,7 +209,7 @@ protocol TranscriptionBackend: AnyObject {
 
 // MARK: - Default Parameter Values
 
-extension TranscriptionBackend {
+nonisolated extension TranscriptionBackend {
     var lastDetectedLanguage: String? { nil }
 
     func requestAbort() { }
@@ -248,7 +248,7 @@ extension TranscriptionBackend {
 
 // MARK: - Language Support
 
-extension BackendType {
+nonisolated extension BackendType {
     private static let parakeetV2Languages: Set<String> = ["en"]
     private static let parakeetV3Languages: Set<String> = [
         "bg", "hr", "cs", "da", "nl", "en", "et", "fi", "fr", "de",

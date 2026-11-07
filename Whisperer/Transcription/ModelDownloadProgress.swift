@@ -14,7 +14,7 @@
 import Foundation
 
 /// A downloadable speech model, one case per thing a row in the Models tab can fetch.
-enum ModelAsset: Hashable {
+nonisolated enum ModelAsset: Hashable {
     case whisper(WhisperModel)
     case parakeet(ParakeetModelVariant)
     case nemotron
@@ -67,7 +67,7 @@ enum ModelAsset: Hashable {
 
 /// Where a download is, beyond its fraction. Each phase has its own words in the UI so a stalled
 /// bar is never the only thing the user sees.
-enum ModelDownloadPhase: Equatable {
+nonisolated enum ModelDownloadPhase: Equatable {
     /// Started, no bytes yet.
     case connecting
     case downloading
@@ -79,7 +79,7 @@ enum ModelDownloadPhase: Equatable {
     case finishing
 }
 
-struct ModelDownloadProgress: Equatable {
+nonisolated struct ModelDownloadProgress: Equatable {
     var fraction: Double = 0
     var phase: ModelDownloadPhase = .connecting
     /// Known only for single-file downloads (whisper.cpp). Otherwise estimated from the fraction.
@@ -181,7 +181,7 @@ struct ModelDownloadProgress: Equatable {
 
 /// Words for a failure the user can act on. Raw `URLError` descriptions ("The request timed
 /// out.") say what broke, not what to do.
-enum ModelDownloadFailure {
+nonisolated enum ModelDownloadFailure {
     static func message(for error: Error) -> String {
         if let urlError = error as? URLError {
             switch urlError.code {

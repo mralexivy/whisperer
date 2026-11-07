@@ -81,7 +81,7 @@ final class PrivacyShieldController {
     private var changingMode = false
     private let routes = AudioProcessMonitor()
     private static let enabledKey = "privacyShieldAutomaticEnabled"
-    private static let restoreKey = "privacyShieldRestoreInputUID"
+    private nonisolated static let restoreKey = "privacyShieldRestoreInputUID"
 
     private var snapshot: PrivacyShieldSnapshot {
         get { AppState.shared.privacyShield }

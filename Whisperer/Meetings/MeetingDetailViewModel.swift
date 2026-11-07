@@ -236,7 +236,7 @@ final class MeetingDetailViewModel: ObservableObject {
     // MARK: - CoreData fetch
 
     nonisolated static func fetchRecord(_ id: UUID) async -> MeetingRecord? {
-        let ctx = HistoryDatabase.shared.newBackgroundContext()
+        let ctx = await HistoryDatabase.shared.newBackgroundContext()
         return await ctx.perform {
             let req = MeetingEntity.fetchRequest()
             req.predicate = NSPredicate(format: "id == %@", id as CVarArg)

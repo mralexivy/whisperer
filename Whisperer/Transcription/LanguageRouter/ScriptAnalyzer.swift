@@ -12,14 +12,14 @@ import Foundation
 
 // MARK: - Script Family
 
-enum ScriptFamily: String {
+nonisolated enum ScriptFamily: String {
     case latin, cyrillic, hebrew, arabic, devanagari, thai, georgian
     case armenian, greek, hiragana, katakana, hangul, cjk
 }
 
 // MARK: - ScriptAnalyzer
 
-enum ScriptAnalyzer {
+nonisolated enum ScriptAnalyzer {
 
     // MARK: - Script Detection Table
 

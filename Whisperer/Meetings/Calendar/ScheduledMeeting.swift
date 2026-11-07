@@ -15,22 +15,22 @@
 import Foundation
 
 /// Where an event came from: the account it was read from, signed in directly.
-enum CalendarSource: String, Codable, Sendable {
+nonisolated enum CalendarSource: String, Codable, Sendable {
     case google
     case microsoft
 }
 
-enum MeetingRSVP: String, Codable, Sendable {
+nonisolated enum MeetingRSVP: String, Codable, Sendable {
     case accepted, tentative, declined, pending, unknown
 }
 
-enum MeetingKind: String, Codable, Sendable {
+nonisolated enum MeetingKind: String, Codable, Sendable {
     case online, inPerson, unknown
 }
 
 /// Someone on the invite. Read from the calendar so a recording knows who was in the room:
 /// the user's own name for their voice, and the names to offer for everyone else's.
-struct MeetingParticipant: Codable, Sendable, Equatable, Hashable {
+nonisolated struct MeetingParticipant: Codable, Sendable, Equatable, Hashable {
     var name: String?
     var email: String
     /// The signed-in user.
@@ -53,7 +53,7 @@ struct MeetingParticipant: Codable, Sendable, Equatable, Hashable {
     }
 }
 
-extension Array where Element == MeetingParticipant {
+nonisolated extension Array where Element == MeetingParticipant {
     /// People other than the user who did not decline — the voices a recording may hear.
     var expectedOthers: [MeetingParticipant] {
         filter { !$0.isSelf && $0.response != .declined }
@@ -62,7 +62,7 @@ extension Array where Element == MeetingParticipant {
 
 /// Conferencing providers whose join links Whisperer recognizes. Only these hosts are offered
 /// as "Join" — an arbitrary link in an event's notes is never opened.
-enum ConferenceProvider: String, Codable, Sendable, CaseIterable {
+nonisolated enum ConferenceProvider: String, Codable, Sendable, CaseIterable {
     case zoom, googleMeet, teams, webex, slack, whereby, around, chime
 
     var displayName: String {
@@ -96,7 +96,7 @@ enum ConferenceProvider: String, Codable, Sendable, CaseIterable {
 }
 
 /// What the classifier needs from a calendar event, normalized from the provider's API response.
-struct CalendarEventSnapshot: Sendable, Equatable {
+nonisolated struct CalendarEventSnapshot: Sendable, Equatable {
     var source: CalendarSource = .google
     var eventIdentifier: String
     var externalIdentifier: String?
@@ -118,7 +118,7 @@ struct CalendarEventSnapshot: Sendable, Equatable {
     var participants: [MeetingParticipant] = []
 }
 
-struct ScheduledMeeting: Identifiable, Equatable, Sendable {
+nonisolated struct ScheduledMeeting: Identifiable, Equatable, Sendable {
     /// Stable per occurrence: survives resyncs that change `eventIdentifier`, and differs
     /// between occurrences of a recurring event.
     let id: String

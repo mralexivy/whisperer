@@ -161,10 +161,10 @@ struct DictionaryView: View {
         .sheet(isPresented: $showAddEntry) {
             AddDictionaryEntryView()
         }
-        .onChange(of: selectedPackId) { _ in
+        .onChange(of: selectedPackId) { _, _ in
             displayLimit = pageSize
         }
-        .onChange(of: dictionaryManager.selectedEntryId) { newValue in
+        .onChange(of: dictionaryManager.selectedEntryId) { _, newValue in
             // When an entry is selected from correction popover, highlight it
             if let entryId = newValue {
                 selectedTab = .corrections
@@ -377,7 +377,7 @@ struct DictionaryView: View {
                     .textFieldStyle(.plain)
                     .font(.system(size: 13))
                     .foregroundColor(WhispererColors.primaryText(colorScheme))
-                    .onChange(of: searchText) { _ in
+                    .onChange(of: searchText) { _, _ in
                         displayLimit = pageSize  // Reset pagination on search
                     }
 
@@ -520,7 +520,7 @@ struct DictionaryView: View {
                         .padding(.horizontal, 20)
                         .padding(.vertical, 12)
                     }
-                    .onChange(of: highlightedEntryId) { newValue in
+                    .onChange(of: highlightedEntryId) { _, newValue in
                         if let entryId = newValue {
                             withAnimation(.easeInOut(duration: 0.3)) {
                                 scrollProxy.scrollTo(entryId, anchor: .center)

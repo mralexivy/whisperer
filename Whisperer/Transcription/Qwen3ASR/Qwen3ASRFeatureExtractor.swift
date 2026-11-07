@@ -90,12 +90,12 @@ nonisolated final class Qwen3ASRFeatureExtractor: @unchecked Sendable {
 
         var re = [Float](repeating: 0, count: frames * bins)
         var im = [Float](repeating: 0, count: frames * bins)
-        cblas_sgemm(CblasRowMajor, CblasNoTrans, CblasNoTrans,
-                    Int32(frames), Int32(bins), Int32(n),
-                    1, frameMatrix, Int32(n), cosBasis, Int32(bins), 0, &re, Int32(bins))
-        cblas_sgemm(CblasRowMajor, CblasNoTrans, CblasNoTrans,
-                    Int32(frames), Int32(bins), Int32(n),
-                    1, frameMatrix, Int32(n), sinBasis, Int32(bins), 0, &im, Int32(bins))
+        // Row-major C[M×N] = A[M×P]·B[P×N] — same product as the deprecated
+        // `cblas_sgemm(RowMajor, NoTrans, NoTrans, alpha: 1, beta: 0)` it replaces.
+        vDSP_mmul(frameMatrix, 1, cosBasis, 1, &re, 1,
+                  vDSP_Length(frames), vDSP_Length(bins), vDSP_Length(n))
+        vDSP_mmul(frameMatrix, 1, sinBasis, 1, &im, 1,
+                  vDSP_Length(frames), vDSP_Length(bins), vDSP_Length(n))
 
         // |X|^2
         var power = [Float](repeating: 0, count: frames * bins)
@@ -104,9 +104,8 @@ nonisolated final class Qwen3ASRFeatureExtractor: @unchecked Sendable {
 
         // mel[frames, mels] = power[frames, bins] · filtersT[bins, mels]
         var mel = [Float](repeating: 0, count: frames * mels)
-        cblas_sgemm(CblasRowMajor, CblasNoTrans, CblasNoTrans,
-                    Int32(frames), Int32(mels), Int32(bins),
-                    1, power, Int32(bins), melFiltersT, Int32(mels), 0, &mel, Int32(mels))
+        vDSP_mmul(power, 1, melFiltersT, 1, &mel, 1,
+                  vDSP_Length(frames), vDSP_Length(mels), vDSP_Length(bins))
 
         // log10(max(mel, 1e-10))
         var floorValue: Float = 1e-10

@@ -7,7 +7,7 @@
 
 import Foundation
 
-enum LLMModelVariant: String, CaseIterable, Identifiable {
+nonisolated enum LLMModelVariant: String, CaseIterable, Identifiable {
     case qwen2_5_1_5B = "Qwen2.5-1.5B"
     case whispererV3 = "Whisperer V3"
     case qwen3_5_4B_mtp = "Qwen3.5-4B (MTP)"

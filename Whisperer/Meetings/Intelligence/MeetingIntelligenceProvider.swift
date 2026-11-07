@@ -242,7 +242,7 @@ nonisolated final class OnceFlag: @unchecked Sendable {
     }
 }
 
-extension MeetingIntelligenceProvider {
+nonisolated extension MeetingIntelligenceProvider {
     var modelLabel: String? { nil }
     /// ~200k tokens is the floor across the supported cloud models; leave room for the
     /// instructions and the answer.

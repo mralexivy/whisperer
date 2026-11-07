@@ -124,7 +124,7 @@ actor MeetingSpeakerCoordinator {
         do {
             let models: Nemotron3Models
             if let warm = await MeetingDiarizerService.shared.models {
-                models = warm
+                models = warm.models
             } else {
                 let started = Date()
                 models = try await Nemotron3Models.loadFromHuggingFace(
@@ -133,7 +133,7 @@ actor MeetingSpeakerCoordinator {
                 )
                 let ms = Int(Date().timeIntervalSince(started) * 1000)
                 Logger.warning("Diarization: model was not warm — loaded on the recording path in \(ms)ms", subsystem: .model)
-                await MeetingDiarizerService.shared.adopt(models)
+                await MeetingDiarizerService.shared.adopt(ResidentDiarizerModels(models: models))
             }
             let instance = Nemotron3Diarizer(config: config, models: models)
             diarizer = instance

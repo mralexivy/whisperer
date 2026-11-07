@@ -29,7 +29,7 @@ import Foundation
 /// The three compiled sequence lengths. Fixed shapes rather than a flexible input because a
 /// flexible-shape Core ML model falls back to CPU on several macOS releases, and the whole
 /// reason for a small discriminative tagger is that it must cost less than the 4B it replaces.
-enum EditingSequenceShape: Int, Sendable, CaseIterable, Comparable {
+nonisolated enum EditingSequenceShape: Int, Sendable, CaseIterable, Comparable {
     case short = 32
     case medium = 64
     case long = 128
@@ -52,7 +52,7 @@ enum EditingSequenceShape: Int, Sendable, CaseIterable, Comparable {
 /// one flat label space because the thresholds are per-action: the plan ships punctuation
 /// before casing before disfluency, each only once it measures ≥99% precision per language, and
 /// a single softmax over a combined label set makes "ship punctuation only" unexpressible.
-enum EditingHead: String, Sendable, CaseIterable {
+nonisolated enum EditingHead: String, Sendable, CaseIterable {
     /// Is anything wrong with this token at all. The separate detection head is what lets the
     /// tagging heads stay sharp: without it, KEEP dominates training and every other class
     /// collapses.
@@ -92,9 +92,9 @@ enum EditingHead: String, Sendable, CaseIterable {
     var keepIndex: Int { 0 }
 }
 
-enum EditingErrorLabel: Int, Sendable, CaseIterable { case correct, incorrect }
-enum EditingOperationLabel: Int, Sendable, CaseIterable { case keep, replace, delete, insertAfter }
-enum EditingPunctuationLabel: Int, Sendable, CaseIterable {
+nonisolated enum EditingErrorLabel: Int, Sendable, CaseIterable { case correct, incorrect }
+nonisolated enum EditingOperationLabel: Int, Sendable, CaseIterable { case keep, replace, delete, insertAfter }
+nonisolated enum EditingPunctuationLabel: Int, Sendable, CaseIterable {
     case none, period, comma, question, exclamation, colon, semicolon
 
     var mark: String? {
@@ -109,18 +109,18 @@ enum EditingPunctuationLabel: Int, Sendable, CaseIterable {
         }
     }
 }
-enum EditingCasingLabel: Int, Sendable, CaseIterable { case keep, lower, capitalize, upper }
-enum EditingDisfluencyLabel: Int, Sendable, CaseIterable { case keep, drop }
-enum EditingStructureLabel: Int, Sendable, CaseIterable { case none, lineBreak, listItem }
-enum EditingLanguageLabel: Int, Sendable, CaseIterable { case same, drifted }
-enum EditingRiskLabel: Int, Sendable, CaseIterable { case safe, risky }
+nonisolated enum EditingCasingLabel: Int, Sendable, CaseIterable { case keep, lower, capitalize, upper }
+nonisolated enum EditingDisfluencyLabel: Int, Sendable, CaseIterable { case keep, drop }
+nonisolated enum EditingStructureLabel: Int, Sendable, CaseIterable { case none, lineBreak, listItem }
+nonisolated enum EditingLanguageLabel: Int, Sendable, CaseIterable { case same, drifted }
+nonisolated enum EditingRiskLabel: Int, Sendable, CaseIterable { case safe, risky }
 
 // MARK: - Output
 
 /// Raw logits, not probabilities. The KEEP bias is a logit-space addition, so a runtime that
 /// softmaxed first would make it unapplyable — and a calibrated probability is the model's job
 /// anyway, not the runtime's.
-struct EditingTokenLogits: Sendable {
+nonisolated struct EditingTokenLogits: Sendable {
     let logits: [EditingHead: [Float]]
 
     init(logits: [EditingHead: [Float]]) {
@@ -147,14 +147,14 @@ struct EditingTokenLogits: Sendable {
 /// One encoder pass. `tokens` covers only the real inputs — padding positions are dropped here
 /// rather than returned, because a padded position that reaches the tagging policy is a bug
 /// that shows up as an edit against a token that does not exist.
-struct EditingRuntimeOutput: Sendable {
+nonisolated struct EditingRuntimeOutput: Sendable {
     let shape: EditingSequenceShape
     let tokens: [EditingTokenLogits]
 }
 
 // MARK: - Errors
 
-enum EditingRuntimeError: Error, LocalizedError {
+nonisolated enum EditingRuntimeError: Error, LocalizedError {
     case notLoaded
     case sequenceTooLong(Int)
     case weightsUnavailable
@@ -198,7 +198,7 @@ nonisolated protocol TextEditingModelRuntime: Sendable {
 /// This exists so the policy in `MMBERTEditingModel` is executable and provably silent before
 /// any weights exist. "Stub emits zero edits" is a real regression test: it fails the moment
 /// the policy grows a path that proposes an edit without the model having asked for one.
-struct StubEditingRuntime: TextEditingModelRuntime {
+nonisolated struct StubEditingRuntime: TextEditingModelRuntime {
 
     /// Whether `load()` should fail, so callers' error paths are reachable in tests.
     let failsToLoad: Bool

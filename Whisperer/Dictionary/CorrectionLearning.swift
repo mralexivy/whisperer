@@ -176,7 +176,6 @@ struct CorrectionLearningAnchor: Equatable, Sendable {
     init?(fieldValue: String, locating target: String) {
         guard !target.isEmpty else { return nil }
         let nsField = fieldValue as NSString
-        let nsTarget = target as NSString
         let length = nsField.length
         var firstRange = NSRange(location: NSNotFound, length: 0)
         var found = 0

@@ -9,13 +9,26 @@
 import Foundation
 import Speech
 import AVFoundation
+import os
 
 @available(macOS 26.0, *)
-nonisolated final class SpeechAnalyzerBridge: TranscriptionBackend {
+/// `@unchecked Sendable`: inference runs serially on `queue` (which alone touches `converter`),
+/// the install cache is guarded by `_cacheQueue`, the shutdown/ready flags by `flags`, and the
+/// remaining stored properties are immutable after `init`.
+nonisolated final class SpeechAnalyzerBridge: TranscriptionBackend, @unchecked Sendable {
 
     private let queue = DispatchQueue(label: "speechanalyzer.transcribe", qos: .userInteractive)
-    private var _isShuttingDown = false
-    private var _isReady = false
+    /// Written by `prepareForShutdown()` / `releaseModels` on the caller's thread and read on
+    /// `queue` — plain stored `Bool`s gave no happens-before edge between the two.
+    private let flags = OSAllocatedUnfairLock(initialState: (shuttingDown: false, ready: false))
+    private var _isShuttingDown: Bool {
+        get { flags.withLock { $0.shuttingDown } }
+        set { flags.withLock { $0.shuttingDown = newValue } }
+    }
+    private var _isReady: Bool {
+        get { flags.withLock { $0.ready } }
+        set { flags.withLock { $0.ready = newValue } }
+    }
 
     /// Best audio format for the analyzer (cached after prepare)
     private let analyzerFormat: AVAudioFormat?

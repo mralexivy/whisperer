@@ -34,7 +34,7 @@ enum LLMLoadPhase: Equatable {
 
 /// Throughput of the most recent generation. Both decode paths already compute these numbers for
 /// their debug log line; this exposes them so benchmarks can compare models without scraping logs.
-struct LLMGenerationStats: Equatable {
+nonisolated struct LLMGenerationStats: Equatable {
     let promptTokens: Int
     let genTokens: Int
     /// Prefill — scales with prompt length, not model speed. Kept separate from decode for that reason.
@@ -51,11 +51,21 @@ struct LLMGenerationStats: Equatable {
     }
 }
 
+// MARK: - KV cache hand-off
+
+/// Carries KV caches across an isolation boundary. `KVCache` is a non-Sendable reference type;
+/// this is `@unchecked Sendable` because every use is a strict hand-off — the sender built the
+/// caches (or a private `copy()` of them) and never touches them again after sending.
+nonisolated struct KVCacheHandoff: @unchecked Sendable {
+    let caches: [any KVCache]
+    var prefixLength: Int = 0
+}
+
 // MARK: - Degeneration guard
 
 // Internal rather than file-private so the batched-decode benchmarks can apply the identical
 // guard per row. Reimplementing it there would mean measuring a different stopping rule.
-enum Degeneration {
+nonisolated enum Degeneration {
     /// Longest cycle worth looking for. 16 catches "**Plan:** 1." style list-item loops
     /// (~10-token cycles) that the old limit of 8 missed. Real parallel sentences differ
     /// in content so their token IDs diverge before 4 full cycles complete.
@@ -78,7 +88,7 @@ enum Degeneration {
 ///
 /// Generic over the unit because the two decode paths see different things: the MTP path has
 /// token ids, `ChatSession` only hands out decoded string chunks.
-struct DegenerationGuard<Unit: Equatable> {
+nonisolated struct DegenerationGuard<Unit: Equatable> {
     private var units: [Unit] = []
     /// Output length (in characters) before the unit at the same index was appended.
     private var lengths: [Int] = []
@@ -373,7 +383,7 @@ class LLMPostProcessor: ObservableObject {
         let t0 = Date()
         // Detach inference off the main actor — ChatSession token encoding + KV prefill have
         // synchronous CPU work before their first await, which blocks the main thread if run there.
-        _ = try? await Task.detached(priority: .userInitiated) {
+        _ = await Task.detached(priority: .userInitiated) {
             try? await warmupSession.respond(to: ".", images: [], videos: [])
         }.value
         // GPU barrier off main thread — ensures KV state is committed before saveCache.
@@ -394,8 +404,8 @@ class LLMPostProcessor: ObservableObject {
             // ~15-20 MB safetensors read + parse — off main thread to avoid UI stall.
             let caches: [any KVCache] = try await Task.detached {
                 let (loaded, _) = try loadPromptCache(url: tmpURL)
-                return loaded
-            }.value
+                return KVCacheHandoff(caches: loaded)
+            }.value.caches
 
             guard !Task.isCancelled else { return }
 
@@ -448,7 +458,7 @@ class LLMPostProcessor: ObservableObject {
         // Use a representative-length user message so the Metal graph compiles for real inputs,
         // not just the 1-token "." from warmup. maxTokens=1 keeps generation instant.
         // Detached so the synchronous token-encoding work doesn't run on the main actor.
-        _ = try? await Task.detached(priority: .userInitiated) {
+        _ = await Task.detached(priority: .userInitiated) {
             try? await dryRunSession.respond(to: "[INPUT]\nThis is a dry run to prime the Metal compute graph for user-message prefill.\n[/INPUT]", images: [], videos: [])
         }.value
         Logger.debug("LLM post-warmup dry-run complete in \(Int(-t0.timeIntervalSinceNow * 1000))ms — Metal graph primed", subsystem: .model)
@@ -457,7 +467,7 @@ class LLMPostProcessor: ObservableObject {
     // MARK: - MTP KV Cache Warmup
 
     /// Sendable box for passing pre-copied MTP warm KV state into @Sendable container.perform closures.
-    private final class MTPWarmBox: @unchecked Sendable {
+    nonisolated private final class MTPWarmBox: @unchecked Sendable {
         var cache: [any KVCache]? = nil
         var prefixLength: Int = 0
     }
@@ -473,7 +483,7 @@ class LLMPostProcessor: ObservableObject {
 
         let box = MTPWarmBox()
         let t0 = Date()
-        try? await container.perform { context in
+        await container.perform { context in
             guard let mtpModel = context.model as? any MTPCapableModel else { return }
             let tokenizer = context.tokenizer
 
@@ -796,10 +806,17 @@ class LLMPostProcessor: ObservableObject {
     // MARK: - MTP Processing
 
     /// Mutable accumulator shared between the generateMTPTokens onToken callback and the timeout task.
-    /// @unchecked Sendable: accessed from a single serial queue (container.perform) + one flag write from timeout.
-    private final class MTPOutput: @unchecked Sendable {
+    /// @unchecked Sendable: everything but `stop` is touched only inside `container.perform` (one
+    /// thread at a time) and read on the main actor after `perform` returns. `stop` is written by
+    /// the timeout task on another thread while the token callback reads it, so it is lock-backed.
+    nonisolated private final class MTPOutput: @unchecked Sendable {
         private(set) var text: String = ""
-        var stop: Bool = false
+        private let stopLock = NSLock()
+        private var _stop = false
+        var stop: Bool {
+            get { stopLock.withLock { _stop } }
+            set { stopLock.withLock { _stop = newValue } }
+        }
         /// Throughput, carried back out of the @Sendable container closure.
         var stats: LLMGenerationStats? = nil
         /// Length of `text`, maintained incrementally — the guard needs it once per token and

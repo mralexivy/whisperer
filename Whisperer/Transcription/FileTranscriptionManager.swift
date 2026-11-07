@@ -21,7 +21,7 @@ enum FileTranscriptionState: Equatable {
     case error(message: String)
 }
 
-enum FileTranscriptionError: Error, LocalizedError {
+nonisolated enum FileTranscriptionError: Error, LocalizedError {
     case unsupportedFormat
     case noAudioTrack
     case fileReadFailed(String)
@@ -86,9 +86,9 @@ class FileTranscriptionManager: ObservableObject {
     private var overlapSamples: Int { Int(overlapDuration * sampleRate) }
 
     // Supported file extensions
-    static let audioExtensions: Set<String> = ["wav", "mp3", "m4a", "aac", "aiff", "flac", "opus", "ogg", "caf"]
-    static let videoExtensions: Set<String> = ["mp4", "mov", "m4v"]
-    static let allExtensions: Set<String> = audioExtensions.union(videoExtensions)
+    nonisolated static let audioExtensions: Set<String> = ["wav", "mp3", "m4a", "aac", "aiff", "flac", "opus", "ogg", "caf"]
+    nonisolated static let videoExtensions: Set<String> = ["mp4", "mov", "m4v"]
+    nonisolated static let allExtensions: Set<String> = audioExtensions.union(videoExtensions)
 
     static var supportedContentTypes: [UTType] {
         [.audio, .mpeg4Movie, .quickTimeMovie, .movie]
@@ -191,7 +191,7 @@ class FileTranscriptionManager: ObservableObject {
                     let context: String? = accumulatedText.isEmpty ? nil : String(accumulatedText.suffix(self.contextMaxLength))
 
                     // Prepend prompt words to context for improved recognition
-                    let promptPrefix = await AppState.shared.promptWordsString
+                    let promptPrefix = AppState.shared.promptWordsString
                     let combinedPrompt: String? = {
                         let parts = [promptPrefix, context].compactMap { $0 }
                         return parts.isEmpty ? nil : parts.joined(separator: " ")
@@ -354,7 +354,11 @@ class FileTranscriptionManager: ObservableObject {
 
     // MARK: - Audio Loading
 
-    private func loadAudioSamples(from url: URL) async throws -> [Float] {
+    /// `@concurrent`: decoding and resampling a whole file (an hour of audio is ~230 MB of
+    /// Float32 at 16 kHz) ran on the main actor here, freezing the UI for the duration of the
+    /// read. Everything below is pure AVFoundation work on local values.
+    @concurrent
+    nonisolated private func loadAudioSamples(from url: URL) async throws -> [Float] {
         let ext = url.pathExtension.lowercased()
 
         if Self.videoExtensions.contains(ext) {
@@ -371,7 +375,7 @@ class FileTranscriptionManager: ObservableObject {
         }
     }
 
-    private func loadAudioFileSamples(from url: URL) throws -> [Float] {
+    nonisolated private func loadAudioFileSamples(from url: URL) throws -> [Float] {
         let audioFile: AVAudioFile
         do {
             audioFile = try AVAudioFile(forReading: url)
@@ -396,7 +400,7 @@ class FileTranscriptionManager: ObservableObject {
         return try convertToWhisperFormat(buffer: buffer, sourceFormat: processingFormat)
     }
 
-    private func loadVideoAudioSamples(from url: URL) async throws -> [Float] {
+    nonisolated private func loadVideoAudioSamples(from url: URL) async throws -> [Float] {
         let asset = AVURLAsset(url: url)
 
         let tracks: [AVAssetTrack]
@@ -458,7 +462,7 @@ class FileTranscriptionManager: ObservableObject {
         return allSamples
     }
 
-    private func convertToWhisperFormat(buffer: AVAudioPCMBuffer, sourceFormat: AVAudioFormat) throws -> [Float] {
+    nonisolated private func convertToWhisperFormat(buffer: AVAudioPCMBuffer, sourceFormat: AVAudioFormat) throws -> [Float] {
         guard let targetFormat = AVAudioFormat(
             commonFormat: .pcmFormatFloat32,
             sampleRate: sampleRate,

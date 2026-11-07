@@ -9,7 +9,10 @@
 import Foundation
 import AppKit
 
-final class SpellValidator: @unchecked Sendable {
+/// `nonisolated` + `@unchecked Sendable`: called off the main thread (CorrectionEngine on a global
+/// queue, MidSentenceCaseNormalizer). `tag`/`availableLanguages` are immutable; both caches and
+/// their LRU order are only touched under `lock`.
+nonisolated final class SpellValidator: @unchecked Sendable {
     static let shared = SpellValidator()
 
     private let tag: Int

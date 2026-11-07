@@ -525,7 +525,7 @@ actor MCPSessionRegistry {
 
 /// Constructs a Server with the Whisperer tool handlers registered.
 /// Called once per session — creating multiple servers is cheap.
-func makeMCPServer() async -> Server {
+nonisolated func makeMCPServer() async -> Server {
     let version = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.0"
     let s = Server(
         name: "Whisperer",

@@ -289,7 +289,7 @@ actor WhispererMCPServer {
     private func nwReceive(conn: NWConnection) async -> Data? {
         await withCheckedContinuation { cont in
             conn.receive(minimumIncompleteLength: 1, maximumLength: 65536) { content, _, isComplete, error in
-                if let error {
+                if error != nil {
                     cont.resume(returning: nil)
                     return
                 }
