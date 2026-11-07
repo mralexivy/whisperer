@@ -1,5 +1,6 @@
 #include "ShieldAudio.h"
 #include "ShieldDSP.hpp"
+#include "ShieldPNet.hpp"
 #include <AudioUnit/AudioUnit.h>
 #include <CoreAudio/CoreAudio.h>
 #include <chrono>
@@ -177,3 +178,12 @@ extern "C" ShieldMetrics shield_audio_metrics(ShieldAudio* s) {
 extern "C" void* shield_baseline_create() { return new shield::Baseline; }
 extern "C" void shield_baseline_process(void* p,const float* in,float* out,uint32_t n,float strength) { static_cast<shield::Baseline*>(p)->process(in,out,n,strength); }
 extern "C" void shield_baseline_destroy(void* p) { delete static_cast<shield::Baseline*>(p); }
+
+extern "C" void* shield_pnet_create(const char* path) {
+    auto* p = new shield::PNet;
+    if (!path || !p->load(path)) { delete p; return nullptr; }
+    return p;
+}
+extern "C" void shield_pnet_process(void* p,const float* in,float* out,uint32_t n,float strength) { static_cast<shield::PNet*>(p)->process(in,out,n,strength); }
+extern "C" void shield_pnet_reset(void* p) { static_cast<shield::PNet*>(p)->reset(); }
+extern "C" void shield_pnet_destroy(void* p) { delete static_cast<shield::PNet*>(p); }

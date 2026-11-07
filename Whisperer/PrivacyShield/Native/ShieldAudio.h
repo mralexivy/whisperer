@@ -31,6 +31,11 @@ ShieldMetrics shield_audio_metrics(ShieldAudio*);
 void* shield_baseline_create(void);
 void shield_baseline_process(void*, const float*, float*, uint32_t, float);
 void shield_baseline_destroy(void*);
+// Predictive perturbation network (ShieldPNet.hpp). Returns NULL if the weights file is invalid.
+void* shield_pnet_create(const char* weightsPath);
+void shield_pnet_process(void*, const float*, float*, uint32_t, float strength);
+void shield_pnet_reset(void*);
+void shield_pnet_destroy(void*);
 #ifdef __cplusplus
 }
 #endif

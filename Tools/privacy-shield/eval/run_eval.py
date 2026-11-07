@@ -46,7 +46,26 @@ def transcribe(cli, model, wav):
     data = json.loads(Path(f"{base}.json").read_text())
     return " ".join(seg["text"].strip() for seg in data.get("transcription", []))
 
+def native_pnet(src, dst, library, weights, strength):
+    """Run the shipped C++ network exactly as the audio worker does: 480-sample 48 kHz blocks."""
+    import ctypes
+    lib = ctypes.CDLL(str(library))
+    lib.shield_pnet_create.restype = ctypes.c_void_p; lib.shield_pnet_create.argtypes = [ctypes.c_char_p]
+    lib.shield_pnet_process.argtypes = [ctypes.c_void_p, ctypes.POINTER(ctypes.c_float), ctypes.POINTER(ctypes.c_float), ctypes.c_uint32, ctypes.c_float]
+    lib.shield_pnet_destroy.argtypes = [ctypes.c_void_p]
+    p = lib.shield_pnet_create(str(weights).encode())
+    if not p: raise SystemExit(f"invalid weights: {weights}")
+    x, sr = sf.read(src, dtype="float32"); assert sr == 48000
+    n = len(x) // 480 * 480; y = np.copy(x)
+    for i in range(0, n, 480):
+        a = (ctypes.c_float * 480)(*x[i:i + 480]); b = (ctypes.c_float * 480)()
+        lib.shield_pnet_process(p, a, b, 480, strength); y[i:i + 480] = np.frombuffer(b, np.float32)
+    lib.shield_pnet_destroy(p)
+    sf.write(dst, y, 48000, subtype="PCM_16")
+
 def shield(src, dst, args, module):
+    if args.processor.startswith("native:"):
+        return native_pnet(src, dst, args.library, args.processor[7:], args.strength if args.strength != .35 else 1.0)
     if module is not None:
         x, sr = sf.read(src, dtype="float32")
         assert sr == 48000, "corpus must be 48 kHz"
