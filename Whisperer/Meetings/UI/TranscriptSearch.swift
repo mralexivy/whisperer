@@ -260,13 +260,14 @@ enum TranscriptSearch {
         self.contentHeight = contentHeight
         // Keep the cursor clamped to the new bounds; initialise to 0 when geometry first
         // arrives for a match set that was previously unknown (currentIndex was nil).
-        if matches.isEmpty {
-            currentIndex = nil
-        } else if let idx = currentIndex {
-            currentIndex = min(idx, matches.count - 1)
-        } else {
-            currentIndex = 0
-        }
+        //
+        // Assigned only when it changes. `@Published` fires on every assignment, equal or not,
+        // and `SelectableTranscriptView` re-applies highlights on `$currentIndex` and then calls
+        // `report` again — so writing `nil` over `nil` here was an endless highlight → layout →
+        // report loop on the main thread whenever a transcript was on screen. Scrolling a meeting
+        // cost 37 ms a step on the full screen against 0.5 ms without it (2026-11-08).
+        let clamped: Int? = matches.isEmpty ? nil : min(currentIndex ?? 0, matches.count - 1)
+        if clamped != currentIndex { currentIndex = clamped }
         guard !unchanged else { return }
         matchesVersion &+= 1
     }

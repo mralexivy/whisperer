@@ -389,3 +389,17 @@ generic, but honest, and it needs no guess about anyone's title format.
   the self attendee; no profile scope). 1:1 (one non-declined other) → remote voices = that
   attendee. Group → remote stays "Speaker N" with invite chips. No invite → nothing.
 - Applied live as cards land (every 10 s of audio) and once at stop; never over a manual rename.
+
+## Transcript scroll stutter and the blank pane — one root, 2026-11-08
+
+- `TranscriptSearchModel.report` assigned `currentIndex` on every call (nil over nil); `@Published`
+  fires on any assignment, and `SelectableTranscriptView`'s search sink re-applies highlights and
+  calls `report` again — an endless highlight → layout → report loop on the main thread whenever a
+  transcript was shown. Full-screen scroll step 37 ms → 2.5 ms after assigning only on change.
+- The transcript lived in a `LazyVStack` with one giant child. After the live → saved handoff
+  shrank the content while scrolled to the end, the lazy stack had dropped the child and never
+  recreated it (stale size estimate): the blank pane. The loop above had been masking it by
+  forcing extra layout passes. Plain `VStack` now; reproduced 3/3 by
+  `MeetingTranscriptHandoffTests` with the loop gone, passes 3/3 after.
+- `MeetingTranscriptScrollPerformanceTests` measures a re-render, a transcript scroll step and a
+  full-screen scroll step in a real window; profile with `sample <pid>` on a long scroll loop.

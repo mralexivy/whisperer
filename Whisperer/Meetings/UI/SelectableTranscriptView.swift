@@ -72,6 +72,12 @@ struct SelectableTranscriptView: NSViewRepresentable {
 
     func makeCoordinator() -> Coordinator { Coordinator() }
 
+    #if DEBUG
+    /// Full re-measures of the transcript (layout of every segment) since launch. Read by
+    /// `MeetingTranscriptScrollPerformanceTests`: hovering or scrolling must not cause any.
+    nonisolated(unsafe) static var metricsRecomputeCount = 0
+    #endif
+
     func makeNSView(context: Context) -> NSTextView {
         let layoutManager = NSLayoutManager()
         let storage = NSTextStorage()
@@ -344,6 +350,9 @@ struct SelectableTranscriptView: NSViewRepresentable {
         }
 
         func recomputeMetrics() {
+            #if DEBUG
+            SelectableTranscriptView.metricsRecomputeCount += 1
+            #endif
             guard let textView,
                   let layoutManager,
                   let container = textView.textContainer,

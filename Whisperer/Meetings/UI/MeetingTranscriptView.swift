@@ -90,7 +90,13 @@ struct MeetingTranscriptView: View {
     var body: some View {
         ScrollViewReader { proxy in
             ScrollView {
-                LazyVStack(spacing: 0) {
+                // A plain VStack, not lazy: the transcript is one tall child (a single text view
+                // with cards drawn behind it), so laziness saves nothing — and it caused the blank
+                // pane after a meeting ended. The handoff from the live transcript to the saved one
+                // shrank the content while the view was scrolled to the end; the lazy stack had
+                // dropped its only child off-screen and, working from a stale size estimate, never
+                // created it again, until switching meetings reset the scroll (2026-11-08).
+                VStack(spacing: 0) {
                     if isLive {
                         LivePreviewNoticeBanner()
                             .padding(.vertical, 8)
