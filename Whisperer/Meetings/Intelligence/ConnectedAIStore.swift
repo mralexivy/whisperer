@@ -63,11 +63,8 @@ final class ConnectedAIStore: ObservableObject {
 
     /// Providers shown in this build, in display order.
     var availableProviders: [AIProviderID] {
-        AIProviderID.allCases.filter { id in
-            guard id.isAvailableInThisBuild else { return false }
-            if id == .chatGPT { return ChatGPTAuth.isPreviewEnabled }
-            return true
-        }
+        // Preview providers (ChatGPT) are listed with a "Preview" badge, never hidden.
+        AIProviderID.allCases.filter(\.isAvailableInThisBuild)
     }
 
     /// The provider meeting AI uses right now, or nil for "on this Mac".

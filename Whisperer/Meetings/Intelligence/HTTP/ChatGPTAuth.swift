@@ -18,8 +18,8 @@
 //    together, in one Keychain write.
 //  - Sign-in can succeed without plan usage: the granted scopes are checked.
 //
-//  Commercial apps need OpenAI's approval to use plan usage; until then this flow is
-//  enabled only in DEBUG builds or behind `connectedAI.enableChatGPTPreview`.
+//  Commercial apps need OpenAI's approval to use plan usage; until then the provider is listed
+//  in every build with a "Preview" badge (`AIProviderID.isPreview`).
 //
 
 import AppKit
@@ -40,14 +40,6 @@ actor ChatGPTAuth {
 
     private static let credentialsAccount = "chatgpt.credentials"
     private static let hostIDKey = "connectedAI.chatGPT.hostID"
-
-    nonisolated static var isPreviewEnabled: Bool {
-        #if DEBUG
-        return true
-        #else
-        return UserDefaults.standard.bool(forKey: "connectedAI.enableChatGPTPreview")
-        #endif
-    }
 
     // MARK: - Credentials
 
