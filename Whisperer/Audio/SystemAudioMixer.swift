@@ -17,6 +17,18 @@ import Foundation
 
 nonisolated final class SystemAudioMixer: @unchecked Sendable {
 
+    /// The levels of both sides over one microphone buffer, on the meeting's own clock (the
+    /// samples the transcript and the diarizer count). Recorded whether or not the far end is
+    /// mixed in: on speakers the mix is off but the tap still says when the call is talking,
+    /// which is what tells a local voice from a remote one (`SpeakerSourceAttribution`).
+    struct SourceFrame: Equatable, Sendable {
+        /// First sample of the buffer, counted from the start of the meeting's audio.
+        let start: Int
+        let count: Int
+        let micRMS: Float
+        let callRMS: Float
+    }
+
     /// The most far-end audio held waiting for a microphone buffer. The two streams run on
     /// different device clocks, so the backlog drifts; past this the oldest samples are dropped
     /// rather than letting the call audio fall further and further behind the user's voice.
@@ -32,6 +44,8 @@ nonisolated final class SystemAudioMixer: @unchecked Sendable {
     private var droppedSamples = 0
     private var underrunSamples = 0
     private var peak: Float = 0
+    private var frames: [SourceFrame] = []
+    private var position = 0
 
     /// False while the far end would be heard twice (the call is playing on speakers, which the
     /// microphone already picks up). The backlog keeps draining so re-enabling it later does not
@@ -63,6 +77,15 @@ nonisolated final class SystemAudioMixer: @unchecked Sendable {
         lock.lock(); defer { lock.unlock() }
         let take = min(mic.count, pending.count)
         let enabled = _isMixEnabled
+        if !mic.isEmpty {
+            var micSum: Float = 0, callSum: Float = 0
+            for v in mic { micSum += v * v }
+            for i in 0..<take { callSum += pending[i] * pending[i] }
+            let n = Float(mic.count)
+            frames.append(SourceFrame(start: position, count: mic.count,
+                                      micRMS: (micSum / n).squareRoot(), callRMS: (callSum / n).squareRoot()))
+            position += mic.count
+        }
         var out = mic
         if enabled {
             for i in 0..<take {
@@ -81,6 +104,12 @@ nonisolated final class SystemAudioMixer: @unchecked Sendable {
     func discardPending() {
         lock.lock(); defer { lock.unlock() }
         pending.removeAll(keepingCapacity: true)
+    }
+
+    /// Every buffer's levels so far, oldest first.
+    var sourceActivity: [SourceFrame] {
+        lock.lock(); defer { lock.unlock() }
+        return frames
     }
 
     var backlog: Int {

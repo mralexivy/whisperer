@@ -375,3 +375,17 @@ poll and the resolver finally agree. Belt and braces on top: exact landing-page 
 matches at all. Services whose in-call titles we cannot verify are covered by the existing
 `sustainedCapturingBrowser` path, which fires "Meeting in <browser>" after 15s of unbroken capture —
 generic, but honest, and it needs no guess about anyone's title format.
+
+## Automatic speaker names from the invite — 2026-11-08
+
+- Identity signal is the audio source, not the voice: the call's audio is captured on its own
+  (process tap, `MeetingCallAudioController`), and `SystemAudioMixer` records per mic buffer the
+  mic and call RMS on the meeting's clock, mixed in or not (on speakers the mix is off but the
+  tap still says when the call talks).
+- `SpeakerSourceAttribution`: a speaker whose speech is ≤25% call-active is local (the user;
+  only the one with the most speech), ≥60% is remote. Needs ≥4 s of speech, and ≥10 s of call
+  activity in the meeting or nothing is classified (a denied tap makes every voice look local).
+- Names: user = the invite's self name (Outlook) else the Mac account name (Google never names
+  the self attendee; no profile scope). 1:1 (one non-declined other) → remote voices = that
+  attendee. Group → remote stays "Speaker N" with invite chips. No invite → nothing.
+- Applied live as cards land (every 10 s of audio) and once at stop; never over a manual rename.

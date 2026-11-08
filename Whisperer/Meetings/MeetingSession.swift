@@ -103,6 +103,16 @@ class MeetingSession: ObservableObject {
     /// flushed *after* a rename pick the new name up too.
     private var speakerNames: [Int: String] = [:]
 
+    /// The calendar invite of this meeting, when it was matched to one. Drives automatic speaker
+    /// names (`SpeakerSourceAttribution`). Set by `MeetingSessionCoordinator` after the start.
+    var participants: [MeetingParticipant] = []
+    /// Per-buffer mic and call levels from the call-audio tap; nil when the call is not captured.
+    /// Set by `MeetingCallAudioController`. Holds the mixer, so it outlives the capture's stop.
+    var sourceActivity: (() -> [SystemAudioMixer.SourceFrame])?
+    /// Speakers the user named by hand. Automatic naming never touches them.
+    private var userNamedSpeakers: Set<Int> = []
+    private var lastAutomaticNamingAt: Double = -.infinity
+
     /// Hard cap on how much audio one transcript card may cover.
     private let maxSegmentDuration: Double = 30.0
 
@@ -349,6 +359,10 @@ class MeetingSession: ObservableObject {
         liveSpeakerName = "Speaker 1"
         hasSpeakerSignal = false
         speakerNames = [:]
+        participants = []
+        sourceActivity = nil
+        userNamedSpeakers = []
+        lastAutomaticNamingAt = -.infinity
         self.sourceBundleID = sourceBundleID
         self.sourceAppName = sourceAppName
         callAudioNote = nil
@@ -439,6 +453,7 @@ class MeetingSession: ObservableObject {
             await self?.awaitTailDelivery()
             guard let self else { return }
 
+            self.refreshAutomaticSpeakerNames(force: true)
             let finalSegments = self.segments
             let transcript = finalSegments.map { $0.text }.joined(separator: " ")
             Logger.info("Meeting session stop: segments=\(finalSegments.count), transcript=\(transcript.count) chars", subsystem: .transcription)
@@ -913,6 +928,7 @@ class MeetingSession: ObservableObject {
             )
         }
         segments.append(contentsOf: newSegments)
+        refreshAutomaticSpeakerNames(force: false)
 
         let carried = (remainder ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
         currentSegmentText = carried
@@ -1073,10 +1089,38 @@ class MeetingSession: ObservableObject {
         guard !trimmed.isEmpty else { return }
 
         // Recorded so segments flushed later in this same recording inherit the new name.
+        userNamedSpeakers.insert(speakerIndex)
         speakerNames[speakerIndex] = trimmed
         segments.renameSpeaker(index: speakerIndex, to: trimmed)
         if speakerIndex == currentSpeakerIndex { currentSpeakerName = trimmed }
         if speakerIndex == liveSpeakerIndex { liveSpeakerName = trimmed }
+    }
+
+    /// Names speakers from the invite: the voice at this Mac's microphone is the user, and in a
+    /// 1:1 the call's voice is the other attendee (see `SpeakerSourceAttribution`). Re-run as
+    /// cards land, at most every 10 s of audio, and once more at stop; a later answer can still
+    /// name a speaker the earlier ones could not. Never overrides a name the user typed.
+    func refreshAutomaticSpeakerNames(force: Bool) {
+        guard !participants.isEmpty, let activity = sourceActivity else { return }
+        let now = segments.last?.endTimestamp ?? 0
+        guard force || now - lastAutomaticNamingAt >= 10 else { return }
+        lastAutomaticNamingAt = now
+        let spans = segments.map {
+            SpeakerSourceAttribution.Span(speakerIndex: $0.speakerIndex, start: $0.timestamp, end: $0.endTimestamp)
+        }
+        let sources = SpeakerSourceAttribution.classify(spans, activity: activity())
+        let names = SpeakerSourceAttribution.names(
+            for: sources, participants: participants,
+            ownName: SpeakerSourceAttribution.ownName(participants: participants))
+        for (index, name) in names.sorted(by: { $0.key < $1.key })
+        where !userNamedSpeakers.contains(index) && speakerNames[index] != name {
+            speakerNames[index] = name
+            segments.renameSpeaker(index: index, to: name)
+            if index == currentSpeakerIndex { currentSpeakerName = name }
+            if index == liveSpeakerIndex { liveSpeakerName = name }
+            Logger.info("Meeting speakers: Speaker \(index + 1) named \(sources[index] == .local ? "as the user" : "from the invite")",
+                        subsystem: .transcription)
+        }
     }
 
     // MARK: - Notes

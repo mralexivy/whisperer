@@ -77,6 +77,9 @@ final class MeetingCallAudioController {
         self.capture = capture
         self.mixer = mixer
         self.target = target
+        // Mic and call levels for automatic speaker names; the closure keeps the mixer alive
+        // past `stop()` so the final naming at the end of the meeting can still read them.
+        session.sourceActivity = { mixer.sourceActivity }
         startedAt = Date()
         reportedSilence = false
         recorder.systemAudioMixer = mixer

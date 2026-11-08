@@ -307,6 +307,7 @@ final class MeetingSessionCoordinator: ObservableObject {
         }
         tracked = Tracked(session: session, origin: origin, bundleID: bundleID, signals: signals,
                           startedAt: Date(), occurrenceID: occurrence?.id)
+        session.participants = occurrence?.participants ?? []
         if let occurrence, !occurrence.participants.isEmpty, let meetingID = session.meetingID {
             await MeetingManager.shared.updateParticipants(meetingID: meetingID, participants: occurrence.participants)
         }
