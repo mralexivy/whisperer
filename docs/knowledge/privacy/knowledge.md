@@ -91,3 +91,22 @@
 - **Hybrid (learned signal over 45 ms reversal, small+medium, codec in the loop):** mute loss flat at ~8.4
   for 200 steps; stopped. Mild reversal alone (real speech): content words kept 88% / 82% / 76% at
   40 / 45 / 50 ms.
+
+## Competitor mechanism (static analysis supplied by user, 2026-11-08)
+
+- A competitor desktop app ("Test App 1.13") uses the SAME virtual-mic route we do (Core Audio
+  AudioServerPlugIn + hidden feed, libASPL, ~20-80 ms bounded ring). It does NOT deny mic access; a call
+  app choosing the physical mic bypasses it. Its own Terms call the effect best-effort and say some
+  systems may still transcribe — so the honest product target is "natural voice, transcription harder,"
+  not guaranteed blocking.
+- Its disruption is a MODEL-ASSISTED, TIME-VARYING SPECTRAL transform at 16 kHz, 400-sample periodic Hann,
+  160 hop, 201 bins, overlap-add normalised by sum of squared windows:
+  `Y[m,k] = (1 + g[m,k]) * X[m,k] * exp(i*phi[m,k])`. A per-frame gain field and phase field, produced by
+  an MLX model path (plus a seeded RNG and an encrypted 2-layer GRU audio profile whose runtime role was
+  not established). Bounds/clamps on g and phi were not identified in the static dump.
+- Takeaway for us: the win over our earlier time-domain added-signal (UAP/pnet) is the PHASE term. The ear
+  is insensitive to absolute phase, but a recogniser recomputes magnitude on its own STFT grid, so a
+  time-varying phase field becomes magnitude error downstream while staying natural. A fixed g(f)/phi(f)
+  is just EQ+all-pass (ASR-robust); the field must change frame-to-frame. `train_spectral.py` learns this.
+- Probe (random smooth phase/gain, no training): STOI 0.98-0.99 at |phi| up to 6 rad / |g| 6 dB, but 0%
+  words changed — confirms random is natural-but-useless; the field must be ADVERSARIALLY TRAINED.
