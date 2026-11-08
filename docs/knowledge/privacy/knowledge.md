@@ -110,3 +110,21 @@
   is just EQ+all-pass (ASR-robust); the field must change frame-to-frame. `train_spectral.py` learns this.
 - Probe (random smooth phase/gain, no training): STOI 0.98-0.99 at |phi| up to 6 rad / |g| 6 dB, but 0%
   words changed — confirms random is natural-but-useless; the field must be ADVERSARIALLY TRAINED.
+
+## Spectral (phase+gain) jammer: trained result — 2026-11-08
+
+- Trained a time-varying spectral field `Y=(1+g)Xe^{iphi}` (`train_spectral.py`, 24-frame loop, bound 4 dB
+  / 2 rad) adversarially against Whisper small+medium with Opus+RNNoise in the loop. true_ce stayed flat
+  at 0.13-0.16 across 120 steps while |phi| grew to 1.41 rad: no disruptive direction found.
+- Held-out eval (real speech, 16 LibriSpeech speakers, after the call proxy): content words kept
+  whisper turbo 97% -> 96.4%, Parakeet 99.3% -> 99%. STOI 0.99, PESQ 3.45 (identical to clean) on the
+  author's voice. => perfectly natural, ~0% effect. The competitor's own mechanism, measured on our
+  bench, lands in the natural-but-useless corner, which is why their Terms say best-effort.
+- Why phase does not survive: 2.5x overlap-add (400-win / 160-hop) averages adjacent frames' phase
+  rotations back out during reconstruction, and the recogniser's magnitude front-end is robust to the
+  rest. Result is consistent with the random-field probe (STOI 0.98, 0% changed).
+- **Three independent mechanisms now hit one wall** (time-domain learned signal, local time reversal,
+  spectral phase+gain): on this bench every output that a listener/SQUIM calls natural (STOI >= 0.9)
+  changes <= ~3% of words after a codec on held-out recognisers; only robotic outputs (STOI ~0.6) disrupt.
+  No tested method delivers natural voice + reliable transcription blocking. The robotic reversal jammer
+  remains the only working disruptor and ships opt-in/off by default.
