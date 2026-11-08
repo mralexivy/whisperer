@@ -17,15 +17,26 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 import benchmark  # noqa: E402
 from run_eval import call_sim, transcribe, to_16k  # noqa: E402
 
-def av_index(name):
-    out = subprocess.run(["ffmpeg", "-hide_banner", "-f", "avfoundation", "-list_devices", "true", "-i", ""],
-                         capture_output=True, text=True).stderr
-    audio = out.split("AVFoundation audio devices:")[-1]
-    for line in audio.splitlines():
-        m = re.search(r"\[(\d+)\] (.+)$", line)
-        if m and name.lower() in m.group(2).lower():
-            return m.group(1), m.group(2).strip()
-    raise SystemExit(f"audio device not found: {name}\n{audio}")
+def hal_index(name):
+    """Core Audio input by name. Recording goes through the HAL (PortAudio), the way call apps read a
+    microphone: ffmpeg's AVFoundation capture receives only ~30% of the virtual mic's buffers."""
+    import sounddevice as sd
+    for i, d in enumerate(sd.query_devices()):
+        if name.lower() in d["name"].lower() and d["max_input_channels"] > 0:
+            return i, d["name"]
+    raise SystemExit(f"audio device not found: {name}")
+
+def record_both(phys, virt, seconds, play):
+    """Record both inputs at 48 kHz mono while `play()` runs; returns (physical, virtual) float32 arrays."""
+    import numpy as np, sounddevice as sd
+    got = {phys: [], virt: []}
+    streams = [sd.InputStream(device=d, channels=1, samplerate=48000, dtype="float32",
+                              callback=lambda data, frames, t, status, d=d: got[d].append(data[:, 0].copy()))
+               for d in (phys, virt)]
+    for st in streams: st.start()
+    time.sleep(0.6); play(); time.sleep(max(0.0, seconds - 0.6))
+    for st in streams: st.stop(); st.close()
+    return tuple(np.concatenate(got[d]) for d in (phys, virt))
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__)
@@ -36,7 +47,7 @@ def main():
     ap.add_argument("--limit", type=int, default=12)
     a = ap.parse_args()
     work = Path(a.work); work.mkdir(parents=True, exist_ok=True)
-    phys, phys_name = av_index(a.physical); virt, virt_name = av_index(a.virtual)
+    phys, phys_name = hal_index(a.physical); virt, virt_name = hal_index(a.virtual)
     print(f"physical: [{phys}] {phys_name}   virtual: [{virt}] {virt_name}", flush=True)
     rows = [json.loads(l) for l in (Path(a.corpus) / "corpus.jsonl").read_text().splitlines() if l.strip()][: a.limit]
     results = []
@@ -45,12 +56,9 @@ def main():
         dur = float(subprocess.run(["ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "csv=p=0", str(clip)],
                                    capture_output=True, text=True).stdout or 5) + 1.5
         pw, vw = work / f"{r['id']}.physical.wav", work / f"{r['id']}.virtual.wav"
-        rec = subprocess.Popen(["ffmpeg", "-y", "-v", "error", "-f", "avfoundation", "-i", f":{phys}", "-f", "avfoundation", "-i", f":{virt}",
-                                "-t", f"{dur:.2f}", "-map", "0:a", "-ac", "1", "-ar", "48000", str(pw),
-                                "-t", f"{dur:.2f}", "-map", "1:a", "-ac", "1", "-ar", "48000", str(vw)])
-        time.sleep(0.6)
-        subprocess.run(["afplay", str(clip)], check=True)
-        rec.wait(timeout=dur + 10)
+        p, v = record_both(phys, virt, dur, lambda: subprocess.run(["afplay", str(clip)], check=True))
+        import soundfile as sf
+        sf.write(pw, p, 48000, subtype="PCM_16"); sf.write(vw, v, 48000, subtype="PCM_16")
         row = {"id": r["id"]}
         for side, wav in (("physical", pw), ("virtual", vw)):
             d16 = work / f"{r['id']}.{side}.direct16.wav"; to_16k(wav, d16)

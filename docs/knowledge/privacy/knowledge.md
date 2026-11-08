@@ -70,3 +70,9 @@
   intelligible). Periodic noise interruption 2-3%. Frequency shift 60 Hz 0%. Learned continuous signal
   (UAP, predictive net, jammer net): <= 22% even at voice level. Learned mute burst before speech
   (`train_burst.py`): learns without the codec (p(EOT) 0 -> 12% in 60 steps) but only to ~4% through Opus.
+- **Live, in the app (2026-11-08).** Clips played through the speakers -> physical mic -> shield (identity
+  + jammer) -> Whisperer Virtual Mic, recorded through Core Audio: after the call proxy whisper turbo kept
+  2.8% of key facts (physical mic transcript: all of them). `live_test.py` now records through the HAL
+  (PortAudio); ffmpeg's AVFoundation capture received only ~30% of the virtual mic's buffers (6.0 s of
+  samples in 20 s; a 1 kHz tone arrived at the right pitch, so buffers were dropped, not resampled),
+  which made earlier live runs look like silence.
