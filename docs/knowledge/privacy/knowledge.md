@@ -42,3 +42,8 @@
   Modern ASR is highly noise-robust: plain noise as loud as the voice changes ~4% of words on whisper V3.
 - Train only on OPEN surrogate ASR (open Whisper small/medium, wav2vec2); hold out the app's own model
   (turbo) and Parakeet for honest evaluation. Never target a specific commercial endpoint.
+- **Dedicated jammer run (`pnet-jam`, 600 steps, finished 2026-11-07 22:43).** Held-out eval after the
+  call, whisper turbo: words changed 10.9% / 17.8% / 16.5% at steps 200 / 400 / 600; key facts still
+  recoverable 72% / 67% / 67%. Perturbation sits only ~5 dB under the voice (clearly audible). More
+  training past step 400 did not help. Even an audible learned signal leaves two-thirds of the facts
+  readable, so do not market this as anti-transcription. Identity protection is the shippable claim.
