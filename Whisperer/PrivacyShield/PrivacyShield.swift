@@ -86,8 +86,9 @@ final class PrivacyShieldController {
     private nonisolated static let restoreKey = "privacyShieldRestoreInputUID"
     static let jamKey = "privacyShieldJamTranscription"
 
-    /// Whether the shield also blocks transcription (the jammer). On unless the user turned it off.
-    static var jamsTranscription: Bool { UserDefaults.standard.object(forKey: jamKey) as? Bool ?? true }
+    /// Whether the shield also blocks transcription (the jammer). Off unless the user turns it on: it makes
+    /// the voice sound robotic to listeners (author's listening check, 2026-11-08).
+    static var jamsTranscription: Bool { UserDefaults.standard.object(forKey: jamKey) as? Bool ?? false }
 
     /// Changing the jammer restarts a running shield so the new setting applies to the live voice.
     func setJamsTranscription(_ enabled: Bool) {

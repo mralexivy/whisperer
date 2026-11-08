@@ -43,7 +43,7 @@ struct PrivacyShieldView: View {
                 .tint(MBColors.accent)
                 .disabled(app.privacyShield.phase == .stopping || app.privacyShield.phase == .starting)
             Text(jams
-                 ? "Your Mac reshapes your voice and scrambles it in short slices before it reaches the call. People can still follow you; AI note takers get mostly nonsense, and can't identify or clone your voice. In our tests on real speech after a call, three speech recognizers kept only about 1 in 8 of the words that matter. It makes transcription much harder, not impossible. Adds about 90 ms of delay. Use headphones."
+                 ? "Your Mac reshapes your voice and scrambles it in short slices before it reaches the call. Your voice sounds robotic to people on the call; AI note takers get mostly nonsense, and can't identify or clone your voice. In our tests on real speech after a call, three speech recognizers kept only about 1 in 8 of the words that matter. It makes transcription much harder, not impossible. Adds about 90 ms of delay. Use headphones."
                  : "Your Mac reshapes your voice before it reaches the call, so AI can't identify you or clone your voice. People and transcription still get every word. It makes recognition much harder, not impossible. Use headphones.")
                 .font(.caption2).foregroundStyle(MBColors.textSecondary)
                 .fixedSize(horizontal: false, vertical: true)
