@@ -60,6 +60,14 @@ actor SystemLivePreviewBridge: LivePreviewEngine {
     nonisolated static let confidentProbability: Float = 0.8
     /// Audio kept for replay into a restarted analyzer. Past it, a restart carries text over.
     nonisolated static let replayLimitSamples = 16_000 * 30
+    /// After the start-of-session decision, the language is re-checked on the most recent
+    /// `reprobeWindowSamples` every `reprobeIntervalSamples` of audio, so a session that started
+    /// in the wrong language (or genuinely switched) follows the speech. See
+    /// `LanguageReprobeTracker` for the switching rule.
+    nonisolated static let reprobeIntervalSamples = 16_000 * 15
+    nonisolated static let reprobeWindowSamples = 16_000 * 8
+    /// RMS below which a re-probe window is treated as silence and skipped.
+    nonisolated static let reprobeMinimumRMS: Float = 0.005
 
     private var sessionID = 0
     private var sessionLanguage: TranscriptionLanguage?
@@ -83,6 +91,11 @@ actor SystemLivePreviewBridge: LivePreviewEngine {
     private var probedCheckpoints: Set<Double> = []
     /// This session's first checkpoint (`LanguageProbe.Source.earliestSeconds`).
     private var probeEarlySeconds = SystemLivePreviewBridge.earlyProbeSeconds
+    /// The last `reprobeWindowSamples` of audio, kept for the whole session (unlike `sessionAudio`,
+    /// which stops at the replay limit).
+    private var recentAudio: [Float] = []
+    private var samplesSinceReprobe = 0
+    private var reprobe = LanguageReprobeTracker()
 
     private var analyzer: SpeechAnalyzer?
     private var input: AsyncStream<AnalyzerInput>.Continuation?
@@ -248,10 +261,12 @@ actor SystemLivePreviewBridge: LivePreviewEngine {
 
     func feed(samples: [Float]) async {
         recordSessionAudio(samples)
+        recordRecentAudio(samples)
         if let input, let format = analyzerFormat, let buffer = makeBuffer(samples, format: format) {
             input.yield(AnalyzerInput(buffer: buffer))
         }
         scheduleProbeIfDue()
+        scheduleReprobeIfDue()
     }
 
     func endSession() async -> String {
@@ -304,6 +319,61 @@ actor SystemLivePreviewBridge: LivePreviewEngine {
         pendingFrame = []
         probeInFlight = false
         probedCheckpoints = []
+        recentAudio = []
+        samplesSinceReprobe = 0
+        reprobe.reset()
+    }
+
+    // MARK: - Re-probe (whole session)
+
+    private func recordRecentAudio(_ samples: [Float]) {
+        recentAudio.append(contentsOf: samples)
+        // Trimmed in bulk, not per feed: a per-feed trim copied the whole 8 s window every 20 ms.
+        if recentAudio.count > Self.reprobeWindowSamples * 2 {
+            recentAudio.removeFirst(recentAudio.count - Self.reprobeWindowSamples)
+        }
+        samplesSinceReprobe += samples.count
+    }
+
+    /// Re-check the language on recent speech once the start decision is made. Only in auto mode
+    /// with a real choice (`probeCandidates`), never while another probe runs, never on silence.
+    private func scheduleReprobeIfDue() {
+        guard probeStage == .decided, !probeInFlight, let probe, probeCandidates.count > 1,
+              sessionLanguage != nil, samplesSinceReprobe >= Self.reprobeIntervalSamples,
+              recentAudio.count >= Self.reprobeWindowSamples else { return }
+        samplesSinceReprobe = 0
+        let window = Array(recentAudio.suffix(Self.reprobeWindowSamples))
+        var sum: Float = 0
+        for value in window { sum += value * value }
+        guard (sum / Float(window.count)).squareRoot() >= Self.reprobeMinimumRMS else { return }
+        probeInFlight = true
+        let candidates = probeCandidates
+        let id = sessionID
+        Task { [weak self] in
+            let result = await probe.identify(samples: window, allowed: candidates)
+            await self?.reprobeFinished(result, session: id)
+        }
+    }
+
+    private func reprobeFinished(
+        _ result: (language: TranscriptionLanguage, probability: Float, probabilities: [TranscriptionLanguage: Float])?,
+        session: Int
+    ) async {
+        guard session == sessionID else { return }
+        probeInFlight = false
+        guard let result, let current = sessionLanguage else { return }
+        let scores = result.probabilities.sorted { $0.value > $1.value }
+            .map { "\($0.key.rawValue)=\(String(format: "%.2f", $0.value))" }.joined(separator: " ")
+        guard let target = reprobe.observe(language: result.language, probability: result.probability,
+                                           current: current) else {
+            if result.language != current, result.probability >= LanguageReprobeTracker.confidentProbability {
+                Logger.info("Language re-probe: \(result.language.rawValue) (\(scores)) against \(current.rawValue) — waiting for agreement", subsystem: .transcription)
+            }
+            return
+        }
+        Logger.info("Language re-probe: switching \(current.rawValue) → \(target.rawValue) (\(scores))", subsystem: .transcription)
+        UserDefaults.standard.set(target.rawValue, forKey: Self.lastLanguageKey)
+        await switchLanguage(to: target, reason: "re-probe", replay: false)
     }
 
     /// Keep the session's audio for the probe and for replay, and find where speech starts:

@@ -1057,3 +1057,11 @@ Supersedes the 2026-10-07 "Qwen3-ASR as the default engine" decision and the 202
   Qwen3's text. With Apple feeding the cards (`.accumulatedPartials`) they are Apple's words, so
   a Russian meeting Apple wrote in English was never re-decoded. `lastMeetingASREngine` now
   records `.speechAnalyzer` when Apple wrote the cards, so every language is re-decoded.
+- Live text now re-probes for the whole session (`SystemLivePreviewBridge` re-probe +
+  `LanguageReprobeTracker`): last 8 s every 15 s, switch on 2 consecutive confident (≥0.85)
+  answers for the same other language. It does not depend on Qwen3 committing chunks, which
+  stalled for ~2 min in the 14:59 meeting. Measured with the production Qwen3 probe on the user's
+  recordings (`LanguageReprobeRealAudioTests`): English opener → start en 1.00; Hebrew and
+  Russian meetings switch at 33 s (he/ru 1.00 on every re-probe); an English meeting stays English.
+- Russian refine runs on the baseline (large-v3-turbo q5); on the user's Russian recordings it
+  writes clean Russian.

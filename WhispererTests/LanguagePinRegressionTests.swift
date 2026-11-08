@@ -126,6 +126,43 @@ final class LanguagePinRegressionTests: XCTestCase {
         XCTAssertEqual(pinner.observe(code: "en", text: "so everyone can follow")?.isRepin, true)
     }
 
+    // MARK: - A6: live text re-checks its language for the whole session
+
+    /// The 14:59 meeting: Apple started English from the opener, then every re-probe hears Hebrew.
+    func testReprobeSwitchesAMeetingThatStartedInTheWrongLanguage() {
+        var tracker = LanguageReprobeTracker()
+        XCTAssertNil(tracker.observe(language: .hebrew, probability: 0.97, current: .english),
+                     "one probe is not enough")
+        XCTAssertEqual(tracker.observe(language: .hebrew, probability: 0.99, current: .english), .hebrew)
+    }
+
+    /// The 16:02 meeting, in Russian, opened the same way.
+    func testReprobeSwitchesToRussian() {
+        var tracker = LanguageReprobeTracker()
+        _ = tracker.observe(language: .russian, probability: 0.93, current: .english)
+        XCTAssertEqual(tracker.observe(language: .russian, probability: 0.95, current: .english), .russian)
+    }
+
+    /// An English phrase inside a Hebrew meeting ("business unit", "Bank of America") is one
+    /// window; the next Hebrew window clears it.
+    func testReprobeIgnoresOneWindowOfAnotherLanguage() {
+        var tracker = LanguageReprobeTracker()
+        XCTAssertNil(tracker.observe(language: .english, probability: 0.92, current: .hebrew))
+        XCTAssertNil(tracker.observe(language: .hebrew, probability: 0.98, current: .hebrew))
+        XCTAssertNil(tracker.observe(language: .english, probability: 0.92, current: .hebrew),
+                     "the earlier English window must not carry over past the Hebrew one")
+    }
+
+    /// An unsure answer is neither evidence for a switch nor against it.
+    func testReprobeIgnoresUnsureAnswers() {
+        var tracker = LanguageReprobeTracker()
+        XCTAssertNil(tracker.observe(language: .hebrew, probability: 0.90, current: .english))
+        XCTAssertNil(tracker.observe(language: .english, probability: 0.55, current: .english))
+        XCTAssertEqual(tracker.observe(language: .hebrew, probability: 0.91, current: .english), .hebrew,
+                       "an unsure probe in between must not reset the run")
+        XCTAssertNil(tracker.observe(language: .russian, probability: 0.60, current: .hebrew))
+    }
+
     // MARK: - B: the fused verdict
 
     private func probe(_ probabilities: [String: Float], from start: Double, to end: Double) -> MeetingLanguageProbe {

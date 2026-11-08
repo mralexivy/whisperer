@@ -21,6 +21,41 @@
 
 import Foundation
 
+/// Decides when a running live-text session has drifted into the wrong language, from periodic
+/// re-probes of its most recent audio.
+///
+/// The start-of-session probe answers from the first 2–3 s and was final: a meeting that opened
+/// on English words ("OK, this is Sasha and Keren") streamed Apple dictation in English for 53
+/// minutes of Hebrew, and a Russian meeting likewise (2026-11-08). Re-probing fixes that, but one
+/// English phrase inside a Hebrew meeting must not flip it, so a switch needs consecutive
+/// confident answers for the same other language. Unsure answers count for nothing either way.
+nonisolated struct LanguageReprobeTracker: Equatable {
+    static let confidentProbability: Float = 0.85
+    static let agreeingProbes = 2
+
+    private(set) var challenger: TranscriptionLanguage?
+    private(set) var run = 0
+
+    mutating func reset() {
+        challenger = nil
+        run = 0
+    }
+
+    /// One re-probe's answer. Returns the language to switch to, or nil to stay.
+    mutating func observe(language: TranscriptionLanguage, probability: Float,
+                          current: TranscriptionLanguage?) -> TranscriptionLanguage? {
+        guard probability >= Self.confidentProbability else { return nil }
+        guard language != current else {
+            reset()
+            return nil
+        }
+        if challenger == language { run += 1 } else { challenger = language; run = 1 }
+        guard run >= Self.agreeingProbes else { return nil }
+        reset()
+        return language
+    }
+}
+
 actor LanguageProbe {
 
     /// The engine the probe runs on, resolved per call: the main engine can load, unload or be
