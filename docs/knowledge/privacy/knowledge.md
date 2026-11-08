@@ -128,3 +128,20 @@
   changes <= ~3% of words after a codec on held-out recognisers; only robotic outputs (STOI ~0.6) disrupt.
   No tested method delivers natural voice + reliable transcription blocking. The robotic reversal jammer
   remains the only working disruptor and ships opt-in/off by default.
+
+## Competitor's EXACT recovered config, measured — 2026-11-08
+
+- Reproduced Test App 1.13's shipped recipe faithfully from the user's static analysis
+  (`competitor_processor.py`): stochastic SplitMix64+Box-Muller Gaussian fields, frequency envelope
+  `0:0.45,1000:1.2,2000:1.6` (bin k = 40k Hz), strength factors 0.3 (gain) / 0.1 (phase), on
+  `Y=(1+g)Xe^{iphi}`. No training; this is their method, not ours.
+- **Measured on our bench after the call proxy:**
+  - TTS corpus: strength 1 (shipped) STOI 0.988 / 0.8% words changed; strength 4 STOI 0.907 / 0%;
+    strength 8 (audibly noisy) STOI 0.798 / 0%.
+  - Real speech, held-out recognisers: strength 1 whisper content 97.9%->97.1%, Parakeet 99.1%->99.1%;
+    strength 4 whisper 97.9%->97.4%, Parakeet unchanged.
+- **Conclusion:** the competitor's own shipped algorithm, faithfully reproduced, does essentially nothing
+  to a modern recogniser even pushed 8x past shipped strength. This is not a reproduction failure: it
+  matches their own Terms ("best effort", "some systems may still transcribe"). A per-cell stochastic
+  spectral perturbation averages out in the mel front end; the recogniser is robust to the broadband
+  residue. Chasing their mechanism further is not worthwhile — it is measurably best-effort/ineffective.
