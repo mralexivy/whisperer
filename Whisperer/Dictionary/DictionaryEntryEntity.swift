@@ -9,7 +9,7 @@ import Foundation
 import CoreData
 
 @objc(DictionaryEntryEntity)
-public class DictionaryEntryEntity: NSManagedObject {
+nonisolated public class DictionaryEntryEntity: NSManagedObject {
     @NSManaged public var id: UUID
     @NSManaged public var incorrectForm: String
     @NSManaged public var correctForm: String
@@ -28,11 +28,11 @@ public class DictionaryEntryEntity: NSManagedObject {
     @NSManaged public var observedSource: String?
 }
 
-extension DictionaryEntryEntity: Identifiable {}
+nonisolated extension DictionaryEntryEntity: Identifiable {}
 
 // MARK: - Fetch Request
 
-extension DictionaryEntryEntity {
+nonisolated extension DictionaryEntryEntity {
     @nonobjc public class func fetchRequest() -> NSFetchRequest<DictionaryEntryEntity> {
         return NSFetchRequest<DictionaryEntryEntity>(entityName: "DictionaryEntryEntity")
     }
@@ -40,7 +40,7 @@ extension DictionaryEntryEntity {
 
 // MARK: - Convenience Initializer
 
-extension DictionaryEntryEntity {
+nonisolated extension DictionaryEntryEntity {
     static func create(
         in context: NSManagedObjectContext,
         incorrectForm: String,

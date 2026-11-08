@@ -8,6 +8,7 @@
 import Foundation
 import CoreData
 import Combine
+import os
 
 @MainActor
 class DictionaryManager: ObservableObject {
@@ -27,16 +28,19 @@ class DictionaryManager: ObservableObject {
                 rebuildWorkItem = nil
                 correctionEngine = nil
             }
+            publishCorrectionSnapshot()
         }
     }
     @Published var fuzzyMatchingSensitivity: Int = 2 {
         didSet {
             UserDefaults.standard.set(fuzzyMatchingSensitivity, forKey: "fuzzyMatchingSensitivity")
+            publishCorrectionSnapshot()
         }
     }
     @Published var usePhoneticMatching: Bool = true {
         didSet {
             UserDefaults.standard.set(usePhoneticMatching, forKey: "usePhoneticMatching")
+            publishCorrectionSnapshot()
         }
     }
     /// Cross-session dictionary learning: words you correct stop being wrong.
@@ -59,7 +63,32 @@ class DictionaryManager: ObservableObject {
         database.viewContext
     }
 
-    private var correctionEngine: CorrectionEngine?
+    private var correctionEngine: CorrectionEngine? {
+        didSet { publishCorrectionSnapshot() }
+    }
+
+    /// What `correctTextCapturing` needs, readable from any thread. That method is called off the
+    /// main thread (`AppState.applyDictionaryOffMainThread` runs it on a global queue, the meeting
+    /// refiner on its own task), and it used to read `correctionEngine` and the @Published
+    /// settings directly — a data race with the main-thread swap in `scheduleRebuild`, which could
+    /// release the old engine under a reader. The main actor republishes this on every change.
+    private nonisolated struct CorrectionSnapshot: Sendable {
+        var engine: CorrectionEngine?
+        var isEnabled = true
+        var maxEditDistance = 2
+        var usePhonetic = true
+    }
+    private nonisolated let correctionSnapshot = OSAllocatedUnfairLock(initialState: CorrectionSnapshot())
+
+    private func publishCorrectionSnapshot() {
+        let snapshot = CorrectionSnapshot(
+            engine: correctionEngine,
+            isEnabled: isEnabled,
+            maxEditDistance: fuzzyMatchingSensitivity,
+            usePhonetic: usePhoneticMatching
+        )
+        correctionSnapshot.withLock { $0 = snapshot }
+    }
     private var packPreferences = DictionaryPackPreferences()
     private let packPreferencesKey = "dictionaryPackPreferences"
 
@@ -78,6 +107,8 @@ class DictionaryManager: ObservableObject {
         fuzzyMatchingSensitivity = UserDefaults.standard.object(forKey: "fuzzyMatchingSensitivity") as? Int ?? 2
         usePhoneticMatching = UserDefaults.standard.object(forKey: "usePhoneticMatching") as? Bool ?? true
         correctionLearningEnabled = UserDefaults.standard.object(forKey: "correctionLearningEnabled") as? Bool ?? true
+        // Property observers do not run for assignments in `init`.
+        publishCorrectionSnapshot()
 
         // Load pack preferences
         if let data = UserDefaults.standard.data(forKey: packPreferencesKey),
@@ -95,14 +126,15 @@ class DictionaryManager: ObservableObject {
             // Load packs from files (background thread)
             let loadedPacks = await Self.loadPacksInBackground(packPreferences: capturedPackPrefs)
 
-            // Load entries from CoreData (background context)
-            let loadedEntries = await Self.loadEntriesInBackground()
+            // `HistoryDatabase` is main-actor state; a background context is Sendable and cheap
+            // to make, so it is taken there and every fetch below runs on its own queue.
+            let context = await MainActor.run { HistoryDatabase.shared.newBackgroundContext() }
 
-            // Also check if bundled dictionary needs loading
-            await Self.loadBundledDictionaryInBackground(packs: loadedPacks, packPreferences: capturedPackPrefs)
+            // Check if bundled dictionary needs loading
+            await Self.loadBundledDictionaryInBackground(packs: loadedPacks, packPreferences: capturedPackPrefs, context: context)
 
-            // Reload entries after bundled loading
-            let finalEntries = await Self.loadEntriesInBackground()
+            // Load entries after bundled loading. (A first load before it was discarded unread.)
+            let finalEntries = await Self.loadEntriesInBackground(context: context)
 
             // Build correction engine on background thread (SymSpell + PhoneticMatcher
             // index building is expensive and would block the main actor for ~2s,
@@ -123,8 +155,12 @@ class DictionaryManager: ObservableObject {
 
     // MARK: - Background Loading (off main thread)
 
+    // The loaders below are `@concurrent nonisolated`. As plain `static func`s on this
+    // main-actor class they were main-actor isolated, so every `await` from the detached init
+    // task hopped back and decoded ~480 KB of pack JSON and ran the Core Data import on main.
+
     /// Load packs from bundle files without blocking main thread
-    private static func loadPacksInBackground(packPreferences: DictionaryPackPreferences) async -> [DictionaryPack] {
+    @concurrent private nonisolated static func loadPacksInBackground(packPreferences: DictionaryPackPreferences) async -> [DictionaryPack] {
         guard let resourcePath = Bundle.main.resourcePath else {
             return []
         }
@@ -173,10 +209,7 @@ class DictionaryManager: ObservableObject {
     }
 
     /// Load entries from CoreData using background context
-    private static func loadEntriesInBackground() async -> [DictionaryEntry] {
-        let database = HistoryDatabase.shared
-        let context = database.newBackgroundContext()
-
+    @concurrent private nonisolated static func loadEntriesInBackground(context: NSManagedObjectContext) async -> [DictionaryEntry] {
         return await context.perform {
             let fetchRequest: NSFetchRequest<DictionaryEntryEntity> = DictionaryEntryEntity.fetchRequest()
             fetchRequest.sortDescriptors = [NSSortDescriptor(key: "incorrectForm", ascending: true)]
@@ -192,10 +225,7 @@ class DictionaryManager: ObservableObject {
     }
 
     /// Load bundled dictionary entries in background if needed
-    private static func loadBundledDictionaryInBackground(packs: [DictionaryPack], packPreferences: DictionaryPackPreferences) async {
-        let database = HistoryDatabase.shared
-        let context = database.newBackgroundContext()
-
+    @concurrent private nonisolated static func loadBundledDictionaryInBackground(packs: [DictionaryPack], packPreferences: DictionaryPackPreferences, context: NSManagedObjectContext) async {
         // Load entries from all enabled packs that haven't been loaded or have new versions
         for pack in packs where pack.isEnabled {
             let loadedVersion = packPreferences.getLoadedVersion(pack.id)
@@ -259,7 +289,7 @@ class DictionaryManager: ObservableObject {
     }
 
     /// Load entries from a specific pack in background
-    private static func loadEntriesFromPackInBackground(_ pack: DictionaryPack, context: NSManagedObjectContext, packPreferences: DictionaryPackPreferences) async {
+    @concurrent private nonisolated static func loadEntriesFromPackInBackground(_ pack: DictionaryPack, context: NSManagedObjectContext, packPreferences: DictionaryPackPreferences) async {
         guard let resourcePath = Bundle.main.resourcePath else { return }
 
         let fileManager = FileManager.default
@@ -323,7 +353,7 @@ class DictionaryManager: ObservableObject {
     ///
     /// Called once per pack-schema version bump (guarded by `dictionaryPruneVersion` in
     /// UserDefaults). Never touches user-created entries (`isBuiltIn == false`).
-    private static func pruneRemovedBuiltInEntries(packs: [DictionaryPack], context: NSManagedObjectContext) async {
+    @concurrent private nonisolated static func pruneRemovedBuiltInEntries(packs: [DictionaryPack], context: NSManagedObjectContext) async {
         guard let resourcePath = Bundle.main.resourcePath else { return }
 
         let fileManager = FileManager.default
@@ -529,9 +559,9 @@ class DictionaryManager: ObservableObject {
 
         // 2. Persist to CoreData on background context (off main thread)
         let entryId = entry.id
-        let database = self.database
+        // Made here: `HistoryDatabase` is main-actor state, the context itself is Sendable.
+        let bgContext = database.newBackgroundContext()
         Task.detached {
-            let bgContext = database.newBackgroundContext()
             await bgContext.perform {
                 let fetchRequest: NSFetchRequest<DictionaryEntryEntity> = DictionaryEntryEntity.fetchRequest()
                 fetchRequest.predicate = NSPredicate(format: "id == %@", entryId as CVarArg)
@@ -835,13 +865,18 @@ class DictionaryManager: ObservableObject {
     /// slot. The slot cross-attributed: a meeting refine correcting its 88th window overwrote
     /// what a finishing dictation's history save was about to read, so a record was stamped with
     /// another job's terms. Callers now own the list, which makes that impossible by construction.
-    func correctTextCapturing(_ text: String) -> (text: String, corrections: [AppliedCorrection]) {
-        guard isEnabled, let engine = correctionEngine else {
+    ///
+    /// `nonisolated`: callers run it off the main thread on purpose (it can take seconds on a
+    /// long transcript). It reads only the lock-protected `correctionSnapshot`.
+    nonisolated func correctTextCapturing(_ text: String) -> (text: String, corrections: [AppliedCorrection]) {
+        let snapshot = correctionSnapshot.withLock { $0 }
+        guard snapshot.isEnabled, let engine = snapshot.engine else {
             return (text, [])
         }
 
         // Use the new sensitivity settings (0 = exact match only, 1-3 = edit distance)
-        let maxEditDistance = fuzzyMatchingSensitivity
+        let maxEditDistance = snapshot.maxEditDistance
+        let usePhoneticMatching = snapshot.usePhonetic
         let result = engine.applyCorrections(text, maxEditDistance: maxEditDistance, usePhonetic: usePhoneticMatching)
 
         let applied = result.corrections.map {
@@ -857,9 +892,12 @@ class DictionaryManager: ObservableObject {
         }
 
         // Increment use counts for applied corrections
-        Task {
-            for correction in result.corrections {
-                await incrementUseCount(correction.original)
+        if !result.corrections.isEmpty {
+            let originals = result.corrections.map(\.original)
+            Task { @MainActor [weak self] in
+                for original in originals {
+                    await self?.incrementUseCount(original)
+                }
             }
         }
 

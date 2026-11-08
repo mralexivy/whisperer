@@ -58,7 +58,7 @@ enum WisprDictionaryImporter {
         }
     }
 
-    static var defaultDatabaseURL: URL {
+    nonisolated static var defaultDatabaseURL: URL {
         FileManager.default
             .homeDirectoryForCurrentUser
             .appendingPathComponent("Library/Application Support/Wispr Flow/flow.sqlite")

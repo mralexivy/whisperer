@@ -25,7 +25,7 @@
 
 import Foundation
 
-enum MeetingOverviewParser {
+nonisolated enum MeetingOverviewParser {
 
     /// Every label the format defines. Any line that starts with one of these ends
     /// a multi-paragraph OVERVIEW.

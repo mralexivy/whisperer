@@ -33,8 +33,10 @@ final class TranscriptPolishController: ObservableObject {
         await MeetingManager.shared.updateSegments(meetingID: id, segments: segments)
     }
 
-    init(store: ConnectedAIStore = .shared, defaults: UserDefaults = .standard) {
-        self.store = store
+    /// `store` nil = `ConnectedAIStore.shared`, resolved here on the main actor (a default
+    /// argument of `.shared` would be evaluated in a nonisolated context).
+    init(store: ConnectedAIStore? = nil, defaults: UserDefaults = .standard) {
+        self.store = store ?? .shared
         self.defaults = defaults
     }
 
@@ -66,16 +68,20 @@ final class TranscriptPolishController: ObservableObject {
         let started = Date()
         let chars = segments.reduce(0) { $0 + $1.text.count }
         Logger.info("Transcript polish: \(provider.id.rawValue) (\(provider.modelLabel ?? "default")) starting for \(meetingID), \(segments.count) card(s), \(chars) chars", subsystem: .transcription)
+        // An immutable weak reference: the progress callback runs concurrently, so it must not
+        // capture a mutable `weak var` (which is what a `[weak self]` capture list produces).
+        weak let weakSelf = self
+        let onProgress: @Sendable (Int, Int) -> Void = { done, total in
+            Task { @MainActor in
+                guard let self = weakSelf, self.meetingID == meetingID, self.isRunning else { return }
+                self.phase = .running(done: done, total: max(total, 1))
+            }
+        }
         let t = Task { [weak self] in
             do {
                 let outcome = try await MeetingTranscriptPolisher.polish(
                     segments, with: provider, languageName: languageName,
-                    onProgress: { done, total in
-                        Task { @MainActor [weak self] in
-                            guard let self, self.meetingID == meetingID, self.isRunning else { return }
-                            self.phase = .running(done: done, total: max(total, 1))
-                        }
-                    })
+                    onProgress: onProgress)
                 await persist(meetingID, outcome.segments)
                 MeetingAIProvenance.record(
                     MeetingAIProvenance(source: provider.id.rawValue, model: provider.modelLabel, date: Date()),

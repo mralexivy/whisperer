@@ -232,6 +232,9 @@ struct IslandContentView: View {
     var body: some View {
         rootBodyView
             .onAppear {
+                // A local, so the `[weak coordinator]` captures below are not undercut by an
+                // implicit strong capture of the view's property in this closure.
+                let coordinator = self.coordinator
                 hitBox.onScrollWheel = { [weak coordinator] delta, phase in
                     coordinator?.handleScrollWheel(delta: delta, phase: phase)
                 }

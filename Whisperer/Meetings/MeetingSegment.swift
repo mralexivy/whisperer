@@ -9,7 +9,7 @@ import Foundation
 
 // MARK: - Segment
 
-struct MeetingSegment: Codable, Identifiable, Equatable {
+nonisolated struct MeetingSegment: Codable, Identifiable, Equatable {
     var id: UUID
     var timestamp: Double          // seconds from meeting start
     var endTimestamp: Double       // estimated end (start + chunk duration)
@@ -50,7 +50,7 @@ struct MeetingSegment: Codable, Identifiable, Equatable {
     }
 }
 
-enum SegmentTag: String, Codable, CaseIterable {
+nonisolated enum SegmentTag: String, Codable, CaseIterable {
     case keyPoint = "KEY POINT"
     case decision = "DECISION"
     case risk     = "RISK"
@@ -68,7 +68,7 @@ enum SegmentTag: String, Codable, CaseIterable {
 
 // MARK: - Note
 
-struct MeetingNote: Codable, Identifiable, Equatable {
+nonisolated struct MeetingNote: Codable, Identifiable, Equatable {
     var id: UUID
     var kind: NoteKind
     /// Seconds into the meeting the note is about; negative = about the meeting as a whole.
@@ -93,7 +93,7 @@ struct MeetingNote: Codable, Identifiable, Equatable {
     var isByAI: Bool { author != nil }
 }
 
-enum NoteKind: String, Codable, CaseIterable {
+nonisolated enum NoteKind: String, Codable, CaseIterable {
     case note     = "NOTE"
     case decision = "DECISION"
     case risk     = "RISK"
@@ -111,7 +111,7 @@ enum NoteKind: String, Codable, CaseIterable {
 
 // MARK: - Action item
 
-struct MeetingActionItem: Codable, Identifiable, Equatable {
+nonisolated struct MeetingActionItem: Codable, Identifiable, Equatable {
     var id: UUID
     var text: String
     var ownerName: String
@@ -129,7 +129,7 @@ struct MeetingActionItem: Codable, Identifiable, Equatable {
 
 // MARK: - AI summary sub-types
 
-struct TopicItem: Codable, Identifiable, Equatable {
+nonisolated struct TopicItem: Codable, Identifiable, Equatable {
     var id: UUID
     var text: String
     var timestampSeconds: Double
@@ -141,7 +141,7 @@ struct TopicItem: Codable, Identifiable, Equatable {
     }
 }
 
-struct DecisionItem: Codable, Identifiable, Equatable {
+nonisolated struct DecisionItem: Codable, Identifiable, Equatable {
     var id: UUID
     var label: String
     var text: String
@@ -155,7 +155,7 @@ struct DecisionItem: Codable, Identifiable, Equatable {
     }
 }
 
-struct QuestionItem: Codable, Identifiable, Equatable {
+nonisolated struct QuestionItem: Codable, Identifiable, Equatable {
     var id: UUID
     var text: String
     var timestampSeconds: Double
@@ -169,7 +169,7 @@ struct QuestionItem: Codable, Identifiable, Equatable {
 
 // MARK: - AI summary
 
-struct MeetingAISummary: Codable, Equatable {
+nonisolated struct MeetingAISummary: Codable, Equatable {
     var overview: String
     var keyTopics: [TopicItem]
     var decisions: [DecisionItem]
@@ -189,7 +189,7 @@ struct MeetingAISummary: Codable, Equatable {
     }
 }
 
-extension MeetingAISummary {
+nonisolated extension MeetingAISummary {
     // Lenient decoder: missing or malformed fields fall back to empty defaults instead of
     // throwing. This lets the JSON repair path return a partial-but-usable summary when
     // the LLM output is truncated by a generation timeout.

@@ -13,7 +13,7 @@ import WhisperKit
 
 // MARK: - Snapshot progress (ordering-stamped for monotonic delivery)
 
-struct PartialTranscription: Sendable {
+nonisolated struct PartialTranscription: Sendable {
     let sessionGeneration: UInt64
     let chunkGeneration: UInt64
     let windowId: Int
@@ -21,7 +21,7 @@ struct PartialTranscription: Sendable {
     let text: String
 }
 
-struct WhisperKitStreamingWord: Sendable {
+nonisolated struct WhisperKitStreamingWord: Sendable {
     let text: String
     let tokens: [Int]
     let start: Float
@@ -29,7 +29,7 @@ struct WhisperKitStreamingWord: Sendable {
     let probability: Float
 }
 
-struct WhisperKitStreamingResult: Sendable {
+nonisolated struct WhisperKitStreamingResult: Sendable {
     let text: String
     let words: [WhisperKitStreamingWord]
     let averageLogProbability: Float?
@@ -43,7 +43,7 @@ struct WhisperKitStreamingResult: Sendable {
 // generation counters, and the snapshot callback. All fields readable from
 // the TranscriptionCallback without actor overhead.
 
-private final class CallbackGate: @unchecked Sendable {
+private nonisolated final class CallbackGate: @unchecked Sendable {
     private let lock = NSLock()
     private var _sessionGeneration: UInt64 = 0
     private var _chunkGeneration: UInt64 = 0
@@ -206,11 +206,19 @@ private actor WhisperKitRuntime {
 
 // MARK: - WhisperKitBridge
 
-final class WhisperKitBridge: TranscriptionBackend {
+/// `nonisolated` + `@unchecked Sendable`: decode entry points are called from background
+/// queues and detached tasks. The only instance state is `runtime` (an actor) and `gate`
+/// (lock-protected), both immutable references.
+///
+/// Before this, the class was implicitly `@MainActor`, so every `await self.performTranscription`
+/// from a detached task hopped to the main thread to build options and assemble results — and
+/// the synchronous `transcribe` adapter, which blocks on a semaphore for that work, would
+/// deadlock outright if it were ever entered on the main thread.
+nonisolated final class WhisperKitBridge: TranscriptionBackend, @unchecked Sendable {
 
     // MARK: Static model config
 
-    static var modelVariant: String = "openai_whisper-large-v3-v20240930_turbo_632MB"
+    static let modelVariant: String = "openai_whisper-large-v3-v20240930_turbo_632MB"
     static let modelRepo = "argmaxinc/whisperkit-coreml"
     private static let folderDefaultsKey = "whisperKitModelFolder"
 
@@ -381,6 +389,9 @@ final class WhisperKitBridge: TranscriptionBackend {
         }
     }
 
+    /// `@concurrent` so option setup and result assembly never run on the caller's executor
+    /// (the main actor, for `transcribeDirectAsync` from the stop path).
+    @concurrent
     private func performTranscription(
         samples: [Float], initialPrompt: String?,
         language: TranscriptionLanguage, maxTokens: Int32
@@ -445,6 +456,7 @@ final class WhisperKitBridge: TranscriptionBackend {
         }
     }
 
+    @concurrent
     private func performStreamingTranscription(
         samples: [Float], language: TranscriptionLanguage,
         clipSeconds: Float, prefixTokens: [Int]?, maxTokens: Int
@@ -465,7 +477,7 @@ final class WhisperKitBridge: TranscriptionBackend {
         options.compressionRatioThreshold = 2.4
         options.logProbThreshold = -1.0
         options.sampleLength = maxTokens
-        options.chunkingStrategy = .none  // Our window is already short; prevent internal VAD chunking from interfering with clipTimestamps
+        options.chunkingStrategy = nil  // No chunking strategy. Our window is already short; prevent internal VAD chunking from interfering with clipTimestamps
         if clipSeconds > 0 { options.clipTimestamps = [clipSeconds] }
         if let prefixTokens, !prefixTokens.isEmpty {
             options.prefixTokens = prefixTokens
@@ -572,7 +584,7 @@ final class WhisperKitBridge: TranscriptionBackend {
 
 // MARK: - Error
 
-enum WhisperKitBridgeError: Error, LocalizedError {
+nonisolated enum WhisperKitBridgeError: Error, LocalizedError {
     case modelNotCached
     var errorDescription: String? {
         "WhisperKit model not downloaded. Please download it in the Models tab."

@@ -225,6 +225,8 @@ final class PolishModelManager: ObservableObject {
             try await updater.run { _ in /* no UI progress for background updates */ }
             try Task.checkCancellation()
 
+            // Read on the main actor: the generated key type is main-isolated by default.
+            let key = PolishModelKey.hex
             try await Task.detached(priority: .utility) {
                 let unpacked = staging.appendingPathComponent(manifest.version)
                 let final = Self.installRoot.appendingPathComponent(manifest.version)
@@ -232,7 +234,7 @@ final class PolishModelManager: ObservableObject {
                 _ = try PolishModelPackage.install(
                     ciphertextAt: part,
                     manifest: manifest,
-                    keyHex: PolishModelKey.hex,
+                    keyHex: key,
                     destination: unpacked,
                     progress: { _ in },
                     isCancelled: { Task.isCancelled })

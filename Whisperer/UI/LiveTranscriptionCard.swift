@@ -233,7 +233,7 @@ struct LiveTranscriptionCard: View {
                     .onPreferenceChange(ScrollOffsetKey.self) { offset in
                         scrollOffset = offset
                     }
-                    .onChange(of: textUpdater.displayedText) { _ in
+                    .onChange(of: textUpdater.displayedText) { _, _ in
                         proxy.scrollTo("textEnd", anchor: .bottom)
                         if contentHeight > cardHeight { flashScrollIndicator() }
                     }
@@ -279,7 +279,7 @@ struct LiveTranscriptionCard: View {
             cursorTimer = nil
             textUpdater.stop()
         }
-        .onChange(of: appState.liveTranscription) { newText in
+        .onChange(of: appState.liveTranscription) { _, newText in
             if newText.isEmpty {
                 isTextRTL = false  // Reset for new recording
             } else {
@@ -288,7 +288,7 @@ struct LiveTranscriptionCard: View {
             textUpdater.setTarget(newText, rtl: isTextRTL)
             syncCursorTimer()
         }
-        .onChange(of: contentHeight) { _ in
+        .onChange(of: contentHeight) { _, _ in
             if isExpanded {
                 NotificationCenter.default.post(name: .overlayContentHeightChanged, object: nil)
             }

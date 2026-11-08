@@ -21,7 +21,7 @@ import Foundation
 /// Who supplied an alias. When two sources map the same phrase, the higher case wins — and it
 /// wins outright rather than by score, because "the user typed this spelling" is not a
 /// confidence to be averaged against a shipped table.
-enum AliasSource: Int, Sendable, Comparable, CaseIterable {
+nonisolated enum AliasSource: Int, Sendable, Comparable, CaseIterable {
     /// Learned automatically from the user's own accepted corrections. Weakest: inferred.
     case learned = 0
     /// Shipped with the app — the small tech lexicon below.

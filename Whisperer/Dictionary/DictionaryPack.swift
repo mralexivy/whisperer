@@ -7,7 +7,7 @@
 
 import Foundation
 
-struct DictionaryPack: Identifiable, Codable, Equatable {
+nonisolated struct DictionaryPack: Identifiable, Codable, Equatable {
     let id: String          // Filename without extension (e.g., "dict_01_languages_frameworks")
     let filename: String    // Full filename with extension
     let name: String        // From metadata.category
@@ -27,7 +27,7 @@ struct DictionaryPack: Identifiable, Codable, Equatable {
 
 // MARK: - Dictionary Pack File Format
 
-struct DictionaryPackFile: Codable {
+nonisolated struct DictionaryPackFile: Codable {
     let metadata: Metadata
     let corrections: [Correction]
 
@@ -52,7 +52,7 @@ struct DictionaryPackFile: Codable {
 
 // MARK: - Pack Preferences Storage
 
-struct DictionaryPackPreferences: Codable {
+nonisolated struct DictionaryPackPreferences: Codable {
     var enabledPacks: [String: Bool] = [:]      // packId -> isEnabled
     var loadedVersions: [String: String] = [:]  // packId -> version
 

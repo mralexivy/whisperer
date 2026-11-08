@@ -127,6 +127,18 @@ nonisolated struct DeterministicPolisher: Sendable {
 
     // MARK: - Polishing
 
+    /// The `polish(_:pauses:context:)` tripwire. Synchronous because `Thread.isMainThread` is
+    /// unavailable from async contexts; called first thing, so it still sees the entry thread.
+    private static func reportIfOnMainThread() {
+        guard Thread.isMainThread else { return }
+        Logger.error(
+            "DeterministicPolisher: the async polish pass entered on the main thread — "
+            + "@concurrent is no longer forcing the hop and the Core ML editor stage will "
+            + "freeze the UI for the duration of this pass",
+            subsystem: .transcription
+        )
+    }
+
     /// - Parameter pauses: inter-chunk silence, keyed by the whitespace token at each chunk
     ///   boundary. Supplied by `polish(chunks:)`; empty for every caller that has only a string,
     ///   in which case `ParagraphSplitter` falls back to its text-only rule.
@@ -166,14 +178,7 @@ nonisolated struct DeterministicPolisher: Sendable {
         // line on thread 0 means the attribute was removed or the compiler stopped honouring it —
         // either way the UI is about to freeze for as long as the encoder takes, and the previous
         // time that happened it took 4.6 s and left no trace in the log.
-        if Thread.isMainThread {
-            Logger.error(
-                "DeterministicPolisher: the async polish pass entered on the main thread — "
-                + "@concurrent is no longer forcing the hop and the Core ML editor stage will "
-                + "freeze the UI for the duration of this pass",
-                subsystem: .transcription
-            )
-        }
+        Self.reportIfOnMainThread()
 
         let startedAt = CFAbsoluteTimeGetCurrent()
         var working = graph

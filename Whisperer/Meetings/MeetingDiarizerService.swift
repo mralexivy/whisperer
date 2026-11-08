@@ -11,6 +11,16 @@ import Foundation
 import Combine
 import FluidAudio
 
+/// Sendable carrier for the resident Nemotron-3 bundle, so it can move between the loader task,
+/// this service (main actor) and `MeetingSpeakerCoordinator` (its own actor).
+///
+/// `@unchecked Sendable`: the bundle is the loaded `MLModel` weights, which are read-only after
+/// load and never mutated. The mutable, non-thread-safe part is `Nemotron3Diarizer`, which each
+/// meeting builds fresh inside the coordinator actor around this shared handle.
+nonisolated struct ResidentDiarizerModels: @unchecked Sendable {
+    let models: Nemotron3Models
+}
+
 /// Downloads, warms and owns the Nemotron-3 speaker-diarization model.
 ///
 /// The first `MLModel` load compiles an ANE program, so `warm()` pays that once in the
@@ -32,13 +42,23 @@ final class MeetingDiarizerService: ObservableObject {
     /// The warmed model bundle, held for the app session. `nil` until `warm()` succeeds.
     /// Weights are read-only — sequential meetings each build a fresh `Nemotron3Diarizer`
     /// around this one handle.
-    private(set) var models: Nemotron3Models?
+    private(set) var models: ResidentDiarizerModels?
 
     /// Adopts a bundle loaded elsewhere (the coordinator's fallback path) so the next meeting
     /// does not pay for it again.
-    func adopt(_ loaded: Nemotron3Models) {
+    func adopt(_ loaded: ResidentDiarizerModels) {
         guard models == nil else { return }
         models = loaded
+    }
+
+    /// Main-actor tail of a successful `prefetch()` download.
+    private func finishPrefetch(adopting loaded: ResidentDiarizerModels) {
+        prefetchTask = nil
+        downloadProgress = 1
+        statusText = ""
+        isReady = Self.isModelCached()
+        hasWarmed = true  // prevent warm() from double-loading
+        adopt(loaded)
     }
 
     /// True once the model bundle is present on disk. Recording never waits on this —
@@ -121,27 +141,21 @@ final class MeetingDiarizerService: ObservableObject {
                 // loadFromHuggingFace downloads (if absent) then loads the bundle.
                 // We adopt the result so warm() is a no-op and the bundle is available immediately.
                 let loaded = try await ModelWorkQueue.shared.run("nemotron3-diarizer-download") {
-                    try await Nemotron3Models.loadFromHuggingFace(
+                    ResidentDiarizerModels(models: try await Nemotron3Models.loadFromHuggingFace(
                         config: config,
                         cacheDirectory: destination,
                         progressHandler: { progress in
                             let fraction = progress.fractionCompleted
-                            Task { @MainActor [weak self] in
-                                self?.downloadProgress = fraction
+                            // The service is a process-lifetime singleton; going through
+                            // `shared` avoids capturing the detached task's mutable weak `self`.
+                            Task { @MainActor in
+                                MeetingDiarizerService.shared.downloadProgress = fraction
                             }
                         }
-                    )
+                    ))
                 }
                 Logger.info("Nemotron-3 Diarizer: model ready", subsystem: .model)
-                await MainActor.run { [weak self] in
-                    guard let self else { return }
-                    self.prefetchTask = nil
-                    self.downloadProgress = 1
-                    self.statusText = ""
-                    self.isReady = Self.isModelCached()
-                    self.hasWarmed = true  // prevent warm() from double-loading
-                    self.adopt(loaded)
-                }
+                await self?.finishPrefetch(adopting: loaded)
             } catch {
                 // Non-fatal: meetings still record, just without speaker labels.
                 Logger.error("Nemotron-3 Diarizer: download failed — \(error.localizedDescription)", subsystem: .model)
@@ -179,11 +193,12 @@ final class MeetingDiarizerService: ObservableObject {
             let started = Date()
             do {
                 let loaded = try await ModelWorkQueue.shared.run("nemotron3-diarizer-warmup") {
-                    try await Nemotron3Models.loadFromHuggingFace(config: config, cacheDirectory: root)
+                    ResidentDiarizerModels(models: try await Nemotron3Models.loadFromHuggingFace(
+                        config: config, cacheDirectory: root))
                 }
                 let ms = Int(Date().timeIntervalSince(started) * 1000)
                 Logger.info("Nemotron-3 Diarizer: warm-up load in \(ms)ms — held resident", subsystem: .model)
-                await MainActor.run { [weak self] in self?.adopt(loaded) }
+                await self?.adopt(loaded)
             } catch {
                 // Non-fatal — the coordinator will try again when a meeting starts.
                 Logger.error("Nemotron-3 Diarizer: warm-up failed — \(error.localizedDescription)", subsystem: .model)

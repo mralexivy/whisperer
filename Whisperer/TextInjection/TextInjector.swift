@@ -202,7 +202,7 @@ class TextInjector {
             // `finish` logs once and exits — the single exit point keeps the reason enum honest.
             // .notVerified always logs so insertion failure rate is observable per destination.
             // .windowElapsed with no corrections is the normal "user didn't edit" outcome — skip it.
-            func finish(_ reason: CorrectionObservationEndReason) {
+            @MainActor func finish(_ reason: CorrectionObservationEndReason) {
                 if reason == .windowElapsed && learnedCount == 0 { return }
                 Logger.event(.dictLearn, .textInjection, [
                     "endReason": .string(reason.rawValue),
@@ -316,7 +316,8 @@ class TextInjector {
     /// Activates the target app and polls until it is frontmost, up to 200ms.
     private func activateApp(pid: pid_t) async throws {
         guard let app = NSRunningApplication(processIdentifier: pid) else { return }
-        app.activate(options: [.activateIgnoringOtherApps])
+        // `.activateIgnoringOtherApps` has had no effect since macOS 14; this is the same call.
+        app.activate(options: [])
         for _ in 0..<10 {
             if NSWorkspace.shared.frontmostApplication?.processIdentifier == pid {
                 return

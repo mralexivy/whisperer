@@ -30,7 +30,7 @@ enum MeetingLanguageScanner {
 
     // MARK: - Tuning
 
-    struct Plan {
+    nonisolated struct Plan {
         /// Audio handed to each probe. Whisper pads or trims to 30 s internally, so anything
         /// shorter buys nothing and anything longer is discarded.
         var probeDuration: Double = 30

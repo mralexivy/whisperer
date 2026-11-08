@@ -12,7 +12,9 @@ import Foundation
 import AVFoundation
 import Accelerate
 
-struct WaveformGenerator {
+/// `nonisolated`: pure file reads + DSP, meant to run off the main thread (70 seeks into an Ogg
+/// Opus file each decode a page — tens of ms on a long meeting recording).
+nonisolated struct WaveformGenerator {
     /// Generate waveform samples from audio file.
     /// Returns array of normalized amplitudes (0.0 to 1.0).
     /// Uses chunked reads — safe for files of any length.

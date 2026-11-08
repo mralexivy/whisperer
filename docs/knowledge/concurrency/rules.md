@@ -62,3 +62,23 @@
   and the release is clean. The failure is indistinguishable from a crash in the code under test —
   `MeetingPolishTests` lost two tests to it while the polisher they exercise was correct — so
   confirm the shape with a bare `final class {}` probe before debugging anything else.
+
+- **Treat every MainActor-isolation compiler warning as a probable data race, not noise.** With
+  `SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor` in Swift 5 mode, an unannotated type is `@MainActor`
+  but nothing stops a background thread calling it — so the warning is the only signal. The
+  2026-11-06 sweep (761 → 10 app warnings) found real races behind them: `WhisperBridge.onNewSegment`
+  (a closure written on main, read on whisper's decode thread), the LLM generation `stop` flag,
+  `Logger`'s level/file-URL config, `CorrectionEngine`'s phrase-pattern cache under concurrent
+  `applyCorrections`, and `StreamingTranscriber` state written from detached loops. Fix by deciding
+  per type: thread-safe → `nonisolated` (+ `@unchecked Sendable` with a comment naming the lock);
+  main-only → hop to main. Never `nonisolated(unsafe)` without naming the guarding lock.
+
+- **Declare pure value types and helpers `nonisolated` at birth.** Enums, Codable models, parsers,
+  formatters, `displayName`-style computed properties: under default MainActor isolation they are
+  silently main-only, and the first off-main caller produces a warning *at the call site*, far from
+  the fix. Most of the 761 warnings were cascades from a handful of such declarations (`Logger`
+  alone accounted for ~300).
+
+- **Never hold an `NSLock` across `await`.** The task may resume on another thread, and unlocking an
+  `NSLock` from a thread that didn't lock it is undefined. Use `lock.withLock { }` with no
+  suspension inside (`SafeLock.withLockAsync` did exactly this and was deleted, unused).

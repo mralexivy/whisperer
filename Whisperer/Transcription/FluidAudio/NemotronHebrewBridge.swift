@@ -124,7 +124,7 @@ actor NemotronHebrewBridge {
     func feed(samples: [Float]) async {
         guard !_isShuttingDown, let manager, !samples.isEmpty else { return }
         _sessionSampleCount += samples.count
-        try? await manager.process(samples: samples)
+        _ = try? await manager.process(samples: samples)
     }
 
     func endSession() async -> String {
@@ -187,7 +187,7 @@ actor NemotronHebrewBridge {
     }
 }
 
-enum NemotronHebrewError: Error, LocalizedError {
+nonisolated enum NemotronHebrewError: Error, LocalizedError {
     case modelNotCached
     var errorDescription: String? {
         switch self {

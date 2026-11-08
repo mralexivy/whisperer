@@ -50,7 +50,7 @@ struct AIModesView: View {
             }
             loadModeValues()
         }
-        .onChange(of: selectedModeId) { _ in
+        .onChange(of: selectedModeId) { _, _ in
             loadModeValues()
         }
     }
@@ -221,7 +221,7 @@ struct AIModesView: View {
                                 .font(.system(size: 18, weight: .bold, design: .rounded))
                                 .foregroundColor(.white)
                                 .textFieldStyle(.plain)
-                                .onChange(of: editedName) { _ in hasChanges = true }
+                                .onChange(of: editedName) { _, _ in hasChanges = true }
                         }
 
                         HStack(spacing: 8) {
@@ -285,7 +285,7 @@ struct AIModesView: View {
                         .scrollContentBackground(.hidden)
                         .padding(14)
                         .frame(minHeight: 180)
-                        .onChange(of: editedPrompt) { _ in hasChanges = true }
+                        .onChange(of: editedPrompt) { _, _ in hasChanges = true }
 
                     if editedPrompt.isEmpty {
                         Text("Enter your prompt... use {transcript} for the input text")
@@ -327,7 +327,7 @@ struct AIModesView: View {
                             RoundedRectangle(cornerRadius: 8)
                                 .stroke(Color.white.opacity(0.06), lineWidth: 1)
                         )
-                        .onChange(of: editedTargetLanguage) { _ in hasChanges = true }
+                        .onChange(of: editedTargetLanguage) { _, _ in hasChanges = true }
                 }
             }
 
@@ -339,7 +339,7 @@ struct AIModesView: View {
                     range: 0...1,
                     colorScheme: colorScheme
                 )
-                .onChange(of: editedTemperature) { _ in hasChanges = true }
+                .onChange(of: editedTemperature) { _, _ in hasChanges = true }
 
                 ParameterSlider(
                     label: "Top P",
@@ -347,7 +347,7 @@ struct AIModesView: View {
                     range: 0...1,
                     colorScheme: colorScheme
                 )
-                .onChange(of: editedTopP) { _ in hasChanges = true }
+                .onChange(of: editedTopP) { _, _ in hasChanges = true }
             }
 
             // Save button

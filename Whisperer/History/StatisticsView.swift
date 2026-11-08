@@ -826,13 +826,13 @@ struct StatisticsView: View {
                    let slot = Int(parts[1]),
                    let slotData = statsManager.peakHours.first(where: { $0.dayOfWeek == weekday && $0.hourSlot == slot }),
                    slotData.count > 0 {
-                    Text("\(dayLabels[weekday - 1]) · \(slot * 2):00 — ")
+                    let label = Text("\(dayLabels[weekday - 1]) · \(slot * 2):00 — ")
                         .font(.system(size: 10))
                         .foregroundColor(WhispererColors.secondaryText(colorScheme))
-                    +
-                    Text("\(slotData.count) sessions")
+                    let count = Text("\(slotData.count) sessions")
                         .font(.system(size: 10, weight: .semibold))
                         .foregroundColor(WhispererColors.accentBlue)
+                    Text("\(label)\(count)")
                 }
             }
         }
@@ -1722,7 +1722,7 @@ private struct AppUsageRow: View {
                 animatedWidth = app.percentage
             }
         }
-        .onChange(of: app.percentage) { newValue in
+        .onChange(of: app.percentage) { _, newValue in
             withAnimation(.spring(response: 0.6, dampingFraction: 0.8)) {
                 animatedWidth = newValue
             }

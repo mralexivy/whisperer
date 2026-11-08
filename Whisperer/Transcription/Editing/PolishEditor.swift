@@ -28,7 +28,7 @@
 
 import Foundation
 
-enum PolishEditor {
+nonisolated enum PolishEditor {
 
     /// Guards `state`. Never held across `await`.
     private static let lock = NSLock()
@@ -110,14 +110,10 @@ enum PolishEditor {
                 await runtime.warmAllShapes()
 
                 let model = MMBERTEditingModel(runtime: runtime)
-                lock.lock()
-                state = .ready(model)
-                lock.unlock()
+                lock.withLock { state = .ready(model) }
                 Logger.info("Polish editor ready", subsystem: .transcription)
             } catch {
-                lock.lock()
-                state = .unavailable
-                lock.unlock()
+                lock.withLock { state = .unavailable }
                 Logger.error("Polish editor failed to load: \(error)", subsystem: .transcription)
             }
         }

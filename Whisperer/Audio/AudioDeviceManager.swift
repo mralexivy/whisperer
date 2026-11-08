@@ -15,7 +15,7 @@ import AppKit
 
 /// Represents the resolved audio input route at recording start time.
 /// Device identity is resolved fresh from CoreAudio — never cached.
-enum ResolvedInputRoute: Sendable, Equatable, CustomStringConvertible {
+nonisolated enum ResolvedInputRoute: Sendable, Equatable, CustomStringConvertible {
     case systemDefault
     case explicit(uid: String, deviceID: AudioDeviceID)
 
@@ -509,7 +509,8 @@ class AudioDeviceManager: ObservableObject {
                 // Redundant with the CoreAudio listener — both funnel into the same
                 // refresh, and `dev.change` is the record that says what resulted.
                 Logger.step("dev.avconnect", .audio, ["name": .string(device.localizedName)])
-                self?.refreshDevices()
+                // Delivered on `queue: .main`, so this is already the main actor.
+                MainActor.assumeIsolated { self?.refreshDevices() }
             }
         }
 
@@ -521,7 +522,8 @@ class AudioDeviceManager: ObservableObject {
             if let device = notification.object as? AVCaptureDevice,
                device.hasMediaType(.audio) {
                 Logger.step("dev.avdisconnect", .audio, ["name": .string(device.localizedName)])
-                self?.refreshDevices()
+                // Delivered on `queue: .main`, so this is already the main actor.
+                MainActor.assumeIsolated { self?.refreshDevices() }
             }
         }
 

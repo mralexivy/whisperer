@@ -175,6 +175,11 @@ nonisolated enum MeetingTranscriptPolisher {
 
     /// Runs the whole pass. `onProgress` gets (chunks done, chunks total). Chunks are sent in
     /// parallel (they don't overlap) and applied in order.
+    ///
+    /// `@concurrent`: chunking, prompt building and the final apply walk the whole transcript;
+    /// the caller (`TranscriptPolishController`) is on the main actor, which a plain
+    /// `nonisolated async` would inherit.
+    @concurrent
     static func polish(_ segments: [MeetingSegment], with provider: any MeetingIntelligenceProvider,
                        languageName: String?,
                        onProgress: @escaping @Sendable (Int, Int) -> Void) async throws -> Outcome {

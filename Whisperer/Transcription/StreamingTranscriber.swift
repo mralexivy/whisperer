@@ -17,7 +17,7 @@ import os
 /// Thread-safe counter + deduplicator for Nemotron partial callbacks.
 /// FluidAudio sometimes fires the callback twice for the same chunk (same text, ~1ms apart).
 /// Uses a class so @Sendable closures can capture it without mutation warnings.
-final class NemotronPartialCounter: @unchecked Sendable {
+nonisolated final class NemotronPartialCounter: @unchecked Sendable {
     private var _count = 0
     private var _lastText = ""
     private let lock = NSLock()
@@ -177,7 +177,7 @@ nonisolated final class NemotronLanguagePinner: @unchecked Sendable {
 
 /// Placeholder backend for the Nemotron path. Nemotron bypasses all TranscriptionBackend
 /// calls — this struct satisfies the non-optional init requirement without doing any work.
-final class NullTranscriptionBackend: TranscriptionBackend {
+nonisolated final class NullTranscriptionBackend: TranscriptionBackend, Sendable {
     func transcribe(samples: [Float], initialPrompt: String?, language: TranscriptionLanguage,
                     singleSegment: Bool, maxTokens: Int32) -> String { "" }
     func transcribeAsync(samples: [Float], initialPrompt: String?, language: TranscriptionLanguage,
@@ -340,8 +340,9 @@ class StreamingTranscriber {
 
     // Thread-safe processing flag
     private let processingLock = SafeLock()
-    private var _isProcessing = false
-    var isProcessing: Bool {
+    // `nonisolated(unsafe)`: every access holds `processingLock` (read from decode/callback threads).
+    nonisolated(unsafe) private var _isProcessing = false
+    nonisolated var isProcessing: Bool {
         get {
             do {
                 return try processingLock.withLock(timeout: 1.0) { _isProcessing }
@@ -365,13 +366,13 @@ class StreamingTranscriber {
         }
     }
 
-    private var _lastActivityAt = Date()
+    nonisolated(unsafe) private var _lastActivityAt = Date()  // guarded by `processingLock`
     /// When this transcriber last made observable progress. `isProcessing` answers "is a decode
     /// running right now", which is false in the gaps between passes and false for work that
     /// never enters a decode at all — so the stop watchdog cannot distinguish a busy pipeline
     /// from a wedged one using it alone. This does: anything that advances the transcript or the
     /// pipeline bumps it. Read by `AppState.startStopWatchdog`.
-    var lastActivityAt: Date {
+    nonisolated var lastActivityAt: Date {
         do {
             return try processingLock.withLock(timeout: 1.0) { _lastActivityAt }
         } catch {
@@ -380,7 +381,7 @@ class StreamingTranscriber {
         }
     }
 
-    func noteActivity() {
+    nonisolated func noteActivity() {
         let now = Date()
         try? processingLock.withLock(timeout: 1.0) { _lastActivityAt = now }
     }
@@ -504,10 +505,29 @@ class StreamingTranscriber {
     // VAD scan task
     private var vadScanTask: Task<Void, Never>?
     private var previewTask: Task<Void, Never>?
-    private var isStopped: Bool = false
+    /// State that the VAD-scan and preview loops (`Task.detached`), the Nemotron partial callback
+    /// and the language probe read or write off the main actor, while `start`/`stop` write it on
+    /// the main actor. These were plain stored properties of a main-actor class — unsynchronized
+    /// cross-thread access, and for `previewAccumulatedText` (a `String`) a race on its storage's
+    /// retain/release, not merely a stale read. One lock, `nonisolated` accessors.
+    private struct CrossThreadState {
+        var isStopped = false
+        var livePreviewFellBack = false
+        var livePreviewResolved = false
+        var previewAccumulatedText = ""
+        var accurateProbeInFlight = false
+    }
+    nonisolated private let crossThread = OSAllocatedUnfairLock(initialState: CrossThreadState())
+
+    nonisolated private var isStopped: Bool {
+        get { crossThread.withLock { $0.isStopped } }
+        set { crossThread.withLock { $0.isStopped = newValue } }
+    }
     private let stopGateLock = NSLock()
-    private var _isPreparingToStop: Bool = false
-    private var isPreparingToStop: Bool {
+    /// `nonisolated(unsafe)` is sound here: every read and write holds `stopGateLock` (an
+    /// `NSLock`, which is `Sendable`), and the preview loop reads it off the main actor.
+    nonisolated(unsafe) private var _isPreparingToStop: Bool = false
+    nonisolated private var isPreparingToStop: Bool {
         stopGateLock.withLock { _isPreparingToStop }
     }
     // Set to true only after Nemotron beginSession + setPreviewCallback complete.
@@ -516,12 +536,21 @@ class StreamingTranscriber {
     private var isNemotronSessionReady: Bool = false
     /// True once the preview-only live engine was found not streaming at session start: this
     /// engine's own preview then drives the display, so the HUD never sits on "Listening…".
-    private(set) var livePreviewFellBack: Bool = false
+    nonisolated private(set) var livePreviewFellBack: Bool {
+        get { crossThread.withLock { $0.livePreviewFellBack } }
+        set { crossThread.withLock { $0.livePreviewFellBack = newValue } }
+    }
     /// Set when the live engine's session has opened or failed — the preview loop waits on it.
-    private var livePreviewResolved: Bool = false
+    nonisolated private var livePreviewResolved: Bool {
+        get { crossThread.withLock { $0.livePreviewResolved } }
+        set { crossThread.withLock { $0.livePreviewResolved = newValue } }
+    }
     private var livePreviewUnavailableReported = false
     private var lastPreviewedSampleIndex: Int = 0
-    private var previewAccumulatedText: String = ""
+    nonisolated private var previewAccumulatedText: String {
+        get { crossThread.withLock { $0.previewAccumulatedText } }
+        set { crossThread.withLock { $0.previewAccumulatedText = newValue } }
+    }
     /// Qwen3-ASR preview stabilisation (LocalAgreement-2): the previous pass's words and the
     /// committed-audio index they were decoded from. Only a word prefix two passes agree on is
     /// shown, because the live card never retracts a word once revealed.
@@ -638,8 +667,7 @@ class StreamingTranscriber {
     /// Guards against queueing a second V3 confirmation behind the first. The VAD scan runs twice
     /// a second and a confirmation waits on the live decoder's `ctxLock`, so without this the
     /// escalation budget would be spent on passes over audio that has already moved on.
-    private let accurateProbeLock = NSLock()
-    private var accurateProbeInFlight = false
+    /// The flag itself lives in `crossThread` (`accurateProbeInFlight`).
 
     // Certainty-driven probe cadence (in audio seconds):
     //   < 10 s total: no probe — too short for reliable detection
@@ -1240,7 +1268,7 @@ class StreamingTranscriber {
         lastProvisionalLanguage = nil
         unroutedSince = nil
         hasWarnedAboutUnroutedCommit = false
-        accurateProbeLock.lock(); accurateProbeInFlight = false; accurateProbeLock.unlock()
+        crossThread.withLock { $0.accurateProbeInFlight = false }
         scriptMismatchCount = 0
         chunkLangMismatchCount = 0
         whisperLangTally = [:]
@@ -4698,10 +4726,12 @@ class StreamingTranscriber {
 
         // One probe at a time — V3 waits on the live decoder's ctxLock, so queueing a second
         // behind the first would probe audio that has already moved on.
-        accurateProbeLock.lock()
-        if accurateProbeInFlight { accurateProbeLock.unlock(); return false }
-        accurateProbeInFlight = true
-        accurateProbeLock.unlock()
+        let claimed = crossThread.withLock { state -> Bool in
+            guard !state.accurateProbeInFlight else { return false }
+            state.accurateProbeInFlight = true
+            return true
+        }
+        guard claimed else { return false }
 
         let audioSeconds = recordedDuration
         let windowSeconds = Double(detectionSamples.count) / sampleRate
@@ -4712,11 +4742,7 @@ class StreamingTranscriber {
 
         Task.detached(priority: .userInitiated) { [weak self] in
             guard let self else { return }
-            defer {
-                self.accurateProbeLock.lock()
-                self.accurateProbeInFlight = false
-                self.accurateProbeLock.unlock()
-            }
+            defer { self.crossThread.withLock { $0.accurateProbeInFlight = false } }
             guard !self.isStopped else { return }
 
             // The probe MUST run on `probeQueue`, not inline here. `StreamingTranscriber` has no
@@ -4892,7 +4918,7 @@ class StreamingTranscriber {
         guard let promotion else { return }
 
         self.whisper = promotion.backend
-        if var decision = routeDecision {
+        if let decision = routeDecision {
             // Update decision to reflect non-fallback status
             routeDecision = ModelRouteDecision(
                 lang: decision.lang,

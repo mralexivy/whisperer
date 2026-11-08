@@ -8,7 +8,7 @@
 
 import Foundation
 
-class PhoneticMatcher {
+nonisolated final class PhoneticMatcher {
     // Dictionary of terms indexed by their phonetic codes
     private var soundexIndex: [String: Set<String>] = [:]
     private var metaphoneIndex: [String: Set<String>] = [:]

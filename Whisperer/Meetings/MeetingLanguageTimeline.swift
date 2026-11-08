@@ -33,7 +33,7 @@ import NaturalLanguage
 /// `probabilities` is exactly what `WhisperBridge.detectLanguage(samples:)` returns: whisper
 /// language codes to probabilities over *all* languages, unfiltered and unnormalized by our
 /// shortlist. Kept in that raw form so the fusion, not the caller, owns the filtering.
-struct MeetingLanguageProbe: Equatable {
+nonisolated struct MeetingLanguageProbe: Equatable {
     /// Seconds from meeting start.
     let start: Double
     let end: Double
@@ -49,7 +49,7 @@ struct MeetingLanguageProbe: Equatable {
 /// `language == .auto` means the fusion **abstained** — the evidence was too close to call, so
 /// the decoder should be left to its own per-window detection there. Abstaining is the correct
 /// outcome when confidence is low: it degrades to today's behaviour instead of translating.
-struct MeetingLanguageSpan: Equatable {
+nonisolated struct MeetingLanguageSpan: Equatable {
     var start: Double
     var end: Double
     var language: TranscriptionLanguage
@@ -62,7 +62,7 @@ struct MeetingLanguageSpan: Equatable {
 
 // MARK: - Timeline
 
-struct MeetingLanguageTimeline: Equatable {
+nonisolated struct MeetingLanguageTimeline: Equatable {
     /// Ordered, contiguous, non-overlapping. Empty only when there was no usable evidence.
     var spans: [MeetingLanguageSpan]
     /// Language covering the most seconds, or `.auto` when every span abstained.
@@ -99,7 +99,7 @@ struct MeetingLanguageTimeline: Equatable {
 
 // MARK: - Configuration
 
-struct MeetingLanguageTimelineConfig {
+nonisolated struct MeetingLanguageTimelineConfig {
     /// Log-likelihood price of changing language between two adjacent probes.
     ///
     /// This single number is what makes borrowing safe. A probe that is confidently wrong
@@ -161,7 +161,7 @@ struct MeetingLanguageTimelineConfig {
 // MARK: - Builder
 
 /// The pure half: probe distributions + transcript text in, timeline out.
-enum MeetingLanguageTimelineBuilder {
+nonisolated enum MeetingLanguageTimelineBuilder {
 
     /// Fuse the evidence and smooth it into spans.
     ///

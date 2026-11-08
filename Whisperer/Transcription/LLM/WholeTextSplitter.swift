@@ -19,7 +19,7 @@
 
 import Foundation
 
-enum WholeTextSplitter {
+nonisolated enum WholeTextSplitter {
 
     // MARK: - Correction split (dictation whole-text path)
 

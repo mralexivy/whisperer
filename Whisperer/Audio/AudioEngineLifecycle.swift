@@ -19,7 +19,7 @@ import AudioToolbox
 
 // MARK: - Error
 
-enum AudioEngineError: Error, LocalizedError {
+nonisolated enum AudioEngineError: Error, LocalizedError {
     case notPrepared
     case abandoned
     case buildFailed(Error)
@@ -189,7 +189,7 @@ actor AudioEngineLifecycle {
         // replaceDeadEngine() also increments generation.
         // Either means we must NOT transition to .running.
         guard generation == gen, case .starting = phase, engine === e else {
-            lifecycleQueue.async { try? e.stop() }  // clean up our local ref
+            lifecycleQueue.async { e.stop() }  // clean up our local ref
             throw AudioEngineError.abandoned
         }
 
@@ -578,7 +578,7 @@ actor AudioEngineLifecycle {
 
 // MARK: - Phase description
 
-extension AudioEngineLifecycle.Phase: CustomDebugStringConvertible {
+nonisolated extension AudioEngineLifecycle.Phase: CustomDebugStringConvertible {
     var debugDescription: String {
         switch self {
         case .idle:              return "idle"

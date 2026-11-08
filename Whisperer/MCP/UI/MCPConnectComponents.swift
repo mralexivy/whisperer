@@ -267,7 +267,7 @@ struct MCPCodeBlock: View {
             HStack {
                 MCPSectionLabel(text: title)
                 Spacer()
-                MCPCopyButton(text: code, copy: copy, testID: copyTestID)
+                MCPCopyButton(text: code, copy: { copy($0) }, testID: copyTestID)
             }
             .padding(.leading, 12).padding(.trailing, 8).padding(.vertical, 7)
             .background(Color.white.opacity(0.03))

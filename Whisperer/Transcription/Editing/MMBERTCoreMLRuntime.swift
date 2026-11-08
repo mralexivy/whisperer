@@ -117,8 +117,7 @@ nonisolated final class MMBERTCoreMLRuntime: TextEditingModelRuntime, @unchecked
     }
 
     var isLoaded: Bool {
-        lock.lock(); defer { lock.unlock() }
-        return loaded != nil
+        lock.withLock { loaded != nil }
     }
 
     // MARK: - Locating the weights
@@ -134,7 +133,7 @@ nonisolated final class MMBERTCoreMLRuntime: TextEditingModelRuntime, @unchecked
     /// benchmarks run against real weights on a development machine that has never downloaded
     /// anything, and it still accepts the three-package layout the calibration tooling writes.
     static func locate() -> URL? {
-        if let downloaded = PolishModelManager.shared.installedDirectory {
+        if let downloaded = PolishModelManager.installedDirectory {
             return downloaded
         }
         if let bundled = Bundle.main.url(forResource: "MMBERTEditing", withExtension: "mlmodelc")
@@ -181,28 +180,30 @@ nonisolated final class MMBERTCoreMLRuntime: TextEditingModelRuntime, @unchecked
     /// — 427 MB of duplicated work, one copy of which is then thrown away. The in-flight task is
     /// published under the lock instead, so the second caller awaits the first one's load.
     func load() async throws {
-        lock.lock()
-        if loaded != nil {
-            lock.unlock()
+        enum Next { case done, join(Task<Void, any Error>), started(Task<Void, any Error>) }
+        // The check and the publish of the in-flight task happen in one critical section; the
+        // lock is never held across the await.
+        let next: Next = lock.withLock {
+            if loaded != nil { return .done }
+            if let inFlight = loadTask { return .join(inFlight) }
+            let task = Task { [weak self] in
+                guard let self else { throw EditingRuntimeError.weightsUnavailable }
+                try await self.performLoad()
+            }
+            loadTask = task
+            return .started(task)
+        }
+        switch next {
+        case .done:
             return
-        }
-        if let inFlight = loadTask {
-            lock.unlock()
+        case .join(let inFlight):
             return try await inFlight.value
+        case .started(let task):
+            defer {
+                lock.withLock { if loadTask == task { loadTask = nil } }
+            }
+            try await task.value
         }
-        let task = Task { [weak self] in
-            guard let self else { throw EditingRuntimeError.weightsUnavailable }
-            try await self.performLoad()
-        }
-        loadTask = task
-        lock.unlock()
-
-        defer {
-            lock.lock()
-            if loadTask == task { loadTask = nil }
-            lock.unlock()
-        }
-        try await task.value
     }
 
     private func performLoad() async throws {
@@ -235,9 +236,8 @@ nonisolated final class MMBERTCoreMLRuntime: TextEditingModelRuntime, @unchecked
         let bos = tokenizer.bosTokenId ?? 2
         let eos = tokenizer.eosTokenId ?? 1
 
-        lock.lock()
-        loaded = Loaded(tokenizer: tokenizer, models: models, bos: bos, eos: eos, pad: 0)
-        lock.unlock()
+        let ready = Loaded(tokenizer: tokenizer, models: models, bos: bos, eos: eos, pad: 0)
+        lock.withLock { loaded = ready }
         Logger.info("mmBERT editing runtime loaded from \(directory.lastPathComponent)",
                     subsystem: .transcription)
     }
@@ -276,9 +276,7 @@ nonisolated final class MMBERTCoreMLRuntime: TextEditingModelRuntime, @unchecked
     }
 
     func unload() async {
-        lock.lock()
-        loaded = nil
-        lock.unlock()
+        lock.withLock { loaded = nil }
     }
 
     private static func loadTokenizer(from directory: URL) throws -> any Tokenizer {
@@ -306,6 +304,17 @@ nonisolated final class MMBERTCoreMLRuntime: TextEditingModelRuntime, @unchecked
 
     // MARK: - Encoding
 
+    /// Synchronous so it may ask `Thread.isMainThread`, which is unavailable in async contexts.
+    private static func reportIfOnMainThread() {
+        guard Thread.isMainThread else { return }
+        Logger.error(
+            "MMBERTCoreMLRuntime: encode entered on the main thread — the MPSGraph forward "
+            + "pass will block the UI. The caller must be @concurrent; see "
+            + "DeterministicPolisher's type note.",
+            subsystem: .transcription
+        )
+    }
+
     /// This function is `nonisolated(nonsending)` under `SWIFT_APPROACHABLE_CONCURRENCY = YES`, so
     /// it runs wherever its caller runs, and `Self.predict` below is synchronous and runs wherever
     /// *this* runs. Nothing in this file can move the work off the main thread. The hop is the
@@ -314,19 +323,9 @@ nonisolated final class MMBERTCoreMLRuntime: TextEditingModelRuntime, @unchecked
     /// Core ML boundary itself, so it fires even if a future caller reaches the runtime without
     /// going through the polisher.
     func encode(_ pieces: [String]) async throws -> EditingRuntimeOutput {
-        if Thread.isMainThread {
-            Logger.error(
-                "MMBERTCoreMLRuntime: encode entered on the main thread — the MPSGraph forward "
-                + "pass will block the UI. The caller must be @concurrent; see "
-                + "DeterministicPolisher's type note.",
-                subsystem: .transcription
-            )
-        }
+        Self.reportIfOnMainThread()
 
-        lock.lock()
-        let state = loaded
-        lock.unlock()
-        guard let state else { throw EditingRuntimeError.notLoaded }
+        guard let state = lock.withLock({ loaded }) else { throw EditingRuntimeError.notLoaded }
 
         // One group per trained "word": a word piece plus whatever trailing punctuation pieces
         // followed it. Training saw `deploy.` as one unit with a punctuation *state*; feeding the
@@ -386,9 +385,7 @@ nonisolated final class MMBERTCoreMLRuntime: TextEditingModelRuntime, @unchecked
     /// Calling this after `load()` moves the cost for 64 and 128 to launch (where nothing waits)
     /// rather than to the first meeting editor pass (where the user is watching).
     func warmAllShapes() async {
-        lock.lock()
-        let state = loaded
-        lock.unlock()
+        let state = lock.withLock { loaded }
         guard let state else { return }
 
         for shape in EditingSequenceShape.allCases {
@@ -551,9 +548,7 @@ nonisolated final class MMBERTCoreMLRuntime: TextEditingModelRuntime, @unchecked
     /// Test-facing; production goes through `encode`.
     func rawHeads(for pieces: [String]) async throws
         -> [(word: String, ids: [Int], heads: RawWordHeads)] {
-        lock.lock()
-        let state = loaded
-        lock.unlock()
+        let state = lock.withLock { loaded }
         guard let state else { throw EditingRuntimeError.notLoaded }
 
         let groups = Self.group(pieces)

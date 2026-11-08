@@ -76,6 +76,10 @@ nonisolated enum CLIProcessRunner {
     ///   - onStdout: called with every chunk of stdout as it arrives, for streaming.
     ///   - collect: called after exit, before the temp directory is deleted, to read files the
     ///     CLI wrote there (Codex `-o`).
+    ///
+    /// `@concurrent`: temp-file writes, `posix_spawn` and the final pipe drain are synchronous,
+    /// and callers include the main actor (`ConnectedAIStore.refreshReadiness`).
+    @concurrent
     static func run(
         executable: URL,
         arguments: (URL) -> [String],

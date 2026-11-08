@@ -117,7 +117,7 @@ actor NemotronBridge {
     /// Nemotron buffers internally and processes in 1120ms chunks automatically.
     func feed(samples: [Float]) async {
         guard !_isShuttingDown, let manager, !samples.isEmpty else { return }
-        try? await manager.process(samples: samples)
+        _ = try? await manager.process(samples: samples)
     }
 
     /// Returns complete session transcript since last beginSession().
@@ -168,7 +168,7 @@ actor NemotronBridge {
     }
 }
 
-enum NemotronError: Error, LocalizedError {
+nonisolated enum NemotronError: Error, LocalizedError {
     case modelNotCached
     var errorDescription: String? {
         switch self {

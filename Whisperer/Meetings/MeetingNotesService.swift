@@ -102,5 +102,7 @@ enum MeetingNotesService {
         NotificationCenter.default.post(name: .meetingNotesDidChange, object: meetingID, userInfo: ["notes": notes])
     }
 
-    private final class RefusalBox: @unchecked Sendable { var error: Error? }
+    /// `@unchecked Sendable`: written at most once inside the Core Data `perform` block and read
+    /// only after `mutateNotes` returns, so the two accesses are sequenced, never concurrent.
+    nonisolated private final class RefusalBox: @unchecked Sendable { var error: Error? }
 }

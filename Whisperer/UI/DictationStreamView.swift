@@ -180,7 +180,7 @@ private struct KineticCaret: View {
             .opacity(isStreaming ? 1.0 : (pulse ? 0.9 : 0.2))
             .scaleEffect(y: isStreaming ? 1.0 : (pulse ? 1.0 : 0.86), anchor: .bottom)
             .onAppear { startPulse() }
-            .onChange(of: isStreaming) { streaming in
+            .onChange(of: isStreaming) { _, streaming in
                 if streaming {
                     // Ends the repeating animation — a repeatForever keeps running otherwise,
                     // and would re-assert itself the moment the opacity ternary flips back.

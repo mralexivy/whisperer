@@ -41,6 +41,10 @@ struct WhispererApp: App {
 }
 
 class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
+    /// Receipt validation using StoreKit 2 — off until in-app purchases ship. A stored property
+    /// rather than a local `let false`, which made the guarded block "will never be executed".
+    private static let receiptValidationEnabled = false
+
     var overlayPanel: OverlayPanel?
     var pickerPanel: TranscriptionPickerPanel?
     var islandCoordinator: IslandCoordinator?
@@ -93,9 +97,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
         // Receipt validation using StoreKit 2 (disabled for now)
         // TODO: Enable when in-app purchases are ready by setting receiptValidationEnabled = true
-        let receiptValidationEnabled = false
-
-        if receiptValidationEnabled {
+        if Self.receiptValidationEnabled {
             #if !DEBUG
             Task {
                 do {
@@ -1596,7 +1598,7 @@ struct ModelsTabView: View {
             displayedEngine = normalise(appState.selectedBackendType)
             if !WhisperModel.primaryOrder.contains(appState.selectedModel) { showAllWhisperModels = true }
         }
-        .onChange(of: appState.selectedBackendType) { newVal in
+        .onChange(of: appState.selectedBackendType) { _, newVal in
             // Keep display in sync when the backend changes via means other than the tab
             displayedEngine = normalise(newVal)
         }
@@ -2592,7 +2594,7 @@ struct SettingsTabView: View {
                     }
                 }
             }
-            .onChange(of: scrollTarget) { target in
+            .onChange(of: scrollTarget) { _, target in
                 if let target = target {
                     withAnimation(.easeInOut(duration: 0.3)) {
                         proxy.scrollTo(target, anchor: .top)

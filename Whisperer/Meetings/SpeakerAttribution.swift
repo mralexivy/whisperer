@@ -12,7 +12,7 @@ import Foundation
 /// Extracted for the same reason `MeetingTranscriptText` was: the rule is arithmetic over a
 /// timeline, the failure it prevents is subtle, and it is unreachable for a test while it sits
 /// private inside an actor behind `#if canImport(FluidAudio)`.
-enum SpeakerAttribution {
+nonisolated enum SpeakerAttribution {
 
     struct Turn: Equatable {
         let start: TimeInterval

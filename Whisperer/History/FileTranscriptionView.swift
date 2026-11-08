@@ -955,9 +955,11 @@ struct FileTranscriptionView: View {
         _ = provider.loadObject(ofClass: URL.self) { url, error in
             guard let url = url, error == nil else { return }
             let ext = url.pathExtension.lowercased()
-            guard FileTranscriptionManager.allExtensions.contains(ext) else { return }
 
+            // The item provider calls back on a background queue; the extension check reads
+            // main-actor state, so it happens after the hop.
             DispatchQueue.main.async {
+                guard FileTranscriptionManager.allExtensions.contains(ext) else { return }
                 withAnimation(.spring(response: 0.3)) {
                     manager.selectFile(url: url)
                 }

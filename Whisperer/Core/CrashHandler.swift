@@ -218,7 +218,7 @@ final class CrashHandler {
             if FileManager.default.fileExists(atPath: crashLogURL.path) {
                 // Append to existing file
                 if let handle = try? FileHandle(forWritingTo: crashLogURL) {
-                    try? handle.seekToEnd()
+                    _ = try? handle.seekToEnd()
                     // `write(contentsOf:)`: `write(_:)` raises an uncatchable ObjC exception on a
                     // full volume. Crashing inside the crash reporter destroys the report.
                     try? handle.write(contentsOf: data)

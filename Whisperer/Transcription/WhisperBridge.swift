@@ -11,7 +11,7 @@ import os
 
 // MARK: - Transcription Language
 
-enum TranscriptionLanguage: String, CaseIterable, Codable {
+nonisolated enum TranscriptionLanguage: String, CaseIterable, Codable {
     case auto = "auto"
     case afrikaans = "af"
     case albanian = "sq"
@@ -255,7 +255,7 @@ enum TranscriptionLanguage: String, CaseIterable, Codable {
 
 // MARK: - Whisper Error
 
-enum WhisperError: Error, LocalizedError {
+nonisolated enum WhisperError: Error, LocalizedError {
     case modelLoadFailed
     case transcriptionFailed
     case modelCorrupted
@@ -276,7 +276,7 @@ enum WhisperError: Error, LocalizedError {
 
 /// One whisper segment with its own timing, relative to the start of the decoded buffer.
 /// Produced only by `WhisperBridge.transcribeTimestamped` — every other path discards timings.
-struct WhisperTimedSegment {
+nonisolated struct WhisperTimedSegment {
     let text: String
     let start: Double   // seconds
     let end: Double     // seconds
@@ -286,7 +286,7 @@ struct WhisperTimedSegment {
 
 /// One word from the eager streaming decode path.
 /// Field-for-field matches `WhisperKitStreamingWord` so `EagerStreamEngine` takes both.
-struct WhisperStreamWord: Sendable {
+nonisolated struct WhisperStreamWord: Sendable {
     let text: String        // includes leading space when present in BPE output
     let tokens: [Int]
     let start: Double       // seconds, relative to decoded buffer start
@@ -298,7 +298,7 @@ struct WhisperStreamWord: Sendable {
 ///
 /// Exists so callers that persist a decode's output can refuse to treat "the bridge was busy or
 /// gone" as "the audio was silent". See `WhisperBridge.transcribeTimestampedChecked`.
-enum WhisperDecodeUnavailable: Error, LocalizedError {
+nonisolated enum WhisperDecodeUnavailable: Error, LocalizedError {
     case shuttingDown
     case notInitialized
     case lockTimeout
@@ -315,24 +315,54 @@ enum WhisperDecodeUnavailable: Error, LocalizedError {
 }
 
 /// Result of one eager streaming decode pass over `WhisperBridge`.
-struct WhisperStreamResult: Sendable {
+nonisolated struct WhisperStreamResult: Sendable {
     let words: [WhisperStreamWord]
     let averageLogProbability: Float
     let languageCode: String?
 }
 
-class WhisperBridge: TranscriptionBackend {
+/// `nonisolated` and `@unchecked Sendable`: the bridge is built off-main (model pool, meeting
+/// engines, transcript refiner) and does all of its work on whisper's decode threads, so a main
+/// actor isolation would be a fiction. Thread safety is by locks, not by an actor (CLAUDE.md:
+/// SafeLock for whisper.cpp):
+/// - `ctx` is read and replaced only while holding `ctxLock` (the `deinit` force-free is the one
+///   documented exception, when no other reference can exist).
+/// - `isInitialized`, `modelPath`, `useGPU`, `lockTimeout` and `transcriptionTimeout` are written
+///   only during `init`.
+/// - Every field another thread can touch mid-decode lives in an `OSAllocatedUnfairLock`:
+///   `abortFlag`, `opState`, `rtfEstimate`, and `crossThread` (shutdown flag, detected
+///   language, the live-segment callback).
+nonisolated final class WhisperBridge: TranscriptionBackend, @unchecked Sendable {
     private var ctx: OpaquePointer?
     private let modelPath: URL
     private let queue = DispatchQueue(label: "whisper.transcribe", qos: .userInteractive)
     private let ctxLock: SafeLock
 
+    /// State written on one thread and read on another while a decode runs. These were plain
+    /// stored properties: `onNewSegment` is assigned from the main actor by `StreamingTranscriber`
+    /// while `new_segment_callback` reads it on whisper's decode thread, and `lastDetectedLanguage`
+    /// is written by the decode while callers read it from elsewhere. Unsynchronized reads of a
+    /// closure or a `String` race on their retain/release — a crash, not just a stale value.
+    private struct CrossThreadState {
+        var isShuttingDown = false
+        var lastDetectedLanguage: String?
+        var onNewSegment: ((String) -> Void)?
+    }
+    private let crossThread = OSAllocatedUnfairLock(uncheckedState: CrossThreadState())
+
     // Shutdown tracking to prevent operations during cleanup
-    private var isShuttingDown = false
+    private var isShuttingDown: Bool {
+        get { crossThread.withLockUnchecked { $0.isShuttingDown } }
+        set { crossThread.withLockUnchecked { $0.isShuttingDown = newValue } }
+    }
+    /// Written once, in `init`, before the bridge is shared.
     private var isInitialized = false
 
-    // Callbacks for chunked pipeline
-    var onNewSegment: ((String) -> Void)?   // Live text from new_segment_callback
+    /// Live text from new_segment_callback. Invoked on whisper's decode thread.
+    var onNewSegment: ((String) -> Void)? {
+        get { crossThread.withLockUnchecked { $0.onNewSegment } }
+        set { crossThread.withLockUnchecked { $0.onNewSegment = newValue } }
+    }
     private struct AbortState {
         /// The live flag `abort_callback` polls from whisper.cpp's decode thread.
         var requested = false
@@ -401,7 +431,10 @@ class WhisperBridge: TranscriptionBackend {
     private let maxConsecutiveFailures = 2
 
     // Language detected during the last transcription (from whisper_full_lang_id)
-    private(set) var lastDetectedLanguage: String?
+    private(set) var lastDetectedLanguage: String? {
+        get { crossThread.withLockUnchecked { $0.lastDetectedLanguage } }
+        set { crossThread.withLockUnchecked { $0.lastDetectedLanguage = newValue } }
+    }
 
     // MARK: HealthReportable state
 
@@ -801,7 +834,7 @@ class WhisperBridge: TranscriptionBackend {
         for i in 0..<nSegments {
             let noSpeechProb = whisper_full_get_segment_no_speech_prob(ctx, i)
             if noSpeechProb > noSpeechProbThreshold {
-                if let segmentText = whisper_full_get_segment_text(ctx, i) {
+                if whisper_full_get_segment_text(ctx, i) != nil {
                     EventRingBuffer.shared.record(
                         component: "WhisperBridge",
                         operation: "skipNonSpeech",

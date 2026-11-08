@@ -363,7 +363,7 @@ nonisolated struct MMBERTEditingModel: EditingModel {
 
 // MARK: - Calibration action names
 
-private extension EditingCasingLabel {
+nonisolated private extension EditingCasingLabel {
     /// The name `calibrate.py` gives this class. The Swift label space and the Python one are
     /// two spellings of the same thing, and a lookup that silently missed would read as
     /// "unmeasured" — which is safe but wrong, so the mapping is explicit and total.
@@ -395,7 +395,7 @@ private extension EditingCasingLabel {
 /// `decode(from:)` is the schema-faithful loader that makes regeneration mechanical and lets a
 /// test read the JSON directly, and `EditingModelTests.testBakedTableIsNoLooserThanTheJSON`
 /// fails if the literal is ever more permissive than the file it claims to mirror.
-struct MMBERTCalibrationTable: Sendable {
+nonisolated struct MMBERTCalibrationTable: Sendable {
 
     /// The heads `calibrate.py` reports. Spelled as the JSON spells them.
     /// The first four (error, punct, casing, disf) are measured; the remaining four

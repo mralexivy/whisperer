@@ -8,7 +8,7 @@
 import Foundation
 import Darwin
 
-enum SystemMemory {
+nonisolated enum SystemMemory {
 
     /// Available memory in GB (free + inactive + purgeable pages).
     /// Fails open (returns .greatestFiniteMagnitude) if the query fails,

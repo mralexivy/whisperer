@@ -575,7 +575,7 @@ struct TranscriptionsView: View {
         .onReceive(NotificationCenter.default.publisher(for: NSWindow.didBecomeKeyNotification)) { _ in
             dailyQuote = DailyQuotes.random
         }
-        .onChange(of: historyManager.transcriptions.count) { _ in
+        .onChange(of: historyManager.transcriptions.count) { _, _ in
             // Select first item when data loads if nothing is selected
             if selectedTranscription == nil, let first = historyManager.transcriptions.first {
                 selectedTranscription = first
@@ -704,7 +704,7 @@ struct TranscriptionsView: View {
                     .textFieldStyle(.plain)
                     .font(.system(size: 13))
                     .foregroundColor(WhispererColors.primaryText(colorScheme))
-                    .onChange(of: searchText) { _ in
+                    .onChange(of: searchText) { _, _ in
                         performSearch()
                     }
 
@@ -2087,10 +2087,10 @@ struct HistorySettingsView: View {
             selectedLanguages = Set(config.allowedLanguages)
             selectedPrimary = config.primaryLanguage ?? .english
         }
-        .onChange(of: selectedLanguages) { _ in
+        .onChange(of: selectedLanguages) { _, _ in
             saveLanguageRoutingConfig()
         }
-        .onChange(of: selectedPrimary) { _ in
+        .onChange(of: selectedPrimary) { _, _ in
             saveLanguageRoutingConfig()
         }
     }

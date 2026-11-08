@@ -52,7 +52,7 @@ struct MeetingOverviewView: View {
             fallbackNotice = connectedAI.lastNotice
         }
         .onAppear { provenance = meeting.flatMap { MeetingAIProvenance.lookup($0.id) } }
-        .onChange(of: meeting?.id) { id in
+        .onChange(of: meeting?.id) { _, id in
             provenance = id.flatMap { MeetingAIProvenance.lookup($0) }
             fallbackNotice = nil
         }

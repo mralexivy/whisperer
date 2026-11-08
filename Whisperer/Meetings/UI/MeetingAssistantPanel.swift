@@ -100,7 +100,7 @@ struct AskAIPane: View {
             inputBar
         }
         .onAppear { onAppear() }
-        .onChange(of: meeting?.id) { _ in onAppear() }
+        .onChange(of: meeting?.id) { onAppear() }
         .alert("Clear conversation?", isPresented: $showClearConfirm) {
             Button("Clear", role: .destructive) { clearConversation() }
             Button("Cancel", role: .cancel) { }
@@ -223,10 +223,10 @@ struct AskAIPane: View {
                 .padding(14)
                 .id("chatBottom")
             }
-            .onChange(of: messages.count) { _ in
+            .onChange(of: messages.count) {
                 withAnimation { proxy.scrollTo("chatBottom", anchor: .bottom) }
             }
-            .onChange(of: isThinking) { thinking in
+            .onChange(of: isThinking) { _, thinking in
                 if thinking { withAnimation { proxy.scrollTo("chatBottom", anchor: .bottom) } }
             }
         }
@@ -562,7 +562,7 @@ struct LiveNotesPane: View {
                   let updated = note.userInfo?["notes"] as? [MeetingNote] else { return }
             withAnimation(.spring(response: 0.35, dampingFraction: 0.85)) { external = updated }
         }
-        .onChange(of: meeting?.id) { _ in external = nil }
+        .onChange(of: meeting?.id) { external = nil }
     }
 
     private func save(_ updated: MeetingNote) {
@@ -678,7 +678,7 @@ struct NoteCard: View {
                 .font(.system(size: 13))
                 .foregroundColor(.white.opacity(0.85))
                 .textFieldStyle(.plain)
-                .onChange(of: note.text) { _ in onUpdate?(note) }
+                .onChange(of: note.text) { onUpdate?(note) }
         }
         .padding(10)
         .background(Color(hex: "14142B"))
@@ -737,20 +737,12 @@ struct SpeakersPane: View {
             .sorted { $0.wordCount > $1.wordCount }
     }
 
-    private var roster: [(index: Int, name: String)] {
-        speakerStats.map { (index: $0.index, name: $0.name) }
-    }
-
-    private var duplicateIndices: Set<Int> {
-        SpeakerNaming.duplicateIndices(in: roster)
-    }
-
     private var participants: [MeetingParticipant] {
         (meeting?.participants ?? []).filter { $0.response != .declined }
     }
 
     /// Invite names nobody has been given yet — offered as one-click names for unnamed voices.
-    private var unassignedNames: [String] {
+    private func unassignedNames(roster: [(index: Int, name: String)]) -> [String] {
         let taken = Set(roster.map { SpeakerNaming.normalized($0.name) })
         var seen = Set<String>()
         return participants.map(\.displayName).filter {
@@ -760,9 +752,17 @@ struct SpeakersPane: View {
     }
 
     var body: some View {
-        ScrollView {
+        // Computed once per render. `speakerStats` word-splits every segment of the meeting, and
+        // it used to be re-derived per row (via `roster`, `duplicateIndices`, `unassignedNames`)
+        // on every live-session publish.
+        let stats = speakerStats
+        let roster = stats.map { (index: $0.index, name: $0.name) }
+        let duplicates = SpeakerNaming.duplicateIndices(in: roster)
+        let suggestions = unassignedNames(roster: roster)
+        let participants = self.participants
+        return ScrollView {
             LazyVStack(spacing: 10) {
-                if speakerStats.isEmpty {
+                if stats.isEmpty {
                     VStack(spacing: 10) {
                         Image(systemName: "person.2.fill")
                             .font(.system(size: 28, weight: .light))
@@ -774,14 +774,14 @@ struct SpeakersPane: View {
                     .frame(maxWidth: .infinity)
                     .padding(.top, 40)
                 } else {
-                    let totalWords = max(1, speakerStats.map { $0.wordCount }.reduce(0, +))
-                    ForEach(speakerStats, id: \.index) { sp in
+                    let totalWords = max(1, stats.map { $0.wordCount }.reduce(0, +))
+                    ForEach(stats, id: \.index) { sp in
                         SpeakerStatRow(
                             speaker: sp,
                             fraction: Double(sp.wordCount) / Double(totalWords),
-                            isDuplicate: duplicateIndices.contains(sp.index),
+                            isDuplicate: duplicates.contains(sp.index),
                             speakerRoster: roster,
-                            suggestedNames: [MeetingSegment].isDefaultSpeakerName(sp.name) ? unassignedNames : [],
+                            suggestedNames: [MeetingSegment].isDefaultSpeakerName(sp.name) ? suggestions : [],
                             onRenamed: onSpeakerRenamed
                         )
                     }

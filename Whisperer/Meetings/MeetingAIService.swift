@@ -14,7 +14,7 @@ import Foundation
 /// Represents a segment of the meeting transcript cited by the LLM in its answer.
 /// Moved here from the deleted MeetingRAGEngine. Must stay Codable — MeetingChatStore
 /// persists assistant messages with their sources as JSON.
-struct RAGChunk: Codable, Equatable {
+nonisolated struct RAGChunk: Codable, Equatable {
     let text: String
     let startTimestamp: Double
     let endTimestamp: Double
@@ -33,7 +33,7 @@ struct RAGChunk: Codable, Equatable {
 
 // MARK: - Answer model
 
-struct RAGAnswer {
+nonisolated struct RAGAnswer {
     let text: String
     let sources: [RAGChunk]   // citations parsed from the LLM response
     let usedRAG: Bool
@@ -467,16 +467,19 @@ actor MeetingAIService {
 
         // Shared generate closure — called once for rung 0 and once for rung 1.
         // The `assistantPrefill` param is only set on the rung-1 call.
+        // Frozen copies: the @Sendable closure must not capture the mutable vars above.
+        let reduceText = effectiveTranscript
+        let reduceReq = reduceRequest
         let generate: @Sendable (String, (@Sendable (String) -> Void)?, String?) async throws -> String = { message, partial, prefill in
             try await llm.process(
-                text:                   effectiveTranscript,
-                systemPrompt:           reduceRequest.systemPrompt,
+                text:                   reduceText,
+                systemPrompt:           reduceReq.systemPrompt,
                 userMessage:            message,
                 temperature:            0.15,
                 repetitionPenalty:      1.15,
                 maxTokensCap:           2048,
-                outputTokensHint:       reduceRequest.outputTokensHint,
-                timeoutSecondsOverride: reduceRequest.timeoutSeconds,
+                outputTokensHint:       reduceReq.outputTokensHint,
+                timeoutSecondsOverride: reduceReq.timeoutSeconds,
                 throwOnFallback:        true,
                 // Runs once per meeting; warming this prefix only evicts the dictation cache.
                 reuseWarmCache:         false,
@@ -488,7 +491,7 @@ actor MeetingAIService {
         }
 
         // ── Rung 0: normal generation with correct tier and prompt ───────────────────
-        var raw: String? = try? await generate(userMessage, onPartialText, nil)
+        let raw: String? = try? await generate(userMessage, onPartialText, nil)
         Logger.info("Meeting overview: rung0 produced \(raw?.count ?? 0) chars", subsystem: .transcription)
 
         // Non-MTP models never drive `onPartialText`, and a streamed title can also be

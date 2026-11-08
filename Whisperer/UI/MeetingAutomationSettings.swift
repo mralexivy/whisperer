@@ -245,7 +245,7 @@ struct AutoRecordSettingsRows: View {
                         Text("Apps you asked not to prompt for")
                             .font(.system(size: 13, weight: .medium))
                             .foregroundColor(MBColors.textPrimary)
-                        Text(coordinator.excludedBundleIDs.map(Self.appName).sorted().joined(separator: ", "))
+                        Text(coordinator.excludedBundleIDs.map { Self.appName($0) }.sorted().joined(separator: ", "))
                             .font(.system(size: 11))
                             .foregroundColor(MBColors.textSecondary)
                     }

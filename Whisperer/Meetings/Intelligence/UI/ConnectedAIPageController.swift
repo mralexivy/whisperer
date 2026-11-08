@@ -34,7 +34,9 @@ final class ConnectedAIPageController: ObservableObject {
 
     private var cancellable: AnyCancellable?
 
-    init(store: ConnectedAIStore = .shared) {
+    /// `store` nil = `.shared`, resolved on the main actor rather than as a default argument.
+    init(store: ConnectedAIStore? = nil) {
+        let store = store ?? .shared
         self.store = store
         // Re-render the page whenever the store changes.
         cancellable = store.objectWillChange.sink { [weak self] _ in self?.objectWillChange.send() }

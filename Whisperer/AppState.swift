@@ -1207,7 +1207,8 @@ class AppState: ObservableObject {
         dictionaryRebuildObserver = NotificationCenter.default.addObserver(
             forName: .dictionaryDidRebuild, object: nil, queue: .main
         ) { [weak self] _ in
-            self?.reconfigureVocabularyBoosting()
+            // `queue: .main` delivers on the main thread; the closure type is just nonisolated.
+            MainActor.assumeIsolated { self?.reconfigureVocabularyBoosting() }
         }
 
         #if !APP_STORE
@@ -1640,7 +1641,7 @@ class AppState: ObservableObject {
         beginModelDownload(asset)
         modelDownloadTasks[asset] = Task.detached(priority: .userInitiated) { [weak self] in
             do {
-                try await work { fraction in
+                try await work { [weak self] fraction in
                     Task { @MainActor [weak self] in self?.reportModelDownload(asset, fraction: fraction) }
                 }
                 try Task.checkCancellation()
@@ -1779,12 +1780,14 @@ class AppState: ObservableObject {
         // see `WhisperBridge.purgeCoreMLEncoder(besideModelAt:)`, which also deletes any encoder a
         // previous build already installed. This sweeps the download leftovers that never reach a
         // load path (the `.mlmodelc.zip`, `__MACOSX`), reclaiming a few hundred MB.
+        // `ModelDownloader` is main-actor isolated, so each call hops back to main; they are a
+        // handful of `removeItem`s, cheap enough not to warrant a nonisolated file path.
         Task.detached(priority: .background) {
-            ModelDownloader.shared.purgeCoreMLEncoderArtifacts(for: model)
-            ModelDownloader.shared.purgeCoreMLEncoderArtifacts(for: .tiny)
+            await ModelDownloader.shared.purgeCoreMLEncoderArtifacts(for: model)
+            await ModelDownloader.shared.purgeCoreMLEncoderArtifacts(for: .tiny)
             // Tiny is no longer used for detection; reclaim the 77 MB if user is not on it.
-            if model != .tiny, ModelDownloader.shared.isModelDownloaded(.tiny) {
-                try? ModelDownloader.shared.deleteModel(.tiny)
+            if model != .tiny, await ModelDownloader.shared.isModelDownloaded(.tiny) {
+                try? await ModelDownloader.shared.deleteModel(.tiny)
                 Logger.info("Purged ggml-tiny.bin (no longer used for detection)", subsystem: .model)
             }
         }
@@ -2251,7 +2254,7 @@ class AppState: ObservableObject {
         systemLanguageStatuses[language] = .downloading(0)
         systemLanguageInstallTasks[language] = Task { [weak self] in
             do {
-                try await SystemLivePreviewBridge.install(language) { fraction in
+                try await SystemLivePreviewBridge.install(language) { [weak self] fraction in
                     Task { @MainActor [weak self] in
                         guard let self, self.systemLanguageInstallTasks[language] != nil else { return }
                         self.systemLanguageStatuses[language] = .downloading(fraction)
@@ -2652,7 +2655,7 @@ class AppState: ObservableObject {
             do {
                 // Weights + warmup are one queue slot: a warmup that lands on top of another
                 // family's ANE load is exactly the contention this queue exists to remove.
-                try await ModelWorkQueue.shared.run("llm-load") {
+                try await ModelWorkQueue.shared.run("llm-load") { [weak self] in
                     try await processor.loadModel(variant)
                     let memAfter = BenchmarkUtilities.currentMemoryMB()
                     Logger.info("LLM \(variant.displayName) pre-loaded. Process memory: \(String(format: "%.0f", memBefore))MB → \(String(format: "%.0f", memAfter))MB (+\(String(format: "%.0f", memAfter - memBefore))MB)", subsystem: .model)
@@ -2676,7 +2679,7 @@ class AppState: ObservableObject {
                 Logger.error("Failed to pre-load LLM \(variant.displayName): \(error)", subsystem: .model)
                 let msg = "Failed to load model"
                 // Write error state to the current processor, not a potentially stale capture
-                await MainActor.run {
+                await MainActor.run { [weak self] in
                     self?.llmPostProcessor?.errorMessage = msg
                     self?.llmPostProcessor?.loadPhase = .error(msg)
                     self?.llmPostProcessor?.isLoading = false
@@ -3263,51 +3266,47 @@ class AppState: ObservableObject {
         Task.detached(priority: .userInitiated) { [weak self] in
             guard let self else { return }
 
-            do {
-                // Validate multilingual fallback availability
-                let fallbackModel = await MainActor.run { self.buildFallbackModel() }
-                if !ModelDownloader.shared.isModelDownloaded(fallbackModel) {
-                    Logger.warning("Multilingual fallback model \(fallbackModel.displayName) not downloaded, attempting download", subsystem: .model)
-                    do {
-                        try await ModelDownloader.shared.downloadModel(fallbackModel, progressCallback: { _ in })
-                    } catch {
-                        Logger.warning("Failed to download fallback model, disabling routing: \(error)", subsystem: .model)
-                        return
-                    }
+            // Validate multilingual fallback availability
+            let fallbackModel = await MainActor.run { self.buildFallbackModel() }
+            if !(await ModelDownloader.shared.isModelDownloaded(fallbackModel)) {
+                Logger.warning("Multilingual fallback model \(fallbackModel.displayName) not downloaded, attempting download", subsystem: .model)
+                do {
+                    try await ModelDownloader.shared.downloadModel(fallbackModel, progressCallback: { _ in })
+                } catch {
+                    Logger.warning("Failed to download fallback model, disabling routing: \(error)", subsystem: .model)
+                    return
                 }
+            }
 
+            // Register the current whisperBridge as fallback
+            await MainActor.run { [weak self] in
+                guard let self else { return }
                 // Create ModelPool — detection now uses the resident V3 bridge directly.
+                // `ModelPool` is main-actor state, so it is built here rather than off-main.
                 let pool = ModelPool()
+                let fallbackProfile = self.buildFallbackProfile()
 
-                // Register the current whisperBridge as fallback
-                await MainActor.run { [weak self] in
-                    guard let self else { return }
-                    let fallbackProfile = self.buildFallbackProfile()
+                if let bridge = self.whisperBridge {
+                    try? pool.loadFallback(profile: fallbackProfile, backend: bridge)
+                }
 
-                    if let bridge = self.whisperBridge {
-                        try? pool.loadFallback(profile: fallbackProfile, backend: bridge)
-                    }
+                self.modelPool = pool
+                Logger.info("Language routing initialized (\(self.routingConfig.allowedLanguages.count) languages)", subsystem: .model)
 
-                    self.modelPool = pool
-                    Logger.info("Language routing initialized (\(self.routingConfig.allowedLanguages.count) languages)", subsystem: .model)
-
-                    // Optionally preload standby for primary language
-                    if let primary = self.routingConfig.primaryLanguage {
-                        let downloaded = ModelDownloader.shared.downloadedModelSet()
-                        if let specializedModel = WhisperModel.recommendedModel(for: primary, downloaded: downloaded),
-                           specializedModel != self.selectedModel {
-                            let standbyProfile = ModelProfile(
-                                model: specializedModel,
-                                backend: .whisperCpp,
-                                language: primary,
-                                isSpecialized: true
-                            )
-                            pool.preloadStandby(profile: standbyProfile)
-                        }
+                // Optionally preload standby for primary language
+                if let primary = self.routingConfig.primaryLanguage {
+                    let downloaded = ModelDownloader.shared.downloadedModelSet()
+                    if let specializedModel = WhisperModel.recommendedModel(for: primary, downloaded: downloaded),
+                       specializedModel != self.selectedModel {
+                        let standbyProfile = ModelProfile(
+                            model: specializedModel,
+                            backend: .whisperCpp,
+                            language: primary,
+                            isSpecialized: true
+                        )
+                        pool.preloadStandby(profile: standbyProfile)
                     }
                 }
-            } catch {
-                Logger.warning("Failed to initialize language routing: \(error)", subsystem: .model)
             }
         }
     }
@@ -3601,7 +3600,10 @@ class AppState: ObservableObject {
             soundPlayer?.playStartSound()
         }
 
-        Task {
+        Task { [weak self] in
+            // Weak at the top so the nested `[weak self]` callbacks below are not undercut by an
+            // implicit strong capture; the body itself runs with a strong `self`.
+            guard let self else { return }
             do {
                 #if canImport(WhisperKit)
                 // Reset gate before StreamingTranscriber is created — synchronous, no race
@@ -3643,7 +3645,7 @@ class AppState: ObservableObject {
                 // Settings since launch is then reinstalled rather than silently missing.
                 refreshSystemLanguages(installMissing: true)
                 // A language of the user's that Apple has no assets for yet: say so and install it.
-                if let missing = builtinEngineLanguages.first(where: { Self.isMissing(systemLanguageStatuses[$0]) }) {
+                if let missing = builtinEngineLanguages.first(where: { Self.isMissing(self.systemLanguageStatuses[$0]) }) {
                     handleLivePreviewUnavailable(missing)
                 }
 
@@ -3682,7 +3684,7 @@ class AppState: ObservableObject {
                     // coordinator (which rejects any rewrite). Its committed words can: they
                     // never change. The still-volatile words are shown after the pending tail.
                     if coordinatorFeed == .accumulatedPartials, let builtin = builtinInApp as? SystemLivePreviewBridge {
-                        Task {
+                        Task { [weak self] in
                             await builtin.setStableTextCallback { [weak self] committed in
                                 Task { @MainActor [weak self] in
                                     guard let self, let coordinator = self.meetingSpeakerCoordinator,
@@ -3695,7 +3697,7 @@ class AppState: ObservableObject {
                             }
                         }
                     }
-                    Task {
+                    Task { [weak self] in
                         await coordinator.setCallbacks(
                             onAttributed: { text, speakerIndex, start, end in
                                 Task { @MainActor in
@@ -3709,7 +3711,7 @@ class AppState: ObservableObject {
                                 }
                             },
                             onPendingTail: { [weak self] tail in
-                                Task { @MainActor in
+                                Task { @MainActor [weak self] in
                                     guard meetingSession.chunkGeneration == capturedGeneration else { return }
                                     self?.meetingPendingTail = tail
                                     meetingSession.livePreviewText = SystemLivePreviewBridge.join(tail, self?.meetingVolatileTail ?? "")
@@ -4306,7 +4308,10 @@ class AppState: ObservableObject {
         soundPlayer?.playStartSound()
 
         // Start recording immediately
-        Task {
+        Task { [weak self] in
+            // Weak at the top so the nested `[weak self]` callbacks below are not undercut by an
+            // implicit strong capture; the body itself runs with a strong `self`.
+            guard let self else { return }
             do {
                 // Create streaming transcriber with pre-loaded bridge, optional VAD, and language.
                 // Nemotron path: pass NullTranscriptionBackend + nemotronBridge (VAD chunking bypassed).
@@ -4319,12 +4324,12 @@ class AppState: ObservableObject {
 
                 #if canImport(FluidAudio)
                 let nemotron: (any AnyObject)? = {
-                    if builtinCovers { return systemLivePreviewInstance }
-                    if selectedBackendType == .nemotron { return nemotronBridgeInstance as AnyObject? }
-                    if selectedBackendType == .nemotronHebrew { return nemotronHebrewBridgeInstance as AnyObject? }
+                    if builtinCovers { return self.systemLivePreviewInstance }
+                    if self.selectedBackendType == .nemotron { return self.nemotronBridgeInstance as AnyObject? }
+                    if self.selectedBackendType == .nemotronHebrew { return self.nemotronHebrewBridgeInstance as AnyObject? }
                     // Preview-only: the built-in engine (Apple dictation) drives live text and the
                     // selected engine produces the final transcript.
-                    if builtinEngineDrivesLiveText(for: selectedBackendType) { return systemLivePreviewInstance }
+                    if self.builtinEngineDrivesLiveText(for: self.selectedBackendType) { return self.systemLivePreviewInstance }
                     return nil
                 }()
                 // When covering, the built-in engine is the final decoder (bridge is the null backend).
@@ -4354,7 +4359,7 @@ class AppState: ObservableObject {
                 // Settings since launch is then reinstalled rather than silently missing.
                 refreshSystemLanguages(installMissing: true)
                 // A language of the user's that Apple has no assets for yet: say so and install it.
-                if let missing = builtinEngineLanguages.first(where: { Self.isMissing(systemLanguageStatuses[$0]) }) {
+                if let missing = builtinEngineLanguages.first(where: { Self.isMissing(self.systemLanguageStatuses[$0]) }) {
                     handleLivePreviewUnavailable(missing)
                 }
 
@@ -4838,7 +4843,7 @@ class AppState: ObservableObject {
     /// Carries a non-`Sendable` transcriber across the hop to the global queue. The same
     /// unchecked hand-off `StreamingTranscriber.stopAsync` already performs with `self`, made
     /// explicit here rather than left to a capture.
-    private struct UncheckedTransfer<T>: @unchecked Sendable {
+    private nonisolated struct UncheckedTransfer<T>: @unchecked Sendable {
         let value: T
         init(_ value: T) { self.value = value }
     }
@@ -5965,8 +5970,9 @@ extension AppState {
             }
 
             let skipCorrections = llmEnabled || (loadedBackendType ?? selectedBackendType) == .whisperKit
-            let stopTask = Task.detached(priority: .userInitiated) { [weak transcriber] in
-                await transcriber?.stopAsync(skipCorrections: skipCorrections) ?? ""
+            let stopTask = Task.detached(priority: .userInitiated) { [transcriber] in
+                // Strong: the enclosing task holds `transcriber` for the whole finish anyway.
+                await transcriber.stopAsync(skipCorrections: skipCorrections)
             }
             var finalText = await withTimeoutResult(
                 seconds: Self.stopCeilingSeconds(forRecordedDuration: transcriber.recordedDuration)

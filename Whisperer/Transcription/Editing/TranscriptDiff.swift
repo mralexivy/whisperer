@@ -27,7 +27,7 @@
 
 import Foundation
 
-enum TranscriptDiff {
+nonisolated enum TranscriptDiff {
 
     // MARK: - Entry points
 

@@ -65,7 +65,8 @@ final class WaveformState: ObservableObject {
     func startDisplayLink() {
         guard displayTimer == nil else { return }
         let t = Timer.scheduledTimer(withTimeInterval: 1.0 / 60.0, repeats: true) { [weak self] _ in
-            self?.tick()
+            // Fires on the main run loop (added below); the closure type is just nonisolated.
+            MainActor.assumeIsolated { self?.tick() }
         }
         RunLoop.main.add(t, forMode: .common)
         displayTimer = t

@@ -75,7 +75,7 @@ struct MeetingPrepView: View {
             }
             engines.prefetch()
         }
-        .onChange(of: appState.isSelectedEngineDownloading) { downloading in
+        .onChange(of: appState.isSelectedEngineDownloading) { _, downloading in
             // The speech engine just landed on disk: re-check, so its row turns ready without
             // the user leaving and re-entering the screen.
             if !downloading { engines.prefetch() }

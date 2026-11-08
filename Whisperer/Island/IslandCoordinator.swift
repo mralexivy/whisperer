@@ -133,15 +133,18 @@ final class IslandCoordinator: ObservableObject {
             object: nil,
             queue: .main
         ) { [weak self] _ in
-            guard let self else { return }
-            let p = IslandPlacement.current
-            self.placement = p
-            self.geo.placement = p
-            // Reset the reveal gate so the bar doesn't appear at the new edge instantly.
-            self.cancelDwellTask()
-            self.revealGate.reset()
-            self.idleRevealPhase = .hidden
-            self.panelController?.applyPlacementChange(placement: p, screen: self.homeScreen)
+            // `queue: .main` delivers on the main thread; the closure type is just nonisolated.
+            MainActor.assumeIsolated {
+                guard let self else { return }
+                let p = IslandPlacement.current
+                self.placement = p
+                self.geo.placement = p
+                // Reset the reveal gate so the bar doesn't appear at the new edge instantly.
+                self.cancelDwellTask()
+                self.revealGate.reset()
+                self.idleRevealPhase = .hidden
+                self.panelController?.applyPlacementChange(placement: p, screen: self.homeScreen)
+            }
         }
     }
 

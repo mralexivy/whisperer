@@ -9,7 +9,7 @@ import Foundation
 import AVFoundation
 import SwiftOGG
 
-enum AudioArchiveError: Error, LocalizedError {
+nonisolated enum AudioArchiveError: Error, LocalizedError {
     case cannotCreateFile(URL)
     case unsupportedSource(URL)
     case conversionFailed(String)
@@ -25,7 +25,7 @@ enum AudioArchiveError: Error, LocalizedError {
 
 /// Single source of truth for the on-disk audio format. Everything the app writes —
 /// live sessions, dictation archives, meeting audio, imported files — goes through here.
-enum AudioArchiveFormat {
+nonisolated enum AudioArchiveFormat {
 
     // MARK: - Format
 
@@ -189,7 +189,7 @@ enum AudioArchiveFormat {
 ///
 /// **Not thread-safe by design** — every call site is already serialized (the recorder's
 /// `sessionWriteQueue`, or a single transcode loop).
-final class AudioArchiveWriter {
+nonisolated final class AudioArchiveWriter {
 
     private let encoder: OGGEncoder
     private let handle: FileHandle

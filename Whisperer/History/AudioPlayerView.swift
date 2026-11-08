@@ -41,7 +41,14 @@ struct AudioPlayerView: View {
         }
         .onAppear {
             player.load(url: audioURL)
-            waveformData = WaveformGenerator.generateWaveform(from: audioURL, sampleCount: 70)
+        }
+        .task(id: audioURL) {
+            // Off the main thread: every bin is a seek + decode into the (often Opus) file.
+            let url = audioURL
+            let samples = await Task.detached(priority: .userInitiated) {
+                WaveformGenerator.generateWaveform(from: url, sampleCount: 70)
+            }.value
+            waveformData = samples
         }
         .onDisappear {
             player.stop()

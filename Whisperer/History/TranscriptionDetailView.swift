@@ -539,7 +539,7 @@ struct TranscriptionDetailView: View {
                     .scrollContentBackground(.hidden)
                     .padding(14)
                     .frame(minHeight: 100)
-                    .onChange(of: notes) { _ in
+                    .onChange(of: notes) { _, _ in
                         saveNotes()
                     }
 
@@ -711,7 +711,7 @@ struct TranscriptionDetailView: View {
                 }
 
                 // Apply dictionary corrections
-                let finalText = DictionaryManager.shared.correctTextCapturing(rawText).text
+                let finalText = await DictionaryManager.shared.correctTextCapturing(rawText).text
 
                 guard !finalText.isEmpty else {
                     Logger.warning("Re-transcription produced empty result", subsystem: .transcription)

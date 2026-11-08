@@ -7,7 +7,7 @@
 
 import Foundation
 
-enum ParakeetModelVariant: String, CaseIterable, Identifiable {
+nonisolated enum ParakeetModelVariant: String, CaseIterable, Identifiable {
     case v2 = "v2"
     case v3 = "v3"
 

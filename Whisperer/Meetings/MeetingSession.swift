@@ -267,7 +267,8 @@ class MeetingSession: ObservableObject {
                                               with editor: DeterministicPolisher,
                                               context: EditContext) async
         -> (segments: [MeetingSegment], rewritten: Int) {
-        if Thread.isMainThread {
+        // `pthread_main_np` rather than `Thread.isMainThread`, which is unavailable in async code.
+        if pthread_main_np() != 0 {
             Logger.error("Meeting editor: polishAll entered on the main thread — isolation inheritance is back",
                          subsystem: .transcription)
         }
@@ -346,8 +347,8 @@ class MeetingSession: ObservableObject {
         self.sourceAppName = sourceAppName
         makeEditors()
 
-        let language = await AppState.shared.selectedLanguage.rawValue
-        let model = await AppState.shared.selectedModel.rawValue
+        let language = AppState.shared.selectedLanguage.rawValue
+        let model = AppState.shared.selectedModel.rawValue
 
         let id = await MeetingManager.shared.beginSession(
             title: title,

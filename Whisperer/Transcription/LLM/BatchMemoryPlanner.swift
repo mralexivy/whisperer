@@ -44,7 +44,7 @@ import MLX
 
 /// What the planner decided, and why. `clampReason` is non-nil whenever the caller did not get
 /// what it asked for — callers log it rather than silently running narrower than intended.
-struct BatchMemoryPlan: Equatable {
+nonisolated struct BatchMemoryPlan: Equatable {
     /// Rows to run concurrently. Always ≥ 1: a batch of one still has to be possible, because the
     /// alternative to a too-expensive batch is a serial pass, not a failure.
     let rows: Int
@@ -77,7 +77,7 @@ struct BatchMemoryPlan: Equatable {
 ///
 /// A value type with injectable constants so the tests can drive it with synthetic ceilings —
 /// asserting a guardrail by allocating 30 GB to see whether it trips is not a test anyone can run.
-struct BatchMemoryPlanner {
+nonisolated struct BatchMemoryPlanner {
 
     // MARK: - Measured constants
 
