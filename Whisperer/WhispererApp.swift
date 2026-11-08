@@ -1604,30 +1604,32 @@ struct ModelsTabView: View {
         }
     }
 
-    /// Apple dictation's state, shown only when it needs the user: a language it has not
-    /// installed yet, or one installing now. Apple dictation is not a choice — it drives live
-    /// text (HUD and meeting transcript) for whichever engine is picked — so a Ready state is
-    /// nothing to report and the menu stays quiet.
+    /// Apple dictation's state for every language the user dictates in. Apple dictation is not a
+    /// choice — it drives live text (HUD and meeting transcript) for whichever engine is picked —
+    /// but which of its languages are installed decides what live text can be written in, so the
+    /// installed ones stay listed rather than hiding once ready (hidden on 2026-11-06, which left
+    /// no way to see why Hebrew live text was missing).
     @ViewBuilder
     private var livePreviewNotice: some View {
         let statuses = appState.systemLanguageStatuses
-        let pending = appState.builtinEngineLanguages.filter { language in
+        let languages = appState.builtinEngineLanguages
+        let needsInstall = languages.contains { language in
             switch statuses[language] {
             case .notInstalled, .downloading: return true
             default: return false
             }
         }
-        if !pending.isEmpty {
+        if !languages.isEmpty {
             VStack(alignment: .leading, spacing: 6) {
                 HStack(spacing: 6) {
                     Image(systemName: "text.bubble")
                         .font(.system(size: 10, weight: .medium))
                         .foregroundColor(.green)
-                    Text("Live preview needs Apple dictation for:")
+                    Text(needsInstall ? "Live preview needs Apple dictation for:" : "Apple dictation languages")
                         .font(.caption)
                         .foregroundColor(MBColors.textSecondary)
                 }
-                ForEach(pending, id: \.self) { language in
+                ForEach(languages, id: \.self) { language in
                     systemLanguageRow(language, status: statuses[language])
                 }
             }

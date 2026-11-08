@@ -77,6 +77,12 @@ nonisolated final class NemotronLanguagePinner: @unchecked Sendable {
     private var _challenger: String?
     private var _challengerRun = 0
 
+    /// Thresholds for Qwen3's committed chunks: whole utterances of several seconds, each with a
+    /// language header, rather than Nemotron's 1120 ms slices.
+    static func forQwen3Chunks() -> NemotronLanguagePinner {
+        NemotronLanguagePinner(minChunksBeforePin: 2, agreementThreshold: 0.7, chunksToRepin: 3)
+    }
+
     init(minChunksBeforePin: Int = 8, agreementThreshold: Double = 0.7, chunksToRepin: Int = 14) {
         self.minChunksBeforePin = minChunksBeforePin
         self.agreementThreshold = agreementThreshold
@@ -659,6 +665,15 @@ class StreamingTranscriber {
     /// Accumulates Nemotron's own per-chunk language guesses and decides when to pin the session
     /// to one. Declared unconditionally so `nemotronLanguageTally` is readable in any build.
     private let nemotronLanguagePinner = NemotronLanguagePinner()
+
+    /// Pins the live preview from Qwen3's per-chunk language header. Apple dictation cannot detect
+    /// language, and on the Qwen3 path no Whisperer V3 probe exists to reach a fused verdict, so
+    /// without this nothing ever corrects the locale the 2–3 s probe chose: a Hebrew meeting that
+    /// opened on English words ("OK, this is Sasha and Keren") stayed English for 22 minutes
+    /// (2026-11-08) while Qwen3 decoded every chunk as Hebrew. Qwen3 chunks are whole utterances
+    /// (several seconds each) rather than Nemotron's 1120 ms, so two agreeing chunks pin and three
+    /// in a row move the pin.
+    private let qwenChunkLanguagePinner = NemotronLanguagePinner.forQwen3Chunks()
 
     /// Fuses every language detector already resident in the process — Nemotron's free per-chunk
     /// guess, the tiny CPU probe, and Whisperer V3 — into one verdict that drives both engines.
@@ -1263,6 +1278,7 @@ class StreamingTranscriber {
         lastDetectionSampleCount = 0
         sessionLanguageFloor = nil
         languageArbiter.reset()
+        qwenChunkLanguagePinner.reset()
         switchVerifyLock.lock(); switchVerdicts = [:]; switchVerifyInFlight = false; switchVerifyLock.unlock()
         languageArbiter.configure(allowedLanguages: languageRouter?.allowedLanguages ?? [])
         lastProvisionalLanguage = nil
@@ -1863,6 +1879,7 @@ class StreamingTranscriber {
                 // play on that path, which is why they share the tally.
                 if let qwen = self.whisper as? Qwen3ASRBridge {
                     self.languageArbiter.recordNemotron(code: qwen.lastDetectedLanguage)
+                    self.pinLivePreview(fromChunkLanguage: qwen.lastDetectedLanguage, text: trimmed)
                 }
 
                 // Track whisper_full_lang_id against the locked language for script-mismatch signals.
@@ -4888,6 +4905,19 @@ class StreamingTranscriber {
 
     /// Push the fused verdict to Nemotron, so the live cards are decoded in the language the whole
     /// process agrees on rather than the one Nemotron guessed for itself.
+    /// Feed one committed chunk's detected language to `qwenChunkLanguagePinner`, and pin the live
+    /// preview when it decides. Only the user's languages count: Qwen3 calls accented English `nl`
+    /// now and then, and Apple has no reason to stream a locale the user never configured.
+    private func pinLivePreview(fromChunkLanguage code: String?, text: String) {
+        guard let decision = qwenChunkLanguagePinner.observe(code: code, text: text),
+              let language = TranscriptionLanguage.from(languageTag: decision.code) else { return }
+        let allowed = languageRouter?.allowedLanguages ?? []
+        guard allowed.isEmpty || allowed.contains(language) else { return }
+        Logger.info("[LivePreview] Qwen3 chunks agree on \(decision.code) — \(decision.isRepin ? "re-pinning" : "pinning") live text",
+                    subsystem: .transcription)
+        pinNemotron(to: language)
+    }
+
     private func pinNemotron(to language: TranscriptionLanguage) {
         #if canImport(FluidAudio)
         // An explicitly selected language is already forced at `beginSession`; overriding it here

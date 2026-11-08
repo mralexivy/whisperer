@@ -1038,3 +1038,17 @@ Supersedes the 2026-10-07 "Qwen3-ASR as the default engine" decision and the 202
 - **Accuracy recovery is unchanged.** After a Whisper meeting the cleanup pass re-decodes with `RefineModelTable` — the resident baseline (Whisperer V3) for most languages, ivrit-ai's fine-tune for Hebrew.
 - **Menu bar Models tab.** Tabs are model families (Whisper · Qwen3 · Parakeet · Core ML), not quality adjectives. Apple Speech has no tab: Apple's recognizer already runs as the live preview for every engine. Apple dictation shows up there only when a language needs installing.
 - **SF Symbols fail silently.** `waveform.badge.sparkles` (Qwen3) and `star.of.david.fill` (Hebrew model) do not exist, so they drew nothing, which is the "missing Qwen icon". `DefaultBackendTests` now checks that every engine and Whisper-model icon exists.
+
+## Qwen3 meetings: Apple's live text was never re-pinned — 2026-11-08
+
+- With Qwen3 as the engine and Apple dictation driving live text, the meeting transcript is
+  Apple's committed words (`MeetingCoordinatorFeed` `.accumulatedPartials`); Qwen3's chunk text is
+  used only when Apple fails to start (`AppState` `livePreviewFellBack`).
+- Apple cannot detect language. Its locale comes from the 2–3 s `LanguageProbe`, after which only
+  `pinLanguage` can move it. On the whisper path the V3 probes and the arbiter's fused verdict pin
+  it; on the Qwen3 path no V3 probe exists, `fuse` never reaches a verdict, and nothing pinned it.
+- A 22-minute Hebrew meeting that opened on English words ("OK, this is Sasha and Keren") was
+  written as English nonsense end to end, while Qwen3 decoded every chunk as Hebrew.
+- Qwen3-ASR does detect and write Hebrew (3/3 Hebrew test clips tagged `Hebrew`, Hebrew script).
+- Fix: `qwenChunkLanguagePinner` (`NemotronLanguagePinner.forQwen3Chunks()`: 2 chunks to pin,
+  3 in a row to re-pin, user's languages only) feeds Qwen3's per-chunk header into `pinNemotron`.

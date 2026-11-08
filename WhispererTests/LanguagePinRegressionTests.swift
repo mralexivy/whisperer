@@ -95,6 +95,37 @@ final class LanguagePinRegressionTests: XCTestCase {
         XCTAssertEqual(pinner.pinnedCode, "he")
     }
 
+    // MARK: - A5: Qwen3's chunk headers pin Apple's live text
+
+    /// The 2026-11-08 meeting: it opened on English words, so the 2–3 s probe started Apple
+    /// dictation in English, and then every Qwen3 chunk said Hebrew. Nothing on the Qwen3 path
+    /// corrected Apple, and 22 minutes of Hebrew were written as English. The chunk headers must
+    /// pin Hebrew within a few utterances.
+    func testQwen3ChunksPinHebrewAfterAnEnglishOpener() {
+        let pinner = NemotronLanguagePinner.forQwen3Chunks()
+        XCTAssertNil(pinner.observe(code: "en", text: "OK, this is Sasha and Keren"))
+        XCTAssertNil(pinner.observe(code: "he", text: "בואו נלמד על התקציב"))
+        XCTAssertNil(pinner.observe(code: "he", text: "כלומר מה שאני אומר"))
+        let decision = pinner.observe(code: "he", text: "אנחנו צריכים לסגור את זה")
+        XCTAssertEqual(decision?.code, "he", "Three of four Hebrew chunks must pin Hebrew")
+        XCTAssertEqual(decision?.isRepin, false)
+    }
+
+    /// A borrowed English phrase inside Hebrew speech ("business unit", "Bank of America") is one
+    /// chunk, not a switch, and must not move the pin; three English utterances in a row are.
+    func testQwen3PinIgnoresOneEnglishChunkButFollowsARealSwitch() {
+        let pinner = NemotronLanguagePinner.forQwen3Chunks()
+        _ = pinner.observe(code: "he", text: "שלום לכולם")
+        _ = pinner.observe(code: "he", text: "נתחיל בפגישה")
+        XCTAssertEqual(pinner.pinnedCode, "he")
+        XCTAssertNil(pinner.observe(code: "en", text: "Business unit"))
+        XCTAssertNil(pinner.observe(code: "he", text: "ועכשיו נמשיך"))
+        XCTAssertEqual(pinner.pinnedCode, "he")
+        XCTAssertNil(pinner.observe(code: "en", text: "Let's switch to English"))
+        XCTAssertNil(pinner.observe(code: "en", text: "for the rest of the call"))
+        XCTAssertEqual(pinner.observe(code: "en", text: "so everyone can follow")?.isRepin, true)
+    }
+
     // MARK: - B: the fused verdict
 
     private func probe(_ probabilities: [String: Float], from start: Double, to end: Double) -> MeetingLanguageProbe {
