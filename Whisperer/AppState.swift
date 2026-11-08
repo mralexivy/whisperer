@@ -1320,6 +1320,18 @@ class AppState: ObservableObject {
             return
         }
 
+        // Picking a Whisper model is picking the Whisper engine. This used to change only the
+        // model: on Qwen3 or Parakeet, clicking a Whisper row did nothing at all (the stored
+        // Whisper model already matched, so it returned "already selected"), and even a different
+        // model left the old engine in charge (2026-11-08).
+        if selectedBackendType != .whisperCpp {
+            selectedModel = model
+            UserDefaults.standard.set(model.rawValue, forKey: "selectedModel")
+            if let requiredLanguage = model.supportedLanguage { selectedLanguage = requiredLanguage }
+            selectBackend(.whisperCpp)
+            return
+        }
+
         guard model != selectedModel || loadedModel != model else {
             Logger.debug("Model \(model.displayName) already selected", subsystem: .model)
             return
@@ -1342,6 +1354,14 @@ class AppState: ObservableObject {
     /// Select a Parakeet model variant
     func selectParakeetModel(_ model: ParakeetModelVariant) {
         guard state == .idle else { return }
+
+        // As for Whisper: picking a Parakeet model is picking the Parakeet engine.
+        if selectedBackendType != .parakeet {
+            selectedParakeetModel = model
+            UserDefaults.standard.set(model.rawValue, forKey: "selectedParakeetModel")
+            selectBackend(.parakeet)
+            return
+        }
 
         guard model != selectedParakeetModel || loadedParakeetModel != model else {
             Logger.info("Parakeet \(model.displayName) already selected", subsystem: .model)
