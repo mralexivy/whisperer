@@ -2268,9 +2268,20 @@ class AppState: ObservableObject {
             for (language, status) in statuses where self.systemLanguageInstallTasks[language] == nil {
                 self.systemLanguageStatuses[language] = status
             }
-            guard installMissing else { return }
-            for (language, status) in statuses where status == .notInstalled {
-                self.installSystemLanguage(language)
+            for (language, status) in statuses {
+                switch status {
+                case .notInstalled where installMissing:
+                    self.installSystemLanguage(language)
+                case .downloading:
+                    // Apple's install outlasted the 1.5 s status check, so it is running inside
+                    // `DictationAssets` with nothing here following it. Track it to the end
+                    // (`install` joins the running download, never starts a second): without this
+                    // the menu sat at 0% for good while the logs said "installed en-US in 7.9s"
+                    // (2026-11-08).
+                    self.installSystemLanguage(language)
+                default:
+                    break
+                }
             }
         }
     }
