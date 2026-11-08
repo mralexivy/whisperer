@@ -73,6 +73,18 @@ private actor SlowNemotronBridge: LivePreviewEngine {
     func pinLanguage(_ code: String?) async {}
 }
 
+/// Records when each buffer reached the live-text engine.
+private actor TimestampingLiveEngine: LivePreviewEngine {
+    private(set) var feedTimes: [Date] = []
+    func forcedLanguageSupport(for language: TranscriptionLanguage) async -> (code: String, isSupported: Bool)? { nil }
+    func beginSession(language: TranscriptionLanguage) async {}
+    func setPreviewCallback(_ callback: @escaping @Sendable (String) -> Void) async {}
+    func feed(samples: [Float]) async { feedTimes.append(Date()) }
+    func endSession() async -> String { "" }
+    func detectedLanguageCode() async -> String? { nil }
+    func pinLanguage(_ code: String?) async {}
+}
+
 /// Apple dictation with no assets for the session's language: opens, never streams.
 private actor NotStreamingLiveEngine: LivePreviewEngine {
     func forcedLanguageSupport(for language: TranscriptionLanguage) async -> (code: String, isSupported: Bool)? { nil }
@@ -133,6 +145,25 @@ final class NemotronFeedChainTests: XCTestCase {
 
         // Whisper still sees every sample — shedding must not touch the authoritative audio.
         XCTAssertEqual(transcriber.recordedDuration, 30.0, accuracy: 0.01)
+    }
+
+    /// Audio for live text must not wait for the main thread. The feed chain used to run on the
+    /// main actor, so a busy UI held every buffer back until the 3 s cap shed them — live text
+    /// seconds late with words missing (2026-11-08, 358 "shedding" lines in a day).
+    func testPreviewAudioReachesTheLiveEngineWhileTheMainThreadIsBusy() async throws {
+        let engine = TimestampingLiveEngine()
+        let transcriber = makeTranscriber(nemotron: engine)
+        transcriber.start(onTranscription: { _ in })
+        try await Task.sleep(nanoseconds: 200_000_000)
+
+        let buffer = [Float](repeating: 0, count: 1600)
+        for _ in 0..<20 { transcriber.addSamples(buffer) }   // 2 s of audio
+        Thread.sleep(forTimeInterval: 0.5)                    // the UI hogs the main thread
+        let busyUntil = Date()
+
+        let fedWhileBusy = await engine.feedTimes.filter { $0 < busyUntil }.count
+        XCTAssertGreaterThanOrEqual(fedWhileBusy, 18,
+            "only \(fedWhileBusy) of 20 buffers reached the live engine while the main thread was busy")
     }
 
     /// A live engine that opens but never streams must hand the display back to the main engine

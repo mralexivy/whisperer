@@ -1065,3 +1065,9 @@ Supersedes the 2026-10-07 "Qwen3-ASR as the default engine" decision and the 202
   Russian meetings switch at 33 s (he/ru 1.00 on every re-probe); an English meeting stays English.
 - Russian refine runs on the baseline (large-v3-turbo q5); on the user's Russian recordings it
   writes clean Russian.
+- Live text lag in meetings (all languages), 2026-11-08: the live-preview audio feed chain
+  (`enqueueNemotronFeed`) used plain `Task`s inside the main-actor `StreamingTranscriber`, so every
+  buffer needed the main thread before reaching Apple dictation. Busy UI (e.g. the search-highlight
+  loop, fixed in aa5bc572) backed it up to the 3 s cap and audio was shed: 358 "preview feed backlog
+  … shedding" lines in a day on the work Mac. The chain is now `Task.detached` with lock-guarded
+  counters; `NemotronFeedChainTests` proves buffers arrive while the main thread is blocked.

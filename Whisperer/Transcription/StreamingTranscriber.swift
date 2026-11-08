@@ -638,12 +638,20 @@ class StreamingTranscriber {
     /// HUD and, because `stopAsync` used to `await` the whole chain, froze the stop path long
     /// enough for the stop watchdog to force idle and destroy the recording. Bounding this is
     /// the fix; see `enqueueNemotronFeed` and `drainNemotronFeedChain`.
-    private var nemotronPendingFeedSamples: Int = 0
+    ///
+    /// Lock-guarded rather than main-actor state, because the chain itself runs off the main
+    /// actor (see `enqueueNemotronFeed`).
+    private var nemotronPendingFeedSamples: Int { nemotronFeedCounters.withLock { $0.pending } }
     /// Set at stop on the preview-only path. Every queued link checks it and returns without
     /// calling `feed()`, so the whole chain collapses within one in-flight `feed()` call.
     /// Cancelling `nemotronFeedTask` alone cannot do this — it only cancels the last link,
     /// which still awaits its (uncancelled) predecessor.
-    private var nemotronFeedAbandoned = false
+    private var nemotronFeedAbandoned: Bool {
+        get { nemotronFeedCounters.withLock { $0.abandoned } }
+        set { nemotronFeedCounters.withLock { $0.abandoned = newValue } }
+    }
+    private struct NemotronFeedCounters { var pending = 0; var abandoned = false }
+    nonisolated private let nemotronFeedCounters = OSAllocatedUnfairLock(initialState: NemotronFeedCounters())
     /// One log line per shedding episode, not one per dropped buffer.
     private var nemotronFeedSheddingLogged = false
     /// Maximum audio allowed to sit unprocessed in the *preview* feed chain. Preview feeds are
@@ -1270,8 +1278,7 @@ class StreamingTranscriber {
         livePreviewUnavailableReported = false
         #if canImport(FluidAudio)
         nemotronFeedTask = nil
-        nemotronPendingFeedSamples = 0
-        nemotronFeedAbandoned = false
+        nemotronFeedCounters.withLock { $0 = NemotronFeedCounters() }
         nemotronFeedSheddingLogged = false
         #endif
         routeDecision = nil
@@ -1528,13 +1535,19 @@ class StreamingTranscriber {
             nemotronFeedSheddingLogged = false
         }
 
-        nemotronPendingFeedSamples += samples.count
-        nemotronFeedTask = Task { [weak self, prev = nemotronFeedTask] in
+        nemotronFeedCounters.withLock { $0.pending += samples.count }
+        // Detached, so no link ever waits for the main actor. A plain `Task` here inherited the
+        // class's main-actor isolation: every audio buffer had to get the main thread before it
+        // could reach the live-text engine and again after, so any busy stretch of UI work held
+        // up Apple dictation's audio. The backlog hit the 3 s cap and audio was shed — 358
+        // "shedding" lines in one day, live text arriving seconds late and with words missing
+        // (2026-11-08). The chain still runs strictly in order: each link awaits its predecessor.
+        nemotronFeedTask = Task.detached(priority: .userInitiated) {
+            [prev = nemotronFeedTask, bridge = nemotronBridge, counters = nemotronFeedCounters] in
             _ = await prev?.value
-            guard let self else { return }
-            defer { self.nemotronPendingFeedSamples -= samples.count }
-            guard !self.nemotronFeedAbandoned else { return }
-            await self.nemotronBridge?.feed(samples: samples)
+            defer { counters.withLock { $0.pending -= samples.count } }
+            guard !counters.withLock({ $0.abandoned }) else { return }
+            await bridge?.feed(samples: samples)
         }
     }
 
