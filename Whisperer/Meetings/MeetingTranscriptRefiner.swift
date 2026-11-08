@@ -237,8 +237,13 @@ final class MeetingTranscriptRefiner: ObservableObject {
         // Decided before anything is loaded. When the live engine already leads every language
         // in scope, the cheapest correct pass is no pass: no 547 MB baseline download, no
         // language scan, no GPU. This is the common case after a Qwen3 meeting.
-        let liveEngine = Self.liveEngine(for: meetingID)
-        guard !Self.candidateModels(meetingID: meetingID).isEmpty else {
+        // A run the user asked for (the language chip, Re-transcribe) always decodes: they are saying
+        // the text is wrong, which the "Qwen3 already leads" rule cannot know. Without this, a
+        // meeting whose cards Apple dictation wrote, recorded before the engine was tracked, could
+        // never be repaired — its Russian windows were skipped even with Russian picked.
+        let userAsked = forcedLanguage != nil || redoAll
+        let liveEngine: BackendType = userAsked ? .whisperCpp : Self.liveEngine(for: meetingID)
+        guard userAsked || !Self.candidateModels(meetingID: meetingID).isEmpty else {
             Logger.info("Transcript refine: \(liveEngine.displayName) already leads every configured language — no second decode for \(meetingID)", subsystem: .transcription)
             return finish(source, meetingID: meetingID)
         }
