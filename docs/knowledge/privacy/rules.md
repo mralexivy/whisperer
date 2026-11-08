@@ -10,4 +10,6 @@
 5. Ship only what is measured: evaluate through the native C++ path (`--processor native:`), and keep
    the native/PyTorch parity test green.
 6. Fail closed: without the trained network the shield refuses to start rather than run the baseline.
-7. Never claim "blocks transcription". Claim "makes transcription much harder" with measured numbers.
+7. Never claim transcription is impossible. Claim "makes transcription much harder" with measured numbers.
+8. Judge a jammer on real human speech (`jam_eval.py`, LibriSpeech) and at least three recogniser
+   families; TTS clips overstate the effect (the author's voice and LibriSpeech resist more).

@@ -71,6 +71,29 @@ final class PrivacyShieldNetworkTests: XCTestCase {
         for (x, y) in zip(input, output) { XCTAssertEqual(y, min(0.98, max(-0.98, x)), accuracy: 1e-6) }
     }
 
+    /// The jammer runs after the network: with the network at strength 0 the output is the voice,
+    /// time-reversed in short frames, at the same loudness, after a fixed delay, and silent in silence.
+    func testJammerScramblesSpeechAfterFixedDelay() throws {
+        let url = try XCTUnwrap(PrivacyAudioProcessor.bundledNetworkURL)
+        let input = voice(blocks: 200)
+        let (output, valid) = run(try PrivacyAudioProcessor(networkURL: url, modelURL: nil, strength: 0, jamTranscription: true), input)
+        XCTAssertTrue(valid)
+        XCTAssertTrue(output.allSatisfy { $0.isFinite && abs($0) <= 1 })
+        let latency = Int((Float(48000) * PrivacyAudioProcessor.jamFrameMilliseconds / 1000 * (1 + PrivacyAudioProcessor.jamJitter)).rounded(.up))
+            + Int(Float(48000) * PrivacyAudioProcessor.jamFadeMilliseconds / 1000)
+        XCTAssertTrue(output[..<latency].allSatisfy { $0 == 0 }, "nothing is emitted before the look-ahead fills")
+        let half = input.count / 2, speech = (latency + 4800)..<half
+        func rms<S: Sequence>(_ s: S) -> Double where S.Element == Float {
+            var sum = 0.0, n = 0.0; for v in s { sum += Double(v) * Double(v); n += 1 }; return sqrt(sum / max(n, 1))
+        }
+        let delayed = speech.map { input[$0 - latency] }
+        let jammed = speech.map { output[$0] }
+        XCTAssertEqual(rms(jammed) / rms(delayed), 1, accuracy: 0.25, "jamming keeps the voice's loudness")
+        XCTAssertGreaterThan(rms(zip(jammed, delayed).map { $0 - $1 }), rms(delayed) * 0.3, "voice was not scrambled")
+        let tail = output[(half + latency + 4800)...]
+        XCTAssertLessThan(rms(tail), 1e-4, "jammer is silent when the voice is")
+    }
+
     func testDamagedWeightsFailClosed() throws {
         let bad = FileManager.default.temporaryDirectory.appendingPathComponent("bad-\(UUID().uuidString).wspn")
         try Data("WSPN not really".utf8).write(to: bad)

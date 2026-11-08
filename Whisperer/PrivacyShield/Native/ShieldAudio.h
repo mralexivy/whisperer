@@ -36,6 +36,13 @@ void* shield_pnet_create(const char* weightsPath);
 void shield_pnet_process(void*, const float*, float*, uint32_t, float strength);
 void shield_pnet_reset(void*);
 void shield_pnet_destroy(void*);
+// Transcription jammer (ShieldJammer.hpp): local time reversal with randomised frame lengths.
+// Returns NULL for out-of-range parameters. Output is delayed by shield_jammer_latency() samples.
+void* shield_jammer_create(float frameMs, float fadeMs, float jitter, uint32_t seed);
+void shield_jammer_process(void*, const float*, float*, uint32_t, float strength);
+uint32_t shield_jammer_latency(void*);
+void shield_jammer_reset(void*);
+void shield_jammer_destroy(void*);
 #ifdef __cplusplus
 }
 #endif

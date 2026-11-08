@@ -47,3 +47,26 @@
   recoverable 72% / 67% / 67%. Perturbation sits only ~5 dB under the voice (clearly audible). More
   training past step 400 did not help. Even an audible learned signal leaves two-thirds of the facts
   readable, so do not market this as anti-transcription. Identity protection is the shippable claim.
+
+## Transcription jammer: local time reversal — 2026-11-08
+
+- **What works.** Play the voice in ~70 ms frames, each time-reversed (frame length randomised +-20%,
+  3 ms power-complementary crossfades). Native: `ShieldJammer.hpp`, parity with
+  `transform_processor.revfade` (< 1e-5, any block size). Fixed delay ~87 ms. Runs after the identity
+  network (`PrivacyAudioProcessor`, `jamTranscription:`), setting `privacyShieldJamTranscription`.
+- **Measured (shipped chain, native path, after Opus 24 kbps + RNNoise, `jam_eval.py`).** Real speech,
+  24 held-out LibriSpeech speakers, content-word recall clean -> jammed: whisper turbo 97% -> 12.5%,
+  Parakeet 99% -> 13%, Qwen3-ASR 98.5% -> 9%. TTS corpus key facts: 89% -> 3% / 86% -> 8% / 94% -> 8%.
+  Author's own 31 s recording: whisper output is fluent nonsense; Parakeet changes 56% of words.
+- **What the reversal needs.** Sharp in-frame reversal: Hann 50%-overlap reversal (`revola`) at the
+  same frame length barely hurts ASR (5-26% words changed), and the same frame grid with no reversal
+  (`gridfade`, `splice`) changes 0-11%. Reversing only one band (above/below 1-2 kHz) changes 10-20%.
+- **Frame length is the dial.** Words changed on the author's voice (whisper): 50 ms 21%, 60 ms 49-54%,
+  70 ms 82-92%, 85 ms 66% (Parakeet keeps rising: 50% / 61% / 71%). Human intelligibility of locally
+  reversed speech also falls with frame length (literature: near-perfect <= ~50 ms, falling through
+  ~60-130 ms); the listener check decides the shipped value.
+- **What failed (all after the call, whisper turbo held out).** Competing talker / babble under the
+  voice: 2-26% words changed even at equal level. Noise-vocoding at 12 bands 4% (6 bands 28%, poorly
+  intelligible). Periodic noise interruption 2-3%. Frequency shift 60 Hz 0%. Learned continuous signal
+  (UAP, predictive net, jammer net): <= 22% even at voice level. Learned mute burst before speech
+  (`train_burst.py`): learns without the codec (p(EOT) 0 -> 12% in 60 steps) but only to ~4% through Opus.

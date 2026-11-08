@@ -20,3 +20,11 @@ clang++ -std=c++17 -O3 Tools/privacy-shield/performance.cpp -o "$TEST_DIR/perfor
 "$TEST_DIR/performance"
 bash Tools/privacy-shield/test-standalone.sh
 python3 -m unittest discover -s Tools/privacy-shield -p 'test_*.py'
+# Jammer parity (native streaming == Python reference); needs numpy + scipy (the eval venv has both).
+SHIELD_PY="${SHIELD_PYTHON:-$ROOT/build/privacy-shield/eval/.venv/bin/python}"
+if [ -x "$SHIELD_PY" ]; then
+    SHIELD_BUILD_DIR="$ROOT/build/privacy-shield" bash Tools/privacy-shield/build-benchmark.sh >/dev/null
+    "$SHIELD_PY" Tools/privacy-shield/eval/test_jammer_native.py
+else
+    echo "Skipped jammer parity: set SHIELD_PYTHON to a Python with numpy and scipy."
+fi

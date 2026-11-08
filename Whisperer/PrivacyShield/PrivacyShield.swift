@@ -18,12 +18,14 @@ final class PrivacyAudioSession: @unchecked Sendable {
     private var native: OpaquePointer?
     private var processor: PrivacyAudioProcessor?
 
-    func start(input: AudioDeviceID, output: AudioDeviceID, network: URL?, model: URL?, strength: Float) async throws {
+    func start(input: AudioDeviceID, output: AudioDeviceID, network: URL?, model: URL?, strength: Float,
+               jamTranscription: Bool = false) async throws {
         try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
             queue.async { [weak self] in
                 guard let self else { continuation.resume(throwing: CancellationError()); return }
                 do {
-                    let processor = try PrivacyAudioProcessor(networkURL: network, modelURL: model, strength: strength)
+                    let processor = try PrivacyAudioProcessor(networkURL: network, modelURL: model, strength: strength,
+                                                              jamTranscription: jamTranscription)
                     guard let native = shield_audio_create() else { throw PrivacyShieldError.native(-7006) }
                     self.native = native; self.processor = processor
                     let status = shield_audio_start(native, input, output, { context, input, output, count in
@@ -82,6 +84,21 @@ final class PrivacyShieldController {
     private let routes = AudioProcessMonitor()
     private static let enabledKey = "privacyShieldAutomaticEnabled"
     private nonisolated static let restoreKey = "privacyShieldRestoreInputUID"
+    static let jamKey = "privacyShieldJamTranscription"
+
+    /// Whether the shield also blocks transcription (the jammer). On unless the user turned it off.
+    static var jamsTranscription: Bool { UserDefaults.standard.object(forKey: jamKey) as? Bool ?? true }
+
+    /// Changing the jammer restarts a running shield so the new setting applies to the live voice.
+    func setJamsTranscription(_ enabled: Bool) {
+        UserDefaults.standard.set(enabled, forKey: Self.jamKey)
+        guard snapshot.isEnabled, snapshot.phase != .stopping else { return }
+        Task { [weak self] in
+            guard let self else { return }
+            await self.shutdown()
+            self.start()
+        }
+    }
 
     private var snapshot: PrivacyShieldSnapshot {
         get { AppState.shared.privacyShield }
@@ -234,7 +251,8 @@ final class PrivacyShieldController {
                 guard let network = PrivacyAudioProcessor.bundledNetworkURL else {
                     throw PrivacyShieldError.unavailable("Voice protection isn't included in this build.")
                 }
-                try await runner.start(input: microphone.id, output: output, network: network, model: nil, strength: 1.0)
+                try await runner.start(input: microphone.id, output: output, network: network, model: nil, strength: 1.0,
+                                       jamTranscription: Self.jamsTranscription)
                 guard token == generation, !Task.isCancelled else { await runner.stop(); break }
                 await runner.setProcessing(requested)
                 guard token == generation, !Task.isCancelled else { await runner.stop(); break }

@@ -8,8 +8,13 @@ final class PrivacyAudioProcessor {
     /// (Tools/privacy-shield/eval/pnet.py, exported with export_weights).
     static let bundledNetworkName = "ShieldPerturbation"
     static var bundledNetworkURL: URL? { Bundle.main.url(forResource: bundledNetworkName, withExtension: "wspn") }
+    /// Transcription jammer settings (Tools/privacy-shield/eval/jammer_processor.py defaults): ~70 ms
+    /// time-reversed frames, +-20% randomised, 3 ms crossfades. Adds ~87 ms of fixed delay.
+    static let jamFrameMilliseconds: Float = 70, jamFadeMilliseconds: Float = 3, jamJitter: Float = 0.2
 
     private let network: UnsafeMutableRawPointer?
+    private let jammer: UnsafeMutableRawPointer?
+    private var scratch = [Float](repeating: 0, count: 480)
     private let baseline: UnsafeMutableRawPointer?
     private let model: MLModel?
     private let input: MLMultiArray?
@@ -18,14 +23,23 @@ final class PrivacyAudioProcessor {
 
     /// `networkURL` selects the native predictive network (the protection). `modelURL` keeps the
     /// developer Core ML adapter. With neither, the unvalidated DSP baseline runs; it gives no
-    /// protection and is only for routing tests.
-    init(networkURL: URL? = nil, modelURL: URL?, strength: Float) throws {
+    /// protection and is only for routing tests. `jamTranscription` runs the jammer after the network.
+    init(networkURL: URL? = nil, modelURL: URL?, strength: Float, jamTranscription: Bool = false) throws {
         self.strength = strength
         if let networkURL {
             guard let handle = networkURL.withUnsafeFileSystemRepresentation({ $0.flatMap(shield_pnet_create) }) else {
                 throw PrivacyShieldError.unavailable("The voice protection model is damaged. Reinstall Whisperer.")
             }
-            network = handle
+            var jam: UnsafeMutableRawPointer?
+            if jamTranscription {
+                jam = shield_jammer_create(Self.jamFrameMilliseconds, Self.jamFadeMilliseconds, Self.jamJitter,
+                                           UInt32.random(in: 1...UInt32.max))
+                guard jam != nil else {
+                    shield_pnet_destroy(handle)
+                    throw PrivacyShieldError.unavailable("Transcription blocking could not start. Reinstall Whisperer.")
+                }
+            }
+            network = handle; jammer = jam
             model = nil; input = nil; features = nil; baseline = nil
             // Warmup and validation before microphone capture is opened.
             var silence = [Float](repeating: 0, count: 480), out = [Float](repeating: 0, count: 480)
@@ -34,9 +48,10 @@ final class PrivacyAudioProcessor {
                 throw PrivacyShieldError.unavailable("Voice protection warmup returned invalid output.")
             }
             shield_pnet_reset(handle)
+            if let jam { shield_jammer_reset(jam) }
             return
         }
-        network = nil
+        network = nil; jammer = nil
         if let modelURL {
             let config = MLModelConfiguration()
             config.computeUnits = .all
@@ -70,12 +85,18 @@ final class PrivacyAudioProcessor {
     deinit {
         if let baseline { shield_baseline_destroy(baseline) }
         if let network { shield_pnet_destroy(network) }
+        if let jammer { shield_jammer_destroy(jammer) }
     }
 
     func process(_ source: UnsafePointer<Float>, _ destination: UnsafeMutablePointer<Float>, count: UInt32) -> Bool {
         guard count == 480 else { return false }
         if let network {
-            shield_pnet_process(network, source, destination, count, strength)
+            if let jammer {
+                shield_pnet_process(network, source, &scratch, count, strength)
+                shield_jammer_process(jammer, scratch, destination, count, 1)
+            } else {
+                shield_pnet_process(network, source, destination, count, strength)
+            }
             for i in 0..<Int(count) where !destination[i].isFinite { return false }
             return true
         }

@@ -1,6 +1,7 @@
 #include "ShieldAudio.h"
 #include "ShieldDSP.hpp"
 #include "ShieldPNet.hpp"
+#include "ShieldJammer.hpp"
 #include <AudioUnit/AudioUnit.h>
 #include <CoreAudio/CoreAudio.h>
 #include <chrono>
@@ -187,3 +188,12 @@ extern "C" void* shield_pnet_create(const char* path) {
 extern "C" void shield_pnet_process(void* p,const float* in,float* out,uint32_t n,float strength) { static_cast<shield::PNet*>(p)->process(in,out,n,strength); }
 extern "C" void shield_pnet_reset(void* p) { static_cast<shield::PNet*>(p)->reset(); }
 extern "C" void shield_pnet_destroy(void* p) { delete static_cast<shield::PNet*>(p); }
+
+extern "C" void* shield_jammer_create(float frameMs,float fadeMs,float jitter,uint32_t seed) {
+    if (!(frameMs >= 10 && frameMs <= 200) || !(fadeMs >= 0.5f && fadeMs < frameMs / 2)) return nullptr;
+    return new shield::Jammer(frameMs, fadeMs, jitter, seed);
+}
+extern "C" void shield_jammer_process(void* p,const float* in,float* out,uint32_t n,float strength) { static_cast<shield::Jammer*>(p)->process(in,out,n,strength); }
+extern "C" uint32_t shield_jammer_latency(void* p) { return uint32_t(static_cast<shield::Jammer*>(p)->latencySamples()); }
+extern "C" void shield_jammer_reset(void* p) { static_cast<shield::Jammer*>(p)->reset(); }
+extern "C" void shield_jammer_destroy(void* p) { delete static_cast<shield::Jammer*>(p); }
