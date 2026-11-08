@@ -106,6 +106,61 @@ final class MeetingTranscriptHandoffTests: XCTestCase {
                        file: file, line: line)
     }
 
+    /// The 2026-11-08 sequence from the log: stop with 119 segments, then the fine-tuning pass
+    /// rewrites the same segments into Hebrew in place, saving every few windows, with its sweep
+    /// animation running in the view the whole time.
+    func testDetailStaysVisibleWhileFineTuningRewritesTheTranscript() throws {
+        let id = UUID()
+        var stored = MeetingRecord(id: id, title: "Alex / Keren - Weekly", language: "auto", modelUsed: "qwen3")
+        let vm = MeetingDetailViewModel(fetcher: { _ in stored })
+        let session = MeetingSession()
+        let hosting = NSHostingView(rootView: MeetingDetailView(detailVM: vm, session: session, playheadSeconds: 0))
+        let window = NSWindow(contentRect: CGRect(x: 40, y: 40, width: 1000, height: 800),
+                              styleMask: [.borderless], backing: .buffered, defer: false)
+        window.contentView = hosting
+        window.makeKeyAndOrderFront(nil)
+        Self.keepAlive += [vm, session, hosting, window]
+        defer { MeetingTranscriptRefiner.shared.setRunStateForTesting(meetingID: nil) }
+
+        let selected = expectation(description: "selected")
+        Task { await vm.select(id); selected.fulfill() }
+        wait(for: [selected], timeout: 5)
+
+        let live = segments(119) { i in "OK is Sasha and Keren, kilo engineering business unit \(i)." }
+        session.meetingID = id
+        session.isRecording = true
+        session.segments = live
+        pump(1.0)
+        session.isRecording = false
+        stored.segments = live
+        stored.isInProgress = false
+        NotificationCenter.default.post(name: .meetingSegmentsDidPersist, object: id)
+        pump(1.0)
+
+        let textView = try XCTUnwrap(find(NSTextView.self, in: hosting), "no transcript text view")
+        XCTAssertFalse(textView.visibleRect.isEmpty, "precondition: transcript visible after stop")
+
+        // Fine-tuning: same segment IDs, text rewritten into Hebrew window by window.
+        var working = live
+        for batch in 0..<4 {
+            let range = (batch * 30)..<min((batch + 1) * 30, working.count)
+            MeetingTranscriptRefiner.shared.setRunStateForTesting(
+                meetingID: id, active: [working[range.upperBound - 1].id],
+                done: Set(working[..<range.lowerBound].map(\.id)))
+            for i in range {
+                working[i].rawText = working[i].text
+                working[i].text = "אנחנו מדברים על התקציב של נובמבר ועל יחידת העסקים, סעיף \(i)."
+            }
+            stored.segments = working
+            NotificationCenter.default.post(name: .meetingSegmentsDidPersist, object: id)
+            pump(1.5)
+            let current = try XCTUnwrap(find(NSTextView.self, in: hosting), "no transcript text view in batch \(batch)")
+            XCTAssertFalse(current.string.isEmpty, "batch \(batch): text view emptied")
+            XCTAssertFalse(current.visibleRect.isEmpty,
+                           "batch \(batch): transcript off screen (frame=\(current.frame), visible=\(current.visibleRect))")
+        }
+    }
+
     func testDetailShowsSavedTranscriptWhenLiveHadMoreSegments() throws {
         try runDetailHandoff(liveCount: 150, savedCount: 119)
     }

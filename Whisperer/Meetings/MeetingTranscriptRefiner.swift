@@ -45,6 +45,16 @@ final class MeetingTranscriptRefiner: ObservableObject {
     /// Meeting the current run belongs to; nil when idle.
     @Published private(set) var activeMeetingID: UUID?
 
+    #if DEBUG
+    /// Puts the published run state where a view test needs it, without running a refine.
+    func setRunStateForTesting(meetingID: UUID?, active: Set<UUID> = [], done: Set<UUID> = []) {
+        activeMeetingID = meetingID
+        activeSegmentIDs = active
+        doneSegmentIDs = done
+        progress = meetingID == nil ? nil : 0.5
+    }
+    #endif
+
     private var runTask: Task<Void, Never>?
     private var cancelledMeetingID: UUID?
 
