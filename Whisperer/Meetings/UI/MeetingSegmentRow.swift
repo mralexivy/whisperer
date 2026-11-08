@@ -303,6 +303,19 @@ struct MeetingSegmentTextView: NSViewRepresentable {
         field.attributedStringValue = attributed
     }
 
+    /// The height of the wrapped text at the offered width, asked again on every update. Without
+    /// it SwiftUI sized the field once, from its first words, and never grew it: the live meeting
+    /// bubble filled one row and every word after that wrapped out of sight until the paragraph
+    /// was committed as a card — minutes of "nothing", then the whole block at once (2026-11-08).
+    func sizeThatFits(_ proposal: ProposedViewSize, nsView field: NSTextField, context: Context) -> CGSize? {
+        let width = proposal.width ?? field.bounds.width
+        guard width.isFinite, width > 0 else { return nil }
+        field.preferredMaxLayoutWidth = width
+        let height = field.cell?.cellSize(forBounds: NSRect(x: 0, y: 0, width: width,
+                                                            height: .greatestFiniteMagnitude)).height ?? 0
+        return CGSize(width: width, height: ceil(height))
+    }
+
     final class Coordinator {
         var lastText: String = ""
         var lastQuery: String = ""
