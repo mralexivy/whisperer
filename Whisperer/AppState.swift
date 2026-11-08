@@ -2633,12 +2633,21 @@ class AppState: ObservableObject {
     }
 
     /// Pre-load the LLM model if enabled
-    func preloadLLM() {
+    /// Load the local language model ahead of use. Skipped while dictation's mode is one the fast
+    /// polisher handles on its own (Correct, Grammar): the model would sit in memory, ~2.5 GB, and
+    /// never be asked anything — and a model that fails to load then logs an error for a feature
+    /// the user is not using (2026-11-08). It loads on first real use instead (`ensureLLMLoaded`).
+    func preloadLLM(evenIfFastPolishCovers: Bool = false) {
         // Skip in test environment - tests load LLM directly
         if ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil {
             return
         }
         guard llmEnabled else { return }
+        if !evenIfFastPolishCovers, deterministicPolishHandlesPostProcessing {
+            Logger.info("LLM preload skipped — the fast polisher handles \(AIModeManager.shared.postProcessMode.name); "
+                        + "the model loads the first time a rewrite needs it", subsystem: .model)
+            return
+        }
 
         // Cancel any in-flight load to prevent duplicate model instances
         llmLoadTask?.cancel()
@@ -2872,6 +2881,17 @@ class AppState: ObservableObject {
     /// every cut, and passing chunks one at a time discards the silence between them, which is the
     /// only sentence-boundary evidence the deterministic pass has. It is the same reasoning that
     /// put the short-circuit at the top of `applyLLMPostProcessingSegmented`.
+    /// Make sure the local language model is loaded, loading it now if a preload was skipped.
+    /// False when the model is switched off or failed to load.
+    func ensureLLMLoaded() async -> Bool {
+        guard llmEnabled else { return false }
+        if llmPostProcessor?.isModelLoaded == true { return true }
+        // A load already running is awaited, not restarted: `preloadLLM` cancels the task in flight.
+        if llmPostProcessor?.isLoading != true { preloadLLM(evenIfFastPolishCovers: true) }
+        await llmLoadTask?.value
+        return llmPostProcessor?.isModelLoaded == true
+    }
+
     private var deterministicPolishHandlesPostProcessing: Bool {
         guard PolishFeatureFlags.isFastPolishEnabled else { return false }
         let id = AIModeManager.shared.postProcessMode.id
@@ -2995,7 +3015,7 @@ class AppState: ObservableObject {
         }
 
         // Everything past here is the model, so everything past here needs the model.
-        guard llmEnabled, let processor = llmPostProcessor, processor.isModelLoaded else {
+        guard llmEnabled, await ensureLLMLoaded(), let processor = llmPostProcessor else {
             return text
         }
         guard !mode.prompt.isEmpty else { return text }
@@ -3113,6 +3133,8 @@ class AppState: ObservableObject {
 
     /// Process transcription through rewrite mode LLM
     private func processRewriteMode(transcription: String) async -> String {
+        // The model is not preloaded while the fast polisher covers dictation; load it now.
+        _ = await ensureLLMLoaded()
         // Initialize rewrite service lazily
         if rewriteModeService == nil, let processor = llmPostProcessor {
             rewriteModeService = RewriteModeService(llmProcessor: processor)

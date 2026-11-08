@@ -842,7 +842,7 @@ struct DictationPolishCard: View {
                     .font(.system(size: 11, weight: .semibold))
                     .tracking(1.2)
                     .foregroundColor(WhispererColors.tertiaryText(colorScheme))
-                Text("Fixes grammar and punctuation in what you dictate. Always runs on this Mac.")
+                Text("Grammar and punctuation are fixed by the fast polisher on this Mac, always. The language model below is only for rewrite modes (translate, summarize, rewrite) and loads the first time one runs.")
                     .font(.system(size: 13))
                     .foregroundColor(WhispererColors.secondaryText(colorScheme))
             }
@@ -855,7 +855,7 @@ struct DictationPolishCard: View {
                             .foregroundColor(Color(hex: "8B5CF6"))
                     }
                     VStack(alignment: .leading, spacing: 3) {
-                        Text("Polish dictation with AI")
+                        Text("Language model for rewrite modes")
                             .font(.system(size: 14, weight: .semibold))
                             .foregroundColor(WhispererColors.primaryText(colorScheme))
                         HStack(spacing: 4) {
