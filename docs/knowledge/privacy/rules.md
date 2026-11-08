@@ -13,3 +13,5 @@
 7. Never claim transcription is impossible. Claim "makes transcription much harder" with measured numbers.
 8. Judge a jammer on real human speech (`jam_eval.py`, LibriSpeech) and at least three recogniser
    families; TTS clips overstate the effect (the author's voice and LibriSpeech resist more).
+9. Gate every jammer candidate on the machine listener (`listener.py`, STOI >= 0.9) before any ASR
+   measurement or listening request; reversal-family transforms fail it at every frame length.

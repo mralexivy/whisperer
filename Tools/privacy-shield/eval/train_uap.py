@@ -79,6 +79,8 @@ def main():
     ap.add_argument("--relative", type=float, default=0.0,
                     help="if >0, scale delta by a causal 20 ms speech envelope: d = relative * env(x) * tanh(delta) "
                          "(speech-shaped: strong under the voice, silent in pauses); --eps is then ignored")
+    ap.add_argument("--prerev", type=float, default=0.0,
+                    help="hybrid jammer: train on top of mild local time reversal (frame ms, +-20%%, 3 ms fades)")
     a = ap.parse_args()
     torch.manual_seed(a.seed); random.seed(a.seed); np.random.seed(a.seed)
     dev = torch.device("mps" if torch.backends.mps.is_available() else "cpu")
@@ -87,6 +89,9 @@ def main():
     clips = []
     for r in rows:
         x, sr = sf.read(Path(a.train) / r["audio"], dtype="float32"); assert sr == SR
+        if a.prerev > 0:
+            from transform_processor import revfade
+            x = revfade(x.astype(np.float64), a.prerev, 3.0, jitter=0.2).astype(np.float32)
         clips.append((x[: SR * 8], r["reference"]))
 
     models = [whisper.load_model(m, device=dev) for m in a.models.split(",")]

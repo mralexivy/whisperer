@@ -76,3 +76,18 @@
   (PortAudio); ffmpeg's AVFoundation capture received only ~30% of the virtual mic's buffers (6.0 s of
   samples in 20 s; a 1 kHz tone arrived at the right pitch, so buffers were dropped, not resampled),
   which made earlier live runs look like silence.
+
+## Listener verdict and the naturalness frontier — 2026-11-08
+
+- **Listener check (author).** The shipped chain and every reversal setting (60-85 ms, any crossfade,
+  with or without identity reshaping) sound robotic; the original and the identity shield alone sound
+  natural. The jammer is therefore opt-in and off by default, and its copy says it sounds robotic.
+- **Machine listener (`listener.py`, torchaudio SQUIM).** Estimated STOI reproduces the verdict: natural
+  0.97-0.99, robotic 0.56-0.62. Mild reversal 30-50 ms scores 0.53-0.57: every local reversal is robotic.
+- **Frontier (STOI vs whisper turbo words changed after the call, TTS corpus).** Everything with STOI >= 0.9
+  changes <= 2% (frequency shift 0.99/0%, quiet UAP 0.97/2%). The most damaging candidates sit far below:
+  learned jammer net 0.85/16.5%, competing talker at voice level 0.82/26%, UAP at voice level 0.70/22%,
+  6-band vocoder 0.58/28%, reversal jammer 0.63/90%. No tested method is both natural and disruptive.
+- **Hybrid (learned signal over 45 ms reversal, small+medium, codec in the loop):** mute loss flat at ~8.4
+  for 200 steps; stopped. Mild reversal alone (real speech): content words kept 88% / 82% / 76% at
+  40 / 45 / 50 ms.

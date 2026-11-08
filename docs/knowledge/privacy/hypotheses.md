@@ -6,8 +6,5 @@
   ≥ 30% drift. Test: STOI/ESTOI and a listening check on the final checkpoint.
 - Speech-shaped scaling of a fixed pattern does not beat a flat pattern at equal loudness (one white-box
   sanity run). Needs a fair, longer comparison.
-- Local time reversal at ~70 ms (+-20%) stays intelligible to listeners on a call while ASR fails.
-  Test: listener check on `~/Documents/jammer-listening/11-SHIPPED-shield-plus-jammer.wav` vs 08-10; if
-  listeners struggle, drop to 60 ms and re-measure with `jam_eval.py`.
 - Randomised frame lengths defeat a notetaker that re-reverses on a fixed grid. Test: re-reverse jammed
   audio at 70 ms on every phase and score.
