@@ -10,6 +10,7 @@ import Combine
 import FluidAudio
 import Foundation
 import IOKit.pwr_mgt
+import os
 
 enum ActiveMode: Equatable {
     case dictation
@@ -876,6 +877,49 @@ class AppState: ObservableObject {
     /// Serializes `coordinator.feed()` calls. Feeding an actor from the audio callback
     /// without chaining lets re-entrancy across the ANE `await` interleave buffers.
     private var diarizerFeedTask: Task<Void, Never>?
+    /// Committed text for the coordinator, on its own chain. It used to share `diarizerFeedTask`
+    /// with the diarizer's audio, so every text update waited behind every queued audio batch;
+    /// once the diarizer fell behind real time the queue grew and live meeting text stopped
+    /// moving ("worked, then stuck at 0:25", 2026-11-08). Now text waits at most for the one
+    /// coordinator call in flight.
+    private var coordinatorTextTask: Task<Void, Never>?
+    /// Audio queued on `diarizerFeedTask` and not yet fed. Past `diarizerMaxBacklogSamples` new
+    /// batches only advance the coordinator's clock until the queue drains.
+    nonisolated private let diarizerPendingSamples = OSAllocatedUnfairLock(initialState: 0)
+    private static let diarizerMaxBacklogSamples = 16_000 * 3
+
+    /// Queue `work` on the coordinator's text chain, off the main actor, strictly in order.
+    private func enqueueCoordinatorText(_ coordinator: MeetingSpeakerCoordinator,
+                                        _ work: @escaping @Sendable (MeetingSpeakerCoordinator) async -> Void) {
+        coordinatorTextTask = Task.detached(priority: .userInitiated) { [previous = coordinatorTextTask] in
+            await previous?.value
+            await work(coordinator)
+        }
+    }
+
+    /// Queue a diarizer audio batch, off the main actor, strictly in order and bounded.
+    private func enqueueDiarizerAudio(_ coordinator: MeetingSpeakerCoordinator, _ batch: [Float]) {
+        let pending = diarizerPendingSamples
+        let behind = pending.withLock { value -> Bool in
+            let behind = value >= Self.diarizerMaxBacklogSamples
+            value += batch.count
+            return behind
+        }
+        diarizerFeedTask = Task.detached(priority: .userInitiated) { [previous = diarizerFeedTask] in
+            await previous?.value
+            await coordinator.feed(batch, diarize: !behind)
+            pending.withLock { $0 -= batch.count }
+        }
+    }
+
+    /// Everything queued for the coordinator has been handed over.
+    private func drainCoordinatorChains() async {
+        await diarizerFeedTask?.value
+        await coordinatorTextTask?.value
+        diarizerFeedTask = nil
+        coordinatorTextTask = nil
+        diarizerPendingSamples.withLock { $0 = 0 }
+    }
     /// Enforces the monotonic accumulated-transcript contract on the `.transcriberAccumulated`
     /// feed (Qwen3). Reset at the start of every in-app recording — a snapshot carried over
     /// from the previous meeting would make the next meeting's first update look like a shrink.
@@ -3750,10 +3794,7 @@ class AppState: ObservableObject {
                                 Task { @MainActor [weak self] in
                                     guard let self, let coordinator = self.meetingSpeakerCoordinator,
                                           let accumulated = self.meetingTranscriptAccumulator.accept(committed) else { return }
-                                    self.diarizerFeedTask = Task { [previous = self.diarizerFeedTask] in
-                                        await previous?.value
-                                        await coordinator.onPartial(accumulated)
-                                    }
+                                    self.enqueueCoordinatorText(coordinator) { await $0.onPartial(accumulated) }
                                 }
                             }
                         }
@@ -3829,10 +3870,7 @@ class AppState: ObservableObject {
                                 }
                                 if coordinatorFeed == .accumulatedFinal {
                                     let finalText = chunk.text
-                                    self.diarizerFeedTask = Task { [previous = self.diarizerFeedTask] in
-                                        await previous?.value
-                                        await coordinator.onFinalText(finalText)
-                                    }
+                                    self.enqueueCoordinatorText(coordinator) { await $0.onFinalText(finalText) }
                                 }
                                 // Either way, do not also send to onNewChunk — that would append
                                 // the meeting text a second time.
@@ -3883,10 +3921,7 @@ class AppState: ObservableObject {
                               let coordinator = self.meetingSpeakerCoordinator,
                               let accumulated = self.meetingTranscriptAccumulator.accept(text)
                         else { return }
-                        self.diarizerFeedTask = Task { [previous = self.diarizerFeedTask] in
-                            await previous?.value
-                            await coordinator.onPartial(accumulated)
-                        }
+                        self.enqueueCoordinatorText(coordinator) { await $0.onPartial(accumulated) }
                         #endif
                     }
                 }
@@ -3927,10 +3962,7 @@ class AppState: ObservableObject {
                         }
                         if coordinatorFeed == .accumulatedFinal,
                            let coordinator = self.meetingSpeakerCoordinator {
-                            self.diarizerFeedTask = Task { [previous = self.diarizerFeedTask] in
-                                await previous?.value
-                                await coordinator.onPartial(tail)
-                            }
+                            self.enqueueCoordinatorText(coordinator) { await $0.onPartial(tail) }
                             return
                         }
                         if self.meetingSpeakerCoordinator != nil { return }
@@ -3976,10 +4008,7 @@ class AppState: ObservableObject {
                         if diarizerBatch.count >= diarizerBatchSize {
                             let batch = diarizerBatch
                             diarizerBatch.removeAll(keepingCapacity: true)
-                            self.diarizerFeedTask = Task { [previous = self.diarizerFeedTask] in
-                                await previous?.value
-                                await coordinator.feed(batch)
-                            }
+                            self.enqueueDiarizerAudio(coordinator, batch)
                         }
                     }
                     #endif
@@ -4162,8 +4191,7 @@ class AppState: ObservableObject {
             // Drain the diarizer and commit any still-unattributed text BEFORE the session
             // reference goes away — finish() emits through the callbacks captured above.
             if let coordinator = meetingSpeakerCoordinator {
-                await diarizerFeedTask?.value
-                diarizerFeedTask = nil
+                await drainCoordinatorChains()
                 await coordinator.finish()
                 meetingSpeakerCoordinator = nil
                 activeMeetingSession?.coordinatorOwnsTail = false
@@ -5182,8 +5210,7 @@ class AppState: ObservableObject {
             #if canImport(FluidAudio)
             self.releaseMeetingASRBridge()
             if let coordinator = self.meetingSpeakerCoordinator {
-                await self.diarizerFeedTask?.value
-                self.diarizerFeedTask = nil
+                await self.drainCoordinatorChains()
                 await coordinator.finish()
                 self.meetingSpeakerCoordinator = nil
                 self.activeMeetingSession?.coordinatorOwnsTail = false

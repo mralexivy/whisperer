@@ -184,9 +184,13 @@ actor MeetingSpeakerCoordinator {
     /// `drainPending()` is called unconditionally so the age-based deadline fires even when
     /// the diarizer is not loaded — without this, a meeting recorded without a model would keep
     /// the entire transcript in pending forever (finalizedUntil stays 0).
-    func feed(_ samples: [Float]) {
+    ///
+    /// `diarize: false` advances the clock only: the caller is behind real time and catching up,
+    /// and keeping the clock exact matters more than diarizing every second (the words keep
+    /// flowing on the 3 s deadline, with the best available speaker).
+    func feed(_ samples: [Float], diarize: Bool = true) {
         samplesFed += samples.count
-        if let diarizer, let timeline = diarizerTimeline {
+        if diarize, let diarizer, let timeline = diarizerTimeline {
             diarizer.appendAudio(samples)
             let chunks = (try? diarizer.processBufferedAudio()) ?? []
             for chunk in chunks {
