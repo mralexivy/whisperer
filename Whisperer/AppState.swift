@@ -835,6 +835,11 @@ class AppState: ObservableObject {
     /// specialist. Captured at stop because the borrowed bridge is released moments later.
     private(set) var lastMeetingASREngine: (meetingID: UUID, engine: BackendType)?
 
+    /// Where the running meeting's transcript text comes from, decided when its recording starts.
+    /// With `.accumulatedPartials` the saved cards are Apple dictation's words, not the borrowed
+    /// decoder's, which `lastMeetingASREngine` must reflect at stop.
+    private var meetingTranscriptFeed: MeetingCoordinatorFeed?
+
     // Per-chunk LLM correction coordinator
     private let chunkLLMCoordinator = ChunkLLMCoordinator()
 
@@ -3668,6 +3673,7 @@ class AppState: ObservableObject {
                                                              builtinDrivesPreview: nemotronPreviewOnlyInApp)
                 let hasAccumulatedSource = coordinatorFeed != nil
                     && (anyNemotronInApp != nil || inAppBackend == .qwen3asr)
+                meetingTranscriptFeed = hasAccumulatedSource ? coordinatorFeed : nil
                 if let meetingSession = capturedMeetingSession, hasAccumulatedSource {
                     let coordinator = MeetingSpeakerCoordinator()
                     meetingSpeakerCoordinator = coordinator
@@ -5825,7 +5831,13 @@ class AppState: ObservableObject {
         // the refiner asks. An empty tally is fine — the timeline treats it as no prior.
         if let id = activeMeetingSession?.meetingID {
             lastMeetingNemotronTally = (id, streamingTranscriber?.nemotronLanguageTally ?? [:])
-            lastMeetingASREngine = (id, effectiveInAppBackend)
+            // The engine whose words became the cards. When Apple dictation fed them, recording
+            // the borrowed Qwen3 instead told the refiner the text was already Qwen3's: it then
+            // skipped every language without a measured specialist, and a Russian meeting whose
+            // live text Apple had written in English kept that English for good (2026-11-08).
+            let appleWroteCards = meetingTranscriptFeed == .accumulatedPartials
+                && streamingTranscriber?.livePreviewFellBack != true
+            lastMeetingASREngine = (id, appleWroteCards ? .speechAnalyzer : effectiveInAppBackend)
         }
 
         // NOTE: activeMeetingSession is NOT cleared here. The tail transcription fires

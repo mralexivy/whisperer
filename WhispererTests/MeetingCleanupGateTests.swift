@@ -46,6 +46,18 @@ final class MeetingCleanupGateTests: XCTestCase {
             RefineModelTable.baseline)
     }
 
+    /// A Qwen3 meeting whose cards were Apple dictation's words is recorded as `.speechAnalyzer`.
+    /// Its Russian must be re-decoded: on 2026-11-08 Apple wrote a Russian meeting in English,
+    /// the refiner believed the text was Qwen3's, skipped Russian, and the English stayed.
+    func testRussianIsReDecodedWhenAppleWroteTheCards() {
+        XCTAssertNil(
+            RefineModelTable.refineModel(for: .russian, liveEngine: .qwen3asr, config: noRouting),
+            "precondition: Qwen3's own Russian text is not re-decoded")
+        XCTAssertNotNil(
+            RefineModelTable.refineModel(for: .russian, liveEngine: .speechAnalyzer, config: noRouting),
+            "Apple's text is not Qwen3's — Russian must get a re-decode")
+    }
+
     /// Every entry in the table must name a model the app can actually resolve, and must agree
     /// with the long-standing `builtin` table where both have an opinion.
     func testSpecialistTableIsConsistentWithBuiltin() {

@@ -1052,3 +1052,8 @@ Supersedes the 2026-10-07 "Qwen3-ASR as the default engine" decision and the 202
 - Qwen3-ASR does detect and write Hebrew (3/3 Hebrew test clips tagged `Hebrew`, Hebrew script).
 - Fix: `qwenChunkLanguagePinner` (`NemotronLanguagePinner.forQwen3Chunks()`: 2 chunks to pin,
   3 in a row to re-pin, user's languages only) feeds Qwen3's per-chunk header into `pinNemotron`.
+- Second half of the same bug (2026-11-08, Russian): after a Qwen3 meeting the refiner re-decodes
+  only languages with a specialist beating Qwen3 (Hebrew → ivrit), assuming the cards are
+  Qwen3's text. With Apple feeding the cards (`.accumulatedPartials`) they are Apple's words, so
+  a Russian meeting Apple wrote in English was never re-decoded. `lastMeetingASREngine` now
+  records `.speechAnalyzer` when Apple wrote the cards, so every language is re-decoded.
