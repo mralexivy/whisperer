@@ -55,6 +55,9 @@ final class MeetingJobQueue: ObservableObject {
     /// Combined gate: the queue does not start new jobs when either flag is set.
     var isSuspended: Bool { isRecordingSuspended || isDictationSuspended }
 
+    /// A job's pipeline is running (refine, polish, overview).
+    var isProcessing: Bool { runningTask != nil }
+
     // MARK: - Enqueue
 
     /// Called from `MeetingSession.stopRecording()` after tail delivery.

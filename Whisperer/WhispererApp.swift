@@ -127,6 +127,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
         // Start health monitoring
         HealthManager.shared.startMonitoring()
+        if !AppEnvironment.isRunningTests { EnergyMonitor.shared.start() }
 
         // Hide dock icon
         NSApp.setActivationPolicy(.accessory)
@@ -466,6 +467,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         // 6. Stop health monitoring
         Logger.debug("Stopping health monitoring...", subsystem: .app)
         HealthManager.shared.stopMonitoring()
+        EnergyMonitor.shared.stop()
 
         // 7. Stop MCP server
         Logger.debug("Stopping MCP server...", subsystem: .app)

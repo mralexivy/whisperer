@@ -62,6 +62,7 @@ enum StuckStateDumper {
         header += renderMemoryUsage()
         header += renderAudioMuter()
         header += renderWindows()
+        header += EnergyMonitor.shared.renderDumpSection()
 
         // `/usr/bin/sample` walks every thread's stack, and to do that it repeatedly suspends
         // the whole target process — including the whisper.cpp decode queue and the audio tap.
