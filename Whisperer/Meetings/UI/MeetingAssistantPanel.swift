@@ -262,7 +262,9 @@ struct AskAIPane: View {
 
     @ViewBuilder
     private func assistantBubble(_ msg: MeetingChatMessage) -> some View {
-        let isRTL = Self.detectRTL(msg.text)
+        // Answers saved before citations were stripped still carry them.
+        let text = MeetingAIService.stripCitations(msg.text)
+        let isRTL = Self.detectRTL(text)
         VStack(alignment: isRTL ? .trailing : .leading, spacing: 6) {
             HStack(alignment: .top, spacing: 8) {
                 if isRTL { Spacer() }
@@ -273,7 +275,7 @@ struct AskAIPane: View {
                         .padding(.top, 1)
                 }
                 ChatBubbleTextView(
-                    text: msg.text, isRTL: isRTL,
+                    text: text, isRTL: isRTL,
                     fontSize: 13, textColor: NSColor.white.withAlphaComponent(0.85)
                 )
                 if isRTL {
@@ -478,7 +480,7 @@ struct AskAIPane: View {
                 meetingID: meeting.id,
                 segments: meeting.segments,
                 onPartial: { partial in
-                    Task { @MainActor in streamingText = partial }
+                    Task { @MainActor in streamingText = MeetingAIService.stripCitations(partial) }
                 }
             )
             await MainActor.run { streamingText = "" }

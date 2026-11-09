@@ -49,6 +49,20 @@ actor MeetingAIService {
     /// Pre-compiled regex for citation parsing. The pattern is a string literal
     /// that never fails to compile, so force-try is safe.
     private static let citationRegex = try! NSRegularExpression(pattern: #"\[(\d+)s\]"#)
+    /// A run of citation markers with the space before it: "… budget. [70s] [100s]".
+    private static let citationRunRegex = try! NSRegularExpression(pattern: #"[ \t]*\[\d+s\](?:[ \t]*\[\d+s\])*"#)
+
+    /// The answer as the user reads it. The model cites moments as `[95s]` so `parseCitations`
+    /// can turn them into the clickable sources under the answer; left in the text they were a
+    /// trail of "[70s] [100s] [130s] [150s] [1131s]" after every sentence (2026-11-09).
+    nonisolated static func stripCitations(_ text: String) -> String {
+        let ns = text as NSString
+        var out = citationRunRegex.stringByReplacingMatches(in: text, range: NSRange(location: 0, length: ns.length),
+                                                            withTemplate: "")
+        // "budget [70s]." left "budget ." behind.
+        for mark in [".", ",", ";", ":", ")", "!", "?"] { out = out.replacingOccurrences(of: " " + mark, with: mark) }
+        return out
+    }
 
     /// Whether the meeting's title was still app-generated when the artifact sequence began,
     /// recorded by `generateTitle` and consumed by `generateOverview`. Callers invoke the two
@@ -215,7 +229,7 @@ actor MeetingAIService {
             )
             let answer = response.trimmingCharacters(in: .whitespacesAndNewlines)
             let sources = parseCitations(from: answer, segments: segments)
-            return RAGAnswer(text: answer, sources: sources, usedRAG: false)
+            return RAGAnswer(text: Self.stripCitations(answer), sources: sources, usedRAG: false)
         } catch {
             Logger.error("Meeting Q&A failed: \(error)", subsystem: .transcription)
             return RAGAnswer(text: "Sorry, I couldn't answer that. Please try again.", sources: [], usedRAG: false)
@@ -1238,7 +1252,7 @@ extension MeetingAIService {
                 onPartial?(partial)
             }
             let answer = text.trimmingCharacters(in: .whitespacesAndNewlines)
-            return RAGAnswer(text: answer, sources: parseCitations(from: answer, segments: segments),
+            return RAGAnswer(text: Self.stripCitations(answer), sources: parseCitations(from: answer, segments: segments),
                              usedRAG: false, answeredBy: provider.id)
         } catch {
             if Task.isCancelled { return RAGAnswer(text: "", sources: [], usedRAG: false, answeredBy: provider.id) }
