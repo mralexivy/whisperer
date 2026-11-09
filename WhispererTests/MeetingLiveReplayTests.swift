@@ -102,6 +102,7 @@ final class MeetingLiveReplayTests: XCTestCase {
         Self.keepAlive += [whisper, pool, transcriber]
 
         let energyBefore = EnergyMonitor.readTask()
+        let computeBefore = ComputeLedger.snapshot()
         let began = Date()
         let feeder = Task.detached(priority: .userInitiated) {
             let step = 1_365
@@ -143,6 +144,7 @@ final class MeetingLiveReplayTests: XCTestCase {
             print(String(format: "[MeetingReplay] ENERGY GPU %.1fs of %.0fs wall (%.0f%%), %.0f J (%.1f W avg), stop %.1fs",
                          Double(b.gpu - a.gpu) / 1e9, wall, Double(b.gpu - a.gpu) / 1e9 / wall * 100,
                          Double(b.energy - a.energy) / 1e9, Double(b.energy - a.energy) / 1e9 / wall, stopSeconds))
+            print("[MeetingReplay] COMPUTE " + ComputeLedger.describe(ComputeLedger.delta(since: computeBefore), wallSeconds: wall))
         }
 
         // The score that matters to the user: for how much of the meeting was the live text in

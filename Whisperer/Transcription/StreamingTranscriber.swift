@@ -1720,7 +1720,10 @@ class StreamingTranscriber {
         // detection path, `checkScriptStability`, requires a lock that by then could never happen.
         // A meeting has forty minutes of evidence. The arbiter accumulates across all of it and
         // can still flip a lock later, so probing continues on a cadence for the whole session.
-        if let pool = modelPool, let langRouter = languageRouter, let mdlRouter = modelRouter {
+        // A meeting Apple dictation writes: its own probe and re-probes decide the language
+        // (`SystemLivePreviewBridge`). A second prober here doubled the V3 passes and its fused
+        // verdict alone could pin Apple to the wrong language (2026-11-09, 10:32).
+        if !whisperIdleForMeeting, let pool = modelPool, let langRouter = languageRouter, let mdlRouter = modelRouter {
             let totalInRing = ringBase + allSamples.count
             let confidence = languageArbiter.verdict?.confidence ?? 0
             let intervalSeconds: Double

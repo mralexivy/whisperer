@@ -591,6 +591,15 @@ class MeetingManager: ObservableObject {
                 duration: record.duration,
                 audioFileURL: record.audioFileURL
             )
+            // The "finally" of a meeting the app quit, crashed or lost power under: it gets the
+            // same refine, polish and overview a normal stop queues. The refine re-decodes the
+            // recording, so text the cards never received is recovered from the audio.
+            if let recovered = await meeting(id: record.id),
+               !recovered.segments.isEmpty || recovered.resolvedAudioURL.map({ FileManager.default.fileExists(atPath: $0.path) }) == true {
+                Logger.info("Meeting crash recovery: queuing processing for \(record.id)", subsystem: .app)
+                MeetingJobQueue.shared.enqueue(meetingID: record.id, segments: recovered.segments,
+                                               audioURL: recovered.resolvedAudioURL)
+            }
         }
     }
 

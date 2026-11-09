@@ -172,6 +172,8 @@ actor LanguageProbe {
         case .qwen3(let bridge):
             let available = codes.filter { Qwen3ASREngine.forcedLanguageTokens[$0] != nil }
             guard available.count == codes.count else { return nil }
+            let started = ContinuousClock.now
+            defer { ComputeLedger.add(.languageID, seconds: started.duration(to: .now).seconds) }
             return await bridge.languageLogits(samples: samples, codes: codes)
         case .whisper(let bridge):
             guard let probabilities = await Task.detached(priority: .userInitiated, operation: {

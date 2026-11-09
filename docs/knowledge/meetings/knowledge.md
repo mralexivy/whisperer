@@ -437,3 +437,9 @@ generic, but honest, and it needs no guess about anyone's title format.
 - `StreamingTranscriber.liveEngineWritesMeeting` (set by AppState for those meetings): no preview passes while Apple streams, ring trimmed to 30 s, stop skips the tail. Replay: GPU 6%, same 116 words, language right 49/49, probes 0.74 s, stop 0.2 s. If Apple fell back at start, whisper runs as before.
 - Diarizer cost (Nemotron-3, `MeetingDiarizerCostTests`): 1.75 s of compute per minute of audio, GPU 0.28 s, ~8 J/min (~0.14 W). Not a heat source.
 - WindowServer's GPU time is not readable from IORegistry `AppUsage` (its counter does not move between reads); measuring what our windows' perpetual animations cost needs `sudo powermetrics`.
+
+## Compute visibility and language-probe cost (2026-11-09)
+- `ComputeLedger` charges seconds and calls to whisper decodes (every `whisper_full`), language ID (inside the whisper lock, or Qwen3 logits) and the diarizer. The log gets `Energy: meeting N min — whisper …, language ID …, diarizer …; app …` at each meeting stop and `Energy: processing N s — …` when its job completes; `MeetingLiveReplayTests` prints the same as COMPUTE.
+- With whisper idle, language ID was the main remaining cost: two probers (transcriber 15/30/60 s + Apple bridge 15 s), 12 V3 passes in 98 s. In Apple-written meetings only the bridge probes now; its re-probe gap doubles on each confident confirmation up to 60 s and snaps back to 15 s on a confident disagreement.
+- Found doing it: a re-probe skipped for silence spent the whole interval, so a quiet stretch could keep every re-probe in a pause — a he→en replay never switched. A silent skip now retries in 2 s, and the silence floor is 0.002 RMS. Replay he→en (205 s): switch 29 s after English began, GPU 2%, 9 probes.
+- Crash/quit during a meeting: `recoverCrashedSessions` now queues the meeting's refine/polish/overview job after finalizing (quit takes the same path: the row is still in progress at next launch).

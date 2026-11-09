@@ -42,6 +42,8 @@ final class MeetingJobQueue: ObservableObject {
     // MARK: - Private state
 
     private var runningTask: Task<Void, Never>?
+    /// Compute before the running job's attempt began, for its "Energy: processing" line.
+    private var jobComputeBaseline: (snapshot: ComputeLedger.Snapshot, at: Date)?
 
     /// True while the queue is suspended for a **meeting recording**. Jobs paused for a recording
     /// are cancelled and re-queued; their attempt counter is incremented for crash-recovery purposes.
@@ -267,6 +269,7 @@ final class MeetingJobQueue: ObservableObject {
 
         let job = jobs[idx]
         Logger.info("MeetingJobQueue: starting \(job.id) stage=\(job.stage.rawValue) attempt=\(job.attempts)", subsystem: .transcription)
+        jobComputeBaseline = (ComputeLedger.snapshot(), Date())
 
         runningTask = Task {
             await runPipeline(
@@ -396,6 +399,13 @@ final class MeetingJobQueue: ObservableObject {
         transition(meetingID: meetingID, to: .done, status: .done)
         MeetingJobStore.remove(meetingID: meetingID)
         Logger.info("MeetingJobQueue: \(meetingID) complete", subsystem: .transcription)
+        if let baseline = jobComputeBaseline {
+            let wall = Date().timeIntervalSince(baseline.at)
+            Logger.info(String(format: "Energy: processing %.0f s — ", wall)
+                        + ComputeLedger.describe(ComputeLedger.delta(since: baseline.snapshot), wallSeconds: wall),
+                        subsystem: .transcription)
+        }
+        jobComputeBaseline = nil
 
         runningTask = nil
         startNext()

@@ -813,6 +813,8 @@ class AppState: ObservableObject {
     private var dictionaryRebuildObserver: Any?
     private var appActivationObserver: Any?
     private var systemSleepObserver: Any?
+    /// Compute spent before the meeting began, so its stop can log what the meeting itself cost.
+    private var meetingComputeBaseline: (snapshot: ComputeLedger.Snapshot, at: Date)?
     private var clipboardNotificationObserver: Any?
 
     // Pre-loaded Silero VAD for voice activity detection
@@ -5902,6 +5904,7 @@ class AppState: ObservableObject {
 
         activeMeetingSession = session
         meetingAudioFileURL = nil
+        meetingComputeBaseline = (ComputeLedger.snapshot(), Date())
 
         // Suppress HUD before recording starts so it never flashes. `meetingWindowIsVisible`
         // means "a meeting surface owns the recording UI", not "the floating window is up" —
@@ -5949,6 +5952,14 @@ class AppState: ObservableObject {
 
     func stopMeetingRecording() {
         guard isMeetingMode else { return }
+
+        if let baseline = meetingComputeBaseline {
+            meetingComputeBaseline = nil
+            let wall = Date().timeIntervalSince(baseline.at)
+            let recent = EnergyMonitor.shared.recent(minutes: max(1, Int(wall / 60) + 1))
+            Logger.info("Energy: meeting \(Int(wall / 60)) min — \(ComputeLedger.describe(ComputeLedger.delta(since: baseline.snapshot), wallSeconds: wall))"
+                        + (recent.isEmpty ? "" : "; app \(EnergyMonitor.describe(recent))"), subsystem: .app)
+        }
 
         // Stop the silence watcher — caller must have already captured speechDetected if needed.
         meetingSilenceWatcher.stop()

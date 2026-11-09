@@ -192,7 +192,7 @@ actor MeetingSpeakerCoordinator {
         samplesFed += samples.count
         if diarize, let diarizer, let timeline = diarizerTimeline {
             diarizer.appendAudio(samples)
-            let chunks = (try? diarizer.processBufferedAudio()) ?? []
+            let chunks = ComputeLedger.measure(.diarizer) { (try? diarizer.processBufferedAudio()) ?? [] }
             for chunk in chunks {
                 ingest(chunk, into: timeline)
             }

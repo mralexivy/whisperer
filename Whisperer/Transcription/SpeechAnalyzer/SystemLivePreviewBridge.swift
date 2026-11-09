@@ -71,9 +71,21 @@ actor SystemLivePreviewBridge: LivePreviewEngine {
     /// in the wrong language (or genuinely switched) follows the speech. See
     /// `LanguageReprobeTracker` for the switching rule.
     nonisolated static let reprobeIntervalSamples = 16_000 * 15
+    /// Longest gap between re-probes once the language keeps being confirmed. Each probe is one
+    /// V3 encoder pass (~0.7 s of GPU); at a fixed 15 s they were most of a meeting's remaining
+    /// model work (2026-11-09). Confirmations double the gap up to this; a confident disagreement
+    /// snaps it back to `reprobeIntervalSamples`, so a real switch is still caught within ~30 s.
+    nonisolated static let reprobeMaxIntervalSamples = 16_000 * 60
+
+    /// The gap before the next re-probe, given the current one and what the last probe said.
+    nonisolated static func nextReprobeInterval(current: Int, confirmed: Bool) -> Int {
+        confirmed ? min(current * 2, reprobeMaxIntervalSamples) : reprobeIntervalSamples
+    }
     nonisolated static let reprobeWindowSamples = 16_000 * 8
     /// RMS below which a re-probe window is treated as silence and skipped.
-    nonisolated static let reprobeMinimumRMS: Float = 0.005
+    nonisolated static let reprobeMinimumRMS: Float = 0.002
+    /// How soon a re-probe skipped for silence tries again.
+    nonisolated static let reprobeRetrySamples = 16_000 * 2
 
     private var sessionID = 0
     private var sessionLanguage: TranscriptionLanguage?
@@ -101,6 +113,7 @@ actor SystemLivePreviewBridge: LivePreviewEngine {
     /// which stops at the replay limit).
     private var recentAudio: [Float] = []
     private var samplesSinceReprobe = 0
+    private var reprobeInterval = SystemLivePreviewBridge.reprobeIntervalSamples
     private var reprobe = LanguageReprobeTracker()
 
     private var analyzer: SpeechAnalyzer?
@@ -330,6 +343,7 @@ actor SystemLivePreviewBridge: LivePreviewEngine {
         probedCheckpoints = []
         recentAudio = []
         samplesSinceReprobe = 0
+        reprobeInterval = Self.reprobeIntervalSamples
         reprobe.reset()
     }
 
@@ -348,13 +362,19 @@ actor SystemLivePreviewBridge: LivePreviewEngine {
     /// with a real choice (`probeCandidates`), never while another probe runs, never on silence.
     private func scheduleReprobeIfDue() {
         guard probeStage == .decided, !probeInFlight, let probe, probeCandidates.count > 1,
-              sessionLanguage != nil, samplesSinceReprobe >= Self.reprobeIntervalSamples,
+              sessionLanguage != nil, samplesSinceReprobe >= reprobeInterval,
               recentAudio.count >= Self.reprobeWindowSamples else { return }
-        samplesSinceReprobe = 0
         let window = Array(recentAudio.suffix(Self.reprobeWindowSamples))
         var sum: Float = 0
         for value in window { sum += value * value }
-        guard (sum / Float(window.count)).squareRoot() >= Self.reprobeMinimumRMS else { return }
+        guard (sum / Float(window.count)).squareRoot() >= Self.reprobeMinimumRMS else {
+            // A pause, not a probe: try again in a moment. Spending the whole interval here let
+            // every re-probe of a quiet stretch land in a gap between sentences, and a meeting
+            // that moved to English stayed in Hebrew for good (replay, 2026-11-09).
+            samplesSinceReprobe = reprobeInterval - Self.reprobeRetrySamples
+            return
+        }
+        samplesSinceReprobe = 0
         probeInFlight = true
         let candidates = probeCandidates
         let id = sessionID
@@ -371,6 +391,11 @@ actor SystemLivePreviewBridge: LivePreviewEngine {
         guard session == sessionID else { return }
         probeInFlight = false
         guard let result, let current = sessionLanguage else { return }
+        let confirmed = result.language == current && result.probability >= LanguageReprobeTracker.confidentProbability
+        let disagreed = result.language != current && result.probability >= LanguageReprobeTracker.confidentProbability
+        if confirmed || disagreed {
+            reprobeInterval = Self.nextReprobeInterval(current: reprobeInterval, confirmed: confirmed)
+        }
         let scores = result.probabilities.sorted { $0.value > $1.value }
             .map { "\($0.key.rawValue)=\(String(format: "%.2f", $0.value))" }.joined(separator: " ")
         guard let target = reprobe.observe(language: result.language, probability: result.probability,

@@ -1082,9 +1082,10 @@ nonisolated final class WhisperBridge: TranscriptionBackend, @unchecked Sendable
             // Feed the health deadline's RTF estimate from what this model actually costs here.
             // Skipped for aborted decodes: they return early, so their elapsed time describes the
             // abort latency rather than the model, and folding it in would shrink the deadline.
+            let elapsed = Double((ContinuousClock.now - decodeStart).components.seconds)
+                + Double((ContinuousClock.now - decodeStart).components.attoseconds) / 1e18
+            ComputeLedger.add(.whisper, seconds: elapsed)
             if !abortRequestedDuringCurrentOp {
-                let elapsed = Double((ContinuousClock.now - decodeStart).components.seconds)
-                    + Double((ContinuousClock.now - decodeStart).components.attoseconds) / 1e18
                 recordObservedRTF(audioSeconds: audioSeconds, decodeSeconds: elapsed)
             }
         }
@@ -1570,6 +1571,9 @@ nonisolated final class WhisperBridge: TranscriptionBackend, @unchecked Sendable
         do {
             return try ctxLock.withLock(timeout: lockTimeout) { [self] in
                 guard let ctx = ctx else { return nil }
+                // Charged inside the lock: the cost of the probe, not of waiting for a decode.
+                let started = ContinuousClock.now
+                defer { ComputeLedger.add(.languageID, seconds: started.duration(to: .now).seconds) }
 
                 let melResult = samples.withUnsafeBufferPointer { ptr -> Int32 in
                     whisper_pcm_to_mel(ctx, ptr.baseAddress, Int32(ptr.count), 2)
