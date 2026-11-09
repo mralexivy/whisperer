@@ -431,3 +431,7 @@ generic, but honest, and it needs no guess about anyone's title format.
 ## A meeting's recording is never orphaned (2026-11-09)
 - The session file lived in `Sessions/` and the meeting row got its filename only at a normal stop. A crash, a force quit or an abandoned meeting left the row without audio, and `SessionStorage.deleteOrphanedSessions` deleted the file after 7 days.
 - Now the row is given the filename as soon as the recorder starts, `resolvedAudioURL` looks in `Meetings/` then `Sessions/` (`MeetingManager.audioURL(forFileName:)`), and abandon and crash recovery move the file into `Meetings/` (`adoptSessionAudio`). The writer flushes every 5 s, so a crash costs at most that.
+
+## Whisper stays idle in meetings Apple dictation writes (2026-11-09)
+- In an `.accumulatedPartials` meeting the eager whisper stream's text is discarded (cards come from Apple's stable words; refine re-decodes the file after). It still ran the whole meeting: GPU 66% busy in replay (65 s of 99 s), 10–21 W on the work Mac, lock waits that made language probes take 1–10 s, a ring that grew to 13 min, and a 30 s, 600 s-capped tail decode at stop that timed out the teardown.
+- `StreamingTranscriber.liveEngineWritesMeeting` (set by AppState for those meetings): no preview passes while Apple streams, ring trimmed to 30 s, stop skips the tail. Replay: GPU 6%, same 116 words, language right 49/49, probes 0.74 s, stop 0.2 s. If Apple fell back at start, whisper runs as before.

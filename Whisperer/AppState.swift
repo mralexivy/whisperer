@@ -3796,6 +3796,11 @@ class AppState: ObservableObject {
                 let hasAccumulatedSource = coordinatorFeed != nil
                     && (anyNemotronInApp != nil || inAppBackend == .qwen3asr)
                 meetingTranscriptFeed = hasAccumulatedSource ? coordinatorFeed : nil
+                // Apple dictation writes this meeting's cards: whisper stays idle while it streams
+                // (see `StreamingTranscriber.liveEngineWritesMeeting`).
+                if capturedMeetingSession != nil, hasAccumulatedSource, coordinatorFeed == .accumulatedPartials {
+                    streamingTranscriber?.liveEngineWritesMeeting = true
+                }
                 if let meetingSession = capturedMeetingSession, hasAccumulatedSource {
                     let coordinator = MeetingSpeakerCoordinator()
                     meetingSpeakerCoordinator = coordinator

@@ -522,8 +522,26 @@ class StreamingTranscriber {
         var livePreviewResolved = false
         var previewAccumulatedText = ""
         var accurateProbeInFlight = false
+        var liveEngineWritesMeeting = false
     }
     nonisolated private let crossThread = OSAllocatedUnfairLock(initialState: CrossThreadState())
+
+    /// A meeting whose cards the live engine (Apple dictation) writes. Its text never reaches
+    /// this engine's output — the meeting discards whisper's chunks — and the refine pass after
+    /// the meeting re-decodes the recording anyway. So whisper does no decoding while the live
+    /// engine streams: on 2026-11-09 the eager stream kept the GPU 66% busy for a meeting's whole
+    /// length (10–21 W, the Mac hot on battery), its uncommitted ring grew to 13 minutes, and the
+    /// stop spent 30 s on a 600 s tail nobody used, then timed out the meeting's teardown. The
+    /// ring keeps only `meetingRingSeconds` for the language probes. If the live engine fell
+    /// back at start, whisper drives the meeting as before.
+    nonisolated var liveEngineWritesMeeting: Bool {
+        get { crossThread.withLock { $0.liveEngineWritesMeeting } }
+        set { crossThread.withLock { $0.liveEngineWritesMeeting = newValue } }
+    }
+    nonisolated private var whisperIdleForMeeting: Bool {
+        crossThread.withLock { $0.liveEngineWritesMeeting && !$0.livePreviewFellBack }
+    }
+    static let meetingRingSeconds: Double = 30
 
     nonisolated private var isStopped: Bool {
         get { crossThread.withLock { $0.isStopped } }
@@ -1496,6 +1514,10 @@ class StreamingTranscriber {
             let reArmInterval: UInt64 = min(previewInterval, 50_000_000)
             while !Task.isCancelled {
                 guard let self, !self.isStopped, !self.isPreparingToStop else { break }
+                if self.whisperIdleForMeeting {
+                    try? await Task.sleep(nanoseconds: 500_000_000)
+                    continue
+                }
                 let ran = self.runLivePreviewPass()
                 do {
                     try await Task.sleep(nanoseconds: ran ? previewInterval : reArmInterval)
@@ -1618,10 +1640,19 @@ class StreamingTranscriber {
         #endif
 
         var inMemory = 0
+        let keepOnlyRecent = whisperIdleForMeeting
         do {
             try allSamplesLock.withLock {
                 ring.append(samples)
                 totalSamplesReceived += samples.count
+                if keepOnlyRecent {
+                    // Nothing commits in this mode; the recording itself is the session file.
+                    let keep = Int(Self.meetingRingSeconds * sampleRate)
+                    let end = ring.baseSampleIndex + ring.inMemoryCount
+                    if ring.inMemoryCount > keep + Int(sampleRate * 5) {
+                        ring.dropFront(toAbsoluteIndex: end - keep)
+                    }
+                }
                 inMemory = ring.inMemoryCount
             }
         } catch {
@@ -3688,6 +3719,22 @@ class StreamingTranscriber {
         vadScanTask = nil
         previewTask?.cancel()
         previewTask = nil
+
+        #if canImport(FluidAudio)
+        if whisperIdleForMeeting, let nemotron = nemotronBridge {
+            // The live engine wrote this meeting; there is no whisper text to finish.
+            isStopped = true
+            pendingChunks.removeAll()
+            isProcessing = true
+            abandonNemotronFeedChain()
+            _ = await drainNemotronFeedChain(timeout: 0.4)
+            nemotronFeedTask = nil
+            _ = await nemotron.endSession()
+            isProcessing = false
+            Logger.info("Stop: the live engine wrote this meeting — no whisper tail decode", subsystem: .transcription)
+            return ""
+        }
+        #endif
 
         #if canImport(WhisperKit)
         if let wkBridge = whisper as? WhisperKitBridge {

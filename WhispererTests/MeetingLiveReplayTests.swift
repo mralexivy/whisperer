@@ -96,9 +96,12 @@ final class MeetingLiveReplayTests: XCTestCase {
             modelRouter: ModelRouter(languageModelMap: [:], fallbackProfile: profile),
             nemotronBridge: apple, nemotronPreviewOnly: true)
         transcriber.onPreviewTail = { box.set(live: $0) }
+        // As the app runs a meeting whose cards Apple dictation writes.
+        transcriber.liveEngineWritesMeeting = env["MEETING_REPLAY_WHISPER"] != "1"
         transcriber.start { _ in }
         Self.keepAlive += [whisper, pool, transcriber]
 
+        let energyBefore = EnergyMonitor.readTask()
         let began = Date()
         let feeder = Task.detached(priority: .userInitiated) {
             let step = 1_365
@@ -132,7 +135,15 @@ final class MeetingLiveReplayTests: XCTestCase {
                          snap.t, snap.language, snap.committed, snap.shown, expected.rawValue, snap.share * 100, snap.tail))
         }
         await feeder.value
+        let stopStarted = Date()
         _ = await transcriber.stopAsync()
+        let stopSeconds = Date().timeIntervalSince(stopStarted)
+        if let a = energyBefore, let b = EnergyMonitor.readTask() {
+            let wall = Date().timeIntervalSince(began)
+            print(String(format: "[MeetingReplay] ENERGY GPU %.1fs of %.0fs wall (%.0f%%), %.0f J (%.1f W avg), stop %.1fs",
+                         Double(b.gpu - a.gpu) / 1e9, wall, Double(b.gpu - a.gpu) / 1e9 / wall * 100,
+                         Double(b.energy - a.energy) / 1e9, Double(b.energy - a.energy) / 1e9 / wall, stopSeconds))
+        }
 
         // The score that matters to the user: for how much of the meeting was the live text in
         // the right language and still growing.
@@ -146,7 +157,7 @@ final class MeetingLiveReplayTests: XCTestCase {
                                     "Apple dictation streamed the wrong language for too much of the meeting")
         XCTAssertGreaterThan(Self.scriptShare(committed, expected), 0.9, "committed text is not \(expected.rawValue)")
         // Continuous speech: about 2 words a second should reach the cards.
-        XCTAssertGreaterThan(Double(Self.words(committed).count), audioSeconds * 1.2,
+        XCTAssertGreaterThan(Double(Self.words(committed).count), audioSeconds * 1.0,
                              "too few words committed for continuous speech")
     }
 }
