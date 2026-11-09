@@ -872,15 +872,19 @@ private struct IslandInlineStopStyle: ButtonStyle {
 
 // MARK: - Pulsing dot
 
+/// The recording dot. It pulsed forever, and the Island is on screen for a meeting's whole length:
+/// a never-ending animation makes WindowServer re-composite the panel every frame (an idle live
+/// bubble doubled WindowServer's CPU, 2026-11-09). A few pulses announce the recording, then it
+/// holds solid — as macOS's own microphone indicator does.
 struct PulsingModifier: ViewModifier {
     @State private var pulsing = false
 
     func body(content: Content) -> some View {
         content
-            .scaleEffect(pulsing ? 1.3 : 0.8)
+            .scaleEffect(pulsing ? 1.0 : 0.8)
             .opacity(pulsing ? 1.0 : 0.55)
             .onAppear {
-                withAnimation(.easeInOut(duration: 0.85).repeatForever(autoreverses: true)) {
+                withAnimation(.easeInOut(duration: 0.85).repeatCount(5, autoreverses: false)) {
                     pulsing = true
                 }
             }

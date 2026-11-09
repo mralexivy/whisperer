@@ -295,7 +295,8 @@ struct MeetingLiveTranscriptView: View {
 
 // MARK: - Sonar dot
 
-/// Quiet "we are hearing you" pulse for the pre-first-chunk window.
+/// Quiet "we are hearing you" pulse for the pre-first-chunk window. A few pulses, then still:
+/// a pulse that never ends keeps WindowServer compositing the window (see `KineticCaret`).
 struct SonarDot: View {
     @State private var animating = false
 
@@ -312,7 +313,7 @@ struct SonarDot: View {
         }
         .frame(width: 40, height: 40)
         .onAppear {
-            withAnimation(.easeOut(duration: 1.6).repeatForever(autoreverses: false)) {
+            withAnimation(.easeOut(duration: 1.6).repeatCount(4, autoreverses: false)) {
                 animating = true
             }
         }

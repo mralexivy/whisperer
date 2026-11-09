@@ -161,14 +161,16 @@ private struct StreamWord: View {
 
 // MARK: - Caret
 
-/// Solid and leading the text while words arrive; a slow breathing pulse once they stop, which
-/// is the only thing on screen still saying "listening" during a pause.
+/// Solid and leading the text while words arrive; dimmed and still once they stop.
+///
+/// It used to breathe forever during a pause. Any animation that never ends makes WindowServer
+/// re-composite the window every frame for as long as it is up — the meeting's whole length:
+/// an idle live bubble doubled WindowServer's CPU (36 → 73 ms/s, 2026-11-09). Dimmed and
+/// slightly shorter still says "listening", at no cost.
 private struct KineticCaret: View {
     let isStreaming: Bool
     let scale: CGFloat
     let fontSize: CGFloat
-
-    @State private var pulse = false
 
     private let blueAccent = Color(red: 0.357, green: 0.424, blue: 0.969)   // #5B6CF7
     private let purpleAccent = Color(red: 0.545, green: 0.361, blue: 0.965) // #8B5CF6
@@ -185,26 +187,9 @@ private struct KineticCaret: View {
             // glow is affordable, and the thing that makes the caret read as a light source
             // the words pour out from rather than as a rectangle.
             .shadow(color: blueAccent.opacity(isStreaming ? 0.55 : 0.18), radius: 4 * scale)
-            .opacity(isStreaming ? 1.0 : (pulse ? 0.9 : 0.2))
-            .scaleEffect(y: isStreaming ? 1.0 : (pulse ? 1.0 : 0.86), anchor: .bottom)
-            .onAppear { startPulse() }
-            .onChange(of: isStreaming) { _, streaming in
-                if streaming {
-                    // Ends the repeating animation — a repeatForever keeps running otherwise,
-                    // and would re-assert itself the moment the opacity ternary flips back.
-                    withAnimation(.easeOut(duration: 0.12)) { pulse = false }
-                } else {
-                    startPulse()
-                }
-            }
-    }
-
-    private func startPulse() {
-        guard !isStreaming else { return }
-        pulse = false
-        withAnimation(.easeInOut(duration: 1.05).repeatForever(autoreverses: true)) {
-            pulse = true
-        }
+            .opacity(isStreaming ? 1.0 : 0.45)
+            .scaleEffect(y: isStreaming ? 1.0 : 0.9, anchor: .bottom)
+            .animation(.easeOut(duration: 0.25), value: isStreaming)
     }
 }
 

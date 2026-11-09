@@ -446,30 +446,23 @@ struct MeetingLibraryRow: View {
 
 // MARK: - Mini waveform
 
+/// A still waveform glyph for the recording card. It used to bounce forever, which keeps
+/// WindowServer re-compositing the window for the whole meeting (see `KineticCaret`).
 struct MiniWaveformView: View {
-    @State private var animating = false
-
     var body: some View {
         HStack(spacing: 2) {
             ForEach(0..<18, id: \.self) { i in
                 RoundedRectangle(cornerRadius: 1)
                     .fill(Color.red.opacity(0.7))
                     .frame(width: 2, height: barHeight(i))
-                    .animation(
-                        .easeInOut(duration: 0.4 + Double(i) * 0.03)
-                        .repeatForever(autoreverses: true)
-                        .delay(Double(i) * 0.05),
-                        value: animating
-                    )
             }
         }
-        .onAppear { animating = true }
     }
 
     private func barHeight(_ i: Int) -> CGFloat {
         let base: CGFloat = 4
         let max: CGFloat = 18
         let wave = sin(Double(i) * 0.7) * 0.5 + 0.5
-        return animating ? base + CGFloat(wave) * (max - base) : base
+        return base + CGFloat(wave) * (max - base)
     }
 }

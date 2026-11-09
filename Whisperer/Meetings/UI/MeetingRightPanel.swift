@@ -84,7 +84,9 @@ private struct RecordingInProgressView: View {
         .background(Color(hex: "0A0A18"))
         .onAppear {
             pulse = true
-            withAnimation(.easeInOut(duration: 0.7).repeatForever(autoreverses: true)) {
+            // Bounded, not forever: a perpetual pulse keeps WindowServer compositing the
+            // window for the whole meeting (see `KineticCaret`).
+            withAnimation(.easeInOut(duration: 0.7).repeatCount(6, autoreverses: true)) {
                 dotBright = true
             }
         }
@@ -113,7 +115,7 @@ private struct RecordingInProgressView: View {
                     .opacity(pulse ? 0 : 0.75)
                     .animation(
                         .easeOut(duration: 2.5)
-                            .repeatForever(autoreverses: false)
+                            .repeatCount(3, autoreverses: false)
                             .delay(Double(i) * 0.82),
                         value: pulse
                     )

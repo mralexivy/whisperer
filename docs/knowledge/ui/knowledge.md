@@ -292,3 +292,8 @@ it across launches would have to be per-display anyway. Drag/resize still holds 
 - `DictationStreamView` keyed words by position. Dropping the front of the meeting bubble (a card committed) gave every position a different word; the layout animation slid them all while removed words faded where they stood: words drawn over each other and a ghost paragraph.
 - Now `SmoothTextUpdater.firstWordID` gives each word a lasting identity, the layout animation is keyed on the last word's identity (arrivals glide, a drop reflows in place), removed words use `.transition(.identity)`, and after a drop the new words land on the next run-loop turn.
 - `MeetingLiveTailSnapshotTests` (TEST_RUNNER_LIVE_TAIL_SNAPSHOT=<dir>) writes frames at 30 ms and 80 ms into a drop.
+
+## Perpetual animations cost WindowServer for the whole meeting (2026-11-09)
+- Any never-ending SwiftUI animation makes WindowServer re-composite its window every frame while it is up. Measured with `WindowServerCostTests` (WindowServer CPU via `ps`, opt-in TEST_RUNNER_WINDOWSERVER_COST=1): baseline 28–33 ms/s; idle live bubble 73 → 36 after the breathing caret went still; idle meeting live window 87 → 40.
+- Rule: nothing visible during a recording animates forever. The caret dims when idle, the recording card's waveform is a still glyph, sonar/pulse indicators pulse a few times (`repeatCount`) and hold, and the Island's recording dot pulses 5 times then holds solid. Short-lived progress animations (polish sweep, transcribing dots) are fine.
+- WindowServer's GPU time cannot be read from IORegistry `AppUsage`; its CPU time from `ps` tracks compositing well enough to compare.
