@@ -359,8 +359,17 @@ actor AudioEngineLifecycle {
         for tapAttempt in 1...3 {
             // Re-read the live format right before each install attempt.
             let liveFormat = inputNode.outputFormat(forBus: 0)
-            let tapFormat = (liveFormat.sampleRate > 0 && liveFormat.channelCount > 0)
+            let nodeFormat = (liveFormat.sampleRate > 0 && liveFormat.channelCount > 0)
                 ? liveFormat : inputFormat
+            let tapFormat = tapInstallFormat(
+                node: nodeFormat,
+                hardwareRate: inputNode.inputFormat(forBus: 0).sampleRate,
+                nominalRate: boundDeviceID.flatMap { nominalSampleRate($0) },
+                attempt: tapAttempt)
+            if tapFormat.sampleRate != nodeFormat.sampleRate {
+                Logger.step(.engBuild, .audio, ["tap_sr": .double(tapFormat.sampleRate),
+                                                "node_sr": .double(nodeFormat.sampleRate)])
+            }
 
             tapErr = nil
             tapOk = ObjCTry({
@@ -434,6 +443,29 @@ actor AudioEngineLifecycle {
         Logger.step(.engTap, .audio, ["buf": .int(Int(bufferSize))])
 
         return (boundDeviceID, inputFormat)
+    }
+
+    // MARK: - Tap format
+
+    /// The format to install the tap with. AVAudioEngine asserts that its sample rate equals the
+    /// input's *hardware* rate (`inputFormat(forBus: 0)`), not the node's output format. Opening
+    /// the AirPods microphone switches them to call mode at 16 or 24 kHz, and the node kept
+    /// reporting the 48 kHz it had before: every install hit "required condition is false:
+    /// format.sampleRate == inputHWFormat.sampleRate", three times, and the dictation never
+    /// started (2026-11-09, `settle_budget_exceeded` at 48000 each time). So the node's format is
+    /// used only when the hardware agrees with it; otherwise its channel layout at the hardware
+    /// rate, then — on the last attempt — at the HAL's nominal rate.
+    nonisolated static func tapInstallFormat(node: AVAudioFormat, hardwareRate: Double,
+                                             nominalRate: Double?, attempt: Int) -> AVAudioFormat {
+        func at(_ rate: Double) -> AVAudioFormat {
+            AVAudioFormat(commonFormat: node.commonFormat, sampleRate: rate,
+                          channels: node.channelCount, interleaved: node.isInterleaved) ?? node
+        }
+        if attempt >= 3, let nominalRate, nominalRate > 0, abs(nominalRate - node.sampleRate) >= 1 {
+            return at(nominalRate)
+        }
+        if hardwareRate > 0, abs(hardwareRate - node.sampleRate) >= 1 { return at(hardwareRate) }
+        return node
     }
 
     // MARK: - Format settle helper

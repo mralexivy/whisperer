@@ -422,3 +422,8 @@ wrapper mechanism is new in macOS 26.2 and changes the timing.
 - `systemDefaultInputDeviceID()` in `AudioEngineLifecycle` now skips `CADefaultDeviceAggregate-*` UIDs.
 - First-buffer gate: if no audio arrives within the preflight deadline, fail and let the ladder retry.
 - `RecordingError` gets `LocalizedError` conformance — no more "error 4" on screen.
+
+## AirPods (confirmed from a friend's log, 2026-11-09)
+- **Quiet input reads as a dead mic.** AirPods Pro at input gain 0.208 peaked at 0.0088; 3.5 s after `audio.first` the 1.5 s rule fired (`eng.retry reason=silence_1.5s verdict=device_ok_but_silent hot=true`), rebuilt the engine mid-meeting, and the rebuild failed ("Engine operation abandoned"). Bluetooth inputs now get 6 s before any signal / 20 s after, counted in seconds of audio.
+- **Call-mode rate flip breaks the tap.** Opening the AirPods mic switches them to call mode; `inputNode.outputFormat` kept saying 48 kHz (`settle_budget_exceeded sr=48000 flips=0`) and `installTap` failed 3× on `format.sampleRate == inputHWFormat.sampleRate` — one dictation started after 13 s, the next never. The tap is now installed at `inputFormat(forBus: 0)`'s rate when it disagrees with the node (nominal HAL rate on the last attempt); the adaptive converter handles the buffers.
+- AirPods starts are slow regardless: "Audio startup slow: 3.0s" and 6 s to `rec.start` in a meeting.
