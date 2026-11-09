@@ -1113,14 +1113,29 @@ class MeetingSession: ObservableObject {
     /// cards land, at most every 10 s of audio, and once more at stop; a later answer can still
     /// name a speaker the earlier ones could not. Never overrides a name the user typed.
     func refreshAutomaticSpeakerNames(force: Bool) {
-        guard !participants.isEmpty, let activity = sourceActivity else { return }
+        guard let activity = sourceActivity else {
+            if force { Logger.info("Meeting speakers: not named — no call audio levels this meeting", subsystem: .transcription) }
+            return
+        }
         let now = segments.last?.endTimestamp ?? 0
         guard force || now - lastAutomaticNamingAt >= 10 else { return }
         lastAutomaticNamingAt = now
         let spans = segments.map {
             SpeakerSourceAttribution.Span(speakerIndex: $0.speakerIndex, start: $0.timestamp, end: $0.endTimestamp)
         }
-        let sources = SpeakerSourceAttribution.classify(spans, activity: activity())
+        let frames = activity()
+        let evidence = SpeakerSourceAttribution.evidence(spans, activity: frames)
+        let callActive = SpeakerSourceAttribution.callActiveSeconds(frames)
+        let sources = SpeakerSourceAttribution.classify(evidence, callActiveSeconds: callActive)
+        if force {
+            // Once per meeting: enough to tell from a log why a speaker was or was not named.
+            let perSpeaker = evidence.sorted { $0.key < $1.key }.map { index, e in
+                String(format: "S%d %.0fs call %.0f%% → %@", index + 1, e.activeSeconds, e.callShare * 100,
+                       sources[index].map { $0 == .local ? "me" : "call" } ?? "?")
+            }.joined(separator: ", ")
+            Logger.info(String(format: "Meeting speakers: call talking %.0fs, %d on invite — ", callActive, participants.count)
+                        + (perSpeaker.isEmpty ? "no speech" : perSpeaker), subsystem: .transcription)
+        }
         let names = SpeakerSourceAttribution.names(
             for: sources, participants: participants,
             ownName: SpeakerSourceAttribution.ownName(participants: participants))

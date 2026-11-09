@@ -98,11 +98,25 @@ final class SpeakerSourceAttributionTests: XCTestCase {
         XCTAssertNil(names(spans, frames, [me, keren])[2])
     }
 
-    /// No invite (an ad-hoc call): nobody to name the call after, so no names at all.
-    func testNoInviteNamesNobody() {
+    /// No invite (an ad-hoc call): the user is still the voice at this Mac; the call's voice has
+    /// no name to take.
+    func testNoInviteNamesOnlyTheUser() {
         let frames = activity(seconds: 40, callTalking: [10...20, 30...40])
         let spans = [Span(speakerIndex: 0, start: 0, end: 10), Span(speakerIndex: 1, start: 10, end: 20)]
-        XCTAssertEqual(names(spans, frames, []), [:])
+        XCTAssertEqual(names(spans, frames, []), [0: "Alex Ivy"])
+    }
+
+    /// A speaker's card is mostly pauses. Only moments someone talks count, so a call voice
+    /// speaking a third of its 30 s card is still the call (it used to fall under the 0.6 line).
+    func testPausesInsideACardDoNotHideTheCall() {
+        var frames = activity(seconds: 60, callTalking: [30...40])
+        // The user talks 0–10 into the mic; the room is quiet the rest of the time.
+        frames = frames.map { f in
+            let t = Double(f.start) / 16_000
+            return Frame(start: f.start, count: f.count, micRMS: t < 10 ? 0.05 : 0.001, callRMS: f.callRMS)
+        }
+        let spans = [Span(speakerIndex: 0, start: 0, end: 10), Span(speakerIndex: 1, start: 25, end: 55)]
+        XCTAssertEqual(names(spans, frames, [me, keren]), [0: "Alex Ivy", 1: "Keren Cohen"])
     }
 
     /// Outlook names the user's own attendee entry; that wins over this Mac's account name.
