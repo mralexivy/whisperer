@@ -56,6 +56,54 @@ nonisolated struct LanguageReprobeTracker: Equatable {
     }
 }
 
+/// Finds where a new spoken turn begins, from per-buffer levels: speech after a pause.
+///
+/// A meeting changes language at a turn — someone else answers, or the same person switches as
+/// they start a new thought. Probing a turn's first seconds catches a switch in ~4 s; a timer
+/// alone caught it 29 s late (2026-11-09) and probing on a short timer would keep the GPU busy.
+/// Levels only, no model: the floor follows the quiet buffers, speech is well above it.
+nonisolated struct SpeechTurnDetector: Equatable {
+    /// A pause at least this long ends a turn.
+    static let pauseSeconds = 0.6
+    /// Speech a new turn needs before it is probed. V3 is reliable from about this much.
+    static let probeAfterSeconds = 3.0
+    static let minimumThreshold: Float = 0.0015
+
+    /// Recent buffer levels; the quietest of them is the floor. A running average seeded from
+    /// the first buffer learned the floor from speech, so its threshold sat above the speech
+    /// itself and pauses between phrases were never seen.
+    private var recentLevels: [Float] = []
+    static let floorWindow = 64
+    var noiseFloor: Float? { recentLevels.min() }
+    private var quietSeconds = 0.0
+    private var armed = false
+    private var turnSpeechSeconds = 0.0
+
+    /// One buffer. True when a new turn has just gathered `probeAfterSeconds` of speech.
+    mutating func observe(rms: Float, seconds: Double) -> Bool {
+        recentLevels.append(rms)
+        if recentLevels.count > Self.floorWindow { recentLevels.removeFirst() }
+        let threshold = max(Self.minimumThreshold, (noiseFloor ?? rms) * 4)
+        if rms < threshold {
+            quietSeconds += seconds
+            // A pause opens a turn; pauses inside a turn that is still gathering speech do not
+            // restart it — people pause between phrases, and restarting on each one kept a turn
+            // from ever reaching 3 s (a he → en switch caught 13 s late in replay).
+            if quietSeconds >= Self.pauseSeconds, !armed {
+                armed = true
+                turnSpeechSeconds = 0
+            }
+            return false
+        }
+        quietSeconds = 0
+        guard armed else { return false }
+        turnSpeechSeconds += seconds
+        guard turnSpeechSeconds >= Self.probeAfterSeconds else { return false }
+        armed = false
+        return true
+    }
+}
+
 actor LanguageProbe {
 
     /// The engine the probe runs on, resolved per call: the main engine can load, unload or be

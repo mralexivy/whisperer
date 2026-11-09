@@ -115,6 +115,18 @@ actor SystemLivePreviewBridge: LivePreviewEngine {
     private var samplesSinceReprobe = 0
     private var reprobeInterval = SystemLivePreviewBridge.reprobeIntervalSamples
     private var reprobe = LanguageReprobeTracker()
+    /// Turn-start probes (see `SpeechTurnDetector`).
+    private var turns = SpeechTurnDetector()
+    private var samplesSinceAnyProbe = 0
+    /// A turn probe's less-than-certain other language, waiting for a second look.
+    private var turnChallenger: TranscriptionLanguage?
+    private var samplesSinceChallenge = 0
+    /// One turn probe at most this often, so a quick back-and-forth does not keep the GPU busy.
+    nonisolated static let turnProbeMinGapSamples = 16_000 * 4
+    nonisolated static let turnProbeWindowSamples = 16_000 * 3
+    /// A turn probe this sure of another language switches at once.
+    nonisolated static let turnSwitchProbability: Float = 0.95
+    nonisolated static let turnConfirmAfterSamples = 16_000 * 2
 
     private var analyzer: SpeechAnalyzer?
     private var input: AsyncStream<AnalyzerInput>.Continuation?
@@ -285,7 +297,63 @@ actor SystemLivePreviewBridge: LivePreviewEngine {
             input.yield(AnalyzerInput(buffer: buffer))
         }
         scheduleProbeIfDue()
+        scheduleTurnProbeIfDue(samples)
         scheduleReprobeIfDue()
+    }
+
+    /// Probe the first seconds of a new turn, and give a doubtful answer a second look.
+    private func scheduleTurnProbeIfDue(_ samples: [Float]) {
+        samplesSinceAnyProbe += samples.count
+        if turnChallenger != nil { samplesSinceChallenge += samples.count }
+        var sum: Float = 0
+        for value in samples { sum += value * value }
+        let rms = samples.isEmpty ? 0 : (sum / Float(samples.count)).squareRoot()
+        let turnStarted = turns.observe(rms: rms, seconds: Double(samples.count) / 16_000)
+        guard probeStage == .decided, !probeInFlight, let probe, probeCandidates.count > 1,
+              sessionLanguage != nil, recentAudio.count >= Self.turnProbeWindowSamples else { return }
+        let confirming = turnChallenger != nil && samplesSinceChallenge >= Self.turnConfirmAfterSamples
+        guard confirming || (turnStarted && samplesSinceAnyProbe >= Self.turnProbeMinGapSamples) else { return }
+        samplesSinceAnyProbe = 0
+        samplesSinceReprobe = 0
+        probeInFlight = true
+        let window = Array(recentAudio.suffix(Self.turnProbeWindowSamples))
+        let candidates = probeCandidates
+        let id = sessionID
+        Task { [weak self] in
+            let result = await probe.identify(samples: window, allowed: candidates)
+            await self?.turnProbeFinished(result, confirming: confirming, session: id)
+        }
+    }
+
+    private func turnProbeFinished(
+        _ result: (language: TranscriptionLanguage, probability: Float, probabilities: [TranscriptionLanguage: Float])?,
+        confirming: Bool, session: Int
+    ) async {
+        guard session == sessionID else { return }
+        probeInFlight = false
+        guard let result, let current = sessionLanguage else { return }
+        let confident = result.probability >= LanguageReprobeTracker.confidentProbability
+        if result.language == current {
+            if confident { reprobeInterval = Self.nextReprobeInterval(current: reprobeInterval, confirmed: true) }
+            turnChallenger = nil
+            return
+        }
+        guard confident else { return }
+        let scores = result.probabilities.sorted { $0.value > $1.value }
+            .map { "\($0.key.rawValue)=\(String(format: "%.2f", $0.value))" }.joined(separator: " ")
+        let sure = result.probability >= Self.turnSwitchProbability
+        if sure || (confirming && turnChallenger == result.language) {
+            Logger.info("Language turn probe: switching \(current.rawValue) → \(result.language.rawValue) (\(scores))\(confirming ? ", confirmed" : "")", subsystem: .transcription)
+            turnChallenger = nil
+            reprobe.reset()
+            reprobeInterval = Self.reprobeIntervalSamples
+            UserDefaults.standard.set(result.language.rawValue, forKey: Self.lastLanguageKey)
+            await switchLanguage(to: result.language, reason: "turn probe", replay: false)
+            return
+        }
+        Logger.info("Language turn probe: \(result.language.rawValue) (\(scores)) against \(current.rawValue) — second look in 2 s", subsystem: .transcription)
+        turnChallenger = result.language
+        samplesSinceChallenge = 0
     }
 
     func endSession() async -> String {
@@ -344,6 +412,10 @@ actor SystemLivePreviewBridge: LivePreviewEngine {
         recentAudio = []
         samplesSinceReprobe = 0
         reprobeInterval = Self.reprobeIntervalSamples
+        turns = SpeechTurnDetector()
+        samplesSinceAnyProbe = 0
+        turnChallenger = nil
+        samplesSinceChallenge = 0
         reprobe.reset()
     }
 
