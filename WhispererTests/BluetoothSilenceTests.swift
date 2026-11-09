@@ -35,7 +35,7 @@ final class BluetoothSilenceTests: XCTestCase {
 
 final class BluetoothInputLevelTests: XCTestCase {
     func testQuietAirPodsAreRaisedForTheRecording() {
-        XCTAssertEqual(AudioRecorder.headsetLevelToApply(current: 0.208, isBluetooth: true), 0.8)
+        XCTAssertEqual(AudioRecorder.headsetLevelToApply(current: 0.208, isBluetooth: true), 1.0)
     }
 
     func testAUserChosenLevelIsLeftAlone() {

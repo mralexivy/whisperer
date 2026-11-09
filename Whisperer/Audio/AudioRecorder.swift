@@ -171,11 +171,33 @@ class AudioRecorder: NSObject {
     /// AirPods sat at 0.208 on a friend's Mac and peaked at 0.0088 while the wearer spoke: quiet
     /// enough to read as a dead microphone, and Whisper heard Icelandic in English speech
     /// (2026-11-09). The user had never chosen that level — macOS keeps a per-device slider most
-    /// people never open. Raised for the recording only and restored at stop, so other apps keep
-    /// the setting the user has. A level already at half or more is the user's and is left alone.
+    /// people never open. Raised to full for the recording and restored at stop, so other apps
+    /// keep the setting the user has; `backOffIfClipping` steps it down if speech then hits the
+    /// ceiling. A level already at half or more is the user's and is left alone.
     nonisolated static func headsetLevelToApply(current: Float?, isBluetooth: Bool) -> Float? {
         guard isBluetooth, let current, current < 0.5 else { return nil }
-        return 0.8
+        return 1.0
+    }
+
+    /// Level a raised headset steps down to when a buffer nearly clips. Clipped speech decodes
+    /// worse than quiet speech; quiet is normalized downstream, a clipped peak is gone.
+    static let headsetClipBackOffLevel: Float = 0.8
+    private var headsetBackedOff = false
+
+    /// Called per buffer while a raised headset is live. One step down, once per recording.
+    private func backOffIfClipping(_ samples: [Float]) {
+        guard let raised = raisedInputLevel, !headsetBackedOff else { return }
+        var peak: Float = 0
+        for s in samples { peak = max(peak, abs(s)) }
+        guard peak > 0.95 else { return }
+        headsetBackedOff = true
+        let deviceID = raised.deviceID
+        DispatchQueue.main.async {
+            if InputHealthProbe.restoreInputLevel(deviceID: deviceID, to: Self.headsetClipBackOffLevel) {
+                Logger.info(String(format: "Bluetooth microphone peaked at %.2f — stepped down to %.2f", peak, Self.headsetClipBackOffLevel),
+                            subsystem: .audio)
+            }
+        }
     }
 
     private func raiseHeadsetLevelIfQuiet(_ deviceID: AudioDeviceID) {
@@ -185,6 +207,7 @@ class AudioRecorder: NSObject {
         guard let target = Self.headsetLevelToApply(current: current, isBluetooth: inputIsBluetooth),
               let current, InputHealthProbe.restoreInputLevel(deviceID: deviceID, to: target) else { return }
         raisedInputLevel = (deviceID, current)
+        headsetBackedOff = false
         Logger.info(String(format: "Bluetooth microphone input at %.2f — raised to %.2f for this recording", current, target),
                     subsystem: .audio)
     }
@@ -762,6 +785,7 @@ class AudioRecorder: NSObject {
         if isFirst { Logger.event(.audioFirst, .audio) }
 
         let rms = calculateRMS(samples: samples)
+        if raisedInputLevel != nil { backOffIfClipping(samples) }
         DispatchQueue.main.async { [weak self] in self?.onAmplitudeUpdate?(rms) }
 
         // Silence detection — diagnose first, then auto-recover if a rebuild can actually help.
