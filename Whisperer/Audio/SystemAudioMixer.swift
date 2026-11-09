@@ -18,9 +18,9 @@ import Foundation
 nonisolated final class SystemAudioMixer: @unchecked Sendable {
 
     /// The levels of both sides over one microphone buffer, on the meeting's own clock (the
-    /// samples the transcript and the diarizer count). Recorded whether or not the far end is
-    /// mixed in: on speakers the mix is off but the tap still says when the call is talking,
-    /// which is what tells a local voice from a remote one (`SpeakerSourceAttribution`).
+    /// samples the transcript and the diarizer count), measured before any mixing or ducking:
+    /// the tap says when the call is talking, which is what tells a local voice from a remote one
+    /// (`SpeakerSourceAttribution`).
     struct SourceFrame: Equatable, Sendable {
         /// First sample of the buffer, counted from the start of the meeting's audio.
         let start: Int
@@ -34,9 +34,34 @@ nonisolated final class SystemAudioMixer: @unchecked Sendable {
     /// rather than letting the call audio fall further and further behind the user's voice.
     static let maxBacklogSamples = 8_000          // 0.5 s at 16 kHz
 
+    /// How the far end goes into the stream.
+    enum Mode: Equatable, Sendable {
+        /// Summed with the microphone: headphones, where the microphone cannot hear the call.
+        case add
+        /// Speakers: the microphone hears the call too, but through the room — quiet, filtered and
+        /// reverberant. Apple's dictation transcribes that poorly: 34 words of 158 on the same
+        /// Hebrew played through a simulated room, and the 2026-11-09 meeting (a call on the
+        /// MacBook speakers, -29 dB at the mic) came out as one paragraph in 88 s. So the clean
+        /// far end goes in, and the microphone is ducked while it talks, which also keeps the
+        /// room's copy from doubling it (149 of 158 words). The user's own voice passes at full
+        /// level whenever the call is quiet; talking over the far end, it is ducked too.
+        case duckMicWhileCallTalks
+    }
+
+    /// Far-end RMS above which the call counts as talking (about -50 dBFS — a call's silence is
+    /// digital silence through the tap).
+    static let callTalkingRMS: Float = 0.003
+    /// How long the duck holds after the far end goes quiet: the room still rings with its last
+    /// words, and the speaker's latency puts them in the microphone after the tap.
+    static let echoTailSamples = 4_800              // 0.3 s
+    /// Microphone level while the call talks.
+    static let duckedMicGain: Float = 0.15
+
     private let lock = NSLock()
     private var pending: [Float] = []
-    private var _isMixEnabled = true
+    private var _mode: Mode = .add
+    private var micGain: Float = 1
+    private var echoTailLeft = 0
 
     // Counters for the end-of-meeting log line.
     private var appendedSamples = 0
@@ -47,12 +72,9 @@ nonisolated final class SystemAudioMixer: @unchecked Sendable {
     private var frames: [SourceFrame] = []
     private var position = 0
 
-    /// False while the far end would be heard twice (the call is playing on speakers, which the
-    /// microphone already picks up). The backlog keeps draining so re-enabling it later does not
-    /// replay stale audio.
-    var isMixEnabled: Bool {
-        get { lock.lock(); defer { lock.unlock() }; return _isMixEnabled }
-        set { lock.lock(); _isMixEnabled = newValue; lock.unlock() }
+    var mode: Mode {
+        get { lock.lock(); defer { lock.unlock() }; return _mode }
+        set { lock.lock(); _mode = newValue; lock.unlock() }
     }
 
     /// Far-end audio, 16 kHz mono Float32. Called from the capture queue.
@@ -69,32 +91,45 @@ nonisolated final class SystemAudioMixer: @unchecked Sendable {
         }
     }
 
-    /// Returns `mic` with the same number of far-end samples summed in. A short backlog is padded
-    /// with silence (the call was quiet, or the tap has not delivered yet). The sum is clamped to
-    /// [-1, 1]; both sides are speech at conversational level, so clipping is rare and a hard
-    /// clamp is enough.
+    /// Returns `mic` with the same number of far-end samples summed in — on speakers with the
+    /// microphone ducked while the far end talks (`Mode`). A short backlog is padded with silence
+    /// (the call was quiet, or the tap has not delivered yet). The sum is clamped to [-1, 1]; both
+    /// sides are speech at conversational level, so clipping is rare and a hard clamp is enough.
     func mix(mic: [Float]) -> [Float] {
         lock.lock(); defer { lock.unlock() }
         let take = min(mic.count, pending.count)
-        let enabled = _isMixEnabled
+        var callRMS: Float = 0
         if !mic.isEmpty {
             var micSum: Float = 0, callSum: Float = 0
             for v in mic { micSum += v * v }
             for i in 0..<take { callSum += pending[i] * pending[i] }
             let n = Float(mic.count)
+            callRMS = (callSum / n).squareRoot()
             frames.append(SourceFrame(start: position, count: mic.count,
-                                      micRMS: (micSum / n).squareRoot(), callRMS: (callSum / n).squareRoot()))
+                                      micRMS: (micSum / n).squareRoot(), callRMS: callRMS))
             position += mic.count
         }
-        var out = mic
-        if enabled {
-            for i in 0..<take {
-                out[i] = max(-1, min(1, mic[i] + pending[i]))
+        var targetGain: Float = 1
+        if _mode == .duckMicWhileCallTalks {
+            if callRMS >= Self.callTalkingRMS {
+                echoTailLeft = Self.echoTailSamples
+            } else {
+                echoTailLeft = max(0, echoTailLeft - mic.count)
             }
-            mixedSamples += take
+            if callRMS >= Self.callTalkingRMS || echoTailLeft > 0 { targetGain = Self.duckedMicGain }
         }
+        // Ramped across the buffer: a gain step would click.
+        let startGain = micGain
+        let step = mic.isEmpty ? 0 : (targetGain - startGain) / Float(mic.count)
+        var out = mic
+        for i in 0..<mic.count {
+            let far = i < take ? pending[i] : 0
+            out[i] = max(-1, min(1, mic[i] * (startGain + step * Float(i + 1)) + far))
+        }
+        micGain = targetGain
+        mixedSamples += take
         if take > 0 { pending.removeFirst(take) }
-        if enabled { underrunSamples += mic.count - take }
+        underrunSamples += mic.count - take
         return out
     }
 
@@ -166,10 +201,9 @@ nonisolated enum CallAudioOutputRoute: String, Equatable {
     /// A virtual or aggregate device — nothing can be concluded, so treat it as private.
     case unknown
 
-    /// Mixing the tap on speakers would put every far-end word in the stream twice, the second
-    /// copy a few tens of milliseconds late through the room. Skip it there; the microphone
-    /// already carries the call, which is exactly how meetings recorded before this existed.
-    var shouldMixFarEnd: Bool { self != .speakers }
+    /// On speakers the microphone also hears the far end, late and through the room, so it is
+    /// ducked while the far end talks rather than summed at full level.
+    var farEndMode: SystemAudioMixer.Mode { self == .speakers ? .duckMicWhileCallTalks : .add }
 
     /// Classifies an output device from its transport type, its data source (the built-in
     /// output reports `ispk` / `hdpn`), and its name as a last resort — recent Macs present

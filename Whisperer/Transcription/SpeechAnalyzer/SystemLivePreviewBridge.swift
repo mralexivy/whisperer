@@ -308,6 +308,9 @@ actor SystemLivePreviewBridge: LivePreviewEngine {
 
     func unavailableLanguage() async -> TranscriptionLanguage? { missingLanguage }
 
+    /// The locale the analyzer is streaming in now; nil between sessions.
+    func streamingLanguage() async -> TranscriptionLanguage? { sessionLanguage }
+
     func pinLanguage(_ code: String?) async {
         guard let code, let language = TranscriptionLanguage.from(languageTag: code) else { return }
         if probeStage != .decided { return }  // the probe is about to answer, sooner and better

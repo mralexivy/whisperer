@@ -55,12 +55,37 @@ final class SystemAudioMixerTests: XCTestCase {
         XCTAssertEqual(out[0], 0.1, accuracy: 1e-6)
     }
 
-    func testDisabledMixPassesMicButStillDrains() {
+    /// Speakers, call quiet: the user's voice passes untouched.
+    func testSpeakersPassMicWhileTheCallIsQuiet() {
         let mixer = SystemAudioMixer()
-        mixer.isMixEnabled = false
-        mixer.append([0.5, 0.5])
-        XCTAssertEqual(mixer.mix(mic: [0.1, 0.1]), [0.1, 0.1])
-        XCTAssertEqual(mixer.backlog, 0, "re-enabling must not replay stale call audio")
+        mixer.mode = .duckMicWhileCallTalks
+        let out = mixer.mix(mic: [Float](repeating: 0.1, count: 160))
+        XCTAssertEqual(out.last ?? 0, 0.1, accuracy: 1e-6)
+    }
+
+    /// Speakers, call talking: the clean far end goes in and the room's copy in the microphone is
+    /// ducked, so Apple dictation hears the call instead of its echo.
+    func testSpeakersDuckMicWhileTheCallTalks() {
+        let mixer = SystemAudioMixer()
+        mixer.mode = .duckMicWhileCallTalks
+        mixer.append([Float](repeating: 0.05, count: 320))
+        _ = mixer.mix(mic: [Float](repeating: 0.1, count: 160))   // ramp down
+        let out = mixer.mix(mic: [Float](repeating: 0.1, count: 160))
+        XCTAssertEqual(out[0], 0.05 + 0.1 * SystemAudioMixer.duckedMicGain, accuracy: 1e-5)
+        XCTAssertEqual(mixer.backlog, 0)
+    }
+
+    /// The duck holds through the room's echo tail, then releases.
+    func testSpeakersReleaseTheDuckAfterTheEchoTail() {
+        let mixer = SystemAudioMixer()
+        mixer.mode = .duckMicWhileCallTalks
+        mixer.append([Float](repeating: 0.05, count: 160))
+        _ = mixer.mix(mic: [Float](repeating: 0.1, count: 160))
+        let inTail = mixer.mix(mic: [Float](repeating: 0.1, count: 160))
+        XCTAssertEqual(inTail.last ?? 0, 0.1 * SystemAudioMixer.duckedMicGain, accuracy: 1e-5)
+        var out: [Float] = []
+        for _ in 0..<(SystemAudioMixer.echoTailSamples / 160 + 2) { out = mixer.mix(mic: [Float](repeating: 0.1, count: 160)) }
+        XCTAssertEqual(out.last ?? 0, 0.1, accuracy: 1e-6)
     }
 
     func testDiscardPendingDropsBacklog() {
@@ -100,7 +125,7 @@ final class SystemAudioMixerTests: XCTestCase {
                                                   dataSource: CallAudioOutputRoute.fourCC("ispk"),
                                                   name: "MacBook Pro Speakers")
         XCTAssertEqual(route, .speakers)
-        XCTAssertFalse(route.shouldMixFarEnd)
+        XCTAssertEqual(route.farEndMode, .duckMicWhileCallTalks)
     }
 
     func testBuiltInHeadphonesMix() {
@@ -113,16 +138,16 @@ final class SystemAudioMixerTests: XCTestCase {
     }
 
     func testBluetoothAndUSBMix_DisplaysDoNot_VirtualIsUnknown() {
-        XCTAssertTrue(CallAudioOutputRoute.classify(transport: kAudioDeviceTransportTypeBluetooth,
-                                                    dataSource: nil, name: "AirPods Pro").shouldMixFarEnd)
-        XCTAssertTrue(CallAudioOutputRoute.classify(transport: kAudioDeviceTransportTypeUSB,
-                                                    dataSource: nil, name: "Jabra").shouldMixFarEnd)
+        XCTAssertEqual(CallAudioOutputRoute.classify(transport: kAudioDeviceTransportTypeBluetooth,
+                                                    dataSource: nil, name: "AirPods Pro").farEndMode, .add)
+        XCTAssertEqual(CallAudioOutputRoute.classify(transport: kAudioDeviceTransportTypeUSB,
+                                                    dataSource: nil, name: "Jabra").farEndMode, .add)
         XCTAssertEqual(CallAudioOutputRoute.classify(transport: kAudioDeviceTransportTypeHDMI,
                                                      dataSource: nil, name: "LG"), .speakers)
         let virtual = CallAudioOutputRoute.classify(transport: kAudioDeviceTransportTypeVirtual,
                                                     dataSource: nil, name: "ZoomAudioDevice")
         XCTAssertEqual(virtual, .unknown)
-        XCTAssertTrue(virtual.shouldMixFarEnd)
+        XCTAssertEqual(virtual.farEndMode, .add)
     }
 
     // MARK: - Tap target

@@ -28,7 +28,6 @@ final class MeetingCallAudioController {
             || UserDefaults.standard.bool(forKey: settingKey)
     }
 
-    static let speakersNote = "Call audio is playing on speakers, so it's recorded through your microphone."
     static let unavailableNote = "Recording your microphone only — call audio isn't available right now."
 
     private var capture: SystemAudioCapture?
@@ -130,11 +129,10 @@ final class MeetingCallAudioController {
         let (newRoute, name) = SystemAudioCapture.currentOutputRoute()
         guard newRoute != route else { return }
         route = newRoute
-        mixer?.isMixEnabled = newRoute.shouldMixFarEnd
-        session?.callAudioNote = newRoute.shouldMixFarEnd ? nil : Self.speakersNote
+        mixer?.mode = newRoute.farEndMode
         Logger.info("Meeting call audio: output \(newRoute.rawValue) (\(name)) — " +
-                    (newRoute.shouldMixFarEnd ? "mixing the call into the recording"
-                                              : "not mixing; the microphone already hears the call"),
+                    (newRoute.farEndMode == .add ? "mixing the call into the recording"
+                                                 : "mixing the call in, microphone ducked while it talks"),
                     subsystem: .audio)
     }
 

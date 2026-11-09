@@ -114,10 +114,10 @@ final class SpeakerSourceAttributionTests: XCTestCase {
         XCTAssertEqual(SpeakerSourceAttribution.ownName(participants: [me, keren], macAccountName: " "), "Me")
     }
 
-    /// The mixer records both sides' levels on the mic clock, mixed in or not.
+    /// The mixer records both sides' levels on the mic clock, before the speakers duck.
     func testMixerRecordsLevelsWithTheMixOff() {
         let mixer = SystemAudioMixer()
-        mixer.isMixEnabled = false
+        mixer.mode = .duckMicWhileCallTalks
         mixer.append([Float](repeating: 0.1, count: 160))
         _ = mixer.mix(mic: [Float](repeating: 0.2, count: 160))
         _ = mixer.mix(mic: [Float](repeating: 0.2, count: 160))

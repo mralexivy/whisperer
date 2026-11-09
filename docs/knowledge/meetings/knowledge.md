@@ -409,3 +409,9 @@ generic, but honest, and it needs no guess about anyone's title format.
 - RTL is paced word by word in meetings (`pacesRTL`); the HUD keeps its immediate RTL path.
 - Early language probe: a 1 s V3 probe gave `en 0.81` for Hebrew and flipped Apple dictation to en-US for 7 s. An early probe that would leave the starting language now needs p ≥ 0.95.
 - `MeetingTranscriptScrollPerformanceTests` full-screen scroll is load-sensitive: 12 ms mean while Xcode's build service ran, 3 ms on a quiet machine. Check `uptime` before calling it a regression.
+
+## Call on speakers: Apple dictation needs the clean far end (2026-11-09)
+- Apple's DictationTranscriber (the only Apple transcriber with he/ru here — SpeechTranscriber lists en-US only) barely transcribes far-end speech heard through the room: the user's 88 s Hebrew meeting on MacBook speakers gave 31 words, identical across `.farField`, `.frequentFinalization` and the preset — even its final text after the audio ended. Whisper V3 offline gave ~300 words from the same file.
+- Controlled: 98 s of FLEURS Hebrew → Apple 158 words clean, 34 through a simulated room (-42 dB, band-limited, reverb), 149 clean + mic at 15%. Through the full live pipeline (`MeetingLiveReplayTests`): 11 words room-only vs 116 with `SystemAudioMixer.Mode.duckMicWhileCallTalks`.
+- So on speakers the tap's clean far end is mixed in and the mic is ducked while the call talks (0.3 s echo tail). Before, the tap was captured and thrown away on speakers.
+- `MeetingLiveReplayTests` replays a recording at real time through eager V3 + Apple + probe and prints the bubble every 2 s (TEST_RUNNER_MEETING_REPLAY, _LANG, _CALL).
