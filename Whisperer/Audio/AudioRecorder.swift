@@ -576,7 +576,8 @@ class AudioRecorder: NSObject {
     }
 
     private func startRecordingInternal(route: ResolvedInputRoute, generation: Int,
-                                         preflightReadiness: RouteReadiness? = nil) async throws -> URL {
+                                         preflightReadiness: RouteReadiness? = nil,
+                                         isRecovery: Bool = false) async throws -> URL {
         let hasPermission = await AudioRecorder.checkMicrophonePermission()
         guard hasPermission else {
             Logger.event(.recFail, .audio, ["perm": .string("denied")], level: .error)
@@ -680,7 +681,7 @@ class AudioRecorder: NSObject {
             )
         } catch {
             lastEngineStartError = error
-            discardSessionAudio()
+            if !isRecovery { discardSessionAudio() }  // a rebuild keeps the recording's file
             throw error
         }
 
@@ -690,7 +691,7 @@ class AudioRecorder: NSObject {
         // the retention sweep.
         guard isGenerationCurrent(generation) else {
             await engineLifecycle.stopEngine()
-            discardSessionAudio()
+            if !isRecovery { discardSessionAudio() }  // a rebuild keeps the recording's file
             throw RecordingError.engineCleanedUp
         }
 
@@ -699,13 +700,13 @@ class AudioRecorder: NSObject {
         } catch {
             lastEngineStartError = error
             await engineLifecycle.stopEngine()
-            discardSessionAudio()
+            if !isRecovery { discardSessionAudio() }  // a rebuild keeps the recording's file
             throw error
         }
 
         guard isGenerationCurrent(generation) else {
             await engineLifecycle.stopEngine()
-            discardSessionAudio()
+            if !isRecovery { discardSessionAudio() }  // a rebuild keeps the recording's file
             throw RecordingError.engineCleanedUp
         }
 
@@ -764,8 +765,15 @@ class AudioRecorder: NSObject {
                 Logger.event(.engBuild, .audio, fields, level: .warning)
                 // Stop the engine cleanly before throwing — avoids a tap leak into the next start.
                 await engineLifecycle.stopEngine()
-                isRecording = false
-                discardSessionAudio()
+                // A rebuild mid-recording keeps the recording: still recording, same file. Clearing
+                // `isRecording` here ended a long-form recovery on its first try, and closing the
+                // writer meant the next successful rebuild opened a *new* file the meeting did not
+                // point at — a mic that did not wake in time after the lid closed ended a 65-minute
+                // interview (2026-11-09). The recovery loop retries with backoff.
+                if !isRecovery {
+                    isRecording = false
+                    discardSessionAudio()
+                }
                 throw RecordingError.audioUnitFailed
             }
         }
@@ -1138,7 +1146,7 @@ class AudioRecorder: NSObject {
         recorderState = .starting(generation: generation)
         recordingStartTime = Date()
         do {
-            _ = try await startRecordingInternal(route: route, generation: generation)
+            _ = try await startRecordingInternal(route: route, generation: generation, isRecovery: true)
             Logger.event(.recStart, .audio, ["recovery": .bool(true), "route": .string("\(route)"), "gen": .int(generation)])
             DispatchQueue.main.async { [weak self] in
                 self?.onDeviceRecovery?(.deviceLostDuringRecording)

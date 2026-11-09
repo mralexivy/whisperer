@@ -422,7 +422,8 @@ generic, but honest, and it needs no guess about anyone's title format.
 
 ## Lid closed mid-meeting / capture failure (2026-11-09)
 - A 65-minute interview: audio stopped at the end (lid closed), wake-time recovery found no first buffer, and `handleAudioFlowTimeout` → `abandonMeetingMode` → `abandonRecording()` kept the cards and the audio but never queued the job: no refine, polish or overview. Its 1:05:21 duration is wall clock.
-- Now a meeting with captured content (`MeetingSession.hasCapturedContent`) ends through `stopRecording()` on capture failure, and `NSWorkspace.willSleepNotification` ends a running meeting the same way before the input disappears.
+- Now a meeting with captured content (`MeetingSession.hasCapturedContent`) ends through `stopRecording()` on capture failure. Sleep pauses the meeting (`isPaused`: nothing archived, clock stopped) and wake resumes it; a sleep over 30 min ends it normally on wake.
+- The interview's real killer: a rebuild whose first buffer did not arrive cleared `isRecording` and closed the writer, ending the unbounded long-form recovery on its first try — and any later successful rebuild would have opened a new file the meeting did not point at. In recovery (`isRecovery`), failed rebuilds now keep `isRecording` and the file; only a stop closes it.
 - The 23:46 the player showed was the stale-player bug (the app had run since 12:05, before `9057a50b`): the log has no file-write failure and the tap appended 65 min.
 
 ## Calendar conflicts (2026-11-09)

@@ -813,6 +813,12 @@ class AppState: ObservableObject {
     private var dictionaryRebuildObserver: Any?
     private var appActivationObserver: Any?
     private var systemSleepObserver: Any?
+    private var systemWakeObserver: Any?
+    /// When sleep paused the running meeting, so wake knows to resume it (and not a pause the
+    /// user made themselves).
+    private var meetingPausedForSleepAt: Date?
+    /// Asleep longer than this, the call is over: wake ends the meeting the normal way.
+    static let meetingSleepResumeLimit: TimeInterval = 30 * 60
     /// Compute spent before the meeting began, so its stop can log what the meeting itself cost.
     private var meetingComputeBaseline: (snapshot: ComputeLedger.Snapshot, at: Date)?
     private var clipboardNotificationObserver: Any?
@@ -1283,19 +1289,38 @@ class AppState: ObservableObject {
         }
         #endif
 
-        // The Mac is going to sleep (lid closed): a meeting cannot record through it. Ended the
-        // normal way now, while the microphone and the file are still live, it is saved, its
-        // audio moved and its processing queued. Left running, the input vanished under it, the
-        // recovery on wake found no audio and the meeting was abandoned without its overview,
-        // its duration counting the time asleep (2026-11-09).
+        // The Mac is going to sleep (lid closed): the meeting pauses — nothing is written for the
+        // time asleep and its clock stops — and resumes on wake, the microphone brought back by
+        // the long-form recovery. Left running, the input vanished under it, wake found no audio
+        // and the meeting was abandoned without its overview, its duration counting the sleep
+        // (2026-11-09). A long sleep means the call is over: wake ends the meeting normally.
         systemSleepObserver = NSWorkspace.shared.notificationCenter.addObserver(
             forName: NSWorkspace.willSleepNotification, object: nil, queue: .main
         ) { [weak self] _ in
-            Task { @MainActor [weak self] in
+            MainActor.assumeIsolated {
                 guard let self, let session = self.activeMeetingSession, session.isRecording,
-                      !self.isMeetingStopInFlight else { return }
-                Logger.info("System sleep — ending the meeting so it is saved and processed", subsystem: .app)
-                await session.stopRecording()
+                      !self.isMeetingStopInFlight, !self.isPaused else { return }
+                self.isPaused = true
+                self.meetingPausedForSleepAt = Date()
+                Logger.info("System sleep — meeting paused", subsystem: .app)
+            }
+        }
+        systemWakeObserver = NSWorkspace.shared.notificationCenter.addObserver(
+            forName: NSWorkspace.didWakeNotification, object: nil, queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated {
+                guard let self, let pausedAt = self.meetingPausedForSleepAt else { return }
+                self.meetingPausedForSleepAt = nil
+                guard let session = self.activeMeetingSession, session.isRecording else { return }
+                let slept = Date().timeIntervalSince(pausedAt)
+                if slept > Self.meetingSleepResumeLimit {
+                    Logger.info("Wake after \(Int(slept / 60)) min asleep — ending the meeting", subsystem: .app)
+                    self.isPaused = false
+                    Task { await session.stopRecording() }
+                } else {
+                    Logger.info("Wake after \(Int(slept)) s — meeting resumed", subsystem: .app)
+                    self.isPaused = false
+                }
             }
         }
 
