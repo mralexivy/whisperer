@@ -157,7 +157,31 @@ class AudioRecorder: NSObject {
     // MARK: - Silence detection
 
     private var consecutiveSilentCallbacks: Int = 0
-    private let silenceRecoveryThreshold: Int = 18  // ~1.5s at 48kHz/4096 buffer
+    /// Length of the current silent run, in seconds of audio. Counted in audio, not callbacks:
+    /// a Bluetooth headset in call mode delivers fewer, differently sized buffers than the
+    /// built-in microphone, so 18 callbacks was not 1.5 s there.
+    private var silentSeconds: Double = 0
+    /// The engine is bound to a Bluetooth input (AirPods, a headset).
+    private var inputIsBluetooth = false
+
+    /// Whether `silentSeconds` of input below the silence floor means the input is dead rather
+    /// than the user pausing.
+    ///
+    /// The built-in microphone always hears the room (about -50 dBFS), so 1.5 s under -60 dBFS
+    /// is a dead input. AirPods do not: their noise suppression gates the microphone to near
+    /// zero whenever the wearer stops talking, so every pause in a dictation read as a dead
+    /// microphone — the "No sound is reaching Whisperer. Trying to restart the microphone…"
+    /// warning, an error sound, and an engine rebuild that renegotiates the Bluetooth link and
+    /// drops audio mid-sentence. A Bluetooth input therefore gets far longer before it is
+    /// declared dead: 6 s before the wearer has said anything (a cold link that never woke is
+    /// still caught by the first-buffer gate and the flow watchdog), 20 s once it has carried
+    /// speech. A link that actually stops delivering buffers is the flow watchdog's job, not this.
+    nonisolated static func silenceMeansDeadInput(silentSeconds: Double, isBluetooth: Bool,
+                                                  hasHeardSignal: Bool) -> Bool {
+        let limit: Double
+        if !isBluetooth { limit = 1.5 } else { limit = hasHeardSignal ? 20 : 6 }
+        return silentSeconds >= limit
+    }
     /// Guards `onCaptureTrouble` so one silence episode produces one warning, not one per buffer.
     private var hasReportedSilenceEpisode = false
     /// Set once any non-silent sample has been seen in this recording. Distinguishes "the mic
@@ -537,6 +561,7 @@ class AudioRecorder: NSObject {
 
         lastAudioCallbackTime = nil
         consecutiveSilentCallbacks = 0
+        silentSeconds = 0
 
         let gracePeriod = startupGracePeriod
 
@@ -630,6 +655,10 @@ class AudioRecorder: NSObject {
 
         // Cache device ID for sync diagnostics
         cachedEngineDeviceID = await engineLifecycle.lastKnownDeviceID
+        inputIsBluetooth = cachedEngineDeviceID.map {
+            let transport = InputRoutePreflight.transportType($0)
+            return transport == kAudioDeviceTransportTypeBluetooth || transport == kAudioDeviceTransportTypeBluetoothLE
+        } ?? false
         let gen = await engineLifecycle.generation
 
         isRecording = true
@@ -704,8 +733,10 @@ class AudioRecorder: NSObject {
         // Silence detection — diagnose first, then auto-recover if a rebuild can actually help.
         if rms < 0.001 {
             consecutiveSilentCallbacks += 1
+            silentSeconds += Double(samples.count) / whisperFormat.sampleRate
             let inGracePeriod = recordingStartTime.map { Date().timeIntervalSince($0) < 2.0 } ?? false
-            if consecutiveSilentCallbacks >= silenceRecoveryThreshold,
+            if Self.silenceMeansDeadInput(silentSeconds: silentSeconds, isBluetooth: inputIsBluetooth,
+                                          hasHeardSignal: hasEverReceivedNonSilentAudio),
                case .recording = recorderState,
                !inGracePeriod {
                 // Ask the HAL *why* before reacting. Logging bare `reason=silence_1.5s` and
@@ -727,6 +758,7 @@ class AudioRecorder: NSObject {
         } else {
             let wasSilent = hasReportedSilenceEpisode
             consecutiveSilentCallbacks = 0
+            silentSeconds = 0
             hasEverReceivedNonSilentAudio = true
             hasReportedSilenceEpisode = false
             if recoveryAttemptCount > 0 {
@@ -984,6 +1016,7 @@ class AudioRecorder: NSObject {
                 // The device is live and the tap is installed; the next buffer will carry signal
                 // and `deliverSamples` will clear the episode. No rebuild needed.
                 consecutiveSilentCallbacks = 0
+                silentSeconds = 0
                 return
             }
         }

@@ -67,6 +67,12 @@ class AppState: ObservableObject {
                 pendingActivationAfterDownload = nil
                 DispatchQueue.main.async { [weak self] in self?.activateBackendAfterDownload(backend) }
             }
+            if state == .idle, captureFailure?.isTerminal == false {
+                // A warning is about the recording in progress ("trying to restart the
+                // microphone…"). With the recording over it is no longer true, and it sat on
+                // the menu bar panel next to "Ready" (2026-11-09).
+                captureFailure = nil
+            }
             if state == .idle {
                 // Zero waveform data without touching renderer count or the timer — the timer
                 // stays running if the menu bar popover or dictation HUD is still visible.
