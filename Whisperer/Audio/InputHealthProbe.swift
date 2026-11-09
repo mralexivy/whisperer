@@ -292,7 +292,7 @@ nonisolated enum InputHealthProbe {
     /// Taking the maximum, not the master alone: on several built-in and USB inputs the master
     /// element is absent or stuck at 0 while the per-channel controls carry the real value, and
     /// reporting that stale 0 would misdiagnose a working mic as `gainZero`.
-    private static func inputVolume(_ deviceID: AudioDeviceID) -> Float? {
+    static func inputVolume(_ deviceID: AudioDeviceID) -> Float? {
         var best: Float?
         for element in [kAudioObjectPropertyElementMain, 1, 2] as [AudioObjectPropertyElement] {
             var address = AudioObjectPropertyAddress(

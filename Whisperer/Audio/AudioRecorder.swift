@@ -163,6 +163,39 @@ class AudioRecorder: NSObject {
     private var silentSeconds: Double = 0
     /// The engine is bound to a Bluetooth input (AirPods, a headset).
     private var inputIsBluetooth = false
+    /// The headset input level this recording raised, and what it was, to put back at stop.
+    private var raisedInputLevel: (deviceID: AudioDeviceID, original: Float)?
+
+    /// Input level a Bluetooth headset is raised to for a recording, or nil to leave it.
+    ///
+    /// AirPods sat at 0.208 on a friend's Mac and peaked at 0.0088 while the wearer spoke: quiet
+    /// enough to read as a dead microphone, and Whisper heard Icelandic in English speech
+    /// (2026-11-09). The user had never chosen that level — macOS keeps a per-device slider most
+    /// people never open. Raised for the recording only and restored at stop, so other apps keep
+    /// the setting the user has. A level already at half or more is the user's and is left alone.
+    nonisolated static func headsetLevelToApply(current: Float?, isBluetooth: Bool) -> Float? {
+        guard isBluetooth, let current, current < 0.5 else { return nil }
+        return 0.8
+    }
+
+    private func raiseHeadsetLevelIfQuiet(_ deviceID: AudioDeviceID) {
+        if let raised = raisedInputLevel, raised.deviceID == deviceID { return }
+        restoreRaisedInputLevel()
+        let current = InputHealthProbe.inputVolume(deviceID)
+        guard let target = Self.headsetLevelToApply(current: current, isBluetooth: inputIsBluetooth),
+              let current, InputHealthProbe.restoreInputLevel(deviceID: deviceID, to: target) else { return }
+        raisedInputLevel = (deviceID, current)
+        Logger.info(String(format: "Bluetooth microphone input at %.2f — raised to %.2f for this recording", current, target),
+                    subsystem: .audio)
+    }
+
+    private func restoreRaisedInputLevel() {
+        guard let raised = raisedInputLevel else { return }
+        raisedInputLevel = nil
+        if InputHealthProbe.restoreInputLevel(deviceID: raised.deviceID, to: raised.original) {
+            Logger.info(String(format: "Bluetooth microphone input put back to %.2f", raised.original), subsystem: .audio)
+        }
+    }
 
     /// Whether `silentSeconds` of input below the silence floor means the input is dead rather
     /// than the user pausing.
@@ -659,6 +692,7 @@ class AudioRecorder: NSObject {
             let transport = InputRoutePreflight.transportType($0)
             return transport == kAudioDeviceTransportTypeBluetooth || transport == kAudioDeviceTransportTypeBluetoothLE
         } ?? false
+        if let deviceID = cachedEngineDeviceID { raiseHeadsetLevelIfQuiet(deviceID) }
         let gen = await engineLifecycle.generation
 
         isRecording = true
@@ -846,6 +880,7 @@ class AudioRecorder: NSObject {
     func stopRecording() async {
         // Increment generation first — invalidates any in-flight startRecordingInternal attempts
         currentGeneration += 1
+        restoreRaisedInputLevel()
 
         guard isRecording else {
             // The generation bump above just cancelled a start that had not reached .recording.
@@ -1036,6 +1071,7 @@ class AudioRecorder: NSObject {
             // bails on `guard isRecording` — so nothing ever closed the writer. The partial
             // recording was left unterminated and its filename was still written to history.
             closeSessionWriter()
+            restoreRaisedInputLevel()
             recorderState = .idle
             cachedEngineDeviceID = nil
             DispatchQueue.main.async { [weak self] in self?.onAudioFlowTimeout?(diagnosis) }
@@ -1099,6 +1135,7 @@ class AudioRecorder: NSObject {
             // Keep what was captured before the device died — the restart failed, but the
             // pre-recovery audio is still a valid recording and history will reference it.
             closeSessionWriter()
+            restoreRaisedInputLevel()
             recorderState = .idle
             cachedEngineDeviceID = nil
             DispatchQueue.main.async { [weak self] in self?.onAudioFlowTimeout?(diagnosis) }

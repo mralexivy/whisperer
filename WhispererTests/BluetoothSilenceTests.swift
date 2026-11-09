@@ -32,3 +32,15 @@ final class BluetoothSilenceTests: XCTestCase {
         XCTAssertTrue(AudioRecorder.silenceMeansDeadInput(silentSeconds: 6, isBluetooth: true, hasHeardSignal: false))
     }
 }
+
+final class BluetoothInputLevelTests: XCTestCase {
+    func testQuietAirPodsAreRaisedForTheRecording() {
+        XCTAssertEqual(AudioRecorder.headsetLevelToApply(current: 0.208, isBluetooth: true), 0.8)
+    }
+
+    func testAUserChosenLevelIsLeftAlone() {
+        XCTAssertNil(AudioRecorder.headsetLevelToApply(current: 0.6, isBluetooth: true))
+        XCTAssertNil(AudioRecorder.headsetLevelToApply(current: 0.2, isBluetooth: false), "built-in mic: the user's choice")
+        XCTAssertNil(AudioRecorder.headsetLevelToApply(current: nil, isBluetooth: true), "no volume control")
+    }
+}
