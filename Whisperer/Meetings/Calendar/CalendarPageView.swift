@@ -360,7 +360,10 @@ struct CalendarPageView: View {
 
     private var upcomingMeetings: [ScheduledMeeting] {
         let now = Date()
-        return store.upcoming.filter { $0.endAt > now }.prefix(6).map { $0 }
+        // A meeting overlapped by one the user accepted is not shown: the accepted one is where
+        // they will be. Declined invites never reach `upcoming`.
+        let live = store.upcoming.filter { $0.endAt > now }
+        return live.filter { live.outranking($0) == nil }.prefix(6).map { $0 }
     }
 
     private var upcomingSection: some View {

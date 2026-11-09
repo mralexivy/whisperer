@@ -79,7 +79,7 @@ final class CalendarMeetingsStore: ObservableObject {
 
     var nextMeeting: ScheduledMeeting? {
         let now = Date()
-        return upcoming.first { $0.endAt > now && decisions[$0.id] != .dismissed }
+        return upcoming.filter { $0.endAt > now && decisions[$0.id] != .dismissed }.preferredFirst
     }
 
     /// Last good events per account, kept through a network failure so reminders survive it.
@@ -257,6 +257,8 @@ final class CalendarMeetingsStore: ObservableObject {
     /// When `meeting`'s reminder is due, or nil when it should not remind.
     func reminderDate(for meeting: ScheduledMeeting, now: Date = Date()) -> Date? {
         guard let lead = reminderLeadMinutes else { return nil }
+        // Overlapped by a meeting the user accepted: that one reminds, this one stays quiet.
+        guard upcoming.filter({ decisions[$0.id] != .dismissed }).outranking(meeting) == nil else { return nil }
         switch decisions[meeting.id] {
         case .dismissed, .reminded, .joinedOnly, .recording:
             return nil
@@ -336,6 +338,7 @@ final class CalendarMeetingsStore: ObservableObject {
     func meeting(matching provider: ConferenceProvider?, at now: Date = Date(),
                  slack: TimeInterval = 15 * 60) -> ScheduledMeeting? {
         let window = upcoming.filter { $0.startAt.addingTimeInterval(-slack) <= now && now < $0.endAt }
+            .sorted { $0.commitmentRank > $1.commitmentRank }
         if let provider, let exact = window.first(where: { $0.provider == provider }) { return exact }
         // A single unlinked meeting on now is probably this one; two is a guess, so no title.
         let unlinked = window.filter { $0.provider == nil }

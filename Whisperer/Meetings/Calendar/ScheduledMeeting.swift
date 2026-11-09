@@ -137,6 +137,36 @@ nonisolated struct ScheduledMeeting: Identifiable, Equatable, Sendable {
     var participants: [MeetingParticipant] = []
 
     func isLive(at now: Date) -> Bool { startAt <= now && now < endAt }
+
+    func overlaps(_ other: ScheduledMeeting) -> Bool { startAt < other.endAt && other.startAt < endAt }
+
+    /// How committed the user is to attending. Organizer events arrive as `.accepted`.
+    var commitmentRank: Int {
+        switch response {
+        case .accepted: return 3
+        case .tentative: return 2
+        case .pending, .unknown: return 1
+        case .declined: return 0
+        }
+    }
+}
+
+nonisolated extension Array where Element == ScheduledMeeting {
+    /// A meeting overlapping `meeting` that the user is more committed to, if any. Two invites at
+    /// the same time are the normal state of a busy calendar; the one the user accepted is the
+    /// one they will be in, so it wins the "Meeting now" card, the reminder and a call's name.
+    func outranking(_ meeting: ScheduledMeeting) -> ScheduledMeeting? {
+        filter { $0.id != meeting.id && $0.overlaps(meeting) && $0.commitmentRank > meeting.commitmentRank }
+            .max { ($0.commitmentRank, $1.startAt) < ($1.commitmentRank, $0.startAt) }
+    }
+
+    /// The meeting to show among those overlapping the earliest one: most committed, then
+    /// earliest. `self` in start order.
+    var preferredFirst: ScheduledMeeting? {
+        guard let first = first else { return nil }
+        return filter { $0.id == first.id || $0.overlaps(first) }
+            .max { ($0.commitmentRank, $1.startAt) < ($1.commitmentRank, $0.startAt) }
+    }
 }
 
 /// Decides which events are meetings and normalizes them. Pure.

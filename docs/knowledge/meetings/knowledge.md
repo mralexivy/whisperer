@@ -424,3 +424,6 @@ generic, but honest, and it needs no guess about anyone's title format.
 - A 65-minute interview: audio stopped at the end (lid closed), wake-time recovery found no first buffer, and `handleAudioFlowTimeout` → `abandonMeetingMode` → `abandonRecording()` kept the cards and the audio but never queued the job: no refine, polish or overview. Its 1:05:21 duration is wall clock.
 - Now a meeting with captured content (`MeetingSession.hasCapturedContent`) ends through `stopRecording()` on capture failure, and `NSWorkspace.willSleepNotification` ends a running meeting the same way before the input disappears.
 - The 23:46 the player showed was the stale-player bug (the app had run since 12:05, before `9057a50b`): the log has no file-write failure and the tap appended 65 min.
+
+## Calendar conflicts (2026-11-09)
+- Overlapping invites resolve by the user's answer: accepted (organizer included) > tentative > no answer. The winner is the "Meeting now / Next meeting" card, the only one that reminds, and the one that names a detected call; the calendar page does not list a meeting an accepted one overlaps. Declined invites are dropped at classification. Equal answers keep start order; back-to-back is not a conflict. (`Array<ScheduledMeeting>.outranking`, `.preferredFirst`)
