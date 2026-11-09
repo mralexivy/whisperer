@@ -415,3 +415,7 @@ generic, but honest, and it needs no guess about anyone's title format.
 - Controlled: 98 s of FLEURS Hebrew → Apple 158 words clean, 34 through a simulated room (-42 dB, band-limited, reverb), 149 clean + mic at 15%. Through the full live pipeline (`MeetingLiveReplayTests`): 11 words room-only vs 116 with `SystemAudioMixer.Mode.duckMicWhileCallTalks`.
 - So on speakers the tap's clean far end is mixed in and the mic is ducked while the call talks (0.3 s echo tail). Before, the tap was captured and thrown away on speakers.
 - `MeetingLiveReplayTests` replays a recording at real time through eager V3 + Apple + probe and prints the bubble every 2 s (TEST_RUNNER_MEETING_REPLAY, _LANG, _CALL).
+
+## Meeting player showed the wrong meeting's audio (2026-11-09)
+- `MeetingStudioView` loaded audio only when `audioPlayer.duration == 0`, and `SeekableAudioPlayer.stop()` keeps the file — so the next meeting opened kept the previous one's recording. A 54:12 meeting showed 1:28 (the 8:04 meeting's length); its file was whole (refine scanned 0–3252 s).
+- Selection change now `unload()`s and the screen calls `show(url:)`, which loads unless that URL is already loaded or loading; a load that finishes after a newer request is dropped.

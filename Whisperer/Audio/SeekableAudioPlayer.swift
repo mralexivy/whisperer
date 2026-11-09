@@ -37,6 +37,9 @@ final class SeekableAudioPlayer: NSObject, ObservableObject {
     // MARK: - Private engine components
 
     private var audioFile: AVAudioFile?
+    /// The file the latest `load` asked for. A load that finishes after a newer one was asked for
+    /// is dropped, so a slow file can never land over the meeting the user switched to.
+    private var requestedURL: URL?
     private let engine = AVAudioEngine()
     private let playerNode = AVAudioPlayerNode()
     private let pitchNode = AVAudioUnitTimePitch()   // pitch-preserving rate
@@ -72,10 +75,31 @@ final class SeekableAudioPlayer: NSObject, ObservableObject {
 
     // MARK: - Public API
 
+    /// Load `url` unless it is already loaded or loading. The meeting screen calls this on every
+    /// selection change; it used to load only when nothing was loaded (`duration == 0`), and
+    /// `stop()` keeps the file, so the next meeting opened kept playing the previous one's audio —
+    /// a 54-minute meeting showed a 1:28 recording (2026-11-09).
+    func show(url: URL) {
+        guard url != requestedURL else { return }
+        load(url: url)
+    }
+
+    /// Stop and forget the loaded file: nothing is shown until the next `show`/`load`.
+    func unload() {
+        stop()
+        requestedURL = nil
+        audioFile = nil
+        totalFrames = 0
+        duration = 0
+        loadedURL = nil
+        isLoading = false
+    }
+
     func load(url: URL) {
         stop()
         isLoading = true
         loadedURL = nil
+        requestedURL = url
         let capture = url
         Task.detached(priority: .userInitiated) { [weak self] in
             guard let self else { return }
@@ -83,7 +107,7 @@ final class SeekableAudioPlayer: NSObject, ObservableObject {
                 let file = try AVAudioFile(forReading: capture)
                 let dur = Double(file.length) / file.processingFormat.sampleRate
                 await MainActor.run { [weak self] in
-                    guard let self else { return }
+                    guard let self, self.requestedURL == capture else { return }
                     self.audioFile = file
                     self.totalFrames = file.length
                     self.fileSampleRate = file.processingFormat.sampleRate
@@ -96,7 +120,8 @@ final class SeekableAudioPlayer: NSObject, ObservableObject {
             } catch {
                 Logger.error("SeekableAudioPlayer: failed to load \(capture.lastPathComponent): \(error)", subsystem: .app)
                 await MainActor.run { [weak self] in
-                    self?.isLoading = false
+                    guard let self, self.requestedURL == capture else { return }
+                    self.isLoading = false
                 }
             }
         }

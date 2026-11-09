@@ -51,14 +51,13 @@ struct MeetingStudioView: View {
         // view — with `.onChange` a meeting that was already selected was never loaded, and
         // its transcript stayed empty until the user clicked another meeting and back.
         .task(id: selectedMeetingID) {
-            if detailVM.loadedMeetingID != selectedMeetingID { audioPlayer.stop() }
+            if detailVM.loadedMeetingID != selectedMeetingID { audioPlayer.unload() }
             await detailVM.select(selectedMeetingID)
         }
         .onChange(of: detailVM.meeting?.id) { _, _ in
             if let url = detailVM.meeting?.resolvedAudioURL,
-               FileManager.default.fileExists(atPath: url.path),
-               audioPlayer.duration == 0 {
-                audioPlayer.load(url: url)
+               FileManager.default.fileExists(atPath: url.path) {
+                audioPlayer.show(url: url)
             }
         }
         .onChange(of: session.meetingID) { _, id in
@@ -91,9 +90,8 @@ struct MeetingStudioView: View {
             }
             if let item = meetings.first(where: { $0.id == selectedMeetingID }),
                let url = item.resolvedAudioURL,
-               FileManager.default.fileExists(atPath: url.path),
-               audioPlayer.duration == 0 {
-                audioPlayer.load(url: url)
+               FileManager.default.fileExists(atPath: url.path) {
+                audioPlayer.show(url: url)
             }
         }
         #else
@@ -105,14 +103,13 @@ struct MeetingStudioView: View {
                 }
             }
             .task(id: selectedMeetingID) {
-                if detailVM.loadedMeetingID != selectedMeetingID { audioPlayer.stop() }
+                if detailVM.loadedMeetingID != selectedMeetingID { audioPlayer.unload() }
                 await detailVM.select(selectedMeetingID)
             }
             .onChange(of: detailVM.meeting?.id) { _, _ in
                 if let url = detailVM.meeting?.resolvedAudioURL,
-                   FileManager.default.fileExists(atPath: url.path),
-                   audioPlayer.duration == 0 {
-                    audioPlayer.load(url: url)
+                   FileManager.default.fileExists(atPath: url.path) {
+                    audioPlayer.show(url: url)
                 }
             }
             .onChange(of: session.meetingID) { _, id in
@@ -145,9 +142,8 @@ struct MeetingStudioView: View {
                 }
                 if let item = meetings.first(where: { $0.id == selectedMeetingID }),
                    let url = item.resolvedAudioURL,
-                   FileManager.default.fileExists(atPath: url.path),
-                   audioPlayer.duration == 0 {
-                    audioPlayer.load(url: url)
+                   FileManager.default.fileExists(atPath: url.path) {
+                    audioPlayer.show(url: url)
                 }
             }
         #endif
