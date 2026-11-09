@@ -631,6 +631,23 @@ class MeetingSession: ObservableObject {
     /// is, it returns on the next launch as "crash recovery: finalizing 1 interrupted session".
     /// So it is discarded when it holds nothing at all — the failed-start case, where no audio
     /// was ever captured — and otherwise finalized. Never deleted with content in it.
+    /// The app is quitting mid-meeting: keep every word not yet in a card — the open paragraph
+    /// and the live tail — where crash recovery reads it. The next launch finalizes the meeting,
+    /// moves its recording and queues its refine, polish and overview
+    /// (`MeetingManager.recoverCrashedSessions`).
+    func preserveForQuit() {
+        guard isRecording, let id = meetingID else { return }
+        let text = [currentSegmentText, livePreviewText]
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+            .joined(separator: " ")
+        if !text.isEmpty {
+            MeetingPendingStore.save(meetingID: id, text: text, startTimestamp: currentSegmentStartTimestamp)
+        }
+        Logger.info("Quit during a meeting — kept \(segments.count) card(s) and \(text.count) chars of live text; it is finished and processed at next launch",
+                    subsystem: .app)
+    }
+
     /// Something was said: cards, an open paragraph or live text. A meeting like this is never
     /// abandoned — whatever stops it ends it through `stopRecording()`.
     var hasCapturedContent: Bool {

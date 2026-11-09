@@ -421,6 +421,8 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         // 1. Stop any active recording
         Logger.debug("Stopping active recording if any...", subsystem: .app)
         await MainActor.run {
+            // The meeting's "finally": keep its unsaved text; the recorder closes its file below.
+            appState.activeMeetingSession?.preserveForQuit()
             if appState.state != .idle {
                 appState.state = .idle
             }

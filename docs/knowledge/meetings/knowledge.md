@@ -451,3 +451,7 @@ generic, but honest, and it needs no guess about anyone's title format.
 - No "Meeting speakers" line in any work-Mac log. Causes: (1) ad-hoc calls (no invite) named nobody, not even the user; (2) the call share was call-overlap ÷ the speaker's whole card time — cards are mostly pauses, so a call voice landed ~0.3, under the 0.6 line, and stayed unnamed.
 - Now `SpeakerSourceAttribution.evidence` counts only moments someone talks: call buffers (call RMS ≥ 0.008) vs mic buffers with the call quiet (mic RMS ≥ 0.004); share = call ÷ (call + mic). The user is named in every meeting (invite self entry, else the Mac account name); the call's voice only in a 1:1. At stop one line logs `Meeting speakers: call talking Ns, K on invite — S1 40s call 5% → me, …`.
 - Group meetings (active-speaker tile via Accessibility) are still not built.
+
+## A new meeting no longer cancels the previous one's processing; quit keeps the live text (2026-11-09)
+- `MeetingJobQueue.suspendForRecording` cancelled the running job: a calendar-started meeting threw away a finished 146 s Codex polish, and the overview waited for the next meeting to end. Now the running job keeps going — local model work waits on the `ModelWorkQueue` meeting gate, connected-AI work finishes — and only new jobs wait.
+- Quit mid-meeting: `MeetingSession.preserveForQuit` writes the open paragraph and the live tail to `MeetingPendingStore` (before, only the open paragraph was saved), the recorder closes the file, and the next launch's `recoverCrashedSessions` finalizes, adopts the audio and queues the job.

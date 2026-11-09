@@ -122,21 +122,18 @@ final class MeetingJobQueue: ObservableObject {
     func suspendForRecording() {
         guard !isRecordingSuspended else { return }
         isRecordingSuspended = true
-        Logger.info("MeetingJobQueue: suspended for recording", subsystem: .transcription)
-
-        guard let idx = jobs.firstIndex(where: { $0.status == .running }) else { return }
-        jobs[idx].status = .pausedForRecording
-        jobs[idx].attempts += 1
-        MeetingJobStore.save(jobs[idx])
-
-        runningTask?.cancel()
-        runningTask = nil
-
-        MeetingTranscriptRefiner.shared.cancel(meetingID: jobs[idx].id)
-
-        // Move paused job to head so it resumes before any newer job.
-        let paused = jobs.remove(at: idx)
-        jobs.insert(paused, at: 0)
+        // A job already running keeps running. Its local model work (refine, a local LLM) goes
+        // through `ModelWorkQueue` and waits on the meeting gate until the new meeting ends;
+        // its connected-AI work (polish, overview over the network) costs this Mac nothing and
+        // finishes now. Cancelling it threw finished work away: a meeting that started from a
+        // calendar reminder discarded the previous meeting's 146 s Codex polish, and its
+        // overview waited for the next meeting to end (2026-11-09). New jobs still wait.
+        if let running = jobs.first(where: { $0.status == .running }) {
+            Logger.info("MeetingJobQueue: suspended for recording — \(running.id) keeps going at stage=\(running.stage.rawValue)",
+                        subsystem: .transcription)
+        } else {
+            Logger.info("MeetingJobQueue: suspended for recording", subsystem: .transcription)
+        }
     }
 
     /// Called after a meeting recording stops.
